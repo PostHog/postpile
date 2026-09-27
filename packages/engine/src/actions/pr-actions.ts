@@ -30,7 +30,9 @@ export class PrActions {
   /**
    * Immediate and final. Approving answers the ping, so the PR's events are
    * marked read too; the returned undo token only brings back the unread
-   * state, never the approval.
+   * state, never the approval. The review is pinned to the stored head, the
+   * commit the glance and the user looked at; a later push shows up as
+   * "new commits after approval" on the next sync.
    */
   async approve(key: PrKey): Promise<ActionResult> {
     const pr = this.openPr(key);
@@ -38,7 +40,7 @@ export class PrActions {
       return failed(`${key} is not an open PR in the store`);
     }
     try {
-      await this.writer.approvePr(pr.ref, '');
+      await this.writer.approvePr(pr.ref, '', pr.headOid);
     } catch (error) {
       return failed(`Approve failed: ${errorText(error)}`);
     }

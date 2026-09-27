@@ -19,9 +19,13 @@ export class GitHubWriteClient implements GitHubWriter {
     await this.http.requestOk('PATCH', `notifications/threads/${encodeURIComponent(threadId)}`);
   }
 
-  /** Visible to everyone on the PR; only a dismissal walks it back. */
-  async approvePr(ref: PrRef, body: string): Promise<void> {
-    const payload: { event: string; body?: string } = { event: 'APPROVE' };
+  /**
+   * Visible to everyone on the PR; only a dismissal walks it back.
+   * commit_id pins the review to the commit the user saw. Without it GitHub
+   * approves the current head, which may include pushes made after the last sync.
+   */
+  async approvePr(ref: PrRef, body: string, commitOid: string): Promise<void> {
+    const payload: { event: string; commit_id: string; body?: string } = { event: 'APPROVE', commit_id: commitOid };
     if (body.trim() !== '') {
       payload.body = body;
     }

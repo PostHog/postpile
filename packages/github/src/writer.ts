@@ -9,6 +9,7 @@ import type { PrRef } from '@code-manager/core';
  */
 export interface GitHubWriter {
   markThreadRead(threadId: string): Promise<void>;
-  approvePr(ref: PrRef, body: string): Promise<void>;
+  /** Approves exactly `commitOid`, the head the user looked at, not whatever the head is now. */
+  approvePr(ref: PrRef, body: string, commitOid: string): Promise<void>;
   commentOnPr(ref: PrRef, body: string): Promise<void>;
 }

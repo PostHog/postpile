@@ -19,12 +19,16 @@ describe('GitHubWriteClient', () => {
     const fake = new FakeFetch([{ body: { id: 1 } }, { body: { id: 2 } }]);
     const writer = new GitHubWriteClient(fakeTokens, fake.fn);
 
-    await writer.approvePr(ref, '');
-    await writer.approvePr(ref, 'Ship it');
+    await writer.approvePr(ref, '', 'abc123');
+    await writer.approvePr(ref, 'Ship it', 'abc123');
 
     expect(fake.requests.map((r) => [r.method, r.url, r.body])).toEqual([
-      ['POST', 'https://api.github.com/repos/acme/app/pulls/42/reviews', { event: 'APPROVE' }],
-      ['POST', 'https://api.github.com/repos/acme/app/pulls/42/reviews', { event: 'APPROVE', body: 'Ship it' }],
+      ['POST', 'https://api.github.com/repos/acme/app/pulls/42/reviews', { event: 'APPROVE', commit_id: 'abc123' }],
+      [
+        'POST',
+        'https://api.github.com/repos/acme/app/pulls/42/reviews',
+        { event: 'APPROVE', commit_id: 'abc123', body: 'Ship it' },
+      ],
     ]);
     expect(fake.requests[0]?.headers['content-type']).toBe('application/json');
   });
@@ -41,7 +45,7 @@ describe('GitHubWriteClient', () => {
 
   it('throws GitHubError on a failed write', async () => {
     const fake = new FakeFetch([{ status: 422, body: { message: 'Can not approve your own pull request' } }]);
-    const call = new GitHubWriteClient(fakeTokens, fake.fn).approvePr(ref, '');
+    const call = new GitHubWriteClient(fakeTokens, fake.fn).approvePr(ref, '', 'abc123');
     await expect(call).rejects.toBeInstanceOf(GitHubError);
     await expect(call).rejects.toThrow(/422: Can not approve your own pull request/);
   });

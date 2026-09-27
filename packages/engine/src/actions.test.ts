@@ -70,13 +70,13 @@ describe('markRead and undo', () => {
 });
 
 describe('approve', () => {
-  it('approves on GitHub, records the head and clears the unread state', async () => {
+  it('approves the synced head on GitHub, records it and clears the unread state', async () => {
     const h = await synced();
 
     const result = await h.engine.approve(pr.key);
 
     expect(result.ok).toBe(true);
-    expect(h.writer.calls).toEqual(['approvePr PostHog/posthog#1']);
+    expect(h.writer.calls).toEqual(['approvePr PostHog/posthog#1@head']);
     expect(h.store.userPrStates.get(pr.key)?.approvedCommitOid).toBe('head');
     expect(await tileState(h)).toBe('done');
   });
