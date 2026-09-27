@@ -151,12 +151,19 @@ describe('feedback', () => {
     expect(h.store.feedback.recentForTopic('depot', 5)[0]?.note).toBe('infra');
   });
 
-  it('not_mine marks the PR handled', async () => {
+  it('not_mine clears the unread tile and marks the notification read after the undo window', async () => {
     const h = await synced();
+    expect(await tileState(h)).toBe('unread');
 
-    await h.engine.giveFeedback({ kind: 'not_mine', tileId, prKey: null, targetTopicId: null, note: '' });
+    const result = await h.engine.giveFeedback({ kind: 'not_mine', tileId, prKey: null, targetTopicId: null, note: '' });
 
+    expect(result.undoToken).not.toBeNull();
     expect(h.store.userPrStates.get(pr.key)?.handledAt).not.toBeNull();
+    expect(await tileState(h)).toBe('done');
+    expect(h.writer.calls).toEqual([]);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+    expect(h.writer.calls).toEqual(['markThreadRead thread-1']);
   });
 
   it('not_related drops the member and dissolves a set of two', async () => {

@@ -60,7 +60,7 @@ export class Engine implements EngineService {
     const readMarker = new ReadMarker(store, deps.markReadQueue, now);
     this.tiles = new TileActions(store, readMarker, now);
     this.prActions = new PrActions(store, deps.writer, deps.agent, this.contexts, readMarker, now);
-    this.feedback = new FeedbackActions(store, now);
+    this.feedback = new FeedbackActions(store, readMarker, now);
     this.chats = new ChatActions(store, deps.agent, this.contexts, now);
     this.proposals = new ProposalActions(store, now);
   }

@@ -2,6 +2,7 @@ import { isPinged, type ActionResult, type FeedbackInput, type PrKey, type Tile 
 import type { NewFeedback, Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
+import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
 
 function setIdOf(tileId: string): string | null {
@@ -15,6 +16,7 @@ function setIdOf(tileId: string): string | null {
 export class FeedbackActions {
   constructor(
     private readonly store: Store,
+    private readonly readMarker: ReadMarker,
     private readonly now: () => Date,
   ) {}
 
@@ -26,13 +28,18 @@ export class FeedbackActions {
     this.store.feedback.add({ ...entry, createdAt: this.now().toISOString() });
   }
 
-  /** "Not mine": the pinged PRs count as handled, and the agent learns from the note. */
-  private notMine(tile: Tile, key: PrKey | null): void {
-    const at = this.now().toISOString();
-    const keys = key ? [key] : tile.members.filter((m) => isPinged(m.provenance)).map((m) => m.prKey);
-    for (const handled of keys) {
-      this.store.userPrStates.markHandled(handled, at);
+  /**
+   * "Not mine" acts like mark read: events seen, pinged PRs handled, the GitHub
+   * notification read after the undo window. Returns the undo token. The
+   * agent learns from the logged note.
+   */
+  private notMine(tile: Tile, key: PrKey | null): string {
+    if (key) {
+      return this.readMarker.markRead([key], [key]);
     }
+    const keys = tile.members.map((m) => m.prKey);
+    const pinged = tile.members.filter((m) => isPinged(m.provenance)).map((m) => m.prKey);
+    return this.readMarker.markRead(keys, pinged);
   }
 
   /** "Wrong topic": move it when the user said where, otherwise let the next sync re-sort it. */
@@ -67,8 +74,7 @@ export class FeedbackActions {
     return this.store.transaction(() => {
       this.log({ kind: input.kind, topicId, tileId: input.tileId, prKey: key, setId, eventId: null, note: input.note });
       if (input.kind === 'not_mine') {
-        this.notMine(tile, key);
-        return ok('Noted: not yours');
+        return ok('Noted: not yours', this.notMine(tile, key));
       }
       if (input.kind === 'not_related') {
         if (!setId || !key) {
