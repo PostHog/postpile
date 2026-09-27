@@ -67,6 +67,26 @@ Batches stack; undo walks back newest first; quitting flushes instead of
 dropping. The queue lives in the engine (`MarkReadQueue`), in memory.
 
 **Sync** is on demand: "Sync now" and on app start. No live updates for now.
+Only unread PR threads whose activity is newer than the stored snapshot's fetch
+time get enriched (a thread's `updated_at` runs ahead of the PR's own, so
+comparing against the PR would refetch everything). `SyncOptions` exist for
+cheap runs: `maxPrs` (newest first, the rest follow on later syncs even after a
+304), `maxAgentCalls`, `agentJobs`.
+
+On first sight of a PR, events older than the thread's `last_read_at` are
+marked seen: the user already read them on github.com.
+
+Action details:
+
+- mark read: every member's events seen, pinged members handled (tile turns
+  done until something loud happens), thread mark-read queued. Undo reverts both.
+- approve: GitHub approval right away, then the same mark-read for that PR. The
+  undo token only brings back the unread state, never the approval.
+- not mine: PR(s) handled + feedback. not related: member dropped from the set
+  (a set left with one member dissolves). wrong topic: moved as a user
+  assignment when a target is given, otherwise membership removed so the next
+  sync re-sorts it with the feedback in the prompt.
+- unmute: user override (`quiet`, or the rule loudness if that was not muted).
 
 ## Memory / agentic digesting layer (v1, to review)
 
@@ -81,12 +101,36 @@ and only recomputes on change.
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
 | topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides | - |
 | sets | `pr_set` + `pr_set_member` with combined take and per-member reason | agent regroups; "not related" drops a member or dissolves the set and is remembered |
-| feedback | `feedback`: not_mine / not_related / wrong_topic / unmute / tailoring_kept / tailoring_once | append-only; newest N per topic go into prompts |
+| feedback | `feedback`: not_mine / not_related / wrong_topic / unmute / tailoring_kept / tailoring_once | append-only; newest 10 per topic go into prompts |
 | event overrides | `pr_event.override_*` with reason | kept across re-derivation |
 | other agent answers | `agent_cache`, keyed by hash of prompt + model | prompt changes |
 
-Topic assignment: new or changed PRs go to the agent together with the list of
-existing topics (name + summary). It picks one or proposes a new topic.
+Topic assignment: PRs without a topic go to the agent in batches of 20,
+together with the list of existing topics (name + summary). It picks one or
+names a new topic. **New topics are created directly** (otherwise a first sync
+would leave everything unsorted); renames and merges are proposals only.
+Until the agent has placed a PR it shows up in a virtual **Unsorted** topic
+(id `unsorted`, never stored), so `--no-agent` syncs are still usable.
+
+Driver and user role are derived without the agent: driver = most frequent
+author among the topic's PRs; role = driver if that is the user, else reviewer
+if any PR has a review-request ping, else stakeholder (mention, author, ...),
+else watcher.
+
+When agent jobs run (sync order, each skipped when its input hash is unchanged):
+
+1. `topics`: assign PRs without a topic
+2. `sets`: per topic with 2+ open PRs; hash = PRs + dissolved sets + topic
+   feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active sets are not
+   in the hash, they are the agent's own last answer. A set the agent keeps
+   under the same title keeps its id (tile id, snooze and chat survive); sets it
+   drops are deleted; dissolved sets are never brought back.
+3. `summaries`: per topic, newest 40 PRs
+4. `glances`: every open PR that is in a tile, unread tiles first
+5. `events`: second opinion on **new loud events only** (a wrong loud costs an
+   unread tile, a wrong quiet is still visible)
+
+A broken agent answer is logged in `SyncReport.errors` and retried next sync.
 
 Every prompt carries a `PromptContext`: general instructions + topic tailoring
 + recent feedback for that topic.
@@ -179,13 +223,23 @@ in paths. When the server has a token, every request needs `x-code-manager-token
   `npx install-electron` after a fresh `npm install`.
 - **Localhost API safety**: binds 127.0.0.1, and the desktop app uses a per-launch random token
   so web pages and other local processes cannot drive approve/comment.
-- **Paths**: XDG style (`~/.config/code-manager`, `~/.local/share/code-manager`) so the CLI and
-  the desktop app share one database. WAL mode lets them run side by side.
+- **Paths**: database at `~/Library/Application Support/code-manager/db.sqlite` on macOS
+  (`$XDG_DATA_HOME/code-manager/db.sqlite` elsewhere), instructions at
+  `~/.config/code-manager/instructions.md`. `CODE_MANAGER_DB` and `CODE_MANAGER_INSTRUCTIONS`
+  override. The CLI and the desktop app share one database; WAL lets them run side by side.
+- **Timestamps**: core compares ISO strings, so `packages/github` normalises every GitHub time
+  through `toISOString()` (GitHub omits milliseconds, the app writes them).
+- **Env switches**: `CODE_MANAGER_FAKE=1` runs server/CLI/desktop on the in-memory Depot sample
+  data (`FakeEngine`, for UI work). `CODE_MANAGER_READ_ONLY=1` swaps the GitHub writer for one
+  that refuses every write (smoke runs against a real account).
+- **Test builders** live at `@code-manager/core/fixtures` (incl. `FakeTimers`); engine tests use
+  fake reader/writer and the agent's `FakeRunner`.
 
 ### Safety while building
 
 - No GitHub write calls in tests or smoke runs. Tests use fakes; `GitHubWriteClient` is only
-  constructed by `createEngine`.
+  constructed by `createEngine`, and not at all with `CODE_MANAGER_READ_ONLY=1`. The sync path
+  (`GitHubSync`) only holds a `GitHubReader`.
 - Live `claude` calls: at most 3 across the build, small inputs.
 
 ## Open questions for Julian
@@ -195,13 +249,21 @@ in paths. When the server has a token, every request needs `x-code-manager-token
 - **Carousel vs list** for tiles inside a topic. The placeholder renders a plain list.
 - **Layout**: three panes (topics / open topic / PR or stack detail) is the current favourite,
   not final.
-- **Memory layer details** (the v1 above is a proposal):
-  - how many feedback entries per topic go into prompts (N = 10?)
-  - whether topic summaries regenerate on every membership change or only on sync
-  - whether sets are regrouped on every sync or only when membership changes
+- **Memory layer details** (the v1 above is a proposal; current choices in brackets):
+  - how many feedback entries per topic go into prompts [10]
+  - whether topic summaries regenerate on every membership change or only on sync [on sync,
+    when the hash of member PRs changes]
+  - whether sets are regrouped on every sync or only when membership changes [on sync, when
+    open PRs, dissolved sets or topic feedback change]
+  - new topics: created directly or only as proposals [directly]
+  - event overrides: only new loud events go to the agent [yes]
   - how long dissolved sets and "not related" feedback keep suppressing a regroup
   - whether a PR may belong to more than one topic (schema says one; pulled-in appearances
     elsewhere go through sets)
-- **Snooze wake-up**: proposed default is that a loud event from a human also ends a snooze,
-  so a mention is never hidden. Confirm.
+- **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
+  snooze started ends it, so a mention is never hidden. Confirm.
+- **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
+  comments on the user's own PR are loud; a mention or question drops to quiet once the user
+  spoke on the PR after it; loud events on pulled-in PRs also make a tile unread; every commit
+  after the user's approval is its own loud event (a busy PR lists many reasons).
 - **Repo name**: `code-manager` is a working title.
