@@ -161,6 +161,10 @@ ${previous}
 ${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
+- Every field is read by the user as a fact about the work. Never write about the dossier itself
+  ("First write-up", "Initial dossier", "Updated with new activity", "No changes").
+- statusNote is the one-line state shown next to the topic name: short, concrete, about the work
+  ("waiting on lyra's review of the cache PR"), max ${limits.statusNote} chars.
 - goal: what the initiative is for, max ${limits.goal} chars. summary: where it stands, max ${limits.summary}.
 - status and statusNote (max ${limits.statusNote}): why that status.
 - people: max ${limits.people}, the driver first; note max ${limits.personNote} chars. Logins without "@".

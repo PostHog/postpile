@@ -260,6 +260,7 @@ export class FakeEngine implements EngineService {
       const unreadTiles = states.filter((state) => state.kind === 'unread').length;
       return {
         topic,
+        statusLine: this.memory.statusLine(topic.id),
         group: unreadTiles > 0 ? 'needs_you' : 'quiet',
         unreadTiles,
         openTiles: states.filter((state) => state.kind === 'open').length,

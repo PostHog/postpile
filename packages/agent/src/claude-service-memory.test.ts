@@ -153,6 +153,17 @@ describe('RunnerAgentService.updateDossier line sources', () => {
 });
 
 describe('RunnerAgentService.updateDossier tolerance', () => {
+  it('drops a "First write-up" lead from summary and status note', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, summary: 'First write-up. Tests moved.', statusNote: 'Initial dossier.' } });
+
+    const result = await service.updateDossier(dossierInput());
+
+    expect(result.dossier.summary).toBe('Tests moved.');
+    expect(result.dossier.statusNote).toBe('');
+  });
+
   it('keeps an update whose question has no askedBy and whose optional fields are missing or odd', async () => {
     const { runner, service } = setup();
     runner.answer('dossier_update', {

@@ -1,12 +1,13 @@
 import type { TopicGroup, TopicListItem } from '@code-manager/core';
+import { statusLabel } from '../lib/memory.ts';
 import { CheckIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 
 const GROUP_LABELS: Record<TopicGroup, string> = { needs_you: 'Needs you', quiet: 'Quiet' };
 
-/** Second line under the name: the agent summary, or tile counts when there is none. */
+/** Second line under the name: the dossier's short state line, else tile counts. */
 function topicLine(item: TopicListItem): string {
-  if (item.topic.summary) {
-    return item.topic.summary;
+  if (item.statusLine) {
+    return item.statusLine.note ? item.statusLine.note : statusLabel(item.statusLine.status);
   }
   return `${item.openTiles} open · ${item.totalTiles} tiles`;
 }

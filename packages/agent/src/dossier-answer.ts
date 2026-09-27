@@ -20,6 +20,13 @@ type DossierAnswer = z.infer<typeof dossierUpdateOutput>;
 type EntityAnswer = { kind: EntityRef['kind']; key: string };
 type ChangeAnswer = DossierAnswer['dossier']['recentChanges'][number];
 
+/** "First write-up." and the like, which a real sync put at the start of user-facing fields. */
+const META_LEAD = /^(first|initial) (write-?up|version|dossier)[^.]*\.\s*/i;
+
+function withoutMetaLead(text: string): string {
+  return text.replace(META_LEAD, '');
+}
+
 function hasSources(sources: LineSources): boolean {
   return sources.refs.length > 0 || sources.userRefs.length > 0;
 }
@@ -137,9 +144,9 @@ function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, 
   return clampDossier({
     goal: answer.goal,
     goalSources: lineSources(answer.goalRefs, refs, sameGoal ? previous.goalSources : undefined),
-    summary: answer.summary,
+    summary: withoutMetaLead(answer.summary) || answer.summary,
     status: answer.status,
-    statusNote: answer.statusNote,
+    statusNote: withoutMetaLead(answer.statusNote),
     statusSources: lineSources(answer.statusRefs, refs, sameStatus ? previous.statusSources : undefined),
     people: answer.people.map((p) => ({ login: login(p.login), role: p.role, note: p.note })),
     openQuestions: toQuestions(answer.openQuestions, input, refs),

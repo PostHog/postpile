@@ -104,6 +104,7 @@ describe('Engine.sync with the agent', () => {
     const [item] = await h.engine.listTopics();
     expect(item?.topic).toMatchObject({ name: 'Move CI to Depot', summary: 'Move CI to Depot: 1 new events', driver: 'alice' });
     expect(item?.topic.userRole).toBe('reviewer');
+    expect(item?.statusLine).toEqual({ status: 'active', note: '' });
     expect((await h.engine.getPr(pr.key))?.glance).toMatchObject({ verdict: 'LOOKS_SAFE', dossierVersion: 1 });
 
     h.reader.etag = 'etag-2';

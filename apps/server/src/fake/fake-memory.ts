@@ -13,6 +13,7 @@ import type {
   PrKey,
   RuleProposal,
   Topic,
+  TopicStatusLine,
 } from '@code-manager/core';
 import {
   describeFactRef,
@@ -85,6 +86,11 @@ export class FakeMemory {
       .filter((entry) => entry.topicId === topicId && entry.createdAt > since)
       .filter((entry) => entry.kind === 'memory_wrong' || entry.kind === 'memory_forget')
       .map((entry) => entry.note);
+  }
+
+  statusLine(topicId: string): TopicStatusLine | null {
+    const dossier = this.latest(topicId)?.dossier;
+    return dossier ? { status: dossier.status, note: dossier.statusNote } : null;
   }
 
   topicsWithDossier(): number {

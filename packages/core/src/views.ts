@@ -20,7 +20,7 @@ import type {
   UserPrState,
   Verdict,
 } from './types.ts';
-import type { AgentCallStats } from './memory.ts';
+import type { AgentCallStats, DossierStatus } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView } from './memory-views.ts';
 import type { InstructionsProposal } from './instructions-views.ts';
 
@@ -37,8 +37,16 @@ export interface GlanceGap {
   at: IsoTime;
 }
 
+/** The dossier's short state line, for one-line topic subtitles. */
+export interface TopicStatusLine {
+  status: DossierStatus;
+  note: string;
+}
+
 export interface TopicListItem {
   topic: Topic;
+  /** Null until the topic has a dossier. */
+  statusLine: TopicStatusLine | null;
   /** needs_you when at least one tile is unread. */
   group: TopicGroup;
   unreadTiles: number;

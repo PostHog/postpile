@@ -124,15 +124,19 @@ export class ReadModels {
 
   listTopics(): TopicListItem[] {
     const board = this.board();
+    const topics = board.topics();
+    const dossiers = this.store.dossiers.latestMany(topics.map((topic) => topic.id));
     const items: TopicListItem[] = [];
-    for (const topic of board.topics()) {
+    for (const topic of topics) {
       const states = board.tilesForTopic(topic.id).map((tile) => board.stateOf(tile).kind);
       if (states.length === 0) {
         continue;
       }
       const unreadTiles = states.filter((kind) => kind === 'unread').length;
+      const dossier = dossiers.get(topic.id)?.dossier;
       items.push({
         topic,
+        statusLine: dossier ? { status: dossier.status, note: dossier.statusNote } : null,
         group: unreadTiles > 0 ? 'needs_you' : 'quiet',
         unreadTiles,
         openTiles: states.filter((kind) => kind === 'open').length,
