@@ -64,7 +64,14 @@ once" only logs it.
 **Mark read is deferred**: acting on a tile marks the GitHub notification read
 through a queue with a 6s undo window, because GitHub has no mark-unread API.
 Batches stack; undo walks back newest first; quitting flushes instead of
-dropping. The queue lives in the engine (`MarkReadQueue`), in memory.
+dropping (and waits for sends already in flight). The queue lives in the
+engine (`MarkReadQueue`), in memory. A GitHub mark-read covers the whole
+thread, including activity after the last sync, so right before each PATCH the
+queue reads the thread again: if its `updated_at` moved past the synced value
+the thread stays unread, and the next sync fetches the new activity. Local
+`last_read_at` becomes the thread's `updated_at`, not the send time. Skips and
+failures (one failed thread never stops the rest) show up in the next sync
+report.
 
 **Sync** is on demand: "Sync now" and on app start. No live updates for now.
 Only unread PR threads whose activity is newer than the stored snapshot's fetch
@@ -80,14 +87,16 @@ Action details:
 
 - mark read: every member's events seen, pinged members handled (tile turns
   done until something loud happens), thread mark-read queued. Undo reverts both.
-- approve: GitHub approval right away, then the same mark-read for that PR. The
-  undo token only brings back the unread state, never the approval.
+- approve: GitHub approval right away, pinned with `commit_id` to the synced
+  head (the commit the glance and the user saw), then the same mark-read for
+  that PR. The undo token only brings back the unread state, never the approval.
 - not mine: same as mark read (events seen, handled, thread mark-read queued,
-  undo token) + feedback, one row per member for a stack or set tile. not
-  related: member marked removed in the set (a set left with one member
-  dissolves); regroups never put it back with the remaining members. wrong topic: moved as a user
-  assignment when a target is given, otherwise membership removed so the next
-  sync re-sorts it with the feedback in the prompt.
+  undo token) + feedback, one row per member for a stack or set tile.
+- not related: member marked removed in the set (a set left with one member
+  dissolves); regroups never put it back with the remaining members.
+- wrong topic: moved as a user assignment when a target is given, otherwise
+  membership removed so the next sync re-sorts it with the feedback in the
+  prompt.
 - unmute: user override (`quiet`, or the rule loudness if that was not muted).
 
 ## Memory / agentic digesting layer (v1, to review)
@@ -98,7 +107,7 @@ and only recomputes on change.
 | what | where | invalidated when |
 |---|---|---|
 | general instructions | `~/.config/code-manager/instructions.md`, in every prompt; absent = none | file edited (part of every input hash) |
-| glance | `pr_glance`, latest per PR + `input_hash`, `model` | PR snapshot moves, or instructions or topic tailoring change |
+| glance | `pr_glance`, latest per PR + `input_hash`, `model` | PR snapshot moves (not CI), instructions, tailoring or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
 | topic | `topic`: name, summary + `summary_input_hash`, tailoring, driver, user_role | summary: member PRs change |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
 | topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides | - |
@@ -188,7 +197,10 @@ core  <- store, github, agent  <- engine  <- server, cli
 ### HTTP API
 
 Ids containing `/`, `#` or `:` (tile ids, event ids) are `encodeURIComponent`-ed
-in paths. When the server has a token, every request needs `x-code-manager-token`.
+in paths. Every request needs `x-code-manager-token`. The desktop app makes a
+per-launch token; the standalone server prints a per-run one unless
+`CODE_MANAGER_TOKEN` is set. A web page cannot send the header without a
+preflight and does not know the token, so CORS stays open.
 
 | route | engine call |
 |---|---|
@@ -229,8 +241,9 @@ in paths. When the server has a token, every request needs `x-code-manager-token
 - **npm 11 install-script gating**: `allowScripts` in the root package.json approves esbuild and
   denies fsevents. Electron 44 no longer downloads its binary on install; run
   `npx install-electron` after a fresh `npm install`.
-- **Localhost API safety**: binds 127.0.0.1, and the desktop app uses a per-launch random token
-  so web pages and other local processes cannot drive approve/comment.
+- **Localhost API safety**: binds 127.0.0.1, and a token is always required (per launch in the
+  desktop app, per run in the standalone server) so web pages and other local processes cannot
+  drive approve/comment/mark-read.
 - **Paths**: database at `~/Library/Application Support/code-manager/db.sqlite` on macOS
   (`$XDG_DATA_HOME/code-manager/db.sqlite` elsewhere), instructions at
   `~/.config/code-manager/instructions.md`. `CODE_MANAGER_DB` and `CODE_MANAGER_INSTRUCTIONS`
