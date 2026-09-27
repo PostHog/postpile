@@ -40,8 +40,8 @@ export const draftCommentOutput = z.object({
 
 export const chatOutput = z.object({
   reply: text.min(1),
-  /** A lasting instruction worth keeping, or null. scope all = across every topic. */
-  lasting: z.object({ text: text.min(1), scope: z.enum(['topic', 'all']) }).nullable().default(null),
+  /** A lasting instruction worth keeping, or null. The user picks where it applies. */
+  lasting: z.object({ text: text.min(1) }).nullable().default(null),
 });
 
 export const instructionsChangeOutput = z.object({

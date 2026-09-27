@@ -104,15 +104,12 @@ export interface ChatInput {
 }
 
 /**
- * topic: about this topic, becomes a tailoring proposal. all: about how the
- * user works everywhere, becomes an instructions change proposal.
+ * A lasting point the agent spotted in the user's message. The agent does not
+ * say where it applies: the user picks this topic, all topics or just this once.
  */
-export type LastingScope = 'topic' | 'all';
-
 export interface LastingPoint {
   /** One short instruction, written as the user would say it. */
   text: string;
-  scope: LastingScope;
 }
 
 export interface AgentChatReply {

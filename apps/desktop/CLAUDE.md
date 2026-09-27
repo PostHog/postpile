@@ -63,8 +63,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 - Instructions writes (`instructionsChat`, `proposeInstructions`,
   `saveInstructions`) are local (instructions.md + SQLite), not on the
   `GithubWrite` list. The user's instructions are never changed without an
-  Accept on a proposal; the card shows a line diff (`lib/diff.ts`), Edit,
-  Reject and the scope switch. A save that comes back with `rebased` (the
+  Accept on a proposal; the card shows a line diff (`lib/diff.ts`), Edit
+  and Reject. In tile chat the user places a lasting point ("Keep for this
+  topic" / "Keep for all topics" / "Just this once"); the agent never picks
+  the scope. A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
 - Agent-derived memory is steered only by chat and Wrong / Forget, never by

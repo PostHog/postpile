@@ -13,8 +13,7 @@ function refreshNote(count: number): string {
 
 /**
  * A proposed change to the user's general instructions: summary, line diff,
- * Accept / Edit / Reject, and "Only this topic" when it came from a tile.
- * Nothing is written until Accept. When the file changed on disk meanwhile,
+ * Accept / Edit / Reject. Nothing is written until Accept. When the file changed on disk meanwhile,
  * the server sends the change back rebased and the card shows that instead.
  */
 export function InstructionsProposalCard(props: { proposal: InstructionsProposal; onDone: () => void }) {
@@ -22,7 +21,7 @@ export function InstructionsProposalCard(props: { proposal: InstructionsProposal
   const [proposal, setProposal] = useState(props.proposal);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(props.proposal.text);
-  const busy = actions.isBusy('instructions:save') || actions.isBusy(`tailoring:${proposal.topicId ?? ''}`);
+  const busy = actions.isBusy('instructions:save');
 
   async function accept() {
     const result = await actions.saveInstructions({ proposal, text });
@@ -32,13 +31,6 @@ export function InstructionsProposalCard(props: { proposal: InstructionsProposal
       setProposal(result.rebased);
       setText(result.rebased.text);
       setEditing(false);
-    }
-  }
-
-  async function onlyThisTopic() {
-    if (proposal.topicId) {
-      await actions.decideTailoring(proposal.topicId, proposal.point, true);
-      props.onDone();
     }
   }
 
@@ -71,11 +63,6 @@ export function InstructionsProposalCard(props: { proposal: InstructionsProposal
         <Button disabled={busy} onClick={props.onDone}>
           Reject
         </Button>
-        {proposal.topicId && (
-          <Button className="ml-auto" disabled={busy} title="Keep it as an instruction for this topic only" onClick={() => void onlyThisTopic()}>
-            Only this topic
-          </Button>
-        )}
       </div>
     </div>
   );

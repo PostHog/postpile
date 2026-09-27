@@ -36,8 +36,7 @@ export class InstructionsProposer {
       .map((earlier) => earlier.text);
   }
 
-  /** point: the lasting point in the user's words, kept so "only this topic" can store it as tailoring instead. */
-  async propose(message: ChatMessage, point: string, topicId: string | null): Promise<InstructionsProposalReply> {
+  async propose(message: ChatMessage): Promise<InstructionsProposalReply> {
     if (message.role !== 'user') {
       return { reply: 'Only your own messages can change your instructions.', proposal: null };
     }
@@ -57,8 +56,6 @@ export class InstructionsProposer {
         baseText: current.text,
         text: answer.change.text,
         summary: answer.change.summary,
-        point,
-        topicId,
         sourceChatMessageId: message.id,
         dossiersToRefresh: this.dossiersToRefresh(),
       },

@@ -120,8 +120,9 @@ describe('RunnerAgentService.draftComment and chat', () => {
     expect(result).toEqual({ body: '@bob is the cache key stable across runners?' });
   });
 
-  it('passes on a lasting point with the scope the agent picked', async () => {
+  it('passes on a lasting point without judging its scope', async () => {
     const { runner, service } = setup();
+    // An old-style answer with a scope still parses; the scope is dropped, the user picks it.
     runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Always flag cache key changes.', scope: 'all' } });
     runner.answer('chat', { reply: 'It adds a runner label.', lasting: null });
     const topic = makeTopic();
@@ -134,8 +135,11 @@ describe('RunnerAgentService.draftComment and chat', () => {
       context: emptyContext,
     };
 
-    expect(await service.chat(input)).toEqual({ reply: 'Noted.', lasting: { text: 'Always flag cache key changes.', scope: 'all' } });
+    expect(await service.chat(input)).toEqual({ reply: 'Noted.', lasting: { text: 'Always flag cache key changes.' } });
     expect(await service.chat({ ...input, message: 'what does it do?' })).toEqual({ reply: 'It adds a runner label.', lasting: null });
+    const prompt = runner.promptsFor('chat')[0] ?? '';
+    expect(prompt).not.toContain('"scope"');
+    expect(prompt).toContain('The user decides where it applies');
   });
 });
 
@@ -163,11 +167,11 @@ describe('RunnerAgentService.proposeInstructionsChange', () => {
 
   it('treats no change, an unchanged text and a runaway text as no proposal', async () => {
     const { runner, service } = setup();
-    runner.answer('instructions_change', { reply: 'That is about one topic.', change: null });
+    runner.answer('instructions_change', { reply: 'That is a one-off question.', change: null });
     runner.answer('instructions_change', { reply: '', change: { text: input.instructions, summary: 'same' } });
     runner.answer('instructions_change', { reply: '', change: { text: 'x'.repeat(30_000), summary: 'long' } });
 
-    expect(await service.proposeInstructionsChange(input)).toEqual({ reply: 'That is about one topic.', change: null });
+    expect(await service.proposeInstructionsChange(input)).toEqual({ reply: 'That is a one-off question.', change: null });
     expect((await service.proposeInstructionsChange(input)).change).toBeNull();
     expect((await service.proposeInstructionsChange(input)).change).toBeNull();
   });

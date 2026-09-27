@@ -87,8 +87,8 @@ export interface EngineService {
   getInstructionsChat(): Promise<ChatMessage[]>;
   /** A message in the general chat. Comes back with a proposal when it asks for a change. Nothing is written to the file. */
   instructionsChat(message: string): Promise<InstructionsChatReply>;
-  /** "Apply to all topics instead": the user's chat message asked again as an instructions change. */
-  proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposalReply>;
+  /** "Keep for all topics" on a lasting point: the user's chat message asked as an instructions change. */
+  proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposalReply>;
   /**
    * Writes an accepted proposal to instructions.md and stores the version.
    * Refuses to overwrite a hand edit made after the proposal: that edit is

@@ -493,10 +493,15 @@ export interface ChatMessage {
   createdAt: IsoTime;
 }
 
-/** A lasting point from chat the agent suggests keeping as topic tailoring. */
-export interface TailoringProposal {
-  topicId: string;
+/**
+ * A lasting point the agent spotted in the user's chat message. The user
+ * picks where it goes: "Keep for this topic" (tailoring), "Keep for all
+ * topics" (an instructions proposal from the same message) or "Just this once".
+ */
+export interface LastingPointProposal {
+  /** The tile's topic. Null on Unsorted, which has no tailoring to keep it in. */
+  topicId: string | null;
   text: string;
-  /** The user's chat message it came from, so "apply to all topics instead" can turn it into an instructions proposal. */
-  sourceChatMessageId: number | null;
+  /** The user's own chat message it came from. Instructions proposals only ever start from one. */
+  sourceChatMessageId: number;
 }

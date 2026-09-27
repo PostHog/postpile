@@ -33,14 +33,14 @@ ${earlierBlock(input.earlierMessages)}
 Their message:
 ${clip(input.message, 2000)}
 
-If the message asks for a lasting change to how the assistant works across all their topics,
-write the full new instructions text:
+The user chose to keep this for all their topics, so do not second-guess the scope: even a
+point that names one area becomes a general instruction. Write the full new instructions text:
 - change only what the message asks for; keep every other line word for word, in the same order
 - add a new point where it fits their structure; edit a line when the message changes it; remove
   a line only when the message asks for that
 - keep their voice and formatting (headings, bullets)
 "summary" says in one short line what changed, max ${INSTRUCTIONS_SUMMARY_MAX} chars.
-If the message does not ask for such a change (a question, a one-off, a point about one topic),
-"change" is null and "reply" says in one sentence why.
+If the message holds no lasting point at all (only a question or a one-off), "change" is null
+and "reply" says in one sentence why.
 ${jsonOnly('{"reply": "...", "change": {"text": "...full new instructions...", "summary": "..."} | null}')}`;
 }

@@ -62,18 +62,18 @@ export class InstructionsActions {
   /** Everything said here is about the instructions, so every message goes to the proposal call. */
   async chat(message: string): Promise<InstructionsChatReply> {
     const userMessage = this.addMessage('user', message);
-    const answer = await this.proposer.propose(userMessage, message, null);
+    const answer = await this.proposer.propose(userMessage);
     const replyText = answer.proposal ? `Proposed: ${answer.proposal.summary}` : answer.reply || 'That does not change your instructions.';
     return { message: this.addMessage('agent', replyText), proposal: answer.proposal };
   }
 
-  /** "Apply to all topics instead" on a tailoring proposal: the same user message, asked as an instructions change. */
-  async propose(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposalReply> {
+  /** "Keep for all topics" on a lasting point from tile chat: the user's message, asked as an instructions change. */
+  async propose(sourceChatMessageId: number): Promise<InstructionsProposalReply> {
     const message = this.store.chat.get(sourceChatMessageId);
     if (!message) {
       return { reply: `No chat message ${sourceChatMessageId}.`, proposal: null };
     }
-    return this.proposer.propose(message, point, topicId);
+    return this.proposer.propose(message);
   }
 
   /**
@@ -98,7 +98,7 @@ export class InstructionsActions {
     const current = this.history.current();
     const currentVersion = current.version?.version ?? null;
     if (currentVersion !== proposal.baseVersion) {
-      const again = await this.proposer.propose(source, proposal.point, proposal.topicId);
+      const again = await this.proposer.propose(source);
       const message = `Your instructions changed outside the app. That edit is kept as version ${currentVersion ?? 0}; the change is proposed again on top of it.`;
       return { ok: false, message: again.proposal ? message : `${message} ${again.reply}`, undoToken: null, savedVersion: null, rebased: again.proposal };
     }

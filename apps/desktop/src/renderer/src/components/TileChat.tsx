@@ -1,21 +1,22 @@
 import { useState } from 'react';
-import type { InstructionsProposal, TailoringProposal, TileView } from '@code-manager/core';
+import type { InstructionsProposal, LastingPointProposal, TileView } from '@code-manager/core';
 import { useActions } from '../api/actions.tsx';
 import { useChat } from '../api/chat.ts';
 import { Button } from './Button.tsx';
 import { InstructionsProposalCard } from './InstructionsProposalCard.tsx';
 
 /**
- * Chat with the agent about a tile. A lasting point comes back as tailoring
- * for this topic ("keep it" / "just this once") or, when it applies to every
- * topic, as a change to the user's instructions. The user can switch either way.
+ * Chat with the agent about a tile. A lasting point comes back for the user
+ * to place: "Keep for this topic" (tailoring), "Keep for all topics" (a
+ * proposed change to their instructions, shown as a diff) or "Just this once".
+ * The agent never picks the scope.
  */
 export function TileChat(props: { view: TileView; onClose: () => void }) {
   const actions = useActions();
   const tileId = props.view.tile.id;
   const chat = useChat(tileId, true);
   const [draft, setDraft] = useState('');
-  const [proposal, setProposal] = useState<TailoringProposal | null>(null);
+  const [point, setPoint] = useState<LastingPointProposal | null>(null);
   const [instructions, setInstructions] = useState<InstructionsProposal | null>(null);
   const sending = actions.isBusy(`chat:${tileId}`);
 
@@ -23,24 +24,33 @@ export function TileChat(props: { view: TileView; onClose: () => void }) {
     const reply = await actions.chat(tileId, draft);
     if (reply) {
       setDraft('');
-      setProposal(reply.tailoringProposal);
-      setInstructions(reply.instructionsProposal);
+      setPoint(reply.lastingPoint);
+      setInstructions(null);
     }
   }
 
-  async function decide(keep: boolean) {
-    if (proposal) {
-      await actions.decideTailoring(proposal.topicId, proposal.text, keep);
-      setProposal(null);
+  async function keepForTopic() {
+    if (point?.topicId) {
+      await actions.decideTailoring(point.topicId, point.text, true);
+      setPoint(null);
     }
   }
 
-  async function applyToAllTopics() {
-    if (proposal?.sourceChatMessageId) {
-      const changed = await actions.proposeInstructions(proposal.sourceChatMessageId, proposal.text, proposal.topicId);
-      if (changed) {
-        setProposal(null);
-        setInstructions(changed);
+  /** Logged as feedback on the topic; on Unsorted there is nothing to log it on, so it is only dismissed. */
+  async function justThisOnce() {
+    if (point?.topicId) {
+      await actions.decideTailoring(point.topicId, point.text, false);
+    }
+    setPoint(null);
+  }
+
+  /** The card stays when the proposal call finds no change, so the point can still go to this topic. */
+  async function keepForAllTopics() {
+    if (point) {
+      const proposal = await actions.proposeInstructions(point.sourceChatMessageId);
+      if (proposal) {
+        setPoint(null);
+        setInstructions(proposal);
       }
     }
   }
@@ -66,26 +76,28 @@ export function TileChat(props: { view: TileView; onClose: () => void }) {
             {message.text}
           </p>
         ))}
-        {proposal && (
+        {point && (
           <div className="flex flex-col gap-2 rounded-row border border-accent-line bg-accent-soft p-3 text-xs">
             <span>
-              Keep this as an instruction for the topic? <span className="font-medium">"{proposal.text}"</span>
+              Keep this for later? <span className="font-medium">"{point.text}"</span>
             </span>
-            <div className="flex gap-1.5">
-              <Button variant="primary" onClick={() => void decide(true)}>
-                Keep it
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                variant="primary"
+                disabled={point.topicId === null}
+                title={point.topicId === null ? 'Unsorted is not a topic yet, so there is no topic to keep it on' : 'Add it to the tailoring of this topic'}
+                onClick={() => void keepForTopic()}
+              >
+                Keep for this topic
               </Button>
-              <Button onClick={() => void decide(false)}>Just this once</Button>
-              {proposal.sourceChatMessageId !== null && (
-                <Button
-                  className="ml-auto"
-                  disabled={actions.isBusy('instructions:propose')}
-                  title="Propose it as a change to your general instructions instead"
-                  onClick={() => void applyToAllTopics()}
-                >
-                  Apply to all topics instead
-                </Button>
-              )}
+              <Button
+                disabled={actions.isBusy('instructions:propose')}
+                title="Propose it as a change to your general instructions, shown as a diff first"
+                onClick={() => void keepForAllTopics()}
+              >
+                Keep for all topics
+              </Button>
+              <Button onClick={() => void justThisOnce()}>Just this once</Button>
             </div>
           </div>
         )}

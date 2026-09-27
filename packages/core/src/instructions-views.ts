@@ -34,10 +34,6 @@ export interface InstructionsProposal {
   text: string;
   /** One short line on what changes. */
   summary: string;
-  /** The user's lasting point in their own words, so "only this topic" can keep it as tailoring instead. */
-  point: string;
-  /** The topic of the tile chat it came from; null from the general chat. */
-  topicId: string | null;
   /** The user's own chat message it came from. Proposals never come from anything else. */
   sourceChatMessageId: number;
   /** Topic dossiers that refresh once on the next sync if this is accepted. */

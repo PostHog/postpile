@@ -86,7 +86,7 @@ export class Engine implements EngineService {
     this.tiles = new TileActions(store, readMarker, now);
     this.prActions = new PrActions(store, deps.writer, deps.agent, contexts, readMarker, now);
     this.feedback = new FeedbackActions(store, readMarker, now);
-    this.chats = new ChatActions(store, deps.agent, contexts, proposer, now);
+    this.chats = new ChatActions(store, deps.agent, contexts, now);
     this.proposals = new ProposalActions(store, now);
     this.memoryActions = new MemoryActions(store, now);
     this.memorySources = new MemorySourcesReads(store, now);
@@ -224,8 +224,8 @@ export class Engine implements EngineService {
     return this.instructions.chat(message);
   }
 
-  proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposalReply> {
-    return this.instructions.propose(sourceChatMessageId, point, topicId);
+  proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposalReply> {
+    return this.instructions.propose(sourceChatMessageId);
   }
 
   saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {

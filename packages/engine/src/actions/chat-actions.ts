@@ -1,39 +1,23 @@
 import type { AgentService } from '@code-manager/agent';
-import type { ActionResult, ChatMessage, ChatReply, InstructionsProposal } from '@code-manager/core';
+import type { ActionResult, ChatMessage, ChatReply } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
-import { errorText } from '../errors.ts';
-import type { InstructionsProposer } from '../instructions/proposer.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { failed, ok } from './results.ts';
 
 /**
- * Chat on a tile. Nothing from chat is stored until the user confirms it:
- * tailoring with decideTailoring ("keep it" vs "just this once"), an
- * instructions change with saveInstructions.
+ * Chat on a tile. A lasting point comes back for the user to place; nothing
+ * is stored until they do: "Keep for this topic" / "Just this once" go to
+ * decideTailoring, "Keep for all topics" to proposeInstructions and then
+ * saveInstructions on Accept.
  */
 export class ChatActions {
   constructor(
     private readonly store: Store,
     private readonly agent: AgentService,
     private readonly contexts: PromptContextSource,
-    private readonly proposer: InstructionsProposer,
     private readonly now: () => Date,
   ) {}
-
-  /**
-   * A point the agent says applies everywhere becomes an instructions
-   * proposal from the user's own message. When that call finds no change,
-   * or fails, the point falls back to tailoring for this topic.
-   */
-  private async instructionsProposal(userMessage: ChatMessage, point: string, topicId: string | null): Promise<InstructionsProposal | null> {
-    try {
-      return (await this.proposer.propose(userMessage, point, topicId)).proposal;
-    } catch (error) {
-      console.warn(`instructions proposal failed: ${errorText(error)}`);
-      return null;
-    }
-  }
 
   getChat(tileId: string): ChatMessage[] {
     return this.store.chat.listForTile(tileId);
@@ -65,18 +49,12 @@ export class ChatActions {
       text: answer.reply,
       createdAt: this.now().toISOString(),
     });
-    const lasting = answer.lasting;
-    const storedTopicId = isUnsorted ? null : topic.id;
-    if (lasting?.scope === 'all') {
-      const instructionsProposal = await this.instructionsProposal(userMessage, lasting.text, storedTopicId);
-      if (instructionsProposal) {
-        return { message: reply, tailoringProposal: null, instructionsProposal };
-      }
+    if (!answer.lasting) {
+      return { message: reply, lastingPoint: null };
     }
-    // Unsorted is not a stored topic, so there is nowhere to keep tailoring.
-    const tailoringProposal =
-      lasting && storedTopicId !== null ? { topicId: storedTopicId, text: lasting.text, sourceChatMessageId: userMessage.id } : null;
-    return { message: reply, tailoringProposal, instructionsProposal: null };
+    // Unsorted is not a stored topic: the point can still go to all topics, not to this one.
+    const topicId = isUnsorted ? null : topic.id;
+    return { message: reply, lastingPoint: { topicId, text: answer.lasting.text, sourceChatMessageId: userMessage.id } };
   }
 
   /** keep=true appends the text to the topic's tailoring; false only logs it for this once. */

@@ -72,10 +72,8 @@ function isUnseenLoud(event: PrEvent): boolean {
   return !event.seenAt && loudnessOf(event) === 'loud';
 }
 
-/** Stand-in for the agent spotting a lasting point in chat. */
+/** Stand-in for the agent spotting a lasting point in chat. Where it applies is the user's pick. */
 const LASTING = /\b(always|never|from now on|in general|every topic|all topics)\b/i;
-/** Stand-in for the agent judging it is about this topic, not about every topic. */
-const TOPIC_SCOPED = /\b(here|this topic|this pr|this tile|in this)\b/i;
 
 /** Canned numbers so the footer has something to show; the fake never calls the agent. */
 function sampleSyncStats(): AgentCallStats {
@@ -469,13 +467,9 @@ export class FakeEngine implements EngineService {
     };
     messages.push(userMessage, reply);
     if (!LASTING.test(message)) {
-      return { message: reply, tailoringProposal: null, instructionsProposal: null };
+      return { message: reply, lastingPoint: null };
     }
-    if (TOPIC_SCOPED.test(message)) {
-      return { message: reply, tailoringProposal: { topicId: tile.topicId, text: message, sourceChatMessageId: userMessage.id }, instructionsProposal: null };
-    }
-    const { proposal } = this.instructions.propose(userMessage, message, tile.topicId);
-    return { message: reply, tailoringProposal: null, instructionsProposal: proposal };
+    return { message: reply, lastingPoint: { topicId: tile.topicId, text: message, sourceChatMessageId: userMessage.id } };
   }
 
   async decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult> {
@@ -593,8 +587,8 @@ export class FakeEngine implements EngineService {
     return this.instructions.chatMessage(message);
   }
 
-  async proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposalReply> {
-    return this.instructions.proposeFromId(sourceChatMessageId, point, topicId);
+  async proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposalReply> {
+    return this.instructions.proposeFromId(sourceChatMessageId);
   }
 
   async saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {

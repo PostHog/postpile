@@ -34,53 +34,45 @@ function answerChange(h: Harness, text = CHANGED, summary = 'Flag cache key chan
 }
 
 describe('instructions from tile chat', () => {
-  it('turns a point about every topic into an instructions proposal from the user message', async () => {
+  it('asks nothing about scope and proposes an instructions change only when the user keeps it for all topics', async () => {
     const { h, file } = await setup();
-    h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Flag cache key changes.', scope: 'all' } });
-    answerChange(h);
+    h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Flag cache key changes.' } });
 
     const reply = await h.engine.chat(tileId, 'From now on, always flag cache key changes.');
 
-    expect(reply.tailoringProposal).toBeNull();
-    expect(reply.instructionsProposal).toMatchObject({
+    const userMessage = (await h.engine.getChat(tileId))[0];
+    expect(reply.lastingPoint).toEqual({ topicId: 'depot', text: 'Flag cache key changes.', sourceChatMessageId: userMessage?.id });
+    expect(h.runner.promptsFor('instructions_change')).toEqual([]);
+
+    answerChange(h);
+    const kept = await h.engine.proposeInstructions(reply.lastingPoint!.sourceChatMessageId);
+
+    expect(kept.proposal).toMatchObject({
       baseVersion: 1,
       baseText: BASE,
       text: `${CHANGED}\n`,
       summary: 'Flag cache key changes',
-      point: 'Flag cache key changes.',
-      topicId: 'depot',
+      sourceChatMessageId: userMessage?.id,
       dossiersToRefresh: 1,
     });
-    const userMessage = (await h.engine.getChat(tileId))[0];
-    expect(reply.instructionsProposal?.sourceChatMessageId).toBe(userMessage?.id);
     // Only the user's own words went into the proposal call, no GitHub text.
     const prompt = h.runner.promptsFor('instructions_change')[0] ?? '';
     expect(prompt).toContain('From now on, always flag cache key changes.');
+    expect(prompt).toContain('The user chose to keep this for all their topics');
     expect(prompt).not.toContain(pr.title);
     expect(readFileSync(file, 'utf8')).toBe(BASE);
   });
 
-  it('falls back to tailoring when the proposal call finds no change', async () => {
+  it('keeps the point open when the proposal call finds no change', async () => {
     const { h } = await setup();
-    h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Flag cache keys here.', scope: 'all' } });
-    h.runner.answer('instructions_change', { reply: 'That is about one topic.', change: null });
-
+    h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Flag cache keys.' } });
     const reply = await h.engine.chat(tileId, 'flag cache keys');
+    h.runner.answer('instructions_change', { reply: 'That is a one-off question.', change: null });
 
-    expect(reply.instructionsProposal).toBeNull();
-    expect(reply.tailoringProposal).toMatchObject({ topicId: 'depot', text: 'Flag cache keys here.' });
-  });
+    const kept = await h.engine.proposeInstructions(reply.lastingPoint!.sourceChatMessageId);
 
-  it('switches a tailoring proposal to all topics from the same user message', async () => {
-    const { h } = await setup();
-    h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Flag cache keys.', scope: 'topic' } });
-    const reply = await h.engine.chat(tileId, 'flag cache keys');
-    answerChange(h);
-
-    const switched = await h.engine.proposeInstructions(reply.tailoringProposal!.sourceChatMessageId!, 'Flag cache keys.', 'depot');
-
-    expect(switched.proposal?.text).toBe(`${CHANGED}\n`);
-    expect(h.runner.promptsFor('instructions_change')[0]).toContain('flag cache keys');
+    expect(kept).toEqual({ reply: 'That is a one-off question.', proposal: null });
+    expect(h.store.topics.get('depot')?.tailoring).toBe('');
   });
 
   it('never proposes from an agent message', async () => {
@@ -89,7 +81,7 @@ describe('instructions from tile chat', () => {
     await h.engine.chat(tileId, 'hi');
     const agentMessage = (await h.engine.getChat(tileId))[1]!;
 
-    const result = await h.engine.proposeInstructions(agentMessage.id, 'x', null);
+    const result = await h.engine.proposeInstructions(agentMessage.id);
 
     expect(result.proposal).toBeNull();
     expect(h.runner.promptsFor('instructions_change')).toEqual([]);

@@ -12,7 +12,7 @@ import type {
   PrSet,
   PrState,
   Provenance,
-  TailoringProposal,
+  LastingPointProposal,
   Tile,
   TileState,
   Topic,
@@ -22,7 +22,6 @@ import type {
 } from './types.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView } from './memory-views.ts';
-import type { InstructionsProposal } from './instructions-views.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
@@ -217,12 +216,10 @@ export interface AppConfig {
 }
 
 /**
- * A lasting point in the user's message comes back as one of two proposals:
- * tailoring when it is about this topic, an instructions change when it
- * applies to every topic. The agent picks; the user can switch.
+ * A lasting point in the user's message comes back for the user to place:
+ * this topic, all topics or just this once. The agent does not pick.
  */
 export interface ChatReply {
   message: ChatMessage;
-  tailoringProposal: TailoringProposal | null;
-  instructionsProposal: InstructionsProposal | null;
+  lastingPoint: LastingPointProposal | null;
 }

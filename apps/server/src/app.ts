@@ -82,8 +82,6 @@ const instructionsProposal = z.object({
   baseText: z.string(),
   text: z.string(),
   summary: z.string(),
-  point: z.string(),
-  topicId: z.string().nullable(),
   sourceChatMessageId: z.number().int().positive(),
   dossiersToRefresh: z.number().int().min(0),
 });
@@ -92,8 +90,6 @@ const instructionsDecision = z.object({ proposal: instructionsProposal, text: z.
 
 const proposeInstructionsBody = z.object({
   sourceChatMessageId: z.number().int().positive(),
-  point: z.string().default(''),
-  topicId: z.string().nullable().default(null),
 });
 
 /** Parses a JSON body that may be missing entirely. */
@@ -189,7 +185,7 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   });
   app.post('/api/instructions/proposals', async (c) => {
     const body = proposeInstructionsBody.parse(await c.req.json());
-    return c.json(await engine.proposeInstructions(body.sourceChatMessageId, body.point, body.topicId));
+    return c.json(await engine.proposeInstructions(body.sourceChatMessageId));
   });
 
   app.get('/api/facts', async (c) => {

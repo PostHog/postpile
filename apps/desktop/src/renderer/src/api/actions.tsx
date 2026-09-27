@@ -76,8 +76,8 @@ export interface Actions {
   chat(tileId: string, message: string): Promise<ChatReply | null>;
   /** A message in the "Your instructions" chat. Local, not a GitHub write. */
   instructionsChat(message: string): Promise<InstructionsChatReply | null>;
-  /** "Apply to all topics instead": the same chat message asked as an instructions change. Null when it changes nothing. */
-  proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposal | null>;
+  /** "Keep for all topics": the user's chat message asked as an instructions change. Null when it changes nothing. */
+  proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposal | null>;
   /** Accepts a proposal: writes instructions.md. Local, not a GitHub write. */
   saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult | null>;
 }
@@ -245,9 +245,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposal | null> {
+  async function proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposal | null> {
     try {
-      const body = { sourceChatMessageId, point, topicId };
+      const body = { sourceChatMessageId };
       const reply = await withBusy('instructions:propose', () => request<InstructionsProposalReply>('POST', '/api/instructions/proposals', body));
       if (!reply.proposal) {
         show('error', reply.reply || 'That does not change your instructions.');

@@ -131,8 +131,7 @@ describe('server routes over the fake engine', () => {
   it('turns a lasting chat point into tailoring once confirmed', async () => {
     const app = appWithFake();
     const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'Always flag Turbo version bumps here' });
-    expect(reply.json.tailoringProposal?.topicId).toBe('topic-depot');
-    expect(reply.json.instructionsProposal).toBeNull();
+    expect(reply.json.lastingPoint).toMatchObject({ topicId: 'topic-depot', text: 'Always flag Turbo version bumps here' });
     const history = (await (await app.request(`/api/tiles/${setTile}/chat`)).json()) as unknown[];
     expect(history).toHaveLength(2);
 
@@ -141,12 +140,14 @@ describe('server routes over the fake engine', () => {
     expect(topic.topic.tailoring).toContain('Always flag Turbo version bumps here');
   });
 
-  it('turns a point about every topic into an instructions proposal and saves it on accept', async () => {
+  it('turns a point the user keeps for all topics into an instructions proposal and saves it on accept', async () => {
     const app = appWithFake();
     const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'From now on flag every CI timeout change' });
-    const proposal = reply.json.instructionsProposal;
-    expect(reply.json.tailoringProposal).toBeNull();
+    const sourceChatMessageId = reply.json.lastingPoint?.sourceChatMessageId;
+    const proposed = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId });
+    const proposal = proposed.json.proposal;
     expect(proposal?.text).toContain('- From now on flag every CI timeout change');
+    expect(proposal?.sourceChatMessageId).toBe(sourceChatMessageId);
 
     const saved = await post<InstructionsSaveResult>(app, '/api/instructions', { proposal, text: proposal?.text });
     expect(saved.json).toMatchObject({ ok: true, savedVersion: 4 });
@@ -159,17 +160,12 @@ describe('server routes over the fake engine', () => {
     expect(stale.json.rebased?.baseVersion).toBe(4);
   });
 
-  it('proposes from the general instructions chat and from a tailoring switch', async () => {
+  it('proposes from the general instructions chat', async () => {
     const app = appWithFake();
     const chat = await post<InstructionsChatReply>(app, '/api/instructions/chat', { message: 'Skip docs-only PRs' });
     expect(chat.json.proposal?.summary).toBe('Added: Skip docs-only PRs');
     const history = (await (await app.request('/api/instructions/chat')).json()) as unknown[];
     expect(history.length).toBeGreaterThanOrEqual(4);
-
-    const tile = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'Always flag Turbo bumps here' });
-    const sourceChatMessageId = tile.json.tailoringProposal?.sourceChatMessageId;
-    const switched = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId, point: 'Flag Turbo bumps', topicId: 'topic-depot' });
-    expect(switched.json.proposal).toMatchObject({ point: 'Flag Turbo bumps', topicId: 'topic-depot', sourceChatMessageId });
   });
 
   it('answers "Why?" for facts and dossier lines', async () => {

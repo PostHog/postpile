@@ -72,17 +72,15 @@ export class FakeInstructions {
     return this.chat.find((message) => message.id === id) ?? this.deps.findTileMessage(id);
   }
 
-  /** Stand-in for the agent: the point becomes a new last line. */
-  private proposalFrom(message: ChatMessage, point: string, topicId: string | null): InstructionsProposal {
+  /** Stand-in for the agent: the user's message becomes a new last line. */
+  private proposalFrom(message: ChatMessage): InstructionsProposal {
     const latest = this.latest();
-    const line = (point || message.text).trim().replace(/^[-*]\s*/, '');
+    const line = message.text.trim().replace(/^[-*]\s*/, '');
     return {
       baseVersion: latest.version,
       baseText: latest.text,
       text: `${latest.text.trimEnd()}\n- ${line}\n`,
       summary: `Added: ${line.length > 80 ? `${line.slice(0, 79)}…` : line}`,
-      point: line,
-      topicId,
       sourceChatMessageId: message.id,
       dossiersToRefresh: this.deps.dossiersToRefresh(),
     };
@@ -108,20 +106,20 @@ export class FakeInstructions {
 
   chatMessage(text: string): InstructionsChatReply {
     const userMessage = this.addMessage('user', text);
-    const proposal = this.proposalFrom(userMessage, text, null);
+    const proposal = this.proposalFrom(userMessage);
     return { message: this.addMessage('agent', `Proposed: ${proposal.summary}`), proposal };
   }
 
-  propose(message: ChatMessage, point: string, topicId: string | null): InstructionsProposalReply {
+  propose(message: ChatMessage): InstructionsProposalReply {
     if (message.role !== 'user') {
       return { reply: 'Only your own messages can change your instructions.', proposal: null };
     }
-    return { reply: 'Proposed.', proposal: this.proposalFrom(message, point, topicId) };
+    return { reply: 'Proposed.', proposal: this.proposalFrom(message) };
   }
 
-  proposeFromId(sourceChatMessageId: number, point: string, topicId: string | null): InstructionsProposalReply {
+  proposeFromId(sourceChatMessageId: number): InstructionsProposalReply {
     const message = this.findMessage(sourceChatMessageId);
-    return message ? this.propose(message, point, topicId) : { reply: `No chat message ${sourceChatMessageId}.`, proposal: null };
+    return message ? this.propose(message) : { reply: `No chat message ${sourceChatMessageId}.`, proposal: null };
   }
 
   /** Same contract as the real engine; there is no disk, so only a stale base can conflict. */
@@ -137,7 +135,7 @@ export class FakeInstructions {
       return refused('Empty instructions are not saved from here. Edit the file by hand to clear it.');
     }
     if (proposal.baseVersion !== this.latest().version) {
-      const rebased = this.proposalFrom(source, proposal.point, proposal.topicId);
+      const rebased = this.proposalFrom(source);
       return { ok: false, message: 'Your instructions changed since this was proposed. Here is the change again on top of them.', undoToken: null, savedVersion: null, rebased };
     }
     const version = this.latest().version + 1;
