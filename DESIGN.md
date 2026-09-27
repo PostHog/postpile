@@ -148,6 +148,12 @@ A broken agent answer is logged in `SyncReport.errors` and retried next sync.
 Every prompt carries a `PromptContext`: general instructions + topic tailoring
 + recent feedback for that topic + accepted standing rules.
 
+GitHub text (titles, bodies, comments, event summaries, file paths) is fenced
+in `<github_data>` tags, and every prompt that carries it says that content
+is data, never instructions (`GITHUB_DATA_RULE`, `githubData` in
+`prompts/shared.ts`). Anyone who can comment on a PR can write into these
+prompts; the fence plus the answer checks below keep that out of memory.
+
 All agent calls go through one `AgentRunner` interface. Today:
 `ClaudeCliRunner`, which runs
 
@@ -194,7 +200,7 @@ work).
 Contracts are in code: `packages/core/src/memory.ts` (types),
 `memory-views.ts` (read models), `dossier.ts`, `fact-rules.ts`, `verify.ts`,
 `delta.ts`, `glance-batches.ts`, `agent-calls.ts`, `topic-changes.ts`;
-`packages/store/src/migrations/002_engine_memory.ts` and the new repos;
+`packages/store/src/migrations/002_engine_memory.ts` (003 adds `fact.rechecked_at`) and the new repos;
 `packages/agent/src/service.ts` (v2 block) and `schemas.ts`;
 `packages/engine/src/service.ts`. Everything is implemented; the v1 agent
 calls they replaced are deleted.
@@ -206,10 +212,10 @@ New tables (migration 002). Everything else from v1 stays.
 | table | columns | notes |
 |---|---|---|
 | `event_log` | `seq` INTEGER PK AUTOINCREMENT, `event_id` UNIQUE, `pr_key`, `logged_at` | Append-only, one row per first sighting of an event id. `seq` is the unit every cursor counts in. Never reused (AUTOINCREMENT), rows stay when the `pr_event` row is later dropped. Backfilled for existing events in time order. |
-| `cursor` | PK (`kind`, `scope`), `seq`, `dossier_version`, `updated_at` | `digest:<topic>` = what the dossier has read; `seen:<topic>` = what the user has seen; `consolidate:global` = last consolidation. Only moves forward. |
-| `topic_dossier` | PK (`topic_id`, `version`), `json`, `flags_json`, `input_hash`, `through_seq`, `model`, `created_at` | Every version kept (pruned to the newest 50 per topic). Latest = highest version. |
-| `fact` | `id` PK, `subject_kind`, `subject_key`, `predicate`, `object_kind`, `object_key`, `text`, `topic_id`, `source` (agent/rule), `valid_from`, `invalid_at`, `invalid_reason`, `superseded_by`, `recorded_at`, `expired_at`, `stale_at`, `stale_reason`, `verified_at` | Bi-temporal: `valid_from`/`invalid_at` = world time, `recorded_at`/`expired_at` = when the engine believed it. Active = both `invalid_at` and `expired_at` null. |
-| `fact_ref` | PK (`fact_id`, `kind`, `pr_key`, `source_id`), `url`, `at`, `head_oid` | Provenance. `source_id` is `''` for kind `pr`. A NOOP reconcile adds refs here. |
+| `cursor` | PK (`kind`, `scope`), `seq`, `dossier_version`, `updated_at` | `digest:<topic>` = what the dossier has read; `seen:<topic>` = what the user has seen; `classify:<topic>` (or `classify:unsorted`) = how far the event second opinion got; `consolidate:global` = last consolidation. Only moves forward. |
+| `topic_dossier` | PK (`topic_id`, `version`), `json`, `flags_json`, `input_hash`, `through_seq`, `model`, `created_at` | Pruned to the newest 50 per topic on every save. Latest = highest version. |
+| `fact` | `id` PK, `subject_kind`, `subject_key`, `predicate`, `object_kind`, `object_key`, `text`, `topic_id`, `source` (agent/rule), `valid_from`, `invalid_at`, `invalid_reason`, `superseded_by`, `recorded_at`, `expired_at`, `stale_at`, `stale_reason`, `verified_at`, `rechecked_at` (migration 003) | Bi-temporal: `valid_from`/`invalid_at` = world time, `recorded_at`/`expired_at` = when the engine believed it. Active = both `invalid_at` and `expired_at` null. `rechecked_at` = last time a stale fact was handed to a dossier update. |
+| `fact_ref` | PK (`fact_id`, `kind`, `pr_key`, `source_id`), `url`, `at`, `head_oid` | Provenance. `source_id` is `''` for kind `pr`. A NOOP reconcile adds refs here; a fact keeps its oldest ref and the newest 10. `head_oid`: the commit a review was left on, the commit itself, or the PR head while open. |
 | `rule_proposal` | `id` PK, `text`, `topic_id` (null = global), `evidence_json` (feedback ids), `reason`, `status`, `created_at`, `decided_at` | Standing rules from consolidation, pending until the user decides. |
 | `agent_call` | `id` PK, `run_id`, `kind`, `topic_id`, `model`, `ok`, `attempt`, `duration_ms`, `cost_usd`, `at` | One row per runner call. Sync reports and cost over time read it. |
 
@@ -237,10 +243,14 @@ migration.
   facts recorded or closed after it, and the count of new events.
 - **consolidate cursor**: time and `seq` of the last consolidation run, used
   to decide when the next one is due.
+- **classify cursor** per topic (and `unsorted`): how far the event second
+  opinion got. It only moves once every batch of that topic ran, so batches
+  the call cap skips wait for the next sync.
 - A PR that joins a topic (assignment, accepted merge or split, user move)
   has history the dossier never read. It shows up in the delta as
-  `joinedPrKeys` and gets a short intro in the prompt (title, author, state,
-  description head, its newest events), not its whole event history.
+  `joinedPrKeys` with a short intro in the prompt (title, author, state,
+  description head, files), and its logged events at or below the digest
+  cursor are read once with the new events (`joinedHistory`).
 
 ### Sync flow
 
@@ -261,15 +271,21 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    (30 days) are offered too, their brief prefixed "Finished, retired.";
    assigning to one reactivates it.
 4. **dossiers** (`dossier_update`, one call per topic with a non-empty
-   delta, topics with unread tiles first). Input: `DossierUpdateInput`:
+   delta or a changed context, topics with unread tiles first). Context =
+   `dossierContextHash` (instructions, tailoring, standing rules), kept per
+   topic in `meta` (`dossier_context_hash:<topic>`); a topic without a stored
+   hash counts as unchanged. Input: `DossierUpdateInput`:
    previous dossier, `TopicDelta` from `selectTopicDelta`, member PR
    snapshots, up to 60 known active facts on the topic's entities (verified,
-   context only), the stale facts to recheck, viewer and `PromptContext`.
+   context only), up to 20 stale facts to recheck (each offered once per time
+   it goes stale), viewer and `PromptContext`.
    Output: new dossier (clamped), flags, fact candidates, facts to close,
    stale facts confirmed. Written in one transaction: new
-   `topic_dossier` version (`through_seq` = `delta.toSeq`), `topic.summary`
-   mirror, digest cursor, `closeFacts` closed, confirmed facts
-   `markVerified`, candidates through `preReconcile` (step 5).
+   `topic_dossier` version (`through_seq` = `delta.toSeq`, claims that already
+   fail `verifyDossier` dropped), `topic.summary` mirror, digest cursor,
+   context hash, prune to 50 versions, `closeFacts` closed, confirmed facts
+   rechecked (`FactWriter.confirm`, see verify-before-use), offered stale facts
+   `markRechecked`, candidates through `preReconcile` (step 5).
 5. **facts** (`fact_reconcile`, only for ambiguous candidates, 40 per call,
    after all dossiers): see reconcile rules below. Usually zero calls.
    Part of the `dossiers` job. Ambiguous candidates the budget does not
@@ -282,10 +298,14 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    `glanceItemInputHash` differs from the stored glance, in batches of 18.
    First pinged PRs of every topic, then pulled-in ones, unread tiles first
    in each round. A topic whose dossier update was skipped by the budget
-   gets no glances this sync (it would pay twice). Protocol below.
-9. **events** (`event_classification`, v2: one call per topic with new loud
-   events, up to 20 PRs per call, `classifyEventBatch`): second opinion on new
-   loud events only, as v1.
+   gets no glances this sync (it would pay twice). The dossier goes in
+   without claims that fail `verifyDossier` (`withoutStaleClaims`). Protocol
+   below.
+9. **events** (`event_classification`, v2: one call per topic, up to 20 PRs
+   per call, `classifyEventBatch`): second opinion on loud, unseen events
+   without an override logged after the topic's classify cursor. Driven by
+   the event log, not by this sync's new ids, so capped batches are not
+   lost.
 10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts.
 
 With a call cap (`--max-agent-calls`) the budget is spent in that order:
@@ -306,11 +326,13 @@ dossier + ~3 glance calls.
 after the digest cursor (`EventLogRepo.listSince`), the previous version,
 stale facts and claims, and topic feedback. It:
 
+- adds `joinedHistory`: log entries of joined members at or below the
+  cursor (`joinedMembers` decides who joined)
 - drops muted events, keeps bots (the prompt compacts them to counts)
 - caps at `DELTA_LIMITS.maxEvents` (120) with at most 15 per PR, newest
   kept; the rest are only counted in `omittedEvents`
-- sets `toSeq` to the highest `seq` seen, capped or not, so dropped history
-  is not offered again
+- sets `toSeq` to the highest `seq` after the cursor, capped or not, so
+  dropped history is not offered again
 - lists `joinedPrKeys`: members not in the previous timeline whose
   membership (`memberSince`) is newer than that version. A PR that was
   already a member then was offered once (the model left it out, or it
@@ -338,8 +360,8 @@ cuts after parsing, so one long answer cannot grow later prompts.
 | `openQuestions[]` | `{text, askedBy, refs}` | 8, text 200 |
 | `timeline[]` | `{prKey, role}` oldest first: what each PR does for the initiative | 40, role 120 |
 | `earlier` | history of PRs rolled off the timeline | 600 |
-| `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}` | 6, text 160 |
-| `recentChanges[]` | `{at, text, refs}` newest first, rolling | 12, text 160 |
+| `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}`; an entry naming a source the prompt did not carry is dropped, `observed` renders as "observed, unconfirmed" | 6, text 160 |
+| `recentChanges[]` | `{at, text, refs}` newest first, rolling; `at` is the update time for new entries, carried entries (same text or cited C id) keep theirs | 12, text 160 |
 
 PR state, author, reviewers and CI are **not** stored in the dossier. The
 renderer reads them from the current snapshot, so a dossier cannot carry a
@@ -385,12 +407,12 @@ service maps them back to `FactRef`s and drops unknown ones. A candidate
 fact with no valid ref is dropped (provenance is required). `validFrom` =
 earliest ref time.
 
-Input hash (`dossierInputHash`): previous version (topic + number), delta
-event ids and `toSeq`, joined and left PRs, stale fact ids and claims, new
-feedback ids, tailoring, standing rules, model, prompt version. Not the
-instructions file (open question) and not the known facts (context only).
-A match with the latest version's hash skips the call; that also makes a
-retry after a crash free.
+Input hash (`dossierInputHash`), stored with each version as a record:
+previous version (topic + number), delta event ids and `toSeq`, joined and
+left PRs, stale fact ids and claims, new feedback ids, instructions,
+tailoring, standing rules, model, prompt version. Not the known facts
+(context only). Nothing skips on it: whether a topic updates is
+`isEmptyDelta` plus the context hash (step 4).
 
 ### Facts
 
@@ -419,13 +441,22 @@ Predicates and their rules (`PREDICATE_RULES`):
 | `user_cares` | initiative / path / person, text | no | no |
 | `note` | anything, text | no | no |
 
+`status`, `decided`, `blocked_by` and `depends_on` are `followsHead`: a
+push that moves a ref's head makes them stale (`head_moved`). The rest do
+not care about pushes.
+
+`user_cares` candidates from a dossier update are dropped: their refs can
+only be events or PRs, so GitHub text would be their only source.
+
 **Reconcile** (Mem0 style, extract then reconcile). Candidates come out of
-the dossier update. `preReconcile` (core, pure) settles most of them against
+the dossier update, deduped, and only the newest per unique slot (a
+handover inside one delta must not leave two drivers). `preReconcile` (core,
+pure) settles most of them against
 every active fact on the candidates' subjects **and objects**, across all
 topics (objects matter for per-object slots: "bob drives X" has to see
 "alice drives X"):
 
-1. same subject, predicate, object and normalised text: **NOOP**, merge refs, set `verified_at`
+1. same subject, predicate, object and normalised text: **NOOP**, merge refs, confirm (a stale fact is rechecked like `confirmedFactIds`)
 2. unique predicate, different value, candidate newer: **UPDATE** (old fact closed with `invalid_at` = candidate `validFrom`, `superseded_by` = new id)
 3. same subject, predicate and object, different text: ambiguous
 4. nothing in the way: **ADD**. In the way means an occupant of a unique
@@ -460,7 +491,7 @@ read time in `getTopic` / `getPr` (does not write, only sets
 | referenced PR not in the store | stale `pr_missing` |
 | lifecycle predicate and its PR merged / closed | invalidate at `mergedAt` / close time (`pr_merged` / `pr_closed`) |
 | `status` fact about a PR that merged / closed after the fact's `valid_from` | stale `pr_merged` / `pr_closed`, the next dossier update restates it |
-| ref has `headOid` and the PR head moved | stale `head_moved` |
+| `followsHead` predicate, ref has `headOid` and the PR head moved | stale `head_moved` |
 | `reviews` / `works_on` and the person is no longer reviewer / author / committer | stale `person_not_involved` |
 | referenced comment, review or commit gone from the snapshot | stale `source_deleted` |
 | dossier question whose ref sits in a resolved review thread | stale claim `thread_resolved` |
@@ -468,7 +499,16 @@ read time in `getTopic` / `getPr` (does not write, only sets
 
 Stale facts are left out of every prompt's context, shown greyed in the
 UI, and handed to the topic's next dossier update as the recheck list,
-which forces that update even without new events.
+which forces that update even without new events. Each is offered once per
+time it goes stale (`rechecked_at`), 20 per update, newest first.
+Confirming one (`confirmedFactIds` or a NOOP) rechecks it: a moved head is
+re-anchored to the current head, a fact that then passes is verified, one
+whose check still fails is closed ("confirmed, but the ... check still
+fails"), since the next verify pass would only mark it stale again.
+
+Dossier claims that fail `verifyDossier` are dropped before a version is
+stored and before a dossier goes into a glance prompt
+(`withoutStaleClaims`).
 
 ### Batched glances
 
@@ -503,9 +543,11 @@ and at least one new dossier version since. One `consolidation` call (sonnet)
 over all active topics (split into chunks of 40 topics when needed).
 
 Input (`ConsolidationInput`): every active topic with its latest dossier,
-open/total PR counts and last activity; groups of active facts sharing
-subject + predicate; the newest 60 feedback entries across topics; decided
-rule and topic proposals (so nothing is proposed twice).
+open/total PR counts and last activity; groups of active facts sharing a
+slot (subject + predicate for per_subject, predicate + object for
+per_object, subject + predicate + object otherwise, so "alice works on #1"
+and "#2" are not duplicates); the newest 60 feedback entries across topics;
+decided rule and topic proposals (so nothing is proposed twice).
 
 Output and what happens:
 
@@ -516,9 +558,9 @@ Output and what happens:
 | `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
 | `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 14 days, no unread or snoozed tile. Retiring is reversible |
 
-Also deterministic, in the same run: prune dossier versions to 50 per
-topic, and retire topics that pass the gate and whose dossier status is
-`finished`.
+Also deterministic, in the same run: retire topics that pass the gate and
+whose dossier status is `finished`. Dossier versions are pruned on every
+dossier save, not here.
 
 ### Cost accounting
 
@@ -590,7 +632,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query) and `GitHubWriter` (mark thread read,
@@ -696,8 +738,9 @@ preflight and does not know the token, so CORS stays open.
     elsewhere go through sets)
 - **Engine memory v2** (current choices in brackets):
   - instructions.md edits: re-run every dossier update, or let dossiers catch up on the next
-    event while glances pick the change up at once [catch up; instructions are not in the
-    dossier hash]
+    event while glances pick the change up at once [re-run: instructions, tailoring and
+    standing rules are in `dossierContextHash`, one call per topic after an edit, so glances
+    are not written from outdated userCares]
   - glance hash includes the dossier version, so every dossier update regenerates the glances
     of that topic (one or two batch calls). Alternative: hash only the glance-relevant parts
     (goal, status, userCares, people) [version, as decided]
@@ -714,7 +757,7 @@ preflight and does not know the token, so CORS stays open.
   - one initiative per topic, or initiatives spanning topics [one per topic]
   - consolidation cadence: due after 24h and at least one new dossier version, triggered by
     the desktop app when idle and by `consolidate` in the CLI [yes]
-  - dossier history: keep the newest 50 versions per topic [50]
+  - dossier history: keep the newest 50 versions per topic, pruned on save [50]
   - glance batches on haiku with 18 PRs per call [yes; sonnet if quality drops]
   - dossier driver overrides "most frequent author" for the topic driver [yes]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the

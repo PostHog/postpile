@@ -53,6 +53,27 @@ now".
     put the PR back.
   - Mark-read failures do not drop the rest of a batch; quit waits for sends in
     flight; failures and skips show up in the next sync report.
+- Memory v2 review fixes:
+  - GitHub text is fenced as `<github_data>` in every prompt; userCares with
+    a source the prompt did not carry and `user_cares` fact candidates are
+    dropped, observed cares render as unconfirmed.
+  - A stale fact is offered for recheck once per time it goes stale
+    (`fact.rechecked_at`, migration 003), 20 per update; confirming one that
+    still fails its check closes it, a moved head is re-anchored. Claims that
+    fail `verifyDossier` are dropped on save and before glance prompts.
+  - Dossiers refresh when instructions, tailoring or standing rules change
+    (`dossierContextHash`); the dead input-hash skip is gone.
+  - Event batches the call cap skips wait for the next sync (per-topic
+    `classify` cursor over the event log).
+  - A PR joining a topic brings its older logged events into the delta once.
+  - New recentChanges entries are stamped with the update time, so same-day
+    changes show under "since you last looked".
+  - Fact refs carry the head they were made against; `head_moved` applies to
+    status / decided / blocked_by / depends_on only.
+  - One candidate per unique slot per answer; consolidation groups duplicates
+    by slot, not by subject + predicate.
+  - Bounded: closed members only counted in the dossier prompt, versions
+    pruned to 50 on every save, 1 + 10 refs per fact.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -80,6 +101,11 @@ now".
   dossier already moved past their events).
 - `PROMPT_VERSION` moved to v2: the first real sync on an old database
   regenerates every glance and set hash once.
+- A database from before the classify cursor gives a second opinion on its
+  older loud unseen events once, on the first sync after the upgrade (one
+  call per topic with such events, within `--max-agent-calls`).
+- Topics without a stored dossier context hash count as unchanged; the hash
+  is written on their next dossier update.
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
   consolidation can only propose splits over timeline PRs.
 - No packaged/signed macOS build yet; `npm run build` only bundles for
@@ -103,14 +129,20 @@ now".
 - **Stale glance UX**: currently shown with a "stale" label. Alternatives: hide
   the verdict, or disable one-press Approve until a fresh glance exists.
 - **Memory v2 choices** listed under "Engine memory v2" in DESIGN.md's open
-  questions, most notably: instructions.md edits not in the dossier hash,
-  glance hash tied to the dossier version (each dossier update re-glances
-  its topic), automatic retiring behind the gate.
+  questions, most notably: glance hash tied to the dossier version (each
+  dossier update re-glances its topic), automatic retiring behind the gate.
+  Changed by the review fixes: an instructions.md edit now refreshes every
+  dossier once (one call per topic) instead of waiting for the next event.
+  To go back, drop instructions from `dossierContextHash`.
+- **Confirmed but failing facts**: a stale fact the agent confirms while its
+  check still fails (reviewer left, source comment deleted) is closed.
+  Alternative: keep it stale and hidden for good.
 - **First real sync cost**: a capped smoke run (15 PRs, 6 calls) made 1
   topic assignment + 5 dossier updates for about $0.18, with 7 more dossier
-  updates, 5 glance batches and 4 event batches waiting on the cap. A full
-  first sync over ~140 PRs should land around 80-90 calls; worth a watched
-  run before relying on it.
+  updates, 5 glance batches and 4 event batches cut by the cap. Dossiers and
+  glances pick those up on the next sync; event batches did not back then
+  (they were lost) and now do. A full first sync over ~140 PRs should land
+  around 80-90 calls; worth a watched run before relying on it.
 - Still open from DESIGN.md: UI framework final call, three-pane layout,
   memory numbers (10 feedback entries per prompt, when sets regroup), snooze
   wake-up on any loud human event, the extra loudness rules, repo name.
