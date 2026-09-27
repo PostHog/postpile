@@ -7,11 +7,24 @@ import type {
   FactQuery,
   FactView,
   Feedback,
+  MemorySources,
+  MemoryTarget,
+  PrEvent,
   PrKey,
   RuleProposal,
   Topic,
 } from '@code-manager/core';
-import { dossierVersionNotes, emptyAgentCallStats, topicChangesSince } from '@code-manager/core';
+import {
+  describeFactRef,
+  describeLineSources,
+  dossierLineIssue,
+  dossierVersionNotes,
+  emptyAgentCallStats,
+  factCheck,
+  findDossierLine,
+  lineCheck,
+  topicChangesSince,
+} from '@code-manager/core';
 import type { SampleData } from './sample-data.ts';
 import { buildSampleMemory, type SampleMemory } from './sample-memory.ts';
 
@@ -58,8 +71,12 @@ export class FakeMemory {
     return this.memory.dossiers.get(topicId)?.at(-1) ?? null;
   }
 
+  private membersOf(topicId: string): Set<PrKey> {
+    return new Set([...this.data.membership].filter(([, id]) => id === topicId).map(([prKey]) => prKey));
+  }
+
   private eventsAfter(topicId: string, since: string): number {
-    const members = new Set([...this.data.membership].filter(([, id]) => id === topicId).map(([prKey]) => prKey));
+    const members = this.membersOf(topicId);
     return this.data.events.filter((event) => members.has(event.prKey) && event.at > since).length;
   }
 
@@ -68,6 +85,54 @@ export class FakeMemory {
       .filter((entry) => entry.topicId === topicId && entry.createdAt > since)
       .filter((entry) => entry.kind === 'memory_wrong' || entry.kind === 'memory_forget')
       .map((entry) => entry.note);
+  }
+
+  topicsWithDossier(): number {
+    return this.memory.dossiers.size;
+  }
+
+  private eventsByPr(): Map<PrKey, PrEvent[]> {
+    const byPr = new Map<PrKey, PrEvent[]>();
+    for (const event of this.data.events) {
+      byPr.set(event.prKey, [...(byPr.get(event.prKey) ?? []), event]);
+    }
+    return byPr;
+  }
+
+  /** Sample story: the thread behind the DEPOT_TOKEN question was resolved on GitHub. */
+  private staleClaims(topicId: string) {
+    return topicId === 'topic-depot' ? [{ path: 'openQuestions[2]', reason: 'thread_resolved' as const }] : [];
+  }
+
+  /** Mirrors MemorySourcesReads, over the sample snapshots. */
+  sources(target: MemoryTarget): MemorySources | null {
+    const prs = new Map(this.data.prs.map((pr) => [pr.key, pr]));
+    const events = this.eventsByPr();
+    if (target.kind === 'fact') {
+      const fact = this.memory.facts.find((candidate) => candidate.id === target.factId);
+      if (!fact) {
+        return null;
+      }
+      const sources = fact.refs.map((ref) => describeFactRef(ref, prs.get(ref.prKey), events.get(ref.prKey) ?? []));
+      const outcome = fact.staleReason ? { kind: 'stale' as const, reason: fact.staleReason } : { kind: 'ok' as const };
+      return { target, claim: fact.text, recordedIn: 'Fact', recordedAt: fact.recordedAt, sources, check: factCheck(fact, outcome) };
+    }
+    const version = this.memory.dossiers.get(target.topicId)?.find((candidate) => candidate.version === target.version);
+    const line = version ? findDossierLine(version.dossier, target.path) : null;
+    if (!version || !line) {
+      return null;
+    }
+    const world = { prs, memberKeys: this.membersOf(target.topicId), now: this.now().toISOString() };
+    const planted = this.staleClaims(target.topicId).find((claim) => claim.path === target.path)?.reason ?? null;
+    const issue = planted ?? dossierLineIssue(version.dossier, target.path, world);
+    return {
+      target,
+      claim: line.text,
+      recordedIn: `Dossier v${version.version}`,
+      recordedAt: version.createdAt,
+      sources: describeLineSources(line.sources, prs, events),
+      check: lineCheck(line.sources, issue),
+    };
   }
 
   dossierView(topicId: string, feedback: Feedback[]): DossierView | null {
@@ -80,8 +145,7 @@ export class FakeMemory {
       ? this.memory.facts.filter((fact) => fact.topicId === topicId && (fact.recordedAt > seen.updatedAt || (fact.expiredAt ?? '') > seen.updatedAt))
       : [];
     const versionsNewestFirst = [...(this.memory.dossiers.get(topicId) ?? [])].reverse();
-    // Sample story: the thread behind the DEPOT_TOKEN question was resolved on GitHub.
-    const staleClaims = topicId === 'topic-depot' ? [{ path: 'openQuestions[2]', reason: 'thread_resolved' as const }] : [];
+    const staleClaims = this.staleClaims(topicId);
     return {
       version: latest.version,
       createdAt: latest.createdAt,

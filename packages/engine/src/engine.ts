@@ -8,7 +8,14 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  InstructionsChatReply,
+  InstructionsDecision,
+  InstructionsProposalReply,
+  InstructionsSaveResult,
+  InstructionsView,
   MemoryCorrection,
+  MemorySources,
+  MemoryTarget,
   PendingProposals,
   PrDetail,
   PrKey,
@@ -22,6 +29,7 @@ import type { GitHubReader, GitHubWriter } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
+import { InstructionsActions } from './actions/instructions-actions.ts';
 import { PrActions } from './actions/pr-actions.ts';
 import { MemoryActions } from './actions/memory-actions.ts';
 import { ProposalActions } from './actions/proposal-actions.ts';
@@ -32,7 +40,9 @@ import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { InstructionsHistory } from './instructions/history.ts';
+import { InstructionsProposer } from './instructions/proposer.ts';
 import { FactWriter } from './memory/fact-writer.ts';
+import { MemorySourcesReads } from './memory/memory-sources-reads.ts';
 import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
 import type { EngineService } from './service.ts';
@@ -59,6 +69,8 @@ export class Engine implements EngineService {
   private readonly chats: ChatActions;
   private readonly proposals: ProposalActions;
   private readonly memoryActions: MemoryActions;
+  private readonly memorySources: MemorySourcesReads;
+  private readonly instructions: InstructionsActions;
   private readonly syncRun: SyncRun;
   private readonly consolidationRun: ConsolidationRun;
   private syncing: Promise<SyncReport> | null = null;
@@ -66,16 +78,19 @@ export class Engine implements EngineService {
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
-    const instructions = new InstructionsHistory(store, deps.instructionsFile, now);
-    const contexts = new PromptContextSource(store, instructions);
+    const history = new InstructionsHistory(store, deps.instructionsFile, now);
+    const proposer = new InstructionsProposer(store, deps.agent, history);
+    const contexts = new PromptContextSource(store, history);
     this.reads = new ReadModels(store, deps.agent, contexts, now);
     const readMarker = new ReadMarker(store, deps.markReadQueue, now);
     this.tiles = new TileActions(store, readMarker, now);
     this.prActions = new PrActions(store, deps.writer, deps.agent, contexts, readMarker, now);
     this.feedback = new FeedbackActions(store, readMarker, now);
-    this.chats = new ChatActions(store, deps.agent, contexts, now);
+    this.chats = new ChatActions(store, deps.agent, contexts, proposer, now);
     this.proposals = new ProposalActions(store, now);
     this.memoryActions = new MemoryActions(store, now);
+    this.memorySources = new MemorySourcesReads(store, now);
+    this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
     this.syncRun = new SyncRun(runDeps, new GitHubSync(store, deps.reader, contexts, now), deps.markReadQueue);
     this.consolidationRun = new ConsolidationRun(runDeps);
@@ -191,6 +206,30 @@ export class Engine implements EngineService {
 
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
     return this.memoryActions.correctMemory(input);
+  }
+
+  async getMemorySources(target: MemoryTarget): Promise<MemorySources | null> {
+    return this.memorySources.get(target);
+  }
+
+  async getInstructions(): Promise<InstructionsView> {
+    return this.instructions.view();
+  }
+
+  async getInstructionsChat(): Promise<ChatMessage[]> {
+    return this.instructions.chatHistory();
+  }
+
+  instructionsChat(message: string): Promise<InstructionsChatReply> {
+    return this.instructions.chat(message);
+  }
+
+  proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposalReply> {
+    return this.instructions.propose(sourceChatMessageId, point, topicId);
+  }
+
+  saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {
+    return this.instructions.save(decision);
   }
 
   flushPendingWrites(): Promise<void> {

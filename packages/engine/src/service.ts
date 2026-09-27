@@ -7,7 +7,14 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  InstructionsChatReply,
+  InstructionsDecision,
+  InstructionsProposalReply,
+  InstructionsSaveResult,
+  InstructionsView,
   MemoryCorrection,
+  MemorySources,
+  MemoryTarget,
   PendingProposals,
   PrDetail,
   PrKey,
@@ -71,6 +78,23 @@ export interface EngineService {
    * dossier update sees it. Local only, never a GitHub write.
    */
   correctMemory(input: MemoryCorrection): Promise<ActionResult>;
+  /** "Why?" on a fact or dossier line: its sources and whether it still checks out. Null for an unknown target. */
+  getMemorySources(target: MemoryTarget): Promise<MemorySources | null>;
+
+  /** instructions.md with its version history. A hand edit since the newest version is stored as a version first. */
+  getInstructions(): Promise<InstructionsView>;
+  /** The general chat in "Your instructions", oldest first. */
+  getInstructionsChat(): Promise<ChatMessage[]>;
+  /** A message in the general chat. Comes back with a proposal when it asks for a change. Nothing is written to the file. */
+  instructionsChat(message: string): Promise<InstructionsChatReply>;
+  /** "Apply to all topics instead": the user's chat message asked again as an instructions change. */
+  proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposalReply>;
+  /**
+   * Writes an accepted proposal to instructions.md and stores the version.
+   * Refuses to overwrite a hand edit made after the proposal: that edit is
+   * kept and the change comes back rebased for another decision.
+   */
+  saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult>;
 
   /**
    * The sleep-time job: proposes topic merges, splits and renames, retires

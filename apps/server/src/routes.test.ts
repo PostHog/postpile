@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionResult, ChatReply, PrDetail, TopicDetail, TopicListItem } from '@code-manager/core';
+import type {
+  ActionResult,
+  ChatReply,
+  InstructionsChatReply,
+  InstructionsProposalReply,
+  InstructionsSaveResult,
+  InstructionsView,
+  MemorySources,
+  PrDetail,
+  TopicDetail,
+  TopicListItem,
+} from '@code-manager/core';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { FakeEngine } from './fake/fake-engine.ts';
 
@@ -119,14 +130,56 @@ describe('server routes over the fake engine', () => {
 
   it('turns a lasting chat point into tailoring once confirmed', async () => {
     const app = appWithFake();
-    const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'Always flag Turbo version bumps' });
+    const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'Always flag Turbo version bumps here' });
     expect(reply.json.tailoringProposal?.topicId).toBe('topic-depot');
+    expect(reply.json.instructionsProposal).toBeNull();
     const history = (await (await app.request(`/api/tiles/${setTile}/chat`)).json()) as unknown[];
     expect(history).toHaveLength(2);
 
-    await post(app, '/api/topics/topic-depot/tailoring', { text: 'Always flag Turbo version bumps', keep: true });
+    await post(app, '/api/topics/topic-depot/tailoring', { text: 'Always flag Turbo version bumps here', keep: true });
     const topic = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
-    expect(topic.topic.tailoring).toContain('Always flag Turbo version bumps');
+    expect(topic.topic.tailoring).toContain('Always flag Turbo version bumps here');
+  });
+
+  it('turns a point about every topic into an instructions proposal and saves it on accept', async () => {
+    const app = appWithFake();
+    const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'From now on flag every CI timeout change' });
+    const proposal = reply.json.instructionsProposal;
+    expect(reply.json.tailoringProposal).toBeNull();
+    expect(proposal?.text).toContain('- From now on flag every CI timeout change');
+
+    const saved = await post<InstructionsSaveResult>(app, '/api/instructions', { proposal, text: proposal?.text });
+    expect(saved.json).toMatchObject({ ok: true, savedVersion: 4 });
+    expect(saved.json.message).toContain('Will refresh 2 topic dossiers');
+    const view = (await (await app.request('/api/instructions')).json()) as InstructionsView;
+    expect(view.versions[0]).toMatchObject({ version: 4, origin: 'chat', sourceText: 'From now on flag every CI timeout change' });
+
+    const stale = await post<InstructionsSaveResult>(app, '/api/instructions', { proposal, text: proposal?.text });
+    expect(stale.json.ok).toBe(false);
+    expect(stale.json.rebased?.baseVersion).toBe(4);
+  });
+
+  it('proposes from the general instructions chat and from a tailoring switch', async () => {
+    const app = appWithFake();
+    const chat = await post<InstructionsChatReply>(app, '/api/instructions/chat', { message: 'Skip docs-only PRs' });
+    expect(chat.json.proposal?.summary).toBe('Added: Skip docs-only PRs');
+    const history = (await (await app.request('/api/instructions/chat')).json()) as unknown[];
+    expect(history.length).toBeGreaterThanOrEqual(4);
+
+    const tile = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'Always flag Turbo bumps here' });
+    const sourceChatMessageId = tile.json.tailoringProposal?.sourceChatMessageId;
+    const switched = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId, point: 'Flag Turbo bumps', topicId: 'topic-depot' });
+    expect(switched.json.proposal).toMatchObject({ point: 'Flag Turbo bumps', topicId: 'topic-depot', sourceChatMessageId });
+  });
+
+  it('answers "Why?" for facts and dossier lines', async () => {
+    const app = appWithFake();
+    const fact = (await (await app.request('/api/memory/sources?fact=fact-41902-status')).json()) as MemorySources;
+    expect(fact.check).toMatchObject({ state: 'stale', reason: 'head_moved' });
+    const line = (await (await app.request('/api/memory/sources?topic=topic-depot&version=3&path=openQuestions%5B0%5D')).json()) as MemorySources;
+    expect(line.claim).toBe('Does the Turbo cache warm-up need a feature flag?');
+    expect((await app.request('/api/memory/sources?fact=nope')).status).toBe(404);
+    expect((await app.request('/api/memory/sources?topic=topic-depot')).status).toBe(400);
   });
 
   it('drafts an ask and keeps the sent comment local', async () => {

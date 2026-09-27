@@ -68,6 +68,33 @@ const factQuery = z.object({
   limit: z.coerce.number().int().positive().max(1000).optional(),
 });
 
+/** "Why?" target: a fact id, or one line of a stored dossier version. */
+const memoryTargetQuery = z.union([
+  z.object({ fact: z.string().min(1) }).transform((query) => ({ kind: 'fact' as const, factId: query.fact })),
+  z
+    .object({ topic: z.string().min(1), version: z.coerce.number().int().positive(), path: z.string().min(1) })
+    .transform((query) => ({ kind: 'dossier_line' as const, topicId: query.topic, version: query.version, path: query.path })),
+]);
+
+const instructionsProposal = z.object({
+  baseVersion: z.number().int().positive().nullable(),
+  baseText: z.string(),
+  text: z.string(),
+  summary: z.string(),
+  point: z.string(),
+  topicId: z.string().nullable(),
+  sourceChatMessageId: z.number().int().positive(),
+  dossiersToRefresh: z.number().int().min(0),
+});
+
+const instructionsDecision = z.object({ proposal: instructionsProposal, text: z.string() });
+
+const proposeInstructionsBody = z.object({
+  sourceChatMessageId: z.number().int().positive(),
+  point: z.string().default(''),
+  topicId: z.string().nullable().default(null),
+});
+
 /** Parses a JSON body that may be missing entirely. */
 async function optionalJson(c: { req: { text(): Promise<string> } }): Promise<unknown> {
   const text = await c.req.text();
@@ -142,6 +169,24 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     return c.json(await engine.decideRuleProposal(c.req.param('id'), body.accept));
   });
   app.post('/api/memory/corrections', async (c) => c.json(await engine.correctMemory(memoryCorrectionBody.parse(await c.req.json()))));
+  app.get('/api/memory/sources', async (c) => {
+    const sources = await engine.getMemorySources(memoryTargetQuery.parse(c.req.query()));
+    return sources ? c.json(sources) : c.json({ error: 'not found' }, 404);
+  });
+
+  // Instructions writes are local (instructions.md and SQLite), never GitHub writes.
+  app.get('/api/instructions', async (c) => c.json(await engine.getInstructions()));
+  app.post('/api/instructions', async (c) => c.json(await engine.saveInstructions(instructionsDecision.parse(await c.req.json()))));
+  app.get('/api/instructions/chat', async (c) => c.json(await engine.getInstructionsChat()));
+  app.post('/api/instructions/chat', async (c) => {
+    const body = z.object({ message: z.string().min(1) }).parse(await c.req.json());
+    return c.json(await engine.instructionsChat(body.message));
+  });
+  app.post('/api/instructions/proposals', async (c) => {
+    const body = proposeInstructionsBody.parse(await c.req.json());
+    return c.json(await engine.proposeInstructions(body.sourceChatMessageId, body.point, body.topicId));
+  });
+
   app.get('/api/facts', async (c) => {
     const { since, ...query } = factQuery.parse(c.req.query());
     return c.json(await engine.listFacts({ ...query, changedSince: since }));

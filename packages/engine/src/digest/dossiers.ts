@@ -40,7 +40,8 @@ export interface DossierRunResult {
   skippedByBudget: Set<string>;
 }
 
-function contextHashKey(topicId: string): string {
+/** Meta key of the context hash a topic's dossier was last written under. */
+export function contextHashKey(topicId: string): string {
   return `dossier_context_hash:${topicId}`;
 }
 

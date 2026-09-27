@@ -10,8 +10,15 @@ import type {
   Feedback,
   FeedbackInput,
   FeedbackKind,
+  InstructionsChatReply,
+  InstructionsDecision,
+  InstructionsProposalReply,
+  InstructionsSaveResult,
+  InstructionsView,
   Loudness,
   MemoryCorrection,
+  MemorySources,
+  MemoryTarget,
   PendingProposals,
   PrDetail,
   PrEvent,
@@ -29,6 +36,7 @@ import type {
 } from '@code-manager/core';
 import { emptyAgentCallStats, setIdFromTileId, type AgentCallStats } from '@code-manager/core';
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
+import { FakeInstructions } from './fake-instructions.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -63,6 +71,11 @@ function isUnseenLoud(event: PrEvent): boolean {
   return !event.seenAt && loudnessOf(event) === 'loud';
 }
 
+/** Stand-in for the agent spotting a lasting point in chat. */
+const LASTING = /\b(always|never|from now on|in general|every topic|all topics)\b/i;
+/** Stand-in for the agent judging it is about this topic, not about every topic. */
+const TOPIC_SCOPED = /\b(here|this topic|this pr|this tile|in this)\b/i;
+
 /** Canned numbers so the footer has something to show; the fake never calls the agent. */
 function sampleSyncStats(): AgentCallStats {
   const stats = emptyAgentCallStats();
@@ -85,6 +98,7 @@ function sampleSyncStats(): AgentCallStats {
 export class FakeEngine implements EngineService {
   private readonly data: SampleData;
   private readonly memory: FakeMemory;
+  private readonly instructions: FakeInstructions;
   private readonly now: () => Date;
   private readonly snoozes = new Map<string, SnoozeCondition>();
   private readonly chats = new Map<string, ChatMessage[]>();
@@ -98,6 +112,12 @@ export class FakeEngine implements EngineService {
     this.data = buildSampleData(this.now());
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
+    this.instructions = new FakeInstructions({
+      now: this.now,
+      newId: () => this.newId(),
+      dossiersToRefresh: () => this.memory.topicsWithDossier(),
+      findTileMessage: (id) => [...this.chats.values()].flat().find((message) => message.id === id),
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -433,9 +453,14 @@ export class FakeEngine implements EngineService {
       createdAt: this.timestamp(),
     };
     messages.push(userMessage, reply);
-    // Stand-in for the agent spotting a lasting instruction.
-    const lasting = /\b(always|never|from now on)\b/i.test(message);
-    return { message: reply, tailoringProposal: lasting ? { topicId: tile.topicId, text: message } : null };
+    if (!LASTING.test(message)) {
+      return { message: reply, tailoringProposal: null, instructionsProposal: null };
+    }
+    if (TOPIC_SCOPED.test(message)) {
+      return { message: reply, tailoringProposal: { topicId: tile.topicId, text: message, sourceChatMessageId: userMessage.id }, instructionsProposal: null };
+    }
+    const { proposal } = this.instructions.propose(userMessage, message, tile.topicId);
+    return { message: reply, tailoringProposal: null, instructionsProposal: proposal };
   }
 
   async decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult> {
@@ -526,6 +551,30 @@ export class FakeEngine implements EngineService {
     const prKey = fact.refs[0]?.prKey ?? null;
     this.recordFeedback({ kind, topicId: fact.topicId, tileId: null, prKey, setId: null, eventId: null, note: fact.text });
     return ok('Forgot that fact');
+  }
+
+  async getMemorySources(target: MemoryTarget): Promise<MemorySources | null> {
+    return this.memory.sources(target);
+  }
+
+  async getInstructions(): Promise<InstructionsView> {
+    return this.instructions.view();
+  }
+
+  async getInstructionsChat(): Promise<ChatMessage[]> {
+    return this.instructions.chatHistory();
+  }
+
+  async instructionsChat(message: string): Promise<InstructionsChatReply> {
+    return this.instructions.chatMessage(message);
+  }
+
+  async proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposalReply> {
+    return this.instructions.proposeFromId(sourceChatMessageId, point, topicId);
+  }
+
+  async saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {
+    return this.instructions.save(decision);
   }
 
   async consolidate(): Promise<ConsolidationReport> {

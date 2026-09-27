@@ -56,12 +56,16 @@ export interface InstructionsView {
   dossiersToRefresh: number;
 }
 
-/** What the user accepts: the proposal as they left it, maybe edited inline. */
+/** What the user accepts: the proposal, and its text as they left it (maybe edited inline). */
 export interface InstructionsDecision {
-  baseVersion: number | null;
+  proposal: InstructionsProposal;
   text: string;
-  summary: string;
-  sourceChatMessageId: number;
+}
+
+/** A proposal, or the agent's one-line reason why the message changes nothing across topics. */
+export interface InstructionsProposalReply {
+  reply: string;
+  proposal: InstructionsProposal | null;
 }
 
 export interface InstructionsSaveResult extends ActionResult {

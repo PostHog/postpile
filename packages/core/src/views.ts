@@ -22,6 +22,7 @@ import type {
 } from './types.ts';
 import type { AgentCallStats } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView } from './memory-views.ts';
+import type { InstructionsProposal } from './instructions-views.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
@@ -167,7 +168,13 @@ export interface AppConfig {
   writesAllowed: boolean;
 }
 
+/**
+ * A lasting point in the user's message comes back as one of two proposals:
+ * tailoring when it is about this topic, an instructions change when it
+ * applies to every topic. The agent picks; the user can switch.
+ */
 export interface ChatReply {
   message: ChatMessage;
   tailoringProposal: TailoringProposal | null;
+  instructionsProposal: InstructionsProposal | null;
 }

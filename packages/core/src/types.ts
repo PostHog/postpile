@@ -493,4 +493,6 @@ export interface ChatMessage {
 export interface TailoringProposal {
   topicId: string;
   text: string;
+  /** The user's chat message it came from, so "apply to all topics instead" can turn it into an instructions proposal. */
+  sourceChatMessageId: number | null;
 }

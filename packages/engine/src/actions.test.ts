@@ -229,7 +229,8 @@ describe('chat and tailoring', () => {
 
     const reply = await h.engine.chat(tileId, 'preview deploys are noise here');
 
-    expect(reply.tailoringProposal).toEqual({ topicId: 'depot', text: 'Ignore preview deploys.' });
+    expect(reply.tailoringProposal).toEqual({ topicId: 'depot', text: 'Ignore preview deploys.', sourceChatMessageId: expect.any(Number) });
+    expect(reply.instructionsProposal).toBeNull();
     expect((await h.engine.getChat(tileId)).map((m) => m.role)).toEqual(['user', 'agent']);
     expect(h.store.topics.get('depot')?.tailoring).toBe('');
 
