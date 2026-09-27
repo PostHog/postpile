@@ -86,6 +86,27 @@ export interface FactRef {
 export type FactSource = 'agent' | 'rule';
 
 /**
+ * A source in the user's own words rather than on GitHub: a version of the
+ * general instructions, the topic tailoring, a correction, or a chat turn.
+ */
+export type UserRefKind = 'instructions' | 'tailoring' | 'feedback' | 'chat';
+
+export interface UserRef {
+  kind: UserRefKind;
+  /** Instructions version, feedback id or chat message id as text; the topic id for tailoring. */
+  id: string;
+  at: IsoTime;
+  /** Short copy of what the user said, so the source still reads after the tailoring changes or the chat is gone. */
+  quote: string;
+}
+
+/** Where one dossier line came from: GitHub refs and the user's own words. */
+export interface LineSources {
+  refs: FactRef[];
+  userRefs: UserRef[];
+}
+
+/**
  * One statement about an entity, bi-temporal:
  * validFrom / invalidAt say when it was true in the world,
  * recordedAt / expiredAt say when the engine believed it.
@@ -188,10 +209,15 @@ export interface DossierPerson {
   note: string;
 }
 
+// The userRefs, refs on timeline entries and cares, and goalSources /
+// statusSources are optional: versions stored before lines carried sources
+// have none, and the UI shows "no source recorded" for them.
+
 export interface DossierQuestion {
   text: string;
   askedBy: string | null;
   refs: FactRef[];
+  userRefs?: UserRef[];
 }
 
 /**
@@ -202,6 +228,8 @@ export interface DossierQuestion {
 export interface DossierPrEntry {
   prKey: PrKey;
   role: string;
+  refs?: FactRef[];
+  userRefs?: UserRef[];
 }
 
 export type DossierCareSource = 'instructions' | 'tailoring' | 'feedback' | 'observed';
@@ -209,12 +237,15 @@ export type DossierCareSource = 'instructions' | 'tailoring' | 'feedback' | 'obs
 export interface DossierCare {
   text: string;
   source: DossierCareSource;
+  refs?: FactRef[];
+  userRefs?: UserRef[];
 }
 
 export interface DossierChange {
   at: IsoTime;
   text: string;
   refs: FactRef[];
+  userRefs?: UserRef[];
 }
 
 /** The living, bounded document per topic. Limits in DOSSIER_LIMITS. */
@@ -224,6 +255,9 @@ export interface Dossier {
   summary: string;
   status: DossierStatus;
   statusNote: string;
+  goalSources?: LineSources;
+  /** Sources of status and statusNote together. */
+  statusSources?: LineSources;
   people: DossierPerson[];
   openQuestions: DossierQuestion[];
   /** Oldest first. PRs that roll off are folded into `earlier`. */

@@ -9,8 +9,10 @@ import type {
   EntityRef,
   Fact,
   FactPredicate,
+  FactRefKind,
   RuleProposal,
   StaleReason,
+  UserRefKind,
 } from './memory.ts';
 import type { IsoTime, TopicProposal } from './types.ts';
 
@@ -106,4 +108,53 @@ export interface ConsolidationReport {
 export interface PendingProposals {
   topics: TopicProposal[];
   rules: RuleProposal[];
+}
+
+/** What the user asked "Why?" about: a fact, or one line of a stored dossier version. */
+export type MemoryTarget =
+  | { kind: 'fact'; factId: string }
+  /** path as in findDossierLine: "goal", "status", "openQuestions[2]", ... */
+  | { kind: 'dossier_line'; topicId: string; version: number; path: string };
+
+export type MemorySourceKind = FactRefKind | UserRefKind;
+
+/** One source behind a fact or dossier line, ready to show. */
+export interface MemorySource {
+  kind: MemorySourceKind;
+  /** GitHub login of who said or did it; null for the user's own words. */
+  who: string | null;
+  /** One short line: "commented on #41902", "Your instructions, version 3". */
+  title: string;
+  /** Short copy of the source text; empty when there is none. */
+  excerpt: string;
+  at: IsoTime;
+  url: string | null;
+  /** The source is gone from what the engine has stored: a deleted comment, a PR not synced. */
+  missing: boolean;
+}
+
+/**
+ * ok: checks out against GitHub now. stale: a check failed (reason says
+ * which). closed: a fact the engine no longer believes (note says why).
+ * user_only: only the user's own words back it, nothing on GitHub to check.
+ * unsourced: no source recorded, e.g. a line from an older dossier version.
+ */
+export type MemoryCheckState = 'ok' | 'stale' | 'closed' | 'user_only' | 'unsourced';
+
+export interface MemoryCheck {
+  state: MemoryCheckState;
+  reason: StaleReason | null;
+  note: string | null;
+}
+
+/** The "Why?" panel of a fact or dossier line. */
+export interface MemorySources {
+  target: MemoryTarget;
+  claim: string;
+  /** "Fact" or "Dossier v3". */
+  recordedIn: string;
+  recordedAt: IsoTime;
+  /** Oldest first. Empty means no source recorded. */
+  sources: MemorySource[];
+  check: MemoryCheck;
 }

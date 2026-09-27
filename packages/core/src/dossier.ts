@@ -1,4 +1,4 @@
-import type { Dossier } from './memory.ts';
+import type { Dossier, FactRef, LineSources, UserRef } from './memory.ts';
 
 /**
  * Size bounds for a dossier. The agent is asked to stay inside them and
@@ -20,6 +20,11 @@ export const DOSSIER_LIMITS = {
   careText: 160,
   recentChanges: 12,
   changeText: 160,
+  /** GitHub refs per line; the oldest are kept, they say where a line started. */
+  lineRefs: 6,
+  /** The user's own words per line. */
+  lineUserRefs: 3,
+  quote: 160,
   /** A brief for topic assignment and consolidation prompts. */
   brief: 400,
 } as const;
@@ -49,6 +54,21 @@ export function clipText(text: string, max: number): string {
   return `${trimmed.slice(0, max - 1).trimEnd()}…`;
 }
 
+function clampRefs(refs: FactRef[] | undefined): FactRef[] | undefined {
+  return refs?.slice(0, DOSSIER_LIMITS.lineRefs);
+}
+
+function clampUserRefs(refs: UserRef[] | undefined): UserRef[] | undefined {
+  return refs?.slice(0, DOSSIER_LIMITS.lineUserRefs).map((ref) => ({ ...ref, quote: clipText(ref.quote, DOSSIER_LIMITS.quote) }));
+}
+
+function clampSources(sources: LineSources | undefined): LineSources | undefined {
+  if (sources === undefined) {
+    return undefined;
+  }
+  return { refs: clampRefs(sources.refs) ?? [], userRefs: clampUserRefs(sources.userRefs) ?? [] };
+}
+
 /**
  * Cuts every list and string to DOSSIER_LIMITS. Lists keep their most useful
  * end: timeline keeps the newest entries (the dropped ones belong in
@@ -61,22 +81,39 @@ export function clampDossier(dossier: Dossier): Dossier {
     summary: clipText(dossier.summary, limits.summary),
     status: dossier.status,
     statusNote: clipText(dossier.statusNote, limits.statusNote),
+    goalSources: clampSources(dossier.goalSources),
+    statusSources: clampSources(dossier.statusSources),
     people: dossier.people
       .slice(0, limits.people)
       .map((person) => ({ ...person, note: clipText(person.note, limits.personNote) })),
     openQuestions: dossier.openQuestions
       .slice(0, limits.openQuestions)
-      .map((question) => ({ ...question, text: clipText(question.text, limits.questionText) })),
+      .map((question) => ({
+        ...question,
+        text: clipText(question.text, limits.questionText),
+        refs: clampRefs(question.refs) ?? [],
+        userRefs: clampUserRefs(question.userRefs),
+      })),
     timeline: dossier.timeline
       .slice(-limits.timeline)
-      .map((entry) => ({ ...entry, role: clipText(entry.role, limits.timelineRole) })),
+      .map((entry) => ({
+        ...entry,
+        role: clipText(entry.role, limits.timelineRole),
+        refs: clampRefs(entry.refs),
+        userRefs: clampUserRefs(entry.userRefs),
+      })),
     earlier: clipText(dossier.earlier, limits.earlier),
     userCares: dossier.userCares
       .slice(0, limits.userCares)
-      .map((care) => ({ ...care, text: clipText(care.text, limits.careText) })),
+      .map((care) => ({ ...care, text: clipText(care.text, limits.careText), refs: clampRefs(care.refs), userRefs: clampUserRefs(care.userRefs) })),
     recentChanges: dossier.recentChanges
       .slice(0, limits.recentChanges)
-      .map((change) => ({ ...change, text: clipText(change.text, limits.changeText) })),
+      .map((change) => ({
+        ...change,
+        text: clipText(change.text, limits.changeText),
+        refs: clampRefs(change.refs) ?? [],
+        userRefs: clampUserRefs(change.userRefs),
+      })),
   };
 }
 

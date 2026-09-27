@@ -24,3 +24,6 @@ export * from './glance-batches.ts';
 export * from './agent-calls.ts';
 export * from './topic-changes.ts';
 export * from './dossier-history.ts';
+export * from './dossier-lines.ts';
+export * from './memory-sources.ts';
+export * from './instructions-views.ts';

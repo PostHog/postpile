@@ -1,3 +1,4 @@
+import { findDossierLine } from './dossier-lines.ts';
 import { PREDICATE_RULES } from './fact-rules.ts';
 import type { Dossier, DossierIssue, DossierQuestion, Fact, FactRef, StaleReason, VerifyOutcome } from './memory.ts';
 import type { IsoTime, Pr, PrKey } from './types.ts';
@@ -214,6 +215,32 @@ export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssu
     }
   });
   return issues;
+}
+
+/**
+ * Why one dossier line cannot be trusted any more, or null, for the "Why?"
+ * panel. verifyDossier first, then the line's own refs: a PR that is not
+ * synced, a deleted source, and for the status line a push since it was
+ * written (like a status fact, it follows the head).
+ */
+export function dossierLineIssue(dossier: Dossier, path: string, world: VerifyWorld): StaleReason | null {
+  const issue = verifyDossier(dossier, world).find((candidate) => candidate.path === path);
+  if (issue) {
+    return issue.reason;
+  }
+  for (const ref of findDossierLine(dossier, path)?.sources.refs ?? []) {
+    const pr = world.prs.get(ref.prKey);
+    if (pr === undefined) {
+      return 'pr_missing';
+    }
+    if (!sourceExists(ref, pr)) {
+      return 'source_deleted';
+    }
+    if (path === 'status' && ref.headOid !== null && ref.headOid !== pr.headOid) {
+      return 'head_moved';
+    }
+  }
+  return null;
 }
 
 /**
