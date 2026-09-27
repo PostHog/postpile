@@ -20,6 +20,11 @@ describe('glanceInputHash', () => {
     expect(glanceInputHash(glanceInput({ pr }))).toBe(base);
   });
 
+  it('ignores CI re-runs', () => {
+    const pr = makePr({ checks: { rollup: 'FAILURE', contexts: [] } });
+    expect(glanceInputHash(glanceInput({ pr }))).toBe(base);
+  });
+
   it('changes on a new push, a human comment, instructions or tailoring', () => {
     expect(glanceInputHash(glanceInput({ pr: makePr({ headOid: 'def' }) }))).not.toBe(base);
     expect(glanceInputHash(glanceInput({ pr: makePr({ comments: [makeComment()] }) }))).not.toBe(base);

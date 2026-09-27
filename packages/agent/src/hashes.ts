@@ -23,7 +23,6 @@ function prGlanceSnapshot(pr: Pr): unknown {
     reviewerTeams: pr.reviewerTeams,
     reviews: pr.reviews.filter((r) => !isBot(r.author)).map((r) => [r.id, r.state]),
     comments: humanComments(pr).map((c) => c.id),
-    checks: pr.checks.rollup,
   };
 }
 
