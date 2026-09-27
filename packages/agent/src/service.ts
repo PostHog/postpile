@@ -67,7 +67,23 @@ export interface SetProposal {
 export interface TopicSummaryInput {
   topic: Topic;
   prs: Pr[];
+  /**
+   * The other active topics, as merge targets. Left out of the input hash on
+   * purpose: a new topic elsewhere must not rewrite every summary.
+   */
+  otherTopics: TopicChoice[];
   context: PromptContext;
+}
+
+/** A rename or merge the agent suggests while summarizing. Only the user can apply it. */
+export type TopicChangeProposal =
+  | { kind: 'rename'; name: string; reason: string }
+  | { kind: 'merge'; intoTopicId: string; reason: string };
+
+export interface TopicSummaryResult {
+  summary: string;
+  inputHash: string;
+  proposals: TopicChangeProposal[];
 }
 
 export interface EventClassificationInput {
@@ -118,7 +134,7 @@ export interface AgentService {
   glance(input: GlanceInput): Promise<Glance>;
   assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]>;
   groupSets(input: SetGroupingInput): Promise<SetProposal[]>;
-  summarizeTopic(input: TopicSummaryInput): Promise<{ summary: string; inputHash: string }>;
+  summarizeTopic(input: TopicSummaryInput): Promise<TopicSummaryResult>;
   classifyEvents(input: EventClassificationInput): Promise<EventOverrideProposal[]>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;
   chat(input: ChatInput): Promise<AgentChatReply>;

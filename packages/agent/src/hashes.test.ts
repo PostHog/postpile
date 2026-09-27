@@ -53,14 +53,14 @@ describe('topicSummaryInputHash', () => {
   it('ignores PR order but reacts to a state change', () => {
     const a = makePr();
     const b = makePr({ ref: { repo: 'acme/app', number: 2 } });
-    const input = { topic: makeTopic(), prs: [a, b], context: emptyContext };
+    const input = { topic: makeTopic(), prs: [a, b], otherTopics: [], context: emptyContext };
     const hash = topicSummaryInputHash(input);
     expect(topicSummaryInputHash({ ...input, prs: [b, a] })).toBe(hash);
     expect(topicSummaryInputHash({ ...input, prs: [makePr({ state: 'MERGED' }), b] })).not.toBe(hash);
   });
 
   it('reacts to new feedback, which is in the prompt', () => {
-    const input = { topic: makeTopic(), prs: [makePr()], context: emptyContext };
+    const input = { topic: makeTopic(), prs: [makePr()], otherTopics: [], context: emptyContext };
     const withFeedback = { ...input, context: { ...emptyContext, recentFeedback: [makeFeedback()] } };
     expect(topicSummaryInputHash(withFeedback)).not.toBe(topicSummaryInputHash(input));
   });

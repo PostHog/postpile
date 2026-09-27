@@ -129,9 +129,30 @@ describe('RunnerAgentService.summarizeTopic', () => {
   it('returns the summary with its input hash', async () => {
     const { runner, service } = setup();
     runner.answer('topic_summary', { summary: 'CI moves to Depot. Two PRs in flight.' });
-    const result = await service.summarizeTopic({ topic: makeTopic(), prs: [makePr()], context: emptyContext });
+    const result = await service.summarizeTopic({ topic: makeTopic(), prs: [makePr()], otherTopics: [], context: emptyContext });
     expect(result.summary).toBe('CI moves to Depot. Two PRs in flight.');
     expect(result.inputHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.proposals).toEqual([]);
+  });
+
+  it('keeps real rename and merge ideas and drops no-ops and made-up topics', async () => {
+    const { runner, service } = setup();
+    const topic = makeTopic();
+    runner.answer('topic_summary', {
+      summary: 'Same work as the runner topic.',
+      proposals: [
+        { kind: 'rename', name: topic.name, reason: 'no change' },
+        { kind: 'rename', name: 'Depot runners', reason: 'clearer' },
+        { kind: 'merge', intoTopicId: 'runners', reason: 'same work' },
+        { kind: 'merge', intoTopicId: 'invented', reason: 'hallucinated' },
+      ],
+    });
+    const otherTopics = [{ id: 'runners', name: 'Runners', summary: '' }];
+    const result = await service.summarizeTopic({ topic, prs: [makePr()], otherTopics, context: emptyContext });
+    expect(result.proposals).toEqual([
+      { kind: 'rename', name: 'Depot runners', reason: 'clearer' },
+      { kind: 'merge', intoTopicId: 'runners', reason: 'same work' },
+    ]);
   });
 });
 

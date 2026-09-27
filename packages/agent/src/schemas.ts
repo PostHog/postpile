@@ -35,6 +35,14 @@ export const setGroupingOutput = z.object({
 
 export const topicSummaryOutput = z.object({
   summary: text.min(1),
+  proposals: z
+    .array(
+      z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('rename'), name: text.min(1), reason: text.min(1) }),
+        z.object({ kind: z.literal('merge'), intoTopicId: text, reason: text.min(1) }),
+      ]),
+    )
+    .default([]),
 });
 
 export const eventClassificationOutput = z.object({

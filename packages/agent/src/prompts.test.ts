@@ -29,7 +29,7 @@ describe('every prompt carries the memory and asks for JSON', () => {
     glance: glancePrompt({ pr, viewer, provenance: { kind: 'pinged', reason: 'review_requested' }, topic, context: fullContext }),
     topics: topicAssignmentPrompt({ prs: [pr], viewer, topics: [{ id: 't1', name: 'CI', summary: '' }], context: fullContext }),
     sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext }),
-    summary: topicSummaryPrompt({ topic, prs: [pr], context: fullContext }),
+    summary: topicSummaryPrompt({ topic, prs: [pr], otherTopics: [], context: fullContext }),
     events: eventClassificationPrompt({ pr, viewer, events: [makeEvent()], context: fullContext }),
     comment: draftCommentPrompt({ pr, viewer, person: 'bob', intent: 'is the cache key stable?', context: fullContext }),
     chat: chatPrompt({

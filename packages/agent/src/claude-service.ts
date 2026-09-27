@@ -33,6 +33,7 @@ import type {
   TopicAssignment,
   TopicAssignmentInput,
   TopicSummaryInput,
+  TopicSummaryResult,
 } from './service.ts';
 
 // Glances are small and fire per PR; everything else may look at a whole topic.
@@ -140,9 +141,15 @@ export class RunnerAgentService implements AgentService {
     return result;
   }
 
-  async summarizeTopic(input: TopicSummaryInput): Promise<{ summary: string; inputHash: string }> {
+  async summarizeTopic(input: TopicSummaryInput): Promise<TopicSummaryResult> {
     const { value } = await this.ask('topic_summary', topicSummaryPrompt(input), topicSummaryOutput);
-    return { summary: value.summary, inputHash: topicSummaryInputHash(input) };
+    const currentName = input.topic.name.trim().toLowerCase();
+    const mergeTargets = new Set(input.otherTopics.map((t) => t.id).filter((id) => id !== input.topic.id));
+    // Drop no-op renames and merges into topics the model made up.
+    const proposals = value.proposals.filter((p) =>
+      p.kind === 'rename' ? p.name.toLowerCase() !== currentName : mergeTargets.has(p.intoTopicId),
+    );
+    return { summary: value.summary, inputHash: topicSummaryInputHash(input), proposals };
   }
 
   async classifyEvents(input: EventClassificationInput): Promise<EventOverrideProposal[]> {

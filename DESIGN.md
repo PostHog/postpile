@@ -111,6 +111,12 @@ Topic assignment: PRs without a topic go to the agent in batches of 20,
 together with the list of existing topics (name + summary). It picks one or
 names a new topic. **New topics are created directly** (otherwise a first sync
 would leave everything unsorted); renames and merges are proposals only.
+They come out of the topic summary job: its answer may carry rename or merge
+ideas, which are filed as pending `topic_proposal` rows (never the same idea
+twice, so a rejected rename stays rejected). Other topics are in that prompt
+as merge targets but not in its hash, so a new topic does not rewrite every
+summary. Nothing produces `new_topic` proposals yet, since new topics are
+created directly.
 Until the agent has placed a PR it shows up in a virtual **Unsorted** topic
 (id `unsorted`, never stored), so `--no-agent` syncs are still usable.
 

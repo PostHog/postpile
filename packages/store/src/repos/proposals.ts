@@ -77,6 +77,15 @@ export class TopicProposalRepo {
     ).map(toProposal);
   }
 
+  /** Every proposal about changing this topic, any status, oldest first. */
+  listForTopic(topicId: string): TopicProposal[] {
+    return all<ProposalRow>(
+      this.db,
+      'SELECT * FROM topic_proposal WHERE topic_id = ? ORDER BY created_at, id',
+      topicId,
+    ).map(toProposal);
+  }
+
   /** Deciding twice is a no-op: only pending proposals change. */
   decide(id: string, status: Exclude<ProposalStatus, 'pending'>, at: string): void {
     run(

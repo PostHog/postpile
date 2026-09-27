@@ -130,6 +130,31 @@ describe('Engine.sync with the agent', () => {
     expect(tile?.prs[0]?.glanceStale).toBe(true);
   });
 
+  it('files rename ideas from the summary as pending proposals, once', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    const topic = { id: 'depot', name: 'Depot', summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher' as const, status: 'active' as const, createdAt: at(0), updatedAt: at(0) };
+    h.store.topics.create(topic);
+    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    const rename = { kind: 'rename', name: 'Depot runners', reason: 'clearer' };
+    h.runner.answer('topic_summary', { summary: 'Runners move to Depot.', proposals: [rename] });
+
+    await h.engine.sync({ agentJobs: ['summaries'] });
+
+    const detail = await h.engine.getTopic('depot');
+    expect(detail?.topic.name).toBe('Depot');
+    expect(detail?.pendingProposals).toMatchObject([{ kind: 'rename', name: 'Depot runners', status: 'pending' }]);
+
+    // The user says no; the same idea on the next summary is not filed again.
+    await h.engine.decideTopicProposal(detail!.pendingProposals[0]!.id, false);
+    h.store.topics.setTailoring('depot', 'only runner cost', at(1));
+    h.runner.answer('topic_summary', { summary: 'Still runners.', proposals: [rename] });
+    const report = await h.engine.sync({ agentJobs: ['summaries'] });
+    expect(report.agentCalls).toBe(1);
+    expect((await h.engine.getTopic('depot'))?.pendingProposals).toEqual([]);
+  });
+
   it('respects maxAgentCalls and agentJobs', async () => {
     const h = makeHarness();
     for (const n of [1, 2]) {
