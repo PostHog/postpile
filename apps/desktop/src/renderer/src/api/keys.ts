@@ -6,4 +6,7 @@ export const queryKeys = {
   pr: (prKey: string) => ['pr', prKey] as const,
   chat: (tileId: string) => ['chat', tileId] as const,
   proposals: ['proposals'] as const,
+  instructions: ['instructions'] as const,
+  instructionsChat: ['instructions-chat'] as const,
+  memorySources: (targetKey: string) => ['memory-sources', targetKey] as const,
 };

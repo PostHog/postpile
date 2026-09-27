@@ -14,6 +14,7 @@ export function AgentFacts(props: { facts: FactView[] }) {
           stale={view.stale}
           corrected={false}
           refs={view.fact.refs}
+          why={{ kind: 'fact', factId: view.fact.id }}
         >
           {view.fact.text}
         </MemoryLine>

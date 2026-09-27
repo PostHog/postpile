@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { DossierCare, DossierView } from '@code-manager/core';
 import { claimStaleReason } from '../lib/memory.ts';
+import { lineTarget } from '../lib/sources.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -26,6 +27,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
   const { dossier } = view;
   const wrong = (text: string) => ({ kind: 'wrong' as const, factId: null, topicId, text });
   const corrected = (text: string) => view.correctedClaims.includes(text);
+  const why = (path: string) => lineTarget(topicId, view, path);
   return (
     <div className="flex max-w-[680px] flex-col gap-4 rounded-row border border-hairline bg-surface px-3.5 py-3">
       <Section title="Open questions">
@@ -37,6 +39,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             stale={claimStaleReason(`openQuestions[${index}]`, view.staleClaims)}
             corrected={corrected(question.text)}
             refs={question.refs}
+            why={why(`openQuestions[${index}]`)}
           >
             {question.text}
             {question.askedBy && <span className="text-muted"> asked by @{question.askedBy}</span>}
@@ -52,6 +55,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             correction={wrong(`${entry.prKey}: ${entry.role}`)}
             stale={claimStaleReason(`timeline[${index}]`, view.staleClaims)}
             corrected={corrected(`${entry.prKey}: ${entry.role}`)}
+            why={why(`timeline[${index}]`)}
           >
             <span className="font-mono text-[11px] text-muted">#{prNumber(entry.prKey)}</span> {entry.role}
           </MemoryLine>
@@ -61,8 +65,15 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
 
       <Section title="What you care about here">
         {dossier.userCares.length === 0 && <p className="text-xs text-faint">Nothing noted yet.</p>}
-        {dossier.userCares.map((care) => (
-          <MemoryLine key={care.text} correction={wrong(care.text)} stale={null} corrected={corrected(care.text)} canForget>
+        {dossier.userCares.map((care, index) => (
+          <MemoryLine
+            key={care.text}
+            correction={wrong(care.text)}
+            stale={null}
+            corrected={corrected(care.text)}
+            canForget
+            why={why(`userCares[${index}]`)}
+          >
             {care.source === 'observed' ? <span className="italic">{careText(care)}</span> : careText(care)}
           </MemoryLine>
         ))}
