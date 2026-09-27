@@ -35,6 +35,19 @@ export function sampleKey(number: number): PrKey {
   return prKey({ repo: SAMPLE_REPO, number });
 }
 
+export interface SampleCommentInput {
+  id: string;
+  author: string;
+  body: string;
+  hoursAgo: number;
+}
+
+export interface SampleCommitInput {
+  oid: string;
+  headline: string;
+  hoursAgo: number;
+}
+
 export interface SamplePrInput {
   number: number;
   title: string;
@@ -46,10 +59,14 @@ export interface SamplePrInput {
   headRef?: string;
   openedHoursAgo: number;
   mergedHoursAgo?: number;
-  reviews?: [author: string, state: ReviewState][];
+  reviews?: [author: string, state: ReviewState, body?: string][];
   reviewerUsers?: string[];
   reviewerTeams?: string[];
   body?: string;
+  /** Issue comments, so memory sources in fake mode have who and what to show. */
+  comments?: SampleCommentInput[];
+  /** Commits by the author, oldest first. The last one should be the head (`sha<number>`). */
+  commits?: SampleCommitInput[];
 }
 
 export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
@@ -76,16 +93,30 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     reviewDecision: 'REVIEW_REQUIRED',
     reviewerUsers: input.reviewerUsers ?? [],
     reviewerTeams: input.reviewerTeams ?? [],
-    reviews: (input.reviews ?? []).map(([author, state], index) => ({
+    reviews: (input.reviews ?? []).map(([author, state, body], index) => ({
       id: `review-${input.number}-${index}`,
       author,
       state,
-      body: '',
+      body: body ?? '',
       submittedAt: clock.hoursAgo(1),
       commitOid: headOid,
     })),
-    commits: [],
-    comments: [],
+    commits: (input.commits ?? []).map((commit) => ({
+      oid: commit.oid,
+      headline: commit.headline,
+      author: input.author,
+      committedAt: clock.hoursAgo(commit.hoursAgo),
+    })),
+    comments: (input.comments ?? []).map((comment) => ({
+      id: comment.id,
+      author: comment.author,
+      body: comment.body,
+      createdAt: clock.hoursAgo(comment.hoursAgo),
+      kind: 'comment' as const,
+      url: `https://github.com/${SAMPLE_REPO}/pull/${input.number}#${comment.id}`,
+      path: null,
+      threadId: null,
+    })),
     threads: [],
     timeline: [],
     checks: { rollup: input.checks, contexts: [] },

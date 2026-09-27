@@ -11,7 +11,10 @@ import type {
   FactRef,
   FactRefKind,
   Feedback,
+  LineSources,
   RuleProposal,
+  UserRef,
+  UserRefKind,
 } from '@code-manager/core';
 import { SAMPLE_REPO, SampleClock, sampleKey } from './sample-builders.ts';
 
@@ -34,6 +37,23 @@ const CI = 'topic-ci-tests';
 function ref(clock: SampleClock, kind: FactRefKind, number: number, hoursAgo: number, sourceId: string | null = null): FactRef {
   const url = sourceId ? `https://github.com/${SAMPLE_REPO}/pull/${number}#${sourceId}` : `https://github.com/${SAMPLE_REPO}/pull/${number}`;
   return { kind, prKey: sampleKey(number), sourceId, url, at: clock.hoursAgo(hoursAgo), headOid: null };
+}
+
+function userRef(clock: SampleClock, kind: UserRefKind, id: string, hoursAgo: number, quote: string): UserRef {
+  return { kind, id, at: clock.hoursAgo(hoursAgo), quote };
+}
+
+function prRef(clock: SampleClock, number: number, hoursAgo: number): FactRef {
+  return ref(clock, 'pr', number, hoursAgo);
+}
+
+function sources(refs: FactRef[], userRefs: UserRef[] = []): LineSources {
+  return { refs, userRefs };
+}
+
+/** The Depot topic tailoring, as a dossier line cites it. */
+function depotTailoring(clock: SampleClock): UserRef {
+  return userRef(clock, 'tailoring', DEPOT, 1, 'Rowan drives, I approve. Flag cache keys, runner labels, secrets.');
 }
 
 function person(login: string): EntityRef {
@@ -81,18 +101,20 @@ function sampleFact(clock: SampleClock, input: SampleFactInput): Fact {
 function depotDossierV1(clock: SampleClock): Dossier {
   return {
     goal: 'Run PostHog CI on Depot runners to cut queue time and cost.',
+    goalSources: sources([prRef(clock, 41851, 170)]),
     summary: 'Project config is in. Backend jobs are next.',
     status: 'starting',
     statusNote: 'Only the Depot project config exists so far.',
+    statusSources: sources([prRef(clock, 41851, 144)]),
     people: [{ login: 'rowan', role: 'driver', note: 'Opened the rowan/depot stack.' }],
     openQuestions: [
       { text: 'Keep GitHub runners for release builds?', askedBy: 'nell', refs: [ref(clock, 'comment', 41851, 150, 'issuecomment-1')] },
     ],
-    timeline: [{ prKey: sampleKey(41851), role: 'Adds depot.json, base of the stack.' }],
+    timeline: [{ prKey: sampleKey(41851), role: 'Adds depot.json, base of the stack.', refs: [prRef(clock, 41851, 170)] }],
     earlier: '',
     userCares: [
-      { text: 'Cache keys and Turbo hashing', source: 'tailoring' },
-      { text: 'CI cost per run', source: 'instructions' },
+      { text: 'Cache keys and Turbo hashing', source: 'tailoring', userRefs: [depotTailoring(clock)] },
+      { text: 'CI cost per run', source: 'instructions', userRefs: [userRef(clock, 'instructions', '3', 40, 'Edited outside the app')] },
     ],
     recentChanges: [{ at: clock.hoursAgo(144), text: 'Depot project config merged (#41851).', refs: [ref(clock, 'pr', 41851, 144)] }],
   };
@@ -105,6 +127,7 @@ function depotDossierV2(clock: SampleClock): Dossier {
     summary: 'Backend jobs run on Depot. The token went in as a repo secret. Frontend and cache are next.',
     status: 'active',
     statusNote: 'Backend moved, no blockers.',
+    statusSources: sources([prRef(clock, 41862, 72)]),
     people: [...v1.people, { login: 'lyra', role: 'reviewer', note: 'Approves the workflow changes.' }],
     openQuestions: [
       ...v1.openQuestions,
@@ -112,11 +135,19 @@ function depotDossierV2(clock: SampleClock): Dossier {
     ],
     timeline: [
       ...v1.timeline,
-      { prKey: sampleKey(41862), role: 'Moves backend jobs to Depot.' },
-      { prKey: sampleKey(41915), role: 'Adds DEPOT_TOKEN as a repo secret.' },
+      { prKey: sampleKey(41862), role: 'Moves backend jobs to Depot.', refs: [prRef(clock, 41862, 96)] },
+      { prKey: sampleKey(41915), role: 'Adds DEPOT_TOKEN as a repo secret.', refs: [ref(clock, 'comment', 41915, 25, 'issuecomment-4')] },
+      // Written before lines carried sources: shows "no source recorded".
       { prKey: sampleKey(41899), role: 'Renames workflow files to ci-*.yml.' },
     ],
-    userCares: [...v1.userCares, { text: 'Runner labels and secrets', source: 'tailoring' }],
+    userCares: [
+      ...v1.userCares,
+      {
+        text: 'Runner labels and secrets',
+        source: 'tailoring',
+        userRefs: [depotTailoring(clock), userRef(clock, 'feedback', '5', 26, 'asked to keep this for the topic: flag runner labels too')],
+      },
+    ],
     recentChanges: [
       { at: clock.hoursAgo(24), text: 'DEPOT_TOKEN merged as a repo secret, though an org secret exists (#41915).', refs: [ref(clock, 'pr', 41915, 24)] },
       { at: clock.hoursAgo(72), text: 'Backend jobs run on Depot (#41862 merged).', refs: [ref(clock, 'pr', 41862, 72)] },
@@ -131,6 +162,8 @@ function depotDossierV3(clock: SampleClock): Dossier {
     ...v2,
     summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
     statusNote: 'Cache and e2e layers wait on reviews; the cache PR fails its warm-up job.',
+    // Written against the commit before the latest push, so "Why?" shows it as stale.
+    statusSources: sources([{ ...ref(clock, 'commit', 41902, 4, 'a1b2c3'), headOid: 'a1b2c3' }, ref(clock, 'review', 41902, 1, 'review-41902-0')]),
     people: [
       { login: 'rowan', role: 'driver', note: 'Owns the rollout, stacks rowan/depot-*.' },
       { login: 'lyra', role: 'reviewer', note: 'Approves workflow changes, asked about the warm-up.' },
@@ -138,15 +171,27 @@ function depotDossierV3(clock: SampleClock): Dossier {
       { login: 'jude', role: 'contributor', note: 'Turned off the Storybook cache in #41855.' },
     ],
     openQuestions: [
-      { text: 'Does the Turbo cache warm-up need a feature flag?', askedBy: 'lyra', refs: [ref(clock, 'comment', 41902, 0.3, 'issuecomment-2')] },
+      {
+        text: 'Does the Turbo cache warm-up need a feature flag?',
+        askedBy: 'lyra',
+        refs: [ref(clock, 'comment', 41902, 0.3, 'issuecomment-2'), ref(clock, 'event', 41902, 0.3, `${sampleKey(41902)}:mention:s41902-2`)],
+      },
       ...v2.openQuestions,
     ],
     timeline: [
       ...v2.timeline,
-      { prKey: sampleKey(41902), role: 'Points the Turbo remote cache at Depot.' },
-      { prKey: sampleKey(41911), role: 'Moves e2e to Depot runners, stacked on the cache PR.' },
+      { prKey: sampleKey(41902), role: 'Points the Turbo remote cache at Depot.', refs: [prRef(clock, 41902, 5), ref(clock, 'review', 41902, 1, 'review-41902-1')] },
+      { prKey: sampleKey(41911), role: 'Moves e2e to Depot runners, stacked on the cache PR.', refs: [prRef(clock, 41911, 1)] },
     ],
-    userCares: [...v2.userCares, { text: 'Storybook build time', source: 'observed' }],
+    userCares: [
+      ...v2.userCares,
+      {
+        text: 'Storybook build time',
+        source: 'observed',
+        refs: [ref(clock, 'comment', 41855, 16, 'issuecomment-3')],
+        userRefs: [userRef(clock, 'chat', '7', 15, 'Storybook going cold on every PR hurts.')],
+      },
+    ],
     recentChanges: [
       { at: clock.hoursAgo(0.3), text: 'lyra asked on #41902 whether the cache warm-up needs a flag.', refs: [ref(clock, 'comment', 41902, 0.3, 'issuecomment-2')] },
       { at: clock.hoursAgo(1), text: '#41911 opened: e2e moves to Depot runners, stacked on the cache PR.', refs: [ref(clock, 'pr', 41911, 1)] },
@@ -228,12 +273,12 @@ function buildFacts(clock: SampleClock): Fact[] {
     sampleFact(clock, {
       id: 'fact-lyra-reviews-41902', subject: person('lyra'), predicate: 'reviews', object: pr(41902),
       text: 'lyra reviews #41902 and approved it.', topicId: DEPOT, recordedHoursAgo: 1,
-      refs: [ref(clock, 'review', 41902, 1, 'pullrequestreview-41902-0')],
+      refs: [ref(clock, 'review', 41902, 1, 'review-41902-0')],
     }),
     sampleFact(clock, {
       id: 'fact-41902-status', subject: pr(41902), predicate: 'status', object: null,
       text: 'The warm-up job fails on the first cold run.', topicId: DEPOT, recordedHoursAgo: 4,
-      refs: [{ ...ref(clock, 'commit', 41902, 4, 'commit-a1b2c3'), headOid: 'a1b2c3' }],
+      refs: [{ ...ref(clock, 'commit', 41902, 4, 'a1b2c3'), headOid: 'a1b2c3' }],
     }),
     sampleFact(clock, {
       id: 'fact-41911-depends', subject: pr(41911), predicate: 'depends_on', object: pr(41902),
@@ -253,7 +298,7 @@ function buildFacts(clock: SampleClock): Fact[] {
     sampleFact(clock, {
       id: 'fact-lyra-owns-workflows', subject: person('lyra'), predicate: 'owns', object: { kind: 'path', key: `${SAMPLE_REPO}:.github/workflows/` },
       text: 'lyra owns the CI workflow files.', topicId: DEPOT, recordedHoursAgo: 48,
-      refs: [ref(clock, 'review', 41899, 30, 'pullrequestreview-41899-1'), ref(clock, 'review', 41862, 80, 'pullrequestreview-41862-1')],
+      refs: [ref(clock, 'review', 41899, 30, 'review-41899-1'), ref(clock, 'review', 41862, 80, 'review-41862-1')],
     }),
     sampleFact(clock, {
       id: 'fact-41855-cold', subject: pr(41855), predicate: 'note', object: null,

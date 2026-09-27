@@ -178,6 +178,7 @@ describe('server routes over the fake engine', () => {
     expect(fact.check).toMatchObject({ state: 'stale', reason: 'head_moved' });
     const line = (await (await app.request('/api/memory/sources?topic=topic-depot&version=3&path=openQuestions%5B0%5D')).json()) as MemorySources;
     expect(line.claim).toBe('Does the Turbo cache warm-up need a feature flag?');
+    expect(line.sources.some((source) => source.who === 'lyra' && !source.missing)).toBe(true);
     expect((await app.request('/api/memory/sources?fact=nope')).status).toBe(404);
     expect((await app.request('/api/memory/sources?topic=topic-depot')).status).toBe(400);
   });

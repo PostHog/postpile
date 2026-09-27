@@ -97,8 +97,16 @@ function buildPrs(clock: SampleClock): Pr[] {
       number: 41902, title: 'Use Depot cache backend for Turbo', author: 'rowan', state: 'OPEN',
       size: [186, 42, 7], checks: 'FAILURE', openedHoursAgo: 5,
       baseRef: 'rowan/depot-2', headRef: 'rowan/depot-3',
-      reviews: [['lyra', 'APPROVED'], ['nell', 'COMMENTED']],
+      reviews: [
+        ['lyra', 'APPROVED', 'Cache config looks right. The warm-up job is the only open point.'],
+        ['nell', 'COMMENTED', 'The first run after merge took 38 min on my fork.'],
+      ],
       reviewerUsers: [SAMPLE_VIEWER], reviewerTeams: ['PostHog/team-devex'],
+      comments: [{ id: 'issuecomment-2', author: 'lyra', body: '@you does the warm-up job need a feature flag, or is one cold hour fine?', hoursAgo: 0.3 }],
+      commits: [
+        { oid: 'a1b2c3', headline: 'Warm the Turbo cache on the first run', hoursAgo: 4 },
+        { oid: 'sha41902', headline: 'Retry the warm-up once before failing', hoursAgo: 0.5 },
+      ],
     }),
     samplePr(clock, {
       number: 41921, title: 'Bump turbo to 2.5', author: 'renovate[bot]', state: 'OPEN',
@@ -107,6 +115,7 @@ function buildPrs(clock: SampleClock): Pr[] {
     samplePr(clock, {
       number: 41855, title: 'Skip Turbo remote cache for Storybook', author: 'jude', state: 'MERGED',
       size: [3, 1, 1], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 14, reviews: [['lyra', 'APPROVED']],
+      comments: [{ id: 'issuecomment-3', author: 'jude', body: 'Are the snapshots stale because of the cache or because of the Vite upgrade?', hoursAgo: 16 }],
     }),
     samplePr(clock, {
       number: 41911, title: 'Run e2e on Depot runners', author: 'rowan', state: 'OPEN',
@@ -123,10 +132,12 @@ function buildPrs(clock: SampleClock): Pr[] {
       number: 41851, title: 'Add Depot project config', author: 'rowan', state: 'MERGED',
       size: [12, 0, 1], checks: 'SUCCESS', openedHoursAgo: 170, mergedHoursAgo: 144,
       baseRef: 'master', headRef: 'rowan/depot-1', reviews: [[SAMPLE_VIEWER, 'APPROVED']],
+      comments: [{ id: 'issuecomment-1', author: 'nell', body: 'Can we keep GitHub runners for release builds until Depot has an SLA?', hoursAgo: 150 }],
     }),
     samplePr(clock, {
       number: 41915, title: 'DEPOT_TOKEN as repo secret', author: 'rowan', state: 'MERGED',
       size: [9, 3, 3], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 24, reviews: [['lyra', 'APPROVED']],
+      comments: [{ id: 'issuecomment-4', author: 'rowan', body: 'Keeping DEPOT_TOKEN a repo secret for now. The org secret move comes with the release workflow.', hoursAgo: 25 }],
     }),
     samplePr(clock, {
       number: 41899, title: 'Rename workflow files to ci-*.yml', author: 'rowan', state: 'OPEN',

@@ -60,6 +60,24 @@ describe('FakeEngine memory', () => {
     expect((await engine.getTopic('topic-depot'))?.dossier?.correctedClaims).toContain('Storybook build time');
   });
 
+  it('has rich sources for the Depot dossier', async () => {
+    const engine = new FakeEngine();
+    const line = (path: string) => engine.getMemorySources({ kind: 'dossier_line', topicId: 'topic-depot', version: 3, path });
+
+    const question = await line('openQuestions[0]');
+    expect(question?.sources.map((source) => [source.kind, source.who, source.missing])).toEqual([
+      ['comment', 'lyra', false],
+      ['event', 'lyra', false],
+    ]);
+    expect(question?.check.state).toBe('ok');
+    expect((await line('status'))?.check).toMatchObject({ state: 'stale', reason: 'head_moved' });
+    expect((await line('openQuestions[2]'))?.check).toMatchObject({ state: 'stale', reason: 'thread_resolved' });
+    expect((await line('userCares[0]'))?.check.state).toBe('user_only');
+    expect((await line('userCares[3]'))?.sources.map((source) => source.kind)).toEqual(['comment', 'chat']);
+    expect((await line('timeline[3]'))?.check.state).toBe('unsourced');
+    expect((await engine.getMemorySources({ kind: 'fact', factId: 'fact-lyra-owns-workflows' }))?.sources.every((source) => !source.missing)).toBe(true);
+  });
+
   it('files the next rule proposal once and merges a topic on accept', async () => {
     const engine = new FakeEngine();
     expect((await engine.consolidate()).ruleProposalsFiled).toBe(1);
