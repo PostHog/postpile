@@ -22,8 +22,6 @@ export interface GitHubSyncResult {
   threads: number;
   prsFetched: number;
   prsSkipped: number;
-  /** PRs whose snapshot was written in this sync. */
-  fetchedKeys: PrKey[];
   newEventIds: string[];
 }
 
@@ -51,6 +49,14 @@ export class GitHubSync {
     private readonly now: () => Date,
   ) {}
 
+  private setMeta(key: string, value: string | null): void {
+    if (value === null) {
+      this.store.meta.delete(key);
+    } else {
+      this.store.meta.set(key, value);
+    }
+  }
+
   private async syncNotifications(): Promise<{ notModified: boolean; threads: number }> {
     const result = await this.reader.listNotifications({
       etag: this.store.meta.get(ETAG_KEY),
@@ -73,14 +79,6 @@ export class GitHubSync {
       this.setMeta(LAST_MODIFIED_KEY, result.lastModified);
     });
     return { notModified: false, threads: result.threads.length };
-  }
-
-  private setMeta(key: string, value: string | null): void {
-    if (value === null) {
-      this.store.meta.delete(key);
-    } else {
-      this.store.meta.set(key, value);
-    }
   }
 
   /**
@@ -157,7 +155,6 @@ export class GitHubSync {
       threads: notifications.threads,
       prsFetched: fetched.size,
       prsSkipped: candidates.length - picked.length,
-      fetchedKeys: [...fetched.keys()],
       newEventIds,
     };
   }

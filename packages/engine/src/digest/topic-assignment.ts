@@ -1,5 +1,5 @@
 import type { TopicAssignment, TopicChoice } from '@code-manager/agent';
-import type { Pr, PrKey, Topic } from '@code-manager/core';
+import type { Pr, Topic } from '@code-manager/core';
 import { newTopicId } from '../ids.ts';
 import { errorText, type DigestDeps } from './deps.ts';
 
@@ -58,11 +58,11 @@ export class TopicAssigner {
     return topic;
   }
 
-  private apply(assignments: TopicAssignment[]): PrKey[] {
+  private apply(assignments: TopicAssignment[]): void {
     const { store } = this.deps;
     const at = this.deps.now().toISOString();
-    return store.transaction(() =>
-      assignments.map((assignment) => {
+    store.transaction(() => {
+      for (const assignment of assignments) {
         const topicId = assignment.kind === 'existing' ? assignment.topicId : this.findOrCreateTopic(assignment.name).id;
         store.memberships.assign({
           prKey: assignment.prKey,
@@ -71,14 +71,11 @@ export class TopicAssigner {
           reason: assignment.reason,
           createdAt: at,
         });
-        return assignment.prKey;
-      }),
-    );
+      }
+    });
   }
 
-  /** Returns the keys that got a topic. */
-  async run(): Promise<PrKey[]> {
-    const assigned: PrKey[] = [];
+  async run(): Promise<void> {
     for (const batch of chunk(this.unassignedPrs(), ASSIGNMENT_BATCH_SIZE)) {
       if (!this.deps.budget.take()) {
         break;
@@ -91,11 +88,10 @@ export class TopicAssigner {
           topics: this.topicChoices(),
           context: this.deps.contexts.forTopic(null),
         });
-        assigned.push(...this.apply(assignments));
+        this.apply(assignments);
       } catch (error) {
         this.deps.errors.push(`topic assignment: ${errorText(error)}`);
       }
     }
-    return assigned;
   }
 }
