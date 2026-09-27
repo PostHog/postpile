@@ -14,4 +14,3 @@ export { GlanceRepo } from './repos/glances.ts';
 export { SnoozeRepo } from './repos/snoozes.ts';
 export { FeedbackRepo, type NewFeedback } from './repos/feedback.ts';
 export { ChatRepo, type NewChatMessage } from './repos/chat.ts';
-export { AgentCacheRepo, type AgentCacheEntry } from './repos/agent-cache.ts';

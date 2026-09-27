@@ -1,6 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { inTransaction, openDatabase } from './database.ts';
-import { AgentCacheRepo } from './repos/agent-cache.ts';
 import { ChatRepo } from './repos/chat.ts';
 import { EventRepo } from './repos/events.ts';
 import { FeedbackRepo } from './repos/feedback.ts';
@@ -30,7 +29,6 @@ export class Store {
   readonly snoozes: SnoozeRepo;
   readonly feedback: FeedbackRepo;
   readonly chat: ChatRepo;
-  readonly agentCache: AgentCacheRepo;
 
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
@@ -46,7 +44,6 @@ export class Store {
     this.snoozes = new SnoozeRepo(db);
     this.feedback = new FeedbackRepo(db);
     this.chat = new ChatRepo(db);
-    this.agentCache = new AgentCacheRepo(db);
   }
 
   static open(path: string): Store {

@@ -168,15 +168,4 @@ CREATE TABLE chat_message (
   created_at TEXT NOT NULL
 );
 CREATE INDEX chat_message_tile ON chat_message (tile_id, id);
-
--- Generic answer cache for agent calls that have no table of their own
--- (topic assignment, event classification, drafts). Keyed by a hash of the
--- full prompt plus model, like ghatchup's claude/<sha>.json.
-CREATE TABLE agent_cache (
-  key        TEXT PRIMARY KEY,
-  purpose    TEXT NOT NULL,
-  model      TEXT NOT NULL,
-  output     TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
 `;

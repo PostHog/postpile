@@ -363,14 +363,6 @@ describe('ChatRepo', () => {
   });
 });
 
-describe('AgentCacheRepo', () => {
-  it('stores answers by key', () => {
-    expect(store.agentCache.get('k')).toBeNull();
-    store.agentCache.put({ key: 'k', purpose: 'assign', model: 'sonnet', output: '{"a":1}', createdAt: at(0) });
-    expect(store.agentCache.get('k')).toMatchObject({ purpose: 'assign', output: '{"a":1}' });
-  });
-});
-
 describe('Store.transaction', () => {
   it('rolls back every write when the function throws', () => {
     expect(() =>

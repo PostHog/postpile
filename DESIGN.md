@@ -105,7 +105,7 @@ and only recomputes on change.
 | sets | `pr_set` + `pr_set_member` with combined take and per-member reason; `removed_at` keeps "not related" members | agent regroups; removed members never come back with the rest, a corrected set the agent drops is kept as dissolved |
 | feedback | `feedback`: not_mine / not_related / wrong_topic / unmute / tailoring_kept / tailoring_once | append-only; newest 10 per topic go into prompts |
 | event overrides | `pr_event.override_*` with reason | kept across re-derivation |
-| other agent answers | `agent_cache`, keyed by hash of prompt + model | prompt changes |
+| other agent answers | not cached: topic assignment and event overrides only run for new PRs and events, drafts and chat run on request | - |
 
 Topic assignment: PRs without a topic go to the agent in batches of 20,
 together with the list of existing topics (name + summary). It picks one or
