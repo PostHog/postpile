@@ -54,6 +54,19 @@ describe('preReconcile', () => {
     ]);
   });
 
+  it('keeps only the newest candidate per unique slot of one answer', () => {
+    const alice = makeCandidate({ subject: { kind: 'person', key: 'alice' }, predicate: 'drives', object: topic, text: 'alice drives it', validFrom: at(1) });
+    const bob = makeCandidate({ subject: { kind: 'person', key: 'bob' }, predicate: 'drives', object: topic, text: 'bob took over', validFrom: at(5) });
+    expect(preReconcile([bob, alice], []).actions).toEqual([{ kind: 'add', candidate: bob }]);
+
+    const old = makeFact({ id: 's1', subject: topic, predicate: 'status', object: null, text: 'active', validFrom: at(0) });
+    const first = makeCandidate({ subject: topic, predicate: 'status', object: null, text: 'blocked', validFrom: at(2) });
+    const second = makeCandidate({ subject: topic, predicate: 'status', object: null, text: 'unblocked', validFrom: at(2) });
+    expect(preReconcile([first, second], [old]).actions).toEqual([
+      { kind: 'update', factId: 's1', candidate: second, reason: 'replaced by a newer status fact' },
+    ]);
+  });
+
   it('5: a unique slot held by a newer fact goes to the agent', () => {
     const newer = makeFact({ id: 's1', subject: topic, predicate: 'status', object: null, text: 'finished', validFrom: at(50) });
     const candidate = makeCandidate({ subject: topic, predicate: 'status', object: null, text: 'active', validFrom: at(10) });

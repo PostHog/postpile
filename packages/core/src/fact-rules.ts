@@ -93,6 +93,39 @@ function dedupeCandidates(candidates: FactCandidate[]): FactCandidate[] {
   return [...byKey.values()];
 }
 
+/** The unique slot a candidate fills, or null for predicates any number of facts may share. */
+function slotKey(candidate: FactCandidate): string | null {
+  const rule = PREDICATE_RULES[candidate.predicate].unique;
+  if (rule === 'per_subject') {
+    return `${candidate.predicate}|subject|${candidate.subject.kind}:${candidate.subject.key}`;
+  }
+  if (rule === 'per_object' && candidate.object !== null) {
+    return `${candidate.predicate}|object|${candidate.object.kind}:${candidate.object.key}`;
+  }
+  return null;
+}
+
+/**
+ * One answer can fill the same unique slot twice, e.g. a handover inside one
+ * delta. Each candidate would be checked against the stored facts only, so
+ * both would end up active. Only the newest per slot is kept; on a tie the
+ * later one in the answer wins.
+ */
+function newestPerSlot(candidates: FactCandidate[]): FactCandidate[] {
+  const newest = new Map<string, FactCandidate>();
+  for (const candidate of candidates) {
+    const key = slotKey(candidate);
+    const known = key === null ? undefined : newest.get(key);
+    if (key !== null && (known === undefined || candidate.validFrom >= known.validFrom)) {
+      newest.set(key, candidate);
+    }
+  }
+  return candidates.filter((candidate) => {
+    const key = slotKey(candidate);
+    return key === null || newest.get(key) === candidate;
+  });
+}
+
 function isExactMatch(fact: Fact, candidate: FactCandidate): boolean {
   return (
     sameEntity(fact.subject, candidate.subject) &&
@@ -140,7 +173,8 @@ function replaceSlot(candidate: FactCandidate, slot: Fact[]): ReconcileAction[] 
 /**
  * The deterministic half of reconciling, so most candidates never need an
  * agent call. `existing` is every active fact on the candidates' subjects and
- * objects (objects matter for per_object predicates like drives).
+ * objects (objects matter for per_object predicates like drives). Candidates
+ * are deduped first, and only the newest per unique slot is kept.
  * Rules, first match wins:
  * 1. same subject, predicate, object and normalised text -> noop (merge refs)
  * 2. unique predicate, different value, candidate newer -> update
@@ -153,7 +187,7 @@ function replaceSlot(candidate: FactCandidate, slot: Fact[]): ReconcileAction[] 
 export function preReconcile(candidates: FactCandidate[], existing: Fact[]): PreReconcileResult {
   const actions: ReconcileAction[] = [];
   const ambiguous: AmbiguousCandidate[] = [];
-  for (const candidate of dedupeCandidates(candidates)) {
+  for (const candidate of newestPerSlot(dedupeCandidates(candidates))) {
     const sameSubjectPredicate = existing.filter(
       (fact) => fact.predicate === candidate.predicate && sameEntity(fact.subject, candidate.subject),
     );
