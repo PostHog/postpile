@@ -60,6 +60,31 @@ describe('DeferredQueue', () => {
     expect(sent).toHaveLength(2);
   });
 
+  it('flush waits for a send whose timer already fired', async () => {
+    const timers = new FakeTimers();
+    let release = (): void => {};
+    let finished = false;
+    const queue = new DeferredQueue<string>(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      finished = true;
+    }, timers);
+    queue.enqueue('t1');
+    timers.advance(UNDO_WINDOW_MS);
+
+    let flushed = false;
+    const flushing = queue.flush().then(() => {
+      flushed = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(flushed).toBe(false);
+
+    release();
+    await flushing;
+    expect(finished).toBe(true);
+  });
+
   it('reports send failures instead of throwing from a timer', async () => {
     const timers = new FakeTimers();
     const failures: string[] = [];

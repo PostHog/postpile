@@ -39,6 +39,8 @@ interface Entry<T> {
  */
 export class DeferredQueue<T> {
   private readonly entries: Entry<T>[] = [];
+  /** Sends that already left `entries` but have not finished yet. */
+  private readonly inFlight = new Set<Promise<void>>();
   private counter = 0;
 
   constructor(
@@ -48,21 +50,27 @@ export class DeferredQueue<T> {
     private readonly onError: SendFailed<T> = () => {},
   ) {}
 
-  private async sendNow(token: string): Promise<void> {
-    const index = this.entries.findIndex((entry) => entry.batch.token === token);
-    if (index < 0) {
-      return;
-    }
-    const [entry] = this.entries.splice(index, 1);
-    if (!entry) {
-      return;
-    }
-    this.timers.clearTimeout(entry.handle);
+  private async sendEntry(entry: Entry<T>): Promise<void> {
     try {
       await this.send(entry.batch.payload);
     } catch (error) {
       this.onError(error, entry.batch);
     }
+  }
+
+  private sendNow(token: string): Promise<void> {
+    const index = this.entries.findIndex((entry) => entry.batch.token === token);
+    if (index < 0) {
+      return Promise.resolve();
+    }
+    const [entry] = this.entries.splice(index, 1);
+    if (!entry) {
+      return Promise.resolve();
+    }
+    this.timers.clearTimeout(entry.handle);
+    const sending = this.sendEntry(entry).finally(() => this.inFlight.delete(sending));
+    this.inFlight.add(sending);
+    return sending;
   }
 
   enqueue(payload: T): DeferredBatch<T> {
@@ -101,11 +109,15 @@ export class DeferredQueue<T> {
     return this.entries.map((entry) => entry.batch);
   }
 
-  /** Sends every pending batch now, oldest first. */
+  /**
+   * Sends every pending batch now, oldest first, and waits for sends whose
+   * timer already fired. On quit the store closes right after this resolves.
+   */
   async flush(): Promise<void> {
     const tokens = this.entries.map((entry) => entry.batch.token);
     for (const token of tokens) {
       await this.sendNow(token);
     }
+    await Promise.all([...this.inFlight]);
   }
 }
