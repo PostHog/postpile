@@ -1,20 +1,35 @@
 import type { Glance, ReconcileAction } from '@code-manager/core';
 import type { z } from 'zod';
+import { mapConsolidationAnswer } from './consolidation-answer.ts';
+import { mapDossierAnswer } from './dossier-answer.ts';
+import { DossierRefs } from './dossier-refs.ts';
+import { mapGlanceAnswer } from './glance-answer.ts';
 import { dossierInputHash, glanceInputHash, glanceItemInputHash, topicSummaryInputHash } from './hashes.ts';
-import { parseAgentJson } from './json.ts';
+import { AgentOutputError, parseAgentJson } from './json.ts';
 import { modelFor } from './models.ts';
 import { chatPrompt } from './prompts/chat.ts';
 import { draftCommentPrompt } from './prompts/comment.ts';
+import { consolidationPrompt } from './prompts/consolidation.ts';
+import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
+import { eventBatchPrompt } from './prompts/event-batch.ts';
 import { eventClassificationPrompt } from './prompts/events.ts';
+import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { glancePrompt } from './prompts/glance.ts';
+import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
 import { topicSummaryPrompt } from './prompts/summary.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
+import { mapReconcileAnswer } from './reconcile-answer.ts';
 import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
 import {
   chatOutput,
+  consolidationOutput,
+  dossierUpdateOutput,
   draftCommentOutput,
+  eventBatchOutput,
   eventClassificationOutput,
+  factReconcileOutput,
+  glanceBatchOutput,
   glanceOutput,
   setGroupingOutput,
   topicAssignmentOutput,
@@ -244,26 +259,76 @@ export class RunnerAgentService implements AgentService {
   }
 
   async updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult> {
-    throw new Error(`not implemented: updateDossier (${input.topic.id})`);
+    const refs = new DossierRefs(input);
+    const { value, model } = await this.ask('dossier_update', dossierUpdatePrompt(input, refs), dossierUpdateOutput, {
+      topicId: input.topic.id,
+      attempt: 1,
+    });
+    const mapped = mapDossierAnswer(value, input, refs, this.now());
+    return { ...mapped, inputHash: dossierInputHash(input), model };
   }
 
   async reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]> {
-    throw new Error(`not implemented: reconcileFacts (${input.items.length} items)`);
+    if (input.items.length === 0) {
+      return [];
+    }
+    const { value } = await this.ask('fact_reconcile', factReconcilePrompt(input), factReconcileOutput);
+    return mapReconcileAnswer(value, input);
   }
 
   glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
     return glanceItemInputHash(input, item);
   }
 
+  /**
+   * An answer whose outer JSON does not parse counts every PR as missing, so
+   * they go into the retry batch like any other gap. Runner failures throw.
+   */
   async glanceBatch(input: GlanceBatchInput): Promise<GlanceBatchResult> {
-    throw new Error(`not implemented: glanceBatch (${input.items.length} items)`);
+    const model = modelFor('glance_batch');
+    if (input.items.length === 0) {
+      return { glances: [], missing: [], model };
+    }
+    const label = { topicId: input.topic?.id ?? null, attempt: input.attempt };
+    try {
+      const answer = await this.ask('glance_batch', glanceBatchPrompt(input), glanceBatchOutput, label);
+      const stamp = { model: answer.model, createdAt: this.now(), inputHash: (item: GlanceBatchItem) => glanceItemInputHash(input, item) };
+      return { ...mapGlanceAnswer(answer.value, input, stamp), model: answer.model };
+    } catch (error) {
+      if (error instanceof AgentOutputError) {
+        return { glances: [], missing: input.items.map((item) => item.pr.key), model };
+      }
+      throw error;
+    }
   }
 
   async classifyEventBatch(input: EventBatchInput): Promise<EventOverrideProposal[]> {
-    throw new Error(`not implemented: classifyEventBatch (${input.items.length} PRs)`);
+    // A user's own unmute or override always wins; the agent never sees those events.
+    const items = input.items
+      .map((item) => ({ pr: item.pr, events: item.events.filter((e) => e.override?.by !== 'user') }))
+      .filter((item) => item.events.length > 0);
+    if (items.length === 0) {
+      return [];
+    }
+    const { value } = await this.ask('event_classification', eventBatchPrompt({ ...input, items }), eventBatchOutput, {
+      topicId: input.topic?.id ?? null,
+      attempt: 1,
+    });
+    const byId = new Map(items.flatMap((item) => item.events).map((e) => [e.id, e]));
+    const seen = new Set<string>();
+    return value.overrides.filter((o) => {
+      const event = byId.get(o.eventId);
+      const keep = event !== undefined && o.loudness !== event.ruleLoudness && !seen.has(o.eventId);
+      seen.add(o.eventId);
+      return keep;
+    });
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {
-    throw new Error(`not implemented: consolidate (${input.topics.length} topics)`);
+    if (input.topics.length === 0 && input.duplicateFacts.length === 0) {
+      return { topicProposals: [], factMerges: [], ruleIdeas: [], finishedTopics: [] };
+    }
+    const { value } = await this.ask('consolidation', consolidationPrompt(input), consolidationOutput);
+    return mapConsolidationAnswer(value, input);
   }
 }

@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
  * PROMPT_VERSION when prompt wording changes in a way that should invalidate
  * cached answers.
  */
-export const PROMPT_VERSION = 'v1';
+export const PROMPT_VERSION = 'v2';
 
 export function inputHash(...parts: unknown[]): string {
   const hash = createHash('sha256');

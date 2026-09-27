@@ -47,6 +47,7 @@ describe('every prompt carries the memory and asks for JSON', () => {
       expect(prompt).toContain('I care about CI cost');
       expect(prompt).toContain('Flag anything that touches the cache keys');
       expect(prompt).toContain('frontend PRs are never mine');
+      expect(prompt).toContain('Never approve database migrations at a glance.');
       expect(prompt).toContain('Reply with JSON only');
     });
   }

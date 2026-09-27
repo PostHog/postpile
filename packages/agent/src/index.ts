@@ -9,5 +9,6 @@ export { renderDossier } from './prompts/dossier.ts';
 export { AgentOutputError, extractJson, parseAgentJson } from './json.ts';
 export { modelFor } from './models.ts';
 export type * from './service.ts';
+export { FACTS_IN_DOSSIER_PROMPT } from './service.ts';
 export { RunnerAgentService } from './claude-service.ts';
 export type { RunnerAgentServiceOptions } from './claude-service.ts';

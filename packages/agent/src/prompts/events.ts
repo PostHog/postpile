@@ -2,7 +2,7 @@ import type { PrEvent } from '@code-manager/core';
 import type { EventClassificationInput } from '../service.ts';
 import { contextBlock, jsonOnly, prLine, viewerLine } from './shared.ts';
 
-function eventLine(event: PrEvent): string {
+export function eventLine(event: PrEvent): string {
   const bot = event.isBot ? ' (bot)' : '';
   return `- id ${event.id} | ${event.at} | ${event.kind} by @${event.actor}${bot} | rules said ${event.ruleLoudness} (${event.ruleReason}) | ${event.summary}`;
 }

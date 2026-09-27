@@ -1,0 +1,143 @@
+import { DOSSIER_LIMITS } from '@code-manager/core';
+import type { Fact, PrEvent } from '@code-manager/core';
+import type { DossierRefs } from '../dossier-refs.ts';
+import type { DossierUpdateInput } from '../service.ts';
+import { renderDossier } from './dossier.ts';
+import { clip, contextBlock, entityText, jsonOnly, prLine, viewerLine } from './shared.ts';
+
+const L = DOSSIER_LIMITS;
+
+function factLine(fact: Fact, shortId: string, staleNote: string): string {
+  const since = fact.validFrom.slice(0, 10);
+  return `- ${shortId} [${fact.predicate}] ${entityText(fact.subject)} -> ${entityText(fact.object)}: ${fact.text} (since ${since})${staleNote}`;
+}
+
+function eventLine(event: PrEvent, shortId: string): string {
+  return `- ${shortId} ${event.at.slice(0, 10)} ${event.prKey} ${event.kind} by @${event.actor}: ${clip(event.summary, 300)}`;
+}
+
+/** Bots and CI are most of the volume and none of the story: one count per PR. */
+function botCounts(events: PrEvent[]): string[] {
+  const byPr = new Map<string, { count: number; kinds: Set<string> }>();
+  for (const event of events.filter((e) => e.isBot)) {
+    const entry = byPr.get(event.prKey) ?? { count: 0, kinds: new Set<string>() };
+    entry.count += 1;
+    entry.kinds.add(event.kind);
+    byPr.set(event.prKey, entry);
+  }
+  return [...byPr].map(([prKey, entry]) => `- ${prKey}: ${entry.count} (${[...entry.kinds].join(', ')})`);
+}
+
+function block(title: string, lines: string[], empty: string | null = null): string {
+  if (lines.length === 0) {
+    return empty === null ? '' : `\n${title}\n${empty}\n`;
+  }
+  return `\n${title}\n${lines.join('\n')}\n`;
+}
+
+function eventsBlock(input: DossierUpdateInput, refs: DossierRefs): string {
+  const human = input.delta.events.flatMap((event) => {
+    const shortId = refs.eventShortId(event);
+    return shortId ? [eventLine(event, shortId)] : [];
+  });
+  const omitted =
+    input.delta.omittedEvents > 0 ? [`(${input.delta.omittedEvents} older events were left out to keep this short)`] : [];
+  return (
+    block('New activity since the last update, oldest first:', [...human, ...omitted], '(no new human activity)') +
+    block('Bot and CI activity, counted only:', botCounts(input.delta.events))
+  );
+}
+
+function joinedBlock(input: DossierUpdateInput): string {
+  const joined = new Set(input.delta.joinedPrKeys);
+  const intros = input.prs
+    .filter((pr) => joined.has(pr.key))
+    .map((pr) => {
+      const files = pr.files.slice(0, 5).map((f) => f.path).join(', ');
+      return `- ${prLine(pr)}\n  ${clip(pr.body, 300) || '(no description)'}${files ? `\n  files: ${files}` : ''}`;
+    });
+  return block('PRs that just joined the topic (the dossier does not know them yet):', intros);
+}
+
+function factsBlocks(input: DossierUpdateInput, refs: DossierRefs): string {
+  const known = input.knownFacts.map((f) => factLine(f, refs.factShortId(f) ?? '', ''));
+  const stale = input.staleFacts.map((f) => factLine(f, refs.factShortId(f) ?? '', ` (check failed: ${f.staleReason ?? 'unknown'})`));
+  return (
+    block('Known facts (checked against GitHub, context only):', known) +
+    block('Facts that failed a check. For each one: confirm it, close it, or state the corrected fact:', stale)
+  );
+}
+
+function feedbackBlock(input: DossierUpdateInput): string {
+  const lines = input.delta.newFeedback.map((f) => `- ${f.createdAt.slice(0, 10)} ${f.kind}${f.prKey ? ` (${f.prKey})` : ''}: ${clip(f.note, 300)}`);
+  return block('New corrections from the user since the last version. Take them into the dossier:', lines);
+}
+
+const answerShape = `{
+  "dossier": {
+    "goal": "...", "summary": "...", "status": "starting" | "active" | "blocked" | "winding_down" | "finished",
+    "statusNote": "...",
+    "people": [{"login": "alice", "role": "driver" | "contributor" | "reviewer" | "stakeholder", "note": "..."}],
+    "openQuestions": [{"text": "...", "askedBy": "carol" | null, "refs": ["e3"]}],
+    "timeline": [{"prKey": "owner/repo#1", "role": "..."}],
+    "earlier": "...",
+    "userCares": [{"text": "...", "source": "instructions" | "tailoring" | "feedback" | "observed"}],
+    "recentChanges": [{"at": "2026-09-20", "text": "...", "refs": ["e5", "C1"]}]
+  },
+  "flags": [{"kind": "needs_user" | "contradiction" | "looks_finished" | "off_topic_pr", "text": "...", "prKey": "owner/repo#1" | null}],
+  "facts": [{"subject": {"kind": "person", "key": "alice"}, "predicate": "works_on", "object": {"kind": "pr", "key": "owner/repo#1"} | null, "text": "...", "refs": ["e2"]}],
+  "closeFacts": [{"factId": "F2", "reason": "..."}],
+  "confirmedFactIds": ["F7"]
+}`;
+
+/**
+ * REFINE: the previous dossier plus only what is new since it was written.
+ * The model rewrites the whole dossier, reports flags, and extracts facts
+ * with short-id refs; the service maps refs back and drops unknown ids.
+ */
+export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs): string {
+  const prsByKey = new Map(input.prs.map((pr) => [pr.key, pr]));
+  const previous = input.previous ? renderDossier(input.previous, prsByKey) : 'None yet. This is the first write-up of the topic.';
+  const members = input.prs.map((pr) => `- ${prLine(pr)}`);
+  const left = input.delta.leftPrKeys.map((key) => `- ${key}`);
+  const claims = input.delta.staleClaims.map((c) => `- ${c.path}: ${c.reason}`);
+  return `You keep a living dossier on one piece of ongoing work, the topic "${input.topic.name}"
+(id ${input.topic.id}), for a developer who follows it on GitHub. You get the previous dossier and
+only what happened since. Rewrite the dossier so it is true now.
+${viewerLine(input.viewer)}
+${contextBlock(input.context)}
+Previous dossier:
+${previous}
+${block('Member PRs now:', members, '(none)')}${joinedBlock(input)}${eventsBlock(input, refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
+How to write the dossier:
+- Keep what is still true, change what moved, drop what is over. Plain words, no filler.
+- goal: what the initiative is for, max ${L.goal} chars. summary: where it stands, max ${L.summary}.
+- status and statusNote (max ${L.statusNote}): why that status.
+- people: max ${L.people}, the driver first; note max ${L.personNote} chars. Logins without "@".
+- openQuestions: max ${L.openQuestions}, only questions still open; text max ${L.questionText}.
+- timeline: member PRs only, oldest first, role = what the PR does for the initiative, max
+  ${L.timelineRole} chars. Max ${L.timeline} entries; fold older ones into earlier (max ${L.earlier}).
+  Do not write PR state, CI or reviewers anywhere: those are read from GitHub at display time.
+- userCares: max ${L.userCares}, what this user cares about in this topic, judged by their
+  instructions and corrections; text max ${L.careText}.
+- recentChanges: newest first, max ${L.recentChanges}, text max ${L.changeText}. Add entries for
+  what happened now, keep older ones that still matter.
+- refs: the short ids above: e1.. for new activity, Q1.. or C1.. to keep the sources of an entry
+  of the previous dossier, F1.. for a fact, or a member PR key.
+
+flags: needs_user when the user should act or decide something; contradiction when new activity
+contradicts the dossier or a fact; looks_finished when the work seems done; off_topic_pr (with
+prKey) when a member PR does not belong here. Usually empty.
+
+facts: short statements worth remembering across topics, only when new or changed by the
+activity above. Each needs at least one ref. Entities: person (login, lowercase), pr
+(owner/repo#123), path ("owner/repo:dir/prefix/"), initiative (use "${input.topic.id}").
+Predicates: drives (person -> initiative), works_on / reviews (person -> pr or path), owns
+(person -> path), part_of (pr -> initiative), depends_on (pr -> pr), blocked_by (pr or
+initiative -> pr or person), decided / status / user_cares / note (object null, the text says it).
+Do not repeat a known fact unless it changed.
+
+closeFacts: known or failed facts (F ids) that are no longer true. confirmedFactIds: failed facts
+that are still true.
+${jsonOnly(answerShape)}`;
+}

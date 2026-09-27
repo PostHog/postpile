@@ -46,6 +46,7 @@ export function glanceInputHash(input: GlanceInput): string {
     input.topic?.name ?? null,
     input.context.instructions,
     input.context.tailoring,
+    input.context.standingRules,
     ownFeedback,
   );
 }
@@ -60,6 +61,7 @@ export function topicSummaryInputHash(input: TopicSummaryInput): string {
     prs,
     input.context.instructions,
     input.context.tailoring,
+    input.context.standingRules,
     input.context.recentFeedback.map((f) => f.id),
   );
 }
@@ -83,6 +85,7 @@ export function setGroupingInputHash(input: SetGroupingInput): string {
     sets,
     input.context.instructions,
     input.context.tailoring,
+    input.context.standingRules,
     input.context.recentFeedback.map((f) => f.id),
   );
 }
@@ -95,7 +98,22 @@ export function setGroupingInputHash(input: SetGroupingInput): string {
  * knownFacts, which are context only.
  */
 export function dossierInputHash(input: DossierUpdateInput): string {
-  throw new Error(`not implemented: dossierInputHash (${input.topic.id})`);
+  const delta = input.delta;
+  return inputHash(
+    'dossier_update',
+    modelFor('dossier_update'),
+    input.topic.id,
+    input.previous?.version ?? 0,
+    delta.events.map((e) => e.id),
+    delta.toSeq,
+    delta.joinedPrKeys,
+    delta.leftPrKeys,
+    input.staleFacts.map((f) => [f.id, f.text]),
+    delta.staleClaims,
+    delta.newFeedback.map((f) => f.id),
+    input.context.tailoring,
+    input.context.standingRules,
+  );
 }
 
 /**
@@ -105,5 +123,19 @@ export function dossierInputHash(input: DossierUpdateInput): string {
  * invalidate a glance.
  */
 export function glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
-  throw new Error(`not implemented: glanceItemInputHash (${item.pr.key}, v${input.dossier?.version ?? 0})`);
+  const ownFeedback = input.context.recentFeedback.filter((f) => f.prKey === item.pr.key).map((f) => f.id);
+  const dossier = input.dossier ? [input.dossier.topicId, input.dossier.version] : null;
+  return inputHash(
+    'glance_batch',
+    modelFor('glance_batch'),
+    prGlanceSnapshot(item.pr),
+    input.viewer,
+    item.provenance,
+    input.topic?.name ?? null,
+    dossier,
+    input.context.instructions,
+    input.context.tailoring,
+    input.context.standingRules,
+    ownFeedback,
+  );
 }

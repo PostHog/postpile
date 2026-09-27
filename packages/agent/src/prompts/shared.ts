@@ -1,5 +1,5 @@
 import { isBot, isMachineComment } from '@code-manager/core';
-import type { Comment, Feedback, FeedbackKind, Pr, Viewer } from '@code-manager/core';
+import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@code-manager/core';
 import type { PromptContext } from '../service.ts';
 
 /** Trims a body to keep prompts bounded without losing the point. */
@@ -35,7 +35,8 @@ function feedbackLine(feedback: Feedback): string {
 
 /**
  * The memory block every prompt carries: the user's general instructions, the
- * topic's confirmed tailoring and their newest corrections. Empty parts are
+ * topic's confirmed tailoring, their newest corrections and accepted standing
+ * rules. Empty parts are
  * left out so a fresh install sends no empty headings.
  */
 export function contextBlock(context: PromptContext): string {
@@ -50,12 +51,28 @@ export function contextBlock(context: PromptContext): string {
     const lines = context.recentFeedback.map(feedbackLine).join('\n');
     parts.push(`Recent corrections from the user, newest first. Do not repeat these mistakes:\n\n${lines}`);
   }
+  if (context.standingRules.length > 0) {
+    const rules = context.standingRules.map((rule) => `- ${rule}`).join('\n');
+    parts.push(`Standing rules the user accepted. Always follow them:\n\n${rules}`);
+  }
   return parts.length === 0 ? '' : `\n${parts.join('\n\n')}\n`;
 }
 
 export function viewerLine(viewer: Viewer): string {
   const teams = viewer.teams.length > 0 ? ` Their teams: ${viewer.teams.join(', ')}.` : '';
   return `The user is @${viewer.login} on GitHub.${teams}`;
+}
+
+/** "person:alice", as facts are shown in prompts. */
+export function entityText(entity: EntityRef | null): string {
+  return entity ? `${entity.kind}:${entity.key}` : '-';
+}
+
+export function howItReached(provenance: Provenance): string {
+  if (provenance.kind === 'pinged') {
+    return `GitHub notified them about it (reason: ${provenance.reason}).`;
+  }
+  return `GitHub did not notify them. It was pulled in for context because: ${provenance.reason}`;
 }
 
 /** Closing instruction shared by every prompt: bare JSON in a known shape. */
@@ -77,6 +94,8 @@ export interface PrDetailLimits {
 
 export const fullDetail: PrDetailLimits = { body: 4000, files: 25, comments: 15, commentLength: 400 };
 export const shortDetail: PrDetailLimits = { body: 400, files: 6, comments: 0, commentLength: 0 };
+/** Per PR in a glance batch: 18 of these share one prompt. */
+export const batchDetail: PrDetailLimits = { body: 1500, files: 15, comments: 8, commentLength: 300 };
 
 /**
  * Description, files, review states and human discussion of one PR. viewer is

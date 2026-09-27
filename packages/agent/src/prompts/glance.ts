@@ -1,13 +1,5 @@
-import type { Provenance } from '@code-manager/core';
 import type { GlanceInput } from '../service.ts';
-import { contextBlock, fullDetail, jsonOnly, prDetails, viewerLine } from './shared.ts';
-
-function howItReached(provenance: Provenance): string {
-  if (provenance.kind === 'pinged') {
-    return `GitHub notified them about it (reason: ${provenance.reason}).`;
-  }
-  return `GitHub did not notify them. It was pulled in for context because: ${provenance.reason}`;
-}
+import { contextBlock, fullDetail, howItReached, jsonOnly, prDetails, viewerLine } from './shared.ts';
 
 /**
  * The "approve at a glance" summary from ghatchup, as JSON. forYou is the

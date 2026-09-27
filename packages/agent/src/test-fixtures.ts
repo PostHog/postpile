@@ -1,4 +1,4 @@
-import type { Comment, Feedback, Pr, PrEvent, Topic, Viewer } from '@code-manager/core';
+import type { Comment, Dossier, DossierVersion, Fact, Feedback, Pr, PrEvent, Topic, TopicDelta, Viewer } from '@code-manager/core';
 import type { PromptContext } from './service.ts';
 
 // Builders for tests. Not a .test.ts file, so vitest does not run it on its own.
@@ -106,11 +106,86 @@ export function makeEvent(overrides: Partial<PrEvent> = {}): PrEvent {
   };
 }
 
+export function makeFact(overrides: Partial<Fact> = {}): Fact {
+  return {
+    id: 'fact-1',
+    subject: { kind: 'person', key: 'alice' },
+    predicate: 'drives',
+    object: { kind: 'initiative', key: 'topic-1' },
+    text: 'Alice drives the Depot move.',
+    topicId: 'topic-1',
+    source: 'agent',
+    refs: [{ kind: 'pr', prKey: 'acme/app#1', sourceId: null, url: null, at: '2026-09-01T10:00:00Z', headOid: null }],
+    validFrom: '2026-09-01T10:00:00Z',
+    invalidAt: null,
+    invalidReason: null,
+    supersededBy: null,
+    recordedAt: '2026-09-01T11:00:00Z',
+    expiredAt: null,
+    staleAt: null,
+    staleReason: null,
+    verifiedAt: null,
+    ...overrides,
+  };
+}
+
+export function makeDossier(overrides: Partial<Dossier> = {}): Dossier {
+  return {
+    goal: 'Run all CI on Depot runners to cut cost and queue time.',
+    summary: 'Test jobs moved; Docker builds next.',
+    status: 'blocked',
+    statusNote: 'waiting on the runner image PR',
+    people: [{ login: 'alice', role: 'driver', note: 'owns the rollout' }],
+    openQuestions: [
+      {
+        text: 'Do we keep GitHub runners for release builds?',
+        askedBy: 'carol',
+        refs: [{ kind: 'comment', prKey: 'acme/app#1', sourceId: 'c9', url: null, at: '2026-09-10T10:00:00Z', headOid: null }],
+      },
+    ],
+    timeline: [{ prKey: 'acme/app#1', role: 'moves test jobs' }],
+    earlier: '',
+    userCares: [{ text: 'CI cost and cache keys', source: 'instructions' }],
+    recentChanges: [{ at: '2026-09-19T00:00:00.000Z', text: 'Docker build PR opened', refs: [] }],
+    ...overrides,
+  };
+}
+
+export function makeDossierVersion(overrides: Partial<DossierVersion> = {}): DossierVersion {
+  return {
+    topicId: 'topic-1',
+    version: 7,
+    dossier: makeDossier(),
+    flags: [],
+    inputHash: 'h7',
+    throughSeq: 40,
+    model: 'sonnet',
+    createdAt: '2026-09-20T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeDelta(overrides: Partial<TopicDelta> = {}): TopicDelta {
+  return {
+    topicId: 'topic-1',
+    fromSeq: 40,
+    toSeq: 45,
+    events: [],
+    omittedEvents: 0,
+    joinedPrKeys: [],
+    leftPrKeys: [],
+    staleFactIds: [],
+    staleClaims: [],
+    newFeedback: [],
+    ...overrides,
+  };
+}
+
 export const emptyContext: PromptContext = { instructions: '', tailoring: '', recentFeedback: [], standingRules: [] };
 
 export const fullContext: PromptContext = {
   instructions: 'I am on the devex team. I care about CI cost.',
   tailoring: 'Flag anything that touches the cache keys.',
   recentFeedback: [makeFeedback()],
-  standingRules: [],
+  standingRules: ['Never approve database migrations at a glance.'],
 };
