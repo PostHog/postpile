@@ -23,7 +23,6 @@ export const CONSOLIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** Topics per consolidation call. */
 export const CONSOLIDATION_TOPICS_PER_CALL = 40;
 export const FEEDBACK_IN_CONSOLIDATION = 60;
-export const DOSSIER_VERSIONS_KEPT = 50;
 const DECIDED_RULES_IN_PROMPT = 50;
 /** Active facts scanned for duplicates. */
 const FACTS_SCANNED = 2000;
@@ -76,8 +75,7 @@ function duplicateGroups(facts: Fact[]): Fact[][] {
  * topics proposes merges, splits and renames, folds duplicate facts, turns
  * repeated feedback into rule proposals and names finished topics. The
  * deterministic part runs even without the agent: retire topics whose
- * dossier says finished and that pass the gate, and prune old dossier
- * versions.
+ * dossier says finished and that pass the gate.
  */
 export class Consolidator {
   constructor(private readonly deps: ConsolidationDeps) {}
@@ -152,12 +150,6 @@ export class Consolidator {
     });
   }
 
-  private pruneDossiers(topicIds: string[]): void {
-    for (const topicId of topicIds) {
-      this.deps.store.dossiers.prune(topicId, DOSSIER_VERSIONS_KEPT);
-    }
-  }
-
   async run(options: ConsolidateOptions, report: ConsolidationReport): Promise<void> {
     const { store } = this.deps;
     const topics = store.topics.listActive();
@@ -173,7 +165,6 @@ export class Consolidator {
     const offered = topics.map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null));
     const complete = offered.length === 0 || (await this.askAgent(this.inputs(offered), applier));
     this.retireFinished(dossiers, applier);
-    this.pruneDossiers(topics.map((t) => t.id));
     if (complete) {
       store.cursors.advance({
         kind: 'consolidate',

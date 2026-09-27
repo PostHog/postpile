@@ -24,6 +24,9 @@ import { verifyWorldFor } from '../memory/fact-world.ts';
 import { FEEDBACK_IN_PROMPTS } from '../prompt-context.ts';
 import type { DigestDeps } from './deps.ts';
 
+/** Versions kept per topic; older ones are pruned on every save. */
+export const DOSSIER_VERSIONS_KEPT = 50;
+
 /** Fact candidates one dossier update produced, still to be reconciled. */
 export interface TopicCandidates {
   topicId: string;
@@ -148,6 +151,7 @@ export class DossierUpdater {
       store.topics.updateSummary(topicId, result.dossier.summary, result.inputHash, at);
       store.cursors.advance({ kind: 'digest', scope: topicId, seq: input.delta.toSeq, dossierVersion: version, updatedAt: at });
       store.meta.set(contextHashKey(topicId), dossierContextHash(input.context));
+      store.dossiers.prune(topicId, DOSSIER_VERSIONS_KEPT);
       for (const close of result.closeFacts) {
         this.deps.facts.close(close.factId, close.reason, at);
         tally.facts.invalidated += 1;

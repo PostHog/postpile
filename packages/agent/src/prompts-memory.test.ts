@@ -112,6 +112,14 @@ describe('dossierUpdatePrompt', () => {
     expect(prompt).toContain('Member PRs now:\n<github_data>\n- acme/app#1');
   });
 
+  it('counts merged members the dossier does not name instead of listing them', () => {
+    const old = makePr({ ref: { repo: 'acme/app', number: 3 }, title: 'Old cleanup', state: 'MERGED' });
+    const withOld = dossierInput({ prs: [pr1, pr2, old] });
+    const text = dossierUpdatePrompt(withOld, new DossierRefs(withOld));
+    expect(text).not.toContain('Old cleanup');
+    expect(text).toContain('(and 1 more merged or closed PRs)');
+  });
+
   it('says so when there is no dossier yet', () => {
     const first = dossierInput({ previous: null });
     expect(dossierUpdatePrompt(first, new DossierRefs(first))).toContain('None yet. This is the first write-up');

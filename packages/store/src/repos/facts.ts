@@ -57,6 +57,9 @@ interface FactRefRow {
 
 const ACTIVE = 'invalid_at IS NULL AND expired_at IS NULL';
 
+/** Newest refs kept per fact next to the oldest, so a fact restated on every update stays bounded. */
+const NEWEST_REFS_KEPT = 10;
+
 function toRef(row: FactRefRow): FactRef {
   return {
     kind: row.kind as FactRefKind,
@@ -310,10 +313,24 @@ export class FactRepo {
     return this.select(where, params, true, query.limit ?? 100);
   }
 
-  /** Adds refs to an existing fact, ignoring ones it already has (NOOP reconcile). Also sets verified_at. */
+  /**
+   * Adds refs to an existing fact, ignoring ones it already has (NOOP
+   * reconcile), and sets verified_at. Keeps the oldest ref (where the fact
+   * came from) and the newest NEWEST_REFS_KEPT.
+   */
   addRefs(factId: string, refs: FactRef[], at: string): void {
     inTransaction(this.db, () => {
       this.insertRefs(factId, refs);
+      run(
+        this.db,
+        `DELETE FROM fact_ref WHERE fact_id = ?
+           AND rowid NOT IN (SELECT rowid FROM fact_ref WHERE fact_id = ? ORDER BY at, rowid LIMIT 1)
+           AND rowid NOT IN (SELECT rowid FROM fact_ref WHERE fact_id = ? ORDER BY at DESC, rowid DESC LIMIT ?)`,
+        factId,
+        factId,
+        factId,
+        NEWEST_REFS_KEPT,
+      );
       run(this.db, 'UPDATE fact SET verified_at = ? WHERE id = ?', at, factId);
     });
   }

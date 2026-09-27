@@ -185,6 +185,17 @@ describe('FactRepo', () => {
     expect(fact?.verifiedAt).toBe(at(31));
   });
 
+  it('keeps the oldest ref and the newest ten when refs pile up', () => {
+    store.facts.add(makeFact());
+    const refs = Array.from({ length: 15 }, (_, i) => makeFactRef({ kind: 'comment', sourceId: `c${i}`, at: at(20 + i) }));
+    store.facts.addRefs('f1', refs, at(40));
+    const kept = store.facts.get('f1')?.refs.map((ref) => ref.sourceId) ?? [];
+    expect(kept).toHaveLength(11);
+    expect(kept[0]).toBeNull();
+    expect(kept.at(-1)).toBe('c14');
+    expect(kept).not.toContain('c4');
+  });
+
   it('closes a fact once and never deletes it', () => {
     store.facts.add(makeFact());
     store.facts.close('f1', { invalidAt: at(40), reason: 'pr_merged', supersededBy: null, expiredAt: at(41) });

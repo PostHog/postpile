@@ -79,6 +79,20 @@ function factsBlocks(input: DossierUpdateInput, refs: DossierRefs): string {
   );
 }
 
+/**
+ * Open members, and closed ones the dossier or this update is about. Other
+ * merged or closed PRs are only counted, so the prompt does not grow with
+ * the age of the topic.
+ */
+function membersBlock(input: DossierUpdateInput): string {
+  const named = new Set([...(input.previous?.dossier.timeline.map((entry) => entry.prKey) ?? []), ...input.delta.joinedPrKeys]);
+  const shown = input.prs.filter((pr) => pr.state === 'OPEN' || named.has(pr.key));
+  const hidden = input.prs.length - shown.length;
+  const lines = shown.map((pr) => `- ${prLine(pr)}`);
+  const more = hidden > 0 ? `(and ${hidden} more merged or closed PRs)\n` : '';
+  return dataBlock('Member PRs now:', lines, '(none)') + more;
+}
+
 function feedbackBlock(input: DossierUpdateInput): string {
   const lines = input.delta.newFeedback.map((f) => `- ${f.createdAt.slice(0, 10)} ${f.kind}${f.prKey ? ` (${f.prKey})` : ''}: ${clip(f.note, 300)}`);
   return block('New corrections from the user since the last version. Take them into the dossier:', lines);
@@ -110,7 +124,6 @@ export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs
   const limits = DOSSIER_LIMITS;
   const prsByKey = new Map(input.prs.map((pr) => [pr.key, pr]));
   const previous = input.previous ? renderDossier(input.previous, prsByKey) : 'None yet. This is the first write-up of the topic.';
-  const members = input.prs.map((pr) => `- ${prLine(pr)}`);
   const left = input.delta.leftPrKeys.map((key) => `- ${key}`);
   const claims = input.delta.staleClaims.map((c) => `- ${c.path}: ${c.reason}`);
   return `You keep a living dossier on one piece of ongoing work, the topic "${input.topic.name}"
@@ -121,7 +134,7 @@ ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Previous dossier:
 ${previous}
-${dataBlock('Member PRs now:', members, '(none)')}${joinedBlock(input)}${eventsBlock(input, refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
+${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
 - goal: what the initiative is for, max ${limits.goal} chars. summary: where it stands, max ${limits.summary}.
