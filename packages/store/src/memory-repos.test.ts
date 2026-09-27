@@ -198,12 +198,36 @@ describe('FactRepo', () => {
     store.facts.markStale('f1', 'head_moved', at(50));
     store.facts.markStale('f1', 'pr_missing', at(60));
     expect(store.facts.get('f1')).toMatchObject({ staleAt: at(50), staleReason: 'head_moved' });
-    expect(store.facts.listStaleForTopic('topic-1').map((f) => f.id)).toEqual(['f1']);
+    expect(store.facts.listStaleToRecheck('topic-1', 10).map((f) => f.id)).toEqual(['f1']);
 
     store.facts.markVerified(['f1'], at(70));
     expect(store.facts.get('f1')).toMatchObject({ staleAt: null, staleReason: null, verifiedAt: at(70) });
-    expect(store.facts.listStaleForTopic('topic-1')).toEqual([]);
+    expect(store.facts.listStaleToRecheck('topic-1', 10)).toEqual([]);
     store.facts.markVerified([], at(80));
+  });
+
+  it('offers a stale fact for recheck once per time it goes stale', () => {
+    store.facts.add(makeFact());
+    store.facts.add(makeFact({ id: 'f2' }));
+    store.facts.markStale('f1', 'source_deleted', at(50));
+    store.facts.markStale('f2', 'source_deleted', at(51));
+    expect(store.facts.listStaleToRecheck('topic-1', 1).map((f) => f.id)).toEqual(['f2']);
+
+    store.facts.markRechecked(['f1', 'f2'], at(60));
+    expect(store.facts.listStaleToRecheck('topic-1', 10)).toEqual([]);
+
+    store.facts.markVerified(['f1'], at(70));
+    store.facts.markStale('f1', 'head_moved', at(80));
+    expect(store.facts.listStaleToRecheck('topic-1', 10).map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('moves pinned heads of refs, and leaves unpinned refs alone', () => {
+    store.facts.add(makeFact({ refs: [makeFactRef({ headOid: 'h0' }), makeFactRef({ kind: 'comment', sourceId: 'c1' })] }));
+    store.facts.reanchorRefs('f1', new Map([['PostHog/posthog#1', 'h1']]));
+    expect(store.facts.get('f1')?.refs.map((ref) => [ref.kind, ref.headOid])).toEqual([
+      ['comment', null],
+      ['pr', 'h1'],
+    ]);
   });
 
   it('queries active facts newest first, with filters and "changed since"', () => {

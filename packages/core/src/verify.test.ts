@@ -3,7 +3,7 @@ import { emptyDossier } from './dossier.ts';
 import { at, makeComment, makeCommit, makeFact, makeFactRef, makePr, makeReview, makeThread, makeTimelineItem } from './fixtures.ts';
 import type { Dossier } from './memory.ts';
 import type { Pr } from './types.ts';
-import { verifyDossier, verifyFact, type VerifyWorld } from './verify.ts';
+import { verifyDossier, verifyFact, withoutStaleClaims, type VerifyWorld } from './verify.ts';
 
 function world(prs: Pr[], memberKeys: string[] = []): VerifyWorld {
   return { prs: new Map(prs.map((pr) => [pr.key, pr])), memberKeys: new Set(memberKeys), now: at(1000) };
@@ -124,5 +124,20 @@ describe('verifyDossier', () => {
       ],
     };
     expect(verifyDossier(dossier, world([pr], [pr.key]))).toEqual([{ path: 'timeline[1]', reason: 'left_topic' }]);
+  });
+
+  it('drops exactly the flagged claims', () => {
+    const dossier: Dossier = {
+      ...emptyDossier(),
+      openQuestions: [question('c1'), question('rc1'), { text: 'no refs', askedBy: null, refs: [] }],
+      timeline: [
+        { prKey: pr.key, role: 'base image' },
+        { prKey: 'PostHog/posthog#2', role: 'moved away' },
+      ],
+    };
+    const clean = withoutStaleClaims(dossier, world([pr], [pr.key]));
+    expect(clean.openQuestions.map((q) => q.text)).toEqual(['about c1', 'no refs']);
+    expect(clean.timeline.map((entry) => entry.prKey)).toEqual([pr.key]);
+    expect(verifyDossier(clean, world([pr], [pr.key]))).toEqual([]);
   });
 });

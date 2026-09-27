@@ -1,10 +1,16 @@
-import { FACTS_IN_DOSSIER_PROMPT, type DossierUpdateInput, type DossierUpdateResult } from '@code-manager/agent';
+import {
+  FACTS_IN_DOSSIER_PROMPT,
+  STALE_FACTS_IN_DOSSIER_PROMPT,
+  type DossierUpdateInput,
+  type DossierUpdateResult,
+} from '@code-manager/agent';
 import {
   isEmptyDelta,
   joinedMembers,
   selectTopicDelta,
   verifyDossier,
   verifyFact,
+  withoutStaleClaims,
   type EntityRef,
   type Fact,
   type FactCandidate,
@@ -72,7 +78,7 @@ export class DossierUpdater {
     const prs = store.prs.getMany(memberKeys);
     const previous = store.dossiers.latest(topic.id);
     const cursorSeq = store.cursors.get('digest', topic.id)?.seq ?? previous?.throughSeq ?? 0;
-    const staleFacts = store.facts.listStaleForTopic(topic.id);
+    const staleFacts = store.facts.listStaleToRecheck(topic.id, STALE_FACTS_IN_DOSSIER_PROMPT);
     const world = { prs, memberKeys: new Set(memberKeys), now: this.deps.now().toISOString() };
     const memberSince = new Map(memberships.map((m) => [m.prKey, m.createdAt]));
     const joinedKeys = cursorSeq > 0 ? joinedMembers(memberKeys, memberSince, previous) : [];
@@ -103,17 +109,26 @@ export class DossierUpdater {
     };
   }
 
-  /** New version, summary mirror, digest cursor and fact closes land together or not at all. */
+  /**
+   * New version, summary mirror, digest cursor and fact closes land together
+   * or not at all. Claims that already fail verification are dropped before
+   * storing, or the next sync would offer them as stale claims again.
+   */
   private save(input: DossierUpdateInput, result: DossierUpdateResult): void {
     const { store, tally } = this.deps;
     const at = this.deps.now().toISOString();
     const topicId = input.topic.id;
     const version = (input.previous?.version ?? 0) + 1;
+    const world = {
+      prs: new Map(input.prs.map((pr) => [pr.key, pr])),
+      memberKeys: new Set(input.prs.map((pr) => pr.key)),
+      now: at,
+    };
     store.transaction(() => {
       store.dossiers.add({
         topicId,
         version,
-        dossier: result.dossier,
+        dossier: withoutStaleClaims(result.dossier, world),
         flags: result.flags,
         inputHash: result.inputHash,
         throughSeq: input.delta.toSeq,
@@ -126,8 +141,8 @@ export class DossierUpdater {
         this.deps.facts.close(close.factId, close.reason, at);
         tally.facts.invalidated += 1;
       }
-      store.facts.markVerified(result.confirmedFactIds, at);
-      tally.facts.confirmed += result.confirmedFactIds.length;
+      this.deps.facts.confirm(result.confirmedFactIds, tally.facts);
+      store.facts.markRechecked(input.staleFacts.map((fact) => fact.id), at);
     });
     tally.dossiersUpdated += 1;
   }

@@ -108,6 +108,8 @@ export interface AgentChatReply {
 
 /** Known facts shown to a dossier update, newest first. Keeps the prompt bounded. */
 export const FACTS_IN_DOSSIER_PROMPT = 60;
+/** Stale facts one dossier update rechecks; the rest wait for the next one. */
+export const STALE_FACTS_IN_DOSSIER_PROMPT = 20;
 
 /** REFINE: old dossier + new events + instructions -> new dossier, facts and flags. */
 export interface DossierUpdateInput {
@@ -119,7 +121,7 @@ export interface DossierUpdateInput {
   prs: Pr[];
   /** Active, verified facts on the topic's entities, at most FACTS_IN_DOSSIER_PROMPT. */
   knownFacts: Fact[];
-  /** Facts that failed verification. The answer confirms, closes or replaces each one. */
+  /** Facts that failed verification, at most STALE_FACTS_IN_DOSSIER_PROMPT. The answer confirms, closes or replaces each one. */
   staleFacts: Fact[];
   viewer: Viewer;
   context: PromptContext;

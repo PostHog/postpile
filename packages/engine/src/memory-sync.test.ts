@@ -1,5 +1,5 @@
 import type { Dossier, Pr } from '@code-manager/core';
-import { at, makeCandidate, makeComment, makeThreadFor } from '@code-manager/core/fixtures';
+import { at, makeCandidate, makeComment, makeFact, makeFactRef, makeThreadFor } from '@code-manager/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';
@@ -303,6 +303,79 @@ describe('facts', () => {
     const all = await h.engine.listFacts({ includeClosed: true });
     const old = all.find((view) => view.fact.id === first!.fact.id);
     expect(old?.fact.supersededBy).toBe(active[0]?.fact.id);
+  });
+});
+
+describe('stale facts and claims', () => {
+  const bobReviews = makeFact({
+    id: 'bob-reviews',
+    subject: { kind: 'person', key: 'bob' },
+    predicate: 'reviews',
+    text: 'bob reviews #1',
+    topicId: 'depot',
+  });
+
+  it('offers a stale fact for recheck once, not on every sync', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    h.store.facts.add(bobReviews);
+
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(h.agent.dossierInputs[0]?.staleFacts.map((f) => f.id)).toEqual(['bob-reviews']);
+
+    h.reader.etag = 'etag-2';
+    const quiet = await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(quiet.agentCalls).toBe(0);
+  });
+
+  it('closes a stale fact the agent confirms while its check still fails', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    h.store.facts.add(bobReviews);
+    h.agent.answerDossier(() => ({ confirmedFactIds: ['bob-reviews'] }));
+
+    const report = await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(report.facts.invalidated).toBe(1);
+    expect(h.store.facts.get('bob-reviews')?.invalidReason).toBe('confirmed, but the person_not_involved check still fails');
+  });
+
+  it('re-anchors a confirmed fact whose head moved', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    const status = makeFact({
+      id: 'status',
+      subject: { kind: 'pr', key: pr.key },
+      predicate: 'status',
+      object: null,
+      text: 'waits on the image',
+      topicId: 'depot',
+      refs: [makeFactRef({ prKey: pr.key, headOid: 'older' })],
+    });
+    h.store.facts.add(status);
+    h.agent.answerDossier(() => ({ confirmedFactIds: ['status'] }));
+
+    const report = await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(report.facts.confirmed).toBe(1);
+    const fact = h.store.facts.get('status');
+    expect(fact).toMatchObject({ staleAt: null, invalidAt: null });
+    expect(fact?.refs.map((ref) => ref.headOid)).toEqual([pr.headOid]);
+  });
+
+  it('does not store claims that already fail verification', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    const gone = { text: 'still open?', askedBy: null, refs: [makeFactRef({ kind: 'comment', sourceId: 'deleted' })] };
+    h.agent.answerDossier(() => ({ dossier: { ...depotDossier(), openQuestions: [gone] } }));
+
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(h.store.dossiers.latest('depot')?.dossier.openQuestions).toEqual([]);
+
+    h.reader.etag = 'etag-2';
+    const quiet = await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(quiet.agentCalls).toBe(0);
   });
 });
 

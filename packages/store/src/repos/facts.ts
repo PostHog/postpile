@@ -238,9 +238,46 @@ export class FactRepo {
     );
   }
 
-  /** Active stale facts of a topic: the recheck list for its next dossier update. */
-  listStaleForTopic(topicId: string): Fact[] {
-    return this.select(`${ACTIVE} AND stale_at IS NOT NULL AND topic_id = ?`, [topicId]);
+  /**
+   * The recheck list for a topic's next dossier update: active stale facts not
+   * offered since they went stale, newest stale first, at most limit.
+   */
+  listStaleToRecheck(topicId: string, limit: number): Fact[] {
+    const rows = all<{ id: string }>(
+      this.db,
+      `SELECT id FROM fact
+       WHERE ${ACTIVE} AND topic_id = ? AND stale_at IS NOT NULL
+         AND (rechecked_at IS NULL OR rechecked_at < stale_at)
+       ORDER BY stale_at DESC, id LIMIT ?`,
+      topicId,
+      limit,
+    );
+    const facts = this.getMany(rows.map((row) => row.id));
+    return rows.map((row) => facts.get(row.id)).filter((fact): fact is Fact => fact !== undefined);
+  }
+
+  /** These facts were handed to a dossier update; they are not offered again until they go stale anew. */
+  markRechecked(factIds: string[], at: string): void {
+    if (factIds.length === 0) {
+      return;
+    }
+    run(this.db, `UPDATE fact SET rechecked_at = ? WHERE id IN (${placeholders(factIds.length)})`, at, ...factIds);
+  }
+
+  /**
+   * Moves the head a fact's refs were pinned to, after a recheck confirmed
+   * the fact at the PR's current head. Refs without a head stay without one.
+   */
+  reanchorRefs(factId: string, headByPr: Map<PrKey, string>): void {
+    for (const [prKey, headOid] of headByPr) {
+      run(
+        this.db,
+        'UPDATE fact_ref SET head_oid = ? WHERE fact_id = ? AND pr_key = ? AND head_oid IS NOT NULL',
+        headOid,
+        factId,
+        prKey,
+      );
+    }
   }
 
   /**

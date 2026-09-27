@@ -1,5 +1,5 @@
 import { PREDICATE_RULES } from './fact-rules.ts';
-import type { Dossier, DossierIssue, Fact, FactRef, StaleReason, VerifyOutcome } from './memory.ts';
+import type { Dossier, DossierIssue, DossierQuestion, Fact, FactRef, StaleReason, VerifyOutcome } from './memory.ts';
 import type { IsoTime, Pr, PrKey } from './types.ts';
 
 /** What verification may look at. Only stored snapshots: no IO, no agent. */
@@ -183,6 +183,17 @@ function questionRefIssue(ref: FactRef, prs: Map<PrKey, Pr>): StaleReason | null
   return null;
 }
 
+/** Why a question no longer holds (its first failing ref), or null. */
+function questionIssue(question: DossierQuestion, prs: Map<PrKey, Pr>): StaleReason | null {
+  for (const ref of question.refs) {
+    const reason = questionRefIssue(ref, prs);
+    if (reason !== null) {
+      return reason;
+    }
+  }
+  return null;
+}
+
 /**
  * The same idea for dossier claims: open questions whose refs point at a
  * resolved review thread or a deleted comment, and timeline entries for PRs
@@ -192,12 +203,9 @@ function questionRefIssue(ref: FactRef, prs: Map<PrKey, Pr>): StaleReason | null
 export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssue[] {
   const issues: DossierIssue[] = [];
   dossier.openQuestions.forEach((question, index) => {
-    for (const ref of question.refs) {
-      const reason = questionRefIssue(ref, world.prs);
-      if (reason !== null) {
-        issues.push({ path: `openQuestions[${index}]`, reason });
-        break;
-      }
+    const reason = questionIssue(question, world.prs);
+    if (reason !== null) {
+      issues.push({ path: `openQuestions[${index}]`, reason });
     }
   });
   dossier.timeline.forEach((entry, index) => {
@@ -206,4 +214,18 @@ export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssu
     }
   });
   return issues;
+}
+
+/**
+ * The dossier without the claims verifyDossier flags. Used before a dossier
+ * is stored, so a claim the model keeps cannot force an update on every
+ * sync, and before it goes into a prompt, so a closed concern is not read as
+ * open.
+ */
+export function withoutStaleClaims(dossier: Dossier, world: VerifyWorld): Dossier {
+  return {
+    ...dossier,
+    openQuestions: dossier.openQuestions.filter((question) => questionIssue(question, world.prs) === null),
+    timeline: dossier.timeline.filter((entry) => world.memberKeys.has(entry.prKey)),
+  };
 }
