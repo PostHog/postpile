@@ -1,5 +1,13 @@
 import type { AgentService, ConsolidationInput, ConsolidationTopic } from '@code-manager/agent';
-import type { ConsolidateOptions, ConsolidationReport, DossierVersion, Fact, Topic } from '@code-manager/core';
+import {
+  PREDICATE_RULES,
+  type ConsolidateOptions,
+  type ConsolidationReport,
+  type DossierVersion,
+  type EntityRef,
+  type Fact,
+  type Topic,
+} from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import { Board } from '../board.ts';
 import type { AgentBudget } from '../budget.ts';
@@ -30,11 +38,32 @@ export interface ConsolidationDeps {
   now: () => Date;
 }
 
-/** Active facts sharing subject and predicate, in groups of two or more. */
+function entityKey(entity: EntityRef | null): string {
+  return entity ? `${entity.kind}:${entity.key}` : '-';
+}
+
+/**
+ * Facts that could say the same thing share a slot: subject and predicate
+ * for per_subject, predicate and object for per_object, subject, predicate
+ * and object otherwise. "alice works_on #1" and "alice works_on #2" are two
+ * true facts, not duplicates.
+ */
+function slotKey(fact: Fact): string {
+  const unique = PREDICATE_RULES[fact.predicate].unique;
+  if (unique === 'per_subject') {
+    return `${fact.predicate} ${entityKey(fact.subject)}`;
+  }
+  if (unique === 'per_object' && fact.object !== null) {
+    return `${fact.predicate} -> ${entityKey(fact.object)}`;
+  }
+  return `${fact.predicate} ${entityKey(fact.subject)} -> ${entityKey(fact.object)}`;
+}
+
+/** Active facts sharing a slot, in groups of two or more. */
 function duplicateGroups(facts: Fact[]): Fact[][] {
   const groups = new Map<string, Fact[]>();
   for (const fact of facts) {
-    const key = `${fact.subject.kind}:${fact.subject.key} ${fact.predicate}`;
+    const key = slotKey(fact);
     const group = groups.get(key) ?? [];
     group.push(fact);
     groups.set(key, group);

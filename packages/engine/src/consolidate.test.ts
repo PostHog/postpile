@@ -122,6 +122,21 @@ describe('Engine.consolidate', () => {
     expect((await h.engine.listProposals()).rules).toEqual([]);
   });
 
+  it('offers facts about different objects of a non-unique predicate as separate', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1), reviewRequestedPr(2)]);
+    h.store.facts.add(makeFact({ id: 'f1', topicId: 'depot' }));
+    h.store.facts.add(makeFact({ id: 'f2', topicId: 'depot', object: { kind: 'pr', key: 'PostHog/posthog#2' }, text: 'alice works on #2' }));
+    h.agent.answerConsolidation((input) => {
+      expect(input.duplicateFacts).toEqual([]);
+      return {};
+    });
+
+    await h.engine.consolidate();
+
+    expect(h.agent.consolidationInputs).toHaveLength(1);
+  });
+
   it('folds duplicate facts into the kept one', async () => {
     const h = makeHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

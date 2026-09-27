@@ -195,7 +195,7 @@ export interface ConsolidationTopic {
 /** The sleep-time job: looks across all topics at once. */
 export interface ConsolidationInput {
   topics: ConsolidationTopic[];
-  /** Active facts grouped by subject + predicate where a group has 2+ facts. */
+  /** Active facts that share a slot (see the consolidator), in groups of 2+. */
   duplicateFacts: Fact[][];
   /** Newest first, all topics. */
   feedback: Feedback[];

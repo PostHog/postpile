@@ -25,7 +25,7 @@ function topicBlock(entry: ConsolidationTopic): string {
 function factGroupBlock(group: Fact[], index: number): string {
   const facts = group.map((f) => `  - id ${f.id}: ${f.text} (since ${f.validFrom.slice(0, 10)}, ${f.refs.length} sources)`);
   const first = group[0];
-  const head = first ? `[${first.predicate}] ${entityText(first.subject)}` : '';
+  const head = first ? `[${first.predicate}] ${entityText(first.subject)} -> ${entityText(first.object)}` : '';
   return `Group ${index + 1} ${head}\n${facts.join('\n')}`;
 }
 
@@ -60,7 +60,7 @@ ${contextBlock(input.context)}
 Active topics:
 ${listOrNone(input.topics.map(topicBlock))}
 
-Stored facts that may be duplicates (same subject and predicate):
+Stored facts that may be duplicates (same predicate about the same thing):
 ${listOrNone(input.duplicateFacts.map(factGroupBlock))}
 
 Recent corrections from the user, newest first:
