@@ -2,7 +2,9 @@
 // Not exported from the main index, so app code cannot pick them up by accident.
 
 import type { Timers } from './deferred-queue.ts';
+import { emptyDossier } from './dossier.ts';
 import { prKey } from './keys.ts';
+import type { DossierVersion, Fact, FactCandidate, FactRef } from './memory.ts';
 import type {
   Comment,
   Commit,
@@ -154,6 +156,59 @@ export function singleTile(pr: Pr, pinged = true): Tile {
         provenance: pinged ? { kind: 'pinged', reason: 'review_requested' } : { kind: 'pulled_in', reason: 'context' },
       },
     ],
+  };
+}
+
+export function makeFactRef(overrides: Partial<FactRef> = {}): FactRef {
+  return { kind: 'pr', prKey: 'PostHog/posthog#1', sourceId: null, url: null, at: at(10), headOid: null, ...overrides };
+}
+
+export function makeFact(overrides: Partial<Fact> = {}): Fact {
+  return {
+    id: 'f1',
+    subject: { kind: 'person', key: 'alice' },
+    predicate: 'works_on',
+    object: { kind: 'pr', key: 'PostHog/posthog#1' },
+    text: 'alice works on PostHog/posthog#1',
+    topicId: 'topic-1',
+    source: 'agent',
+    refs: [makeFactRef()],
+    validFrom: at(10),
+    invalidAt: null,
+    invalidReason: null,
+    supersededBy: null,
+    recordedAt: at(11),
+    expiredAt: null,
+    staleAt: null,
+    staleReason: null,
+    verifiedAt: null,
+    ...overrides,
+  };
+}
+
+export function makeCandidate(overrides: Partial<FactCandidate> = {}): FactCandidate {
+  return {
+    subject: { kind: 'person', key: 'alice' },
+    predicate: 'works_on',
+    object: { kind: 'pr', key: 'PostHog/posthog#1' },
+    text: 'alice works on PostHog/posthog#1',
+    refs: [makeFactRef()],
+    validFrom: at(20),
+    ...overrides,
+  };
+}
+
+export function makeDossierVersion(overrides: Partial<DossierVersion> = {}): DossierVersion {
+  return {
+    topicId: 'topic-1',
+    version: 1,
+    dossier: emptyDossier(),
+    flags: [],
+    inputHash: 'h1',
+    throughSeq: 0,
+    model: 'claude-sonnet-4-5',
+    createdAt: at(0),
+    ...overrides,
   };
 }
 

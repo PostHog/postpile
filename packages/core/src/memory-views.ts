@@ -52,9 +52,9 @@ export interface FactQuery {
   entity?: EntityRef;
   predicate?: FactPredicate;
   topicId?: string;
-  /** Facts recorded or closed after this time ("what changed since T"). */
+  /** Facts recorded or closed after this time ("what changed since T"). Closed ones count too. */
   changedSince?: IsoTime;
-  /** Include invalidated and superseded facts. Default false. */
+  /** Include invalidated and superseded facts. Default false, implied by changedSince. */
   includeClosed?: boolean;
   /** Default 100. */
   limit?: number;

@@ -3,7 +3,7 @@ import type { EventKind, Loudness, LoudnessOverride, PrEvent, PrKey } from '@cod
 import { inTransaction } from '../database.ts';
 import { all, fromBool, placeholders, run, toBool } from '../sql.ts';
 
-interface EventRow {
+export interface EventRow {
   id: string;
   pr_key: string;
   kind: string;
@@ -32,7 +32,7 @@ function toOverride(row: EventRow): LoudnessOverride | null {
   };
 }
 
-function toEvent(row: EventRow): PrEvent {
+export function toEvent(row: EventRow): PrEvent {
   return {
     id: row.id,
     prKey: row.pr_key,

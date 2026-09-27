@@ -1,5 +1,18 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { EntityRef, Fact, FactQuery, FactRef, PrKey, StaleReason } from '@code-manager/core';
+import type {
+  EntityKind,
+  EntityRef,
+  Fact,
+  FactPredicate,
+  FactQuery,
+  FactRef,
+  FactRefKind,
+  FactSource,
+  PrKey,
+  StaleReason,
+} from '@code-manager/core';
+import { inTransaction } from '../database.ts';
+import { all, placeholders, run, type SqlValue } from '../sql.ts';
 
 export interface FactClosing {
   /** World time the fact stopped being true. */
@@ -11,6 +24,90 @@ export interface FactClosing {
   expiredAt: string;
 }
 
+interface FactRow {
+  id: string;
+  subject_kind: string;
+  subject_key: string;
+  predicate: string;
+  object_kind: string | null;
+  object_key: string | null;
+  text: string;
+  topic_id: string | null;
+  source: string;
+  valid_from: string;
+  invalid_at: string | null;
+  invalid_reason: string | null;
+  superseded_by: string | null;
+  recorded_at: string;
+  expired_at: string | null;
+  stale_at: string | null;
+  stale_reason: string | null;
+  verified_at: string | null;
+}
+
+interface FactRefRow {
+  fact_id: string;
+  kind: string;
+  pr_key: string;
+  source_id: string;
+  url: string | null;
+  at: string;
+  head_oid: string | null;
+}
+
+const ACTIVE = 'invalid_at IS NULL AND expired_at IS NULL';
+
+function toRef(row: FactRefRow): FactRef {
+  return {
+    kind: row.kind as FactRefKind,
+    prKey: row.pr_key,
+    sourceId: row.source_id === '' ? null : row.source_id,
+    url: row.url,
+    at: row.at,
+    headOid: row.head_oid,
+  };
+}
+
+function toObject(row: FactRow): EntityRef | null {
+  if (row.object_kind === null || row.object_key === null) {
+    return null;
+  }
+  return { kind: row.object_kind as EntityKind, key: row.object_key };
+}
+
+function toFact(row: FactRow, refs: FactRef[]): Fact {
+  return {
+    id: row.id,
+    subject: { kind: row.subject_kind as EntityKind, key: row.subject_key },
+    predicate: row.predicate as FactPredicate,
+    object: toObject(row),
+    text: row.text,
+    topicId: row.topic_id,
+    source: row.source as FactSource,
+    refs,
+    validFrom: row.valid_from,
+    invalidAt: row.invalid_at,
+    invalidReason: row.invalid_reason,
+    supersededBy: row.superseded_by,
+    recordedAt: row.recorded_at,
+    expiredAt: row.expired_at,
+    staleAt: row.stale_at,
+    staleReason: row.stale_reason as StaleReason | null,
+    verifiedAt: row.verified_at,
+  };
+}
+
+/** "(subject_kind = ? AND subject_key = ?) OR (object_kind = ? AND object_key = ?) OR ..." plus its params. */
+function entityFilter(entities: EntityRef[]): { sql: string; params: SqlValue[] } {
+  const parts: string[] = [];
+  const params: SqlValue[] = [];
+  for (const entity of entities) {
+    parts.push('(subject_kind = ? AND subject_key = ?)', '(object_kind = ? AND object_key = ?)');
+    params.push(entity.kind, entity.key, entity.kind, entity.key);
+  }
+  return { sql: `(${parts.join(' OR ')})`, params };
+}
+
 /**
  * Facts and their refs. Nothing is ever deleted: close() ends a fact,
  * markStale() hides it until a refresh. "Active" means invalid_at and
@@ -19,60 +116,207 @@ export interface FactClosing {
 export class FactRepo {
   constructor(private readonly db: DatabaseSync) {}
 
+  /** Refs of these facts, oldest first per fact. */
+  private refsFor(factIds: string[]): Map<string, FactRef[]> {
+    const result = new Map<string, FactRef[]>(factIds.map((id) => [id, []]));
+    if (factIds.length === 0) {
+      return result;
+    }
+    const rows = all<FactRefRow>(
+      this.db,
+      `SELECT * FROM fact_ref WHERE fact_id IN (${placeholders(factIds.length)}) ORDER BY at, kind, source_id`,
+      ...factIds,
+    );
+    for (const row of rows) {
+      result.get(row.fact_id)?.push(toRef(row));
+    }
+    return result;
+  }
+
+  /** Oldest recorded first unless newestFirst. */
+  private select(where: string, params: SqlValue[], newestFirst = false, limit = -1): Fact[] {
+    const order = newestFirst ? 'recorded_at DESC, id' : 'recorded_at, id';
+    const rows = all<FactRow>(
+      this.db,
+      `SELECT * FROM fact WHERE ${where} ORDER BY ${order} LIMIT ?`,
+      ...params,
+      limit,
+    );
+    const refs = this.refsFor(rows.map((row) => row.id));
+    return rows.map((row) => toFact(row, refs.get(row.id) ?? []));
+  }
+
+  private insertRefs(factId: string, refs: FactRef[]): void {
+    for (const ref of refs) {
+      run(
+        this.db,
+        `INSERT OR IGNORE INTO fact_ref (fact_id, kind, pr_key, source_id, url, at, head_oid)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        factId,
+        ref.kind,
+        ref.prKey,
+        ref.sourceId ?? '',
+        ref.url,
+        ref.at,
+        ref.headOid,
+      );
+    }
+  }
+
   /** Inserts the fact and its refs. */
   add(fact: Fact): void {
-    throw new Error('not implemented: FactRepo.add');
+    inTransaction(this.db, () => {
+      run(
+        this.db,
+        `INSERT INTO fact
+           (id, subject_kind, subject_key, predicate, object_kind, object_key, text, topic_id, source,
+            valid_from, invalid_at, invalid_reason, superseded_by, recorded_at, expired_at,
+            stale_at, stale_reason, verified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        fact.id,
+        fact.subject.kind,
+        fact.subject.key,
+        fact.predicate,
+        fact.object?.kind ?? null,
+        fact.object?.key ?? null,
+        fact.text,
+        fact.topicId,
+        fact.source,
+        fact.validFrom,
+        fact.invalidAt,
+        fact.invalidReason,
+        fact.supersededBy,
+        fact.recordedAt,
+        fact.expiredAt,
+        fact.staleAt,
+        fact.staleReason,
+        fact.verifiedAt,
+      );
+      this.insertRefs(fact.id, fact.refs);
+    });
   }
 
   get(id: string): Fact | null {
-    throw new Error('not implemented: FactRepo.get');
+    return this.select('id = ?', [id])[0] ?? null;
   }
 
   getMany(ids: string[]): Map<string, Fact> {
-    throw new Error('not implemented: FactRepo.getMany');
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const facts = this.select(`id IN (${placeholders(ids.length)})`, ids);
+    return new Map(facts.map((fact) => [fact.id, fact]));
   }
 
   /** Active facts whose subject or object is one of these entities. */
   listActiveForEntities(entities: EntityRef[]): Fact[] {
-    throw new Error('not implemented: FactRepo.listActiveForEntities');
+    if (entities.length === 0) {
+      return [];
+    }
+    const filter = entityFilter(entities);
+    return this.select(`${ACTIVE} AND ${filter.sql}`, filter.params);
   }
 
   /** Active facts a topic's dossier update produced. */
   listActiveForTopic(topicId: string): Fact[] {
-    throw new Error('not implemented: FactRepo.listActiveForTopic');
+    return this.select(`${ACTIVE} AND topic_id = ?`, [topicId]);
   }
 
   /** Active facts about one of these PRs or citing one in a ref. Used by the verify pass after a fetch. */
   listActiveTouchingPrs(prKeys: PrKey[]): Fact[] {
-    throw new Error('not implemented: FactRepo.listActiveTouchingPrs');
+    if (prKeys.length === 0) {
+      return [];
+    }
+    const list = placeholders(prKeys.length);
+    return this.select(
+      `${ACTIVE} AND (
+         (subject_kind = 'pr' AND subject_key IN (${list}))
+         OR (object_kind = 'pr' AND object_key IN (${list}))
+         OR id IN (SELECT fact_id FROM fact_ref WHERE pr_key IN (${list}))
+       )`,
+      [...prKeys, ...prKeys, ...prKeys],
+    );
   }
 
   /** Active stale facts of a topic: the recheck list for its next dossier update. */
   listStaleForTopic(topicId: string): Fact[] {
-    throw new Error('not implemented: FactRepo.listStaleForTopic');
+    return this.select(`${ACTIVE} AND stale_at IS NOT NULL AND topic_id = ?`, [topicId]);
   }
 
-  /** Filtered listing for EngineService.listFacts, newest recorded first. */
+  /**
+   * Filtered listing for EngineService.listFacts, newest recorded first.
+   * changedSince also returns facts closed after that time, so it implies includeClosed.
+   */
   query(query: FactQuery): Fact[] {
-    throw new Error('not implemented: FactRepo.query');
+    const conditions: string[] = [];
+    const params: SqlValue[] = [];
+    if (query.entity !== undefined) {
+      const filter = entityFilter([query.entity]);
+      conditions.push(filter.sql);
+      params.push(...filter.params);
+    }
+    if (query.predicate !== undefined) {
+      conditions.push('predicate = ?');
+      params.push(query.predicate);
+    }
+    if (query.topicId !== undefined) {
+      conditions.push('topic_id = ?');
+      params.push(query.topicId);
+    }
+    if (query.changedSince !== undefined) {
+      conditions.push('(recorded_at > ? OR expired_at > ?)');
+      params.push(query.changedSince, query.changedSince);
+    } else if (!query.includeClosed) {
+      conditions.push(ACTIVE);
+    }
+    const where = conditions.length === 0 ? '1 = 1' : conditions.join(' AND ');
+    return this.select(where, params, true, query.limit ?? 100);
   }
 
   /** Adds refs to an existing fact, ignoring ones it already has (NOOP reconcile). Also sets verified_at. */
   addRefs(factId: string, refs: FactRef[], at: string): void {
-    throw new Error('not implemented: FactRepo.addRefs');
+    inTransaction(this.db, () => {
+      this.insertRefs(factId, refs);
+      run(this.db, 'UPDATE fact SET verified_at = ? WHERE id = ?', at, factId);
+    });
   }
 
   /** Ends a fact. Closing an already closed fact is a no-op. */
   close(factId: string, closing: FactClosing): void {
-    throw new Error('not implemented: FactRepo.close');
+    run(
+      this.db,
+      `UPDATE fact SET invalid_at = ?, invalid_reason = ?, superseded_by = ?, expired_at = ?
+       WHERE id = ? AND ${ACTIVE}`,
+      closing.invalidAt,
+      closing.reason,
+      closing.supersededBy,
+      closing.expiredAt,
+      factId,
+    );
   }
 
+  /** Keeps the first stale time and reason while the fact stays stale. */
   markStale(factId: string, reason: StaleReason, at: string): void {
-    throw new Error('not implemented: FactRepo.markStale');
+    run(
+      this.db,
+      'UPDATE fact SET stale_at = ?, stale_reason = ? WHERE id = ? AND stale_at IS NULL',
+      at,
+      reason,
+      factId,
+    );
   }
 
   /** Clears stale_* and sets verified_at. */
   markVerified(factIds: string[], at: string): void {
-    throw new Error('not implemented: FactRepo.markVerified');
+    if (factIds.length === 0) {
+      return;
+    }
+    run(
+      this.db,
+      `UPDATE fact SET stale_at = NULL, stale_reason = NULL, verified_at = ?
+       WHERE id IN (${placeholders(factIds.length)})`,
+      at,
+      ...factIds,
+    );
   }
 }

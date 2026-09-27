@@ -152,7 +152,9 @@ export type StaleReason =
   | 'head_moved'
   | 'person_not_involved'
   | 'source_deleted'
-  | 'thread_resolved';
+  | 'thread_resolved'
+  /** Dossier timeline entry for a PR that is no longer a member of the topic. */
+  | 'left_topic';
 
 /**
  * ok: still good. invalidate: provably over (merged, closed), close it out at `at`.
