@@ -675,6 +675,41 @@ head moved since its refs; questions use `verifyDossier`.
 Routes: `GET/POST /api/instructions`, `GET/POST /api/instructions/chat`,
 `POST /api/instructions/proposals`, `GET /api/memory/sources`.
 
+## Topic placement: relation and area
+
+Every topic gets a placement, so a long topic list sorts itself by whose
+work it is.
+
+- **Relation** (`DossierRelation` in the dossier, path `relation`, with
+  sources like any line): `team` (the user's team drives it), `routed`
+  (another team owns it; the user or their team was pulled in for their
+  angle, e.g. CODEOWNERS on `.github/workflows`), `fyi` (subscribed,
+  mentioned in passing). Plus `ownerTeam` and a short `whyYou`.
+  Rules first (`relationSignals` in core): the user authors or drives ->
+  team; only passive threads -> fyi. A review request to the user or one
+  of their teams, or a mention, is ambiguous; the dossier update decides,
+  with the rule notes and the general instructions in its prompt. A rule
+  decision wins over the answer.
+- **Corrections**: "Wrong" on the relation carries the real value
+  (`MemoryCorrection.relation`). It is stored as `relation_override:<topic>`
+  (meta, with the event log seq) and wins until a new event lands in the
+  topic; it is also logged as feedback for the next dossier update.
+- **Area** (`topic.area`, migration 005): picked by the dossier update from
+  the areas in use; at most 3 new areas per sync, past that a topic keeps
+  its area. Consolidation sees areas and live tile counts; it may propose
+  `area_merge` (topic_proposal with `from_area`, applied on accept) and
+  splits for topics that keep more than 12 live tiles.
+- **UI**: sidebar sections Needs you (unread, any relation, with a badge) /
+  Your team (by area) / Routed to you / FYI, the last two folded by
+  default. The topic header says "Owned by X · you're here because Y".
+  Tiles: live ones first, snoozed and done folded into one row each.
+
+Topic assignment against fragmentation (first real sync: 61 topics for
+142 PRs): the prompt shows member counts and asks for existing topics
+first, a new one only for 2+ PRs or a clear new initiative, `unsorted`
+otherwise; at most 5 new topics per sync. Unsorted PRs are offered again
+after the next consolidation.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.
@@ -686,7 +721,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query) and `GitHubWriter` (mark thread read,

@@ -108,6 +108,12 @@ now".
   - PRs without a glance say why: skipped by the call cap or failed
   - topic subtitles come from the dossier status line; meta phrases like
     "First write-up." are dropped and the prompt forbids them
+- Topic placement (DESIGN.md "Topic placement"): relation team / routed /
+  fyi with owner and "why you" (rules first, the dossier decides the rest,
+  "Wrong" corrects until new activity), areas with a per-sync cap and
+  area-merge proposals, sidebar grouped Needs you / Your team by area /
+  Routed / FYI, done and snoozed tiles folded. Fake data has a routed and
+  an FYI topic.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -157,6 +163,15 @@ now".
   member's base, or the other way round) and PRs linked from bodies or
   comments without a thread; optionally treat `subscribed` threads as
   context rather than a ping.
+- Relation rules know the user's own teams only (viewer teams); other
+  authors' team membership is not fetched, so ownerTeam of routed topics
+  comes from the agent. CODEOWNERS is inferred from team review requests
+  plus the touched directory, the CODEOWNERS file is not read.
+- Existing topics get a relation and area on their next dossier update; until
+  then they sit under Your team / "Other".
+- Loud topics always show under Needs you, so the Routed and FYI sections
+  only hold quiet topics and stay folded; there is no "open when loud" case
+  left in practice.
 - Unsorted PRs are not shown to consolidation; they are only re-offered to
   topic assignment after a consolidation run.
 - Dossiers written before line sources show "no source recorded" on goal,

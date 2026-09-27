@@ -108,13 +108,20 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   PR state), `icons.tsx`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong badge, Wrong / Forget on hover), `MemoryButton`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
-  `InstructionsProposalCard` (tile chat and the instructions view).
+  `InstructionsProposalCard` (tile chat and the instructions view),
+  `RelationBadge` (in `pills.tsx`).
   Something used in three places goes here; two call
   sites can stay duplicated.
 - Don't extract a component that has more props than JSX children.
 - Order functions so they are defined before they are used.
 
 ## Selection
+
+The sidebar groups topics with `lib/sidebar.ts` (`sidebarGroups`): Needs you,
+Your team by area, Routed to you, FYI. Fold state is local UI state; Routed
+and FYI start folded. Relation corrections go through `correctMemory` with
+`relation` set (`RelationLine`), local only. `TileGrid` shows live tiles and
+folds snoozed / done ones.
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
 "Your instructions"), and the picked
