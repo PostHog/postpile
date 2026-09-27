@@ -59,6 +59,25 @@ describe('server app', () => {
     expect(() => createApp(fakeEngine({}), '')).toThrow(/token/);
   });
 
+  it('normalises snooze times to UTC and refuses date-only values', async () => {
+    const seen: unknown[] = [];
+    const snooze = async (_tileId: string, condition: unknown) => {
+      seen.push(condition);
+      return { ok: true, message: 'Snoozed', undoToken: null };
+    };
+    const app = createApp(fakeEngine({ snooze }), 'secret');
+    const send = (until: string) =>
+      app.request('/api/tiles/t/snooze', {
+        method: 'POST',
+        headers: { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' },
+        body: JSON.stringify({ condition: { kind: 'until_time', until } }),
+      });
+
+    expect((await send('2026-09-28T10:00:00+02:00')).status).toBe(200);
+    expect((await send('2026-09-28')).status).toBe(400);
+    expect(seen).toEqual([{ kind: 'until_time', until: '2026-09-28T08:00:00.000Z' }]);
+  });
+
   it('decodes encoded tile ids', async () => {
     let seen = '';
     const getChat = async (tileId: string) => {
