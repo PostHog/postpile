@@ -21,6 +21,7 @@ import type {
   UnreadReason,
   UserPrState,
 } from '@code-manager/core';
+import { setIdFromTileId } from '@code-manager/core';
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -351,7 +352,7 @@ export class FakeEngine implements EngineService {
       topicId: tile.topicId,
       tileId: tile.id,
       prKey: input.prKey,
-      setId: tile.kind === 'set' ? tile.id.slice('set:'.length) : null,
+      setId: setIdFromTileId(tile.id),
       eventId: null,
       note: input.note,
     });

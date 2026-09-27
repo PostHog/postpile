@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, singleTile } from './fixtures.ts';
 import { buildStacks } from './stacks.ts';
-import { buildTopicTiles, deriveTileState, explainTileState, isPrDone, type TileStateInput } from './tiles.ts';
+import {
+  buildTopicTiles,
+  deriveTileState,
+  explainTileState,
+  isPrDone,
+  setIdFromTileId,
+  setTileId,
+  singleTileId,
+  type TileStateInput,
+} from './tiles.ts';
 import type { Pr, PrEvent, PrSet, Tile, UserPrState } from './types.ts';
 
 function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPrState[] = []): TileStateInput {
@@ -195,5 +204,13 @@ describe('buildTopicTiles', () => {
     const mention = makeEvent({ prKey: quiet.key, kind: 'mention', ruleLoudness: 'loud' });
     const tiles = buildTopicTiles({ ...base, events: new Map([[quiet.key, [mention]]]) });
     expect(tiles[0]?.members[0]?.provenance).toEqual({ kind: 'pinged', reason: 'mention' });
+  });
+});
+
+describe('tile ids', () => {
+  it('parses the set id back out of a set tile id only', () => {
+    expect(setIdFromTileId(setTileId('s1'))).toBe('s1');
+    expect(setIdFromTileId(singleTileId('PostHog/posthog#1'))).toBeNull();
+    expect(setIdFromTileId('stack:PostHog/posthog#1')).toBeNull();
   });
 });

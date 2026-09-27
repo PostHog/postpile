@@ -1,13 +1,9 @@
-import { isPinged, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@code-manager/core';
+import { isPinged, setIdFromTileId, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@code-manager/core';
 import type { NewFeedback, Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
-
-function setIdOf(tileId: string): string | null {
-  return tileId.startsWith('set:') ? tileId.slice('set:'.length) : null;
-}
 
 /**
  * User corrections. Each one is logged (the newest go back into prompts) and
@@ -68,7 +64,7 @@ export class FeedbackActions {
       return failed(`no tile ${input.tileId}`);
     }
     const key = input.prKey ?? (tile.members.length === 1 ? tile.members[0]!.prKey : null);
-    const setId = setIdOf(input.tileId);
+    const setId = setIdFromTileId(input.tileId);
     const topicId = this.realTopicId(key ? board.topicIdOf(key) : tile.topicId);
 
     return this.store.transaction(() => {

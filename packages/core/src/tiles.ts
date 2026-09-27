@@ -51,8 +51,15 @@ export function singleTileId(prKey: PrKey): string {
   return `pr:${prKey}`;
 }
 
+const SET_TILE_PREFIX = 'set:';
+
 export function setTileId(setId: string): string {
-  return `set:${setId}`;
+  return `${SET_TILE_PREFIX}${setId}`;
+}
+
+/** The PrSet id behind a set tile id, or null for single and stack tiles. */
+export function setIdFromTileId(tileId: string): string | null {
+  return tileId.startsWith(SET_TILE_PREFIX) ? tileId.slice(SET_TILE_PREFIX.length) : null;
 }
 
 function approvedHeadOnGitHub(pr: Pr, viewerLogin: string | undefined): boolean {
