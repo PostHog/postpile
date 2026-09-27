@@ -621,6 +621,60 @@ Built in three parts against these contracts: core + store (pure rules and
 repos), agent (prompts, answer mapping, hashes) and engine + server + CLI
 (sync, consolidation, read models, routes). All three landed.
 
+## Memory by author: instructions vs. what the agent learned
+
+Memory is split by who wrote it.
+
+- **User-authored**: the general instructions (`instructions.md`). Highest
+  priority in every prompt. The agent never changes it without the user
+  accepting a proposal. Hand edits are fine at any time.
+- **Agent-derived**: dossiers, facts, topic tailoring distilled from chat.
+  The agent maintains them; the user steers by chat and by one-click
+  Wrong / Forget, never by editing agent prose. Every line answers "Why?".
+
+**Instructions changes via chat.** Tile chat returns a lasting point with a
+scope: `topic` becomes a tailoring proposal (as before), `all` ("from now
+on", "always", "in general") goes to `proposeInstructionsChange`, which
+gets only the current text and the user's own message (never GitHub text)
+and returns the full new text plus a summary. The UI shows it as a line
+diff: Accept, Edit inline, Reject, and switch scope ("Apply to all topics
+instead" / "Only this topic"). The general chat in "Your instructions"
+always goes to the same call. When that call finds no change, tile chat
+falls back to tailoring. Proposals must cite a stored user chat message
+(`sourceChatMessageId`); the engine refuses anything else.
+
+**Versions** (`instructions_version`, migration 004): `version`, `text`,
+`summary`, `origin` (`chat` / `outside`), `source_chat_message_id`,
+`created_at`. The file stays the source of truth. `InstructionsHistory`
+reads it on every prompt context and stores a text that differs from the
+newest version as "Edited outside the app" (the first one as "Found on
+disk"), so every prompt knows its instructions version. Saving checks the
+proposal's `baseVersion` against the current one: on a mismatch the hand
+edit is already stored, nothing is written, and the change comes back
+rebased (asked again on top of the new text) for another decision. Writes
+go through a temp file + rename and follow a symlink to its target.
+An accepted change counts as new context: dossiers with a stored context
+hash refresh once on the next sync, and the accept message says how many.
+
+**"Why?" provenance.** Every dossier line (goal, status, open question,
+timeline entry, care, recent change) carries `refs` (GitHub) and
+`userRefs` (instructions version `I1`, tailoring lines `T1..`,
+corrections `U1..`, chat turns `M1..`). The dossier update prompt hands
+out these short ids and gets the user's chat turns in the topic since the
+last version (max 10); unknown ids are dropped, an unchanged line that
+cites nothing keeps its old sources, 6 GitHub + 3 user refs per line.
+Fields are optional, so older versions load and show "no source recorded".
+`DOSSIER_PROMPT_VERSION` (d2) is recorded in the dossier input hash only;
+the shared `PROMPT_VERSION` stays, so glances and sets are not regenerated.
+`getMemorySources(target)` (`GET /api/memory/sources?fact=` or
+`?topic=&version=&path=`) describes each source from stored snapshots
+(who, what, when, quote, link) and a verify state: ok, stale (reason),
+closed, user_only, unsourced. The status line counts as stale when the
+head moved since its refs; questions use `verifyDossier`.
+
+Routes: `GET/POST /api/instructions`, `GET/POST /api/instructions/chat`,
+`POST /api/instructions/proposals`, `GET /api/memory/sources`.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.
@@ -632,7 +686,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query) and `GitHubWriter` (mark thread read,

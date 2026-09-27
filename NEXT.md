@@ -84,13 +84,23 @@ now".
 - Fake mode carries sample memory (`apps/server/src/fake/sample-memory.ts`,
   `FakeMemory`): Depot and Frontend build dossiers, facts with one stale,
   a seen cursor, a merge proposal and standing-rule proposals.
+- Memory split by author (DESIGN.md "Memory by author"):
+  - "Your instructions" view: current text, version history with diffs and
+    origin, a chat that proposes changes; tile chat proposes instructions
+    changes for points about every topic, tailoring for topic points, and
+    the user can switch scope. Nothing is written without Accept; hand
+    edits are stored as their own version and never overwritten (a stale
+    proposal comes back rebased). Versions in `instructions_version`
+    (migration 004; 003 was taken).
+  - "Why?" on every fact and dossier line: sources (GitHub and the user's
+    own words) plus verify state. Dossier updates now cite sources on every
+    line and see the user's chat turns in the topic.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
 
 - Desktop UI follows the chosen style, but the layout is still open. Not in
-  the UI yet: editing general instructions, a "handled quietly" list (both
-  shown disabled), keyboard
+  the UI yet: a "handled quietly" list (shown disabled), keyboard
   navigation, dark mode, one-press approve from a tile (Approve lives in the
   detail pane, next to the glance).
 - The write guard is a UI guard. The server itself still accepts writes from
@@ -126,6 +136,19 @@ now".
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 
+- Dossiers written before line sources show "no source recorded" on goal,
+  status, timeline and cares until their next update. No forced refresh:
+  `DOSSIER_PROMPT_VERSION` only goes into the stored input hash.
+- A rebased instructions proposal is asked again through the agent, so an
+  inline edit made on the stale proposal is lost (the card says the change
+  came back; the user can edit again). No 3-way merge.
+- Rejecting an instructions proposal is not recorded; the agent may
+  propose the same thing again from a similar message.
+- "Open in editor" only reveals and copies the path; the app has no IPC to
+  open an editor.
+- Fake mode keeps instructions in memory (path shown as sample data) and
+  cannot simulate a hand edit on disk.
+
 ## Needs Julian's decisions
 
 - **Fake mode**: rebuild it on the real Engine (in-memory store, fake GitHub
@@ -156,6 +179,9 @@ now".
   glances pick those up on the next sync; event batches did not back then
   (they were lost) and now do. A full first sync over ~140 PRs should land
   around 80-90 calls; worth a watched run before relying on it.
+- **Instructions scope**: the agent decides topic vs. all topics, and an
+  "all" point the instructions call finds no change for falls back to
+  tailoring. Alternative: always ask the user.
 - Still open from DESIGN.md: UI framework final call, three-pane layout,
   memory numbers (10 feedback entries per prompt, when sets regroup), snooze
   wake-up on any loud human event, the extra loudness rules, repo name.

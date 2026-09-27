@@ -21,14 +21,15 @@ The renderer shows what the local API returned and nothing else.
 ## Disabled, not hidden
 
 When something is not wired yet (no endpoint, no data), render it `disabled`
-with a `title` that says why, like "Your instructions" and "Handled quietly"
-in the sidebar. Hiding it makes the gap invisible to the next agent.
+with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it makes the gap invisible to the next agent.
 
 ## Data: typed query hooks, types from core
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
-  `proposals.ts` (`useProposals`, the Inbox).
+  `proposals.ts` (`useProposals`, the Inbox), `instructions.ts`
+  (`useInstructions`, `useInstructionsChat`), `sources.ts`
+  (`useMemorySources`, only enabled while a "Why?" panel is open).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@code-manager/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -59,6 +60,16 @@ in the sidebar. Hiding it makes the gap invisible to the next agent.
   are not on the `GithubWrite` list. A fact closes right away; a dossier
   line shows struck through (`DossierView.correctedClaims`) until the next
   sync rewrites the dossier.
+- Instructions writes (`instructionsChat`, `proposeInstructions`,
+  `saveInstructions`) are local (instructions.md + SQLite), not on the
+  `GithubWrite` list. The user's instructions are never changed without an
+  Accept on a proposal; the card shows a line diff (`lib/diff.ts`), Edit,
+  Reject and the scope switch. A save that comes back with `rebased` (the
+  file changed on disk meanwhile) replaces the card's proposal, it is not
+  an error to swallow.
+- Agent-derived memory is steered only by chat and Wrong / Forget, never by
+  editing its text. Every memory line takes a `why` target
+  (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
   leaves a topic (another topic or the Inbox), not on a timer.
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
@@ -96,14 +107,17 @@ in the sidebar. Hiding it makes the gap invisible to the next agent.
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, provenance,
   PR state), `icons.tsx`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong badge, Wrong / Forget on hover), `MemoryButton`,
-  `SourceChip`. Something used in three places goes here; two call
+  `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
+  `InstructionsProposalCard` (tile chat and the instructions view).
+  Something used in three places goes here; two call
   sites can stay duplicated.
 - Don't extract a component that has more props than JSX children.
 - Order functions so they are defined before they are used.
 
 ## Selection
 
-`App.tsx` holds the picked topic, whether the Inbox is open, and the picked
+`App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
+"Your instructions"), and the picked
 tile + PR. Everything else is
 derived on render (`resolveSelection`): a missing pick falls back to the first
 topic, its first tile and that tile's lead PR. Don't mirror server data into
