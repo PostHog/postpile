@@ -1,106 +1,92 @@
-// Placeholder UI. It only proves data flows from the API into three panes;
-// layout and styling are not decided yet.
+// Placeholder UI. It proves data and actions flow through the API into three
+// panes; layout and styling are not decided yet.
 import { useEffect, useState } from 'react';
-import type { PrDetail, TopicDetail, TopicListItem } from '@code-manager/core';
+import type { ActionResult, PrDetail, TopicDetail, TopicListItem } from '@code-manager/core';
 import * as api from './api.ts';
+import { PrPane } from './PrPane.tsx';
+import { TopicList } from './TopicList.tsx';
+import { TopicPane } from './TopicPane.tsx';
 
-const paneStyle = { overflow: 'auto', padding: 8, borderRight: '1px solid #ccc' };
+// Matches the engine's undo window for deferred mark-read.
+const UNDO_VISIBLE_MS = 6000;
 
-function TopicList(props: { topics: TopicListItem[]; onOpen: (id: string) => void }) {
-  return (
-    <div style={paneStyle}>
-      {(['needs_you', 'quiet'] as const).map((group) => (
-        <div key={group}>
-          <h4>{group === 'needs_you' ? 'Needs you' : 'Quiet'}</h4>
-          {props.topics
-            .filter((item) => item.group === group)
-            .map((item) => (
-              <div key={item.topic.id} onClick={() => props.onOpen(item.topic.id)} style={{ cursor: 'pointer' }}>
-                {item.topic.name} ({item.unreadTiles})
-              </div>
-            ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TopicPane(props: { topic: TopicDetail | null; onOpenPr: (prKey: string) => void }) {
-  if (!props.topic) {
-    return <div style={paneStyle}>No topic open</div>;
+function Notice(props: { result: ActionResult | null; error: string; onUndo: (token: string) => void }) {
+  if (props.error) {
+    return <span style={{ color: 'crimson' }}>{props.error}</span>;
   }
-  return (
-    <div style={paneStyle}>
-      <h3>{props.topic.topic.name}</h3>
-      <p>{props.topic.topic.summary}</p>
-      {props.topic.tiles.map((view) => (
-        <div key={view.tile.id} style={{ border: '1px solid #ddd', margin: '6px 0', padding: 6 }}>
-          <div>
-            [{view.tile.kind}] {view.tile.title} - {view.state.kind}
-          </div>
-          {view.state.unreadBecause.map((reason) => (
-            <div key={reason.eventId}>unread: {reason.summary}</div>
-          ))}
-          {view.prs.map((pr) => (
-            <div key={pr.key} onClick={() => props.onOpenPr(pr.key)} style={{ cursor: 'pointer' }}>
-              {pr.key} {pr.title} ({pr.provenance.kind}, {pr.verdict ?? 'no glance'})
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PrPane(props: { pr: PrDetail | null }) {
-  if (!props.pr) {
-    return <div style={paneStyle}>No PR open</div>;
+  if (!props.result) {
+    return null;
   }
-  const { pr, glance, events } = props.pr;
+  const { message, undoToken } = props.result;
   return (
-    <div style={paneStyle}>
-      <h3>
-        {pr.key} {pr.title}
-      </h3>
-      {glance && (
-        <div>
-          <b>{glance.verdict}</b> {glance.forYou}
-        </div>
-      )}
-      {events.map((view) => (
-        <div key={view.event.id}>
-          [{view.display}] {view.event.summary}
-        </div>
-      ))}
-    </div>
+    <span>
+      {message} {undoToken && <button onClick={() => props.onUndo(undoToken)}>Undo</button>}
+    </span>
   );
 }
 
 export function App() {
   const [topics, setTopics] = useState<TopicListItem[]>([]);
+  const [topicId, setTopicId] = useState<string | null>(null);
   const [topic, setTopic] = useState<TopicDetail | null>(null);
+  const [prKey, setPrKey] = useState<string | null>(null);
   const [pr, setPr] = useState<PrDetail | null>(null);
+  const [notice, setNotice] = useState<ActionResult | null>(null);
   const [error, setError] = useState('');
 
-  function run(task: Promise<unknown>) {
-    task.catch((reason: unknown) => setError(String(reason)));
+  function onError(reason: unknown) {
+    setError(String(reason));
   }
 
-  function reloadTopics() {
-    run(api.listTopics().then(setTopics));
+  function refresh() {
+    setError('');
+    api.listTopics().then(setTopics).catch(onError);
+    if (topicId) {
+      api.getTopic(topicId).then(setTopic).catch(onError);
+    }
+    if (prKey) {
+      api.getPr(prKey).then(setPr).catch(onError);
+    }
   }
 
-  useEffect(reloadTopics, []);
+  function act(task: Promise<ActionResult>) {
+    task
+      .then((result) => {
+        setNotice(result);
+        refresh();
+      })
+      .catch(onError);
+  }
+
+  useEffect(refresh, [topicId, prKey]);
+
+  useEffect(() => {
+    if (!notice?.undoToken) {
+      return;
+    }
+    const timer = setTimeout(() => setNotice(null), UNDO_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  function syncNow() {
+    api
+      .sync()
+      .then((report) => {
+        setNotice({ ok: report.errors.length === 0, message: `synced, ${report.newEvents} new events`, undoToken: null });
+        refresh();
+      })
+      .catch(onError);
+  }
 
   return (
     <div style={{ fontFamily: 'system-ui', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: 8, borderBottom: '1px solid #ccc' }}>
-        <button onClick={() => run(api.sync().then(reloadTopics))}>Sync now</button> {error}
+        <button onClick={syncNow}>Sync now</button> <Notice result={notice} error={error} onUndo={(token) => act(api.undo(token))} />
       </div>
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 2fr 2fr', minHeight: 0 }}>
-        <TopicList topics={topics} onOpen={(id) => run(api.getTopic(id).then(setTopic))} />
-        <TopicPane topic={topic} onOpenPr={(key) => run(api.getPr(key).then(setPr))} />
-        <PrPane pr={pr} />
+        <TopicList topics={topics} openTopicId={topicId} onOpen={setTopicId} />
+        <TopicPane detail={topic} topics={topics} act={act} onError={onError} onOpenPr={setPrKey} />
+        <PrPane detail={pr} act={act} onError={onError} />
       </div>
     </div>
   );

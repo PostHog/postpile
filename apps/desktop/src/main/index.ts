@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import fixPath from 'fix-path';
-import { createEngine, type EngineService } from '@code-manager/engine';
-import { startServer, type RunningServer } from '@code-manager/server';
+import type { EngineService } from '@code-manager/engine';
+import { engineFromEnv, startServer, type RunningServer } from '@code-manager/server';
 
 // A GUI launch gets launchd's minimal PATH. gh and claude live in
 // /opt/homebrew/bin and ~/.local/bin, so take PATH from the login shell.
@@ -15,21 +15,48 @@ app.setName('code-manager');
 let engine: EngineService | null = null;
 let server: RunningServer | null = null;
 
+function openExternalLink(url: string): void {
+  if (url.startsWith('https://')) {
+    void shell.openExternal(url);
+  }
+}
+
 async function openWindow(apiUrl: string, token: string): Promise<void> {
-  const window = new BrowserWindow({ width: 1400, height: 900, title: 'code-manager' });
-  const query = { api: apiUrl, token };
+  const window = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    title: 'code-manager',
+    webPreferences: {
+      preload: join(import.meta.dirname, '../preload/index.cjs'),
+      // Read by the preload script, see src/preload/index.ts.
+      additionalArguments: [`--code-manager-api=${apiUrl}`, `--code-manager-token=${token}`],
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  // Links (e.g. "GitHub") open in the browser; the app window never navigates away.
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalLink(url);
+    return { action: 'deny' };
+  });
+  window.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    openExternalLink(url);
+  });
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (devUrl) {
-    await window.loadURL(`${devUrl}?${new URLSearchParams(query).toString()}`);
+    await window.loadURL(devUrl);
   } else {
-    await window.loadFile(join(import.meta.dirname, '../renderer/index.html'), { query });
+    await window.loadFile(join(import.meta.dirname, '../renderer/index.html'));
   }
 }
 
 async function start(): Promise<void> {
   // The token keeps other local processes and web pages from driving the API.
   const token = randomBytes(24).toString('hex');
-  engine = createEngine();
+  // CODE_MANAGER_FAKE=1 runs on sample data, see engineFromEnv.
+  engine = engineFromEnv();
   server = await startServer({ engine, port: 0, token });
   await openWindow(server.url, token);
 }

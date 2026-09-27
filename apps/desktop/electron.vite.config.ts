@@ -18,6 +18,12 @@ export default defineConfig({
       externalizeDeps: { exclude: workspacePackages },
     },
   },
+  preload: {
+    // Sandboxed preloads cannot be ES modules.
+    build: {
+      rollupOptions: { output: { format: 'cjs' } },
+    },
+  },
   renderer: {
     plugins: [react()],
   },

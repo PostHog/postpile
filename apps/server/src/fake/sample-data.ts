@@ -1,0 +1,409 @@
+// The "Move CI to Depot" sample from the design rounds, as domain objects.
+// Used by FakeEngine so the server, CLI and desktop app run without GitHub or
+// the agent.
+import type { Glance, Pr, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@code-manager/core';
+import {
+  pinged,
+  pulledIn,
+  SAMPLE_VIEWER,
+  SampleClock,
+  sampleEvents,
+  sampleGlance,
+  sampleKey,
+  samplePr,
+  sampleTile,
+  sampleTopic,
+} from './sample-builders.ts';
+
+export interface SampleData {
+  viewer: string;
+  topics: Topic[];
+  prs: Pr[];
+  events: PrEvent[];
+  glances: Glance[];
+  tiles: Tile[];
+  sets: PrSet[];
+  proposals: TopicProposal[];
+  userStates: UserPrState[];
+  /** PR -> topic. PRs pulled into another topic's tile keep their own topic. */
+  membership: Map<PrKey, string>;
+}
+
+const TOPIC = {
+  depot: 'topic-depot',
+  ci: 'topic-ci-tests',
+  migrations: 'topic-migrations',
+  devEnv: 'topic-dev-env',
+  frontend: 'topic-frontend-build',
+  deps: 'topic-dependency-bumps',
+};
+
+function buildTopics(clock: SampleClock): Topic[] {
+  return [
+    sampleTopic(clock, {
+      id: TOPIC.depot,
+      name: 'Move CI to Depot',
+      summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
+      tailoring: 'Rowan drives, I approve. Flag cache keys, runner labels, secrets.',
+      driver: 'rowan',
+      userRole: 'reviewer',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.ci,
+      name: 'CI & tests',
+      summary: 'Shard splitting is being reworked. One PR merged without you and raises a limit you set.',
+      tailoring: 'Anything that loosens CI limits goes to the top.',
+      driver: SAMPLE_VIEWER,
+      userRole: 'driver',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.migrations,
+      name: 'Migrations',
+      summary: 'error_tracking is waiting on one answer from you. Surveys moved and was fixed.',
+      tailoring: 'Tell me when a migration touches real tables.',
+      driver: SAMPLE_VIEWER,
+      userRole: 'driver',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.devEnv,
+      name: 'Dev env',
+      summary: 'Mostly version bumps. One change to hogli defaults waits for a reviewer.',
+      tailoring: 'Anything that changes hogli defaults goes to the top.',
+      driver: SAMPLE_VIEWER,
+      userRole: 'driver',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.frontend,
+      name: 'Frontend build',
+      summary: 'Vite 7 upgrade in review.',
+      tailoring: 'Only cache changes.',
+      driver: 'lyra',
+      userRole: 'watcher',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.deps,
+      name: 'Dependency bumps',
+      summary: 'Bot PRs, all green.',
+      tailoring: 'Never ping me for these.',
+      driver: null,
+      userRole: 'watcher',
+    }),
+  ];
+}
+
+function buildPrs(clock: SampleClock): Pr[] {
+  return [
+    samplePr(clock, {
+      number: 41902, title: 'Use Depot cache backend for Turbo', author: 'rowan', state: 'OPEN',
+      size: [186, 42, 7], checks: 'FAILURE', openedHoursAgo: 5,
+      baseRef: 'rowan/depot-2', headRef: 'rowan/depot-3',
+      reviews: [['lyra', 'APPROVED'], ['nell', 'COMMENTED']],
+      reviewerUsers: [SAMPLE_VIEWER], reviewerTeams: ['PostHog/team-devex'],
+    }),
+    samplePr(clock, {
+      number: 41921, title: 'Bump turbo to 2.5', author: 'renovate[bot]', state: 'OPEN',
+      size: [4, 4, 2], checks: 'SUCCESS', openedHoursAgo: 3, reviewerTeams: ['PostHog/team-devex'],
+    }),
+    samplePr(clock, {
+      number: 41855, title: 'Skip Turbo remote cache for Storybook', author: 'jude', state: 'MERGED',
+      size: [3, 1, 1], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 14, reviews: [['lyra', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41911, title: 'Run e2e on Depot runners', author: 'rowan', state: 'OPEN',
+      size: [48, 48, 5], checks: 'SUCCESS', openedHoursAgo: 1,
+      baseRef: 'rowan/depot-3', headRef: 'rowan/depot-4', reviewerUsers: [SAMPLE_VIEWER, 'nell'],
+    }),
+    samplePr(clock, {
+      number: 41862, title: 'Backend jobs on Depot', author: 'rowan', state: 'MERGED',
+      size: [60, 60, 6], checks: 'SUCCESS', openedHoursAgo: 96, mergedHoursAgo: 72,
+      baseRef: 'rowan/depot-1', headRef: 'rowan/depot-2',
+      reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41851, title: 'Add Depot project config', author: 'rowan', state: 'MERGED',
+      size: [12, 0, 1], checks: 'SUCCESS', openedHoursAgo: 170, mergedHoursAgo: 144,
+      baseRef: 'master', headRef: 'rowan/depot-1', reviews: [[SAMPLE_VIEWER, 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41915, title: 'DEPOT_TOKEN as repo secret', author: 'rowan', state: 'MERGED',
+      size: [9, 3, 3], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 24, reviews: [['lyra', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41899, title: 'Rename workflow files to ci-*.yml', author: 'rowan', state: 'OPEN',
+      size: [0, 0, 9], checks: 'SUCCESS', openedHoursAgo: 48,
+      reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED'], ['nell', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41790, title: 'Raise Django test timeout to 45 min', author: 'nell', state: 'MERGED',
+      size: [1, 1, 1], checks: 'SUCCESS', openedHoursAgo: 60, mergedHoursAgo: 48, reviews: [['rowan', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41822, title: 'Split backend tests by timing data', author: 'remy', state: 'OPEN',
+      size: [240, 80, 11], checks: 'SUCCESS', openedHoursAgo: 72,
+      reviews: [['lyra', 'APPROVED'], ['sol', 'APPROVED']], reviewerTeams: ['PostHog/team-devex'],
+    }),
+    samplePr(clock, {
+      number: 41801, title: 'Move error_tracking models to products/', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [410, 380, 24], checks: 'SUCCESS', openedHoursAgo: 48,
+      reviews: [['ada', 'CHANGES_REQUESTED'], ['lyra', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41870, title: 'Make hogli start default to minimal stack', author: 'sol', state: 'OPEN',
+      size: [70, 12, 4], checks: 'SUCCESS', openedHoursAgo: 72, reviewerTeams: ['PostHog/team-devex'],
+    }),
+  ];
+}
+
+function buildEvents(clock: SampleClock): PrEvent[] {
+  return [
+    ...sampleEvents(clock, 41902, [
+      { kind: 'review_requested', actor: 'rowan', text: 'requested your review', hoursAgo: 5, rule: 'loud', seen: true },
+      { kind: 'deploy', actor: 'deploy-bot', text: 'deployed a preview', hoursAgo: 1, rule: 'quiet', isBot: true },
+      { kind: 'mention', actor: 'lyra', text: 'mentioned you: "does the warm-up need a flag?"', hoursAgo: 0.3, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41921, [
+      { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 3, rule: 'quiet', isBot: true },
+    ]),
+    ...sampleEvents(clock, 41855, [
+      { kind: 'merged', actor: 'jude', text: 'merged it', hoursAgo: 14, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 41911, [
+      { kind: 'review_requested', actor: 'rowan', text: 'requested your review', hoursAgo: 1, rule: 'loud' },
+      { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 0.7, rule: 'quiet', isBot: true },
+    ]),
+    ...sampleEvents(clock, 41862, [
+      { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 72, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 41851, [
+      { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 144, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 41915, [
+      { kind: 'team_mention', actor: 'rowan', text: 'mentioned @team-devex', hoursAgo: 24, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41899, [
+      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 24, rule: 'quiet', seen: true },
+      {
+        kind: 'force_pushed', actor: 'renovate[bot]', text: 'rebased', hoursAgo: 3, rule: 'quiet', isBot: true,
+        mutedBecause: 'Bot rebase, no content change.',
+      },
+      { kind: 'merge_queue', actor: 'mergify[bot]', text: 'queued for merge', hoursAgo: 1, rule: 'quiet', isBot: true },
+    ]),
+    ...sampleEvents(clock, 41790, [
+      { kind: 'merged_without_review', actor: 'nell', text: 'merged it without your review', hoursAgo: 48, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41822, [
+      { kind: 'review_requested', actor: 'remy', text: 'requested @team-devex', hoursAgo: 72, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41801, [
+      { kind: 'question_to_user', actor: 'ada', text: 'asked "is this reversible?"', hoursAgo: 24, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41870, [
+      { kind: 'review_requested', actor: 'sol', text: 'requested @team-devex', hoursAgo: 72, rule: 'loud' },
+    ]),
+  ];
+}
+
+function buildGlances(clock: SampleClock): Glance[] {
+  return [
+    sampleGlance(clock, 41902, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Changes Turbo cache keys, which you asked to hear about.',
+      does: 'Points Turbo remote cache at Depot. First runs after merge are cold.',
+      risk: 'Medium. Nothing breaks, CI slow for about an hour.',
+      othersSaid: 'lyra approved. nell asked about warm-up, Rowan answered.',
+    }),
+    sampleGlance(clock, 41921, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Landing it apart from #41902 would make the cache go cold twice.',
+      does: 'Minor Turbo bump.',
+      risk: 'Low alone.',
+      othersSaid: 'No human comments.',
+      pullInReason: '2.5 changes cache hashing.',
+    }),
+    sampleGlance(clock, 41855, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Storybook now runs cold on every PR.',
+      does: 'Sets cache: false on the storybook task.',
+      risk: 'Slower CI, no breakage.',
+      othersSaid: 'One approval, reason: stale snapshots.',
+      pullInReason: 'From Frontend build: turns off the cache you set up.',
+    }),
+    sampleGlance(clock, 41911, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Runner labels change as planned in #41880.',
+      does: 'Moves Playwright jobs to depot-ubuntu-24.04-8.',
+      risk: 'Low. CI green.',
+      othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 41862, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'You approved it 3 days ago.',
+      does: 'Moves backend jobs to Depot.',
+      risk: 'None now.',
+      othersSaid: '2 approvals.',
+      pullInReason: 'Lower layer of the stack.',
+    }),
+    sampleGlance(clock, 41851, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'You approved it 6 days ago.',
+      does: 'Adds depot.json.',
+      risk: 'None.',
+      othersSaid: '2 approvals.',
+      pullInReason: 'Base of the stack.',
+    }),
+    sampleGlance(clock, 41915, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'You asked to hear about secrets. An org secret already exists.',
+      does: 'Adds a repo secret and uses it in 3 workflows.',
+      risk: 'Low now, messy later.',
+      othersSaid: 'lyra approved.',
+    }),
+    sampleGlance(clock, 41899, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'You approved. Renames are fine per what you said.',
+      does: 'Renames 9 workflow files.',
+      risk: 'None.',
+      othersSaid: '3 approvals.',
+    }),
+    sampleGlance(clock, 41790, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Loosens the 30 min limit you set. You asked to always hear about that.',
+      does: 'Changes the timeout.',
+      risk: 'Slow tests pass silently.',
+      othersSaid: 'One approval.',
+    }),
+    sampleGlance(clock, 41822, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Nobody from devex looked. It changes what the flaky-test report reads.',
+      does: 'Shards from timing JSON.',
+      risk: 'Medium.',
+      othersSaid: '2 approvals.',
+    }),
+    sampleGlance(clock, 41801, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Ada asked if it is reversible. It is state-only, so yes.',
+      does: 'Moves 6 models.',
+      risk: 'Low.',
+      othersSaid: 'Ada asked for changes.',
+    }),
+    sampleGlance(clock, 41870, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Changes a hogli default, which you asked to see first.',
+      does: 'Skips ClickHouse and Kafka by default.',
+      risk: 'People lose services silently.',
+      othersSaid: 'None yet.',
+    }),
+  ];
+}
+
+function buildTiles(): Tile[] {
+  return [
+    sampleTile(TOPIC.depot, 'set', 'set:turbo-cache', 'Three PRs change how Turbo caches', [
+      pinged(41902, 'review_requested'),
+      pulledIn(41921, '2.5 changes cache hashing. Landing it apart from #41902 makes the cache go cold twice.'),
+      pulledIn(41855, 'From Frontend build: turns off the Turbo cache you set up.'),
+    ]),
+    sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(41851)}`, 'rowan/depot: e2e layer waits on you', [
+      pulledIn(41851, 'Base of the stack.'),
+      pulledIn(41862, 'Lower layer of the stack.'),
+      pinged(41902, 'review_requested'),
+      pinged(41911, 'review_requested'),
+    ]),
+    sampleTile(TOPIC.depot, 'single', `pr:${sampleKey(41915)}`, 'DEPOT_TOKEN went in as a repo secret', [
+      pinged(41915, 'team_mention'),
+    ]),
+    sampleTile(TOPIC.depot, 'single', `pr:${sampleKey(41899)}`, 'Rename workflow files to ci-*.yml', [
+      pinged(41899, 'review_requested'),
+    ]),
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(41790)}`, 'Django test timeout raised to 45 min', [
+      pinged(41790, 'subscribed'),
+    ]),
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(41822)}`, 'Timing-based shards, no devex review', [
+      pinged(41822, 'review_requested'),
+    ]),
+    sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(41801)}`, 'Ada asks if the error_tracking move is reversible', [
+      pinged(41801, 'author'),
+    ]),
+    sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(41870)}`, 'hogli start would default to minimal stack', [
+      pinged(41870, 'review_requested'),
+    ]),
+  ];
+}
+
+function buildSets(clock: SampleClock): PrSet[] {
+  return [
+    {
+      id: 'turbo-cache',
+      topicId: TOPIC.depot,
+      title: 'Three PRs change how Turbo caches',
+      take: 'Only #41902 pinged you. The other two touch the same cache keys.',
+      members: [
+        { prKey: sampleKey(41902), reason: 'Moves the Turbo remote cache to Depot.' },
+        { prKey: sampleKey(41921), reason: '2.5 changes cache hashing.' },
+        { prKey: sampleKey(41855), reason: 'Turns off the cache for Storybook.' },
+      ],
+      status: 'active',
+      inputHash: 'sample',
+      createdAt: clock.hoursAgo(3),
+      updatedAt: clock.hoursAgo(3),
+    },
+  ];
+}
+
+function buildProposals(clock: SampleClock): TopicProposal[] {
+  return [
+    {
+      id: 'proposal-rename-dev-env',
+      kind: 'rename',
+      topicId: TOPIC.devEnv,
+      name: 'Dev env and hogli',
+      intoTopicId: null,
+      prKeys: [],
+      reason: 'Most recent PRs in this topic change hogli.',
+      status: 'pending',
+      createdAt: clock.hoursAgo(2),
+      decidedAt: null,
+    },
+  ];
+}
+
+function buildUserStates(clock: SampleClock): UserPrState[] {
+  const approved = (number: number, hoursAgo: number): UserPrState => ({
+    prKey: sampleKey(number),
+    approvedAt: clock.hoursAgo(hoursAgo),
+    approvedCommitOid: `sha${number}`,
+    handledAt: null,
+  });
+  return [approved(41899, 24), approved(41862, 72), approved(41851, 144)];
+}
+
+function buildMembership(tiles: Tile[]): Map<PrKey, string> {
+  const membership = new Map<PrKey, string>();
+  for (const tile of tiles) {
+    for (const member of tile.members) {
+      if (!membership.has(member.prKey)) {
+        membership.set(member.prKey, tile.topicId);
+      }
+    }
+  }
+  membership.set(sampleKey(41855), TOPIC.frontend);
+  membership.set(sampleKey(41921), TOPIC.deps);
+  return membership;
+}
+
+export function buildSampleData(now: Date): SampleData {
+  const clock = new SampleClock(now);
+  const tiles = buildTiles();
+  return {
+    viewer: SAMPLE_VIEWER,
+    topics: buildTopics(clock),
+    prs: buildPrs(clock),
+    events: buildEvents(clock),
+    glances: buildGlances(clock),
+    tiles,
+    sets: buildSets(clock),
+    proposals: buildProposals(clock),
+    userStates: buildUserStates(clock),
+    membership: buildMembership(tiles),
+  };
+}

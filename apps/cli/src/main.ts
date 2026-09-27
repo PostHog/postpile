@@ -1,7 +1,8 @@
 #!/usr/bin/env -S npx tsx
 // Dev CLI, the way to exercise the engine without a UI:
 //   npm run cli -- topics
-import { createEngine } from '@code-manager/engine';
+//   CODE_MANAGER_FAKE=1 npm run cli -- topics   (Depot sample data)
+import { engineFromEnv } from '@code-manager/server';
 import { parseArgs, usage, type Command } from './args.ts';
 import { formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import type { EngineService } from '@code-manager/engine';
@@ -31,7 +32,7 @@ async function main(): Promise<void> {
     console.log(usage);
     return;
   }
-  const engine = createEngine();
+  const engine = engineFromEnv();
   try {
     console.log(await runCommand(engine, command));
     // The CLI never holds a mark-read in an undo window, but flush in case an action queued one.

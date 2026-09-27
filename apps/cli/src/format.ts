@@ -23,7 +23,15 @@ export function formatTopics(items: TopicListItem[]): string {
 }
 
 export function formatTopic(detail: TopicDetail): string {
-  const lines = [detail.topic.name, detail.topic.summary, ''];
+  const { topic } = detail;
+  const lines = [`${topic.name}  (driver ${topic.driver ?? 'unknown'}, you: ${topic.userRole})`, topic.summary];
+  if (topic.tailoring) {
+    lines.push(`tailoring: ${topic.tailoring}`);
+  }
+  for (const proposal of detail.pendingProposals) {
+    lines.push(`proposal ${proposal.id}: ${proposal.kind} ${proposal.name ?? ''} (${proposal.reason})`);
+  }
+  lines.push('');
   for (const view of detail.tiles) {
     lines.push(`[${view.state.kind}] ${view.tile.kind}: ${view.tile.title}`);
     for (const reason of view.state.unreadBecause) {
@@ -37,12 +45,26 @@ export function formatTopic(detail: TopicDetail): string {
 }
 
 export function formatPr(detail: PrDetail): string {
-  const lines = [`${detail.pr.key}  ${detail.pr.title}`, detail.pr.url, ''];
+  const { pr } = detail;
+  const lines = [
+    `${pr.key}  ${pr.title}`,
+    `${pr.state.toLowerCase()} by ${pr.author}, +${pr.additions} -${pr.deletions}, CI ${pr.checks.rollup.toLowerCase()}`,
+    pr.url,
+    `topic ${detail.topicId ?? 'none'}, tiles ${detail.tileIds.join(', ') || 'none'}`,
+  ];
+  if (detail.userState?.approvedAt) {
+    lines.push(`you approved at ${detail.userState.approvedAt}`);
+  }
+  lines.push('');
   if (detail.glance) {
     lines.push(`${detail.glance.verdict}: ${detail.glance.forYou}`);
     lines.push(`does: ${detail.glance.does}`);
     lines.push(`risk: ${detail.glance.risk}`);
-    lines.push(`others said: ${detail.glance.othersSaid}`, '');
+    lines.push(`others said: ${detail.glance.othersSaid}`);
+    if (detail.glance.pullInReason) {
+      lines.push(`pulled in: ${detail.glance.pullInReason}`);
+    }
+    lines.push('');
   }
   for (const view of detail.events) {
     lines.push(`${view.event.at}  [${view.display}]  ${view.event.summary}`);

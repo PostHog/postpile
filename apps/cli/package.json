@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@code-manager/core": "*",
-    "@code-manager/engine": "*"
+    "@code-manager/engine": "*",
+    "@code-manager/server": "*"
   },
   "bin": {
     "code-manager": "./src/main.ts"

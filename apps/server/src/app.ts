@@ -22,8 +22,20 @@ const feedbackBody = z.object({
   note: z.string().default(''),
 });
 
+/** Thrown for input the client got wrong; answered with 400 instead of 500. */
+class BadRequestError extends Error {}
+
 function prKeyFromParams(params: { owner: string; repo: string; number: string }): string {
-  return prKey({ repo: `${params.owner}/${params.repo}`, number: Number(params.number) });
+  const number = Number(params.number);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new BadRequestError(`invalid PR number: ${params.number}`);
+  }
+  return prKey({ repo: `${params.owner}/${params.repo}`, number });
+}
+
+function isClientError(error: Error): boolean {
+  // SyntaxError comes from c.req.json() on a malformed body.
+  return error instanceof BadRequestError || error instanceof z.ZodError || error instanceof SyntaxError;
 }
 
 /**
@@ -41,7 +53,7 @@ export function createApp(engine: EngineService, token: string | null): Hono {
     await next();
   });
 
-  app.onError((error, c) => c.json({ error: error.message }, 500));
+  app.onError((error, c) => c.json({ error: error.message }, isClientError(error) ? 400 : 500));
 
   app.get('/api/health', (c) => c.json({ ok: true }));
   app.post('/api/sync', async (c) => c.json(await engine.sync()));
