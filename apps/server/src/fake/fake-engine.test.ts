@@ -78,6 +78,18 @@ describe('FakeEngine memory', () => {
     expect((await engine.getMemorySources({ kind: 'fact', factId: 'fact-lyra-owns-workflows' }))?.sources.every((source) => !source.missing)).toBe(true);
   });
 
+  it('places sample topics in every group, and a relation correction moves one', async () => {
+    const engine = new FakeEngine();
+    const placements = new Map((await engine.listTopics()).map((item) => [item.topic.id, item.placement]));
+    expect(placements.get('topic-depot')).toMatchObject({ relation: 'team', area: 'CI' });
+    expect(placements.get('topic-ingestion-runners')).toMatchObject({ relation: 'routed', ownerTeam: 'PostHog/team-ingestion' });
+    expect(placements.get('topic-desktop-release')).toMatchObject({ relation: 'fyi', area: 'Desktop' });
+
+    await engine.correctMemory({ kind: 'wrong', factId: null, topicId: 'topic-desktop-release', text: 'FYI', relation: 'routed' });
+
+    expect((await engine.getTopic('topic-desktop-release'))?.placement).toMatchObject({ relation: 'routed', corrected: true });
+  });
+
   it('files the next rule proposal once and merges a topic on accept', async () => {
     const engine = new FakeEngine();
     expect((await engine.consolidate()).ruleProposalsFiled).toBe(1);

@@ -18,6 +18,7 @@ import type {
   PrSetMember,
   Provenance,
   ReconcileAction,
+  RelationSignals,
   RuleProposal,
   Tile,
   Topic,
@@ -169,8 +170,19 @@ export interface DossierUpdateInput {
   staleFacts: Fact[];
   /** The user's own chat messages in this topic since the previous version, at most CHAT_TURNS_IN_DOSSIER_PROMPT. */
   chatTurns: ChatMessage[];
+  /** What the rules could tell about how the topic reaches the user. A decided relation wins over the answer. */
+  relationSignals: RelationSignals;
+  /** Areas other topics use, to reuse. */
+  areas: AreaChoice[];
+  /** The topic's area now, null before the first update. */
+  currentArea: string | null;
   viewer: Viewer;
   context: PromptContext;
+}
+
+export interface AreaChoice {
+  name: string;
+  topics: number;
 }
 
 export interface FactClose {
@@ -188,6 +200,8 @@ export interface DossierUpdateResult {
   closeFacts: FactClose[];
   /** staleFacts the update found still true. */
   confirmedFactIds: string[];
+  /** The area the answer picked, or null. The engine caps new areas per sync. */
+  area: string | null;
   inputHash: string;
   model: string;
 }
@@ -236,6 +250,8 @@ export interface ConsolidationTopic {
   openPrs: number;
   totalPrs: number;
   lastActivityAt: IsoTime | null;
+  /** Tiles not done: past about a dozen the topic is too big to scan and may want a split. */
+  liveTiles: number;
 }
 
 /** The sleep-time job: looks across all topics at once. */
@@ -248,6 +264,8 @@ export interface ConsolidationInput {
   /** So an idea the user already decided on is not proposed again. */
   decidedRules: RuleProposal[];
   decidedTopicProposals: TopicProposal[];
+  /** Areas in use across active topics. */
+  areas: AreaChoice[];
   context: PromptContext;
 }
 
@@ -273,8 +291,16 @@ export interface RuleIdea {
   reason: string;
 }
 
+/** Fold one area into another. Filed as a pending area_merge proposal. */
+export interface AreaMerge {
+  from: string;
+  into: string;
+  reason: string;
+}
+
 export interface ConsolidationResult {
   topicProposals: ConsolidationTopicProposal[];
+  areaMerges: AreaMerge[];
   factMerges: FactMerge[];
   ruleIdeas: RuleIdea[];
   /** The agent's view; the engine retires only topics that also pass the deterministic gate. */

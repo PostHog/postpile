@@ -31,6 +31,7 @@ function defaultDossier(input: DossierUpdateInput): DossierUpdateResult {
     facts: [],
     closeFacts: [],
     confirmedFactIds: [],
+    area: null,
     inputHash: '',
     model: FAKE_MODEL,
   };
@@ -53,7 +54,7 @@ function fakeGlance(input: GlanceBatchInput, item: GlanceBatchItem, hash: string
 }
 
 function emptyConsolidation(): ConsolidationResult {
-  return { topicProposals: [], factMerges: [], ruleIdeas: [], finishedTopics: [] };
+  return { topicProposals: [], areaMerges: [], factMerges: [], ruleIdeas: [], finishedTopics: [] };
 }
 
 export class FakeAgent extends RunnerAgentService {

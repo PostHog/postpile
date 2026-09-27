@@ -31,6 +31,7 @@ const memoryCorrectionBody = z.object({
   factId: z.string().nullable().default(null),
   topicId: z.string().nullable().default(null),
   text: z.string().default(''),
+  relation: z.enum(['team', 'routed', 'fyi']).optional(),
 });
 
 const syncBody = z

@@ -6,6 +6,7 @@ import type {
   DossierFlag,
   DossierPrEntry,
   DossierQuestion,
+  DossierRelation,
   EntityRef,
   FactCandidate,
   IsoTime,
@@ -137,6 +138,21 @@ function toTimeline(answer: DossierAnswer['dossier']['timeline'], input: Dossier
     });
 }
 
+/**
+ * Rules first: a relation the rules decided (the user drives it, only
+ * passive threads) wins over the answer, and so does their whyYou. The
+ * answer decides the ambiguous ones; without either, the previous relation
+ * stays, else fyi.
+ */
+function toRelation(answer: DossierAnswer['dossier']['relation'], input: DossierUpdateInput, refs: DossierRefs): DossierRelation {
+  const signals = input.relationSignals;
+  const previous = input.previous?.dossier.relation;
+  const kind = signals.relation ?? answer?.kind ?? previous?.kind ?? 'fyi';
+  const whyYou = signals.relation ? signals.whyYou : answer?.whyYou || signals.whyYou;
+  const unchanged = previous && previous.kind === kind && previous.whyYou === whyYou ? sourcesOf(previous) : undefined;
+  return { kind, ownerTeam: answer?.ownerTeam ?? signals.ownerTeam, whyYou, ...lineSources(answer?.refs ?? [], refs, unchanged) };
+}
+
 function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, refs: DossierRefs, now: IsoTime): Dossier {
   const previous = input.previous?.dossier;
   const sameGoal = previous !== undefined && previous.goal === answer.goal;
@@ -157,6 +173,7 @@ function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, 
       const old = previous?.recentChanges.find((candidate) => candidate.text === c.text);
       return { at: changeTime(c, input, refs, now), text: c.text, ...lineSources(c.refs, refs, sourcesOf(old)) };
     }),
+    relation: toRelation(answer.relation, input, refs),
   });
 }
 
@@ -217,8 +234,15 @@ function toConfirmed(answer: string[], input: DossierUpdateInput, refs: DossierR
   return [...confirmed];
 }
 
+/** An area name as the sidebar shows it: trimmed, short, null when empty. */
+function toArea(area: string | null): string | null {
+  const name = area?.trim().replace(/\s+/g, ' ') ?? '';
+  return name === '' ? null : name.slice(0, 40);
+}
+
 export interface MappedDossierAnswer {
   dossier: Dossier;
+  area: string | null;
   flags: DossierFlag[];
   facts: FactCandidate[];
   closeFacts: FactClose[];
@@ -231,6 +255,7 @@ export function mapDossierAnswer(answer: DossierAnswer, input: DossierUpdateInpu
   const closeFacts = toCloses(answer.closeFacts, refs);
   return {
     dossier: toDossier(answer.dossier, input, refs, now),
+    area: toArea(answer.area),
     flags: toFlags(answer.flags, memberKeys),
     facts: toCandidates(answer.facts, input.topic.id, refs),
     closeFacts,

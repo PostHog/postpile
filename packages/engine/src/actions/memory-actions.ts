@@ -1,6 +1,7 @@
-import type { ActionResult, FeedbackKind, MemoryCorrection, PendingProposals } from '@code-manager/core';
+import type { ActionResult, FeedbackKind, MemoryCorrection, PendingProposals, RelationOverride } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import { UNSORTED_TOPIC_ID } from '../board.ts';
+import { relationOverrideKey } from '../memory/placement.ts';
 import { failed, ok } from './results.ts';
 
 /** User decisions on engine memory: standing rules, "I have seen this topic" and corrections. */
@@ -62,8 +63,17 @@ export class MemoryActions {
       if (input.topicId === null || !this.store.topics.get(input.topicId)) {
         return failed(`no topic ${input.topicId ?? ''}`);
       }
-      this.store.feedback.add({ kind, topicId: input.topicId, tileId: null, prKey: null, setId: null, eventId: null, note: input.text, createdAt: at });
-      return ok('Noted. The next sync rewrites the topic memory without it.');
+      const topicId = input.topicId;
+      const relation = input.relation;
+      const note = relation ? `${input.text} (it is actually: ${relation})` : input.text;
+      this.store.transaction(() => {
+        if (relation) {
+          const override: RelationOverride = { relation, seq: this.store.eventLog.maxSeq() };
+          this.store.meta.set(relationOverrideKey(topicId), JSON.stringify(override));
+        }
+        this.store.feedback.add({ kind, topicId, tileId: null, prKey: null, setId: null, eventId: null, note, createdAt: at });
+      });
+      return ok(relation ? 'Moved. It stays there until something new happens in the topic.' : 'Noted. The next sync rewrites the topic memory without it.');
     }
     const fact = this.store.facts.get(input.factId);
     if (!fact) {

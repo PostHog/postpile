@@ -261,6 +261,7 @@ export class FakeEngine implements EngineService {
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
+        placement: this.memory.placement(topic),
         group: unreadTiles > 0 ? 'needs_you' : 'quiet',
         unreadTiles,
         openTiles: states.filter((state) => state.kind === 'open').length,
@@ -276,6 +277,7 @@ export class FakeEngine implements EngineService {
     }
     return {
       topic,
+      placement: this.memory.placement(topic),
       tiles: this.tilesOfTopic(topicId).map((tile) => this.tileView(tile)),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
@@ -504,6 +506,11 @@ export class FakeEngine implements EngineService {
     if (accept && proposal.kind === 'merge' && topic && proposal.intoTopicId) {
       this.mergeTopic(topic.id, proposal.intoTopicId);
     }
+    if (accept && proposal.kind === 'area_merge' && proposal.fromArea && proposal.name) {
+      for (const moved of this.data.topics.filter((candidate) => candidate.area === proposal.fromArea)) {
+        moved.area = proposal.name;
+      }
+    }
     return ok(accept ? 'accepted' : 'rejected');
   }
 
@@ -554,8 +561,12 @@ export class FakeEngine implements EngineService {
       if (!this.data.topics.some((topic) => topic.id === input.topicId)) {
         return fail(`no topic ${input.topicId ?? ''}`);
       }
-      this.recordFeedback({ kind, topicId: input.topicId, tileId: null, prKey: null, setId: null, eventId: null, note: input.text });
-      return ok('Noted. The next sync rewrites the topic memory without it.');
+      if (input.relation && input.topicId) {
+        this.memory.overrideRelation(input.topicId, input.relation);
+      }
+      const note = input.relation ? `${input.text} (it is actually: ${input.relation})` : input.text;
+      this.recordFeedback({ kind, topicId: input.topicId, tileId: null, prKey: null, setId: null, eventId: null, note });
+      return ok(input.relation ? 'Moved. It stays there until something new happens in the topic.' : 'Noted. The next sync rewrites the topic memory without it.');
     }
     const fact = this.memory.closeFact(input.factId, 'the user said it is wrong');
     if (!fact) {

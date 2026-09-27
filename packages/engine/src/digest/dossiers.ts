@@ -3,12 +3,14 @@ import {
   dossierContextHash,
   FACTS_IN_DOSSIER_PROMPT,
   STALE_FACTS_IN_DOSSIER_PROMPT,
+  type AreaChoice,
   type DossierUpdateInput,
   type DossierUpdateResult,
 } from '@code-manager/agent';
 import {
   isEmptyDelta,
   joinedMembers,
+  relationSignals,
   selectTopicDelta,
   verifyDossier,
   verifyFact,
@@ -27,6 +29,9 @@ import type { DigestDeps } from './deps.ts';
 
 /** Versions kept per topic; older ones are pruned on every save. */
 export const DOSSIER_VERSIONS_KEPT = 50;
+
+/** New areas one sync may introduce; past it a topic keeps its area (or none) until consolidation tidies up. */
+export const MAX_NEW_AREAS_PER_SYNC = 3;
 
 /** Fact candidates one dossier update produced, still to be reconciled. */
 export interface TopicCandidates {
@@ -54,7 +59,43 @@ export function contextHashKey(topicId: string): string {
  * the user looks first.
  */
 export class DossierUpdater {
+  private newAreas = 0;
+
   constructor(private readonly deps: DigestDeps) {}
+
+  /** Areas in use on other active topics, most used first. */
+  private areasInUse(topicId: string): AreaChoice[] {
+    const counts = new Map<string, number>();
+    for (const topic of this.deps.store.topics.listActive()) {
+      if (topic.id !== topicId && topic.area) {
+        counts.set(topic.area, (counts.get(topic.area) ?? 0) + 1);
+      }
+    }
+    return [...counts].map(([name, topics]) => ({ name, topics })).sort((a, b) => b.topics - a.topics);
+  }
+
+  /**
+   * The answer's area if it is in use (by name, any case), or new while
+   * under the cap; else the topic keeps its area. Areas are read again here:
+   * updates run side by side, so another topic may have introduced it.
+   */
+  private areaFor(input: DossierUpdateInput, answered: string | null): string | null {
+    if (answered === null) {
+      return input.currentArea;
+    }
+    const known = this.areasInUse(input.topic.id).find((area) => area.name.toLowerCase() === answered.toLowerCase());
+    if (known) {
+      return known.name;
+    }
+    if (input.currentArea?.toLowerCase() === answered.toLowerCase()) {
+      return input.currentArea;
+    }
+    if (this.newAreas >= MAX_NEW_AREAS_PER_SYNC) {
+      return input.currentArea;
+    }
+    this.newAreas += 1;
+    return answered;
+  }
 
   private topicsInOrder(): Topic[] {
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
@@ -120,6 +161,14 @@ export class DossierUpdater {
       knownFacts: this.knownFacts(topic, memberKeys),
       staleFacts,
       chatTurns: store.chat.listUserForTopicSince(topic.id, previous?.createdAt ?? '', CHAT_TURNS_IN_DOSSIER_PROMPT),
+      relationSignals: relationSignals({
+        viewer: this.deps.viewer,
+        prs: [...prs.values()],
+        threads: [...store.notifications.getByPrKeys(memberKeys).values()],
+        driver: topic.driver,
+      }),
+      areas: this.areasInUse(topic.id),
+      currentArea: topic.area,
       viewer: this.deps.viewer,
       context,
     };
@@ -152,6 +201,7 @@ export class DossierUpdater {
         createdAt: at,
       });
       store.topics.updateSummary(topicId, result.dossier.summary, result.inputHash, at);
+      store.topics.setArea(topicId, this.areaFor(input, result.area), at);
       store.cursors.advance({ kind: 'digest', scope: topicId, seq: input.delta.toSeq, dossierVersion: version, updatedAt: at });
       store.meta.set(contextHashKey(topicId), dossierContextHash(input.context));
       store.dossiers.prune(topicId, DOSSIER_VERSIONS_KEPT);

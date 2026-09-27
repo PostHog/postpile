@@ -11,6 +11,7 @@ interface TopicRow {
   driver: string | null;
   user_role: string;
   status: string;
+  area: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +26,7 @@ function toTopic(row: TopicRow): Topic {
     driver: row.driver,
     userRole: row.user_role as UserRole,
     status: row.status as TopicStatus,
+    area: row.area,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -37,8 +39,8 @@ export class TopicRepo {
     run(
       this.db,
       `INSERT INTO topic
-         (id, name, summary, summary_input_hash, tailoring, driver, user_role, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, name, summary, summary_input_hash, tailoring, driver, user_role, status, area, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       topic.id,
       topic.name,
       topic.summary,
@@ -47,6 +49,7 @@ export class TopicRepo {
       topic.driver,
       topic.userRole,
       topic.status,
+      topic.area,
       topic.createdAt,
       topic.updatedAt,
     );
@@ -89,6 +92,15 @@ export class TopicRepo {
 
   setDriverAndRole(id: string, driver: string | null, userRole: UserRole, at: string): void {
     run(this.db, 'UPDATE topic SET driver = ?, user_role = ?, updated_at = ? WHERE id = ?', driver, userRole, at, id);
+  }
+
+  setArea(id: string, area: string | null, at: string): void {
+    run(this.db, 'UPDATE topic SET area = ?, updated_at = ? WHERE id = ?', area, at, id);
+  }
+
+  /** Folds one area into another, for an accepted area_merge proposal. Returns how many topics moved. */
+  renameArea(from: string, into: string, at: string): number {
+    return run(this.db, 'UPDATE topic SET area = ?, updated_at = ? WHERE area = ?', into, at, from);
   }
 
   /** Archive after a merge proposal was accepted. The id is never reused. */

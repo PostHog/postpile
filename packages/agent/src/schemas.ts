@@ -113,6 +113,16 @@ export const dossierOutput = z.object({
     .default([]),
   // at is ignored: the service stamps new entries itself. Older prompts asked for it.
   recentChanges: z.array(z.object({ at: text.optional(), text: text.min(1), refs: refIds })).default([]),
+  relation: z
+    .object({
+      kind: z.enum(['team', 'routed', 'fyi']),
+      ownerTeam: text.nullable().default(null),
+      whyYou: text.default(''),
+      refs: refIds,
+    })
+    .nullable()
+    .catch(null)
+    .default(null),
 });
 
 export const dossierUpdateOutput = z.object({
@@ -131,6 +141,7 @@ export const dossierUpdateOutput = z.object({
     .default([]),
   closeFacts: z.array(z.object({ factId: text, reason: text.default('closed by the dossier update') })).default([]),
   confirmedFactIds: z.array(text).default([]),
+  area: text.nullable().catch(null).default(null),
 });
 
 /** item is the 0-based index into FactReconcileInput.items. */
@@ -174,6 +185,7 @@ export const consolidationOutput = z.object({
     )
     .default([]),
   factMerges: z.array(z.object({ keepId: text, dropIds: z.array(text).min(1), reason: text })).default([]),
+  areaMerges: z.array(z.object({ from: text.min(1), into: text.min(1), reason: text.default('') })).default([]),
   rules: z
     .array(z.object({ text: text.min(1), topicId: text.nullable(), evidenceFeedbackIds: z.array(z.number().int()), reason: text }))
     .default([]),

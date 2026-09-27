@@ -276,7 +276,7 @@ export class RunnerAgentService implements AgentService {
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {
     if (input.topics.length === 0 && input.duplicateFacts.length === 0) {
-      return { topicProposals: [], factMerges: [], ruleIdeas: [], finishedTopics: [] };
+      return { topicProposals: [], areaMerges: [], factMerges: [], ruleIdeas: [], finishedTopics: [] };
     }
     const { value } = await this.ask('consolidation', consolidationPrompt(input), consolidationOutput);
     return mapConsolidationAnswer(value, input);

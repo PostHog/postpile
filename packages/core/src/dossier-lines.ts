@@ -20,6 +20,14 @@ export function dossierStatusText(dossier: Dossier): string {
   return dossier.statusNote ? `${dossier.status}: ${dossier.statusNote}` : dossier.status;
 }
 
+const RELATION_WORDS = { team: 'Your team', routed: 'Routed to you', fyi: 'FYI' } as const;
+
+/** "Routed to you: owned by PostHog/team-infra, CODEOWNERS on .github/workflows". */
+export function relationText(relation: NonNullable<Dossier['relation']>): string {
+  const owner = relation.ownerTeam ? `owned by ${relation.ownerTeam}, ` : '';
+  return `${RELATION_WORDS[relation.kind]}: ${owner}${relation.whyYou}`;
+}
+
 /** The line at `path`, or null when the path does not point at one. */
 export function findDossierLine(dossier: Dossier, path: string): DossierLine | null {
   if (path === 'goal') {
@@ -27,6 +35,9 @@ export function findDossierLine(dossier: Dossier, path: string): DossierLine | n
   }
   if (path === 'status') {
     return { path, text: dossierStatusText(dossier), sources: sources(dossier.statusSources) };
+  }
+  if (path === 'relation') {
+    return dossier.relation ? { path, text: relationText(dossier.relation), sources: sources(dossier.relation) } : null;
   }
   const match = LIST_PATH.exec(path);
   if (!match) {

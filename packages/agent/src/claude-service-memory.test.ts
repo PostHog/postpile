@@ -44,6 +44,9 @@ function dossierInput(): DossierUpdateInput {
     knownFacts: [makeFact()],
     staleFacts: [makeFact({ id: 'fact-2', staleReason: 'head_moved' })],
     chatTurns: [],
+    relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-devex review requested', notes: ['review requested from the user team'] },
+    areas: [{ name: 'CI', topics: 3 }],
+    currentArea: null,
     viewer,
     context: fullContext,
   };
@@ -149,6 +152,26 @@ describe('RunnerAgentService.updateDossier line sources', () => {
     expect(prompt).toContain('- I1 their general instructions above (version 3)');
     expect(prompt).toContain('- T1 their instruction for this topic: Flag anything that touches the cache keys.');
     expect(dossierInputHash({ ...input, chatTurns: [] })).not.toBe(dossierInputHash(input));
+  });
+});
+
+describe('RunnerAgentService.updateDossier relation and area', () => {
+  const routed = { kind: 'routed', ownerTeam: 'PostHog/team-infra', whyYou: 'infra asked devex about CI', refs: ['e1'] };
+
+  it('takes the answer when the rules could not decide, rules otherwise', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, relation: routed }, area: ' CI ' });
+    runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, relation: routed } });
+
+    const open = await service.updateDossier(dossierInput());
+    const decided = await service.updateDossier({ ...dossierInput(), relationSignals: { relation: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you drive it', notes: [] } });
+
+    expect(open.dossier.relation).toMatchObject({ kind: 'routed', ownerTeam: 'PostHog/team-infra', whyYou: 'infra asked devex about CI' });
+    expect(open.dossier.relation?.refs?.[0]).toMatchObject({ kind: 'comment', sourceId: 'c1' });
+    expect(open.area).toBe('CI');
+    expect(decided.dossier.relation).toMatchObject({ kind: 'team', whyYou: 'you drive it' });
+    expect(runner.promptsFor('dossier_update')[0]).toContain('Rules could not decide between team and routed');
   });
 });
 
@@ -441,13 +464,14 @@ describe('RunnerAgentService.consolidate', () => {
   const t2 = makeTopic({ id: 't2', name: 'Billing' });
   const input: ConsolidationInput = {
     topics: [
-      { topic: t1, dossier: makeDossierVersion({ topicId: 't1', dossier: makeDossier({ timeline: [{ prKey: 'acme/app#1', role: 'a' }, { prKey: 'acme/app#2', role: 'b' }] }) }), openPrs: 1, totalPrs: 2, lastActivityAt: null },
-      { topic: t2, dossier: null, openPrs: 0, totalPrs: 4, lastActivityAt: null },
+      { topic: t1, dossier: makeDossierVersion({ topicId: 't1', dossier: makeDossier({ timeline: [{ prKey: 'acme/app#1', role: 'a' }, { prKey: 'acme/app#2', role: 'b' }] }) }), openPrs: 1, totalPrs: 2, lastActivityAt: null, liveTiles: 2 },
+      { topic: t2, dossier: null, openPrs: 0, totalPrs: 4, lastActivityAt: null, liveTiles: 2 },
     ],
     duplicateFacts: [[makeFact({ id: 'f1' }), makeFact({ id: 'f2' })], [makeFact({ id: 'f3' }), makeFact({ id: 'f4' })]],
     feedback: [makeFeedback({ id: 1 }), makeFeedback({ id: 2 }), makeFeedback({ id: 3 })],
     decidedRules: [{ id: 'r', text: 'Skip docs PRs', topicId: null, evidenceFeedbackIds: [], reason: '', status: 'rejected', createdAt: '', decidedAt: null }],
     decidedTopicProposals: [],
+    areas: [{ name: 'CI', topics: 1 }, { name: 'CI & tests', topics: 1 }],
     context: emptyContext,
   };
 
@@ -461,6 +485,11 @@ describe('RunnerAgentService.consolidate', () => {
         { kind: 'merge', topicId: 't2', intoTopicId: 'nope', reason: 'invented' },
         { kind: 'split', topicId: 't1', name: 'Docker', prKeys: ['acme/app#2', 'acme/app#9'], reason: 'separate' },
         { kind: 'split', topicId: 't1', name: 'Ghost', prKeys: ['acme/app#9'], reason: 'unknown PRs' },
+      ],
+      areaMerges: [
+        { from: 'CI & tests', into: 'CI', reason: 'same area' },
+        { from: 'CI & tests', into: 'Dev env', reason: 'folded twice' },
+        { from: 'Ghost', into: 'CI', reason: 'unknown area' },
       ],
       factMerges: [
         { keepId: 'f1', dropIds: ['f2', 'f3'], reason: 'same' },
@@ -485,6 +514,7 @@ describe('RunnerAgentService.consolidate', () => {
       { kind: 'merge', topicId: 't2', intoTopicId: 't1', reason: 'same work' },
       { kind: 'split', topicId: 't1', name: 'Docker', prKeys: ['acme/app#2'], reason: 'separate' },
     ]);
+    expect(result.areaMerges).toEqual([{ from: 'CI & tests', into: 'CI', reason: 'same area' }]);
     expect(result.factMerges).toEqual([{ keepId: 'f1', dropIds: ['f2'], reason: 'same' }]);
     expect(result.ruleIdeas).toEqual([{ text: 'Frontend PRs are never mine', topicId: null, evidenceFeedbackIds: [1, 2], reason: 'said twice' }]);
     expect(result.finishedTopics).toEqual([{ topicId: 't2', reason: 'all merged' }]);
@@ -493,7 +523,7 @@ describe('RunnerAgentService.consolidate', () => {
   it('makes no call with nothing to look at', async () => {
     const { runner, service } = setup();
     const result = await service.consolidate({ ...input, topics: [], duplicateFacts: [] });
-    expect(result).toEqual({ topicProposals: [], factMerges: [], ruleIdeas: [], finishedTopics: [] });
+    expect(result).toEqual({ topicProposals: [], areaMerges: [], factMerges: [], ruleIdeas: [], finishedTopics: [] });
     expect(runner.requests).toHaveLength(0);
   });
 });

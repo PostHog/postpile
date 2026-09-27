@@ -1,4 +1,4 @@
-import type { AgentService, ConsolidationInput, ConsolidationTopic } from '@code-manager/agent';
+import type { AgentService, AreaChoice, ConsolidationInput, ConsolidationTopic } from '@code-manager/agent';
 import {
   PREDICATE_RULES,
   type ConsolidateOptions,
@@ -77,6 +77,17 @@ function duplicateGroups(facts: Fact[]): Fact[][] {
  * deterministic part runs even without the agent: retire topics whose
  * dossier says finished and that pass the gate.
  */
+/** Areas of these topics with how many topics use each, most used first. */
+function areasInUse(topics: Topic[]): AreaChoice[] {
+  const counts = new Map<string, number>();
+  for (const topic of topics) {
+    if (topic.area) {
+      counts.set(topic.area, (counts.get(topic.area) ?? 0) + 1);
+    }
+  }
+  return [...counts].map(([name, count]) => ({ name, topics: count })).sort((a, b) => b.topics - a.topics);
+}
+
 export class Consolidator {
   constructor(private readonly deps: ConsolidationDeps) {}
 
@@ -89,7 +100,7 @@ export class Consolidator {
     return this.deps.now() >= dueAt && dossiers.some((dossier) => dossier.createdAt > cursor.updatedAt);
   }
 
-  private consolidationTopic(topic: Topic, dossier: DossierVersion | null): ConsolidationTopic {
+  private consolidationTopic(topic: Topic, dossier: DossierVersion | null, board: Board): ConsolidationTopic {
     const keys = this.deps.store.memberships.listForTopic(topic.id).map((m) => m.prKey);
     const prs = [...this.deps.store.prs.getMany(keys).values()];
     const lastActivityAt = prs.map((pr) => pr.updatedAt).sort().at(-1) ?? null;
@@ -99,19 +110,19 @@ export class Consolidator {
       openPrs: prs.filter((pr) => pr.state === 'OPEN').length,
       totalPrs: prs.length,
       lastActivityAt,
+      liveTiles: board.tilesForTopic(topic.id).filter((tile) => board.stateOf(tile).kind !== 'done').length,
     };
   }
 
   /** Facts and feedback go with the first chunk only, so a merge or rule is never proposed twice in one run. */
   private inputs(topics: ConsolidationTopic[]): ConsolidationInput[] {
     const { store } = this.deps;
-    const decidedTopicProposals = store.topics
-      .list()
-      .flatMap((topic) => store.proposals.listForTopic(topic.id))
+    const decidedTopicProposals = [...store.topics.list().flatMap((topic) => store.proposals.listForTopic(topic.id)), ...store.proposals.listAreaMerges()]
       .filter((proposal) => proposal.status !== 'pending');
     const shared = {
       decidedRules: store.ruleProposals.listDecided(DECIDED_RULES_IN_PROMPT),
       decidedTopicProposals,
+      areas: areasInUse(topics.map((entry) => entry.topic)),
       context: this.deps.contexts.forTopic(null),
     };
     return chunk(topics, CONSOLIDATION_TOPICS_PER_CALL).map((part, index) => ({
@@ -162,7 +173,7 @@ export class Consolidator {
     const counts: ConsolidationCounts = report;
     const applier = new ConsolidationApplier(store, this.deps.facts, new RetireGate(board), counts, this.deps.now);
 
-    const offered = topics.map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null));
+    const offered = topics.map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null, board));
     const complete = offered.length === 0 || (await this.askAgent(this.inputs(offered), applier));
     this.retireFinished(dossiers, applier);
     if (complete) {

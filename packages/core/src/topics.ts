@@ -11,6 +11,7 @@ export function newTopic(id: string, name: string, at: IsoTime): Topic {
     driver: null,
     userRole: 'watcher',
     status: 'active',
+    area: null,
     createdAt: at,
     updatedAt: at,
   };

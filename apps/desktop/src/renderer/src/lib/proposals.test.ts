@@ -12,6 +12,7 @@ function proposal(overrides: Partial<TopicProposal>): TopicProposal {
     topicId: 'a',
     name: null,
     intoTopicId: null,
+    fromArea: null,
     prKeys: [],
     reason: '',
     status: 'pending',
@@ -29,5 +30,11 @@ describe('proposalText', () => {
 
   it('names the new name of a rename', () => {
     expect(proposalText(proposal({ name: 'Vite' }), (id) => names[id] ?? id)).toBe('Rename "Frontend build" to "Vite"');
+  });
+
+  it('names both areas of an area merge', () => {
+    expect(proposalText(proposal({ kind: 'area_merge', topicId: null, name: 'CI', fromArea: 'CI & tests' }), (id) => names[id] ?? id)).toBe(
+      'Fold area "CI & tests" into "CI"',
+    );
   });
 });

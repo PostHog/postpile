@@ -8,6 +8,7 @@ export function makeTopic(id: string, overrides: Partial<Topic> = {}): Topic {
     name: id,
     summary: '',
     summaryInputHash: null,
+    area: null,
     tailoring: '',
     driver: null,
     userRole: 'reviewer',

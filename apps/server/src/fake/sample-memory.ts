@@ -4,6 +4,7 @@
 import type {
   Cursor,
   Dossier,
+  DossierRelation,
   DossierVersion,
   EntityRef,
   Fact,
@@ -28,6 +29,8 @@ export interface SampleMemory {
   seen: Map<string, Cursor>;
   /** The "not mine" feedback the standing-rule proposal cites. */
   feedback: Feedback[];
+  /** Relations of topics without a dossier; topics with one carry it in the dossier. */
+  relations: Map<string, DossierRelation>;
 }
 
 const DEPOT = 'topic-depot';
@@ -183,6 +186,13 @@ function depotDossierV3(clock: SampleClock): Dossier {
       { prKey: sampleKey(41902), role: 'Points the Turbo remote cache at Depot.', refs: [prRef(clock, 41902, 5), ref(clock, 'review', 41902, 1, 'review-41902-1')] },
       { prKey: sampleKey(41911), role: 'Moves e2e to Depot runners, stacked on the cache PR.', refs: [prRef(clock, 41911, 1)] },
     ],
+    relation: {
+      kind: 'team',
+      ownerTeam: 'PostHog/team-devex',
+      whyYou: 'rowan (team-devex) drives it, your review requested',
+      refs: [prRef(clock, 41851, 170), ref(clock, 'event', 41911, 1, `${sampleKey(41911)}:review_requested:s41911-0`)],
+      userRefs: [depotTailoring(clock)],
+    },
     userCares: [
       ...v2.userCares,
       {
@@ -227,6 +237,12 @@ function frontendDossierV2(clock: SampleClock): Dossier {
       { text: 'Are the Storybook snapshots stale because of the cache or the Vite upgrade?', askedBy: 'jude', refs: [ref(clock, 'comment', 41855, 16, 'issuecomment-3')] },
     ],
     timeline: [{ prKey: sampleKey(41855), role: 'Skips the Turbo remote cache for Storybook.' }],
+    relation: {
+      kind: 'routed',
+      ownerTeam: 'PostHog/team-frontend',
+      whyYou: 'touches the Turbo cache config you own',
+      refs: [ref(clock, 'comment', 41855, 16, 'issuecomment-3')],
+    },
     recentChanges: [
       { at: clock.hoursAgo(14), text: 'Storybook cache turned off (#41855 merged), every PR runs it cold.', refs: [ref(clock, 'pr', 41855, 14)] },
       ...v1.recentChanges,
@@ -363,6 +379,18 @@ function buildSeen(clock: SampleClock): Map<string, Cursor> {
   return new Map([[DEPOT, { kind: 'seen', scope: DEPOT, seq: 0, dossierVersion: 2, updatedAt: at }]]);
 }
 
+/** Topics without a dossier still get a placement, so the sidebar shows every group. */
+function buildRelations(): Map<string, DossierRelation> {
+  return new Map<string, DossierRelation>([
+    [CI, { kind: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you drive it' }],
+    ['topic-migrations', { kind: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you author the PRs' }],
+    ['topic-dev-env', { kind: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you drive it' }],
+    ['topic-ingestion-runners', { kind: 'routed', ownerTeam: 'PostHog/team-ingestion', whyYou: 'team-devex review requested on .github/workflows' }],
+    ['topic-dependency-bumps', { kind: 'fyi', ownerTeam: null, whyYou: 'subscribed to bot bumps' }],
+    ['topic-desktop-release', { kind: 'fyi', ownerTeam: 'PostHog/team-desktop', whyYou: 'subscribed to the release thread' }],
+  ]);
+}
+
 export function buildSampleMemory(now: Date): SampleMemory {
   const clock = new SampleClock(now);
   return {
@@ -372,5 +400,6 @@ export function buildSampleMemory(now: Date): SampleMemory {
     nextRuleProposals: buildNextRuleProposals(clock),
     seen: buildSeen(clock),
     feedback: buildFeedback(clock),
+    relations: buildRelations(),
   };
 }

@@ -12,7 +12,10 @@ import type {
   PrEvent,
   PrKey,
   RuleProposal,
+  RelationOverride,
   Topic,
+  TopicPlacement,
+  TopicRelation,
   TopicStatusLine,
 } from '@code-manager/core';
 import {
@@ -25,6 +28,7 @@ import {
   findDossierLine,
   lineCheck,
   topicChangesSince,
+  topicPlacement,
 } from '@code-manager/core';
 import type { SampleData } from './sample-data.ts';
 import { buildSampleMemory, type SampleMemory } from './sample-memory.ts';
@@ -55,6 +59,7 @@ function touchesPr(fact: Fact, prKey: PrKey): boolean {
  */
 export class FakeMemory {
   private readonly memory: SampleMemory;
+  private readonly overrides = new Map<string, RelationOverride>();
 
   constructor(
     private readonly data: SampleData,
@@ -86,6 +91,16 @@ export class FakeMemory {
       .filter((entry) => entry.topicId === topicId && entry.createdAt > since)
       .filter((entry) => entry.kind === 'memory_wrong' || entry.kind === 'memory_forget')
       .map((entry) => entry.note);
+  }
+
+  /** Same rules as the engine: dossier relation (or the sample's), a user correction wins; the fake has no new events. */
+  placement(topic: Topic): TopicPlacement | null {
+    const relation = this.latest(topic.id)?.dossier.relation ?? this.memory.relations.get(topic.id);
+    return topicPlacement(relation, topic.area, this.overrides.get(topic.id) ?? null, 0);
+  }
+
+  overrideRelation(topicId: string, relation: TopicRelation): void {
+    this.overrides.set(topicId, { relation, seq: 0 });
   }
 
   statusLine(topicId: string): TopicStatusLine | null {

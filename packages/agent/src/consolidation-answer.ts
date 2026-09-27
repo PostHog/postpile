@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { consolidationOutput } from './schemas.ts';
-import type { ConsolidationInput, ConsolidationResult, ConsolidationTopicProposal, FactMerge, RuleIdea } from './service.ts';
+import type { AreaMerge, ConsolidationInput, ConsolidationResult, ConsolidationTopicProposal, FactMerge, RuleIdea } from './service.ts';
 
 type ConsolidationAnswer = z.infer<typeof consolidationOutput>;
 
@@ -80,7 +80,22 @@ function toRuleIdeas(answer: ConsolidationAnswer['rules'], input: ConsolidationI
   return ideas;
 }
 
-/** Drops everything that names a topic, fact or feedback entry the prompt did not show. */
+/** Only areas the prompt listed, never into itself, each area folded once. */
+function toAreaMerges(answer: ConsolidationAnswer['areaMerges'], input: ConsolidationInput): AreaMerge[] {
+  const areas = new Set(input.areas.map((area) => area.name));
+  const folded = new Set<string>();
+  const merges: AreaMerge[] = [];
+  for (const merge of answer) {
+    if (!areas.has(merge.from) || !areas.has(merge.into) || merge.from === merge.into || folded.has(merge.from)) {
+      continue;
+    }
+    folded.add(merge.from);
+    merges.push(merge);
+  }
+  return merges;
+}
+
+/** Drops everything that names a topic, fact, area or feedback entry the prompt did not show. */
 export function mapConsolidationAnswer(answer: ConsolidationAnswer, input: ConsolidationInput): ConsolidationResult {
   const topicIds = new Set(input.topics.map((entry) => entry.topic.id));
   const finished = new Map<string, { topicId: string; reason: string }>();
@@ -91,6 +106,7 @@ export function mapConsolidationAnswer(answer: ConsolidationAnswer, input: Conso
   }
   return {
     topicProposals: toTopicProposals(answer.topicProposals, input),
+    areaMerges: toAreaMerges(answer.areaMerges, input),
     factMerges: toFactMerges(answer.factMerges, input),
     ruleIdeas: toRuleIdeas(answer.rules, input),
     finishedTopics: [...finished.values()],

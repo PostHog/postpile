@@ -10,6 +10,9 @@ export function proposalText(proposal: TopicProposal, topicName: (topicId: strin
     const into = proposal.intoTopicId ? `"${topicName(proposal.intoTopicId)}"` : 'another topic';
     return `Merge ${topic} into ${into}`;
   }
+  if (proposal.kind === 'area_merge') {
+    return `Fold area "${proposal.fromArea ?? ''}" into "${proposal.name ?? ''}"`;
+  }
   if (proposal.kind === 'split') {
     return `Split "${proposal.name ?? ''}" out of ${topic}`;
   }

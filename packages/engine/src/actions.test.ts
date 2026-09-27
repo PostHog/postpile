@@ -9,7 +9,8 @@ const pr = reviewRequestedPr(1);
 const tileId = `pr:${pr.key}`;
 
 function topic(id: string): Topic {
-  return { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', createdAt: at(0), updatedAt: at(0) };
+  return { id, name: id, summary: '', summaryInputHash: null,
+    area: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', createdAt: at(0), updatedAt: at(0) };
 }
 
 async function synced(): Promise<Harness> {
@@ -250,6 +251,7 @@ describe('topic proposals', () => {
       topicId: 'depot',
       name: 'Depot runners',
       intoTopicId: null,
+      fromArea: null,
       prKeys: [],
       reason: 'clearer',
       status: 'pending',

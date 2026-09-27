@@ -31,6 +31,8 @@ export class ProposalActions {
         this.store.memberships.assign({ ...membership, topicId: proposal.intoTopicId, createdAt: at });
       }
       this.store.topics.setStatus(proposal.topicId, 'archived', at);
+    } else if (proposal.kind === 'area_merge' && proposal.fromArea && proposal.name) {
+      this.store.topics.renameArea(proposal.fromArea, proposal.name, at);
     }
   }
 

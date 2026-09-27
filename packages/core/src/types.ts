@@ -291,6 +291,8 @@ export interface Topic {
   driver: string | null;
   userRole: UserRole;
   status: TopicStatus;
+  /** Broad area the topic sits in ("CI", "Dev env"), agent-assigned. Null until the first dossier update. */
+  area: string | null;
   createdAt: IsoTime;
   updatedAt: IsoTime;
 }
@@ -306,7 +308,7 @@ export interface TopicMembership {
 }
 
 /** split: move prKeys out of topicId into a new topic called name. One proposal per new part. */
-export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split';
+export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split' | 'area_merge';
 export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
 
 /** Topic changes are never applied silently. The agent proposes, the user decides. */
@@ -319,6 +321,8 @@ export interface TopicProposal {
   name: string | null;
   /** merge: the topic to merge into. */
   intoTopicId: string | null;
+  /** area_merge: the area folded into `name`. topicId is null. */
+  fromArea: string | null;
   /** new_topic: the PRs that triggered it. split: the PRs to move. */
   prKeys: PrKey[];
   reason: string;

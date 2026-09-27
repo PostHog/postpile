@@ -20,7 +20,7 @@ import type {
   UserPrState,
   Verdict,
 } from './types.ts';
-import type { AgentCallStats, DossierStatus } from './memory.ts';
+import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView } from './memory-views.ts';
 import type { InstructionsProposal } from './instructions-views.ts';
 
@@ -43,8 +43,24 @@ export interface TopicStatusLine {
   note: string;
 }
 
+/**
+ * Where a topic sits for the user: its relation (from the dossier, rules
+ * first; a user correction wins until new evidence arrives), who owns it,
+ * why it reached them, and its area.
+ */
+export interface TopicPlacement {
+  relation: TopicRelation;
+  ownerTeam: string | null;
+  whyYou: string;
+  area: string | null;
+  /** The user corrected the relation and nothing new happened since. */
+  corrected: boolean;
+}
+
 export interface TopicListItem {
   topic: Topic;
+  /** Null until the topic has a dossier with a relation. */
+  placement: TopicPlacement | null;
   /** Null until the topic has a dossier. */
   statusLine: TopicStatusLine | null;
   /** needs_you when at least one tile is unread. */
@@ -81,6 +97,7 @@ export interface TileView {
 
 export interface TopicDetail {
   topic: Topic;
+  placement: TopicPlacement | null;
   tiles: TileView[];
   sets: PrSet[];
   pendingProposals: TopicProposal[];
@@ -179,6 +196,8 @@ export interface MemoryCorrection {
   topicId: string | null;
   /** The line as the user saw it. Logged, so the next dossier update drops or fixes it. */
   text: string;
+  /** "Wrong" on a topic's relation, with what it really is. Wins until new evidence arrives. */
+  relation?: TopicRelation;
 }
 
 /**

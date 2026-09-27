@@ -1,4 +1,4 @@
-import type { ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@code-manager/agent';
+import type { AreaMerge, ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@code-manager/agent';
 import type { TopicProposal } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import { newProposalId, newRuleProposalId } from '../ids.ts';
@@ -36,6 +36,7 @@ function toTopicProposal(idea: ConsolidationTopicProposal, at: string): TopicPro
     topicId: idea.topicId,
     name: idea.kind === 'merge' ? null : idea.name,
     intoTopicId: idea.kind === 'merge' ? idea.intoTopicId : null,
+    fromArea: null,
     prKeys: idea.kind === 'split' ? idea.prKeys : [],
     reason: idea.reason,
     status: 'pending',
@@ -67,6 +68,28 @@ export class ConsolidationApplier {
       return;
     }
     this.store.proposals.add(toTopicProposal(idea, at));
+    this.counts.topicProposalsFiled += 1;
+  }
+
+  /** Never the same fold twice, so a rejected one stays rejected. */
+  private fileAreaMerge(merge: AreaMerge, at: string): void {
+    const filed = this.store.proposals.listAreaMerges().some((p) => p.fromArea === merge.from && p.name === merge.into);
+    if (filed) {
+      return;
+    }
+    this.store.proposals.add({
+      id: newProposalId(),
+      kind: 'area_merge',
+      topicId: null,
+      name: merge.into,
+      intoTopicId: null,
+      fromArea: merge.from,
+      prKeys: [],
+      reason: merge.reason,
+      status: 'pending',
+      createdAt: at,
+      decidedAt: null,
+    });
     this.counts.topicProposalsFiled += 1;
   }
 
@@ -122,6 +145,9 @@ export class ConsolidationApplier {
     this.store.transaction(() => {
       for (const idea of result.topicProposals) {
         this.fileTopicProposal(idea, at);
+      }
+      for (const merge of result.areaMerges) {
+        this.fileAreaMerge(merge, at);
       }
       for (const merge of result.factMerges) {
         this.mergeFacts(merge.keepId, merge.dropIds, merge.reason, at);

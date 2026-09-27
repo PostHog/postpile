@@ -116,6 +116,20 @@ function userSourcesBlock(refs: DossierRefs): string {
   return block("Sources in the user's own words (instructions, topic instructions, corrections, chat). Cite them by id:", lines);
 }
 
+/** How the topic reaches the user, what the rules made of it, and the areas to reuse. */
+function placementBlock(input: DossierUpdateInput): string {
+  const signals = input.relationSignals;
+  const verdict = signals.relation
+    ? `Rules decided: ${signals.relation} (why: ${signals.whyYou}). Use exactly that.`
+    : `Rules could not decide between team and routed. Best guess for why: ${signals.whyYou}.`;
+  const areas = input.areas.length === 0 ? '(none yet)' : input.areas.map((area) => `${area.name} (${area.topics})`).join(', ');
+  return block('How this topic reaches the user:', [
+    ...signals.notes.map((note) => `- ${note}`),
+    `- ${verdict}`,
+    `- current area: ${input.currentArea ?? '(none)'}; areas in use: ${areas}`,
+  ]);
+}
+
 function feedbackBlock(input: DossierUpdateInput): string {
   const lines = input.delta.newFeedback.map((f) => `- ${f.createdAt.slice(0, 10)} ${f.kind}${f.prKey ? ` (${f.prKey})` : ''}: ${clip(f.note, 300)}`);
   return block('New corrections from the user since the last version. Take them into the dossier:', lines);
@@ -131,8 +145,10 @@ const answerShape = `{
     "timeline": [{"prKey": "owner/repo#1", "role": "...", "refs": ["owner/repo#1"]}],
     "earlier": "...",
     "userCares": [{"text": "...", "source": "instructions" | "tailoring" | "feedback" | "observed", "refs": ["T1"]}],
-    "recentChanges": [{"text": "...", "refs": ["e5", "C1"]}]
+    "recentChanges": [{"text": "...", "refs": ["e5", "C1"]}],
+    "relation": {"kind": "team" | "routed" | "fyi", "ownerTeam": "org/team" | null, "whyYou": "...", "refs": ["e2"]}
   },
+  "area": "CI",
   "flags": [{"kind": "needs_user" | "contradiction" | "looks_finished" | "off_topic_pr", "text": "...", "prKey": "owner/repo#1" | null}],
   "facts": [{"subject": {"kind": "person", "key": "alice"}, "predicate": "works_on", "object": {"kind": "pr", "key": "owner/repo#1"} | null, "text": "...", "refs": ["e2"]}],
   "closeFacts": [{"factId": "F2", "reason": "..."}],
@@ -158,7 +174,7 @@ ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Previous dossier:
 ${previous}
-${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
+${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${placementBlock(input)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
 - Every field is read by the user as a fact about the work. Never write about the dossier itself
@@ -182,6 +198,15 @@ How to write the dossier:
   user's own words. Every line carries refs: goalRefs, statusRefs, each question, timeline entry,
   care and change. Cite only what the line rests on, at most 3. A line you keep unchanged may
   leave refs empty; it keeps its old sources. Only an observed care may cite activity.
+
+relation: how this topic relates to the user. "team" when their own team drives the work,
+"routed" when another team owns it and the user or their team was pulled in for their angle (a
+review for CI, CODEOWNERS), "fyi" when they only follow along. ownerTeam: the owning team as
+"org/team" when you can tell, else null. whyYou: short, concrete, max ${limits.whyYou} chars ("team-devex review
+requested on .github/workflows", "subscribed"). When the rules decided, use their answer.
+
+area: one broad area for the topic, 1 to 3 words ("CI", "Dev env", "Desktop"). Reuse an area in
+use whenever it fits; a new one only for work that fits none of them.
 
 flags: needs_user when the user should act or decide something; contradiction when new activity
 contradicts the dossier or a fact; looks_finished when the work seems done; off_topic_pr (with

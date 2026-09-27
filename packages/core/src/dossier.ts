@@ -1,4 +1,4 @@
-import type { Dossier, FactRef, LineSources, UserRef } from './memory.ts';
+import type { Dossier, DossierRelation, FactRef, LineSources, UserRef } from './memory.ts';
 
 /**
  * Size bounds for a dossier. The agent is asked to stay inside them and
@@ -25,6 +25,7 @@ export const DOSSIER_LIMITS = {
   /** The user's own words per line. */
   lineUserRefs: 3,
   quote: 160,
+  whyYou: 120,
   /** A brief for topic assignment and consolidation prompts. */
   brief: 400,
 } as const;
@@ -67,6 +68,13 @@ function clampSources(sources: LineSources | undefined): LineSources | undefined
     return undefined;
   }
   return { refs: clampRefs(sources.refs) ?? [], userRefs: clampUserRefs(sources.userRefs) ?? [] };
+}
+
+function clampRelation(relation: DossierRelation | undefined): DossierRelation | undefined {
+  if (relation === undefined) {
+    return undefined;
+  }
+  return { ...relation, whyYou: clipText(relation.whyYou, DOSSIER_LIMITS.whyYou), refs: clampRefs(relation.refs), userRefs: clampUserRefs(relation.userRefs) };
 }
 
 /**
@@ -114,6 +122,7 @@ export function clampDossier(dossier: Dossier): Dossier {
         refs: clampRefs(change.refs) ?? [],
         userRefs: clampUserRefs(change.userRefs),
       })),
+    relation: clampRelation(dossier.relation),
   };
 }
 

@@ -8,6 +8,7 @@ interface ProposalRow {
   topic_id: string | null;
   name: string | null;
   into_topic_id: string | null;
+  from_area: string | null;
   pr_keys_json: string;
   reason: string;
   status: string;
@@ -22,6 +23,7 @@ function toProposal(row: ProposalRow): TopicProposal {
     topicId: row.topic_id,
     name: row.name,
     intoTopicId: row.into_topic_id,
+    fromArea: row.from_area,
     prKeys: JSON.parse(row.pr_keys_json) as PrKey[],
     reason: row.reason,
     status: row.status as ProposalStatus,
@@ -37,13 +39,14 @@ export class TopicProposalRepo {
     run(
       this.db,
       `INSERT INTO topic_proposal
-         (id, kind, topic_id, name, into_topic_id, pr_keys_json, reason, status, created_at, decided_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, kind, topic_id, name, into_topic_id, from_area, pr_keys_json, reason, status, created_at, decided_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       proposal.id,
       proposal.kind,
       proposal.topicId,
       proposal.name,
       proposal.intoTopicId,
+      proposal.fromArea,
       JSON.stringify(proposal.prKeys),
       proposal.reason,
       proposal.status,
@@ -84,6 +87,11 @@ export class TopicProposalRepo {
       'SELECT * FROM topic_proposal WHERE topic_id = ? ORDER BY created_at, id',
       topicId,
     ).map(toProposal);
+  }
+
+  /** Every area_merge proposal, any status, oldest first. They name no topic. */
+  listAreaMerges(): TopicProposal[] {
+    return all<ProposalRow>(this.db, "SELECT * FROM topic_proposal WHERE kind = 'area_merge' ORDER BY created_at, id").map(toProposal);
   }
 
   /** Deciding twice is a no-op: only pending proposals change. */

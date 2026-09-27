@@ -266,6 +266,25 @@ export interface Dossier {
   userCares: DossierCare[];
   /** Newest first, rolling. */
   recentChanges: DossierChange[];
+  /** Optional: versions stored before relations have none. */
+  relation?: DossierRelation;
+}
+
+/**
+ * How a topic relates to the user. team: their team drives it. routed:
+ * another team owns it and the user (or their team) was pulled in for their
+ * angle. fyi: they only follow along (subscribed, mentioned in passing).
+ */
+export type TopicRelation = 'team' | 'routed' | 'fyi';
+
+export interface DossierRelation {
+  kind: TopicRelation;
+  /** "PostHog/team-devex", when known. */
+  ownerTeam: string | null;
+  /** Short: "team-devex review requested", "CODEOWNERS on .github/workflows", "subscribed". */
+  whyYou: string;
+  refs?: FactRef[];
+  userRefs?: UserRef[];
 }
 
 export type DossierFlagKind = 'needs_user' | 'contradiction' | 'looks_finished' | 'off_topic_pr';

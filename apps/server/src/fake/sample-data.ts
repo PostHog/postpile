@@ -36,12 +36,15 @@ const TOPIC = {
   devEnv: 'topic-dev-env',
   frontend: 'topic-frontend-build',
   deps: 'topic-dependency-bumps',
+  ingestion: 'topic-ingestion-runners',
+  desktop: 'topic-desktop-release',
 };
 
 function buildTopics(clock: SampleClock): Topic[] {
   return [
     sampleTopic(clock, {
       id: TOPIC.depot,
+      area: 'CI',
       name: 'Move CI to Depot',
       summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
       tailoring: 'Rowan drives, I approve. Flag cache keys, runner labels, secrets.',
@@ -50,6 +53,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.ci,
+      area: 'CI',
       name: 'CI & tests',
       summary: 'Shard splitting is being reworked. One PR merged without you and raises a limit you set.',
       tailoring: 'Anything that loosens CI limits goes to the top.',
@@ -58,6 +62,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.migrations,
+      area: 'Dev env',
       name: 'Migrations',
       summary: 'error_tracking is waiting on one answer from you. Surveys moved and was fixed.',
       tailoring: 'Tell me when a migration touches real tables.',
@@ -66,6 +71,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.devEnv,
+      area: 'Dev env',
       name: 'Dev env',
       summary: 'Mostly version bumps. One change to hogli defaults waits for a reviewer.',
       tailoring: 'Anything that changes hogli defaults goes to the top.',
@@ -74,6 +80,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.frontend,
+      area: 'Frontend',
       name: 'Frontend build',
       summary: 'Vite 7 upgrade in review.',
       tailoring: 'Only cache changes.',
@@ -82,10 +89,29 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.deps,
+      area: 'Dev env',
       name: 'Dependency bumps',
       summary: 'Bot PRs, all green.',
       tailoring: 'Never ping me for these.',
       driver: null,
+      userRole: 'watcher',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.ingestion,
+      area: 'CI',
+      name: 'Ingestion CI runners RFC',
+      summary: 'Ingestion wants its own self-hosted runners and asks devex to review the workflow part.',
+      tailoring: '',
+      driver: 'ines',
+      userRole: 'reviewer',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.desktop,
+      area: 'Desktop',
+      name: 'Desktop app release',
+      summary: 'The desktop team is cutting 2.3. You follow the release thread.',
+      tailoring: '',
+      driver: 'mae',
       userRole: 'watcher',
     }),
   ];
@@ -159,6 +185,15 @@ function buildPrs(clock: SampleClock): Pr[] {
       reviews: [['ada', 'CHANGES_REQUESTED'], ['lyra', 'APPROVED']],
     }),
     samplePr(clock, {
+      number: 41930, title: 'RFC: self-hosted runners for ingestion CI', author: 'ines', state: 'OPEN',
+      size: [140, 12, 3], checks: 'SUCCESS', openedHoursAgo: 20, reviewerTeams: ['PostHog/team-devex'],
+      body: 'Ingestion jobs need more memory than Depot offers. This RFC adds a runner pool and one workflow change.',
+    }),
+    samplePr(clock, {
+      number: 41940, title: 'Release desktop 2.3', author: 'mae', state: 'OPEN',
+      size: [30, 10, 4], checks: 'PENDING', openedHoursAgo: 30,
+    }),
+    samplePr(clock, {
       number: 41870, title: 'Make hogli start default to minimal stack', author: 'sol', state: 'OPEN',
       size: [70, 12, 4], checks: 'SUCCESS', openedHoursAgo: 72, reviewerTeams: ['PostHog/team-devex'],
     }),
@@ -207,6 +242,12 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 41801, [
       { kind: 'question_to_user', actor: 'ada', text: 'asked "is this reversible?"', hoursAgo: 24, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41930, [
+      { kind: 'review_requested', actor: 'ines', text: 'requested @team-devex', hoursAgo: 2, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41940, [
+      { kind: 'comment', actor: 'mae', text: 'commented: "2.3 goes out Thursday"', hoursAgo: 6, rule: 'quiet' },
     ]),
     ...sampleEvents(clock, 41870, [
       { kind: 'review_requested', actor: 'sol', text: 'requested @team-devex', hoursAgo: 72, rule: 'loud' },
@@ -338,6 +379,10 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(41870)}`, 'hogli start would default to minimal stack', [
       pinged(41870, 'review_requested'),
     ]),
+    sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(41930)}`, 'Ingestion asks devex about its runner workflow', [
+      pinged(41930, 'review_requested'),
+    ]),
+    sampleTile(TOPIC.desktop, 'single', `pr:${sampleKey(41940)}`, 'Desktop 2.3 release thread', [pinged(41940, 'subscribed')]),
   ];
 }
 
@@ -370,6 +415,7 @@ function buildProposals(clock: SampleClock): TopicProposal[] {
       topicId: TOPIC.devEnv,
       name: 'Dev env and hogli',
       intoTopicId: null,
+      fromArea: null,
       prKeys: [],
       reason: 'Most recent PRs in this topic change hogli.',
       status: 'pending',
@@ -383,6 +429,7 @@ function buildProposals(clock: SampleClock): TopicProposal[] {
       topicId: TOPIC.frontend,
       name: null,
       intoTopicId: TOPIC.depot,
+      fromArea: null,
       prKeys: [],
       reason: 'Frontend build only shows up for the Turbo cache, and #41855 already sits in a Depot set.',
       status: 'pending',

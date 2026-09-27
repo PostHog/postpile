@@ -19,8 +19,13 @@ import { Board, UNSORTED_TOPIC_ID } from './board.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { GlanceInputs } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
+import { placementOf } from './memory/placement.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { loadViewer } from './viewer-meta.ts';
+
+function isUnsortedTopic(topicId: string): boolean {
+  return topicId === UNSORTED_TOPIC_ID;
+}
 
 function compareTopics(a: TopicListItem, b: TopicListItem): number {
   if (a.group !== b.group) {
@@ -133,9 +138,11 @@ export class ReadModels {
         continue;
       }
       const unreadTiles = states.filter((kind) => kind === 'unread').length;
-      const dossier = dossiers.get(topic.id)?.dossier;
+      const latest = dossiers.get(topic.id);
+      const dossier = latest?.dossier;
       items.push({
         topic,
+        placement: isUnsortedTopic(topic.id) ? null : placementOf(this.store, topic, latest),
         statusLine: dossier ? { status: dossier.status, note: dossier.statusNote } : null,
         group: unreadTiles > 0 ? 'needs_you' : 'quiet',
         unreadTiles,
@@ -155,6 +162,7 @@ export class ReadModels {
     const isUnsorted = topicId === UNSORTED_TOPIC_ID;
     return {
       topic,
+      placement: isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined),
       tiles: this.tileViews(board, topicId),
       sets: isUnsorted ? [] : this.store.sets.listActiveForTopic(topicId),
       pendingProposals: isUnsorted ? [] : this.store.proposals.listPendingForTopic(topicId),

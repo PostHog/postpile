@@ -6,7 +6,8 @@ import { clip, contextBlock, entityText, jsonOnly } from './shared.ts';
 function topicBlock(entry: ConsolidationTopic): string {
   const { topic, dossier } = entry;
   const activity = entry.lastActivityAt ? `last activity ${entry.lastActivityAt.slice(0, 10)}` : 'no activity yet';
-  const lines = [`- id ${topic.id}: "${topic.name}" | ${entry.openPrs} open of ${entry.totalPrs} PRs | ${activity}`];
+  const area = topic.area ? ` | area ${topic.area}` : '';
+  const lines = [`- id ${topic.id}: "${topic.name}" | ${entry.openPrs} open of ${entry.totalPrs} PRs | ${entry.liveTiles} live tiles${area} | ${activity}`];
   const brief = dossier ? dossierBrief(dossier.dossier) : clip(topic.summary, 400);
   if (brief) {
     lines.push(`  ${brief}`);
@@ -39,6 +40,9 @@ function decidedRuleLine(rule: RuleProposal): string {
 }
 
 function decidedTopicLine(p: TopicProposal): string {
+  if (p.kind === 'area_merge') {
+    return `- ${p.status}: area_merge "${p.fromArea ?? ''}" into "${p.name ?? ''}"`;
+  }
   const target = p.kind === 'merge' ? ` into ${p.intoTopicId}` : p.name ? ` "${p.name}"` : '';
   return `- ${p.status}: ${p.kind} ${p.topicId ?? ''}${target}`;
 }
@@ -60,6 +64,8 @@ ${contextBlock(input.context)}
 Active topics:
 ${listOrNone(input.topics.map(topicBlock))}
 
+Areas in use (topic counts): ${input.areas.length === 0 ? '(none)' : input.areas.map((area) => `${area.name} (${area.topics})`).join(', ')}
+
 Stored facts that may be duplicates (same predicate about the same thing):
 ${listOrNone(input.duplicateFacts.map(factGroupBlock))}
 
@@ -76,8 +82,11 @@ What to return, all optional; empty lists are the usual answer:
 - topicProposals: rename (the name no longer fits the work), merge (two topics are the same work;
   topicId is merged into intoTopicId; also propose it for small topics of 1-2 PRs whose work
   overlaps a bigger topic, merging the small one into the bigger one), split (a topic holds two separate pieces of work; one entry
-  per new part, with the PR keys to move out, taken from that topic's pr lines). Topic ids only
-  from the list above.
+  per new part, with the PR keys to move out, taken from that topic's pr lines; also propose one
+  when a topic keeps more than 12 live tiles, along its natural parts). Topic ids only from the
+  list above.
+- areaMerges: two areas that mean the same thing ("CI" and "CI & tests"): from is folded into
+  into. Area names only from the list above.
 - factMerges: inside one duplicate group, facts that say the same thing. keepId = the best one,
   dropIds = the rest.
 - rules: a standing rule when the user corrected the same kind of thing several times. Write it
@@ -87,6 +96,7 @@ What to return, all optional; empty lists are the usual answer:
 reason: one short sentence each, the user will read it.
 ${jsonOnly(`{
   "topicProposals": [{"kind": "rename", "topicId": "...", "name": "...", "reason": "..."}, {"kind": "merge", "topicId": "...", "intoTopicId": "...", "reason": "..."}, {"kind": "split", "topicId": "...", "name": "...", "prKeys": ["owner/repo#1"], "reason": "..."}],
+  "areaMerges": [{"from": "...", "into": "...", "reason": "..."}],
   "factMerges": [{"keepId": "...", "dropIds": ["..."], "reason": "..."}],
   "rules": [{"text": "...", "topicId": null, "evidenceFeedbackIds": [1, 2], "reason": "..."}],
   "finished": [{"topicId": "...", "reason": "..."}]

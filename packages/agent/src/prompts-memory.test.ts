@@ -43,6 +43,9 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     knownFacts: [makeFact()],
     staleFacts: [makeFact({ id: 'fact-2', predicate: 'reviews', text: 'Bob reviews #1', staleReason: 'person_not_involved' })],
     chatTurns: [],
+    relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-devex review requested', notes: ['review requested from the user team'] },
+    areas: [{ name: 'CI', topics: 3 }],
+    currentArea: null,
     viewer,
     context: fullContext,
     ...overrides,
@@ -211,16 +214,17 @@ describe('consolidationPrompt', () => {
   it('shows briefs, flags, timeline keys, duplicates, feedback ids and decided ideas', () => {
     const version = makeDossierVersion({ flags: [{ kind: 'looks_finished', text: 'all merged', prKey: null }] });
     const prompt = consolidationPrompt({
-      topics: [{ topic: makeTopic(), dossier: version, openPrs: 0, totalPrs: 3, lastActivityAt: '2026-09-01T00:00:00Z' }],
+      topics: [{ topic: makeTopic(), dossier: version, openPrs: 0, totalPrs: 3, lastActivityAt: '2026-09-01T00:00:00Z', liveTiles: 3 }],
       duplicateFacts: [[makeFact(), makeFact({ id: 'fact-9' })]],
       feedback: [makeFeedback({ id: 12 })],
       decidedRules: [
         { id: 'r1', text: 'Skip docs PRs', topicId: null, evidenceFeedbackIds: [], reason: '', status: 'rejected', createdAt: '', decidedAt: null },
       ],
       decidedTopicProposals: [],
+      areas: [{ name: 'CI', topics: 2 }, { name: 'CI & tests', topics: 1 }],
       context: fullContext,
     });
-    expect(prompt).toContain('- id topic-1: "Move CI to Depot" | 0 open of 3 PRs | last activity 2026-09-01');
+    expect(prompt).toContain('- id topic-1: "Move CI to Depot" | 0 open of 3 PRs | 3 live tiles | last activity 2026-09-01');
     expect(prompt).toContain('Status: blocked - waiting on the runner image PR.');
     expect(prompt).toContain('flag looks_finished: all merged');
     expect(prompt).toContain('pr acme/app#1: moves test jobs');

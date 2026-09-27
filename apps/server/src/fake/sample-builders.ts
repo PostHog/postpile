@@ -196,6 +196,7 @@ export interface SampleTopicInput {
   tailoring: string;
   driver: string | null;
   userRole: UserRole;
+  area: string | null;
 }
 
 export function sampleTopic(clock: SampleClock, input: SampleTopicInput): Topic {
