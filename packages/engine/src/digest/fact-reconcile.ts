@@ -12,10 +12,18 @@ interface PendingItem {
   topicId: string;
 }
 
-function subjectsOf(candidates: FactCandidate[]): EntityRef[] {
+/**
+ * Subjects and objects of the candidates. Objects matter for per-object
+ * predicates: "bob drives X" must see "alice drives X" to replace it.
+ */
+function entitiesOf(candidates: FactCandidate[]): EntityRef[] {
   const seen = new Map<string, EntityRef>();
   for (const candidate of candidates) {
-    seen.set(`${candidate.subject.kind}:${candidate.subject.key}`, candidate.subject);
+    for (const entity of [candidate.subject, candidate.object]) {
+      if (entity !== null) {
+        seen.set(`${entity.kind}:${entity.key}`, entity);
+      }
+    }
   }
   return [...seen.values()];
 }
@@ -38,7 +46,7 @@ export class FactReconciler {
   }
 
   private settleDeterministic(topic: TopicCandidates): PendingItem[] {
-    const existing = this.deps.store.facts.listActiveForEntities(subjectsOf(topic.candidates));
+    const existing = this.deps.store.facts.listActiveForEntities(entitiesOf(topic.candidates));
     const result = preReconcile(topic.candidates, existing);
     this.apply(result.actions, () => topic.topicId);
     return result.ambiguous.map((item) => ({ item, topicId: topic.topicId }));

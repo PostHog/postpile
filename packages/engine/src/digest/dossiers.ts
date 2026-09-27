@@ -7,11 +7,8 @@ import {
   type EntityRef,
   type Fact,
   type FactCandidate,
-  type DossierVersion,
   type PrKey,
   type Topic,
-  type TopicDelta,
-  type TopicMembership,
 } from '@code-manager/core';
 import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
@@ -64,21 +61,6 @@ export class DossierUpdater {
       .slice(0, FACTS_IN_DOSSIER_PROMPT);
   }
 
-  /**
-   * selectTopicDelta counts every member missing from the previous timeline
-   * as joined. A PR that was already a member when that version was written
-   * was offered then (the model left it out, or it rolled off into
-   * `earlier`); offering it again would force an update on every sync.
-   */
-  private withoutKnownJoins(delta: TopicDelta, previous: DossierVersion | null, memberships: TopicMembership[]): TopicDelta {
-    if (!previous) {
-      return delta;
-    }
-    const joinedAt = new Map(memberships.map((m) => [m.prKey, m.createdAt]));
-    const joinedPrKeys = delta.joinedPrKeys.filter((key) => (joinedAt.get(key) ?? '') > previous.createdAt);
-    return { ...delta, joinedPrKeys };
-  }
-
   private input(topic: Topic): DossierUpdateInput | null {
     const { store } = this.deps;
     const memberships = store.memberships.listForTopic(topic.id);
@@ -91,17 +73,17 @@ export class DossierUpdater {
     const cursorSeq = store.cursors.get('digest', topic.id)?.seq ?? previous?.throughSeq ?? 0;
     const staleFacts = store.facts.listStaleForTopic(topic.id);
     const world = { prs, memberKeys: new Set(memberKeys), now: this.deps.now().toISOString() };
-    const selected = selectTopicDelta({
+    const delta = selectTopicDelta({
       topicId: topic.id,
       cursorSeq,
       memberKeys,
+      memberSince: new Map(memberships.map((m) => [m.prKey, m.createdAt])),
       logged: store.eventLog.listSince(memberKeys, cursorSeq),
       previous,
       staleFacts,
       staleClaims: previous ? verifyDossier(previous.dossier, world) : [],
       feedback: store.feedback.recentForTopic(topic.id, FEEDBACK_IN_PROMPTS),
     });
-    const delta = this.withoutKnownJoins(selected, previous, memberships);
     if (isEmptyDelta(delta)) {
       return null;
     }

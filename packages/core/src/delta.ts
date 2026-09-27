@@ -14,6 +14,13 @@ export interface TopicDeltaInput {
   /** Digest cursor seq, 0 when the topic has no dossier yet. */
   cursorSeq: number;
   memberKeys: PrKey[];
+  /**
+   * When each member joined the topic. A member missing from the previous
+   * timeline only counts as joined when it joined after that version was
+   * written; one that was a member then was already offered (the model left
+   * it out, or it rolled off into `earlier`). Missing entries count as new.
+   */
+  memberSince: Map<PrKey, string>;
   /** Everything in the event log after cursorSeq for the member PRs, oldest first. */
   logged: LoggedEvent[];
   previous: DossierVersion | null;
@@ -56,8 +63,8 @@ function capEvents(logged: LoggedEvent[]): LoggedEvent[] {
 
 /**
  * Picks what a dossier update gets to read: new events (muted dropped, capped
- * by DELTA_LIMITS, bots kept since the prompt compacts them), members the
- * previous version does not know, members that left, stale facts and claims,
+ * by DELTA_LIMITS, bots kept since the prompt compacts them), members that
+ * joined after the previous version, members that left, stale facts and claims,
  * and new feedback. toSeq is the highest seq in `logged`, capped or not.
  */
 export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
@@ -72,6 +79,10 @@ export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
   const timelineKeys = input.previous?.dossier.timeline.map((entry) => entry.prKey) ?? [];
   const known = new Set(timelineKeys);
   const previousAt = input.previous?.createdAt ?? null;
+  const isJoined = (key: PrKey): boolean => {
+    const since = input.memberSince.get(key);
+    return !known.has(key) && (previousAt === null || since === undefined || since > previousAt);
+  };
 
   return {
     topicId: input.topicId,
@@ -79,7 +90,7 @@ export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
     toSeq,
     events: kept.map((entry) => entry.event),
     omittedEvents: audible.length - kept.length,
-    joinedPrKeys: input.memberKeys.filter((key) => !known.has(key)),
+    joinedPrKeys: input.memberKeys.filter(isJoined),
     leftPrKeys: [...known].filter((key) => !members.has(key)),
     staleFactIds: input.staleFacts.map((fact) => fact.id),
     staleClaims: input.staleClaims,

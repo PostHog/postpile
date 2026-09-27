@@ -44,6 +44,7 @@ function input(overrides: Partial<TopicDeltaInput> = {}): TopicDeltaInput {
     topicId: 'ci',
     cursorSeq: 10,
     memberKeys: [pr1, pr2],
+    memberSince: new Map(),
     logged: [],
     previous: makeDossierVersion({ topicId: 'ci', dossier, createdAt: at(50), throughSeq: 10 }),
     staleFacts: [],
@@ -113,6 +114,17 @@ describe('selectTopicDelta', () => {
     const delta = selectTopicDelta(input({ memberKeys: [pr1, 'PostHog/posthog#3'] }));
     expect(delta.joinedPrKeys).toEqual(['PostHog/posthog#3']);
     expect(delta.leftPrKeys).toEqual([pr2]);
+  });
+
+  it('does not offer a member again that the previous version already knew about', () => {
+    const pr3 = 'PostHog/posthog#3';
+    const pr4 = 'PostHog/posthog#4';
+    const memberSince = new Map([
+      [pr3, at(40)],
+      [pr4, at(60)],
+    ]);
+    const delta = selectTopicDelta(input({ memberKeys: [pr1, pr2, pr3, pr4], memberSince }));
+    expect(delta.joinedPrKeys).toEqual([pr4]);
   });
 
   it('treats every member as joined when there is no dossier yet', () => {

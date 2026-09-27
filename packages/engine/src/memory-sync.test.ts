@@ -230,6 +230,33 @@ describe('facts', () => {
     expect(closed[0]?.fact).toMatchObject({ invalidAt: at(90), invalidReason: 'pr_merged' });
   });
 
+  it('replaces the old driver of an initiative without asking the agent', async () => {
+    const { h, setNow } = movableHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    const drives = (login: string, minute: number) =>
+      makeCandidate({
+        subject: { kind: 'person', key: login },
+        predicate: 'drives',
+        object: { kind: 'initiative', key: 'depot' },
+        text: `${login} drives the Depot move`,
+        validFrom: at(minute),
+      });
+    h.agent.answerDossier(() => ({ facts: [drives('alice', 20)] }));
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    setNow(LATER);
+    pushSnapshot(h, { ...pr, comments: [makeComment({ id: 'c2' })] }, 'etag-2');
+    h.agent.answerDossier(() => ({ facts: [drives('bob', 40)] }));
+    const report = await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(report.errors).toEqual([]);
+    expect(h.agent.reconcileInputs).toHaveLength(0);
+    expect(report.facts.updated).toBe(1);
+    const active = await h.engine.listFacts({ predicate: 'drives' });
+    expect(active.map((view) => view.fact.text)).toEqual(['bob drives the Depot move']);
+  });
+
   it('asks the agent only about candidates the rules cannot settle', async () => {
     const { h, setNow } = movableHarness();
     const pr = reviewRequestedPr(1);
