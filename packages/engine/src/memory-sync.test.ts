@@ -221,6 +221,25 @@ describe('batched glances', () => {
     expect(h.store.glances.get(pr.key)).toBeNull();
   });
 
+  it('leaves claims that fail verification out of the glance prompt', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    const gone = { text: 'still open?', askedBy: null, refs: [makeFactRef({ kind: 'comment', sourceId: 'deleted' })] };
+    const dossier = {
+      ...depotDossier(),
+      openQuestions: [gone],
+      timeline: [...depotDossier().timeline, { prKey: 'PostHog/posthog#9', role: 'left' }],
+    };
+    h.store.dossiers.add({ topicId: 'depot', version: 1, dossier, flags: [], inputHash: 'h', throughSeq: 0, model: FAKE_MODEL, createdAt: at(0) });
+
+    await h.engine.sync({ agentJobs: ['glances'] });
+
+    const sent = h.agent.glanceInputs[0]?.dossier?.dossier;
+    expect(sent?.openQuestions).toEqual([]);
+    expect(sent?.timeline.map((entry) => entry.prKey)).toEqual([pr.key]);
+  });
+
   it('writes glances against the new dossier version', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);

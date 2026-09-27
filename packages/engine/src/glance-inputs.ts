@@ -1,5 +1,13 @@
 import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@code-manager/agent';
-import { isPinged, TILE_STATE_ORDER, type DossierVersion, type PrKey, type Topic, type Viewer } from '@code-manager/core';
+import {
+  isPinged,
+  TILE_STATE_ORDER,
+  withoutStaleClaims,
+  type DossierVersion,
+  type PrKey,
+  type Topic,
+  type Viewer,
+} from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import type { Board } from './board.ts';
 import type { PromptContextSource } from './prompt-context.ts';
@@ -55,13 +63,27 @@ export class GlanceInputs {
     private readonly contexts: PromptContextSource,
   ) {}
 
+  /**
+   * The latest dossier without claims that fail verification, so a question
+   * whose thread was resolved does not read as an open concern.
+   */
+  private checkedDossier(topicId: string): DossierVersion | null {
+    const latest = this.store.dossiers.latest(topicId);
+    if (!latest) {
+      return null;
+    }
+    const members = [...this.board.memberships.values()].filter((m) => m.topicId === topicId);
+    const world = { prs: this.board.prs, memberKeys: new Set(members.map((m) => m.prKey)), now: this.board.now };
+    return { ...latest, dossier: withoutStaleClaims(latest.dossier, world) };
+  }
+
   private partsFor(topicId: string | null): TopicParts {
     let parts = this.parts.get(topicId);
     if (!parts) {
       const topic = topicId === null ? null : this.store.topics.get(topicId);
       parts = {
         topic,
-        dossier: topic ? this.store.dossiers.latest(topic.id) : null,
+        dossier: topic ? this.checkedDossier(topic.id) : null,
         context: this.contexts.forTopic(topic?.id ?? null),
       };
       this.parts.set(topicId, parts);
