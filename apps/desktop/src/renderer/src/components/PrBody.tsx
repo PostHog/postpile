@@ -1,6 +1,7 @@
 import type { PrDetail, PrSummary, TileView } from '@code-manager/core';
 import { prLook } from '../lib/pr.ts';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
+import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { ExternalIcon } from './icons.tsx';
 import { StatePill } from './pills.tsx';
@@ -50,6 +51,7 @@ export function PrBody(props: PrBodyProps) {
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
       <PrFacts pr={pr} />
       <ReviewList pr={pr} />
+      <AgentFacts facts={props.detail.facts} />
       <ActivityTimeline events={events} />
     </div>
   );

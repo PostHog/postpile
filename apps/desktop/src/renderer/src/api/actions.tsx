@@ -3,7 +3,7 @@
 // GitHub write go through the guard in lib/guard.ts first.
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { ActionResult, AppConfig, ChatReply, FeedbackInput, PrKey, SnoozeCondition, SyncReport } from '@code-manager/core';
+import type { ActionResult, AppConfig, ChatReply, FeedbackInput, MemoryCorrection, PrKey, SnoozeCondition, SyncReport } from '@code-manager/core';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { useAppConfig } from './config.ts';
 import { prPath, request, tilePath } from './client.ts';
@@ -49,6 +49,11 @@ export interface Actions {
   unmute(eventId: string): Promise<void>;
   decideTailoring(topicId: string, text: string, keep: boolean): Promise<void>;
   decideProposal(proposalId: string, accept: boolean): Promise<void>;
+  decideRuleProposal(proposalId: string, accept: boolean): Promise<void>;
+  /** "Wrong" / "Forget" on a fact or dossier line. Local memory, not a GitHub write. */
+  correctMemory(input: MemoryCorrection): Promise<void>;
+  /** Quiet: no toast. Called when the user leaves a topic. */
+  markTopicSeen(topicId: string): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null>;
   /** Returns true when the comment went out. */
@@ -173,6 +178,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
     await run(`feedback:${input.tileId}`, write, () => request('POST', '/api/feedback', input));
   }
 
+  async function markTopicSeen(topicId: string): Promise<void> {
+    try {
+      await request<ActionResult>('POST', `/api/topics/${encodeURIComponent(topicId)}/seen`);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.topic(topicId) });
+    } catch (error) {
+      show('error', `Could not mark the topic seen: ${errorText(error)}`);
+    }
+  }
+
   async function draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null> {
     try {
       const draft = await withBusy(`ask:${prKey}`, () =>
@@ -232,6 +246,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
       const path = `/api/proposals/${encodeURIComponent(proposalId)}`;
       await run(`proposal:${proposalId}`, null, () => request('POST', path, { accept }));
     },
+    decideRuleProposal: async (proposalId, accept) => {
+      const path = `/api/rule-proposals/${encodeURIComponent(proposalId)}`;
+      await run(`rule:${proposalId}`, null, () => request('POST', path, { accept }));
+    },
+    correctMemory: async (input) => {
+      await run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input));
+    },
+    markTopicSeen,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     chat,
