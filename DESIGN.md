@@ -166,9 +166,10 @@ claude --no-session-persistence -p --output-format json --model <m> \
 ```
 
 with `MAX_THINKING_TOKENS=0` and the prompt on stdin (flags carried over from
-ghatchup, where they took a PR summary from ~30s to ~3s). Glances use
-`claude-haiku-4-5` (`CODE_MANAGER_GLANCE_MODEL`), everything else `sonnet`
-(`CODE_MANAGER_MODEL`). An API-backed runner can replace it later without
+ghatchup, where they took a PR summary from ~30s to ~3s). Everything runs on
+`sonnet` (`CODE_MANAGER_MODEL`); glances can be switched separately with
+`CODE_MANAGER_GLANCE_MODEL` (they ran on `claude-haiku-4-5` until a side-by-side
+run showed Sonnet judging verdicts better). An API-backed runner can replace it later without
 touching callers.
 
 ## Engine memory (v2)
@@ -537,7 +538,7 @@ stored and before a dossier goes into a glance prompt
   **dossier version**, instructions, tailoring, standing rules, feedback on
   that PR, model. Never the other PRs in the batch. Stored glances get
   `dossierVersion`.
-- Model: the glance model (`claude-haiku-4-5`, `CODE_MANAGER_GLANCE_MODEL`).
+- Model: the glance model (`sonnet` by default, `CODE_MANAGER_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
 
@@ -879,7 +880,7 @@ preflight and does not know the token, so CORS stays open.
   - consolidation cadence: due after 24h and at least one new dossier version, triggered by
     the desktop app when idle and by `consolidate` in the CLI [yes]
   - dossier history: keep the newest 50 versions per topic, pruned on save [50]
-  - glance batches on haiku with 18 PRs per call [yes; sonnet if quality drops]
+  - glance batches with 18 PRs per call [yes; moved from haiku to sonnet after a side-by-side run]
   - dossier driver overrides "most frequent author" for the topic driver [yes]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
   snooze started ends it, so a mention is never hidden. Confirm.
