@@ -86,9 +86,9 @@ now".
   a seen cursor, a merge proposal and standing-rule proposals.
 - Memory split by author (DESIGN.md "Memory by author"):
   - "Your instructions" view: current text, version history with diffs and
-    origin, a chat that proposes changes; tile chat proposes instructions
-    changes for points about every topic, tailoring for topic points, and
-    the user can switch scope. Nothing is written without Accept; hand
+    origin, a chat that proposes changes; in tile chat the user places a
+    lasting point: Keep for this topic / Keep for all topics (instructions
+    proposal with a diff) / Just this once. Nothing is written without Accept; hand
     edits are stored as their own version and never overwritten (a stale
     proposal comes back rebased). Versions in `instructions_version`
     (migration 004; 003 was taken).
@@ -114,6 +114,16 @@ now".
   area-merge proposals, sidebar grouped Needs you / Your team by area /
   Routed / FYI, done and snoozed tiles folded. Fake data has a routed and
   an FYI topic.
+- Lasting chat points: the agent only spots them; the user picks the scope
+  (Keep for this topic / Keep for all topics / Just this once). The chat
+  schema has no scope anymore and the "Apply to all topics instead" /
+  "Only this topic" switch is gone.
+- Stack completion (DESIGN.md "Stack completion"): pinged PRs fetched in a
+  sync walk their stack by branch, 6 layers each way, open or merged in the
+  last 14 days, no agent. Layers are stored as pulled in ("stack layer
+  below #N"), get no glance / topic / dossier / event calls, show in the
+  anchor's topic, and turn pinged once notified. Fake data has a Depot
+  stack with two pulled-in lower layers.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -155,14 +165,17 @@ now".
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 
-- **Pulled-in PRs never appear on real data, by design so far.** The engine
-  only fetches PRs that have a notification thread, and any thread counts
-  as pinged (subscribed included). Stacks and sets are built from those
-  PRs, so every member is pinged and "N pulled in" stays 0. What would
-  produce pulled-in PRs: fetch stack neighbours (a PR whose head is a
-  member's base, or the other way round) and PRs linked from bodies or
-  comments without a thread; optionally treat `subscribed` threads as
-  context rather than a ping.
+- Stack completion follows base/head branches only. PRs linked from bodies
+  or comments are not pulled in, and `subscribed` threads still count as
+  pinged. A merged lower layer usually drops out of the chain once GitHub
+  retargets the upper PR to the default branch (branch auto-delete).
+- A pinged PR that was not fetched this sync does not walk its stack, so a
+  new layer on top of it shows up only after the PR itself moves.
+- The first real sync after this change asks two branch lookups per fetched
+  pinged PR (about 10 GraphQL queries for ~140 PRs); later syncs only for
+  PRs that moved. Not yet watched against the real account.
+- `pr_glance.pull_in_reason` and the glance prompt's pulled-in wording are
+  left in place but unused, since layers get no glance.
 - Relation rules know the user's own teams only (viewer teams); other
   authors' team membership is not fetched, so ownerTeam of routed topics
   comes from the agent. CODEOWNERS is inferred from team review requests
@@ -217,12 +230,22 @@ now".
   glances pick those up on the next sync; event batches did not back then
   (they were lost) and now do. A full first sync over ~140 PRs should land
   around 80-90 calls; worth a watched run before relying on it.
-- **Instructions scope**: the agent decides topic vs. all topics, and an
-  "all" point the instructions call finds no change for falls back to
-  tailoring. Alternative: always ask the user.
 - Still open from DESIGN.md: UI framework final call, three-pane layout,
   memory numbers (10 feedback entries per prompt, when sets regroup), snooze
   wake-up on any loud human event, the extra loudness rules, repo name.
+
+## Decided
+
+- **Instructions scope** (2026-09-27): Julian picks the scope of a lasting
+  chat point, not the agent: Keep for this topic (tailoring) / Keep for all
+  topics (instructions proposal, diff with Accept / Edit / Reject) / Just
+  this once. Proposals still only come from Julian's own messages.
+- **Pulled-in PRs** (2026-09-27): only for completing stacks, deterministic,
+  no agent involved. Stack neighbours are fetched by branch during sync
+  (6 layers each way, open or merged within 14 days), stored as pulled in
+  with "stack layer below/above #N", inherit the topic of the stack's
+  pinged PR and never get glance, topic or dossier calls. Sets stay
+  agent-grouped among pinged PRs.
 
 ## How to run
 

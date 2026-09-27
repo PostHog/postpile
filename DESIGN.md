@@ -23,11 +23,13 @@ read, never stored.
 
 - `pinged`: GitHub notified the user (review request, mention, team mention,
   author, subscribed, ...)
-- `pulled_in`: added for context, with a one-line reason
+- `pulled_in`: a stack layer the sync fetched by branch to complete a pinged
+  PR's stack, reason "stack layer below/above #N" (see "Stack completion")
 
 A tile only exists if at least one member is pinged. Provenance is derived from
 whether a notification thread exists, so a pulled-in PR that later gets a real
-ping becomes pinged without anything having to update it.
+ping becomes pinged without anything having to update it. Sets are agent-grouped
+among pinged PRs only; the agent never pulls PRs in.
 
 **Events**: every GitHub activity on a PR becomes an event line. Loudness:
 
@@ -49,17 +51,18 @@ a classification.
 - `done`: every pinged member is done (approved / handled / merged / closed) and nothing loud is unseen.
 - `open`: everything else.
 
-**Glance** per PR: verdict (`LOOKS_SAFE` | `LOOK_CLOSER` | `NOT_YOURS`),
-`forYou` (one or two sentences against the user's own instructions), `does`,
-`risk`, `othersSaid`, and for pulled-in PRs the pull-in reason. Cached by a
+**Glance** per pinged PR (pulled-in stack layers get none): verdict
+(`LOOKS_SAFE` | `LOOK_CLOSER` | `NOT_YOURS`), `forYou` (one or two sentences
+against the user's own instructions), `does`, `risk`, `othersSaid`. Cached by a
 hash of its inputs; regenerated only when the PR moves or instructions change.
 
 **User actions**: approve (single press, immediate, no undo), mark read, snooze
 (until someone replies | new push | CI green | a time), "ask <person>" (agent
 drafts a PR comment, user edits and sends), feedback on a tile ("not mine",
 "not related" for sets, "wrong topic"), chat on a tile. Lasting points from
-chat become a tailoring proposal: "keep it" stores it on the topic, "just this
-once" only logs it.
+chat come back for the user to place: "Keep for this topic" (tailoring), "Keep
+for all topics" (an instructions proposal) or "Just this once" (only logged).
+The agent spots the point but never picks the scope.
 
 **Mark read is deferred**: acting on a tile marks the GitHub notification read
 through a queue with a 6s undo window, because GitHub has no mark-unread API.
@@ -260,7 +263,9 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 1. **fetch** (no agent): notifications, PR snapshots, events with rule
    loudness. Every derived event of a fetched PR goes to `event_log.append`
    in time order; ids already logged are ignored, so events stored before
-   the log existed are picked up on the PR's next fetch.
+   the log existed are picked up on the PR's next fetch. Then the missing
+   layers of the fetched PRs' stacks are fetched by branch (see "Stack
+   completion"); their events are logged but not counted as new.
 2. **verify pass** (no agent): `verifyFact` on every active fact touching a
    fetched PR (`FactRepo.listActiveTouchingPrs`). `invalidate` outcomes are
    closed right away (a merged PR ends "alice works on #12"); `stale` ones are
@@ -296,8 +301,8 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 7. **sets** (`set_grouping`): unchanged from v1 (see open questions).
 8. **glances** (`glance_batch`): per topic, PRs in a tile whose
    `glanceItemInputHash` differs from the stored glance, in batches of 18.
-   First pinged PRs of every topic, then pulled-in ones, unread tiles first
-   in each round. A topic whose dossier update was skipped by the budget
+   Pinged PRs only (pulled-in stack layers get no glance), unread tiles
+   first. A topic whose dossier update was skipped by the budget
    gets no glances this sync (it would pay twice). The dossier goes in
    without claims that fail `verifyDossier` (`withoutStaleClaims`). Protocol
    below.
@@ -310,7 +315,7 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 
 With a call cap (`--max-agent-calls`) the budget is spent in that order:
 topic assignment (everything needs it), dossiers, fact reconcile, sets,
-glances for pinged PRs, glances for pulled-in PRs, events. Consolidation is
+glances, events. Consolidation is
 not part of `sync()` and never overlaps with it (each waits for the other,
 so every call lands in the right run's stats); see below.
 
@@ -632,16 +637,17 @@ Memory is split by who wrote it.
   The agent maintains them; the user steers by chat and by one-click
   Wrong / Forget, never by editing agent prose. Every line answers "Why?".
 
-**Instructions changes via chat.** Tile chat returns a lasting point with a
-scope: `topic` becomes a tailoring proposal (as before), `all` ("from now
-on", "always", "in general") goes to `proposeInstructionsChange`, which
-gets only the current text and the user's own message (never GitHub text)
+**Instructions changes via chat.** Tile chat returns a lasting point
+without a scope; the user picks it: "Keep for this topic" stores tailoring,
+"Just this once" only logs it, "Keep for all topics" calls
+`proposeInstructionsChange`, which gets only the current text and the
+user's own message (never GitHub text), is told the user chose all topics,
 and returns the full new text plus a summary. The UI shows it as a line
-diff: Accept, Edit inline, Reject, and switch scope ("Apply to all topics
-instead" / "Only this topic"). The general chat in "Your instructions"
-always goes to the same call. When that call finds no change, tile chat
-falls back to tailoring. Proposals must cite a stored user chat message
-(`sourceChatMessageId`); the engine refuses anything else.
+diff: Accept, Edit inline, Reject. The general chat in "Your instructions"
+always goes to the same call. When that call finds no change, the point
+stays on screen so it can still go to the topic. Proposals must cite a
+stored user chat message (`sourceChatMessageId`); the engine refuses
+anything else.
 
 **Versions** (`instructions_version`, migration 004): `version`, `text`,
 `summary`, `origin` (`chat` / `outside`), `source_chat_message_id`,
@@ -674,6 +680,32 @@ head moved since its refs; questions use `verifyDossier`.
 
 Routes: `GET/POST /api/instructions`, `GET/POST /api/instructions/chat`,
 `POST /api/instructions/proposals`, `GET /api/memory/sources`.
+
+## Stack completion
+
+Pulled-in PRs exist only to complete stacks, and finding them is
+deterministic: no agent call.
+
+- After the fetch, every pinged PR fetched this sync walks its stack by
+  branch: the layer below has the PR's base as its head, the layer above has
+  its head as its base (`GitHubReader.findPrsByBranch`, read-only GraphQL,
+  30 lookups per query, one query round per layer). At most 6 layers each
+  way (`STACK_DEPTH`). Only open layers and ones merged in the last 14 days
+  (`MERGED_LAYER_DAYS`) count; forks and closed PRs never do; a head lookup
+  on the repo's default branch ends the walk. A walk stops at a PR with a
+  thread: that one is pinged and walks its own stack when it is fetched.
+- Found layers go to `pr_pull_in` (migration 006) with the anchor PR and
+  the reason "stack layer below/above #N". A layer is refetched only when
+  the lookup shows its `updatedAt` moved.
+- A layer gets no topic assignment, glance, dossier or event call and no
+  membership. It shows in the topic of its anchor (`Board.topicIdOf`)
+  through the stack tile, and never makes a tile on its own. Once it gets
+  its own notification it is pinged like any other PR.
+- `buildStacks` keeps layers merged in the last 14 days (given the time),
+  so a merged lower layer still shows at the bottom; a stack needs at least
+  one open PR.
+- `SyncReport.prsPulledIn` counts the layers fetched. A failed lookup is an
+  error line in the report; the rest of the sync goes on.
 
 ## Topic placement: relation and area
 
@@ -721,10 +753,10 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
-  batched GraphQL PR enrichment, 12 PRs per query) and `GitHubWriter` (mark thread read,
+  batched GraphQL PR enrichment, 12 PRs per query, PRs by branch for stack completion) and `GitHubWriter` (mark thread read,
   approve, comment) as separate interfaces. Token from `gh auth token`, read once, cached in
   memory.
 - **packages/agent**: `AgentRunner`, `ClaudeCliRunner`, `AgentService` (topic assignment,
@@ -823,8 +855,8 @@ preflight and does not know the token, so CORS stays open.
   - new topics: created directly or only as proposals [directly]
   - event overrides: only new loud events go to the agent [yes]
   - how long dissolved sets and "not related" feedback keep suppressing a regroup
-  - whether a PR may belong to more than one topic (schema says one; pulled-in appearances
-    elsewhere go through sets)
+  - whether a PR may belong to more than one topic (schema says one; a stack tile shows in
+    every topic that owns one of its PRs)
 - **Engine memory v2** (current choices in brackets):
   - instructions.md edits: re-run every dossier update, or let dossiers catch up on the next
     event while glances pick the change up at once [re-run: instructions, tailoring and
