@@ -14,6 +14,7 @@ import type {
   Tile,
   TileMember,
   TileState,
+  TileStateKind,
   UnreadReason,
   UserPrState,
 } from './types.ts';
@@ -42,6 +43,9 @@ export interface TopicTilesInput {
   sets: PrSet[];
   events?: Map<PrKey, PrEvent[]>;
 }
+
+/** Most urgent first. Used to sort tiles for display and for the glance budget. */
+export const TILE_STATE_ORDER: Record<TileStateKind, number> = { unread: 0, open: 1, snoozed: 2, done: 3 };
 
 export function singleTileId(prKey: PrKey): string {
   return `pr:${prKey}`;

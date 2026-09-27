@@ -1,9 +1,7 @@
 import type { GlanceInput } from '@code-manager/agent';
-import { isPinged, type PrKey, type Provenance, type TileStateKind } from '@code-manager/core';
+import { isPinged, TILE_STATE_ORDER, type PrKey, type Provenance } from '@code-manager/core';
 import { Board } from '../board.ts';
 import { errorText, type DigestDeps } from './deps.ts';
-
-const statePriority: Record<TileStateKind, number> = { unread: 0, open: 1, snoozed: 2, done: 3 };
 
 /**
  * One glance per open PR that shows up in a tile. The input hash decides
@@ -17,7 +15,7 @@ export class GlanceWriter {
   private wanted(board: Board): Map<PrKey, Provenance> {
     const tiles = board
       .allTiles()
-      .map((tile) => ({ tile, priority: statePriority[board.stateOf(tile).kind] }))
+      .map((tile) => ({ tile, priority: TILE_STATE_ORDER[board.stateOf(tile).kind] }))
       .sort((a, b) => a.priority - b.priority);
     const result = new Map<PrKey, Provenance>();
     for (const { tile } of tiles) {

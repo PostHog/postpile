@@ -1,19 +1,17 @@
 import {
   displayState,
   isUnseenLoud,
+  TILE_STATE_ORDER,
   type PrDetail,
   type PrKey,
   type PrSummary,
   type Tile,
-  type TileStateKind,
   type TileView,
   type TopicDetail,
   type TopicListItem,
 } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
-
-const stateOrder: Record<TileStateKind, number> = { unread: 0, open: 1, snoozed: 2, done: 3 };
 
 function compareTopics(a: TopicListItem, b: TopicListItem): number {
   if (a.group !== b.group) {
@@ -69,7 +67,7 @@ export class ReadModels {
       state: board.stateOf(tile),
       prs: this.prSummaries(board, tile),
     }));
-    return views.sort((a, b) => stateOrder[a.state.kind] - stateOrder[b.state.kind]);
+    return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
   }
 
   listTopics(): TopicListItem[] {
