@@ -20,3 +20,4 @@ export { DossierRepo } from './repos/dossiers.ts';
 export { FactRepo, type FactClosing } from './repos/facts.ts';
 export { RuleProposalRepo } from './repos/rule-proposals.ts';
 export { AgentCallRepo } from './repos/agent-calls.ts';
+export { InstructionsRepo, type NewInstructionsVersion } from './repos/instructions.ts';

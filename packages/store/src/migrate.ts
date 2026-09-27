@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import * as init from './migrations/001_init.ts';
 import * as engineMemory from './migrations/002_engine_memory.ts';
 import * as factRecheck from './migrations/003_fact_recheck.ts';
+import * as instructionsVersions from './migrations/004_instructions_versions.ts';
 
 interface Migration {
   version: number;
@@ -9,7 +10,7 @@ interface Migration {
 }
 
 // Append new migrations here, in order. Never edit one that has shipped.
-const migrations: Migration[] = [init, engineMemory, factRecheck];
+const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions];
 
 export function currentVersion(db: DatabaseSync): number {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');

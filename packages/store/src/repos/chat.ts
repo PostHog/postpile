@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { ChatMessage, ChatRole } from '@code-manager/core';
-import { all, insertReturningId } from '../sql.ts';
+import { all, insertReturningId, one } from '../sql.ts';
 
 export type NewChatMessage = Omit<ChatMessage, 'id'>;
 
@@ -38,6 +38,23 @@ export class ChatRepo {
       message.createdAt,
     );
     return { id, ...message };
+  }
+
+  get(id: number): ChatMessage | null {
+    const row = one<ChatRow>(this.db, 'SELECT * FROM chat_message WHERE id = ?', id);
+    return row ? toMessage(row) : null;
+  }
+
+  /** The user's own messages in a topic after `since`, newest `limit` of them, oldest first. */
+  listUserForTopicSince(topicId: string, since: string, limit: number): ChatMessage[] {
+    const rows = all<ChatRow>(
+      this.db,
+      "SELECT * FROM chat_message WHERE topic_id = ? AND role = 'user' AND created_at > ? ORDER BY id DESC LIMIT ?",
+      topicId,
+      since,
+      limit,
+    );
+    return rows.map(toMessage).reverse();
   }
 
   /** Oldest first. */

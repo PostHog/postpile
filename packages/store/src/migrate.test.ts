@@ -6,12 +6,12 @@ import * as init from './migrations/001_init.ts';
 describe('migrations', () => {
   it('creates the schema on a fresh database and is idempotent', () => {
     const db = openDatabase(':memory:');
-    expect(currentVersion(db)).toBe(3);
+    expect(currentVersion(db)).toBe(4);
     runMigrations(db);
-    expect(currentVersion(db)).toBe(3);
+    expect(currentVersion(db)).toBe(4);
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all();
     const names = tables.map((row) => row.name);
-    for (const table of ['pr_glance', 'event_log', 'cursor', 'topic_dossier', 'fact', 'fact_ref', 'rule_proposal', 'agent_call']) {
+    for (const table of ['pr_glance', 'event_log', 'cursor', 'topic_dossier', 'fact', 'fact_ref', 'rule_proposal', 'agent_call', 'instructions_version']) {
       expect(names).toContain(table);
     }
     db.close();

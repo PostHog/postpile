@@ -9,6 +9,7 @@ import { EventRepo } from './repos/events.ts';
 import { FactRepo } from './repos/facts.ts';
 import { FeedbackRepo } from './repos/feedback.ts';
 import { GlanceRepo } from './repos/glances.ts';
+import { InstructionsRepo } from './repos/instructions.ts';
 import { TopicMembershipRepo } from './repos/memberships.ts';
 import { MetaRepo } from './repos/meta.ts';
 import { NotificationRepo } from './repos/notifications.ts';
@@ -41,6 +42,7 @@ export class Store {
   readonly facts: FactRepo;
   readonly ruleProposals: RuleProposalRepo;
   readonly agentCalls: AgentCallRepo;
+  readonly instructions: InstructionsRepo;
 
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
@@ -62,6 +64,7 @@ export class Store {
     this.facts = new FactRepo(db);
     this.ruleProposals = new RuleProposalRepo(db);
     this.agentCalls = new AgentCallRepo(db);
+    this.instructions = new InstructionsRepo(db);
   }
 
   static open(path: string): Store {

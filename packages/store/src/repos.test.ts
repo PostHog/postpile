@@ -361,6 +361,30 @@ describe('ChatRepo', () => {
     store.chat.add({ tileId: 't2', topicId: 'topic-1', role: 'user', text: 'other', createdAt: at(2) });
     expect(reply.id).toBeGreaterThan(0);
     expect(store.chat.listForTile('t1').map((m) => m.role)).toEqual(['user', 'agent']);
+    expect(store.chat.get(reply.id)?.text).toBe('team review');
+    expect(store.chat.get(999)).toBeNull();
+  });
+
+  it('lists the own messages of the user in a topic after a time, newest ones, oldest first', () => {
+    store.chat.add({ tileId: 't1', topicId: 'topic-1', role: 'user', text: 'old', createdAt: at(0) });
+    store.chat.add({ tileId: 't1', topicId: 'topic-1', role: 'agent', text: 'reply', createdAt: at(2) });
+    store.chat.add({ tileId: 't2', topicId: 'topic-1', role: 'user', text: 'a', createdAt: at(3) });
+    store.chat.add({ tileId: 't2', topicId: 'topic-1', role: 'user', text: 'b', createdAt: at(4) });
+    store.chat.add({ tileId: 't3', topicId: 'topic-2', role: 'user', text: 'elsewhere', createdAt: at(5) });
+    expect(store.chat.listUserForTopicSince('topic-1', at(1), 10).map((m) => m.text)).toEqual(['a', 'b']);
+    expect(store.chat.listUserForTopicSince('topic-1', at(1), 1).map((m) => m.text)).toEqual(['b']);
+  });
+});
+
+describe('InstructionsRepo', () => {
+  it('numbers versions and lists them newest first', () => {
+    expect(store.instructions.latest()).toBeNull();
+    const first = store.instructions.add({ text: 'a', summary: 'Found on disk', origin: 'outside', sourceChatMessageId: null, createdAt: at(0) });
+    const second = store.instructions.add({ text: 'a\nb', summary: 'Added b', origin: 'chat', sourceChatMessageId: 7, createdAt: at(1) });
+    expect([first.version, second.version]).toEqual([1, 2]);
+    expect(store.instructions.latest()).toEqual(second);
+    expect(store.instructions.get(1)?.origin).toBe('outside');
+    expect(store.instructions.list(10).map((v) => v.version)).toEqual([2, 1]);
   });
 });
 
