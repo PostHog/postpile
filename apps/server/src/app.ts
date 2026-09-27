@@ -150,6 +150,8 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   app.post('/api/consolidate', async (c) => c.json(await engine.consolidate(consolidateBody.parse(await optionalJson(c)))));
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
+  // Search bar filter: ?q= is matched term by term (AND); a missing or empty q matches nothing.
+  app.get('/api/search', async (c) => c.json(await engine.search(c.req.query('q') ?? '')));
   app.get('/api/topics/:id', async (c) => {
     const topic = await engine.getTopic(c.req.param('id'));
     return topic ? c.json(topic) : c.json({ error: 'not found' }, 404);

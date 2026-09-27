@@ -35,7 +35,7 @@ import type {
   UnreadReason,
   UserPrState,
 } from '@code-manager/core';
-import { emptyAgentCallStats, setIdFromTileId, type AgentCallStats } from '@code-manager/core';
+import { emptyAgentCallStats, searchTopics, setIdFromTileId, type AgentCallStats, type SearchableTopic, type SearchResult } from '@code-manager/core';
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeMemory } from './fake-memory.ts';
@@ -282,6 +282,25 @@ export class FakeEngine implements EngineService {
       pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
       dossier: this.memory.dossierView(topicId, this.feedback),
     };
+  }
+
+  /** Same matcher as the engine, over the sample topics the sidebar lists. */
+  async search(query: string): Promise<SearchResult> {
+    const topics: SearchableTopic[] = this.data.topics
+      .filter((topic) => topic.status === 'active')
+      .map((topic) => ({
+        topicId: topic.id,
+        name: topic.name,
+        area: topic.area,
+        tiles: this.tilesOfTopic(topic.id).map((tile) => ({
+          tileId: tile.id,
+          prs: tile.members.flatMap((member) => {
+            const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
+            return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
+          }),
+        })),
+      }));
+    return searchTopics(topics, query);
   }
 
   async getPr(prKey: PrKey): Promise<PrDetail | null> {

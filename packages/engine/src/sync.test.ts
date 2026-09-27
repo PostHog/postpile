@@ -225,3 +225,20 @@ describe('Engine.sync with the agent', () => {
     expect(sets[0]?.removedKeys).toEqual([removed]);
   });
 });
+
+describe('Engine.search', () => {
+  it('finds stored PRs by title and number, per topic and tile', async () => {
+    const h = makeHarness();
+    for (const [n, title] of [[1, 'Move CI to Depot'], [2, 'Fix flaky test']] as const) {
+      const pr = reviewRequestedPr(n, { title });
+      h.reader.addPr(pr, makeThreadFor(pr));
+    }
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const byTitle = await h.engine.search('depot');
+    expect(byTitle.topics).toHaveLength(1);
+    expect(byTitle.topics[0]).toMatchObject({ topicId: UNSORTED_TOPIC_ID, prKeys: ['PostHog/posthog#1'] });
+    expect((await h.engine.search('#2 flaky')).topics[0]?.prKeys).toEqual(['PostHog/posthog#2']);
+    expect((await h.engine.search('nothing-like-this')).topics).toEqual([]);
+  });
+});

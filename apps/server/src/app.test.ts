@@ -15,6 +15,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     sync: notImplemented,
     listTopics: notImplemented,
     getTopic: notImplemented,
+    search: notImplemented,
     getPr: notImplemented,
     getChat: notImplemented,
     approve: notImplemented,

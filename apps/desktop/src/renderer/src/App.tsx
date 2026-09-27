@@ -1,11 +1,13 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import type { TopicDetail } from '@code-manager/core';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { TileView } from '@code-manager/core';
 import { useActions } from './api/actions.tsx';
 import { useProposals } from './api/proposals.ts';
+import { useSearch } from './api/search.ts';
 import { useTopic, useTopics } from './api/topics.ts';
 import { DetailPane } from './components/DetailPane.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
+import { SearchField } from './components/SearchField.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { TileGrid } from './components/TileGrid.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
@@ -13,6 +15,7 @@ import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
 import { sameView, type NavEntry } from './lib/history.ts';
+import { searchFilter, visibleTopic } from './lib/search.ts';
 import { leadPr } from './lib/tiles.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 
@@ -28,14 +31,17 @@ function EmptyMain(props: { text: string }) {
   );
 }
 
-/** The tile and PR the user picked, falling back to the first tile and its lead PR. */
-function resolveSelection(entry: NavEntry, detail: TopicDetail | undefined) {
-  const tiles = detail?.tiles ?? [];
+/**
+ * The tile and PR the user picked, falling back to the first (shown) tile and
+ * its first PR matching the search, else its lead PR.
+ */
+function resolveSelection(entry: NavEntry, tiles: TileView[], matchingPrKeys: Set<string> | null) {
   const view = tiles.find((candidate) => candidate.tile.id === entry.tileId) ?? tiles[0] ?? null;
   let prKey: string | null = null;
   if (view) {
     const picked = view.prs.find((pr) => pr.key === entry.prKey);
-    prKey = picked?.key ?? leadPr(view)?.key ?? null;
+    const matching = matchingPrKeys ? view.prs.find((pr) => matchingPrKeys.has(pr.key)) : undefined;
+    prKey = picked?.key ?? matching?.key ?? leadPr(view)?.key ?? null;
   }
   return { view, prKey };
 }
@@ -45,14 +51,24 @@ export function App() {
   const topics = useTopics();
   const proposals = useProposals();
 
+  const [query, setQuery] = useState('');
+  const search = useSearch(query);
+
   const items = topics.data ?? [];
   // Navigation is a back / forward history; the current entry is what the user picked.
   const nav = useNavHistory(new Set(items.map((item) => item.topic.id)));
   useNavShortcuts(nav.back, nav.forward);
   const pane = nav.current.pane;
-  const activeItem = items.find((item) => item.topic.id === nav.current.topicId) ?? items[0] ?? null;
+  // A blank query filters nothing, even while react-query still holds the last answer.
+  const filter = searchFilter(query.trim() === '' ? undefined : search.data);
+  // When the filter hides the picked topic, the first match shows instead. That is
+  // derived, not a navigation: history stays clean and clearing the filter
+  // brings the picked topic back.
+  const activeItem = visibleTopic(items, nav.current.topicId, filter);
   const topic = useTopic(activeItem?.topic.id ?? null);
-  const selected = resolveSelection(nav.current, topic.data);
+  const matchingTileIds = activeItem && filter ? (filter.tilesByTopic.get(activeItem.topic.id) ?? new Set<string>()) : null;
+  const shownTiles = (topic.data?.tiles ?? []).filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
+  const selected = resolveSelection(nav.current, shownTiles, filter?.prKeys ?? null);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeItem?.topic.id ?? null, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
   const go = (next: NavEntry) => {
@@ -66,15 +82,18 @@ export function App() {
   // A topic counts as seen when the user leaves it: picks another topic, the
   // Inbox or their instructions. Simpler than a visibility timer, and the
   // "since you last looked" block stays put while they are still reading it.
+  // This follows the picked topic, not the shown one, so a search filter that
+  // hides the topic for a moment does not mark it seen.
   const shownTopicId = pane === 'topic' ? (activeItem?.topic.id ?? null) : null;
-  const lastShownTopicId = useRef<string | null>(null);
+  const pickedTopicId = pane === 'topic' ? (visibleTopic(items, nav.current.topicId, null)?.topic.id ?? null) : null;
+  const lastPickedTopicId = useRef<string | null>(null);
   useEffect(() => {
-    const left = lastShownTopicId.current;
-    lastShownTopicId.current = shownTopicId;
-    if (left !== null && left !== shownTopicId) {
+    const left = lastPickedTopicId.current;
+    lastPickedTopicId.current = pickedTopicId;
+    if (left !== null && left !== pickedTopicId) {
       void actions.markTopicSeen(left);
     }
-  }, [shownTopicId, actions]);
+  }, [pickedTopicId, actions]);
 
   // Sync once on app start; after that only on "Sync now". The ref keeps
   // React's dev double-mount from starting a second one.
@@ -95,6 +114,8 @@ export function App() {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
   } else if (!topics.isPending && items.length === 0) {
     main = <EmptyMain text={actions.syncing ? 'Syncing your GitHub notifications…' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'} />;
+  } else if (filter && !activeItem) {
+    main = <EmptyMain text={`Nothing matches “${query.trim()}”. Esc clears the filter.`} />;
   } else if (topic.error) {
     main = <EmptyMain text={`Could not load the topic: ${topic.error.message}`} />;
   } else if (activeItem && topic.data) {
@@ -107,6 +128,7 @@ export function App() {
           selectedTileId={selected.view?.tile.id ?? null}
           selectedPrKey={selected.prKey}
           onSelect={pickTile}
+          matchingTileIds={matchingTileIds}
         />
       </MainPane>
     );
@@ -114,7 +136,13 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <TitleBar canBack={nav.canBack} canForward={nav.canForward} onBack={nav.back} onForward={nav.forward} />
+      <TitleBar
+        canBack={nav.canBack}
+        canForward={nav.canForward}
+        onBack={nav.back}
+        onForward={nav.forward}
+        search={<SearchField value={query} onChange={setQuery} />}
+      />
       <div className="grid min-h-0 flex-1 grid-cols-[264px_minmax(0,1fr)_404px]">
         <TopicSidebar
           topics={items}
@@ -127,6 +155,8 @@ export function App() {
           onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
           loading={topics.isPending}
           error={topics.error?.message ?? null}
+          filter={filter}
+          onClearFilter={() => setQuery('')}
         />
         {main}
         <DetailPane

@@ -1,6 +1,7 @@
 import {
   displayState,
   isUnseenLoud,
+  searchTopics,
   TILE_STATE_ORDER,
   type FactQuery,
   type FactView,
@@ -8,6 +9,8 @@ import {
   type PrDetail,
   type PrKey,
   type PrSummary,
+  type SearchableTopic,
+  type SearchResult,
   type Tile,
   type TileView,
   type TopicDetail,
@@ -168,6 +171,24 @@ export class ReadModels {
       pendingProposals: isUnsorted ? [] : this.store.proposals.listPendingForTopic(topicId),
       dossier: isUnsorted ? null : this.memory.dossierView(topicId, board.prs),
     };
+  }
+
+  /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */
+  search(query: string): SearchResult {
+    const board = this.board();
+    const topics: SearchableTopic[] = board.topics().map((topic) => ({
+      topicId: topic.id,
+      name: topic.name,
+      area: topic.area,
+      tiles: board.tilesForTopic(topic.id).map((tile) => ({
+        tileId: tile.id,
+        prs: tile.members.flatMap((member) => {
+          const pr = board.prs.get(member.prKey);
+          return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
+        }),
+      })),
+    }));
+    return searchTopics(topics, query);
   }
 
   getPr(key: PrKey): PrDetail | null {

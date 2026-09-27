@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { TopicListItem } from '@code-manager/core';
 import { statusLabel } from '../lib/memory.ts';
+import { filterTopics, type SearchFilter } from '../lib/search.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
 import { CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 import { RelationBadge } from './pills.tsx';
@@ -13,10 +14,26 @@ function topicLine(item: TopicListItem): string {
   return `${item.openTiles} open · ${item.totalTiles} tiles`;
 }
 
-function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; showRelation?: boolean }) {
+/** Right-hand badge: matching tiles while filtering, else unread tiles, else nothing. */
+function TopicBadge(props: { unread: number; matches: number | null; active: boolean }) {
+  const shape = 'flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] font-mono text-[10.5px] font-semibold';
+  if (props.matches !== null) {
+    const label = `${props.matches} matching ${props.matches === 1 ? 'tile' : 'tiles'}`;
+    return (
+      <span className={`${shape} bg-accent-soft text-accent`} title={label} aria-label={label}>
+        {props.matches}
+      </span>
+    );
+  }
+  if (props.unread === 0) {
+    return <span className={shape} />;
+  }
+  return <span className={`${shape} ${props.active ? 'bg-accent text-on-accent' : 'bg-chip text-ink-2'}`}>{props.unread}</span>;
+}
+
+function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; showRelation?: boolean; matches: number | null }) {
   const unread = props.item.unreadTiles > 0;
   const weight = props.active || unread ? 'font-semibold' : 'font-normal';
-  const badge = props.active ? 'bg-accent text-on-accent' : 'bg-chip text-ink-2';
   const relation = props.item.placement?.relation;
   return (
     <button
@@ -32,13 +49,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
         <span className={`truncate text-[13px] tracking-[-0.005em] ${weight}`}>{props.item.topic.name}</span>
         {props.showRelation && relation && <RelationBadge relation={relation} />}
       </span>
-      <span
-        className={`flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] font-mono text-[10.5px] font-semibold ${
-          unread ? badge : ''
-        }`}
-      >
-        {unread ? props.item.unreadTiles : ''}
-      </span>
+      <TopicBadge unread={props.item.unreadTiles} matches={props.matches} active={props.active} />
       <span />
       <span className="col-span-2 truncate text-[11.5px] text-muted">{topicLine(props.item)}</span>
     </button>
@@ -95,6 +106,9 @@ interface TopicSidebarProps {
   onOpenInstructions: () => void;
   loading: boolean;
   error: string | null;
+  /** The search bar's filter; null shows every topic. */
+  filter: SearchFilter | null;
+  onClearFilter: () => void;
 }
 
 /** Section keys for the fold state: "team", "routed", "fyi", or "area:<name>". */
@@ -107,10 +121,29 @@ type SectionKey = string;
  */
 const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi'];
 
+/** "Filtering: 2 topics, 5 tiles · Clear", above the topic list while the search bar filters. */
+function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+  return (
+    <p className="flex items-center gap-1.5 px-2.5 text-[11.5px] text-muted">
+      <span>
+        Filtering: {plural(props.topics, 'topic')}, {plural(props.tiles, 'tile')}
+      </span>
+      <span className="text-faint">·</span>
+      <button type="button" onClick={props.onClear} className="text-accent hover:underline">
+        Clear
+      </button>
+    </p>
+  );
+}
+
 export function TopicSidebar(props: TopicSidebarProps) {
   const [folded, setFolded] = useState<SectionKey[]>(FOLDED_BY_DEFAULT);
-  const groups = sidebarGroups(props.topics);
-  const isOpen = (key: SectionKey) => !folded.includes(key);
+  const filter = props.filter;
+  const shown = filterTopics(props.topics, filter);
+  const groups = sidebarGroups(shown);
+  // While filtering every section is open, so no match hides in a fold.
+  const isOpen = (key: SectionKey) => filter !== null || !folded.includes(key);
   const toggle = (key: SectionKey) => setFolded(isOpen(key) ? [...folded, key] : folded.filter((entry) => entry !== key));
   const topicItems = (items: TopicListItem[], showRelation = false) =>
     items.map((item) => (
@@ -120,6 +153,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
         active={item.topic.id === props.activeTopicId}
         onSelect={() => props.onSelect(item.topic.id)}
         showRelation={showRelation}
+        matches={filter?.tilesByTopic.get(item.topic.id)?.size ?? null}
       />
     ));
   const section = (key: SectionKey, label: string, items: TopicListItem[], children: ReactNode) =>
@@ -133,7 +167,9 @@ export function TopicSidebar(props: TopicSidebarProps) {
   return (
     <nav aria-label="Topics" className="flex min-h-0 flex-col gap-[18px] overflow-auto border-r border-hairline-strong bg-sidebar px-2.5 pt-3.5 pb-2.5">
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
+      {filter && <FilterHint topics={shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
       {props.error && <p className="px-2.5 text-xs text-unread-ink">Could not load topics: {props.error}</p>}
+      {filter && shown.length === 0 && <p className="px-2.5 text-xs leading-relaxed text-muted">No topic has a PR that matches.</p>}
       {!props.error && !props.loading && props.topics.length === 0 && (
         <p className="px-2.5 text-xs leading-relaxed text-muted">No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.</p>
       )}

@@ -8,6 +8,7 @@ import type {
   InstructionsView,
   MemorySources,
   PrDetail,
+  SearchResult,
   TopicDetail,
   TopicListItem,
 } from '@code-manager/core';
@@ -46,6 +47,15 @@ describe('server routes over the fake engine', () => {
     expect(depot?.group).toBe('needs_you');
     expect(depot?.unreadTiles).toBe(3);
     expect(topics.find((item) => item.topic.id === 'topic-frontend-build')?.group).toBe('quiet');
+  });
+
+  it('filters topics and tiles by a search query', async () => {
+    const app = appWithFake();
+    const res = await app.request(`/api/search?q=${encodeURIComponent('turbo #41921')}`);
+    const result = (await res.json()) as SearchResult;
+    expect(result.topics).toEqual([{ topicId: 'topic-depot', tileIds: ['set:turbo-cache'], prKeys: ['PostHog/posthog#41921'] }]);
+    const empty = (await (await app.request('/api/search')).json()) as SearchResult;
+    expect(empty.topics).toEqual([]);
   });
 
   it('returns a topic with tiles and says why a tile is unread', async () => {

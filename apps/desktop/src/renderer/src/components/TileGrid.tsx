@@ -11,6 +11,8 @@ interface TileGridProps {
   selectedTileId: string | null;
   selectedPrKey: string | null;
   onSelect: (tileId: string, prKey: string) => void;
+  /** Tiles the search bar lets through; null shows all. */
+  matchingTileIds: Set<string> | null;
 }
 
 function FilterButton(props: { label: string; active: boolean; onClick: () => void }) {
@@ -49,7 +51,8 @@ function FoldedTiles(props: TileGridProps & { label: string; views: TileView[] }
   if (props.views.length === 0) {
     return null;
   }
-  const expanded = open || props.views.some((view) => view.tile.id === props.selectedTileId);
+  // Open while filtering too: a match should not hide behind a fold.
+  const expanded = open || props.matchingTileIds !== null || props.views.some((view) => view.tile.id === props.selectedTileId);
   return (
     <div className="flex flex-col gap-3">
       <button
@@ -68,10 +71,18 @@ function FoldedTiles(props: TileGridProps & { label: string; views: TileView[] }
   );
 }
 
+function emptyText(filter: TileFilter, total: number, searching: boolean): string {
+  if (total === 0) {
+    return searching ? 'No tile here matches the filter.' : 'Nothing in this topic pinged you.';
+  }
+  return filter === 'unread' ? 'No unread tiles here.' : 'Nothing open here.';
+}
+
 /** The topic's live tiles (unread first, then open); snoozed and done ones fold into a row each. */
 export function TileGrid(props: TileGridProps) {
   const [filter, setFilter] = useState<TileFilter>('all');
-  const tiles = props.detail.tiles;
+  const matching = props.matchingTileIds;
+  const tiles = matching ? props.detail.tiles.filter((view) => matching.has(view.tile.id)) : props.detail.tiles;
   const unread = tiles.filter((view) => view.state.kind === 'unread');
   const live = tiles.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
   const shown = filter === 'unread' ? unread : live;
@@ -81,6 +92,7 @@ export function TileGrid(props: TileGridProps) {
         <span className="text-xs font-semibold text-ink-2">Tiles</span>
         <span className="font-mono text-[10.5px] text-faint">
           {tiles.length} · {unread.length} unread
+          {tiles.length < props.detail.tiles.length && ` · ${props.detail.tiles.length - tiles.length} filtered out`}
         </span>
         <div className="ml-auto flex rounded-control bg-segment p-0.5">
           <FilterButton label="All" active={filter === 'all'} onClick={() => setFilter('all')} />
@@ -89,7 +101,7 @@ export function TileGrid(props: TileGridProps) {
       </div>
       {shown.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">
-          {tiles.length === 0 ? 'Nothing in this topic pinged you.' : filter === 'unread' ? 'No unread tiles here.' : 'Nothing open here.'}
+          {emptyText(filter, tiles.length, matching !== null)}
         </p>
       )}
       <Grid {...props} views={shown} />

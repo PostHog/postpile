@@ -18,6 +18,7 @@ import type {
   PendingProposals,
   PrDetail,
   PrKey,
+  SearchResult,
   SnoozeCondition,
   SyncOptions,
   SyncReport,
@@ -40,6 +41,8 @@ export interface EngineService {
   listTopics(): Promise<TopicListItem[]>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */
   getTopic(topicId: string): Promise<TopicDetail | null>;
+  /** Search bar: topics, tiles and PRs matching every term of `query`. Empty query, empty result. */
+  search(query: string): Promise<SearchResult>;
   /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
   /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */

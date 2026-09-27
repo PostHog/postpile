@@ -27,7 +27,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
-  `proposals.ts` (`useProposals`, the Inbox), `instructions.ts`
+  `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
+  debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
   (`useMemorySources`, only enabled while a "Why?" panel is open).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
@@ -105,7 +106,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`,
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
-  `StatusFooter`, `Toast`.
+  `StatusFooter`, `Toast`, `SearchField` (title bar filter).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, provenance,
   PR state), `icons.tsx`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong badge, Wrong / Forget on hover), `MemoryButton`,
@@ -131,6 +132,18 @@ tile + PR. Everything else is
 derived on render (`resolveSelection`): a missing pick falls back to the first
 topic, its first tile and that tile's lead PR. Don't mirror server data into
 `useState`.
+
+The picks live in a back / forward history (`lib/history.ts`, hook in
+`lib/use-nav-history.ts`): every user pick goes through `go()` in `App.tsx`,
+which pushes an entry unless it shows what is already on screen. Cmd+[ / ],
+the mouse side buttons and the trackpad swipe (main process 'swipe' -> preload
+`onSwipe`) move through it. Anything new that navigates should call `go()`.
+
+The title bar search filters, it has no result list: `GET /api/search`
+(matcher `searchTopics` in core) returns matching topics and tiles, the
+sidebar and tile grid hide the rest (`lib/search.ts`). When the filter hides
+the picked topic, the first match shows instead; that is derived, not a
+history entry, and clearing the filter brings the pick back.
 
 ## Electron shell
 

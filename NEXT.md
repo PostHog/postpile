@@ -124,13 +124,18 @@ now".
   below #N"), get no glance / topic / dossier / event calls, show in the
   anchor's topic, and turn pinged once notified. Fake data has a Depot
   stack with two pulled-in lower layers.
+- Back / forward navigation in the desktop app: title bar chevrons, Cmd+[ /
+  Cmd+], mouse side buttons, trackpad swipe (only fires with the classic
+  "Swipe between pages" setting; not tried on hardware yet).
+- Title bar search that filters topics and tiles (Cmd+F, Esc clears):
+  `GET /api/search?q=`, in-memory over stored PRs, same matcher in fake mode.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
 
 - Desktop UI follows the chosen style, but the layout is still open. Not in
   the UI yet: a "handled quietly" list (shown disabled), keyboard
-  navigation, dark mode, one-press approve from a tile (Approve lives in the
+  navigation between tiles, dark mode, one-press approve from a tile (Approve lives in the
   detail pane, next to the glance).
 - The write guard is a UI guard. The server itself still accepts writes from
   any caller with the token; `CODE_MANAGER_READ_ONLY=1` is the hard stop.
@@ -162,6 +167,9 @@ now".
   consolidation can only propose splits over timeline PRs.
 - No packaged/signed macOS build yet; `npm run build` only bundles for
   electron-vite.
+- Search matches title, number, author, repo, head branch, topic name and
+  area only (no PR body, comments or labels) and does not highlight the
+  matched text. Filter state and history are not kept across restarts.
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 

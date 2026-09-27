@@ -19,6 +19,7 @@ import type {
   PendingProposals,
   PrDetail,
   PrKey,
+  SearchResult,
   SnoozeCondition,
   SyncOptions,
   SyncReport,
@@ -186,6 +187,10 @@ export class Engine implements EngineService {
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     return this.proposals.decide(proposalId, accept);
+  }
+
+  async search(query: string): Promise<SearchResult> {
+    return this.reads.search(query);
   }
 
   async listFacts(query: FactQuery): Promise<FactView[]> {

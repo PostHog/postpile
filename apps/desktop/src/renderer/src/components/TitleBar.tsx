@@ -26,9 +26,9 @@ function SyncStatus() {
     }
   }
   return (
-    <span className="ml-auto flex items-center gap-2 font-mono text-[11px] text-muted">
-      <span className={`size-1.5 rounded-full ${dot}`} />
-      {text}
+    <span className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted" title={text}>
+      <span className={`size-1.5 shrink-0 rounded-full ${dot}`} />
+      <span className="truncate">{text}</span>
     </span>
   );
 }
@@ -53,47 +53,59 @@ interface TitleBarProps {
   canForward: boolean;
   onBack: () => void;
   onForward: () => void;
+  /** The search field, centered in the bar. */
+  search: ReactNode;
 }
 
-/** 52px bar that drags the window. The left 88px stay free for the traffic lights. */
+/**
+ * 52px bar that drags the window. The left 88px (16px padding + 72px) stay
+ * free for the traffic lights. Three columns, the outer two of equal width
+ * and the padding symmetric, keep the search field centered on the window.
+ */
 export function TitleBar(props: TitleBarProps) {
   const actions = useActions();
   return (
-    <header className="drag-region flex h-[52px] shrink-0 items-center gap-3.5 border-b border-hairline-strong bg-titlebar pr-4 pl-[88px]">
-      <span className="-ml-1.5 flex items-center">
-        <NavButton label="Back" shortcut="⌘[" disabled={!props.canBack} onClick={props.onBack}>
-          <BackIcon />
-        </NavButton>
-        <NavButton label="Forward" shortcut="⌘]" disabled={!props.canForward} onClick={props.onForward}>
-          <ForwardIcon />
-        </NavButton>
-      </span>
-      <span className="flex items-center gap-2">
-        <LogoIcon />
-        <span className="text-[13.5px] font-semibold tracking-[-0.01em]">Code Manager</span>
-      </span>
-      {actions.config?.fake && (
-        <>
-          <span className="h-[18px] w-px bg-frame" />
-          <span
-            className="flex h-[22px] items-center rounded-full border border-dashed border-frame px-2 text-[11px] text-muted"
-            title="CODE_MANAGER_FAKE=1: built-in sample data, nothing reaches GitHub"
-          >
-            Sample data
-          </span>
-        </>
-      )}
-      <SyncStatus />
-      <button
-        type="button"
-        aria-label="Sync now"
-        title="Sync now"
-        disabled={actions.syncing}
-        onClick={() => void actions.sync()}
-        className="flex h-7 w-[30px] items-center justify-center rounded-control border border-control bg-surface text-ink-2 shadow-control hover:bg-subtle disabled:opacity-60"
-      >
-        <SyncIcon className={actions.syncing ? 'animate-spin' : ''} />
-      </button>
+    <header className="drag-region grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(220px,380px)_minmax(0,1fr)] items-center gap-4 border-b border-hairline-strong bg-titlebar px-4">
+      <div className="flex min-w-0 items-center gap-3.5 overflow-hidden pl-[72px] whitespace-nowrap">
+        <span className="-ml-1.5 flex items-center">
+          <NavButton label="Back" shortcut="⌘[" disabled={!props.canBack} onClick={props.onBack}>
+            <BackIcon />
+          </NavButton>
+          <NavButton label="Forward" shortcut="⌘]" disabled={!props.canForward} onClick={props.onForward}>
+            <ForwardIcon />
+          </NavButton>
+        </span>
+        <span className="flex items-center gap-2">
+          <LogoIcon />
+          {/* The name gives way below 1280px so the centered search keeps its width. */}
+          <span className="text-[13.5px] font-semibold tracking-[-0.01em] max-xl:hidden">Code Manager</span>
+        </span>
+        {actions.config?.fake && (
+          <>
+            <span className="h-[18px] w-px bg-frame" />
+            <span
+              className="flex h-[22px] shrink-0 items-center rounded-full border border-dashed border-frame px-2 text-[11px] text-muted"
+              title="CODE_MANAGER_FAKE=1: built-in sample data, nothing reaches GitHub"
+            >
+              Sample data
+            </span>
+          </>
+        )}
+      </div>
+      {props.search}
+      <div className="flex min-w-0 items-center justify-end gap-3.5">
+        <SyncStatus />
+        <button
+          type="button"
+          aria-label="Sync now"
+          title="Sync now"
+          disabled={actions.syncing}
+          onClick={() => void actions.sync()}
+          className="flex h-7 w-[30px] shrink-0 items-center justify-center rounded-control border border-control bg-surface text-ink-2 shadow-control hover:bg-subtle disabled:opacity-60"
+        >
+          <SyncIcon className={actions.syncing ? 'animate-spin' : ''} />
+        </button>
+      </div>
     </header>
   );
 }
