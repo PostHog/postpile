@@ -33,3 +33,15 @@ export function avatarTone(login: string): string {
   }
   return AVATAR_TONES[sum % AVATAR_TONES.length] ?? BOT_TONE;
 }
+
+/**
+ * GitHub's public avatar for a user login, `px` wide. No API call and no
+ * token. Null for teams (no such URL) and bots: their avatar needs the app
+ * id, which the API does not give us yet, so they keep the grey initials.
+ */
+export function avatarUrl(login: string, px: number): string | null {
+  if (isBotLogin(login) || isTeam(login) || login === '') {
+    return null;
+  }
+  return `https://avatars.githubusercontent.com/${encodeURIComponent(login)}?s=${px}`;
+}
