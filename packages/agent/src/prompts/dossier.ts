@@ -1,4 +1,4 @@
-import type { CheckRollup, DossierQuestion, DossierVersion, Pr, PrKey } from '@code-manager/core';
+import type { CheckRollup, DossierCare, DossierQuestion, DossierVersion, Pr, PrKey } from '@code-manager/core';
 
 const ciWords: Record<CheckRollup, string> = {
   SUCCESS: 'CI passing',
@@ -23,6 +23,12 @@ function questionLine(question: DossierQuestion, index: number): string {
   const sources = [...new Set(question.refs.map((ref) => ref.prKey))];
   const about = [question.askedBy ? `asked by @${question.askedBy}` : '', ...sources].filter(Boolean).join(', ');
   return `- Q${index + 1} ${question.text}${about ? ` (${about})` : ''}`;
+}
+
+/** An observed care was inferred from activity, which anyone on GitHub can write. */
+function careLine(care: DossierCare): string {
+  const source = care.source === 'observed' ? 'observed, unconfirmed' : care.source;
+  return `- ${care.text} (${source})`;
 }
 
 function section(title: string, lines: string[]): string[] {
@@ -52,10 +58,7 @@ export function renderDossier(version: DossierVersion, prs: Map<PrKey, Pr>): str
       'People:',
       d.people.map((p) => `- @${p.login} ${p.role}${p.note ? `: ${p.note}` : ''}`),
     ),
-    ...section(
-      'What the user cares about here:',
-      d.userCares.map((c) => `- ${c.text} (${c.source})`),
-    ),
+    ...section('What the user cares about here:', d.userCares.map(careLine)),
     ...section('Open questions:', d.openQuestions.map(questionLine)),
     ...section('PR timeline, oldest first (state from GitHub now, not from memory):', timeline),
     ...(d.earlier ? [`Earlier: ${d.earlier}`] : []),

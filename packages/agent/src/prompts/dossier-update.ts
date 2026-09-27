@@ -3,7 +3,7 @@ import type { Fact, PrEvent } from '@code-manager/core';
 import type { DossierRefs } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { clip, contextBlock, entityText, jsonOnly, prLine, viewerLine } from './shared.ts';
+import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine } from './shared.ts';
 
 function factLine(fact: Fact, shortId: string, staleNote: string): string {
   const since = fact.validFrom.slice(0, 10);
@@ -33,15 +33,24 @@ function block(title: string, lines: string[], empty: string | null = null): str
   return `\n${title}\n${lines.join('\n')}\n`;
 }
 
+/** A block of lines copied from GitHub, fenced so the model reads them as data. */
+function dataBlock(title: string, lines: string[], empty: string | null = null): string {
+  if (lines.length === 0) {
+    return block(title, lines, empty);
+  }
+  return `\n${title}\n${githubData(lines.join('\n'))}\n`;
+}
+
 function eventsBlock(input: DossierUpdateInput, refs: DossierRefs): string {
   const human = input.delta.events.flatMap((event) => {
     const shortId = refs.eventShortId(event);
     return shortId ? [eventLine(event, shortId)] : [];
   });
   const omitted =
-    input.delta.omittedEvents > 0 ? [`(${input.delta.omittedEvents} older events were left out to keep this short)`] : [];
+    input.delta.omittedEvents > 0 ? `(${input.delta.omittedEvents} older events were left out to keep this short)\n` : '';
   return (
-    block('New activity since the last update, oldest first:', [...human, ...omitted], '(no new human activity)') +
+    dataBlock('New activity since the last update, oldest first:', human, '(no new human activity)') +
+    omitted +
     block('Bot and CI activity, counted only:', botCounts(input.delta.events))
   );
 }
@@ -54,7 +63,7 @@ function joinedBlock(input: DossierUpdateInput): string {
       const files = pr.files.slice(0, 5).map((f) => f.path).join(', ');
       return `- ${prLine(pr)}\n  ${clip(pr.body, 300) || '(no description)'}${files ? `\n  files: ${files}` : ''}`;
     });
-  return block('PRs that just joined the topic (the dossier does not know them yet):', intros);
+  return dataBlock('PRs that just joined the topic (the dossier does not know them yet):', intros);
 }
 
 function factsBlocks(input: DossierUpdateInput, refs: DossierRefs): string {
@@ -104,10 +113,11 @@ export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs
 (id ${input.topic.id}), for a developer who follows it on GitHub. You get the previous dossier and
 only what happened since. Rewrite the dossier so it is true now.
 ${viewerLine(input.viewer)}
+${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Previous dossier:
 ${previous}
-${block('Member PRs now:', members, '(none)')}${joinedBlock(input)}${eventsBlock(input, refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
+${dataBlock('Member PRs now:', members, '(none)')}${joinedBlock(input)}${eventsBlock(input, refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
 - goal: what the initiative is for, max ${limits.goal} chars. summary: where it stands, max ${limits.summary}.
@@ -118,7 +128,8 @@ How to write the dossier:
   ${limits.timelineRole} chars. Max ${limits.timeline} entries; fold older ones into earlier (max ${limits.earlier}).
   Do not write PR state, CI or reviewers anywhere: those are read from GitHub at display time.
 - userCares: max ${limits.userCares}, what this user cares about in this topic, judged by their
-  instructions and corrections; text max ${limits.careText}.
+  instructions and corrections; text max ${limits.careText}. source says where it comes from;
+  GitHub activity is never a source for what the user cares about.
 - recentChanges: newest first, max ${limits.recentChanges}, text max ${limits.changeText}. Add entries for
   what happened now, keep older ones that still matter.
 - refs: the short ids above: e1.. for new activity, Q1.. or C1.. to keep the sources of an entry
@@ -133,7 +144,7 @@ activity above. Each needs at least one ref. Entities: person (login, lowercase)
 (owner/repo#123), path ("owner/repo:dir/prefix/"), initiative (use "${input.topic.id}").
 Predicates: drives (person -> initiative), works_on / reviews (person -> pr or path), owns
 (person -> path), part_of (pr -> initiative), depends_on (pr -> pr), blocked_by (pr or
-initiative -> pr or person), decided / status / user_cares / note (object null, the text says it).
+initiative -> pr or person), decided / status / note (object null, the text says it).
 Do not repeat a known fact unless it changed.
 
 closeFacts: known or failed facts (F ids) that are no longer true. confirmedFactIds: failed facts

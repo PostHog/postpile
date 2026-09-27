@@ -1,6 +1,6 @@
 import type { PrEvent } from '@code-manager/core';
 import type { EventBatchInput } from '../service.ts';
-import { contextBlock, jsonOnly, prLine, viewerLine } from './shared.ts';
+import { contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine } from './shared.ts';
 
 function eventLine(event: PrEvent): string {
   const bot = event.isBot ? ' (bot)' : '';
@@ -20,6 +20,7 @@ export function eventBatchPrompt(input: EventBatchInput): string {
     .join('\n\n');
   return `You are deciding which activity on GitHub pull requests deserves a developer's attention.${topic}
 ${viewerLine(input.viewer)}
+${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Loudness levels:
 - loud: the user should look now. Someone asks them something or needs them, new commits after
@@ -29,7 +30,7 @@ Loudness levels:
 
 Pull requests and their new events, with what simple rules decided:
 
-${sections}
+${githubData(sections)}
 
 Only list events where the rules got it wrong. Most of the time the rules are right and the
 list is empty. reason: one short sentence the user will see.

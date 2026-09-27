@@ -1,5 +1,5 @@
 import { clampDossier, parsePrKey } from '@code-manager/core';
-import type { Dossier, DossierFlag, EntityRef, FactCandidate, IsoTime } from '@code-manager/core';
+import type { Dossier, DossierCare, DossierCareSource, DossierFlag, EntityRef, FactCandidate, IsoTime } from '@code-manager/core';
 import type { z } from 'zod';
 import type { DossierRefs } from './dossier-refs.ts';
 import type { dossierUpdateOutput } from './schemas.ts';
@@ -44,7 +44,28 @@ function changeTime(at: string, now: IsoTime): IsoTime {
   return Number.isNaN(time) ? now : new Date(time).toISOString();
 }
 
-function toDossier(answer: DossierAnswer['dossier'], memberKeys: Set<string>, refs: DossierRefs, now: IsoTime): Dossier {
+/** The sources the prompt actually carried. A care citing any other source was made up, or planted in GitHub text. */
+function careSources(input: DossierUpdateInput): Set<DossierCareSource> {
+  const sources = new Set<DossierCareSource>(['observed']);
+  if (input.context.instructions.trim()) {
+    sources.add('instructions');
+  }
+  if (input.context.tailoring.trim()) {
+    sources.add('tailoring');
+  }
+  if (input.context.recentFeedback.length > 0 || input.delta.newFeedback.length > 0) {
+    sources.add('feedback');
+  }
+  return sources;
+}
+
+function toCares(answer: DossierAnswer['dossier']['userCares'], input: DossierUpdateInput): DossierCare[] {
+  const sources = careSources(input);
+  return answer.filter((care) => sources.has(care.source));
+}
+
+function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, refs: DossierRefs, now: IsoTime): Dossier {
+  const memberKeys = new Set(input.prs.map((pr) => pr.key));
   return clampDossier({
     goal: answer.goal,
     summary: answer.summary,
@@ -59,7 +80,7 @@ function toDossier(answer: DossierAnswer['dossier'], memberKeys: Set<string>, re
     // PRs that left or never were members do not belong on the timeline.
     timeline: answer.timeline.filter((entry) => memberKeys.has(entry.prKey)),
     earlier: answer.earlier,
-    userCares: answer.userCares,
+    userCares: toCares(answer.userCares, input),
     recentChanges: answer.recentChanges.map((c) => ({ at: changeTime(c.at, now), text: c.text, refs: refs.resolve(c.refs) })),
   });
 }
@@ -80,6 +101,10 @@ function toFlags(answer: DossierAnswer['flags'], memberKeys: Set<string>): Dossi
 function toCandidates(answer: DossierAnswer['facts'], topicId: string, refs: DossierRefs): FactCandidate[] {
   const candidates: FactCandidate[] = [];
   for (const fact of answer) {
+    // Its refs can only be events or PRs, never the user's own words, so GitHub text would be its only source.
+    if (fact.predicate === 'user_cares') {
+      continue;
+    }
     const subject = normalizeEntity(fact.subject, topicId);
     const object = fact.object ? normalizeEntity(fact.object, topicId) : null;
     const factRefs = refs.resolve(fact.refs);
@@ -130,7 +155,7 @@ export function mapDossierAnswer(answer: DossierAnswer, input: DossierUpdateInpu
   const memberKeys = new Set(input.prs.map((pr) => pr.key));
   const closeFacts = toCloses(answer.closeFacts, refs);
   return {
-    dossier: toDossier(answer.dossier, memberKeys, refs, now),
+    dossier: toDossier(answer.dossier, input, refs, now),
     flags: toFlags(answer.flags, memberKeys),
     facts: toCandidates(answer.facts, input.topic.id, refs),
     closeFacts,

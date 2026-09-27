@@ -1,6 +1,6 @@
 import type { PrSet } from '@code-manager/core';
 import type { SetGroupingInput } from '../service.ts';
-import { clip, contextBlock, jsonOnly, prLine } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine } from './shared.ts';
 
 function setLine(set: PrSet): string {
   const members = set.members.map((m) => m.prKey).join(', ');
@@ -27,10 +27,11 @@ export function setGroupingPrompt(input: SetGroupingInput): string {
   const existing = input.existingSets.length === 0 ? '(none)' : input.existingSets.map(setLine).join('\n');
   return `You are grouping related GitHub pull requests inside the topic "${input.topic.name}" so a
 developer can review them together. ${input.topic.summary}
+${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Pull requests in the topic:
 
-${prs}
+${githubData(prs)}
 
 Current sets:
 ${existing}

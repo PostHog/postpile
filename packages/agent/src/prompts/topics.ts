@@ -1,5 +1,5 @@
 import type { TopicAssignmentInput, TopicChoice } from '../service.ts';
-import { clip, contextBlock, jsonOnly, prDetails, shortDetail, viewerLine } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail, viewerLine } from './shared.ts';
 
 /** The dossier brief (goal, status, driver) says far more than a name; the summary is the fallback. */
 function topicLine(topic: TopicChoice): string {
@@ -18,6 +18,7 @@ export function topicAssignmentPrompt(input: TopicAssignmentInput): string {
   return `You are sorting GitHub pull requests into topics for a developer. A topic is a piece of
 ongoing work that spans PRs, like "Move CI to Depot" or "Session replay ingestion rewrite".
 ${viewerLine(input.viewer)}
+${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Existing topics:
 ${topics}
