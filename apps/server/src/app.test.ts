@@ -40,14 +40,35 @@ describe('server app', () => {
     expect(await res.json()).toEqual([]);
   });
 
+  it('refuses a bodyless cross-origin approve without the token', async () => {
+    let approved = false;
+    const approve = async () => {
+      approved = true;
+      return { ok: true, message: 'Approved', undoToken: null };
+    };
+    const app = createApp(fakeEngine({ approve }), 'secret');
+    const res = await app.request('/api/prs/PostHog/posthog/1/approve', {
+      method: 'POST',
+      headers: { origin: 'https://evil.example' },
+    });
+    expect(res.status).toBe(401);
+    expect(approved).toBe(false);
+  });
+
+  it('refuses to start without a token', () => {
+    expect(() => createApp(fakeEngine({}), '')).toThrow(/token/);
+  });
+
   it('decodes encoded tile ids', async () => {
     let seen = '';
     const getChat = async (tileId: string) => {
       seen = tileId;
       return [];
     };
-    const app = createApp(fakeEngine({ getChat }), null);
-    await app.request(`/api/tiles/${encodeURIComponent('pr:PostHog/posthog#1')}/chat`);
+    const app = createApp(fakeEngine({ getChat }), 'secret');
+    await app.request(`/api/tiles/${encodeURIComponent('pr:PostHog/posthog#1')}/chat`, {
+      headers: { [TOKEN_HEADER]: 'secret' },
+    });
     expect(seen).toBe('pr:PostHog/posthog#1');
   });
 });

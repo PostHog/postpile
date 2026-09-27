@@ -6,8 +6,8 @@ export interface ServerOptions {
   engine: EngineService;
   /** 0 picks a random free port. */
   port: number;
-  /** When set, every /api request must carry it in TOKEN_HEADER. */
-  token: string | null;
+  /** Every /api request must carry it in TOKEN_HEADER. */
+  token: string;
 }
 
 export interface RunningServer {

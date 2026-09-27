@@ -27,7 +27,7 @@ npm run cli -- topics
 npm run cli -- topic <id>
 npm run cli -- pr owner/repo#123
 
-npm run server                 # HTTP API on 127.0.0.1:4870
+npm run server                 # HTTP API on 127.0.0.1:4870, prints its token
 npm run desktop                # Electron dev mode
 ```
 

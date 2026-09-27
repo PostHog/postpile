@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prKey } from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 
-/** Clients send this header when the server was started with a token. */
+/** Every /api request must carry the server's token in this header. */
 export const TOKEN_HEADER = 'x-code-manager-token';
 
 const snoozeCondition = z.discriminatedUnion('kind', [
@@ -49,13 +49,21 @@ function isClientError(error: Error): boolean {
 /**
  * JSON API over EngineService. Tile and event ids contain "/", "#" and ":",
  * so clients must encodeURIComponent them in paths.
+ *
+ * The token is required, not optional: some routes (approve, mark-read) take
+ * no body, so without it any web page could send them as simple cross-origin
+ * POSTs. CORS can stay open because the token travels in a custom header, which
+ * a page can only send after a preflight and only if it knows the token.
  */
-export function createApp(engine: EngineService, token: string | null): Hono {
+export function createApp(engine: EngineService, token: string): Hono {
+  if (token === '') {
+    throw new Error('createApp needs a non-empty token');
+  }
   const app = new Hono();
 
   app.use('/api/*', cors({ origin: '*', allowHeaders: ['content-type', TOKEN_HEADER] }));
   app.use('/api/*', async (c, next) => {
-    if (token && c.req.method !== 'OPTIONS' && c.req.header(TOKEN_HEADER) !== token) {
+    if (c.req.method !== 'OPTIONS' && c.req.header(TOKEN_HEADER) !== token) {
       return c.json({ error: 'bad token' }, 401);
     }
     await next();

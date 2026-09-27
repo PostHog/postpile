@@ -1,15 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import type { ActionResult, ChatReply, PrDetail, TopicDetail, TopicListItem } from '@code-manager/core';
-import { createApp } from './app.ts';
+import { createApp, TOKEN_HEADER } from './app.ts';
 import { FakeEngine } from './fake/fake-engine.ts';
 
 const setTile = encodeURIComponent('set:turbo-cache');
 
-function appWithFake() {
-  return createApp(new FakeEngine(), null);
+const TOKEN = 'test-token';
+
+interface TestApp {
+  request(path: string, init?: RequestInit): Promise<Response>;
 }
 
-async function post<T>(app: ReturnType<typeof createApp>, path: string, body: unknown = {}): Promise<{ status: number; json: T }> {
+/** Wraps the app so every request carries the token. */
+function appWithFake(): TestApp {
+  const app = createApp(new FakeEngine(), TOKEN);
+  return {
+    request: async (path, init = {}) => {
+      const headers = { ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };
+      return app.request(path, { ...init, headers });
+    },
+  };
+}
+
+async function post<T>(app: TestApp, path: string, body: unknown = {}): Promise<{ status: number; json: T }> {
   const res = await app.request(path, { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
   return { status: res.status, json: (await res.json()) as T };
 }
