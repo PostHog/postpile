@@ -152,6 +152,32 @@ describe('RunnerAgentService.updateDossier line sources', () => {
   });
 });
 
+describe('RunnerAgentService.updateDossier tolerance', () => {
+  it('keeps an update whose question has no askedBy and whose optional fields are missing or odd', async () => {
+    const { runner, service } = setup();
+    runner.answer('dossier_update', {
+      dossier: {
+        summary: 'Tests moved.',
+        status: 'paused',
+        people: [{ login: 'alice', role: 'owner' }],
+        openQuestions: [{ text: 'Release builds?', refs: ['e1'] }],
+        timeline: [{ prKey: 'acme/app#1' }],
+        userCares: [{ text: 'CI cost', source: 'vibes' }],
+      },
+      flags: [{ kind: 'needs_user', text: 'Decide' }],
+    });
+
+    const result = await service.updateDossier(dossierInput());
+
+    expect(result.dossier.openQuestions[0]).toMatchObject({ text: 'Release builds?', askedBy: null });
+    expect(result.dossier.status).toBe('active');
+    expect(result.dossier.people).toEqual([{ login: 'alice', role: 'contributor', note: '' }]);
+    expect(result.dossier.timeline[0]).toMatchObject({ prKey: 'acme/app#1', role: '' });
+    expect(result.dossier.userCares[0]).toMatchObject({ text: 'CI cost', source: 'observed' });
+    expect(result.flags).toEqual([{ kind: 'needs_user', text: 'Decide', prKey: null }]);
+  });
+});
+
 describe('RunnerAgentService.updateDossier', () => {
   it('maps short ids back to refs and drops everything it did not hand out', async () => {
     const { runner, service, calls } = setup();

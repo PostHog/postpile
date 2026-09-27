@@ -76,22 +76,40 @@ const predicate = z.enum([
   'note',
 ]);
 
-/** Lengths are not enforced here: one long field must not throw away a whole update. clampDossier cuts. */
+/**
+ * Lengths are not enforced here: one long field must not throw away a whole
+ * update. clampDossier cuts. Fields the dossier can live without are
+ * defaulted or caught the same way: a real sync lost a whole update to one
+ * question without "askedBy".
+ */
 export const dossierOutput = z.object({
-  goal: text,
+  goal: text.default(''),
   goalRefs: refIds,
   summary: text.min(1),
-  status: z.enum(['starting', 'active', 'blocked', 'winding_down', 'finished']),
+  status: z.enum(['starting', 'active', 'blocked', 'winding_down', 'finished']).catch('active'),
   statusNote: text.default(''),
   statusRefs: refIds,
   people: z
-    .array(z.object({ login: text.min(1), role: z.enum(['driver', 'contributor', 'reviewer', 'stakeholder']), note: text }))
+    .array(
+      z.object({
+        login: text.min(1),
+        role: z.enum(['driver', 'contributor', 'reviewer', 'stakeholder']).catch('contributor'),
+        note: text.default(''),
+      }),
+    )
     .default([]),
-  openQuestions: z.array(z.object({ text: text.min(1), askedBy: text.nullable(), refs: refIds })).default([]),
-  timeline: z.array(z.object({ prKey: text, role: text, refs: refIds })).default([]),
+  openQuestions: z.array(z.object({ text: text.min(1), askedBy: text.nullable().default(null), refs: refIds })).default([]),
+  timeline: z.array(z.object({ prKey: text, role: text.default(''), refs: refIds })).default([]),
   earlier: text.default(''),
   userCares: z
-    .array(z.object({ text: text.min(1), source: z.enum(['instructions', 'tailoring', 'feedback', 'observed']), refs: refIds }))
+    .array(
+      z.object({
+        text: text.min(1),
+        // Unknown sources count as observed, which the UI shows as unconfirmed.
+        source: z.enum(['instructions', 'tailoring', 'feedback', 'observed']).catch('observed'),
+        refs: refIds,
+      }),
+    )
     .default([]),
   // at is ignored: the service stamps new entries itself. Older prompts asked for it.
   recentChanges: z.array(z.object({ at: text.optional(), text: text.min(1), refs: refIds })).default([]),
@@ -104,14 +122,14 @@ export const dossierUpdateOutput = z.object({
       z.object({
         kind: z.enum(['needs_user', 'contradiction', 'looks_finished', 'off_topic_pr']),
         text: text.min(1),
-        prKey: text.nullable(),
+        prKey: text.nullable().default(null),
       }),
     )
     .default([]),
   facts: z
-    .array(z.object({ subject: entity, predicate, object: entity.nullable(), text: text.min(1), refs: refIds }))
+    .array(z.object({ subject: entity, predicate, object: entity.nullable().default(null), text: text.min(1), refs: refIds }))
     .default([]),
-  closeFacts: z.array(z.object({ factId: text, reason: text.min(1) })).default([]),
+  closeFacts: z.array(z.object({ factId: text, reason: text.default('closed by the dossier update') })).default([]),
   confirmedFactIds: z.array(text).default([]),
 });
 
