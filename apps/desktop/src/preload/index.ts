@@ -1,7 +1,8 @@
-// Runs sandboxed before the renderer. It hands over where the API lives and
-// nothing else: no ipc, no node access. The main process passes both values as
-// extra command line arguments, which a sandboxed preload can still read.
-import { contextBridge } from 'electron';
+// Runs sandboxed before the renderer. It hands over where the API lives and one
+// listener for trackpad swipes, nothing else: no node access, no way to send
+// ipc. The main process passes the API values as extra command line arguments,
+// which a sandboxed preload can still read.
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 function argValue(name: string): string {
   const prefix = `--${name}=`;
@@ -12,4 +13,12 @@ function argValue(name: string): string {
 contextBridge.exposeInMainWorld('codeManager', {
   apiUrl: argValue('code-manager-api'),
   token: argValue('code-manager-token'),
+  /** Calls back with "back" or "forward" on a trackpad swipe; returns the unsubscribe. */
+  onSwipe(callback: (direction: 'back' | 'forward') => void): () => void {
+    const listener = (_event: IpcRendererEvent, direction: 'back' | 'forward') => callback(direction);
+    ipcRenderer.on('code-manager:swipe', listener);
+    return () => {
+      ipcRenderer.removeListener('code-manager:swipe', listener);
+    };
+  },
 });

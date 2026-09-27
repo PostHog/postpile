@@ -1,8 +1,9 @@
+import type { ReactNode } from 'react';
 import { useActions } from '../api/actions.tsx';
 import { capNote } from '../lib/agent-stats.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
-import { LogoIcon, SyncIcon } from './icons.tsx';
+import { BackIcon, ForwardIcon, LogoIcon, SyncIcon } from './icons.tsx';
 
 function SyncStatus() {
   const actions = useActions();
@@ -32,11 +33,41 @@ function SyncStatus() {
   );
 }
 
+function NavButton(props: { label: string; shortcut: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={props.label}
+      title={`${props.label} (${props.shortcut})`}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      className="flex size-7 items-center justify-center rounded-control text-ink-2 hover:bg-subtle disabled:text-ghost disabled:hover:bg-transparent"
+    >
+      {props.children}
+    </button>
+  );
+}
+
+interface TitleBarProps {
+  canBack: boolean;
+  canForward: boolean;
+  onBack: () => void;
+  onForward: () => void;
+}
+
 /** 52px bar that drags the window. The left 88px stay free for the traffic lights. */
-export function TitleBar() {
+export function TitleBar(props: TitleBarProps) {
   const actions = useActions();
   return (
     <header className="drag-region flex h-[52px] shrink-0 items-center gap-3.5 border-b border-hairline-strong bg-titlebar pr-4 pl-[88px]">
+      <span className="-ml-1.5 flex items-center">
+        <NavButton label="Back" shortcut="⌘[" disabled={!props.canBack} onClick={props.onBack}>
+          <BackIcon />
+        </NavButton>
+        <NavButton label="Forward" shortcut="⌘]" disabled={!props.canForward} onClick={props.onForward}>
+          <ForwardIcon />
+        </NavButton>
+      </span>
       <span className="flex items-center gap-2">
         <LogoIcon />
         <span className="text-[13.5px] font-semibold tracking-[-0.01em]">Code Manager</span>

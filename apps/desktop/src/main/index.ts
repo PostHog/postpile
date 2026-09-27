@@ -51,6 +51,15 @@ async function openWindow(apiUrl: string, token: string): Promise<void> {
     event.preventDefault();
     openExternalLink(url);
   });
+  // Trackpad swipe -> back / forward in the renderer's own history. macOS only
+  // sends this when System Settings > Trackpad > "Swipe between pages" allows
+  // the classic swipe (two or three fingers); the default two-finger scroll
+  // gesture does not reach it.
+  window.on('swipe', (_event, direction) => {
+    if (direction === 'left' || direction === 'right') {
+      window.webContents.send('code-manager:swipe', direction === 'left' ? 'back' : 'forward');
+    }
+  });
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (devUrl) {
     await window.loadURL(devUrl);

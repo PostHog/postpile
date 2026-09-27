@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { TopicDetail } from '@code-manager/core';
 import { useActions } from './api/actions.tsx';
 import { useProposals } from './api/proposals.ts';
@@ -12,15 +12,9 @@ import { TitleBar } from './components/TitleBar.tsx';
 import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
+import { sameView, type NavEntry } from './lib/history.ts';
 import { leadPr } from './lib/tiles.ts';
-
-/** What the middle pane shows. */
-type Pane = 'topic' | 'inbox' | 'instructions';
-
-interface TileSelection {
-  tileId: string;
-  prKey: string;
-}
+import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 
 function MainPane(props: { children: ReactNode }) {
   return <main className="flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">{props.children}</main>;
@@ -35,12 +29,12 @@ function EmptyMain(props: { text: string }) {
 }
 
 /** The tile and PR the user picked, falling back to the first tile and its lead PR. */
-function resolveSelection(selection: TileSelection | null, detail: TopicDetail | undefined) {
+function resolveSelection(entry: NavEntry, detail: TopicDetail | undefined) {
   const tiles = detail?.tiles ?? [];
-  const view = tiles.find((candidate) => candidate.tile.id === selection?.tileId) ?? tiles[0] ?? null;
+  const view = tiles.find((candidate) => candidate.tile.id === entry.tileId) ?? tiles[0] ?? null;
   let prKey: string | null = null;
   if (view) {
-    const picked = view.prs.find((pr) => pr.key === selection?.prKey);
+    const picked = view.prs.find((pr) => pr.key === entry.prKey);
     prKey = picked?.key ?? leadPr(view)?.key ?? null;
   }
   return { view, prKey };
@@ -49,15 +43,24 @@ function resolveSelection(selection: TileSelection | null, detail: TopicDetail |
 export function App() {
   const actions = useActions();
   const topics = useTopics();
-  const [pickedTopicId, setPickedTopicId] = useState<string | null>(null);
-  const [pickedTile, setPickedTile] = useState<TileSelection | null>(null);
-  const [pane, setPane] = useState<Pane>('topic');
   const proposals = useProposals();
 
   const items = topics.data ?? [];
-  const activeItem = items.find((item) => item.topic.id === pickedTopicId) ?? items[0] ?? null;
+  // Navigation is a back / forward history; the current entry is what the user picked.
+  const nav = useNavHistory(new Set(items.map((item) => item.topic.id)));
+  useNavShortcuts(nav.back, nav.forward);
+  const pane = nav.current.pane;
+  const activeItem = items.find((item) => item.topic.id === nav.current.topicId) ?? items[0] ?? null;
   const topic = useTopic(activeItem?.topic.id ?? null);
-  const selected = resolveSelection(pickedTile, topic.data);
+  const selected = resolveSelection(nav.current, topic.data);
+  // What is on screen after the fallbacks. Picking it again adds no history entry.
+  const shown: NavEntry = { pane, topicId: activeItem?.topic.id ?? null, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
+  const go = (next: NavEntry) => {
+    if (!sameView(shown, next)) {
+      nav.navigate(next);
+    }
+  };
+  const pickTile = (tileId: string, prKey: string) => go({ pane: 'topic', topicId: activeItem?.topic.id ?? null, tileId, prKey });
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 
   // A topic counts as seen when the user leaves it: picks another topic, the
@@ -103,7 +106,7 @@ export function App() {
           topics={items}
           selectedTileId={selected.view?.tile.id ?? null}
           selectedPrKey={selected.prKey}
-          onSelect={(tileId, prKey) => setPickedTile({ tileId, prKey })}
+          onSelect={pickTile}
         />
       </MainPane>
     );
@@ -111,20 +114,17 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <TitleBar />
+      <TitleBar canBack={nav.canBack} canForward={nav.canForward} onBack={nav.back} onForward={nav.forward} />
       <div className="grid min-h-0 flex-1 grid-cols-[264px_minmax(0,1fr)_404px]">
         <TopicSidebar
           topics={items}
           activeTopicId={shownTopicId}
-          onSelect={(topicId) => {
-            setPane('topic');
-            setPickedTopicId(topicId);
-          }}
+          onSelect={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })}
           inboxCount={inboxCount}
           inboxOpen={pane === 'inbox'}
-          onOpenInbox={() => setPane('inbox')}
+          onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
           instructionsOpen={pane === 'instructions'}
-          onOpenInstructions={() => setPane('instructions')}
+          onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
           loading={topics.isPending}
           error={topics.error?.message ?? null}
         />
@@ -133,7 +133,7 @@ export function App() {
           key={selected.view?.tile.id ?? 'none'}
           view={selected.view}
           prKey={selected.prKey}
-          onSelectPr={(prKey) => selected.view && setPickedTile({ tileId: selected.view.tile.id, prKey })}
+          onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
         />
       </div>
       <StatusFooter topics={items} detail={topic.data} />
