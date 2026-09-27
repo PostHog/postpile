@@ -53,6 +53,7 @@ describe('Depot examples', () => {
         eventId: `${pr.key}:question_to_user:m1`,
         kind: 'question_to_user',
         summary: 'carol asked you: @viewer runner labels ok?',
+        at: at(10),
       },
     ]);
   });

@@ -92,20 +92,16 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewerLogin?: st
 }
 
 function unreadReasons(input: TileStateInput): UnreadReason[] {
-  const reasons: { at: IsoTime; reason: UnreadReason }[] = [];
+  const reasons: UnreadReason[] = [];
   for (const member of input.tile.members) {
     for (const event of input.events.get(member.prKey) ?? []) {
       if (!isUnseenLoud(event)) {
         continue;
       }
-      reasons.push({
-        at: event.at,
-        reason: { prKey: member.prKey, eventId: event.id, kind: event.kind, summary: event.summary },
-      });
+      reasons.push({ prKey: member.prKey, eventId: event.id, kind: event.kind, summary: event.summary, at: event.at });
     }
   }
-  reasons.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-  return reasons.map((entry) => entry.reason);
+  return reasons.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }
 
 function isSnoozeActive(input: TileStateInput): boolean {

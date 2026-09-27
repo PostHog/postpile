@@ -45,7 +45,10 @@ export interface PrSummary {
   verdict: Verdict | null;
   /** The PR, instructions or feedback moved since the glance was made; the verdict is old. */
   glanceStale: boolean;
+  /** The glance's for_you line, null until a glance exists. */
+  forYou: string | null;
   unseenLoudEvents: number;
+  updatedAt: IsoTime;
 }
 
 export interface TileView {
@@ -135,6 +138,16 @@ export interface FeedbackInput {
   /** wrong_topic: where it should go instead, if the user said. */
   targetTopicId: string | null;
   note: string;
+}
+
+/**
+ * How the server runs, for the UI. writesAllowed is false unless the process
+ * was started with CODE_MANAGER_ALLOW_WRITES=1 (or runs on sample data, where
+ * nothing reaches GitHub); the renderer blocks GitHub-writing actions then.
+ */
+export interface AppConfig {
+  fake: boolean;
+  writesAllowed: boolean;
 }
 
 export interface ChatReply {

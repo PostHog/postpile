@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { AppConfig } from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 import { createApp, TOKEN_HEADER } from './app.ts';
+
+const CONFIG: AppConfig = { fake: false, writesAllowed: false };
 
 function notImplemented(): never {
   throw new Error('not implemented');
@@ -38,7 +41,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
 
 describe('server app', () => {
   it('lists topics and enforces the token', async () => {
-    const app = createApp(fakeEngine({ listTopics: async () => [] }), 'secret');
+    const app = createApp(fakeEngine({ listTopics: async () => [] }), 'secret', CONFIG);
     expect((await app.request('/api/topics')).status).toBe(401);
     const res = await app.request('/api/topics', { headers: { [TOKEN_HEADER]: 'secret' } });
     expect(res.status).toBe(200);
@@ -51,7 +54,7 @@ describe('server app', () => {
       approved = true;
       return { ok: true, message: 'Approved', undoToken: null };
     };
-    const app = createApp(fakeEngine({ approve }), 'secret');
+    const app = createApp(fakeEngine({ approve }), 'secret', CONFIG);
     const res = await app.request('/api/prs/PostHog/posthog/1/approve', {
       method: 'POST',
       headers: { origin: 'https://evil.example' },
@@ -60,8 +63,15 @@ describe('server app', () => {
     expect(approved).toBe(false);
   });
 
+  it('serves the app config behind the token', async () => {
+    const app = createApp(fakeEngine({}), 'secret', CONFIG);
+    expect((await app.request('/api/config')).status).toBe(401);
+    const res = await app.request('/api/config', { headers: { [TOKEN_HEADER]: 'secret' } });
+    expect(await res.json()).toEqual({ fake: false, writesAllowed: false });
+  });
+
   it('refuses to start without a token', () => {
-    expect(() => createApp(fakeEngine({}), '')).toThrow(/token/);
+    expect(() => createApp(fakeEngine({}), '', CONFIG)).toThrow(/token/);
   });
 
   it('normalises snooze times to UTC and refuses date-only values', async () => {
@@ -70,7 +80,7 @@ describe('server app', () => {
       seen.push(condition);
       return { ok: true, message: 'Snoozed', undoToken: null };
     };
-    const app = createApp(fakeEngine({ snooze }), 'secret');
+    const app = createApp(fakeEngine({ snooze }), 'secret', CONFIG);
     const send = (until: string) =>
       app.request('/api/tiles/t/snooze', {
         method: 'POST',
@@ -89,7 +99,7 @@ describe('server app', () => {
       seen = tileId;
       return [];
     };
-    const app = createApp(fakeEngine({ getChat }), 'secret');
+    const app = createApp(fakeEngine({ getChat }), 'secret', CONFIG);
     await app.request(`/api/tiles/${encodeURIComponent('pr:PostHog/posthog#1')}/chat`, {
       headers: { [TOKEN_HEADER]: 'secret' },
     });

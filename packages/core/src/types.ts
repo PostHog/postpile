@@ -391,6 +391,8 @@ export interface UnreadReason {
   eventId: string;
   kind: EventKind;
   summary: string;
+  /** When the event happened, so the UI can say how long it has waited. */
+  at: IsoTime;
 }
 
 /** Derived, never stored. */

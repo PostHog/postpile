@@ -1,15 +1,16 @@
 // Standalone server for development and the future web app:
 //   npm start -w @code-manager/server
 //   CODE_MANAGER_FAKE=1 npm start -w @code-manager/server   (sample data)
+//   CODE_MANAGER_ALLOW_WRITES=1 lets the UI approve, comment and mark read on GitHub
 import { randomBytes } from 'node:crypto';
-import { engineFromEnv } from './engine-from-env.ts';
+import { appConfigFromEnv, engineFromEnv } from './engine-from-env.ts';
 import { startServer } from './start.ts';
 
 const port = Number(process.env.PORT || 4870);
 // A fresh token per run unless one is given, so web pages cannot drive the API.
 const token = process.env.CODE_MANAGER_TOKEN || randomBytes(24).toString('hex');
 const engine = engineFromEnv();
-const server = await startServer({ engine, port, token });
+const server = await startServer({ engine, port, token, config: appConfigFromEnv() });
 console.log(`code-manager API on ${server.url}`);
 console.log(`token: ${token}  (send it as x-code-manager-token, or open the UI with ?token=${token})`);
 

@@ -72,6 +72,7 @@ export class ReadModels {
       if (!pr) {
         continue;
       }
+      const glance = glances.get(pr.key);
       summaries.push({
         key: pr.key,
         title: pr.title,
@@ -80,9 +81,11 @@ export class ReadModels {
         state: pr.state,
         isDraft: pr.isDraft,
         provenance: member.provenance,
-        verdict: glances.get(pr.key)?.verdict ?? null,
+        verdict: glance?.verdict ?? null,
         glanceStale: stale.has(pr.key),
+        forYou: glance?.forYou ?? null,
         unseenLoudEvents: (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
+        updatedAt: pr.updatedAt,
       });
     }
     return summaries;

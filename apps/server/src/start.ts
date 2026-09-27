@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import type { AppConfig } from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 import { createApp } from './app.ts';
 
@@ -8,6 +9,8 @@ export interface ServerOptions {
   port: number;
   /** Every /api request must carry it in TOKEN_HEADER. */
   token: string;
+  /** Served at /api/config so the UI knows whether GitHub writes are allowed. */
+  config: AppConfig;
 }
 
 export interface RunningServer {
@@ -18,7 +21,7 @@ export interface RunningServer {
 
 /** Binds to 127.0.0.1 only. The API can approve PRs, so it never listens on the network. */
 export function startServer(options: ServerOptions): Promise<RunningServer> {
-  const app = createApp(options.engine, options.token);
+  const app = createApp(options.engine, options.token, options.config);
   return new Promise((resolve) => {
     const server = serve({ fetch: app.fetch, port: options.port, hostname: '127.0.0.1' }, (info) => {
       resolve({

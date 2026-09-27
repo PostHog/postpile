@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
-import { prKey } from '@code-manager/core';
+import { prKey, type AppConfig } from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 
 /** Every /api request must carry the server's token in this header. */
@@ -59,7 +59,7 @@ function isClientError(error: Error): boolean {
  * POSTs. CORS can stay open because the token travels in a custom header, which
  * a page can only send after a preflight and only if it knows the token.
  */
-export function createApp(engine: EngineService, token: string): Hono {
+export function createApp(engine: EngineService, token: string, config: AppConfig): Hono {
   if (token === '') {
     throw new Error('createApp needs a non-empty token');
   }
@@ -76,6 +76,7 @@ export function createApp(engine: EngineService, token: string): Hono {
   app.onError((error, c) => c.json({ error: error.message }, isClientError(error) ? 400 : 500));
 
   app.get('/api/health', (c) => c.json({ ok: true }));
+  app.get('/api/config', (c) => c.json(config));
   app.post('/api/sync', async (c) => {
     // The body is optional: a bare POST syncs with no limits.
     const text = await c.req.text();

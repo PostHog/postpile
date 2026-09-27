@@ -129,7 +129,7 @@ export class FakeEngine implements EngineService {
     const unreadBecause: UnreadReason[] = [];
     for (const member of tile.members) {
       for (const event of this.eventsOf(member.prKey).filter(isUnseenLoud)) {
-        unreadBecause.push({ prKey: member.prKey, eventId: event.id, kind: event.kind, summary: event.summary });
+        unreadBecause.push({ prKey: member.prKey, eventId: event.id, kind: event.kind, summary: event.summary, at: event.at });
       }
     }
     if (unreadBecause.length > 0) {
@@ -163,7 +163,9 @@ export class FakeEngine implements EngineService {
         provenance: member.provenance,
         verdict: glance?.verdict ?? null,
         glanceStale: false,
+        forYou: glance?.forYou ?? null,
         unseenLoudEvents: this.eventsOf(pr.key).filter(isUnseenLoud).length,
+        updatedAt: pr.updatedAt,
       });
     }
     return { tile, state: this.tileState(tile), prs };

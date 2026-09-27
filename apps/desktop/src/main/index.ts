@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, shell } from 'electron';
 import fixPath from 'fix-path';
 import type { EngineService } from '@code-manager/engine';
-import { engineFromEnv, startServer, type RunningServer } from '@code-manager/server';
+import { appConfigFromEnv, engineFromEnv, startServer, type RunningServer } from '@code-manager/server';
 
 // A GUI launch gets launchd's minimal PATH. gh and claude live in
 // /opt/homebrew/bin and ~/.local/bin, so take PATH from the login shell.
@@ -23,9 +23,16 @@ function openExternalLink(url: string): void {
 
 async function openWindow(apiUrl: string, token: string): Promise<void> {
   const window = new BrowserWindow({
-    width: 1400,
+    width: 1440,
     height: 900,
+    minWidth: 1100,
+    minHeight: 640,
     title: 'code-manager',
+    // The renderer draws its own 52px title bar and leaves 88px on the left
+    // for the traffic lights; this centres them in that bar.
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 18, y: 18 },
+    backgroundColor: '#f7f8fa',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       // Read by the preload script, see src/preload/index.ts.
@@ -56,8 +63,9 @@ async function start(): Promise<void> {
   // The token keeps other local processes and web pages from driving the API.
   const token = randomBytes(24).toString('hex');
   // CODE_MANAGER_FAKE=1 runs on sample data, see engineFromEnv.
+  // CODE_MANAGER_ALLOW_WRITES=1 unblocks GitHub writes in the UI, see appConfigFromEnv.
   engine = engineFromEnv();
-  server = await startServer({ engine, port: 0, token });
+  server = await startServer({ engine, port: 0, token, config: appConfigFromEnv() });
   await openWindow(server.url, token);
 }
 
