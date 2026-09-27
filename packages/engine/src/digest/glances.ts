@@ -1,7 +1,8 @@
 import type { GlanceInput } from '@code-manager/agent';
 import { Board } from '../board.ts';
 import { glanceInputs } from '../glance-inputs.ts';
-import { errorText, type DigestDeps } from './deps.ts';
+import { errorText } from '../errors.ts';
+import type { DigestDeps } from './deps.ts';
 
 /**
  * One glance per open PR that shows up in a tile. The input hash decides

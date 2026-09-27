@@ -1,6 +1,7 @@
 import type { PrEvent, PrKey } from '@code-manager/core';
 import { prKeyOfEvent } from '../ids.ts';
-import { errorText, type DigestDeps } from './deps.ts';
+import { errorText } from '../errors.ts';
+import type { DigestDeps } from './deps.ts';
 
 /**
  * Second opinion on new loud events only: a wrong "loud" costs the user an

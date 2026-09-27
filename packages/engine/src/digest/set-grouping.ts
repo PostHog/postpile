@@ -1,7 +1,8 @@
 import { setGroupingInputHash, type SetProposal } from '@code-manager/agent';
 import type { PrSet, Topic } from '@code-manager/core';
 import { newSetId } from '../ids.ts';
-import { errorText, type DigestDeps } from './deps.ts';
+import { errorText } from '../errors.ts';
+import type { DigestDeps } from './deps.ts';
 
 function hashKey(topicId: string): string {
   return `set_grouping_hash:${topicId}`;

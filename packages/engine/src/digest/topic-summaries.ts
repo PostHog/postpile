@@ -1,6 +1,7 @@
 import { topicSummaryInputHash } from '@code-manager/agent';
 import type { Pr, Topic } from '@code-manager/core';
-import { errorText, type DigestDeps } from './deps.ts';
+import { errorText } from '../errors.ts';
+import type { DigestDeps } from './deps.ts';
 
 /** Bounds the summary prompt for big topics: the most recently updated PRs tell the story. */
 export const SUMMARY_MAX_PRS = 40;

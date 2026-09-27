@@ -1,7 +1,8 @@
 import type { TopicAssignment, TopicChoice } from '@code-manager/agent';
 import type { Pr, Topic } from '@code-manager/core';
 import { newTopicId } from '../ids.ts';
-import { errorText, type DigestDeps } from './deps.ts';
+import { errorText } from '../errors.ts';
+import type { DigestDeps } from './deps.ts';
 
 /** PRs per assignment call. Keeps the prompt small enough for a quick answer. */
 export const ASSIGNMENT_BATCH_SIZE = 20;

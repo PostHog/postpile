@@ -3,13 +3,10 @@ import type { ActionResult, Pr, PrKey } from '@code-manager/core';
 import type { GitHubWriter } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
 import type { PromptContextSource } from '../prompt-context.ts';
+import { errorText } from '../errors.ts';
 import { loadViewer } from '../viewer-meta.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Actions on one PR that write to GitHub right away: approve and comment. */
 export class PrActions {

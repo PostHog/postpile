@@ -14,7 +14,3 @@ export interface DigestDeps {
   errors: string[];
   now: () => Date;
 }
-
-export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

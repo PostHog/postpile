@@ -7,6 +7,7 @@ import {
   type Timers,
 } from '@code-manager/core';
 import type { GitHubReader, GitHubWriter } from '@code-manager/github';
+import { errorText } from './errors.ts';
 
 export { UNDO_WINDOW_MS, type Timers };
 
@@ -98,8 +99,7 @@ export class MarkReadQueue {
       try {
         await this.markOne(thread);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.notes.push(`mark-read: notification ${thread.id} failed: ${message}`);
+        this.notes.push(`mark-read: notification ${thread.id} failed: ${errorText(error)}`);
       }
     }
   }
