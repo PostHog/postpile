@@ -15,6 +15,8 @@ export interface LoudnessInput {
   subject?: string | null;
   /** The viewer already spoke on the PR after this event, so it is handled. */
   userRepliedAfter?: boolean;
+  /** review_requested: the viewer reviewed after it, or the request was removed later. */
+  requestAnswered?: boolean;
 }
 
 export interface LoudnessDecision {
@@ -98,6 +100,9 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
   switch (input.kind) {
     case 'review_requested':
       if (isViewerSubject(input.subject, input.viewer)) {
+        if (input.requestAnswered) {
+          return decide('quiet', 'review request already answered or removed');
+        }
         return decide('loud', 'review requested from you');
       }
       return decide('quiet', 'review requested from someone else');

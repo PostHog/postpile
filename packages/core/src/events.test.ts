@@ -185,6 +185,33 @@ describe('deriveEvents: reviews, commits, timeline, CI', () => {
     ]);
   });
 
+  it('keeps a review request quiet once the viewer reviewed after it or it was removed', () => {
+    const request = makeTimelineItem({ id: 't1', kind: 'review_requested', subject: 'viewer', at: at(1) });
+    const reviewed = makePr({
+      timeline: [request],
+      reviews: [makeReview({ author: 'viewer', state: 'COMMENTED', submittedAt: at(5) })],
+    });
+    expect(only(deriveEvents(reviewed, viewer, null), 'review_requested')[0]?.ruleLoudness).toBe('quiet');
+
+    const removed = makePr({
+      timeline: [
+        request,
+        makeTimelineItem({ id: 't2', kind: 'review_request_removed', subject: 'viewer', at: at(3) }),
+      ],
+    });
+    expect(only(deriveEvents(removed, viewer, null), 'review_requested')[0]?.ruleLoudness).toBe('quiet');
+
+    // Asked again after the review: loud again.
+    const again = makePr({
+      timeline: [request, makeTimelineItem({ id: 't3', kind: 'review_requested', subject: 'viewer', at: at(9) })],
+      reviews: [makeReview({ author: 'viewer', state: 'COMMENTED', submittedAt: at(5) })],
+    });
+    expect(only(deriveEvents(again, viewer, null), 'review_requested').map((e) => e.ruleLoudness)).toEqual([
+      'quiet',
+      'loud',
+    ]);
+  });
+
   it('flags a merge without the viewer review when they were asked', () => {
     const pr = makePr({
       state: 'MERGED',

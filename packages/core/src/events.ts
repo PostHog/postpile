@@ -60,6 +60,24 @@ function viewerSpokeAfter(pr: Pr, viewer: Viewer, at: IsoTime): boolean {
   return spokeInComment || spokeInReview;
 }
 
+/**
+ * A review request is answered once the viewer submitted a review after it,
+ * or once the same request was removed later. Otherwise the first fetch of an
+ * old PR would show a long-handled request as unread.
+ */
+function requestAnswered(pr: Pr, viewer: Viewer, raw: RawEvent): boolean {
+  if (raw.kind !== 'review_requested') {
+    return false;
+  }
+  const reviewedAfter = pr.reviews.some(
+    (r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING' && r.submittedAt > raw.at,
+  );
+  const removedAfter = pr.timeline.some(
+    (item) => item.kind === 'review_request_removed' && item.subject === raw.subject && item.at > raw.at,
+  );
+  return reviewedAfter || removedAfter;
+}
+
 // A reply inside a review thread never @-mentions the viewer, so nothing else
 // would find it. Same signal ghatchup uses.
 function isReplyToViewer(comment: Comment, pr: Pr, viewer: Viewer): boolean {
@@ -336,6 +354,7 @@ export function deriveEvents(
       caresAboutUnreviewedMerges: options.caresAboutUnreviewedMerges,
       subject: raw.subject,
       userRepliedAfter: addressedKinds.includes(raw.kind) && viewerSpokeAfter(pr, viewer, raw.at),
+      requestAnswered: requestAnswered(pr, viewer, raw),
     });
     return {
       id: eventId(pr.key, raw.kind, raw.sourceId),
