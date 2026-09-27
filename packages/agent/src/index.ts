@@ -1,6 +1,12 @@
 export type { AgentPurpose, AgentRequest, AgentResponse, AgentRunner } from './runner.ts';
 export { ClaudeCliRunner, claudeArgs, claudeEnv, parseClaudeOutput } from './claude-cli.ts';
+export type { ClaudeCliRunnerOptions } from './claude-cli.ts';
+export { ConcurrencyLimiter } from './limiter.ts';
+export { FakeRunner } from './fake-runner.ts';
 export { inputHash, PROMPT_VERSION } from './hash.ts';
+export { glanceInputHash, setGroupingInputHash, topicSummaryInputHash } from './hashes.ts';
+export { AgentOutputError, extractJson, parseAgentJson } from './json.ts';
 export { modelFor } from './models.ts';
 export type * from './service.ts';
 export { RunnerAgentService } from './claude-service.ts';
+export type { RunnerAgentServiceOptions } from './claude-service.ts';
