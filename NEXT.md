@@ -95,6 +95,19 @@ now".
   - "Why?" on every fact and dossier line: sources (GitHub and the user's
     own words) plus verify state. Dossier updates now cite sources on every
     line and see the user's chat turns in the topic.
+- Fix pass after the first real full sync (142 PRs, 120 calls, $3.23,
+  61 topics):
+  - syncs the app starts are capped (`CODE_MANAGER_MAX_AGENT_CALLS`,
+    default 30); the title bar says when a sync stopped at the cap
+  - topic assignment prefers existing topics (member counts in the
+    prompt), may leave a lone PR in Unsorted, creates at most 5 topics per
+    sync; Unsorted PRs are asked about again after the next consolidation,
+    which is told to propose merges for 1-2 PR topics
+  - dossier answers with missing optional fields (askedBy, ...) no longer
+    fail the whole update
+  - PRs without a glance say why: skipped by the call cap or failed
+  - topic subtitles come from the dossier status line; meta phrases like
+    "First write-up." are dropped and the prompt forbids them
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -136,6 +149,16 @@ now".
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 
+- **Pulled-in PRs never appear on real data, by design so far.** The engine
+  only fetches PRs that have a notification thread, and any thread counts
+  as pinged (subscribed included). Stacks and sets are built from those
+  PRs, so every member is pinged and "N pulled in" stays 0. What would
+  produce pulled-in PRs: fetch stack neighbours (a PR whose head is a
+  member's base, or the other way round) and PRs linked from bodies or
+  comments without a thread; optionally treat `subscribed` threads as
+  context rather than a ping.
+- Unsorted PRs are not shown to consolidation; they are only re-offered to
+  topic assignment after a consolidation run.
 - Dossiers written before line sources show "no source recorded" on goal,
   status, timeline and cares until their next update. No forced refresh:
   `DOSSIER_PROMPT_VERSION` only goes into the stored input hash.
@@ -244,6 +267,8 @@ Env switches:
   for smoke runs against the real account.
 - `CODE_MANAGER_ALLOW_WRITES=1`: lets the UI send GitHub writes. Off by
   default.
+- `CODE_MANAGER_MAX_AGENT_CALLS`: agent-call cap for syncs the app starts
+  (launch and "Sync now"), default 30. The CLI uses `--max-agent-calls`.
 - `CODE_MANAGER_DB`, `CODE_MANAGER_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/code-manager/db.sqlite`) and the
   instructions file (default `~/.config/code-manager/instructions.md`).
