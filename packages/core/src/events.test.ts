@@ -61,7 +61,7 @@ describe('deriveEvents: comments', () => {
       makeComment({ id: 'a', author: 'viewer', body: 'why this?', createdAt: at(10) }),
       makeComment({ id: 'b', author: 'alice', body: 'because of the cache', createdAt: at(11) }),
     ]);
-    const pr = makePr({ threads: [thread] });
+    const pr = makePr({ threads: [thread], comments: thread.comments });
     const reply = only(deriveEvents(pr, viewer, null), 'reply_to_user')[0];
     expect(reply).toMatchObject({ actor: 'alice', ruleLoudness: 'loud' });
   });
@@ -71,7 +71,7 @@ describe('deriveEvents: comments', () => {
       makeComment({ id: 'a', author: 'alice', body: 'note', createdAt: at(10) }),
       makeComment({ id: 'b', author: 'viewer', body: 'ack', createdAt: at(11) }),
     ]);
-    const events = deriveEvents(makePr({ threads: [thread] }), viewer, null);
+    const events = deriveEvents(makePr({ threads: [thread], comments: thread.comments }), viewer, null);
     expect(only(events, 'reply_to_user')).toHaveLength(0);
   });
 
@@ -100,12 +100,6 @@ describe('deriveEvents: comments', () => {
       ['bot_comment', 'quiet', true],
       ['bot_comment', 'quiet', true],
     ]);
-  });
-
-  it('counts a comment present in both lists once', () => {
-    const shared = makeComment({ id: 'x', body: '@viewer hi', threadId: 'th1', kind: 'review_comment' });
-    const pr = makePr({ comments: [shared], threads: [makeThread('th1', [shared])] });
-    expect(deriveEvents(pr, viewer, null)).toHaveLength(1);
   });
 
   it('skips a review body that addresses nobody, since the review event covers it', () => {

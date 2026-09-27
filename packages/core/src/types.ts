@@ -131,6 +131,11 @@ export interface Pr {
   reviewerTeams: string[];
   reviews: Review[];
   commits: Commit[];
+  /**
+   * Every authored body: issue comments, non-empty review bodies and inline
+   * review-thread comments, oldest first. Inline comments are also in
+   * `threads`, grouped; read this list for "all comments".
+   */
   comments: Comment[];
   threads: ReviewThread[];
   timeline: TimelineItem[];

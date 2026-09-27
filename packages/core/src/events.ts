@@ -39,22 +39,8 @@ function withText(prefix: string, body: string): string {
   return text === '' ? prefix : `${prefix}: ${text}`;
 }
 
-/** Issue comments and inline review comments, each once. */
-function allComments(pr: Pr): Comment[] {
-  const byId = new Map<string, Comment>();
-  for (const comment of pr.comments) {
-    byId.set(comment.id, comment);
-  }
-  for (const thread of pr.threads) {
-    for (const comment of thread.comments) {
-      byId.set(comment.id, comment);
-    }
-  }
-  return [...byId.values()];
-}
-
 function viewerSpokeAfter(pr: Pr, viewer: Viewer, at: IsoTime): boolean {
-  const spokeInComment = allComments(pr).some((c) => sameLogin(c.author, viewer.login) && c.createdAt > at);
+  const spokeInComment = pr.comments.some((c) => sameLogin(c.author, viewer.login) && c.createdAt > at);
   const spokeInReview = pr.reviews.some((r) => sameLogin(r.author, viewer.login) && r.submittedAt > at);
   return spokeInComment || spokeInReview;
 }
@@ -311,7 +297,7 @@ function ciEvent(pr: Pr): RawEvent | null {
 
 function collectRawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEvent[] {
   const raw: RawEvent[] = [];
-  for (const comment of allComments(pr)) {
+  for (const comment of pr.comments) {
     const event = commentEvent(comment, pr, viewer);
     if (event) {
       raw.push(event);

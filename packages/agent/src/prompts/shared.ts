@@ -65,16 +65,7 @@ export function jsonOnly(shape: string): string {
 
 /** Human comments across the PR, oldest first. Bot chatter is most of the volume and none of the signal. */
 export function humanComments(pr: Pr): Comment[] {
-  const seen = new Set<string>();
-  const all: Comment[] = [];
-  for (const comment of [...pr.comments, ...pr.threads.flatMap((thread) => thread.comments)]) {
-    if (seen.has(comment.id) || isMachineComment(comment)) {
-      continue;
-    }
-    seen.add(comment.id);
-    all.push(comment);
-  }
-  return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return pr.comments.filter((comment) => !isMachineComment(comment));
 }
 
 export interface PrDetailLimits {
