@@ -22,6 +22,14 @@ const feedbackBody = z.object({
   note: z.string().default(''),
 });
 
+const syncBody = z
+  .object({
+    maxPrs: z.number().int().positive().optional(),
+    maxAgentCalls: z.number().int().min(0).optional(),
+    agentJobs: z.array(z.enum(['topics', 'sets', 'summaries', 'glances', 'events'])).optional(),
+  })
+  .default({});
+
 /** Thrown for input the client got wrong; answered with 400 instead of 500. */
 class BadRequestError extends Error {}
 
@@ -56,7 +64,12 @@ export function createApp(engine: EngineService, token: string | null): Hono {
   app.onError((error, c) => c.json({ error: error.message }, isClientError(error) ? 400 : 500));
 
   app.get('/api/health', (c) => c.json({ ok: true }));
-  app.post('/api/sync', async (c) => c.json(await engine.sync()));
+  app.post('/api/sync', async (c) => {
+    // The body is optional: a bare POST syncs with no limits.
+    const text = await c.req.text();
+    const options = syncBody.parse(text.trim() === '' ? undefined : JSON.parse(text));
+    return c.json(await engine.sync(options));
+  });
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
   app.get('/api/topics/:id', async (c) => {

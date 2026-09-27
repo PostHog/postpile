@@ -56,6 +56,13 @@ describe('server routes over the fake engine', () => {
     expect(res.status).toBe(400);
   });
 
+  it('syncs with or without options and rejects bad ones', async () => {
+    const app = appWithFake();
+    expect((await app.request('/api/sync', { method: 'POST' })).status).toBe(200);
+    expect((await post(app, '/api/sync', { maxPrs: 5, maxAgentCalls: 0 })).status).toBe(200);
+    expect((await post(app, '/api/sync', { maxPrs: 0 })).status).toBe(400);
+  });
+
   it('marks a tile read and undoes it', async () => {
     const app = appWithFake();
     const marked = await post<ActionResult>(app, `/api/tiles/${setTile}/mark-read`);

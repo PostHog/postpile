@@ -8,4 +8,22 @@ describe('parseArgs', () => {
     expect(parseArgs(['topic'])).toEqual({ name: 'help' });
     expect(parseArgs([])).toEqual({ name: 'help' });
   });
+
+  it('parses sync flags', () => {
+    expect(parseArgs(['sync'])).toEqual({ name: 'sync', options: {} });
+    expect(parseArgs(['sync', '--limit', '10', '--no-agent'])).toEqual({
+      name: 'sync',
+      options: { maxPrs: 10, maxAgentCalls: 0 },
+    });
+    expect(parseArgs(['sync', '--max-agent-calls', '1', '--agent-jobs', 'glances'])).toEqual({
+      name: 'sync',
+      options: { maxAgentCalls: 1, agentJobs: ['glances'] },
+    });
+  });
+
+  it('rejects bad sync flags', () => {
+    expect(parseArgs(['sync', '--limit', '0'])).toEqual({ name: 'help' });
+    expect(parseArgs(['sync', '--agent-jobs', 'nope'])).toEqual({ name: 'help' });
+    expect(parseArgs(['sync', '--what'])).toEqual({ name: 'help' });
+  });
 });

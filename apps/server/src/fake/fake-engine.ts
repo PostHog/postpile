@@ -184,6 +184,7 @@ export class FakeEngine implements EngineService {
       notificationsNotModified: true,
       threads: this.data.tiles.length,
       prsFetched: 0,
+      prsSkipped: 0,
       newEvents: 0,
       agentCalls: 0,
       errors: [],

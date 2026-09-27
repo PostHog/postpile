@@ -4,6 +4,9 @@ export function formatSync(report: SyncReport): string {
   const lines = [
     `threads ${report.threads}, PRs fetched ${report.prsFetched}, new events ${report.newEvents}, agent calls ${report.agentCalls}`,
   ];
+  if (report.prsSkipped > 0) {
+    lines.push(`${report.prsSkipped} PRs left for the next sync (--limit)`);
+  }
   if (report.notificationsNotModified) {
     lines.push('notifications unchanged (304)');
   }
