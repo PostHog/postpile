@@ -3,8 +3,8 @@ import { contextBlock, jsonOnly, prDetails, shortDetail, viewerLine } from './sh
 
 /**
  * Sorts new or changed PRs into the user's topics. Topics must stay stable,
- * so the prompt pushes hard towards existing ones; a new topic is only a
- * proposal the user still has to accept.
+ * so the prompt pushes hard towards existing ones. The engine creates new
+ * topics directly; renames and merges stay proposals the user decides on.
  */
 export function topicAssignmentPrompt(input: TopicAssignmentInput): string {
   const topics =

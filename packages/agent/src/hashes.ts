@@ -63,10 +63,16 @@ export function topicSummaryInputHash(input: TopicSummaryInput): string {
   );
 }
 
-/** Sets regroup when membership, existing sets or any topic feedback changes. */
+/**
+ * Sets regroup when membership, dissolved sets or any topic feedback changes.
+ * Active sets are left out on purpose: they are the agent's own last answer,
+ * and counting them would make every regroup trigger the next one.
+ */
 export function setGroupingInputHash(input: SetGroupingInput): string {
   const prs = [...input.prs].sort((a, b) => a.key.localeCompare(b.key)).map((pr) => [pr.key, pr.title, pr.baseRef, pr.headRef]);
-  const sets = input.existingSets.map((s) => [s.id, s.status, s.members.map((m) => m.prKey)]);
+  const sets = input.existingSets
+    .filter((s) => s.status === 'dissolved')
+    .map((s) => [s.id, s.members.map((m) => m.prKey)]);
   return inputHash(
     'set_grouping',
     modelFor('set_grouping'),

@@ -67,4 +67,10 @@ export class PrRepo {
     const rows = all<{ key: string; updated_at: string }>(this.db, 'SELECT key, updated_at FROM pr');
     return new Map(rows.map((row) => [row.key, row.updated_at]));
   }
+
+  /** When each stored snapshot was fetched. */
+  fetchedAtByKey(): Map<PrKey, string> {
+    const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT key, fetched_at FROM pr');
+    return new Map(rows.map((row) => [row.key, row.fetched_at]));
+  }
 }

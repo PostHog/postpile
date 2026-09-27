@@ -72,6 +72,21 @@ export interface PrDetail {
   tileIds: string[];
 }
 
+/** Agent jobs a sync can run, in the order it runs them. */
+export type AgentJob = 'topics' | 'sets' | 'summaries' | 'glances' | 'events';
+
+export const ALL_AGENT_JOBS: AgentJob[] = ['topics', 'sets', 'summaries', 'glances', 'events'];
+
+/** Knobs for cheap runs (smoke tests, first look). Everything is unlimited by default. */
+export interface SyncOptions {
+  /** Enrich at most this many PRs, newest notification first. The rest follow on later syncs. */
+  maxPrs?: number;
+  /** Stop making agent calls after this many. 0 means no agent at all. */
+  maxAgentCalls?: number;
+  /** Only run these agent jobs. Default: all of them. */
+  agentJobs?: AgentJob[];
+}
+
 export interface SyncReport {
   startedAt: IsoTime;
   finishedAt: IsoTime;
@@ -79,6 +94,8 @@ export interface SyncReport {
   notificationsNotModified: boolean;
   threads: number;
   prsFetched: number;
+  /** Unread PR threads still waiting to be enriched because of maxPrs. */
+  prsSkipped: number;
   newEvents: number;
   agentCalls: number;
   errors: string[];

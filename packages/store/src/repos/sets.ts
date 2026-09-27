@@ -127,6 +127,11 @@ export class PrSetRepo {
     });
   }
 
+  /** Hard delete, for an agent set the agent itself dropped on regroup. User-dissolved sets use dissolve. */
+  delete(id: string): void {
+    run(this.db, 'DELETE FROM pr_set WHERE id = ?', id);
+  }
+
   /** Keeps the row and its members so the agent remembers not to regroup them. */
   dissolve(id: string, at: string): void {
     run(this.db, "UPDATE pr_set SET status = 'dissolved', updated_at = ? WHERE id = ?", at, id);

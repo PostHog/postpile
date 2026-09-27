@@ -1,3 +1,4 @@
+import type { PrSet } from '@code-manager/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { glanceInputHash, setGroupingInputHash, topicSummaryInputHash } from './hashes.ts';
 import type { GlanceInput } from './service.ts';
@@ -59,5 +60,23 @@ describe('setGroupingInputHash', () => {
     const input = { topic: makeTopic(), prs: [makePr()], existingSets: [], context: emptyContext };
     const withFeedback = { ...input, context: { ...emptyContext, recentFeedback: [makeFeedback({ kind: 'not_related' })] } };
     expect(setGroupingInputHash(withFeedback)).not.toBe(setGroupingInputHash(input));
+  });
+
+  it('ignores active sets but reacts to dissolved ones', () => {
+    const input = { topic: makeTopic(), prs: [makePr()], existingSets: [] as PrSet[], context: emptyContext };
+    const set: PrSet = {
+      id: 's1',
+      topicId: 't1',
+      title: 'Depot',
+      take: '',
+      members: [{ prKey: 'o/r#1', reason: '' }, { prKey: 'o/r#2', reason: '' }],
+      status: 'active',
+      inputHash: 'h',
+      createdAt: '',
+      updatedAt: '',
+    };
+    const hash = setGroupingInputHash(input);
+    expect(setGroupingInputHash({ ...input, existingSets: [set] })).toBe(hash);
+    expect(setGroupingInputHash({ ...input, existingSets: [{ ...set, status: 'dissolved' }] })).not.toBe(hash);
   });
 });

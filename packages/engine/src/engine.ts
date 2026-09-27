@@ -1,19 +1,33 @@
-import type {
-  ActionResult,
-  ChatMessage,
-  ChatReply,
-  FeedbackInput,
-  PrDetail,
-  PrKey,
-  SnoozeCondition,
-  SyncReport,
-  TopicDetail,
-  TopicListItem,
-} from '@code-manager/core';
 import type { AgentService } from '@code-manager/agent';
+import {
+  ALL_AGENT_JOBS,
+  type ActionResult,
+  type ChatMessage,
+  type ChatReply,
+  type FeedbackInput,
+  type PrDetail,
+  type PrKey,
+  type SnoozeCondition,
+  type SyncOptions,
+  type SyncReport,
+  type TopicDetail,
+  type TopicListItem,
+} from '@code-manager/core';
 import type { GitHubReader, GitHubWriter } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
+import { ChatActions } from './actions/chat-actions.ts';
+import { FeedbackActions } from './actions/feedback-actions.ts';
+import { PrActions } from './actions/pr-actions.ts';
+import { ProposalActions } from './actions/proposal-actions.ts';
+import { ReadMarker } from './actions/read-marker.ts';
+import { TileActions } from './actions/tile-actions.ts';
+import { AgentBudget } from './budget.ts';
+import { errorText } from './digest/deps.ts';
+import { Digester } from './digest/digester.ts';
+import { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
+import { PromptContextSource } from './prompt-context.ts';
+import { ReadModels } from './read-models.ts';
 import type { EngineService } from './service.ts';
 
 export interface EngineDeps {
@@ -26,82 +40,151 @@ export interface EngineDeps {
   now: () => Date;
 }
 
+/** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
 export class Engine implements EngineService {
-  constructor(private readonly deps: EngineDeps) {}
+  private readonly contexts: PromptContextSource;
+  private readonly github: GitHubSync;
+  private readonly reads: ReadModels;
+  private readonly tiles: TileActions;
+  private readonly prActions: PrActions;
+  private readonly feedback: FeedbackActions;
+  private readonly chats: ChatActions;
+  private readonly proposals: ProposalActions;
+  private running: Promise<SyncReport> | null = null;
 
-  sync(): Promise<SyncReport> {
-    throw new Error('not implemented');
+  constructor(private readonly deps: EngineDeps) {
+    const { store, now } = deps;
+    this.contexts = new PromptContextSource(store, deps.instructionsFile);
+    this.github = new GitHubSync(store, deps.reader, this.contexts, now);
+    this.reads = new ReadModels(store, now);
+    const readMarker = new ReadMarker(store, deps.markReadQueue, now);
+    this.tiles = new TileActions(store, readMarker, now);
+    this.prActions = new PrActions(store, deps.writer, deps.agent, this.contexts, readMarker, now);
+    this.feedback = new FeedbackActions(store, now);
+    this.chats = new ChatActions(store, deps.agent, this.contexts, now);
+    this.proposals = new ProposalActions(store, now);
   }
 
-  listTopics(): Promise<TopicListItem[]> {
-    throw new Error('not implemented');
+  private async runSync(options: SyncOptions): Promise<SyncReport> {
+    const startedAt = this.deps.now().toISOString();
+    const errors: string[] = [];
+    const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY);
+    const report: SyncReport = {
+      startedAt,
+      finishedAt: startedAt,
+      notificationsNotModified: false,
+      threads: 0,
+      prsFetched: 0,
+      prsSkipped: 0,
+      newEvents: 0,
+      agentCalls: 0,
+      errors,
+    };
+    try {
+      const fetched = await this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY);
+      report.notificationsNotModified = fetched.notModified;
+      report.threads = fetched.threads;
+      report.prsFetched = fetched.prsFetched;
+      report.prsSkipped = fetched.prsSkipped;
+      report.newEvents = fetched.newEventIds.length;
+
+      const digester = new Digester({
+        store: this.deps.store,
+        agent: this.deps.agent,
+        contexts: this.contexts,
+        budget,
+        viewer: fetched.viewer,
+        errors,
+        now: this.deps.now,
+      });
+      await digester.run(options.agentJobs ?? ALL_AGENT_JOBS, fetched.newEventIds);
+    } catch (error) {
+      errors.push(`sync: ${errorText(error)}`);
+    }
+    report.agentCalls = budget.calls;
+    report.finishedAt = this.deps.now().toISOString();
+    return report;
   }
 
-  getTopic(_topicId: string): Promise<TopicDetail | null> {
-    throw new Error('not implemented');
+  sync(options: SyncOptions = {}): Promise<SyncReport> {
+    if (!this.running) {
+      this.running = this.runSync(options).finally(() => {
+        this.running = null;
+      });
+    }
+    return this.running;
   }
 
-  getPr(_prKey: PrKey): Promise<PrDetail | null> {
-    throw new Error('not implemented');
+  async listTopics(): Promise<TopicListItem[]> {
+    return this.reads.listTopics();
   }
 
-  getChat(_tileId: string): Promise<ChatMessage[]> {
-    throw new Error('not implemented');
+  async getTopic(topicId: string): Promise<TopicDetail | null> {
+    return this.reads.getTopic(topicId);
   }
 
-  approve(_prKey: PrKey): Promise<ActionResult> {
-    throw new Error('not implemented');
+  async getPr(prKey: PrKey): Promise<PrDetail | null> {
+    return this.reads.getPr(prKey);
   }
 
-  markRead(_tileId: string): Promise<ActionResult> {
-    throw new Error('not implemented');
+  async getChat(tileId: string): Promise<ChatMessage[]> {
+    return this.chats.getChat(tileId);
   }
 
-  undo(_undoToken: string | null): Promise<ActionResult> {
-    throw new Error('not implemented');
+  approve(prKey: PrKey): Promise<ActionResult> {
+    return this.prActions.approve(prKey);
   }
 
-  snooze(_tileId: string, _condition: SnoozeCondition): Promise<ActionResult> {
-    throw new Error('not implemented');
+  async markRead(tileId: string): Promise<ActionResult> {
+    return this.tiles.markRead(tileId);
   }
 
-  unsnooze(_tileId: string): Promise<ActionResult> {
-    throw new Error('not implemented');
+  async undo(undoToken: string | null): Promise<ActionResult> {
+    return this.tiles.undo(undoToken);
   }
 
-  draftAsk(_prKey: PrKey, _person: string, _intent: string): Promise<{ body: string }> {
-    throw new Error('not implemented');
+  async snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult> {
+    return this.tiles.snooze(tileId, condition);
   }
 
-  sendComment(_prKey: PrKey, _body: string): Promise<ActionResult> {
-    throw new Error('not implemented');
+  async unsnooze(tileId: string): Promise<ActionResult> {
+    return this.tiles.unsnooze(tileId);
   }
 
-  giveFeedback(_input: FeedbackInput): Promise<ActionResult> {
-    throw new Error('not implemented');
+  draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }> {
+    return this.prActions.draftAsk(prKey, person, intent);
   }
 
-  unmuteEvent(_eventId: string): Promise<ActionResult> {
-    throw new Error('not implemented');
+  sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
+    return this.prActions.sendComment(prKey, body);
   }
 
-  chat(_tileId: string, _message: string): Promise<ChatReply> {
-    throw new Error('not implemented');
+  async giveFeedback(input: FeedbackInput): Promise<ActionResult> {
+    return this.feedback.giveFeedback(input);
   }
 
-  decideTailoring(_topicId: string, _text: string, _keep: boolean): Promise<ActionResult> {
-    throw new Error('not implemented');
+  async unmuteEvent(eventId: string): Promise<ActionResult> {
+    return this.feedback.unmuteEvent(eventId);
   }
 
-  decideTopicProposal(_proposalId: string, _accept: boolean): Promise<ActionResult> {
-    throw new Error('not implemented');
+  chat(tileId: string, message: string): Promise<ChatReply> {
+    return this.chats.chat(tileId, message);
+  }
+
+  async decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult> {
+    return this.chats.decideTailoring(topicId, text, keep);
+  }
+
+  async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
+    return this.proposals.decide(proposalId, accept);
   }
 
   flushPendingWrites(): Promise<void> {
-    throw new Error('not implemented');
+    return this.deps.markReadQueue.flush();
   }
 
-  close(): Promise<void> {
-    throw new Error('not implemented');
+  async close(): Promise<void> {
+    await this.running?.catch(() => {});
+    this.deps.store.close();
   }
 }

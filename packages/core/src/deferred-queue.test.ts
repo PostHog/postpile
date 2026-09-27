@@ -1,36 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DeferredQueue, UNDO_WINDOW_MS, type Timers } from './deferred-queue.ts';
-
-/** Hand-cranked clock: nothing fires until advance() says so. */
-class FakeTimers implements Timers {
-  private time = 1000;
-  private nextId = 1;
-  private readonly scheduled = new Map<number, { dueAt: number; fn: () => void }>();
-
-  now(): number {
-    return this.time;
-  }
-
-  setTimeout(fn: () => void, ms: number): unknown {
-    const id = this.nextId++;
-    this.scheduled.set(id, { dueAt: this.time + ms, fn });
-    return id;
-  }
-
-  clearTimeout(handle: unknown): void {
-    this.scheduled.delete(handle as number);
-  }
-
-  advance(ms: number): void {
-    this.time += ms;
-    for (const [id, timer] of [...this.scheduled.entries()]) {
-      if (timer.dueAt <= this.time) {
-        this.scheduled.delete(id);
-        timer.fn();
-      }
-    }
-  }
-}
+import { DeferredQueue, UNDO_WINDOW_MS } from './deferred-queue.ts';
+import { FakeTimers } from './fixtures.ts';
 
 function setup() {
   const timers = new FakeTimers();

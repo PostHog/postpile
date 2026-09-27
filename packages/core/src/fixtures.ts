@@ -1,6 +1,7 @@
 // Builders for tests in any package: `import { makePr } from '@code-manager/core/fixtures'`.
 // Not exported from the main index, so app code cannot pick them up by accident.
 
+import type { Timers } from './deferred-queue.ts';
 import { prKey } from './keys.ts';
 import type {
   Comment,
@@ -154,4 +155,35 @@ export function singleTile(pr: Pr, pinged = true): Tile {
       },
     ],
   };
+}
+
+/** Hand-cranked clock: nothing fires until advance() says so. */
+export class FakeTimers implements Timers {
+  private time = 1000;
+  private nextId = 1;
+  private readonly scheduled = new Map<number, { dueAt: number; fn: () => void }>();
+
+  now(): number {
+    return this.time;
+  }
+
+  setTimeout(fn: () => void, ms: number): unknown {
+    const id = this.nextId++;
+    this.scheduled.set(id, { dueAt: this.time + ms, fn });
+    return id;
+  }
+
+  clearTimeout(handle: unknown): void {
+    this.scheduled.delete(handle as number);
+  }
+
+  advance(ms: number): void {
+    this.time += ms;
+    for (const [id, timer] of [...this.scheduled.entries()]) {
+      if (timer.dueAt <= this.time) {
+        this.scheduled.delete(id);
+        timer.fn();
+      }
+    }
+  }
 }

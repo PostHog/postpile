@@ -6,6 +6,7 @@ import type {
   PrDetail,
   PrKey,
   SnoozeCondition,
+  SyncOptions,
   SyncReport,
   TopicDetail,
   TopicListItem,
@@ -17,8 +18,11 @@ import type {
  * could stand in later.
  */
 export interface EngineService {
-  /** fetch -> store -> classify -> agent digest -> derive tiles. On demand only. */
-  sync(): Promise<SyncReport>;
+  /**
+   * fetch -> store -> classify -> agent digest. Tiles are derived on read.
+   * On demand only. A sync while one is running joins the running one.
+   */
+  sync(options?: SyncOptions): Promise<SyncReport>;
 
   listTopics(): Promise<TopicListItem[]>;
   getTopic(topicId: string): Promise<TopicDetail | null>;
