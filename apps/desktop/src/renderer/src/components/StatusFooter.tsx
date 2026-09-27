@@ -1,5 +1,6 @@
 import type { TopicDetail, TopicListItem } from '@code-manager/core';
 import { useActions } from '../api/actions.tsx';
+import { callStatsDetail, callStatsLabel } from '../lib/agent-stats.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { LockIcon } from './icons.tsx';
 
@@ -13,7 +14,7 @@ function writesLabel(fake: boolean | undefined, writesAllowed: boolean | undefin
   return writesAllowed ? 'GitHub writes on' : 'GitHub writes blocked';
 }
 
-/** 26px strip: unread count, PR counts for the open topic, write mode, mark-read queue. */
+/** 26px strip: unread count, PR counts for the open topic, write mode, agent calls of the last sync, mark-read queue. */
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined }) {
   const actions = useActions();
   const unread = props.topics.reduce((sum, item) => sum + item.unreadTiles, 0);
@@ -37,6 +38,11 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
         {blocked && <LockIcon />}
         {writesLabel(actions.config?.fake, actions.config?.writesAllowed)}
       </span>
+      {actions.lastSync && (
+        <span title={callStatsDetail(actions.lastSync.agentCallStats) || 'No agent calls in the last sync'}>
+          last sync: {callStatsLabel(actions.lastSync.agentCallStats)}
+        </span>
+      )}
       <span className="ml-auto">
         {actions.pendingMarkReads > 0 ? `${actions.pendingMarkReads} mark-read pending · undo open` : 'mark-read queue empty'}
       </span>

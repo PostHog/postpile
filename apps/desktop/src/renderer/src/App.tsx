@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { TopicDetail } from '@code-manager/core';
 import { useActions } from './api/actions.tsx';
+import { useProposals } from './api/proposals.ts';
 import { useTopic, useTopics } from './api/topics.ts';
 import { DetailPane } from './components/DetailPane.tsx';
+import { InboxPane } from './components/InboxPane.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { TileGrid } from './components/TileGrid.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
@@ -45,11 +47,27 @@ export function App() {
   const topics = useTopics();
   const [pickedTopicId, setPickedTopicId] = useState<string | null>(null);
   const [pickedTile, setPickedTile] = useState<TileSelection | null>(null);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const proposals = useProposals();
 
   const items = topics.data ?? [];
   const activeItem = items.find((item) => item.topic.id === pickedTopicId) ?? items[0] ?? null;
   const topic = useTopic(activeItem?.topic.id ?? null);
   const selected = resolveSelection(pickedTile, topic.data);
+  const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
+
+  // A topic counts as seen when the user leaves it: picks another topic or
+  // the Inbox. Simpler than a visibility timer, and the "since you last
+  // looked" block stays put while they are still reading it.
+  const shownTopicId = inboxOpen ? null : (activeItem?.topic.id ?? null);
+  const lastShownTopicId = useRef<string | null>(null);
+  useEffect(() => {
+    const left = lastShownTopicId.current;
+    lastShownTopicId.current = shownTopicId;
+    if (left !== null && left !== shownTopicId) {
+      void actions.markTopicSeen(left);
+    }
+  }, [shownTopicId, actions]);
 
   // Sync once on app start; after that only on "Sync now". The ref keeps
   // React's dev double-mount from starting a second one.
@@ -62,7 +80,9 @@ export function App() {
   }, [actions]);
 
   let main = <EmptyMain text="Loading…" />;
-  if (topics.error) {
+  if (inboxOpen) {
+    main = <InboxPane proposals={proposals.data} topics={items} error={proposals.error?.message ?? null} />;
+  } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
   } else if (!topics.isPending && items.length === 0) {
     main = <EmptyMain text={actions.syncing ? 'Syncing your GitHub notifications…' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'} />;
@@ -71,7 +91,7 @@ export function App() {
   } else if (activeItem && topic.data) {
     main = (
       <MainPane>
-        <TopicHeader detail={topic.data} group={activeItem.group} />
+        <TopicHeader detail={topic.data} group={activeItem.group} topics={items} />
         <TileGrid
           detail={topic.data}
           topics={items}
@@ -89,8 +109,14 @@ export function App() {
       <div className="grid min-h-0 flex-1 grid-cols-[264px_minmax(0,1fr)_404px]">
         <TopicSidebar
           topics={items}
-          activeTopicId={activeItem?.topic.id ?? null}
-          onSelect={setPickedTopicId}
+          activeTopicId={shownTopicId}
+          onSelect={(topicId) => {
+            setInboxOpen(false);
+            setPickedTopicId(topicId);
+          }}
+          inboxCount={inboxCount}
+          inboxOpen={inboxOpen}
+          onOpenInbox={() => setInboxOpen(true)}
           loading={topics.isPending}
           error={topics.error?.message ?? null}
         />

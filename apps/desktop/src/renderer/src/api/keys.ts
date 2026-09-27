@@ -5,4 +5,5 @@ export const queryKeys = {
   topic: (topicId: string) => ['topic', topicId] as const,
   pr: (prKey: string) => ['pr', prKey] as const,
   chat: (tileId: string) => ['chat', tileId] as const,
+  proposals: ['proposals'] as const,
 };

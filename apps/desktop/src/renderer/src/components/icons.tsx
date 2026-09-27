@@ -134,3 +134,12 @@ export function ChevronIcon() {
     </svg>
   );
 }
+
+export function InboxIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <path d="M2 9l1.8-5.5h8.4L14 9v4H2z" />
+      <path d="M2 9h3.5l1 1.5h3l1-1.5H14" />
+    </svg>
+  );
+}

@@ -1,5 +1,5 @@
 import type { TopicGroup, TopicListItem } from '@code-manager/core';
-import { CheckIcon, InstructionsIcon } from './icons.tsx';
+import { CheckIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 
 const GROUP_LABELS: Record<TopicGroup, string> = { needs_you: 'Needs you', quiet: 'Quiet' };
 
@@ -39,10 +39,38 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
   );
 }
 
+function InboxItem(props: { count: number; active: boolean; onSelect: () => void }) {
+  const badge = props.active ? 'bg-accent text-on-accent' : 'bg-chip text-ink-2';
+  return (
+    <button
+      type="button"
+      onClick={props.onSelect}
+      aria-current={props.active ? 'true' : undefined}
+      title="Topic changes and standing rules the agent proposes"
+      className={`flex items-center gap-2 rounded-row px-2.5 py-[7px] text-left text-[13px] ${
+        props.active ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
+      }`}
+    >
+      <span className="text-muted">
+        <InboxIcon />
+      </span>
+      <span className="flex-1">Inbox</span>
+      {props.count > 0 && (
+        <span className={`flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] font-mono text-[10.5px] font-semibold ${badge}`}>
+          {props.count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 interface TopicSidebarProps {
   topics: TopicListItem[];
   activeTopicId: string | null;
   onSelect: (topicId: string) => void;
+  inboxCount: number;
+  inboxOpen: boolean;
+  onOpenInbox: () => void;
   loading: boolean;
   error: string | null;
 }
@@ -51,6 +79,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
   const groups: TopicGroup[] = ['needs_you', 'quiet'];
   return (
     <nav aria-label="Topics" className="flex min-h-0 flex-col gap-[18px] overflow-auto border-r border-hairline-strong bg-sidebar px-2.5 pt-3.5 pb-2.5">
+      <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {props.error && <p className="px-2.5 text-xs text-unread-ink">Could not load topics: {props.error}</p>}
       {!props.error && !props.loading && props.topics.length === 0 && (
         <p className="px-2.5 text-xs leading-relaxed text-muted">No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.</p>
