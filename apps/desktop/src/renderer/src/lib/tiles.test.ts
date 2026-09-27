@@ -12,6 +12,9 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     state: 'OPEN',
     isDraft: false,
     provenance: { kind: 'pinged', reason: 'review_requested' },
+    why: 'RV',
+    status: { lifecycle: 'open', review: 'review', checks: 'ok' },
+    openThreads: 0,
     verdict: 'LOOKS_SAFE',
     glanceStale: false,
     forYou: `for you ${number}`,
@@ -27,9 +30,12 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     tile: { id: 'set:s1', topicId: 't1', kind: 'set', title: 'Cache PRs', members: [] },
     state: {
       kind: unreadKeys.length > 0 ? 'unread' : 'open',
-      unreadBecause: unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention', summary: 'x', at: at(index) })),
+      unreadBecause: unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention', actor: 'lyra', summary: 'x', at: at(index) })),
     },
     prs,
+    why: 'RV',
+    people: [],
+    turn: { kind: 'none', who: null, what: '', prKey: null },
   };
 }
 

@@ -3,6 +3,7 @@
 import { prKey } from '@code-manager/core';
 import type {
   CheckRollup,
+  ReviewDecision,
   EventKind,
   Glance,
   Loudness,
@@ -48,6 +49,14 @@ export interface SampleCommitInput {
   hoursAgo: number;
 }
 
+export interface SampleThreadInput {
+  id: string;
+  path: string;
+  /** Comments in order; the first one opens the thread. */
+  comments: { author: string; body: string; hoursAgo: number }[];
+  resolved?: boolean;
+}
+
 export interface SamplePrInput {
   number: number;
   title: string;
@@ -59,7 +68,8 @@ export interface SamplePrInput {
   headRef?: string;
   openedHoursAgo: number;
   mergedHoursAgo?: number;
-  reviews?: [author: string, state: ReviewState, body?: string][];
+  /** commitOid defaults to the head; pass an older one for "commits after approval". */
+  reviews?: [author: string, state: ReviewState, body?: string, commitOid?: string][];
   reviewerUsers?: string[];
   reviewerTeams?: string[];
   body?: string;
@@ -67,6 +77,18 @@ export interface SamplePrInput {
   comments?: SampleCommentInput[];
   /** Commits by the author, oldest first. The last one should be the head (`sha<number>`). */
   commits?: SampleCommitInput[];
+  /** Inline review threads. */
+  threads?: SampleThreadInput[];
+  /** In the merge queue: adds an added_to_merge_queue timeline item. */
+  queued?: boolean;
+}
+
+/** Like GitHub with a review rule: a standing change request wins, then any approval. */
+function sampleReviewDecision(reviews: [string, ReviewState, string?, string?][]): ReviewDecision {
+  if (reviews.some(([, state]) => state === 'CHANGES_REQUESTED')) {
+    return 'CHANGES_REQUESTED';
+  }
+  return reviews.some(([, state]) => state === 'APPROVED') ? 'APPROVED' : 'REVIEW_REQUIRED';
 }
 
 export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
@@ -90,16 +112,16 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     changedFiles,
     files: [],
     labels: [],
-    reviewDecision: 'REVIEW_REQUIRED',
+    reviewDecision: sampleReviewDecision(input.reviews ?? []),
     reviewerUsers: input.reviewerUsers ?? [],
     reviewerTeams: input.reviewerTeams ?? [],
-    reviews: (input.reviews ?? []).map(([author, state, body], index) => ({
+    reviews: (input.reviews ?? []).map(([author, state, body, commitOid], index) => ({
       id: `review-${input.number}-${index}`,
       author,
       state,
       body: body ?? '',
       submittedAt: clock.hoursAgo(1),
-      commitOid: headOid,
+      commitOid: commitOid ?? headOid,
     })),
     commits: (input.commits ?? []).map((commit) => ({
       oid: commit.oid,
@@ -117,8 +139,24 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
       path: null,
       threadId: null,
     })),
-    threads: [],
-    timeline: [],
+    threads: (input.threads ?? []).map((thread) => ({
+      id: thread.id,
+      path: thread.path,
+      isResolved: thread.resolved ?? false,
+      comments: thread.comments.map((comment, index) => ({
+        id: `${thread.id}-${index}`,
+        author: comment.author,
+        body: comment.body,
+        createdAt: clock.hoursAgo(comment.hoursAgo),
+        kind: 'review_comment' as const,
+        url: `https://github.com/${SAMPLE_REPO}/pull/${input.number}#discussion_${thread.id}`,
+        path: thread.path,
+        threadId: thread.id,
+      })),
+    })),
+    timeline: input.queued
+      ? [{ id: `queue-${input.number}`, kind: 'added_to_merge_queue' as const, actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null }]
+      : [],
     checks: { rollup: input.checks, contexts: [] },
     headOid,
     createdAt: clock.hoursAgo(input.openedHoursAgo),

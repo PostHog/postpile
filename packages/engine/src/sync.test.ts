@@ -1,4 +1,4 @@
-import { at, makeThreadFor } from '@code-manager/core/fixtures';
+import { at, makeThreadFor, viewer } from '@code-manager/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
 import { makeHarness } from './testing/fakes.ts';
@@ -7,7 +7,7 @@ import { reviewRequestedPr } from './testing/prs.ts';
 describe('Engine.sync without the agent', () => {
   it('stores threads, PRs and events and shows them as Unsorted', async () => {
     const h = makeHarness();
-    const pr = reviewRequestedPr(1);
+    const pr = reviewRequestedPr(1, { reviewerUsers: [viewer.login] });
     h.reader.addPr(pr, makeThreadFor(pr));
 
     const report = await h.engine.sync({ maxAgentCalls: 0 });
@@ -19,6 +19,8 @@ describe('Engine.sync without the agent', () => {
     expect(topics[0]).toMatchObject({ group: 'needs_you', unreadTiles: 1, topic: { id: UNSORTED_TOPIC_ID } });
     const detail = await h.engine.getTopic(UNSORTED_TOPIC_ID);
     expect(detail?.tiles[0]?.state.unreadBecause[0]?.kind).toBe('review_requested');
+    expect(detail?.tiles[0]).toMatchObject({ why: 'RV', turn: { kind: 'you', prKey: pr.key } });
+    expect(detail?.tiles[0]?.prs[0]).toMatchObject({ why: 'RV', status: { lifecycle: 'open' }, openThreads: 0 });
     expect(h.writer.calls).toEqual([]);
   });
 

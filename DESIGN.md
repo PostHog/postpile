@@ -772,6 +772,70 @@ first, a new one only for 2+ PRs or a clear new initiative, `unsorted`
 otherwise; at most 5 new topics per sync. Unsorted PRs are offered again
 after the next consolidation.
 
+## Tile faces: why it's here, status, whose turn
+
+Every tile answers four questions without opening it. All four are derived in
+core (pure, tested) and come with the tile view model (`TileView.why`,
+`.people`, `.turn`; `PrSummary.why`, `.status`, `.openThreads`). The engine
+and FakeEngine call the same functions.
+
+**Why it's here** (`whyHere`, `tileWhy` in `why-here.ts`): one code per PR,
+the tile shows the most aimed one (order RV, @, AS, RT, @T, AU, CM, FW, ST).
+
+| code | meaning | from |
+|---|---|---|
+| RV / RT | review asked of you / your team | `review_requested`: a pending request names the viewer or one of `Viewer.teams`, else the newest timeline request does, else RV |
+| @ / @T | mentioned you / your team | `mention` / `team_mention` |
+| AS | assigned | `assign` |
+| AU | you wrote it | `author`, or a passive reason on the viewer's own PR |
+| CM | you took part | `comment`, `state_change` |
+| FW | following | `subscribed`, `manual`, `ci_activity`, `other` |
+| ST | stack context | pulled in |
+
+**PR status** (`prStatus` in `pr-status.ts`): lifecycle (open, draft, queued
+while the newest merge-queue timeline entry is an add, merged, closed), review
+from `reviewDecision`, checks from the rollup. Merged and closed PRs drop
+review and checks, drafts drop review. Open threads = unresolved review threads.
+
+**People** (`tilePeople`): authors, the viewer if they submitted a review,
+other reviewers (submitted, then requested), four at most, bots only as
+authors.
+
+**Whose turn** (`whoseTurn` in `whose-turn.ts`): `{ kind: 'you' | 'them' |
+'none', who, what, prKey }`. Rules per pinged PR, first match wins:
+
+1. merged or closed: none.
+2. you: a human mentioned you, your team, replied to you or asked you a
+   question, and you have not commented or reviewed since ("Answer ada's
+   question"; with a pending review of yours: "Review, lyra mentioned you").
+3. On your own PR:
+   - you: unresolved threads whose last comment is someone else's ("Answer 3
+     threads from mira"), else a standing change request ("Address ada's
+     changes"), else failing CI ("Fix failing CI").
+   - them: the first pending reviewer, user before team ("sol to review").
+   - you: approved and not a draft ("Merge, it is approved"). Not in the
+     first rule list; added so an approved own PR does not read as nothing.
+   - else none.
+4. On someone else's PR:
+   - you: commits landed after your approval and you have not reviewed the
+     new head ("Re-check 2 commits"). The app's approval record wins, a
+     github.com approval of an older head counts too.
+   - you: a review is requested of you, or of your team while nobody but
+     the author reviewed yet, and you have not reviewed the head ("Review,
+     rowan asked", "Review for team-devex").
+   - them: you approved the head: the author "to merge". You commented or
+     requested changes on the head: the author "to address 2 threads" (open
+     threads you started), "to address your changes" or "to reply".
+   - them: a team request someone else picked up: the author "to merge" when
+     approved, else that reviewer "is reviewing".
+   - else none (following, subscribed, took part earlier).
+
+A tile takes the most urgent member (you over them over none); on a tie the
+PR with the newest unseen loud event wins, so the footer and the unread strip
+talk about the same PR, else tile order. Multi-PR tiles add " on #N".
+Team membership of other people is unknown, so "a teammate is reviewing"
+means "anyone but the author reviewed".
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.

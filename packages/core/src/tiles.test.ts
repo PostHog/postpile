@@ -63,7 +63,7 @@ describe('deriveTileState', () => {
     const state = deriveTileState(stateInput(tile, [pr], [loud]));
     expect(state).toEqual({
       kind: 'unread',
-      unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', summary: 'bob mentioned you', at: loud.at }],
+      unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', actor: 'bob', summary: 'bob mentioned you', at: loud.at }],
     });
     expect(explainTileState(state)).toBe('unread (PostHog/posthog#1: bob mentioned you)');
   });

@@ -33,6 +33,19 @@ describe('FakeEngine', () => {
   });
 });
 
+describe('FakeEngine tile faces', () => {
+  it('shows all three turn kinds with the core rules', async () => {
+    const engine = new FakeEngine();
+    const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
+    const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
+    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Re-check 2 commits on #41911' });
+    expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV']);
+    expect(depot.find((view) => view.tile.id === 'pr:PostHog/posthog#41899')?.turn).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
+    const desktop = (await engine.getTopic('topic-desktop-release'))?.tiles[0];
+    expect(desktop).toMatchObject({ why: 'FW', turn: { kind: 'none' } });
+  });
+});
+
 describe('FakeEngine memory', () => {
   it('shows the Depot dossier with changes since the seen cursor, until the topic is marked seen', async () => {
     const engine = new FakeEngine();

@@ -409,6 +409,8 @@ export interface UnreadReason {
   prKey: PrKey;
   eventId: string;
   kind: EventKind;
+  /** Who did it, so the UI can show their avatar. */
+  actor: string;
   summary: string;
   /** When the event happened, so the UI can say how long it has waited. */
   at: IsoTime;

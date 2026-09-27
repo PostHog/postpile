@@ -1,0 +1,170 @@
+import { describe, expect, it } from 'vitest';
+import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeUserState, singleTile, viewer } from './fixtures.ts';
+import type { Pr, PrEvent, Tile, UserPrState } from './types.ts';
+import { whoseTurn, type WhoseTurn } from './whose-turn.ts';
+
+const me = viewer.login;
+
+function turnOf(tile: Tile, prs: Pr[], events: PrEvent[] = [], userStates: UserPrState[] = []): WhoseTurn {
+  const eventMap = new Map<string, PrEvent[]>();
+  for (const event of events) {
+    eventMap.set(event.prKey, [...(eventMap.get(event.prKey) ?? []), event]);
+  }
+  return whoseTurn({
+    tile,
+    prs: new Map(prs.map((pr) => [pr.key, pr])),
+    events: eventMap,
+    userStates: new Map(userStates.map((state) => [state.prKey, state])),
+    viewer,
+  });
+}
+
+function single(pr: Pr, events: PrEvent[] = [], userStates: UserPrState[] = []): WhoseTurn {
+  return turnOf(singleTile(pr), [pr], events, userStates);
+}
+
+describe('whoseTurn: your move', () => {
+  it('asks for a review requested of you, naming who asked', () => {
+    const pr = makePr({ author: 'rowan', reviewerUsers: [me] });
+    const requested = makeEvent({ kind: 'review_requested', actor: 'rowan' });
+    expect(single(pr, [requested])).toEqual({ kind: 'you', who: null, what: 'Review, rowan asked', prKey: pr.key });
+    expect(single(pr).what).toBe('Review');
+  });
+
+  it('asks for a team review only while no one else reviewed', () => {
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['PostHog/team-devex'] });
+    expect(single(pr)).toMatchObject({ kind: 'you', what: 'Review for team-devex' });
+    const taken = { ...pr, reviews: [makeReview({ author: 'lyra', state: 'COMMENTED' })] };
+    expect(single(taken)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
+    const approved = { ...taken, reviewDecision: 'APPROVED' as const };
+    expect(single(approved)).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
+  });
+
+  it('asks to re-check commits that landed after your approval', () => {
+    const pr = makePr({
+      author: 'rowan',
+      headOid: 'c3',
+      commits: [makeCommit({ oid: 'c1' }), makeCommit({ oid: 'c2' }), makeCommit({ oid: 'c3' })],
+    });
+    const approved = makeUserState({ prKey: pr.key, approvedAt: at(1), approvedCommitOid: 'c1' });
+    expect(single(pr, [], [approved])).toMatchObject({ kind: 'you', what: 'Re-check 2 commits' });
+  });
+
+  it('counts a github.com approval of an older head too', () => {
+    const pr = makePr({ author: 'rowan', headOid: 'c2', commits: [makeCommit({ oid: 'c1' }), makeCommit({ oid: 'c2' })] });
+    const withReview = { ...pr, reviews: [makeReview({ author: me, commitOid: 'c1' })] };
+    expect(single(withReview)).toMatchObject({ kind: 'you', what: 'Re-check 1 commit' });
+  });
+
+  it('asks you to answer a mention or question you have not replied to', () => {
+    const pr = makePr({ author: 'rowan' });
+    const question = makeEvent({ kind: 'question_to_user', actor: 'lyra', at: at(10) });
+    expect(single(pr, [question])).toMatchObject({ kind: 'you', what: "Answer lyra's question" });
+    const answered = { ...pr, comments: [makeComment({ author: me, createdAt: at(11) })] };
+    expect(single(answered, [question]).kind).toBe('none');
+  });
+
+  it('folds a mention into the review ask', () => {
+    const pr = makePr({ author: 'rowan', reviewerUsers: [me] });
+    const mention = makeEvent({ kind: 'mention', actor: 'lyra' });
+    expect(single(pr, [mention]).what).toBe('Review, lyra mentioned you');
+  });
+
+  it('ignores mentions by bots and by yourself', () => {
+    const pr = makePr({ author: 'rowan' });
+    const bot = makeEvent({ kind: 'mention', actor: 'github-actions', isBot: true });
+    const self = makeEvent({ kind: 'mention', actor: me });
+    expect(single(pr, [bot, self]).kind).toBe('none');
+  });
+});
+
+describe('whoseTurn: on your own PR', () => {
+  const own = makePr({ author: me });
+
+  it('asks you to answer threads from others', () => {
+    const threads = [
+      makeThread('t1', [makeComment({ author: 'mira' })]),
+      makeThread('t2', [makeComment({ author: me }), makeComment({ id: 'c2', author: 'mira' })]),
+      makeThread('t3', [makeComment({ author: 'mira' }), makeComment({ id: 'c3', author: me })]),
+    ];
+    expect(single({ ...own, threads })).toMatchObject({ kind: 'you', what: 'Answer 2 threads from mira' });
+  });
+
+  it('asks you to address requested changes, then to fix CI', () => {
+    const changes = { ...own, reviews: [makeReview({ author: 'ada', state: 'CHANGES_REQUESTED' })] };
+    expect(single(changes).what).toBe("Address ada's changes");
+    const cleared = { ...changes, reviews: [...changes.reviews, makeReview({ id: 'r2', author: 'ada', submittedAt: at(30) })] };
+    expect(single(cleared).what).not.toBe("Address ada's changes");
+    const failing = { ...own, checks: { rollup: 'FAILURE' as const, contexts: [] } };
+    expect(single(failing).what).toBe('Fix failing CI');
+  });
+
+  it('waits on the first requested reviewer', () => {
+    expect(single({ ...own, reviewerUsers: ['sol', 'lyra'] })).toEqual({ kind: 'them', who: 'sol', what: 'to review', prKey: own.key });
+    expect(single({ ...own, reviewerTeams: ['PostHog/team-devex'] })).toMatchObject({ kind: 'them', who: 'PostHog/team-devex' });
+  });
+
+  it('asks you to merge once it is approved', () => {
+    expect(single({ ...own, reviewDecision: 'APPROVED' }).what).toBe('Merge, it is approved');
+    expect(single({ ...own, reviewDecision: 'APPROVED', isDraft: true }).kind).toBe('none');
+  });
+});
+
+describe('whoseTurn: waiting on them', () => {
+  it('waits on the author to merge after you approved the head', () => {
+    const pr = makePr({ author: 'sol', reviews: [makeReview({ author: me, commitOid: 'head' })] });
+    expect(single(pr)).toEqual({ kind: 'them', who: 'sol', what: 'to merge', prKey: pr.key });
+  });
+
+  it('waits on the author to address your threads or changes', () => {
+    const reviewed = makePr({ author: 'rowan', reviews: [makeReview({ author: me, state: 'COMMENTED' })] });
+    expect(single(reviewed).what).toBe('to reply');
+    const threads = [makeThread('t1', [makeComment({ author: me })]), makeThread('t2', [makeComment({ author: me })])];
+    expect(single({ ...reviewed, threads }).what).toBe('to address 2 threads');
+    const changes = makePr({ author: 'rowan', reviews: [makeReview({ author: me, state: 'CHANGES_REQUESTED' })] });
+    expect(single(changes).what).toBe('to address your changes');
+  });
+});
+
+describe('whoseTurn: nobody', () => {
+  it('has no turn on merged or closed PRs, or when you only follow', () => {
+    expect(single(makePr({ state: 'MERGED', reviewerUsers: [me] })).kind).toBe('none');
+    expect(single(makePr({ state: 'CLOSED' })).kind).toBe('none');
+    expect(single(makePr({ author: 'mae' }))).toEqual({ kind: 'none', who: null, what: '', prKey: null });
+  });
+
+  it('has no turn without a viewer', () => {
+    const pr = makePr({ reviewerUsers: [me] });
+    const turn = whoseTurn({ tile: singleTile(pr), prs: new Map([[pr.key, pr]]), events: new Map(), userStates: new Map(), viewer: null });
+    expect(turn.kind).toBe('none');
+  });
+});
+
+describe('whoseTurn: multi-PR tiles', () => {
+  it('picks the most urgent pinged member and names the PR', () => {
+    const approved = makePr({ number: 1, author: 'rowan', reviews: [makeReview({ author: me })] });
+    const asked = makePr({ number: 2, author: 'rowan', reviewerUsers: [me] });
+    const pulled = makePr({ number: 3, author: me, checks: { rollup: 'FAILURE', contexts: [] } });
+    const tile: Tile = {
+      id: 'stack:x',
+      topicId: 'topic-1',
+      kind: 'stack',
+      title: 'stack',
+      members: [
+        { prKey: approved.key, provenance: { kind: 'pinged', reason: 'review_requested' } },
+        { prKey: asked.key, provenance: { kind: 'pinged', reason: 'review_requested' } },
+        { prKey: pulled.key, provenance: { kind: 'pulled_in', reason: 'stack layer above #2' } },
+      ],
+    };
+    expect(turnOf(tile, [approved, asked, pulled])).toEqual({ kind: 'you', who: null, what: 'Review on #2', prKey: asked.key });
+    const pushedOnFirst = { ...approved, headOid: 'c2', commits: [makeCommit({ oid: 'head' }), makeCommit({ oid: 'c2' })] };
+    const news = makeEvent({ prKey: approved.key, kind: 'commits_after_approval', ruleLoudness: 'loud', at: at(50) });
+    expect(turnOf(tile, [pushedOnFirst, asked, pulled], [news])).toMatchObject({ what: 'Re-check 1 commit on #1' });
+    expect(turnOf(tile, [approved, { ...asked, state: 'MERGED' }, pulled])).toEqual({
+      kind: 'them',
+      who: 'rowan',
+      what: 'to merge on #1',
+      prKey: approved.key,
+    });
+  });
+});

@@ -17,6 +17,8 @@ import {
 
 export interface SampleData {
   viewer: string;
+  /** The viewer's teams, as GitHub names them ("org/slug"). */
+  viewerTeams: string[];
   topics: Topic[];
   prs: Pr[];
   events: PrEvent[];
@@ -129,6 +131,13 @@ function buildPrs(clock: SampleClock): Pr[] {
       ],
       reviewerUsers: [SAMPLE_VIEWER], reviewerTeams: ['PostHog/team-devex'],
       comments: [{ id: 'issuecomment-2', author: 'lyra', body: '@you does the warm-up job need a feature flag, or is one cold hour fine?', hoursAgo: 0.3 }],
+      threads: [
+        {
+          id: 'thread-41902-1',
+          path: 'turbo.json',
+          comments: [{ author: 'nell', body: 'Does the cache key include the runner image?', hoursAgo: 2 }],
+        },
+      ],
       commits: [
         { oid: 'a1b2c3', headline: 'Warm the Turbo cache on the first run', hoursAgo: 4 },
         { oid: 'sha41902', headline: 'Retry the warm-up once before failing', hoursAgo: 0.5 },
@@ -145,8 +154,14 @@ function buildPrs(clock: SampleClock): Pr[] {
     }),
     samplePr(clock, {
       number: 41911, title: 'Run e2e on Depot runners', author: 'rowan', state: 'OPEN',
-      size: [48, 48, 5], checks: 'SUCCESS', openedHoursAgo: 1,
-      baseRef: 'rowan/depot-3', headRef: 'rowan/depot-4', reviewerUsers: [SAMPLE_VIEWER, 'nell'],
+      size: [48, 48, 5], checks: 'SUCCESS', openedHoursAgo: 6,
+      baseRef: 'rowan/depot-3', headRef: 'rowan/depot-4', reviewerUsers: ['nell'],
+      reviews: [[SAMPLE_VIEWER, 'APPROVED', 'Labels match #41880.', 'sha41911-a']],
+      commits: [
+        { oid: 'sha41911-a', headline: 'Move Playwright jobs to Depot', hoursAgo: 5 },
+        { oid: 'sha41911-b', headline: 'Bump Playwright shard count to 6', hoursAgo: 0.25 },
+        { oid: 'sha41911', headline: 'Pin the Depot runner image', hoursAgo: 0.15 },
+      ],
     }),
     samplePr(clock, {
       number: 41862, title: 'Backend jobs on Depot', author: 'rowan', state: 'MERGED',
@@ -167,7 +182,7 @@ function buildPrs(clock: SampleClock): Pr[] {
     }),
     samplePr(clock, {
       number: 41899, title: 'Rename workflow files to ci-*.yml', author: 'rowan', state: 'OPEN',
-      size: [0, 0, 9], checks: 'SUCCESS', openedHoursAgo: 48,
+      size: [0, 0, 9], checks: 'SUCCESS', openedHoursAgo: 48, queued: true,
       reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED'], ['nell', 'APPROVED']],
     }),
     samplePr(clock, {
@@ -183,6 +198,27 @@ function buildPrs(clock: SampleClock): Pr[] {
       number: 41801, title: 'Move error_tracking models to products/', author: SAMPLE_VIEWER, state: 'OPEN',
       size: [410, 380, 24], checks: 'SUCCESS', openedHoursAgo: 48,
       reviews: [['ada', 'CHANGES_REQUESTED'], ['lyra', 'APPROVED']],
+      threads: [
+        {
+          id: 'thread-41801-1',
+          path: 'products/error_tracking/backend/models.py',
+          comments: [{ author: 'ada', body: 'Keep db_table so the move stays state-only?', hoursAgo: 26 }],
+        },
+        {
+          id: 'thread-41801-2',
+          path: 'posthog/models/__init__.py',
+          comments: [{ author: 'ada', body: 'This re-export hides the new path.', hoursAgo: 26 }],
+        },
+        {
+          id: 'thread-41801-3',
+          path: 'products/error_tracking/backend/apps.py',
+          comments: [
+            { author: 'lyra', body: 'Label clash with the old app?', hoursAgo: 30 },
+            { author: SAMPLE_VIEWER, body: 'No, the label is new.', hoursAgo: 29 },
+          ],
+          resolved: true,
+        },
+      ],
     }),
     samplePr(clock, {
       number: 41930, title: 'RFC: self-hosted runners for ingestion CI', author: 'ines', state: 'OPEN',
@@ -191,7 +227,7 @@ function buildPrs(clock: SampleClock): Pr[] {
     }),
     samplePr(clock, {
       number: 41940, title: 'Release desktop 2.3', author: 'mae', state: 'OPEN',
-      size: [30, 10, 4], checks: 'PENDING', openedHoursAgo: 30,
+      size: [30, 10, 4], checks: 'PENDING', openedHoursAgo: 30, reviews: [['koa', 'APPROVED']],
     }),
     samplePr(clock, {
       number: 41870, title: 'Make hogli start default to minimal stack', author: 'sol', state: 'OPEN',
@@ -214,8 +250,11 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'merged', actor: 'jude', text: 'merged it', hoursAgo: 14, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 41911, [
-      { kind: 'review_requested', actor: 'rowan', text: 'requested your review', hoursAgo: 1, rule: 'loud' },
-      { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 0.7, rule: 'quiet', isBot: true },
+      { kind: 'review_requested', actor: 'rowan', text: 'requested your review', hoursAgo: 6, rule: 'loud', seen: true },
+      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 4, rule: 'quiet', seen: true },
+      { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Bump Playwright shard count to 6" after your approval', hoursAgo: 0.25, rule: 'loud' },
+      { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Pin the Depot runner image" after your approval', hoursAgo: 0.15, rule: 'loud' },
+      { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 0.1, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 41862, [
       { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 72, rule: 'quiet', seen: true },
@@ -280,7 +319,7 @@ function buildGlances(clock: SampleClock): Glance[] {
     }),
     sampleGlance(clock, 41911, {
       verdict: 'LOOKS_SAFE',
-      forYou: 'Runner labels change as planned in #41880.',
+      forYou: 'You approved; since then Rowan raised the shard count and pinned the runner image.',
       does: 'Moves Playwright jobs to depot-ubuntu-24.04-8.',
       risk: 'Low. CI green.',
       othersSaid: 'No comments yet.',
@@ -429,7 +468,13 @@ function buildUserStates(clock: SampleClock): UserPrState[] {
     approvedCommitOid: `sha${number}`,
     handledAt: null,
   });
-  return [approved(41899, 24)];
+  const approvedOlderHead: UserPrState = {
+    prKey: sampleKey(41911),
+    approvedAt: clock.hoursAgo(4),
+    approvedCommitOid: 'sha41911-a',
+    handledAt: null,
+  };
+  return [approved(41899, 24), approvedOlderHead];
 }
 
 function buildMembership(tiles: Tile[]): Map<PrKey, string> {
@@ -451,6 +496,7 @@ export function buildSampleData(now: Date): SampleData {
   const tiles = buildTiles();
   return {
     viewer: SAMPLE_VIEWER,
+    viewerTeams: ['PostHog/team-devex'],
     topics: buildTopics(clock),
     prs: buildPrs(clock),
     events: buildEvents(clock),

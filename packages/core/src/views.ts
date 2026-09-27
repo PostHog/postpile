@@ -22,6 +22,10 @@ import type {
 } from './types.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
+import type { PrStatus } from './pr-status.ts';
+import type { TilePerson } from './tile-people.ts';
+import type { WhoseTurn } from './whose-turn.ts';
+import type { WhyCode } from './why-here.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
@@ -77,6 +81,12 @@ export interface PrSummary {
   state: PrState;
   isDraft: boolean;
   provenance: Provenance;
+  /** Why the PR is in the tile, as a short code (RV, RT, @, ...). */
+  why: WhyCode;
+  /** Lifecycle, review and checks for the status pill. */
+  status: PrStatus;
+  /** Unresolved review threads. */
+  openThreads: number;
   verdict: Verdict | null;
   /** The PR, instructions or feedback moved since the glance was made; the verdict is old. */
   glanceStale: boolean;
@@ -92,6 +102,12 @@ export interface TileView {
   tile: Tile;
   state: TileState;
   prs: PrSummary[];
+  /** The most aimed code among the PRs. */
+  why: WhyCode;
+  /** Author(s), the viewer if they reviewed, other reviewers. At most TILE_PEOPLE_MAX. */
+  people: TilePerson[];
+  /** Whose move it is on the tile. */
+  turn: WhoseTurn;
 }
 
 export interface TopicDetail {

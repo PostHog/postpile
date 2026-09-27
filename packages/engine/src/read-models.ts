@@ -1,8 +1,14 @@
 import {
   displayState,
   isUnseenLoud,
+  openThreadCount,
+  prStatus,
   searchTopics,
   TILE_STATE_ORDER,
+  tilePeople,
+  tileWhy,
+  whoseTurn,
+  whyHere,
   type FactQuery,
   type FactView,
   type GlanceGap,
@@ -15,6 +21,7 @@ import {
   type TileView,
   type TopicDetail,
   type TopicListItem,
+  type Viewer,
 } from '@code-manager/core';
 import type { AgentService } from '@code-manager/agent';
 import type { Store } from '@code-manager/store';
@@ -91,7 +98,7 @@ export class ReadModels {
     return raw === null ? null : (JSON.parse(raw) as GlanceGap);
   }
 
-  private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>): PrSummary[] {
+  private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>, viewer: Viewer | null): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     const summaries: PrSummary[] = [];
     for (const member of tile.members) {
@@ -108,6 +115,9 @@ export class ReadModels {
         state: pr.state,
         isDraft: pr.isDraft,
         provenance: member.provenance,
+        why: whyHere(member.provenance, pr, viewer),
+        status: prStatus(pr),
+        openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,
         glanceStale: stale.has(pr.key),
         forYou: glance?.forYou ?? null,
@@ -122,11 +132,19 @@ export class ReadModels {
   private tileViews(board: Board, topicId: string): TileView[] {
     const tiles = board.tilesForTopic(topicId);
     const stale = this.staleGlances(board, tiles.flatMap((tile) => tile.members.map((m) => m.prKey)));
-    const views = tiles.map((tile) => ({
-      tile,
-      state: board.stateOf(tile),
-      prs: this.prSummaries(board, tile, stale),
-    }));
+    const viewer = loadViewer(this.store);
+    const views = tiles.map((tile): TileView => {
+      const prs = this.prSummaries(board, tile, stale, viewer);
+      const memberPrs = tile.members.flatMap((member) => board.prs.get(member.prKey) ?? []);
+      return {
+        tile,
+        state: board.stateOf(tile),
+        prs,
+        why: tileWhy(prs.map((pr) => pr.why)),
+        people: tilePeople(memberPrs, viewer?.login ?? null),
+        turn: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }),
+      };
+    });
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
   }
 

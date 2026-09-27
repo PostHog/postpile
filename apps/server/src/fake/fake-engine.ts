@@ -39,7 +39,23 @@ import type {
   UnreadReason,
   UserPrState,
 } from '@code-manager/core';
-import { emptyAgentCallStats, fixedClaimNote, searchTopics, setIdFromTileId, type AgentCallStats, type SearchableTopic, type SearchResult } from '@code-manager/core';
+import {
+  emptyAgentCallStats,
+  fixedClaimNote,
+  openThreadCount,
+  prStatus,
+  searchTopics,
+  setIdFromTileId,
+  tilePeople,
+  tileWhy,
+  whoseTurn,
+  whyHere,
+  type AgentCallStats,
+  type Pr,
+  type SearchableTopic,
+  type SearchResult,
+  type Viewer,
+} from '@code-manager/core';
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeMemory } from './fake-memory.ts';
@@ -185,10 +201,16 @@ export class FakeEngine implements EngineService {
     return state;
   }
 
+  /** A push after the approval makes the PR not done again, like the real rule. */
   private isPrDone(prKey: PrKey): boolean {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     const state = this.data.userStates.find((candidate) => candidate.prKey === prKey);
-    return Boolean(state?.approvedAt || state?.handledAt || pr?.state !== 'OPEN');
+    const approvedHead = Boolean(state?.approvedAt) && (state?.approvedCommitOid ?? pr?.headOid) === pr?.headOid;
+    return Boolean(approvedHead || state?.handledAt || pr?.state !== 'OPEN');
+  }
+
+  private viewer(): Viewer {
+    return { login: this.data.viewer, teams: this.data.viewerTeams };
   }
 
   private isSnoozed(tileId: string): boolean {
@@ -204,7 +226,14 @@ export class FakeEngine implements EngineService {
     const unreadBecause: UnreadReason[] = [];
     for (const member of tile.members) {
       for (const event of this.eventsOf(member.prKey).filter(isUnseenLoud)) {
-        unreadBecause.push({ prKey: member.prKey, eventId: event.id, kind: event.kind, summary: event.summary, at: event.at });
+        unreadBecause.push({
+          prKey: member.prKey,
+          eventId: event.id,
+          kind: event.kind,
+          actor: event.actor,
+          summary: event.summary,
+          at: event.at,
+        });
       }
     }
     if (unreadBecause.length > 0) {
@@ -220,13 +249,17 @@ export class FakeEngine implements EngineService {
     return { kind: 'open', unreadBecause };
   }
 
+  /** Why-codes, status pills, faces and whose turn come from the same core rules as the engine. */
   private tileView(tile: Tile): TileView {
+    const viewer = this.viewer();
     const prs: PrSummary[] = [];
+    const memberPrs: Pr[] = [];
     for (const member of tile.members) {
       const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
       if (!pr) {
         continue;
       }
+      memberPrs.push(pr);
       const glance = this.data.glances.find((candidate) => candidate.prKey === pr.key);
       prs.push({
         key: pr.key,
@@ -236,6 +269,9 @@ export class FakeEngine implements EngineService {
         state: pr.state,
         isDraft: pr.isDraft,
         provenance: member.provenance,
+        why: whyHere(member.provenance, pr, viewer),
+        status: prStatus(pr),
+        openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,
         glanceStale: false,
         forYou: glance?.forYou ?? null,
@@ -244,7 +280,21 @@ export class FakeEngine implements EngineService {
         updatedAt: pr.updatedAt,
       });
     }
-    return { tile, state: this.tileState(tile), prs };
+    const turn = whoseTurn({
+      tile,
+      prs: new Map(memberPrs.map((pr) => [pr.key, pr])),
+      events: new Map(memberPrs.map((pr) => [pr.key, this.eventsOf(pr.key)])),
+      userStates: new Map(this.data.userStates.map((state) => [state.prKey, state])),
+      viewer,
+    });
+    return {
+      tile,
+      state: this.tileState(tile),
+      prs,
+      why: tileWhy(prs.map((pr) => pr.why)),
+      people: tilePeople(memberPrs, viewer.login),
+      turn,
+    };
   }
 
   private tilesOfTopic(topicId: string): Tile[] {

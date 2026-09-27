@@ -100,7 +100,14 @@ function unreadReasons(input: TileStateInput): UnreadReason[] {
       if (!isUnseenLoud(event)) {
         continue;
       }
-      reasons.push({ prKey: member.prKey, eventId: event.id, kind: event.kind, summary: event.summary, at: event.at });
+      reasons.push({
+        prKey: member.prKey,
+        eventId: event.id,
+        kind: event.kind,
+        actor: event.actor,
+        summary: event.summary,
+        at: event.at,
+      });
     }
   }
   return reasons.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
