@@ -15,24 +15,27 @@ import type {
  * - per_object: one active fact per object (an initiative has one driver)
  * - none: any number
  * lifecycle: the fact is about an open PR and ends when that PR merges or closes.
+ * followsHead: the fact depends on the code as it was, so a push that moves
+ * a ref's head makes it stale. Who drives or owns something does not.
  */
 export interface PredicateRule {
   unique: 'per_subject' | 'per_object' | 'none';
   lifecycle: boolean;
+  followsHead: boolean;
 }
 
 export const PREDICATE_RULES: Record<FactPredicate, PredicateRule> = {
-  drives: { unique: 'per_object', lifecycle: false },
-  works_on: { unique: 'none', lifecycle: true },
-  reviews: { unique: 'none', lifecycle: true },
-  owns: { unique: 'none', lifecycle: false },
-  part_of: { unique: 'per_subject', lifecycle: false },
-  depends_on: { unique: 'none', lifecycle: true },
-  blocked_by: { unique: 'none', lifecycle: true },
-  decided: { unique: 'none', lifecycle: false },
-  status: { unique: 'per_subject', lifecycle: false },
-  user_cares: { unique: 'none', lifecycle: false },
-  note: { unique: 'none', lifecycle: false },
+  drives: { unique: 'per_object', lifecycle: false, followsHead: false },
+  works_on: { unique: 'none', lifecycle: true, followsHead: false },
+  reviews: { unique: 'none', lifecycle: true, followsHead: false },
+  owns: { unique: 'none', lifecycle: false, followsHead: false },
+  part_of: { unique: 'per_subject', lifecycle: false, followsHead: false },
+  depends_on: { unique: 'none', lifecycle: true, followsHead: true },
+  blocked_by: { unique: 'none', lifecycle: true, followsHead: true },
+  decided: { unique: 'none', lifecycle: false, followsHead: true },
+  status: { unique: 'per_subject', lifecycle: false, followsHead: true },
+  user_cares: { unique: 'none', lifecycle: false, followsHead: false },
+  note: { unique: 'none', lifecycle: false, followsHead: false },
 };
 
 export function sameEntity(a: EntityRef | null, b: EntityRef | null): boolean {

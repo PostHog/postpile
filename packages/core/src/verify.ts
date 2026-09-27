@@ -121,7 +121,7 @@ function sourceExists(ref: FactRef, pr: Pr): boolean {
  * 1. a referenced PR is not in the store -> stale pr_missing
  * 2. lifecycle predicate and its PR merged/closed -> invalidate at mergedAt / closed time
  *    (a status fact about a PR that ended after it was written -> stale pr_merged / pr_closed)
- * 3. a ref carries headOid and the PR head moved -> stale head_moved
+ * 3. a ref carries headOid, the PR head moved and the predicate follows the head -> stale head_moved
  * 4. reviews/works_on and the person is no longer reviewer / author / committer -> stale person_not_involved
  * 5. a referenced comment, review or commit is gone from the snapshot -> stale source_deleted
  * 6. otherwise ok
@@ -143,7 +143,9 @@ export function verifyFact(fact: Fact, world: VerifyWorld): VerifyOutcome {
     return { kind: 'stale', reason: outlived.reason };
   }
 
-  const headMoved = fact.refs.some((ref) => ref.headOid !== null && prs.get(ref.prKey)?.headOid !== ref.headOid);
+  const headMoved =
+    PREDICATE_RULES[fact.predicate].followsHead &&
+    fact.refs.some((ref) => ref.headOid !== null && prs.get(ref.prKey)?.headOid !== ref.headOid);
   if (headMoved) {
     return { kind: 'stale', reason: 'head_moved' };
   }

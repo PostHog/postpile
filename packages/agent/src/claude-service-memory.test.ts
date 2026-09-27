@@ -105,7 +105,7 @@ describe('RunnerAgentService.updateDossier', () => {
       askedBy: 'carol',
       refs: [
         { kind: 'comment', prKey: 'acme/app#1', sourceId: 'c9', url: null, at: '2026-09-10T10:00:00Z', headOid: null },
-        { kind: 'comment', prKey: 'acme/app#1', sourceId: 'c1', url: 'https://github.com/acme/app/pull/1#c1', at: '2026-09-21T10:00:00Z', headOid: null },
+        { kind: 'comment', prKey: 'acme/app#1', sourceId: 'c1', url: 'https://github.com/acme/app/pull/1#c1', at: '2026-09-21T10:00:00Z', headOid: 'abc' },
       ],
     });
     expect(result.dossier.recentChanges[0]?.at).toBe(NOW);

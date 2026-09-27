@@ -15,21 +15,33 @@ const refKindByEvent: Partial<Record<EventKind, FactRefKind>> = {
   commits_after_approval: 'commit',
 };
 
+/**
+ * The head a claim was made against, so verify can tell when a push outdated
+ * it: the commit a review was left on, the commit itself, and otherwise the
+ * PR head while the PR is open.
+ */
+function headAt(kind: FactRefKind, sourceId: string | null, pr: Pr | undefined): string | null {
+  if (pr === undefined) {
+    return null;
+  }
+  if (kind === 'review') {
+    return pr.reviews.find((review) => review.id === sourceId)?.commitOid ?? null;
+  }
+  if (kind === 'commit') {
+    return sourceId;
+  }
+  return pr.state === 'OPEN' ? pr.headOid : null;
+}
+
 /** Comment, review and commit refs point at their source so verify can spot a deleted one. */
-export function eventRef(event: PrEvent): FactRef {
+export function eventRef(event: PrEvent, pr: Pr | undefined): FactRef {
   const kind = refKindByEvent[event.kind] ?? 'event';
-  return {
-    kind,
-    prKey: event.prKey,
-    sourceId: kind === 'event' ? event.id : event.sourceId,
-    url: event.url,
-    at: event.at,
-    headOid: null,
-  };
+  const sourceId = kind === 'event' ? event.id : event.sourceId;
+  return { kind, prKey: event.prKey, sourceId, url: event.url, at: event.at, headOid: headAt(kind, sourceId, pr) };
 }
 
 function prRef(pr: Pr): FactRef {
-  return { kind: 'pr', prKey: pr.key, sourceId: null, url: pr.url, at: pr.createdAt, headOid: null };
+  return { kind: 'pr', prKey: pr.key, sourceId: null, url: pr.url, at: pr.createdAt, headOid: headAt('pr', null, pr) };
 }
 
 function refKey(ref: FactRef): string {
@@ -79,7 +91,7 @@ export class DossierRefs {
   private refsFor(shortId: string): FactRef[] {
     const event = this.events.get(shortId);
     if (event) {
-      return [eventRef(event)];
+      return [eventRef(event, this.prs.get(event.prKey))];
     }
     const fact = this.facts.get(shortId);
     if (fact) {

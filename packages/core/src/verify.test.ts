@@ -53,9 +53,11 @@ describe('verifyFact', () => {
     expect(verifyFact(fact, world([merged]))).toEqual({ kind: 'ok' });
   });
 
-  it('is stale when a ref pinned a head that moved', () => {
-    const fact = makeFact({ refs: [makeFactRef({ headOid: 'h0' })] });
-    expect(verifyFact(fact, world([pr1]))).toEqual({ kind: 'stale', reason: 'head_moved' });
+  it('is stale when a ref pinned a head that moved, for facts about the code', () => {
+    const refs = [makeFactRef({ headOid: 'h0' })];
+    const decided = makeFact({ subject: { kind: 'pr', key: pr1.key }, predicate: 'decided', object: null, text: 'keep the old cache', refs });
+    expect(verifyFact(decided, world([pr1]))).toEqual({ kind: 'stale', reason: 'head_moved' });
+    expect(verifyFact(makeFact({ refs }), world([pr1]))).toEqual({ kind: 'ok' });
   });
 
   it('is stale when a reviewer is no longer on the PR', () => {
