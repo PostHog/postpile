@@ -13,8 +13,17 @@ full design; this file is the short "what now".
   undo queue, not mine / not related / wrong topic feedback, snooze, unmute,
   ask-a-person draft + send, tile chat with "keep it" tailoring, topic
   rename/merge proposals (filed by the summary job, applied only on accept).
-- CLI, HTTP server (Hono) and a placeholder Electron + React UI over the same
+- CLI, HTTP server (Hono) and an Electron + React UI over the same
   EngineService.
+- Desktop renderer rebuilt in the "Crisp native, refined" style: Tailwind v4
+  on design tokens (`apps/desktop/src/renderer/src/styles/`), react-query
+  hooks per resource, one guarded `ActionsProvider` for every mutation,
+  hidden-inset title bar, three panes (264px | 1fr | 404px), status footer,
+  toast with Undo. Rules for the renderer are in `apps/desktop/CLAUDE.md`.
+- GitHub writes from the UI (approve, comment, mark read, "not mine") are
+  blocked unless the app runs with `CODE_MANAGER_ALLOW_WRITES=1`; the server
+  reports this at `GET /api/config`. Fake mode allows them (nothing leaves the
+  process).
 - Review fixes, highlights:
   - API token is always required, so web pages cannot fire approve or mark-read
     at the local server.
@@ -26,12 +35,17 @@ full design; this file is the short "what now".
     put the PR back.
   - Mark-read failures do not drop the rest of a batch; quit waits for sends in
     flight; failures and skips show up in the next sync report.
-- 238 tests (vitest), typecheck green across all workspaces.
+- Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
 
-- Desktop UI is an unstyled placeholder that proves the data flows. Layout,
-  carousel vs list and styling are still open.
+- Desktop UI follows the chosen style, but the layout is still open. Not in
+  the UI yet: editing general instructions, a "handled quietly" list (both
+  shown disabled), topic dossier and facts from memory v2, keyboard
+  navigation, dark mode, one-press approve from a tile (Approve lives in the
+  detail pane, next to the glance).
+- The write guard is a UI guard. The server itself still accepts writes from
+  any caller with the token; `CODE_MANAGER_READ_ONLY=1` is the hard stop.
 - Fake mode (`CODE_MANAGER_FAKE=1`) runs `FakeEngine`, a second
   EngineService with its own copies of the tile/loudness/undo rules. It can
   drift from the real engine. See decisions below.
@@ -94,6 +108,15 @@ npm run desktop       # Electron dev mode, server in-process on a random port + 
 npm run server        # standalone API on 127.0.0.1:4870, prints its token
 ```
 
+The desktop app syncs once on start, then only on "Sync now". Without
+`CODE_MANAGER_ALLOW_WRITES=1` it shows GitHub-writing actions but blocks them
+with a message:
+
+```
+CODE_MANAGER_ALLOW_WRITES=1 npm run desktop   # approve, comment, mark read for real
+npm run build                                 # electron-vite bundle into apps/desktop/out
+```
+
 Fake mode (sample "Move CI to Depot" data, no GitHub, no agent, no database):
 
 ```
@@ -106,6 +129,8 @@ Env switches:
 
 - `CODE_MANAGER_READ_ONLY=1`: real reads, every GitHub write refused. Use this
   for smoke runs against the real account.
+- `CODE_MANAGER_ALLOW_WRITES=1`: lets the UI send GitHub writes. Off by
+  default.
 - `CODE_MANAGER_DB`, `CODE_MANAGER_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/code-manager/db.sqlite`) and the
   instructions file (default `~/.config/code-manager/instructions.md`).

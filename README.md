@@ -39,6 +39,7 @@ General instructions for every prompt go in
 
 - `CODE_MANAGER_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
 - `CODE_MANAGER_READ_ONLY=1`: real reads, every GitHub write refused
+- `CODE_MANAGER_ALLOW_WRITES=1`: let the UI approve, comment and mark read on GitHub (blocked by default)
 - `CODE_MANAGER_MODEL`, `CODE_MANAGER_GLANCE_MODEL`, `CODE_MANAGER_AGENT_CONCURRENCY`: agent knobs
 
 ## Layout
