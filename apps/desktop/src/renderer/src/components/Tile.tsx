@@ -71,7 +71,7 @@ export function Tile(props: TileProps) {
               <KindIcon kind={tile.kind} />
               {kindLabel(view)}
             </span>
-            <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} />
+            <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} gap={lead?.glanceGap} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             <span className="ml-auto font-mono text-[10.5px] text-faint">{updatedAt ? ageLabel(updatedAt, now) : ''}</span>
           </div>

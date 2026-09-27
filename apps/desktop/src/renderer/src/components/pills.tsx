@@ -1,5 +1,6 @@
 // Small status chips used across panes: verdict, provenance, PR state.
-import type { Provenance, Verdict } from '@code-manager/core';
+import type { GlanceGap, Provenance, Verdict } from '@code-manager/core';
+import { glanceGapText } from '../lib/glance.ts';
 import type { PrLook } from '../lib/pr.ts';
 import { PrIcon } from './icons.tsx';
 
@@ -10,11 +11,13 @@ const VERDICTS: Record<Verdict, { glyph: string; label: string; tone: string }> 
 };
 
 /** Greyed on done tiles; "stale" when the glance was made for an older state. */
-export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean }) {
+export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean; gap?: GlanceGap | null }) {
   if (!props.verdict) {
+    const text = glanceGapText(props.gap ?? null);
+    const tone = props.gap?.reason === 'failed' ? 'border-unread-border text-unread-ink' : 'border-frame text-faint';
     return (
-      <span className="flex h-[19px] items-center rounded-full border border-dashed border-frame px-[7px] text-[10.5px] font-medium text-faint">
-        No glance yet
+      <span title={text.card} className={`flex h-[19px] items-center rounded-full border border-dashed px-[7px] text-[10.5px] font-medium whitespace-nowrap ${tone}`}>
+        {text.pill}
       </span>
     );
   }

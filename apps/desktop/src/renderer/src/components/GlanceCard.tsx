@@ -1,5 +1,6 @@
 import type { PrDetail, PrSummary, TileView } from '@code-manager/core';
 import { useActions } from '../api/actions.tsx';
+import { glanceGapText } from '../lib/glance.ts';
 import { provenanceReason } from '../lib/pr.ts';
 import { Button } from './Button.tsx';
 import { ProvenanceTag, VerdictPill } from './pills.tsx';
@@ -26,20 +27,20 @@ function GlanceLine(props: { label: string; text: string }) {
 /** The agent's take on the PR, written against the user's own instructions. */
 export function GlanceCard(props: GlanceCardProps) {
   const actions = useActions();
-  const { glance, glanceStale } = props.detail;
+  const { glance, glanceStale, glanceGap } = props.detail;
   const summary = props.summary;
   const canUnrelate = props.view.tile.kind === 'set' && summary?.provenance.kind === 'pulled_in';
   return (
     <div className="flex flex-col gap-2 rounded-[10px] border border-hairline-soft bg-subtle p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <VerdictPill verdict={glance?.verdict ?? null} stale={glanceStale} />
+        <VerdictPill verdict={glance?.verdict ?? null} stale={glanceStale} gap={glanceGap} />
         {summary && <ProvenanceTag provenance={summary.provenance} />}
         {summary && <span className="text-[11.5px] text-muted">{provenanceReason(summary.provenance)}</span>}
       </div>
       {glance ? (
         <p className="text-[13px] leading-normal font-medium select-text">{glance.forYou}</p>
       ) : (
-        <p className="text-xs text-muted">No glance yet. The next sync with the agent writes one.</p>
+        <p className="text-xs text-muted">{glanceGapText(glanceGap).card}</p>
       )}
       {glance && (
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs leading-normal text-ink-2">

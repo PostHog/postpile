@@ -10,6 +10,7 @@ import type {
   Feedback,
   FeedbackInput,
   FeedbackKind,
+  GlanceGap,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposalReply,
@@ -107,6 +108,7 @@ export class FakeEngine implements EngineService {
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
 
+
   constructor(options: FakeEngineOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.data = buildSampleData(this.now());
@@ -132,6 +134,14 @@ export class FakeEngine implements EngineService {
     const id = this.nextId;
     this.nextId += 1;
     return id;
+  }
+
+  /** Sample PRs without a glance read as skipped by the call cap. */
+  private glanceGapOf(prKey: PrKey): GlanceGap | null {
+    if (this.data.glances.some((glance) => glance.prKey === prKey)) {
+      return null;
+    }
+    return { reason: 'call_cap', detail: 'The sync stopped at its agent-call cap before this PR.', at: this.timestamp() };
   }
 
   private findTile(tileId: string): Tile | undefined {
@@ -205,6 +215,7 @@ export class FakeEngine implements EngineService {
         verdict: glance?.verdict ?? null,
         glanceStale: false,
         forYou: glance?.forYou ?? null,
+        glanceGap: this.glanceGapOf(pr.key),
         unseenLoudEvents: this.eventsOf(pr.key).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
       });
@@ -284,6 +295,7 @@ export class FakeEngine implements EngineService {
       events,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: false,
+      glanceGap: this.glanceGapOf(prKey),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),

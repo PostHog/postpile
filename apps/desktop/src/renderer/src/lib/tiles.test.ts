@@ -15,6 +15,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     verdict: 'LOOKS_SAFE',
     glanceStale: false,
     forYou: `for you ${number}`,
+    glanceGap: null,
     unseenLoudEvents: 0,
     updatedAt: at(number),
     ...overrides,

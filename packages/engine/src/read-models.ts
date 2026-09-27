@@ -4,6 +4,7 @@ import {
   TILE_STATE_ORDER,
   type FactQuery,
   type FactView,
+  type GlanceGap,
   type PrDetail,
   type PrKey,
   type PrSummary,
@@ -15,6 +16,7 @@ import {
 import type { AgentService } from '@code-manager/agent';
 import type { Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
+import { glanceGapKey } from './digest/glance-batches.ts';
 import { GlanceInputs } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
 import type { PromptContextSource } from './prompt-context.ts';
@@ -75,6 +77,12 @@ export class ReadModels {
     return stale;
   }
 
+  /** Why a PR without a glance has none, as the last sync recorded it. Null once a glance exists. */
+  private glanceGap(key: PrKey, hasGlance: boolean): GlanceGap | null {
+    const raw = hasGlance ? null : this.store.meta.get(glanceGapKey(key));
+    return raw === null ? null : (JSON.parse(raw) as GlanceGap);
+  }
+
   private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     const summaries: PrSummary[] = [];
@@ -95,6 +103,7 @@ export class ReadModels {
         verdict: glance?.verdict ?? null,
         glanceStale: stale.has(pr.key),
         forYou: glance?.forYou ?? null,
+        glanceGap: this.glanceGap(pr.key, glance !== undefined),
         unseenLoudEvents: (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
       });
@@ -155,6 +164,7 @@ export class ReadModels {
     if (!pr) {
       return null;
     }
+    const glance = this.store.glances.get(key);
     const tileIds = new Set(
       board
         .allTiles()
@@ -164,8 +174,9 @@ export class ReadModels {
     return {
       pr,
       events: (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) })),
-      glance: this.store.glances.get(key),
+      glance,
       glanceStale: this.staleGlances(board, [key]).has(key),
+      glanceGap: this.glanceGap(key, glance !== null),
       userState: board.userStates.get(key) ?? null,
       topicId: board.topicIdOf(key),
       tileIds: [...tileIds],

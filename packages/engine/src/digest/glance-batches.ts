@@ -1,4 +1,4 @@
-import { GLANCE_BATCH_SIZE, isPinged, planGlanceBatches, type GlanceBatch, type PrKey } from '@code-manager/core';
+import { GLANCE_BATCH_SIZE, isPinged, planGlanceBatches, type GlanceBatch, type GlanceGap, type PrKey } from '@code-manager/core';
 import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { GlanceInputs, type GlanceTarget } from '../glance-inputs.ts';
@@ -6,6 +6,11 @@ import { chunk } from '../lists.ts';
 import type { DigestDeps } from './deps.ts';
 
 const MISSING_REASON = 'missing or invalid in the answer';
+
+/** Meta key of a PR's glance gap (GlanceGap JSON); cleared when a glance is stored. */
+export function glanceGapKey(prKey: PrKey): string {
+  return `glance_gap:${prKey}`;
+}
 
 /** Keeps the given order: topics appear in the order of their most urgent PR. */
 function groupByTopic(targets: GlanceTarget[]): Map<string | null, GlanceTarget[]> {
@@ -30,6 +35,14 @@ export class GlanceBatchWriter {
 
   constructor(private readonly deps: DigestDeps) {}
 
+  private markGap(prKeys: PrKey[], reason: GlanceGap['reason'], detail: string): void {
+    const at = this.deps.now().toISOString();
+    for (const key of prKeys) {
+      const gap: GlanceGap = { reason, detail, at };
+      this.deps.store.meta.set(glanceGapKey(key), JSON.stringify(gap));
+    }
+  }
+
   private batchesFor(targets: GlanceTarget[], inputs: GlanceInputs): GlanceBatch[] {
     return [...groupByTopic(targets)].flatMap(([topicId, group]) =>
       planGlanceBatches(topicId, inputs.dossierVersion(topicId), group.map((target) => target.item.pr.key)),
@@ -40,6 +53,7 @@ export class GlanceBatchWriter {
   private async runBatch(batch: GlanceBatch, inputs: GlanceInputs, byKey: Map<PrKey, GlanceTarget>): Promise<PrKey[]> {
     const { store, agent } = this.deps;
     if (!this.deps.budget.take('glance_batch')) {
+      this.markGap(batch.prKeys, 'call_cap', 'The sync stopped at its agent-call cap before this PR.');
       return [];
     }
     const items = batch.prKeys.flatMap((key) => {
@@ -51,6 +65,7 @@ export class GlanceBatchWriter {
       store.transaction(() => {
         for (const glance of result.glances) {
           store.glances.put(glance);
+          store.meta.delete(glanceGapKey(glance.prKey));
         }
       });
       for (const key of result.missing) {
@@ -87,7 +102,14 @@ export class GlanceBatchWriter {
 
   private needingGlance(inputs: GlanceInputs, skipTopics: Set<string>): GlanceTarget[] {
     const { store, agent, budget } = this.deps;
-    const targets = inputs.targets().filter((target) => target.topicId === null || !skipTopics.has(target.topicId));
+    const all = inputs.targets();
+    const waiting = all.filter((target) => target.topicId !== null && skipTopics.has(target.topicId));
+    this.markGap(
+      waiting.map((target) => target.item.pr.key),
+      'call_cap',
+      'Its topic dossier waits for the next sync (call cap), and the glance with it.',
+    );
+    const targets = all.filter((target) => target.topicId === null || !skipTopics.has(target.topicId));
     const stored = store.glances.getMany(targets.map((target) => target.item.pr.key));
     return targets.filter((target) => {
       if (stored.get(target.item.pr.key)?.inputHash === inputs.itemHash(agent, target)) {
@@ -114,7 +136,9 @@ export class GlanceBatchWriter {
     ];
     const stillMissing = await this.runRound(this.retryBatches(missing, inputs, byKey), inputs, byKey);
     for (const key of stillMissing) {
-      this.deps.errors.push(`glance ${key}: ${this.lastError.get(key) ?? MISSING_REASON}`);
+      const detail = this.lastError.get(key) ?? MISSING_REASON;
+      this.markGap([key], 'failed', detail);
+      this.deps.errors.push(`glance ${key}: ${detail}`);
     }
   }
 }

@@ -26,6 +26,17 @@ import type { InstructionsProposal } from './instructions-views.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
+/**
+ * Why a PR has no glance yet. call_cap: the sync stopped at its agent-call
+ * cap before reaching it; the next sync picks it up. failed: the agent was
+ * asked (twice) and gave no usable answer.
+ */
+export interface GlanceGap {
+  reason: 'call_cap' | 'failed';
+  detail: string;
+  at: IsoTime;
+}
+
 export interface TopicListItem {
   topic: Topic;
   /** needs_you when at least one tile is unread. */
@@ -48,6 +59,8 @@ export interface PrSummary {
   glanceStale: boolean;
   /** The glance's for_you line, null until a glance exists. */
   forYou: string | null;
+  /** Set while there is no glance and the last sync said why. */
+  glanceGap: GlanceGap | null;
   unseenLoudEvents: number;
   updatedAt: IsoTime;
 }
@@ -78,6 +91,8 @@ export interface PrDetail {
   glance: Glance | null;
   /** True when the glance was made for an older state of the PR or of the instructions. */
   glanceStale: boolean;
+  /** Set while there is no glance and the last sync said why. */
+  glanceGap: GlanceGap | null;
   userState: UserPrState | null;
   topicId: string | null;
   /** Ids of every tile this PR appears in. */
