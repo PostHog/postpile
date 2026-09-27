@@ -1,22 +1,77 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Feedback } from '@code-manager/core';
+import type { Feedback, FeedbackKind } from '@code-manager/core';
+import { all, insertReturningId } from '../sql.ts';
 
 export type NewFeedback = Omit<Feedback, 'id'>;
 
+interface FeedbackRow {
+  id: number;
+  kind: string;
+  topic_id: string | null;
+  tile_id: string | null;
+  pr_key: string | null;
+  set_id: string | null;
+  event_id: string | null;
+  note: string;
+  created_at: string;
+}
+
+function toFeedback(row: FeedbackRow): Feedback {
+  return {
+    id: row.id,
+    kind: row.kind as FeedbackKind,
+    topicId: row.topic_id,
+    tileId: row.tile_id,
+    prKey: row.pr_key,
+    setId: row.set_id,
+    eventId: row.event_id,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+/** Append-only log of user corrections. */
 export class FeedbackRepo {
   constructor(private readonly db: DatabaseSync) {}
 
-  add(_feedback: NewFeedback): Feedback {
-    throw new Error('not implemented');
+  add(feedback: NewFeedback): Feedback {
+    const id = insertReturningId(
+      this.db,
+      `INSERT INTO feedback (kind, topic_id, tile_id, pr_key, set_id, event_id, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      feedback.kind,
+      feedback.topicId,
+      feedback.tileId,
+      feedback.prKey,
+      feedback.setId,
+      feedback.eventId,
+      feedback.note,
+      feedback.createdAt,
+    );
+    return { id, ...feedback };
   }
 
   /** Newest first. Fed back into prompts for that topic. */
-  recentForTopic(_topicId: string, _limit: number): Feedback[] {
-    throw new Error('not implemented');
+  recentForTopic(topicId: string, limit: number): Feedback[] {
+    return all<FeedbackRow>(
+      this.db,
+      'SELECT * FROM feedback WHERE topic_id = ? ORDER BY created_at DESC, id DESC LIMIT ?',
+      topicId,
+      limit,
+    ).map(toFeedback);
   }
 
   /** Newest first, across topics. For prompts that have no topic yet (assignment). */
-  recent(_limit: number): Feedback[] {
-    throw new Error('not implemented');
+  recent(limit: number): Feedback[] {
+    return all<FeedbackRow>(this.db, 'SELECT * FROM feedback ORDER BY created_at DESC, id DESC LIMIT ?', limit).map(
+      toFeedback,
+    );
+  }
+
+  /** Everything said about one PR, e.g. "not mine" before re-offering it. */
+  listForPr(prKey: string): Feedback[] {
+    return all<FeedbackRow>(this.db, 'SELECT * FROM feedback WHERE pr_key = ? ORDER BY created_at, id', prKey).map(
+      toFeedback,
+    );
   }
 }

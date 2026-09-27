@@ -1,0 +1,105 @@
+import { describe, expect, it } from 'vitest';
+import { makeEvent, makePr, makeUserState, viewer } from './fixtures.ts';
+import { displayState, effectiveLoudness, isUnseenLoud, ruleLoudness, type LoudnessInput } from './loudness.ts';
+
+function input(overrides: Partial<LoudnessInput>): LoudnessInput {
+  return {
+    kind: 'comment',
+    actor: 'bob',
+    isBot: false,
+    pr: makePr(),
+    viewer,
+    userState: null,
+    caresAboutUnreviewedMerges: false,
+    ...overrides,
+  };
+}
+
+describe('ruleLoudness', () => {
+  it('keeps the viewer own activity quiet, even a push after approval', () => {
+    expect(ruleLoudness(input({ kind: 'mention', actor: 'Viewer' })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'commits_after_approval', actor: 'viewer' })).loudness).toBe('quiet');
+  });
+
+  it('makes direct address loud', () => {
+    expect(ruleLoudness(input({ kind: 'mention' }))).toEqual({ loudness: 'loud', reason: 'mentions you' });
+    expect(ruleLoudness(input({ kind: 'question_to_user' })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'reply_to_user' })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'team_mention' })).loudness).toBe('loud');
+  });
+
+  it('drops a mention to quiet once the viewer replied after it', () => {
+    const decision = ruleLoudness(input({ kind: 'mention', userRepliedAfter: true }));
+    expect(decision).toEqual({ loudness: 'quiet', reason: 'you already replied' });
+  });
+
+  it('keeps bot mentions, CI, deploys and the merge queue quiet', () => {
+    expect(ruleLoudness(input({ kind: 'mention', actor: 'github-actions', isBot: true })).loudness).toBe('quiet');
+    for (const kind of ['ci', 'deploy', 'merge_queue', 'bot_comment'] as const) {
+      expect(ruleLoudness(input({ kind, actor: 'someone' })).loudness).toBe('quiet');
+    }
+  });
+
+  it('mutes a bot rebase on a draft but not on a ready PR', () => {
+    const draft = makePr({ isDraft: true });
+    expect(ruleLoudness(input({ kind: 'force_pushed', actor: 'trunk-io', isBot: true, pr: draft }))).toEqual({
+      loudness: 'muted',
+      reason: 'bot pushed to a draft',
+    });
+    expect(ruleLoudness(input({ kind: 'commits_pushed', actor: 'renovate', isBot: true, pr: draft })).loudness).toBe(
+      'muted',
+    );
+    expect(ruleLoudness(input({ kind: 'force_pushed', actor: 'trunk-io', isBot: true })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'force_pushed', actor: 'alice', pr: draft })).loudness).toBe('quiet');
+  });
+
+  it('makes a review request loud only when it is for the viewer or their team', () => {
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'viewer' })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'PostHog/team-devex' })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'team-devex' })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'carol' })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: null })).loudness).toBe('quiet');
+  });
+
+  it('makes new commits after approval loud', () => {
+    const decision = ruleLoudness(
+      input({ kind: 'commits_after_approval', actor: 'alice', userState: makeUserState({ approvedAt: 'x' }) }),
+    );
+    expect(decision).toEqual({ loudness: 'loud', reason: 'new commits after you approved' });
+  });
+
+  it('makes merged without review loud only when the user cares', () => {
+    expect(ruleLoudness(input({ kind: 'merged_without_review' })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'merged_without_review', caresAboutUnreviewedMerges: true })).loudness).toBe(
+      'loud',
+    );
+  });
+
+  it('makes human reviews and comments loud on the viewer own PR only', () => {
+    const mine = makePr({ author: 'viewer' });
+    expect(ruleLoudness(input({ kind: 'review_changes_requested', pr: mine })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'comment', pr: mine })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'review_approved' })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'comment' })).loudness).toBe('quiet');
+  });
+
+  it('keeps plain lifecycle events quiet', () => {
+    for (const kind of ['merged', 'closed', 'reopened', 'ready_for_review', 'commits_pushed'] as const) {
+      expect(ruleLoudness(input({ kind, actor: 'alice' })).loudness).toBe('quiet');
+    }
+  });
+});
+
+describe('effective loudness and display state', () => {
+  it('prefers the override over the rule', () => {
+    const event = makeEvent({ ruleLoudness: 'loud', override: { loudness: 'muted', reason: 'noise', by: 'agent' } });
+    expect(effectiveLoudness(event)).toBe('muted');
+    expect(isUnseenLoud(event)).toBe(false);
+  });
+
+  it('shows seen once read, whatever the loudness', () => {
+    expect(displayState(makeEvent({ ruleLoudness: 'loud', seenAt: 'x' }))).toBe('seen');
+    expect(displayState(makeEvent({ ruleLoudness: 'loud' }))).toBe('loud');
+    expect(isUnseenLoud(makeEvent({ ruleLoudness: 'loud' }))).toBe(true);
+  });
+});

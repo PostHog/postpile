@@ -19,8 +19,16 @@ export function openDatabase(path: string): DatabaseSync {
   return db;
 }
 
-/** Runs fn inside a transaction, rolling back if it throws. */
+/**
+ * Runs fn inside a transaction, rolling back if it throws. A call inside an
+ * open transaction joins it, so repositories and callers can both use this
+ * without caring who started first. fn must be synchronous: node:sqlite is
+ * synchronous, and an await in the middle would let other work interleave.
+ */
 export function inTransaction<T>(db: DatabaseSync, fn: () => T): T {
+  if (db.isTransaction) {
+    return fn();
+  }
   db.exec('BEGIN');
   try {
     const result = fn();

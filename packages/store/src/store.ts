@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { openDatabase } from './database.ts';
+import { inTransaction, openDatabase } from './database.ts';
 import { AgentCacheRepo } from './repos/agent-cache.ts';
 import { ChatRepo } from './repos/chat.ts';
 import { EventRepo } from './repos/events.ts';
@@ -51,6 +51,11 @@ export class Store {
 
   static open(path: string): Store {
     return new Store(openDatabase(path));
+  }
+
+  /** Runs fn in one transaction across repositories. fn must be synchronous. */
+  transaction<T>(fn: () => T): T {
+    return inTransaction(this.db, fn);
   }
 
   close(): void {
