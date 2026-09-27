@@ -1,0 +1,17 @@
+{
+  "name": "@code-manager/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@code-manager/core": "*",
+    "@code-manager/engine": "*"
+  },
+  "bin": {
+    "code-manager": "./src/main.ts"
+  }
+}

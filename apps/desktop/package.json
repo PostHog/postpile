@@ -1,0 +1,21 @@
+{
+  "name": "@code-manager/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "@code-manager/core": "*",
+    "@code-manager/engine": "*",
+    "@code-manager/server": "*",
+    "fix-path": "^5.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

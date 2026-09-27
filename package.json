@@ -1,0 +1,51 @@
+{
+  "name": "code-manager",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/store",
+    "packages/github",
+    "packages/agent",
+    "packages/engine",
+    "apps/server",
+    "apps/cli",
+    "apps/desktop"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "build": "npm run build -w @code-manager/desktop",
+    "cli": "tsx apps/cli/src/main.ts",
+    "server": "npm start -w @code-manager/server",
+    "desktop": "npm run dev -w @code-manager/desktop"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "fix-path": "^5.0.0",
+    "hono": "^4.13.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.4.5",
+    "electron-vite": "^5.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "fsevents": false
+  }
+}
