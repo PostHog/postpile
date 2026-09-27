@@ -58,14 +58,27 @@ describe('engine memory routes', () => {
     const { request } = setup();
 
     const proposals = (await (await request('/api/proposals')).json()) as PendingProposals;
-    expect(proposals.rules).toEqual([]);
+    expect(proposals.rules.map((rule) => rule.id)).toEqual(['rule-bot-bumps']);
     expect(proposals.topics.length).toBeGreaterThan(0);
 
-    const decided = await request('/api/rule-proposals/r1', { method: 'POST', body: JSON.stringify({ accept: true }) });
-    expect(((await decided.json()) as ActionResult).ok).toBe(false);
+    const unknown = await request('/api/rule-proposals/r1', { method: 'POST', body: JSON.stringify({ accept: true }) });
+    expect(((await unknown.json()) as ActionResult).ok).toBe(false);
+    const decided = await request('/api/rule-proposals/rule-bot-bumps', { method: 'POST', body: JSON.stringify({ accept: true }) });
+    expect(((await decided.json()) as ActionResult).ok).toBe(true);
 
     const seen = await request('/api/topics/topic-depot/seen', { method: 'POST' });
     expect(((await seen.json()) as ActionResult).ok).toBe(true);
+  });
+
+  it('takes memory corrections and rejects an unknown kind', async () => {
+    const { request } = setup();
+
+    const body = { kind: 'wrong', factId: 'fact-rowan-drives', text: 'rowan drives the move to Depot.' };
+    const corrected = await request('/api/memory/corrections', { method: 'POST', body: JSON.stringify(body) });
+    const bad = await request('/api/memory/corrections', { method: 'POST', body: JSON.stringify({ ...body, kind: 'delete' }) });
+
+    expect(((await corrected.json()) as ActionResult).ok).toBe(true);
+    expect(bad.status).toBe(400);
   });
 
   it('consolidates with or without a body', async () => {

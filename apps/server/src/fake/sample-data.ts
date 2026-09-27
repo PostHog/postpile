@@ -365,6 +365,19 @@ function buildProposals(clock: SampleClock): TopicProposal[] {
       createdAt: clock.hoursAgo(2),
       decidedAt: null,
     },
+    // Filed by consolidation in the story of the sample.
+    {
+      id: 'proposal-merge-frontend',
+      kind: 'merge',
+      topicId: TOPIC.frontend,
+      name: null,
+      intoTopicId: TOPIC.depot,
+      prKeys: [],
+      reason: 'Frontend build only shows up for the Turbo cache, and #41855 already sits in a Depot set.',
+      status: 'pending',
+      createdAt: clock.hoursAgo(2),
+      decidedAt: null,
+    },
   ];
 }
 

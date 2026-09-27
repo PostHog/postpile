@@ -5,10 +5,13 @@ import type {
   ConsolidationReport,
   EventDisplayState,
   EventView,
+  FactQuery,
   FactView,
   Feedback,
   FeedbackInput,
+  FeedbackKind,
   Loudness,
+  MemoryCorrection,
   PendingProposals,
   PrDetail,
   PrEvent,
@@ -24,8 +27,9 @@ import type {
   UnreadReason,
   UserPrState,
 } from '@code-manager/core';
-import { emptyAgentCallStats, setIdFromTileId } from '@code-manager/core';
+import { emptyAgentCallStats, setIdFromTileId, type AgentCallStats } from '@code-manager/core';
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
+import { FakeMemory } from './fake-memory.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
 interface MarkReadBatch {
@@ -59,6 +63,19 @@ function isUnseenLoud(event: PrEvent): boolean {
   return !event.seenAt && loudnessOf(event) === 'loud';
 }
 
+/** Canned numbers so the footer has something to show; the fake never calls the agent. */
+function sampleSyncStats(): AgentCallStats {
+  const stats = emptyAgentCallStats();
+  const count = (calls: number, durationMs: number, costUsd: number) => ({
+    calls, failed: 0, retries: 0, skippedUnchanged: 0, skippedByBudget: 0, durationMs, costUsd,
+  });
+  stats.byKind.dossier_update = count(2, 38000, 0.12);
+  stats.byKind.glance_batch = count(1, 9000, 0.01);
+  stats.byKind.event_classification = count(1, 6000, 0.01);
+  stats.total = 4;
+  return stats;
+}
+
 /**
  * In-memory EngineService over the Depot sample data. Lets the server, CLI and
  * desktop app run before the real engine exists. Never talks to GitHub or the
@@ -67,16 +84,20 @@ function isUnseenLoud(event: PrEvent): boolean {
  */
 export class FakeEngine implements EngineService {
   private readonly data: SampleData;
+  private readonly memory: FakeMemory;
   private readonly now: () => Date;
   private readonly snoozes = new Map<string, SnoozeCondition>();
   private readonly chats = new Map<string, ChatMessage[]>();
-  private readonly feedback: Feedback[] = [];
+  private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
-  private nextId = 1;
+  // Starts above the ids of the seeded feedback.
+  private nextId = 100;
 
   constructor(options: FakeEngineOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.data = buildSampleData(this.now());
+    this.memory = new FakeMemory(this.data, this.now);
+    this.feedback = [...this.memory.seedFeedback()];
   }
 
   // -------------------------------------------------------------------------
@@ -193,16 +214,17 @@ export class FakeEngine implements EngineService {
       prsFetched: 0,
       prsSkipped: 0,
       newEvents: 0,
-      agentCalls: 0,
-      agentCallStats: emptyAgentCallStats(),
-      dossiersUpdated: 0,
+      agentCalls: 4,
+      agentCallStats: sampleSyncStats(),
+      dossiersUpdated: 2,
       facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
     };
   }
 
   async listTopics(): Promise<TopicListItem[]> {
-    return this.data.topics.map((topic) => {
+    const shown = this.data.topics.filter((topic) => topic.status === 'active');
+    return shown.map((topic) => {
       const states = this.tilesOfTopic(topic.id).map((tile) => this.tileState(tile));
       const unreadTiles = states.filter((state) => state.kind === 'unread').length;
       return {
@@ -225,7 +247,7 @@ export class FakeEngine implements EngineService {
       tiles: this.tilesOfTopic(topicId).map((tile) => this.tileView(tile)),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
-      dossier: null,
+      dossier: this.memory.dossierView(topicId, this.feedback),
     };
   }
 
@@ -245,7 +267,7 @@ export class FakeEngine implements EngineService {
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
-      facts: [],
+      facts: this.memory.prFacts(prKey),
     };
   }
 
@@ -441,40 +463,73 @@ export class FakeEngine implements EngineService {
     if (accept && proposal.kind === 'rename' && topic && proposal.name) {
       topic.name = proposal.name;
     }
+    if (accept && proposal.kind === 'merge' && topic && proposal.intoTopicId) {
+      this.mergeTopic(topic.id, proposal.intoTopicId);
+    }
     return ok(accept ? 'accepted' : 'rejected');
   }
 
-  // Engine memory v2: the sample data has no dossiers, facts or rule proposals yet.
+  /** Moves tiles and members over and archives the source topic. */
+  private mergeTopic(fromTopicId: string, intoTopicId: string): void {
+    for (const tile of this.tilesOfTopic(fromTopicId)) {
+      tile.topicId = intoTopicId;
+    }
+    for (const [prKey, topicId] of this.data.membership) {
+      if (topicId === fromTopicId) {
+        this.data.membership.set(prKey, intoTopicId);
+      }
+    }
+    const topic = this.data.topics.find((candidate) => candidate.id === fromTopicId);
+    if (topic) {
+      topic.status = 'archived';
+      topic.updatedAt = this.timestamp();
+    }
+  }
 
-  async listFacts(): Promise<FactView[]> {
-    return [];
+  // Engine memory v2, backed by FakeMemory.
+
+  async listFacts(query: FactQuery): Promise<FactView[]> {
+    return this.memory.listFacts(query);
   }
 
   async listProposals(): Promise<PendingProposals> {
-    return { topics: this.data.proposals.filter((proposal) => proposal.status === 'pending'), rules: [] };
+    const topics = this.data.proposals.filter((proposal) => proposal.status === 'pending');
+    return { topics, rules: this.memory.pendingRuleProposals() };
   }
 
-  async decideRuleProposal(proposalId: string): Promise<ActionResult> {
-    return fail(`no pending rule proposal ${proposalId}`);
+  async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
+    return this.memory.decideRuleProposal(proposalId, accept, this.data.topics);
   }
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {
-    return ok(`marked ${topicId} seen`);
+    if (!this.data.topics.some((topic) => topic.id === topicId)) {
+      return fail(`no topic ${topicId}`);
+    }
+    this.memory.markTopicSeen(topicId);
+    return ok('Marked seen');
+  }
+
+  /** Same contract as the real engine: a fact closes now, a dossier line waits for the next update. */
+  async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
+    const kind: FeedbackKind = input.kind === 'forget' ? 'memory_forget' : 'memory_wrong';
+    if (input.factId === null) {
+      if (!this.data.topics.some((topic) => topic.id === input.topicId)) {
+        return fail(`no topic ${input.topicId ?? ''}`);
+      }
+      this.recordFeedback({ kind, topicId: input.topicId, tileId: null, prKey: null, setId: null, eventId: null, note: input.text });
+      return ok('Noted. The next sync rewrites the topic memory without it.');
+    }
+    const fact = this.memory.closeFact(input.factId, 'the user said it is wrong');
+    if (!fact) {
+      return fail(`no fact ${input.factId}`);
+    }
+    const prKey = fact.refs[0]?.prKey ?? null;
+    this.recordFeedback({ kind, topicId: fact.topicId, tileId: null, prKey, setId: null, eventId: null, note: fact.text });
+    return ok('Forgot that fact');
   }
 
   async consolidate(): Promise<ConsolidationReport> {
-    const startedAt = this.timestamp();
-    return {
-      startedAt,
-      finishedAt: this.timestamp(),
-      skipped: null,
-      topicProposalsFiled: 0,
-      ruleProposalsFiled: 0,
-      factsMerged: 0,
-      topicsRetired: 0,
-      agentCallStats: emptyAgentCallStats(),
-      errors: [],
-    };
+    return this.memory.consolidate();
   }
 
   async flushPendingWrites(): Promise<void> {
