@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1003",
+    "reason": "team_mention",
+    "unread": true,
+    "updated_at": "2026-09-19T08:00:00Z",
+    "last_read_at": null,
+    "subject": { "title": "Flaky test in billing", "url": "https://api.github.com/repos/acme/api/issues/7", "type": "Issue" },
+    "repository": { "full_name": "acme/api" }
+  },
+  {
+    "id": "1004",
+    "reason": "mention",
+    "unread": true,
+    "updated_at": "2026-09-19T07:00:00Z",
+    "last_read_at": null,
+    "subject": { "title": "Discussion", "url": null, "type": "Discussion" },
+    "repository": { "full_name": "acme/api" }
+  }
+]

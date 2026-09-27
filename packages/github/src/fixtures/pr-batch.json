@@ -1,0 +1,135 @@
+{
+  "data": {
+    "p0": {
+      "pullRequest": {
+        "number": 42,
+        "title": "Move CI to Depot",
+        "url": "https://github.com/acme/app/pull/42",
+        "body": "Switches runners. cc @viewer",
+        "state": "OPEN",
+        "isDraft": false,
+        "author": { "__typename": "User", "login": "alice" },
+        "baseRefName": "alice/depot-base",
+        "headRefName": "alice/depot-runners",
+        "headRefOid": "c2",
+        "additions": 30,
+        "deletions": 5,
+        "changedFiles": 2,
+        "reviewDecision": "REVIEW_REQUIRED",
+        "createdAt": "2026-09-18T09:00:00Z",
+        "updatedAt": "2026-09-20T10:00:00Z",
+        "mergedAt": null,
+        "mergedBy": null,
+        "labels": { "nodes": [{ "name": "ci" }] },
+        "files": { "nodes": [
+          { "path": ".github/workflows/ci.yml", "additions": 20, "deletions": 5 },
+          { "path": "depot.json", "additions": 10, "deletions": 0 }
+        ] },
+        "reviewRequests": { "nodes": [
+          { "requestedReviewer": { "__typename": "User", "login": "viewer" } },
+          { "requestedReviewer": { "__typename": "Team", "slug": "infra", "organization": { "login": "acme" } } },
+          { "requestedReviewer": { "__typename": "Bot", "login": "copilot" } }
+        ] },
+        "reviews": { "nodes": [
+          {
+            "id": "R1", "state": "APPROVED", "url": "https://github.com/acme/app/pull/42#pullrequestreview-1",
+            "submittedAt": "2026-09-19T10:00:00Z", "createdAt": "2026-09-19T09:59:00Z",
+            "author": { "__typename": "User", "login": "bob" }, "body": "LGTM", "commit": { "oid": "c1" }
+          },
+          {
+            "id": "R2", "state": "COMMENTED", "url": "https://github.com/acme/app/pull/42#pullrequestreview-2",
+            "submittedAt": null, "createdAt": "2026-09-19T11:00:00Z",
+            "author": { "__typename": "Bot", "login": "greptile-apps" }, "body": "  ", "commit": { "oid": "c1" }
+          }
+        ] },
+        "comments": { "nodes": [
+          {
+            "id": "IC1", "url": "https://github.com/acme/app/pull/42#issuecomment-1",
+            "author": { "__typename": "User", "login": "carol" }, "body": "@viewer can you check the cache keys?",
+            "createdAt": "2026-09-19T12:00:00Z"
+          },
+          {
+            "id": "IC2", "url": "https://github.com/acme/app/pull/42#issuecomment-2",
+            "author": null, "body": "old comment from a deleted user", "createdAt": "2026-09-18T12:00:00Z"
+          }
+        ] },
+        "reviewThreads": { "nodes": [
+          {
+            "id": "T1", "path": "depot.json", "isResolved": false,
+            "comments": { "nodes": [
+              {
+                "id": "RC1", "url": "https://github.com/acme/app/pull/42#discussion_r1",
+                "author": { "__typename": "User", "login": "bob" }, "body": "Why this project id?",
+                "createdAt": "2026-09-19T09:30:00Z"
+              }
+            ] }
+          }
+        ] },
+        "commits": { "nodes": [
+          { "commit": { "oid": "c1", "messageHeadline": "Add depot config", "committedDate": "2026-09-18T09:00:00Z",
+            "author": { "name": "Alice A", "user": { "login": "alice" } } } },
+          { "commit": { "oid": "c2", "messageHeadline": "Fix cache", "committedDate": "2026-09-20T09:00:00Z",
+            "author": { "name": "Alice Laptop", "user": null } } }
+        ] },
+        "headCommit": { "nodes": [
+          { "commit": { "statusCheckRollup": {
+            "state": "PENDING",
+            "contexts": { "nodes": [
+              { "__typename": "CheckRun", "name": "test", "conclusion": "SUCCESS", "completedAt": "2026-09-20T09:10:00Z" },
+              { "__typename": "CheckRun", "name": "lint", "conclusion": null, "completedAt": null },
+              { "__typename": "StatusContext", "context": "deploy/preview", "state": "ERROR", "createdAt": "2026-09-20T09:05:00Z" },
+              { "__typename": "StatusContext", "context": "ci/legacy", "state": "PENDING", "createdAt": "2026-09-20T09:01:00Z" }
+            ] }
+          } } }
+        ] },
+        "timelineItems": { "nodes": [
+          { "__typename": "ReviewRequestedEvent", "id": "E1", "createdAt": "2026-09-18T09:05:00Z",
+            "actor": { "__typename": "User", "login": "alice" },
+            "requestedReviewer": { "__typename": "Team", "slug": "infra", "organization": { "login": "acme" } } },
+          { "__typename": "HeadRefForcePushedEvent", "id": "E2", "createdAt": "2026-09-20T09:00:00Z",
+            "actor": { "__typename": "User", "login": "alice" } },
+          { "__typename": "AddedToMergeQueueEvent", "id": "E3", "createdAt": "2026-09-20T10:00:00Z",
+            "actor": { "__typename": "Bot", "login": "trunk-io" } },
+          { "__typename": "SomeFutureEvent", "id": "E4", "createdAt": "2026-09-20T10:01:00Z", "actor": null }
+        ] }
+      }
+    },
+    "p1": null,
+    "p2": {
+      "pullRequest": {
+        "number": 8,
+        "title": "Bump deps",
+        "url": "https://github.com/acme/api/pull/8",
+        "body": "",
+        "state": "MERGED",
+        "isDraft": false,
+        "author": { "__typename": "Bot", "login": "dependabot" },
+        "baseRefName": "main",
+        "headRefName": "dependabot/npm/foo",
+        "headRefOid": "d1",
+        "additions": 1,
+        "deletions": 1,
+        "changedFiles": 1,
+        "reviewDecision": null,
+        "createdAt": "2026-09-17T09:00:00Z",
+        "updatedAt": "2026-09-17T10:00:00Z",
+        "mergedAt": "2026-09-17T10:00:00Z",
+        "mergedBy": { "__typename": "User", "login": "bob" },
+        "labels": { "nodes": [] },
+        "files": null,
+        "reviewRequests": { "nodes": [] },
+        "reviews": { "nodes": [] },
+        "comments": { "nodes": [] },
+        "reviewThreads": { "nodes": [] },
+        "commits": { "nodes": [] },
+        "headCommit": { "nodes": [{ "commit": { "statusCheckRollup": null } }] },
+        "timelineItems": { "nodes": [
+          { "__typename": "MergedEvent", "id": "M1", "createdAt": "2026-09-17T10:00:00Z", "actor": { "__typename": "User", "login": "bob" } }
+        ] }
+      }
+    }
+  },
+  "errors": [
+    { "type": "NOT_FOUND", "path": ["p1"], "message": "Could not resolve to a Repository with the name 'acme/secret'." }
+  ]
+}

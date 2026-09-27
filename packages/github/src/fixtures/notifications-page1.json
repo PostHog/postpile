@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1001",
+    "reason": "review_requested",
+    "unread": true,
+    "updated_at": "2026-09-20T10:00:00Z",
+    "last_read_at": null,
+    "subject": { "title": "Move CI to Depot", "url": "https://api.github.com/repos/acme/app/pulls/42", "type": "PullRequest" },
+    "repository": { "full_name": "acme/app" }
+  },
+  {
+    "id": "1002",
+    "reason": "security_alert",
+    "unread": true,
+    "updated_at": "2026-09-20T09:00:00Z",
+    "last_read_at": "2026-09-19T09:00:00Z",
+    "subject": { "title": "v1.2.0", "url": "https://api.github.com/repos/acme/app/releases/987654", "type": "Release" },
+    "repository": { "full_name": "acme/app" }
+  }
+]

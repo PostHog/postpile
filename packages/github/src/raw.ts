@@ -1,5 +1,6 @@
 // Shapes of what GitHub actually returns, trimmed to the fields we read.
 // Only this package sees them; everything else gets normalized core types.
+// The GraphQL shapes mirror the selections in queries.ts.
 
 /** One item from GET /notifications. */
 export interface RawNotification {
@@ -19,8 +20,18 @@ export interface RawNotification {
   };
 }
 
+/** Selected through the `actor` fragment. __typename tells bots apart. */
 export interface RawActor {
+  __typename?: string;
   login: string;
+}
+
+/** User, Team, Bot or Mannequin. Only users and teams carry the fields we read. */
+export interface RawRequestedReviewer {
+  __typename: string;
+  login?: string;
+  slug?: string;
+  organization?: { login: string };
 }
 
 export interface RawComment {
@@ -36,7 +47,9 @@ export interface RawReview {
   author: RawActor | null;
   state: string;
   body: string;
+  url: string;
   submittedAt: string | null;
+  createdAt: string;
   commit: { oid: string } | null;
 }
 
@@ -52,7 +65,7 @@ export interface RawCommit {
     oid: string;
     messageHeadline: string;
     committedDate: string;
-    author: { user: RawActor | null; name: string | null } | null;
+    author: { user: { login: string } | null; name: string | null } | null;
   };
 }
 
@@ -62,17 +75,24 @@ export interface RawTimelineItem {
   id: string;
   createdAt: string;
   actor: RawActor | null;
-  requestedReviewer?: { login?: string; slug?: string; organization?: { login: string } } | null;
+  requestedReviewer?: RawRequestedReviewer | null;
 }
 
 export interface RawCheckContext {
   __typename: 'CheckRun' | 'StatusContext';
+  /** CheckRun */
   name?: string;
-  context?: string;
   conclusion?: string | null;
-  state?: string;
   completedAt?: string | null;
+  /** StatusContext */
+  context?: string;
+  state?: string;
   createdAt?: string;
+}
+
+export interface RawStatusCheckRollup {
+  state: string;
+  contexts: { nodes: RawCheckContext[] };
 }
 
 /** One aliased pullRequest node from the batched GraphQL query. */
@@ -97,16 +117,24 @@ export interface RawPullRequest {
   mergedBy: RawActor | null;
   labels: { nodes: { name: string }[] };
   files: { nodes: { path: string; additions: number; deletions: number }[] } | null;
-  reviewRequests: {
-    nodes: { requestedReviewer: { login?: string; slug?: string; organization?: { login: string } } | null }[];
-  };
+  reviewRequests: { nodes: { requestedReviewer: RawRequestedReviewer | null }[] };
   reviews: { nodes: RawReview[] };
   comments: { nodes: RawComment[] };
   reviewThreads: { nodes: RawReviewThread[] };
   commits: { nodes: RawCommit[] };
+  /** commits(last: 1) again, only for the head commit's check rollup. */
+  headCommit: { nodes: { commit: { statusCheckRollup: RawStatusCheckRollup | null } }[] };
   timelineItems: { nodes: RawTimelineItem[] };
-  statusCheckRollup: {
-    state: string;
-    contexts: { nodes: RawCheckContext[] };
-  } | null;
+}
+
+/** Response of the batched query: p0, p1, ... one per PR. Null when the repo is not visible. */
+export type RawBatchResponse = Record<string, { pullRequest: RawPullRequest | null } | null>;
+
+export interface RawViewerTeams {
+  viewer: {
+    login: string;
+    organizations: {
+      nodes: ({ login: string; teams: { nodes: { slug: string }[] } } | null)[];
+    };
+  };
 }
