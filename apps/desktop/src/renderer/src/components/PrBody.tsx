@@ -1,10 +1,9 @@
 import type { PrDetail, PrSummary, TileView } from '@code-manager/core';
-import { prLook } from '../lib/pr.ts';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { ExternalIcon } from './icons.tsx';
-import { StatePill } from './pills.tsx';
+import { StatusPill } from './pills.tsx';
 import { PrFacts } from './PrFacts.tsx';
 import { ReviewList } from './ReviewList.tsx';
 
@@ -31,7 +30,7 @@ export function PrBody(props: PrBodyProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-[22px] py-[18px]">
       <div className="flex items-center gap-2">
-        <StatePill look={prLook(pr)} />
+        {props.summary && <StatusPill status={props.summary.status} size="md" />}
         <span className="font-mono text-[11px] text-muted select-text">{pr.key}</span>
         <a
           href={pr.url}

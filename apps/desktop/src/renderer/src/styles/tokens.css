@@ -41,7 +41,7 @@
   --frame: #d5d8df;
   --dot-quiet: #b9bec9;
 
-  /* Accent: selection, primary actions */
+  /* Accent: selection and focus */
   --accent: #2156d9;
   --accent-soft: #edf2fd;
   --accent-row: #e3ebfc;
@@ -56,6 +56,35 @@
   --unread-ink: #a3321f;
   --unread-when: #c46553;
   --unread-row: #fffaf8;
+
+  /* Warm reach: why-it's-here tints. Honey = aimed at you, sea = your team.
+     Neutral (own PR) reuses --bg-segment with --ink. */
+  --honey-soft: #fff1cc;
+  --honey-ink: #6b4d00;
+  --sea-soft: #dff0ee;
+  --sea-ink: #1f6a61;
+  --quiet-soft: #f0f1f4;
+  --why-done: #e9ebef;
+
+  /* Warm reach: the unread strip and the "your move" footer. Coral (--unread)
+     stays for "new since you looked" only. */
+  --warm-strip: #fffaf0;
+  --warm-strip-line: #f4e8cf;
+  --move: #fff6dd;
+  --move-line: #f1e2b5;
+
+  /* PR status pill: soft tints per segment. Neutral is --quiet-soft + --muted,
+     merged is --merged-soft + --merged-ink. */
+  --pill-line: #e6e8ec;
+  --status-good-soft: #e5f3ea;
+  --status-good: #1c6e3d;
+  --status-bad-soft: #fbe9e6;
+  --status-bad: #b8321f;
+  --status-queued-soft: #fbf0dc;
+  --status-queued: #8a5300;
+
+  /* Primary buttons are ink; the accent blue is for selection and focus only. */
+  --on-ink: #ffffff;
 
   /* Verdicts */
   --safe: #17733e;

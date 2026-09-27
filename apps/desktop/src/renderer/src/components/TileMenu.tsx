@@ -33,5 +33,6 @@ export function TileMenu(props: TileMenuProps) {
       items.push({ label: `Move ${which}to ${item.topic.name}`, onSelect: () => wrongTopic(item.topic.id) });
     }
   }
-  return <Menu label="More" items={items} align="right" />;
+  // A glyph label keeps the tile footer room for the whose-turn line.
+  return <Menu label="⋯" title="More" items={items} align="right" />;
 }

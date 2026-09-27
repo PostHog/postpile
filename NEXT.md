@@ -136,6 +136,12 @@ now".
   call, then Accept (keep / fix / drop) or tell the agent in the tile chat;
   every memory correction has a 6s Undo. DESIGN.md "Recheck instead of
   Wrong".
+- "Warm reach" tile look (DESIGN.md "Tile faces"): why-it's-here code
+  badges (RV, RT, @, @T, AS, AU, CM, FW, ST) on tiles and rows, a warm
+  "why now" strip with the actor's avatar and an ink event glyph, a segment
+  status pill per PR with open threads, a whose-turn footer (you / them /
+  none, rules in core `whoseTurn`), people stack in the header. Same
+  badges, pills and glyphs in the detail pane. Primary buttons are ink.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -182,6 +188,12 @@ now".
 - Recheck: not run against the real agent yet; the fake answers cycle
   holds / fix / drop after 1.5s. The daily cap (40) is a guess. A fix of a
   fact keeps the old refs; no new ref points at the evidence in `why`.
+- Whose turn is rules only and still rough: team membership of other people
+  is unknown (any other reviewer counts as "a teammate reviewing"), "you
+  commented on the head" only looks at reviews, and the own-PR "Merge, it is
+  approved" rule is an addition. Not tried against real data yet.
+- In a narrow two-column grid (~330px tiles) the row titles and the turn
+  text truncate hard; the full text is in the tooltips.
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 

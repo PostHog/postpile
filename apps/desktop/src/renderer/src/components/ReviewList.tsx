@@ -1,16 +1,19 @@
 import type { Pr } from '@code-manager/core';
+import type { EventGlyph } from '../lib/events.ts';
 import { reviewRows, type ReviewStatus } from '../lib/pr.ts';
 import { isTeam } from '../lib/people.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Avatar } from './Avatar.tsx';
+import { Glyph } from './icons.tsx';
 
-const STATUS: Record<ReviewStatus, { label: string; badge: string; mark: string }> = {
-  requested: { label: 'review requested', badge: 'bg-frame', mark: '' },
-  approved: { label: 'approved', badge: 'bg-accent', mark: '✓' },
-  changes_requested: { label: 'requested changes', badge: 'bg-unread', mark: '!' },
-  commented: { label: 'commented', badge: 'bg-faint', mark: '•' },
-  dismissed: { label: 'dismissed', badge: 'bg-frame', mark: '' },
+// Same glyphs and soft tints as the tile's status pill and event badges.
+const STATUS: Record<ReviewStatus, { label: string; badge: string; glyph: EventGlyph }> = {
+  requested: { label: 'review requested', badge: 'bg-quiet-soft text-muted', glyph: 'eye' },
+  approved: { label: 'approved', badge: 'bg-status-good-soft text-status-good', glyph: 'check' },
+  changes_requested: { label: 'requested changes', badge: 'bg-status-bad-soft text-status-bad', glyph: 'changes' },
+  commented: { label: 'commented', badge: 'bg-quiet-soft text-muted', glyph: 'bubble' },
+  dismissed: { label: 'dismissed', badge: 'bg-quiet-soft text-faint', glyph: 'eye' },
 };
 
 /** Who reviewed, who still has to. */
@@ -29,9 +32,9 @@ export function ReviewList(props: { pr: Pr }) {
             <span className="relative">
               <Avatar login={row.login} size="md" />
               <span
-                className={`absolute -right-0.5 -bottom-0.5 flex size-2.5 items-center justify-center rounded-full border-[1.5px] border-surface text-[6px] text-on-accent ${status.badge}`}
+                className={`absolute -right-1 -bottom-1 flex size-[13px] items-center justify-center rounded-full border-[1.5px] border-surface ${status.badge}`}
               >
-                {status.mark}
+                <Glyph glyph={status.glyph} size={7} />
               </span>
             </span>
             <span className="truncate text-[12.5px]">

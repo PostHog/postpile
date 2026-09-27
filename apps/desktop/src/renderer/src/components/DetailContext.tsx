@@ -1,8 +1,7 @@
 import type { TileView } from '@code-manager/core';
-import { prLook } from '../lib/pr.ts';
 import { kindLabel, prNumber } from '../lib/tiles.ts';
 import { KindIcon } from './icons.tsx';
-import { lookDotTone } from './pills.tsx';
+import { StatusPill, WhyBadge } from './pills.tsx';
 
 interface DetailContextProps {
   view: TileView;
@@ -62,14 +61,14 @@ export function DetailContext(props: DetailContextProps) {
                 key={pr.key}
                 type="button"
                 onClick={() => props.onSelectPr(pr.key)}
-                className={`grid h-6 grid-cols-[8px_46px_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 text-left text-[11.5px] ${
+                className={`grid h-[26px] grid-cols-[26px_46px_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 text-left text-[11.5px] ${
                   picked ? 'bg-surface shadow-picked' : 'hover:bg-surface/60'
                 }`}
               >
-                <span className={`size-1.5 rounded-full ${lookDotTone(prLook(pr))}`} />
+                <WhyBadge code={pr.why} provenance={pr.provenance} size="row" />
                 <span className={`font-mono text-[10px] ${picked ? 'text-accent' : 'text-muted'}`}>#{prNumber(pr.key)}</span>
                 <span className={`truncate ${picked ? 'font-semibold' : 'font-[450]'}`}>{pr.title}</span>
-                <span className="text-[10px] text-muted">{pr.provenance.kind === 'pinged' ? 'pinged' : 'stack layer'}</span>
+                <StatusPill status={pr.status} />
               </button>
             );
           })}

@@ -1,39 +1,4 @@
-import type { Checks, PingReason, Pr, PrState, Provenance, Review } from '@code-manager/core';
-
-export type PrLook = 'open' | 'draft' | 'merged' | 'closed';
-
-export function prLook(pr: { state: PrState; isDraft: boolean }): PrLook {
-  if (pr.state === 'MERGED') {
-    return 'merged';
-  }
-  if (pr.state === 'CLOSED') {
-    return 'closed';
-  }
-  return pr.isDraft ? 'draft' : 'open';
-}
-
-const PING_LABELS: Record<PingReason, string> = {
-  review_requested: 'review requested',
-  mention: 'mentioned you',
-  team_mention: 'mentioned your team',
-  author: 'you are the author',
-  assign: 'assigned to you',
-  comment: 'you commented',
-  subscribed: 'you are subscribed',
-  manual: 'you subscribed',
-  state_change: 'you changed its state',
-  ci_activity: 'CI activity',
-  approval_requested: 'approval requested',
-  other: 'GitHub notified you',
-};
-
-/** One line on why the PR is here: the ping reason, or which stack layer it is ("stack layer below #12"). */
-export function provenanceReason(provenance: Provenance): string {
-  if (provenance.kind === 'pinged') {
-    return PING_LABELS[provenance.reason];
-  }
-  return provenance.reason;
-}
+import type { Checks, Pr, PrStatus, Review } from '@code-manager/core';
 
 const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 
@@ -130,4 +95,46 @@ export function mergeStatus(pr: Pr): string {
 export function lastPushAt(pr: Pr): string | null {
   const last = pr.commits[pr.commits.length - 1];
   return last ? last.committedAt : null;
+}
+
+/** good: green, neutral: grey, bad: red (failing, changes), merged: purple, queued: amber. */
+export type StatusTone = 'good' | 'neutral' | 'bad' | 'merged' | 'queued';
+
+export interface StatusPart {
+  text: string;
+  tone: StatusTone;
+  /** Spelled out for the tooltip. */
+  title: string;
+}
+
+const LIFECYCLE_PARTS: Record<PrStatus['lifecycle'], StatusPart> = {
+  open: { text: 'open', tone: 'good', title: 'Open' },
+  draft: { text: 'draft', tone: 'neutral', title: 'Draft' },
+  queued: { text: 'queued', tone: 'queued', title: 'In the merge queue' },
+  merged: { text: 'merged', tone: 'merged', title: 'Merged' },
+  closed: { text: 'closed', tone: 'bad', title: 'Closed without merge' },
+};
+
+const REVIEW_PARTS: Record<NonNullable<PrStatus['review']>, StatusPart> = {
+  approved: { text: 'approved', tone: 'good', title: 'Approved' },
+  changes: { text: 'changes', tone: 'bad', title: 'Changes requested' },
+  review: { text: 'review', tone: 'neutral', title: 'Review required' },
+};
+
+const CHECK_PARTS: Record<NonNullable<PrStatus['checks']>, StatusPart> = {
+  ok: { text: 'ci ok', tone: 'good', title: 'Checks pass' },
+  fail: { text: 'ci ✗', tone: 'bad', title: 'Checks fail' },
+  pending: { text: 'ci …', tone: 'neutral', title: 'Checks running' },
+};
+
+/** The segments of the status pill, leaving out parts that do not apply. */
+export function statusParts(status: PrStatus): StatusPart[] {
+  const parts = [LIFECYCLE_PARTS[status.lifecycle]];
+  if (status.review) {
+    parts.push(REVIEW_PARTS[status.review]);
+  }
+  if (status.checks) {
+    parts.push(CHECK_PARTS[status.checks]);
+  }
+  return parts;
 }

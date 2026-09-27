@@ -52,6 +52,28 @@
   --color-unread-when: var(--unread-when);
   --color-unread-row: var(--unread-row);
 
+  /* Warm reach */
+  --color-honey-soft: var(--honey-soft);
+  --color-honey-ink: var(--honey-ink);
+  --color-sea-soft: var(--sea-soft);
+  --color-sea-ink: var(--sea-ink);
+  --color-quiet-soft: var(--quiet-soft);
+  --color-why-done: var(--why-done);
+  --color-warm-strip: var(--warm-strip);
+  --color-warm-strip-line: var(--warm-strip-line);
+  --color-move: var(--move);
+  --color-move-line: var(--move-line);
+  --color-on-ink: var(--on-ink);
+
+  /* PR status pill */
+  --color-pill-line: var(--pill-line);
+  --color-status-good-soft: var(--status-good-soft);
+  --color-status-good: var(--status-good);
+  --color-status-bad-soft: var(--status-bad-soft);
+  --color-status-bad: var(--status-bad);
+  --color-status-queued-soft: var(--status-queued-soft);
+  --color-status-queued: var(--status-queued);
+
   /* Verdicts */
   --color-safe: var(--safe);
   --color-safe-soft: var(--safe-soft);

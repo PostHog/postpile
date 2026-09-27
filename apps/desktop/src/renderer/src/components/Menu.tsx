@@ -16,6 +16,8 @@ interface MenuProps {
   up?: boolean;
   align?: 'left' | 'right';
   disabled?: boolean;
+  /** Hover text for the button, e.g. when the label is a glyph. */
+  title?: string;
 }
 
 /** A button with a small popover list. Closes on pick, outside click or Escape. */
@@ -48,7 +50,7 @@ export function Menu(props: MenuProps) {
   const position = `${props.up ? 'bottom-full mb-1' : 'top-full mt-1'} ${props.align === 'right' ? 'right-0' : 'left-0'}`;
   return (
     <div ref={root} className="relative">
-      <Button size={props.size} disabled={props.disabled} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Button size={props.size} disabled={props.disabled} title={props.title} aria-label={props.title} aria-expanded={open} onClick={() => setOpen(!open)}>
         {props.label}
       </Button>
       {open && (

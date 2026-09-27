@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView } from '@code-manager/core';
 import { at } from '@code-manager/core/fixtures';
-import { countPrs, kindLabel, leadPr, provenanceLine, tileForYou } from './tiles.ts';
+import { countPrs, kindLabel, leadPr, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -52,11 +52,9 @@ describe('tile helpers', () => {
     expect(leadPr(view)?.key).toBe('PostHog/posthog#3');
   });
 
-  it('labels kinds and provenance', () => {
+  it('labels kinds', () => {
     const view = setView([summary(1), summary(2, { provenance: pulled }), summary(3, { provenance: pulled })]);
     expect(kindLabel(view)).toBe('Set · 3');
-    expect(provenanceLine(view)).toBe('1 pinged · 2 pulled');
-    expect(provenanceLine({ ...view, state: { kind: 'done', unreadBecause: [] } })).toBe('1 pinged · 2 pulled · done');
   });
 
   it('uses the set take for set tiles and the lead for_you otherwise', () => {

@@ -4,7 +4,8 @@ export type ButtonVariant = 'primary' | 'secondary';
 export type ButtonSize = 'sm' | 'md';
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-accent font-semibold text-on-accent shadow-primary hover:brightness-110',
+  // Ink, not accent: the accent blue is kept for selection and focus.
+  primary: 'bg-ink font-semibold text-on-ink shadow-primary hover:bg-ink-2 disabled:hover:bg-ink',
   secondary: 'border border-control bg-surface text-ink-2 shadow-control hover:bg-subtle',
 };
 
@@ -23,7 +24,7 @@ export function Button({ variant = 'secondary', size = 'sm', className = '', typ
   return (
     <button
       type={type}
-      className={`flex shrink-0 items-center gap-1.5 rounded-control whitespace-nowrap disabled:cursor-default disabled:opacity-50 disabled:hover:brightness-100 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`flex shrink-0 items-center gap-1.5 rounded-control whitespace-nowrap disabled:cursor-default disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...rest}
     />
   );

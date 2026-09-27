@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Review } from '@code-manager/core';
 import { at, makePr } from '@code-manager/core/fixtures';
-import { checkCounts, mergeStatus, prLook, reviewRows } from './pr.ts';
+import { checkCounts, mergeStatus, reviewRows, statusParts } from './pr.ts';
 
 function review(author: string, state: Review['state'], minutes: number): Review {
   return { id: `${author}-${minutes}`, author, state, body: '', submittedAt: at(minutes), commitOid: null };
@@ -40,10 +40,24 @@ describe('pr helpers', () => {
     expect(counts).toEqual({ ok: 2, failed: 1, pending: 1, total: 4 });
   });
 
-  it('describes state and merge status', () => {
-    expect(prLook(makePr({ isDraft: true }))).toBe('draft');
-    expect(prLook(makePr({ state: 'MERGED', isDraft: true }))).toBe('merged');
+  it('describes the merge status', () => {
     expect(mergeStatus(makePr({ state: 'MERGED', mergedBy: 'rowan' }))).toBe('merged by rowan');
     expect(mergeStatus(makePr())).toBe('needs review');
+  });
+});
+
+describe('statusParts', () => {
+  it('lists lifecycle, review and checks and leaves out what does not apply', () => {
+    expect(statusParts({ lifecycle: 'open', review: 'approved', checks: 'fail' }).map((part) => [part.text, part.tone])).toEqual([
+      ['open', 'good'],
+      ['approved', 'good'],
+      ['ci ✗', 'bad'],
+    ]);
+    expect(statusParts({ lifecycle: 'merged', review: null, checks: null }).map((part) => part.text)).toEqual(['merged']);
+    expect(statusParts({ lifecycle: 'queued', review: 'changes', checks: 'pending' }).map((part) => part.tone)).toEqual([
+      'queued',
+      'bad',
+      'neutral',
+    ]);
   });
 });

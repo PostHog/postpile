@@ -1,8 +1,9 @@
 # desktop renderer: rules that are easy to undo by accident
 
 Read these before editing anything under `src/renderer/src/`. The visual
-reference is the "Crisp native, refined" mockup (StyleCrispPro); the layout
-is still open, so keep components small and cheap to move.
+reference is the "Crisp native, refined" mockup (StyleCrispPro) with the
+"Warm reach" tile look on top (see "Tile look" below); the layout is still
+open, so keep components small and cheap to move.
 
 ## No fictional data
 
@@ -114,8 +115,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
   `StatusFooter`, `Toast`, `SearchField` (title bar filter).
-- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, provenance,
-  PR state), `icons.tsx`, and for memory `MemoryLine` (text, source chips,
+- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `WhyBadge`,
+  `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
@@ -125,6 +126,23 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   sites can stay duplicated.
 - Don't extract a component that has more props than JSX children.
 - Order functions so they are defined before they are used.
+
+## Tile look ("Warm reach")
+
+Four spots per tile, all derived in core and shipped on `TileView` /
+`PrSummary` (DESIGN.md "Tile faces"); the renderer only picks labels and
+tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
+
+- Why it's here: `WhyBadge`, mono code, honey = you, sea = your team,
+  neutral = yours, quiet grey = passive, dashed = stack context, grey on
+  done tiles.
+- Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
+  badge (`Glyph`), coral dot, age.
+- PR status: `StatusPill`, one segment pill; open threads after it.
+- Whose turn: `TurnLine` in the tile footer; the footer turns warm for
+  "Your move".
+- Coral (`unread`) means "new since you looked" and nothing else on a tile.
+  Primary buttons are ink; accent blue is for selection and focus only.
 
 ## Selection
 

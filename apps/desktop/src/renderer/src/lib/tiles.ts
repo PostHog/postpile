@@ -37,20 +37,6 @@ export function leadPr(view: TileView): PrSummary | null {
   return openPinged ?? view.prs[0] ?? null;
 }
 
-/** "1 pinged · 2 pulled", plus "done" or "snoozed" when that is the state. */
-export function provenanceLine(view: TileView): string {
-  const pinged = view.prs.filter((pr) => pr.provenance.kind === 'pinged').length;
-  const pulled = view.prs.length - pinged;
-  const parts = [`${pinged} pinged`];
-  if (pulled > 0) {
-    parts.push(`${pulled} pulled`);
-  }
-  if (view.state.kind === 'done' || view.state.kind === 'snoozed') {
-    parts.push(view.state.kind);
-  }
-  return parts.join(' · ');
-}
-
 /** The set's combined take for set tiles, else the lead PR's for_you line. */
 export function tileForYou(view: TileView, sets: PrSet[]): string | null {
   if (view.tile.kind === 'set') {

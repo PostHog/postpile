@@ -1,6 +1,7 @@
 // Line icons from the "Crisp native" mockup. They draw with currentColor, so
 // color them with text-* utilities.
 import type { TileKind } from '@code-manager/core';
+import type { EventGlyph } from '../lib/events.ts';
 
 interface IconProps {
   size?: number;
@@ -64,15 +65,6 @@ export function SyncIcon(props: IconProps) {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className={props.className} aria-hidden="true">
       <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
       <path d="M13.5 2.5v3h-3" />
-    </svg>
-  );
-}
-
-export function MentionIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-      <circle cx="8" cy="8" r="2.6" />
-      <path d="M10.6 8v1.2a1.8 1.8 0 0 0 3.4.8A6 6 0 1 0 11 13.2" />
     </svg>
   );
 }
@@ -174,6 +166,52 @@ export function InboxIcon() {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <path d="M2 9l1.8-5.5h8.4L14 9v4H2z" />
       <path d="M2 9h3.5l1 1.5h3l1-1.5H14" />
+    </svg>
+  );
+}
+
+/** A circle as a path, so a glyph stays one <path>. */
+function ring(cx: number, cy: number, r: number): string {
+  return `M${cx} ${cy - r}a${r} ${r} 0 1 0 0 ${2 * r}a${r} ${r} 0 1 0 0 -${2 * r}z`;
+}
+
+// The event glyph set from the "Warm reach" mockup (IconSpots), 16px grid.
+const GLYPH_PATHS: Record<EventGlyph, string> = {
+  at: `${ring(8, 8, 2.5)} M10.5 8v1.1a1.8 1.8 0 0 0 3.5.6A6 6 0 1 0 11 13.2`,
+  question: 'M2.5 3h11v7.5H7.3L4.5 13v-2.5h-2z M6.6 5.4a1.5 1.5 0 1 1 2.1 1.4c-.5.2-.7.5-.7 1 M8 9.1v.01',
+  reply: 'M6 3.5L2.5 7 6 10.5 M2.5 7H10a3.5 3.5 0 0 1 3.5 3.5V13',
+  eye: `M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z ${ring(8, 8, 2)}`,
+  check: 'M3 8.5l3 3 7-7',
+  changes: 'M3.5 1.8h6l3 3v9.4h-9z M8 5v4 M6 7h4 M6 11.5h4',
+  bubble: 'M2.5 3h11v7.5H7.3L4.5 13v-2.5h-2z',
+  commit: `M1.5 8h4 M10.5 8h4 ${ring(8, 8, 2.5)}`,
+  merge: `${ring(4.5, 3.5, 1.6)} ${ring(4.5, 12.5, 1.6)} ${ring(11.5, 8, 1.6)} M4.5 5.1v5.8 M4.5 5.1c0 2.4 2.4 2.9 5.4 2.9`,
+  closed: `${ring(4, 3.5, 1.6)} ${ring(4, 12.5, 1.6)} ${ring(12, 12.5, 1.6)} M4 5.1v5.8 M12 7.5v3.4 M10.3 2.3l3.4 3.4 M13.7 2.3l-3.4 3.4`,
+  ready: `${ring(4, 3.5, 1.6)} ${ring(4, 12.5, 1.6)} ${ring(12, 12.5, 1.6)} M4 5.1v5.8 M12 10.9V6a2 2 0 0 0-2-2H7.5 M9 2.5L7.5 4 9 5.5`,
+  draft: `${ring(4, 3.5, 1.6)} ${ring(4, 12.5, 1.6)} ${ring(12, 12.5, 1.6)} M4 5.1v5.8 M12 8v.01 M12 5v.01`,
+  ci: `${ring(8, 8, 6.2)} M5.8 5.8l4.4 4.4 M10.2 5.8l-4.4 4.4`,
+  deploy: 'M8 11.5V2.5 M4.5 6L8 2.5 11.5 6 M3 14h10',
+  queue: 'M2.5 4h7 M2.5 8h7 M2.5 12h7 M12 6.2l2 1.8-2 1.8',
+  bot: 'M3.5 6h9v7h-9z M8 3.5V6 M6 9.3v.01 M10 9.3v.01 M1.5 9v2 M14.5 9v2',
+};
+
+/** One event glyph. At 9px it wants the heavier 2.4 stroke, like in the mockup. */
+export function Glyph(props: IconProps & { glyph: EventGlyph; strokeWidth?: number }) {
+  const size = props.size ?? 9;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={props.strokeWidth ?? 2.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={props.className}
+      aria-hidden="true"
+    >
+      <path d={GLYPH_PATHS[props.glyph]} />
     </svg>
   );
 }
