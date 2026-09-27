@@ -12,6 +12,17 @@ export const ASSIGNMENT_BATCH_SIZE = 20;
 const RETIRED_OFFER_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
+ * New topics one sync may create. The first real sync made 61 topics, most
+ * with one or two PRs; past this cap PRs wait in Unsorted instead.
+ */
+export const MAX_NEW_TOPICS_PER_SYNC = 5;
+
+/** Meta key: when a PR was left in Unsorted by topic assignment. */
+export function deferredKey(prKey: string): string {
+  return `topic_deferred:${prKey}`;
+}
+
+/**
  * Gives every PR without a topic to the agent, together with the existing
  * topics and their dossier briefs. The agent picks one or names a new topic.
  * New topics are created right away (otherwise a first sync would leave
@@ -19,11 +30,28 @@ const RETIRED_OFFER_MS = 30 * 24 * 60 * 60 * 1000;
  * Recently retired topics are offered too; a PR joining one brings it back.
  */
 export class TopicAssigner {
+  private created = 0;
+
   constructor(private readonly deps: DigestDeps) {}
+
+  /**
+   * A PR left in Unsorted is offered again only after the next
+   * consolidation, which may have merged or reshaped topics; asking again
+   * every sync would pay for the same "no fit" answer.
+   */
+  private isDeferred(prKey: string): boolean {
+    const { store } = this.deps;
+    const deferredAt = store.meta.get(deferredKey(prKey));
+    if (deferredAt === null) {
+      return false;
+    }
+    const consolidatedAt = store.cursors.get('consolidate', 'global')?.updatedAt ?? '';
+    return deferredAt >= consolidatedAt;
+  }
 
   private unassignedPrs(): Pr[] {
     const { store } = this.deps;
-    const keys = store.memberships.listUnassignedPrKeys();
+    const keys = store.memberships.listUnassignedPrKeys().filter((key) => !this.isDeferred(key));
     const threads = store.notifications.getByPrKeys(keys);
     return [...store.prs.getMany(keys.filter((key) => threads.has(key))).values()];
   }
@@ -47,20 +75,36 @@ export class TopicAssigner {
         name: t.name,
         summary: t.summary,
         brief: t.status === 'retired' ? `Finished, retired. ${brief}`.trim() : brief,
+        memberCount: this.deps.store.memberships.listForTopic(t.id).length,
       };
     });
   }
 
-  private findOrCreateTopic(name: string): Topic {
+  /** An existing topic of that name, a new one while under the cap, or null (the PR waits in Unsorted). */
+  private findOrCreateTopic(name: string): Topic | null {
     const { store } = this.deps;
     const wanted = name.trim().toLowerCase();
     const existing = this.offeredTopics().find((t) => t.name.trim().toLowerCase() === wanted);
     if (existing) {
       return existing;
     }
+    if (this.created >= MAX_NEW_TOPICS_PER_SYNC) {
+      return null;
+    }
     const topic = newTopic(newTopicId(name), name.trim(), this.deps.now().toISOString());
     store.topics.create(topic);
+    this.created += 1;
     return topic;
+  }
+
+  private topicIdFor(assignment: TopicAssignment): string | null {
+    if (assignment.kind === 'existing') {
+      return assignment.topicId;
+    }
+    if (assignment.kind === 'new') {
+      return this.findOrCreateTopic(assignment.name)?.id ?? null;
+    }
+    return null;
   }
 
   private apply(assignments: TopicAssignment[]): void {
@@ -68,7 +112,11 @@ export class TopicAssigner {
     const at = this.deps.now().toISOString();
     store.transaction(() => {
       for (const assignment of assignments) {
-        const topicId = assignment.kind === 'existing' ? assignment.topicId : this.findOrCreateTopic(assignment.name).id;
+        const topicId = this.topicIdFor(assignment);
+        if (topicId === null) {
+          store.meta.set(deferredKey(assignment.prKey), at);
+          continue;
+        }
         if (store.topics.get(topicId)?.status === 'retired') {
           store.topics.setStatus(topicId, 'active', at);
         }

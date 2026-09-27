@@ -19,6 +19,7 @@ export const topicAssignmentOutput = z.object({
     z.discriminatedUnion('kind', [
       z.object({ prKey: text, kind: z.literal('existing'), topicId: text, reason: text }),
       z.object({ prKey: text, kind: z.literal('new'), name: text.min(1), reason: text }),
+      z.object({ prKey: text, kind: z.literal('unsorted'), reason: text.default('') }),
     ]),
   ),
 });

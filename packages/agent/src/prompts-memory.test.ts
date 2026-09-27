@@ -162,14 +162,14 @@ describe('topicAssignmentPrompt', () => {
       prs: [pr1],
       viewer,
       topics: [
-        { id: 't1', name: 'CI', summary: 'old summary', brief: 'Run CI on Depot. Status: active. Driver: @alice.' },
-        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', brief: '' },
+        { id: 't1', name: 'CI', summary: 'old summary', brief: 'Run CI on Depot. Status: active. Driver: @alice.', memberCount: 4 },
+        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', brief: '', memberCount: 1 },
       ],
       context: emptyContext,
     });
-    expect(prompt).toContain('- id t1: "CI" - Run CI on Depot. Status: active. Driver: @alice.');
+    expect(prompt).toContain('- id t1: "CI" (4 PRs) - Run CI on Depot. Status: active. Driver: @alice.');
     expect(prompt).not.toContain('old summary');
-    expect(prompt).toContain('- id t2: "Billing" - Billing rewrite.');
+    expect(prompt).toContain('- id t2: "Billing" (1 PR) - Billing rewrite.');
   });
 });
 

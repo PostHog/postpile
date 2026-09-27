@@ -74,7 +74,8 @@ ${listOrNone(input.decidedTopicProposals.map(decidedTopicLine))}
 
 What to return, all optional; empty lists are the usual answer:
 - topicProposals: rename (the name no longer fits the work), merge (two topics are the same work;
-  topicId is merged into intoTopicId), split (a topic holds two separate pieces of work; one entry
+  topicId is merged into intoTopicId; also propose it for small topics of 1-2 PRs whose work
+  overlaps a bigger topic, merging the small one into the bigger one), split (a topic holds two separate pieces of work; one entry
   per new part, with the PR keys to move out, taken from that topic's pr lines). Topic ids only
   from the list above.
 - factMerges: inside one duplicate group, facts that say the same thing. keepId = the best one,

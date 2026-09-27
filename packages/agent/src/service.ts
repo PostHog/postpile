@@ -47,6 +47,8 @@ export interface TopicChoice {
   summary: string;
   /** dossierBrief() of the topic's latest dossier; '' when it has none yet. */
   brief: string;
+  /** PRs in the topic now. Small topics are where fragmentation shows. */
+  memberCount: number;
 }
 
 export interface TopicAssignmentInput {
@@ -58,7 +60,9 @@ export interface TopicAssignmentInput {
 
 export type TopicAssignment =
   | { prKey: PrKey; kind: 'existing'; topicId: string; reason: string }
-  | { prKey: PrKey; kind: 'new'; name: string; reason: string };
+  | { prKey: PrKey; kind: 'new'; name: string; reason: string }
+  /** No topic fits and a new one is not worth it yet: left in Unsorted until after the next consolidation. */
+  | { prKey: PrKey; kind: 'unsorted'; reason: string };
 
 export interface SetGroupingInput {
   topic: Topic;
