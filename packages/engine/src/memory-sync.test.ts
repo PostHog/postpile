@@ -96,6 +96,22 @@ describe('dossier updates', () => {
     expect(h.agent.dossierInputs).toHaveLength(1);
   });
 
+  it('refreshes a dossier once when the tailoring changes, even without new events', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    h.store.topics.setTailoring('depot', 'Flag cache key changes.', at(5));
+    h.reader.etag = 'etag-2';
+    const refreshed = await h.engine.sync({ agentJobs: ['dossiers'] });
+    h.reader.etag = 'etag-3';
+    const quiet = await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(refreshed.dossiersUpdated).toBe(1);
+    expect(h.agent.dossierInputs[1]?.context.tailoring).toBe('Flag cache key changes.');
+    expect(quiet.agentCalls).toBe(0);
+  });
+
   it('lets the dossier driver win over the most frequent author', async () => {
     const h = makeHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

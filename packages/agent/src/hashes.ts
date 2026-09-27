@@ -3,7 +3,7 @@ import type { Pr } from '@code-manager/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
 import { humanComments } from './prompts/shared.ts';
-import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, SetGroupingInput } from './service.ts';
+import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptContext, SetGroupingInput } from './service.ts';
 
 // Input hashes decide when a stored answer is stale. They cover what the
 // answer depends on, not every byte of the prompt: a bot comment or a CI
@@ -51,11 +51,21 @@ export function setGroupingInputHash(input: SetGroupingInput): string {
 }
 
 /**
- * What a dossier update depends on: the previous version (topic + number),
- * the delta (event ids, toSeq, joined and left PRs, stale fact ids and
- * claims, new feedback ids), tailoring, standing rules, model and prompt
- * version. Not the instructions file (see DESIGN.md open questions) and not
- * knownFacts, which are context only.
+ * The parts of the user's context a dossier's userCares are written from.
+ * The engine keeps it per topic; a change refreshes the dossier even when no
+ * new event arrived, so glances are not written from outdated cares.
+ */
+export function dossierContextHash(context: PromptContext): string {
+  return inputHash('dossier_context', context.instructions, context.tailoring, context.standingRules);
+}
+
+/**
+ * A record of what a dossier version was written from, stored with it: the
+ * previous version (topic + number), the delta (event ids, toSeq, joined and
+ * left PRs, stale fact ids and claims, new feedback ids), instructions,
+ * tailoring, standing rules, model and prompt version. Not knownFacts, which
+ * are context only. Nothing skips a call on it: whether to update is
+ * isEmptyDelta plus dossierContextHash.
  */
 export function dossierInputHash(input: DossierUpdateInput): string {
   const delta = input.delta;
@@ -71,6 +81,7 @@ export function dossierInputHash(input: DossierUpdateInput): string {
     input.staleFacts.map((f) => [f.id, f.text]),
     delta.staleClaims,
     delta.newFeedback.map((f) => f.id),
+    input.context.instructions,
     input.context.tailoring,
     input.context.standingRules,
   );

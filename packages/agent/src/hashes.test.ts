@@ -1,6 +1,6 @@
 import type { PrSet } from '@code-manager/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
+import { dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
 import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';
 import {
   emptyContext,
@@ -120,7 +120,7 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
 describe('dossierInputHash', () => {
   const base = dossierInputHash(dossierInput());
 
-  it('reacts to the previous version, new events, joined PRs, stale facts, feedback, tailoring and rules', () => {
+  it('reacts to the previous version, new events, joined PRs, stale facts, feedback and the context', () => {
     expect(dossierInputHash(dossierInput({ previous: makeDossierVersion({ version: 8 }) }))).not.toBe(base);
     expect(dossierInputHash(dossierInput({ previous: null }))).not.toBe(base);
     expect(dossierInputHash(dossierInput({ delta: makeDelta({ events: [makeEvent({ id: 'other' })] }) }))).not.toBe(base);
@@ -129,10 +129,20 @@ describe('dossierInputHash', () => {
     expect(dossierInputHash(dossierInput({ delta: makeDelta({ events: [makeEvent()], newFeedback: [makeFeedback()] }) }))).not.toBe(base);
     expect(dossierInputHash(dossierInput({ context: { ...emptyContext, tailoring: 'x' } }))).not.toBe(base);
     expect(dossierInputHash(dossierInput({ context: { ...emptyContext, standingRules: ['x'] } }))).not.toBe(base);
+    expect(dossierInputHash(dossierInput({ context: { ...emptyContext, instructions: 'new text' } }))).not.toBe(base);
   });
 
-  it('ignores the instructions file and known facts', () => {
-    expect(dossierInputHash(dossierInput({ context: { ...emptyContext, instructions: 'new text' } }))).toBe(base);
+  it('ignores known facts', () => {
     expect(dossierInputHash(dossierInput({ knownFacts: [makeFact()] }))).toBe(base);
+  });
+});
+
+describe('dossierContextHash', () => {
+  it('covers instructions, tailoring and standing rules, not feedback', () => {
+    const base = dossierContextHash(emptyContext);
+    expect(dossierContextHash({ ...emptyContext, instructions: 'x' })).not.toBe(base);
+    expect(dossierContextHash({ ...emptyContext, tailoring: 'x' })).not.toBe(base);
+    expect(dossierContextHash({ ...emptyContext, standingRules: ['x'] })).not.toBe(base);
+    expect(dossierContextHash({ ...emptyContext, recentFeedback: [makeFeedback()] })).toBe(base);
   });
 });

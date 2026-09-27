@@ -191,10 +191,6 @@ export class RunnerAgentService implements AgentService {
     };
   }
 
-  dossierInputHash(input: DossierUpdateInput): string {
-    return dossierInputHash(input);
-  }
-
   async updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult> {
     const refs = new DossierRefs(input);
     const { value, model } = await this.ask('dossier_update', dossierUpdatePrompt(input, refs), dossierUpdateOutput, {

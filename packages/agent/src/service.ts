@@ -248,8 +248,6 @@ export interface AgentService {
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;
   chat(input: ChatInput): Promise<AgentChatReply>;
 
-  /** Same input, same hash: the engine skips updateDossier when it matches the latest version's. */
-  dossierInputHash(input: DossierUpdateInput): string;
   updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult>;
   /** At most one action per item; items the answer skipped are left out. */
   reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]>;

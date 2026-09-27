@@ -128,7 +128,7 @@ export class FakeAgent extends RunnerAgentService {
     }
   }
 
-  override dossierInputHash(input: DossierUpdateInput): string {
+  private dossierHash(input: DossierUpdateInput): string {
     return inputHash(
       'dossier',
       input.topic.id,
@@ -161,7 +161,7 @@ export class FakeAgent extends RunnerAgentService {
   override async updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult> {
     this.dossierInputs.push(input);
     const result = this.answer('dossier_update', this.dossierAnswers, input, defaultDossier, { topicId: input.topic.id, attempt: 1 });
-    return { ...result, inputHash: this.dossierInputHash(input) };
+    return { ...result, inputHash: this.dossierHash(input) };
   }
 
   override async reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]> {

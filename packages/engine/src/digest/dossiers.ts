@@ -1,4 +1,5 @@
 import {
+  dossierContextHash,
   FACTS_IN_DOSSIER_PROMPT,
   STALE_FACTS_IN_DOSSIER_PROMPT,
   type DossierUpdateInput,
@@ -35,12 +36,17 @@ export interface DossierRunResult {
   skippedByBudget: Set<string>;
 }
 
+function contextHashKey(topicId: string): string {
+  return `dossier_context_hash:${topicId}`;
+}
+
 /**
  * REFINE per topic: previous dossier + only the events since the digest
  * cursor -> new dossier version, flags and fact candidates. A topic with an
- * empty delta costs nothing; an input hash equal to the latest version's
- * (a retry after a crash) is skipped too. Topics with unread tiles go first
- * so a capped budget is spent where the user looks first.
+ * empty delta costs nothing, unless the user's instructions, tailoring or
+ * standing rules changed since its last version: its userCares come from
+ * those. Topics with unread tiles go first so a capped budget is spent where
+ * the user looks first.
  */
 export class DossierUpdater {
   constructor(private readonly deps: DigestDeps) {}
@@ -94,7 +100,11 @@ export class DossierUpdater {
       staleClaims: previous ? verifyDossier(previous.dossier, world) : [],
       feedback: store.feedback.recentForTopic(topic.id, FEEDBACK_IN_PROMPTS),
     });
-    if (isEmptyDelta(delta)) {
+    const context = this.deps.contexts.forTopic(topic.id);
+    // No stored hash yet (a database from before it existed) counts as unchanged, so an upgrade costs nothing.
+    const storedContextHash = store.meta.get(contextHashKey(topic.id));
+    const contextChanged = storedContextHash !== null && storedContextHash !== dossierContextHash(context);
+    if (isEmptyDelta(delta) && !contextChanged) {
       return null;
     }
     return {
@@ -105,7 +115,7 @@ export class DossierUpdater {
       knownFacts: this.knownFacts(topic, memberKeys),
       staleFacts,
       viewer: this.deps.viewer,
-      context: this.deps.contexts.forTopic(topic.id),
+      context,
     };
   }
 
@@ -137,6 +147,7 @@ export class DossierUpdater {
       });
       store.topics.updateSummary(topicId, result.dossier.summary, result.inputHash, at);
       store.cursors.advance({ kind: 'digest', scope: topicId, seq: input.delta.toSeq, dossierVersion: version, updatedAt: at });
+      store.meta.set(contextHashKey(topicId), dossierContextHash(input.context));
       for (const close of result.closeFacts) {
         this.deps.facts.close(close.factId, close.reason, at);
         tally.facts.invalidated += 1;
@@ -152,10 +163,6 @@ export class DossierUpdater {
     // Everything up to the agent call is synchronous, so budget.take runs in topic order.
     const input = this.input(topic);
     if (!input) {
-      return;
-    }
-    if (input.previous?.inputHash === agent.dossierInputHash(input)) {
-      budget.skipUnchanged('dossier_update');
       return;
     }
     if (!budget.take('dossier_update')) {
