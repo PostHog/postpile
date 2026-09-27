@@ -15,7 +15,7 @@ export class PrActions {
     private readonly writer: GitHubWriter,
     private readonly agent: AgentService,
     private readonly contexts: PromptContextSource,
-    private readonly reads: ReadMarker,
+    private readonly readMarker: ReadMarker,
     private readonly now: () => Date,
   ) {}
 
@@ -42,7 +42,7 @@ export class PrActions {
       return failed(`Approve failed: ${errorText(error)}`);
     }
     this.store.userPrStates.markApproved(key, pr.headOid, this.now().toISOString());
-    return ok('Approved', this.reads.markRead([key], []));
+    return ok('Approved', this.readMarker.markRead([key], []));
   }
 
   async draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {

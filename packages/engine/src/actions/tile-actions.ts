@@ -7,7 +7,7 @@ import { failed, ok } from './results.ts';
 export class TileActions {
   constructor(
     private readonly store: Store,
-    private readonly reads: ReadMarker,
+    private readonly readMarker: ReadMarker,
     private readonly now: () => Date,
   ) {}
 
@@ -26,11 +26,11 @@ export class TileActions {
     }
     const keys = tile.members.map((m) => m.prKey);
     const pinged = tile.members.filter((m) => isPinged(m.provenance)).map((m) => m.prKey);
-    return ok('Marked read', this.reads.markRead(keys, pinged));
+    return ok('Marked read', this.readMarker.markRead(keys, pinged));
   }
 
   undo(token: string | null): ActionResult {
-    const batch = this.reads.undo(token);
+    const batch = this.readMarker.undo(token);
     if (!batch) {
       return failed('Nothing to undo: already sent to GitHub');
     }
