@@ -43,6 +43,7 @@ function dossierInput(): DossierUpdateInput {
     prs: [pr1, pr2],
     knownFacts: [makeFact()],
     staleFacts: [makeFact({ id: 'fact-2', staleReason: 'head_moved' })],
+    chatTurns: [],
     viewer,
     context: fullContext,
   };
@@ -88,6 +89,69 @@ function dossierAnswer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+describe('RunnerAgentService.updateDossier line sources', () => {
+  const chatTurn = { id: 41, tileId: 'pr:acme/app#1', topicId: 'topic-1', role: 'user' as const, text: 'Cache keys matter most here.', createdAt: '2026-09-23T09:00:00Z' };
+
+  function sourcesInput(): DossierUpdateInput {
+    const previous = makeDossierVersion({
+      dossier: {
+        ...makeDossierVersion().dossier,
+        timeline: [{ prKey: 'acme/app#1', role: 'test jobs', refs: [{ kind: 'pr', prKey: 'acme/app#1', sourceId: null, url: null, at: '2026-09-01T00:00:00Z', headOid: null }] }],
+      },
+    });
+    return { ...dossierInput(), previous, chatTurns: [chatTurn] };
+  }
+
+  it('resolves user ids to the user\'s own words and drops ids the prompt never showed', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    runner.answer('dossier_update', {
+      ...answer,
+      dossier: {
+        ...answer.dossier,
+        goalRefs: ['I1', 'X9'],
+        statusRefs: ['e2', 'M1'],
+        timeline: [{ prKey: 'acme/app#1', role: 'test jobs' }, { prKey: 'acme/app#2', role: 'docker builds', refs: ['acme/app#2', 'T1'] }],
+        userCares: [{ text: 'CI cost', source: 'instructions', refs: ['I1', 'U1', 'M7'] }],
+      },
+    });
+
+    const result = await service.updateDossier(sourcesInput());
+    const { dossier } = result;
+
+    expect(dossier.goalSources?.refs).toEqual([]);
+    expect(dossier.goalSources?.userRefs).toEqual([{ kind: 'instructions', id: '3', at: '2026-09-01T08:00:00Z', quote: 'Added CI cost' }]);
+    expect(dossier.statusSources?.refs.map((ref) => ref.sourceId)).toEqual(['r1']);
+    expect(dossier.statusSources?.userRefs).toEqual([{ kind: 'chat', id: '41', at: chatTurn.createdAt, quote: chatTurn.text }]);
+    expect(dossier.timeline[1]?.userRefs).toEqual([{ kind: 'tailoring', id: 'topic-1', at: expect.any(String), quote: 'Flag anything that touches the cache keys.' }]);
+    expect(dossier.userCares[0]?.userRefs?.map((ref) => ref.kind)).toEqual(['instructions', 'feedback']);
+  });
+
+  it('keeps the old sources of a line that did not change and cites nothing', async () => {
+    const { runner, service } = setup();
+    runner.answer('dossier_update', dossierAnswer());
+
+    const result = await service.updateDossier(sourcesInput());
+
+    expect(result.dossier.timeline[0]?.refs?.map((ref) => ref.prKey)).toEqual(['acme/app#1']);
+    expect(result.dossier.timeline[1]?.refs).toEqual([]);
+  });
+
+  it('lists chat turns and user sources in the prompt, and records the turns in the input hash', async () => {
+    const { runner, service } = setup();
+    runner.answer('dossier_update', dossierAnswer());
+    const input = sourcesInput();
+
+    await service.updateDossier(input);
+
+    const prompt = runner.promptsFor('dossier_update')[0] ?? '';
+    expect(prompt).toContain('- M1 2026-09-23 said in chat: Cache keys matter most here.');
+    expect(prompt).toContain('- I1 their general instructions above (version 3)');
+    expect(prompt).toContain('- T1 their instruction for this topic: Flag anything that touches the cache keys.');
+    expect(dossierInputHash({ ...input, chatTurns: [] })).not.toBe(dossierInputHash(input));
+  });
+});
+
 describe('RunnerAgentService.updateDossier', () => {
   it('maps short ids back to refs and drops everything it did not hand out', async () => {
     const { runner, service, calls } = setup();
@@ -107,6 +171,7 @@ describe('RunnerAgentService.updateDossier', () => {
         { kind: 'comment', prKey: 'acme/app#1', sourceId: 'c9', url: null, at: '2026-09-10T10:00:00Z', headOid: null },
         { kind: 'comment', prKey: 'acme/app#1', sourceId: 'c1', url: 'https://github.com/acme/app/pull/1#c1', at: '2026-09-21T10:00:00Z', headOid: 'abc' },
       ],
+      userRefs: [],
     });
     expect(result.dossier.recentChanges[0]?.at).toBe(NOW);
     expect(result.dossier.recentChanges[0]?.refs[0]).toMatchObject({ kind: 'review', sourceId: 'r1' });

@@ -1,5 +1,22 @@
-import type { DossierChange, EventKind, Fact, FactRef, FactRefKind, Pr, PrEvent, PrKey } from '@code-manager/core';
+import type {
+  ChatMessage,
+  DossierChange,
+  EventKind,
+  Fact,
+  FactRef,
+  FactRefKind,
+  Feedback,
+  LineSources,
+  Pr,
+  PrEvent,
+  PrKey,
+  UserRef,
+} from '@code-manager/core';
+import { feedbackLabel } from './prompts/shared.ts';
 import type { DossierUpdateInput } from './service.ts';
+
+/** Tailoring lines and corrections a dossier prompt offers as citable sources. */
+const USER_SOURCES_PER_KIND = 20;
 
 const refKindByEvent: Partial<Record<EventKind, FactRefKind>> = {
   mention: 'comment',
@@ -48,6 +65,37 @@ function refKey(ref: FactRef): string {
   return `${ref.kind}|${ref.prKey}|${ref.sourceId ?? ''}`;
 }
 
+function userRefKey(ref: UserRef): string {
+  return `${ref.kind}|${ref.id}|${ref.quote}`;
+}
+
+function tailoringLines(tailoring: string): string[] {
+  return tailoring
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .slice(0, USER_SOURCES_PER_KIND);
+}
+
+/** Corrections in the context block and the new ones since the previous version, once each. */
+function feedbackSources(input: DossierUpdateInput): Feedback[] {
+  const byId = new Map<number, Feedback>();
+  for (const feedback of [...input.delta.newFeedback, ...input.context.recentFeedback]) {
+    byId.set(feedback.id, feedback);
+  }
+  return [...byId.values()].slice(0, USER_SOURCES_PER_KIND);
+}
+
+function chatRef(message: ChatMessage): UserRef {
+  return { kind: 'chat', id: String(message.id), at: message.createdAt, quote: message.text };
+}
+
+/** One source in the user's own words, with the short id the prompt shows it under. */
+export interface UserSource {
+  shortId: string;
+  ref: UserRef;
+}
+
 /**
  * The short ids a dossier update prompt hands out, and the way back from
  * them to FactRefs. Models copy "e12" far more reliably than long GitHub ids.
@@ -56,6 +104,8 @@ function refKey(ref: FactRef): string {
  * - Q1..Qn / C1..Cn: open questions / recent changes of the previous dossier,
  *   so a carried-over entry keeps its refs
  * - a member PR key: the PR itself
+ * - I1 / T1.. / U1.. / M1..: the user's instructions, topic tailoring lines,
+ *   corrections and chat turns, for the sources of a line
  */
 export class DossierRefs {
   private readonly events = new Map<string, PrEvent>();
@@ -63,8 +113,10 @@ export class DossierRefs {
   private readonly facts = new Map<string, Fact>();
   private readonly factShortIds = new Map<string, string>();
   private readonly carried = new Map<string, FactRef[]>();
+  private readonly carriedUser = new Map<string, UserRef[]>();
   private readonly changes = new Map<string, DossierChange>();
   private readonly prs = new Map<PrKey, Pr>();
+  private readonly users = new Map<string, UserRef>();
 
   constructor(input: DossierUpdateInput) {
     for (const event of input.delta.events.filter((e) => !e.isBot)) {
@@ -78,14 +130,64 @@ export class DossierRefs {
       this.factShortIds.set(fact.id, shortId);
     }
     const previous = input.previous?.dossier;
-    previous?.openQuestions.forEach((question, index) => this.carried.set(`Q${index + 1}`, question.refs));
+    previous?.openQuestions.forEach((question, index) => {
+      this.carried.set(`Q${index + 1}`, question.refs);
+      this.carriedUser.set(`Q${index + 1}`, question.userRefs ?? []);
+    });
     previous?.recentChanges.forEach((change, index) => {
       this.carried.set(`C${index + 1}`, change.refs);
+      this.carriedUser.set(`C${index + 1}`, change.userRefs ?? []);
       this.changes.set(`C${index + 1}`, change);
     });
     for (const pr of input.prs) {
       this.prs.set(pr.key, pr);
     }
+    this.addUserSources(input);
+  }
+
+  private addUserSources(input: DossierUpdateInput): void {
+    const { context } = input;
+    if (context.instructions.trim()) {
+      const version = context.instructionsVersion;
+      this.users.set('I1', {
+        kind: 'instructions',
+        id: version ? String(version.version) : '',
+        at: version?.createdAt ?? '',
+        quote: version?.summary ?? 'Your general instructions',
+      });
+    }
+    tailoringLines(context.tailoring).forEach((line, index) => {
+      this.users.set(`T${index + 1}`, { kind: 'tailoring', id: input.topic.id, at: input.topic.updatedAt, quote: line });
+    });
+    feedbackSources(input).forEach((feedback, index) => {
+      const quote = feedback.note.trim() ? `${feedbackLabel(feedback.kind)}: ${feedback.note.trim()}` : feedbackLabel(feedback.kind);
+      this.users.set(`U${index + 1}`, { kind: 'feedback', id: String(feedback.id), at: feedback.createdAt, quote });
+    });
+    input.chatTurns.forEach((message, index) => this.users.set(`M${index + 1}`, chatRef(message)));
+  }
+
+  /** Every source in the user's own words, in the order the prompt lists them. */
+  userSources(): UserSource[] {
+    return [...this.users].map(([shortId, ref]) => ({ shortId, ref }));
+  }
+
+  private userRefsFor(shortId: string): UserRef[] {
+    const ref = this.users.get(shortId);
+    if (ref) {
+      return [ref];
+    }
+    return this.carriedUser.get(shortId) ?? [];
+  }
+
+  /** GitHub refs and the user's own words behind these short ids. Unknown ids are dropped. */
+  sources(shortIds: string[]): LineSources {
+    const users = new Map<string, UserRef>();
+    for (const shortId of shortIds) {
+      for (const ref of this.userRefsFor(shortId.trim())) {
+        users.set(userRefKey(ref), ref);
+      }
+    }
+    return { refs: this.resolve(shortIds), userRefs: [...users.values()] };
   }
 
   private refsFor(shortId: string): FactRef[] {

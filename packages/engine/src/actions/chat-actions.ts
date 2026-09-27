@@ -48,7 +48,8 @@ export class ChatActions {
       createdAt: this.now().toISOString(),
     });
     // Unsorted is not a stored topic, so there is nowhere to keep tailoring.
-    return { message: reply, tailoringProposal: isUnsorted ? null : answer.tailoringProposal };
+    const tailoringProposal = answer.lasting && !isUnsorted ? { topicId: topic.id, text: answer.lasting.text } : null;
+    return { message: reply, tailoringProposal };
   }
 
   /** keep=true appends the text to the topic's tailoring; false only logs it for this once. */

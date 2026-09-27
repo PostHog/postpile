@@ -97,7 +97,7 @@ export function describeFactRef(ref: FactRef, pr: Pr | undefined, events: PrEven
 }
 
 const USER_TITLES: Record<UserRef['kind'], (ref: UserRef) => string> = {
-  instructions: (ref) => `Your instructions, version ${ref.id}`,
+  instructions: (ref) => (ref.id ? `Your instructions, version ${ref.id}` : 'Your instructions'),
   tailoring: () => 'Your instructions for this topic',
   feedback: () => 'Your correction',
   chat: () => 'You said in chat',

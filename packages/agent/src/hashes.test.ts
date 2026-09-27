@@ -111,6 +111,7 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     prs: [makePr()],
     knownFacts: [],
     staleFacts: [],
+    chatTurns: [],
     viewer,
     context: emptyContext,
     ...overrides,

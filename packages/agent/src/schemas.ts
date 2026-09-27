@@ -39,14 +39,19 @@ export const draftCommentOutput = z.object({
 
 export const chatOutput = z.object({
   reply: text.min(1),
-  /** A lasting instruction worth keeping for the topic, or null. */
-  tailoring: text.nullable(),
+  /** A lasting instruction worth keeping, or null. scope all = across every topic. */
+  lasting: z.object({ text: text.min(1), scope: z.enum(['topic', 'all']) }).nullable().default(null),
+});
+
+export const instructionsChangeOutput = z.object({
+  reply: text.default(''),
+  change: z.object({ text: text.min(1), summary: text.min(1) }).nullable(),
 });
 
 // ---------------------------------------------------------------------------
 // Engine memory v2. Refs are the short ids the prompt handed out ("e12" for an
-// event, "pr3" for a PR); the service maps them back to FactRefs and drops
-// unknown ones.
+// event, a PR key, "I1" / "T2" / "U3" / "M4" for the user's own words); the
+// service maps them back to sources and drops unknown ones.
 // ---------------------------------------------------------------------------
 
 const refIds = z.array(text).default([]);
@@ -73,17 +78,19 @@ const predicate = z.enum([
 /** Lengths are not enforced here: one long field must not throw away a whole update. clampDossier cuts. */
 export const dossierOutput = z.object({
   goal: text,
+  goalRefs: refIds,
   summary: text.min(1),
   status: z.enum(['starting', 'active', 'blocked', 'winding_down', 'finished']),
   statusNote: text.default(''),
+  statusRefs: refIds,
   people: z
     .array(z.object({ login: text.min(1), role: z.enum(['driver', 'contributor', 'reviewer', 'stakeholder']), note: text }))
     .default([]),
   openQuestions: z.array(z.object({ text: text.min(1), askedBy: text.nullable(), refs: refIds })).default([]),
-  timeline: z.array(z.object({ prKey: text, role: text })).default([]),
+  timeline: z.array(z.object({ prKey: text, role: text, refs: refIds })).default([]),
   earlier: text.default(''),
   userCares: z
-    .array(z.object({ text: text.min(1), source: z.enum(['instructions', 'tailoring', 'feedback', 'observed']) }))
+    .array(z.object({ text: text.min(1), source: z.enum(['instructions', 'tailoring', 'feedback', 'observed']), refs: refIds }))
     .default([]),
   // at is ignored: the service stamps new entries itself. Older prompts asked for it.
   recentChanges: z.array(z.object({ at: text.optional(), text: text.min(1), refs: refIds })).default([]),

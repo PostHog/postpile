@@ -1,4 +1,4 @@
-import type { ReconcileAction } from '@code-manager/core';
+import { clipText, type ReconcileAction } from '@code-manager/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
@@ -10,6 +10,7 @@ import { modelFor } from './models.ts';
 import { chatPrompt } from './prompts/chat.ts';
 import { draftCommentPrompt } from './prompts/comment.ts';
 import { consolidationPrompt } from './prompts/consolidation.ts';
+import { INSTRUCTIONS_MAX_CHARS, INSTRUCTIONS_SUMMARY_MAX, instructionsChangePrompt } from './prompts/instructions.ts';
 import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
@@ -26,6 +27,7 @@ import {
   eventBatchOutput,
   factReconcileOutput,
   glanceBatchOutput,
+  instructionsChangeOutput,
   setGroupingOutput,
   topicAssignmentOutput,
 } from './schemas.ts';
@@ -44,6 +46,8 @@ import type {
   GlanceBatchInput,
   GlanceBatchItem,
   GlanceBatchResult,
+  InstructionsChangeInput,
+  InstructionsChangeReply,
   SetGroupingInput,
   SetProposal,
   TopicAssignment,
@@ -61,6 +65,7 @@ const timeouts: Record<AgentPurpose, number> = {
   consolidation: 300_000,
   draft_comment: 120_000,
   chat: 120_000,
+  instructions_change: 120_000,
 };
 
 export interface RunnerAgentServiceOptions {
@@ -183,12 +188,24 @@ export class RunnerAgentService implements AgentService {
   }
 
   async chat(input: ChatInput): Promise<AgentChatReply> {
-    const { value } = await this.ask('chat', chatPrompt(input), chatOutput);
-    const tailoring = value.tailoring?.trim();
-    return {
-      reply: value.reply,
-      tailoringProposal: tailoring ? { topicId: input.topic.id, text: tailoring } : null,
-    };
+    const { value } = await this.ask('chat', chatPrompt(input), chatOutput, { topicId: input.topic.id, attempt: 1 });
+    return { reply: value.reply, lasting: value.lasting };
+  }
+
+  /**
+   * An answer that changes nothing, or grows past INSTRUCTIONS_MAX_CHARS,
+   * counts as no change: the user would only see an empty or runaway diff.
+   */
+  async proposeInstructionsChange(input: InstructionsChangeInput): Promise<InstructionsChangeReply> {
+    const { value } = await this.ask('instructions_change', instructionsChangePrompt(input), instructionsChangeOutput);
+    const text = value.change?.text.trim() ?? '';
+    if (!value.change || text === '' || text === input.instructions.trim()) {
+      return { reply: value.reply, change: null };
+    }
+    if (text.length > INSTRUCTIONS_MAX_CHARS) {
+      return { reply: 'The proposed text came back far too long, so it was dropped.', change: null };
+    }
+    return { reply: value.reply, change: { text: `${text}\n`, summary: clipText(value.change.summary, INSTRUCTIONS_SUMMARY_MAX) } };
   }
 
   async updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult> {

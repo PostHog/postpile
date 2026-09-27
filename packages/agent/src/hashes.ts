@@ -5,6 +5,14 @@ import { modelFor } from './models.ts';
 import { humanComments } from './prompts/shared.ts';
 import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptContext, SetGroupingInput } from './service.ts';
 
+/**
+ * Wording version of the dossier update prompt alone. d2 asks every line
+ * for its sources. Only the stored input hash records it: bumping the
+ * shared PROMPT_VERSION would regenerate every glance and set for nothing,
+ * and older dossiers read fine, their lines show "no source recorded".
+ */
+export const DOSSIER_PROMPT_VERSION = 'd2';
+
 // Input hashes decide when a stored answer is stale. They cover what the
 // answer depends on, not every byte of the prompt: a bot comment or a CI
 // re-run must not regenerate a glance, so those are left out on purpose.
@@ -63,7 +71,7 @@ export function dossierContextHash(context: PromptContext): string {
  * A record of what a dossier version was written from, stored with it: the
  * previous version (topic + number), the delta (event ids, toSeq, joined and
  * left PRs, stale fact ids and claims, new feedback ids), instructions,
- * tailoring, standing rules, model and prompt version. Not knownFacts, which
+ * tailoring, standing rules, chat turn ids, model and prompt versions. Not knownFacts, which
  * are context only. Nothing skips a call on it: whether to update is
  * isEmptyDelta plus dossierContextHash.
  */
@@ -71,6 +79,7 @@ export function dossierInputHash(input: DossierUpdateInput): string {
   const delta = input.delta;
   return inputHash(
     'dossier_update',
+    DOSSIER_PROMPT_VERSION,
     modelFor('dossier_update'),
     input.topic.id,
     input.previous?.version ?? 0,
@@ -84,6 +93,7 @@ export function dossierInputHash(input: DossierUpdateInput): string {
     input.context.instructions,
     input.context.tailoring,
     input.context.standingRules,
+    input.chatTurns.map((message) => message.id),
   );
 }
 

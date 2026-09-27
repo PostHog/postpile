@@ -120,10 +120,10 @@ describe('RunnerAgentService.draftComment and chat', () => {
     expect(result).toEqual({ body: '@bob is the cache key stable across runners?' });
   });
 
-  it('turns a lasting point into a tailoring proposal for the topic', async () => {
+  it('passes on a lasting point with the scope the agent picked', async () => {
     const { runner, service } = setup();
-    runner.answer('chat', { reply: 'Noted.', tailoring: 'Always flag cache key changes.' });
-    runner.answer('chat', { reply: 'It adds a runner label.', tailoring: null });
+    runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Always flag cache key changes.', scope: 'all' } });
+    runner.answer('chat', { reply: 'It adds a runner label.', lasting: null });
     const topic = makeTopic();
     const input = {
       topic,
@@ -134,14 +134,42 @@ describe('RunnerAgentService.draftComment and chat', () => {
       context: emptyContext,
     };
 
-    expect(await service.chat(input)).toEqual({
-      reply: 'Noted.',
-      tailoringProposal: { topicId: 'topic-1', text: 'Always flag cache key changes.' },
+    expect(await service.chat(input)).toEqual({ reply: 'Noted.', lasting: { text: 'Always flag cache key changes.', scope: 'all' } });
+    expect(await service.chat({ ...input, message: 'what does it do?' })).toEqual({ reply: 'It adds a runner label.', lasting: null });
+  });
+});
+
+describe('RunnerAgentService.proposeInstructionsChange', () => {
+  const input = { instructions: '# Me\n- I care about CI cost.\n', message: 'From now on flag cache key changes.', earlierMessages: ['hi'] };
+
+  it('returns the full new text and a summary, and asks without any GitHub text', async () => {
+    const { runner, service } = setup();
+    runner.answer('instructions_change', {
+      reply: 'Added it.',
+      change: { text: '# Me\n- I care about CI cost.\n- Flag cache key changes.', summary: 'Flag cache key changes' },
     });
-    expect(await service.chat({ ...input, message: 'what does it do?' })).toEqual({
-      reply: 'It adds a runner label.',
-      tailoringProposal: null,
+
+    const result = await service.proposeInstructionsChange(input);
+
+    expect(result).toEqual({
+      reply: 'Added it.',
+      change: { text: '# Me\n- I care about CI cost.\n- Flag cache key changes.\n', summary: 'Flag cache key changes' },
     });
+    const prompt = runner.promptsFor('instructions_change')[0] ?? '';
+    expect(prompt).toContain('From now on flag cache key changes.');
+    expect(prompt).toContain('- I care about CI cost.');
+    expect(prompt).not.toContain('github_data');
+  });
+
+  it('treats no change, an unchanged text and a runaway text as no proposal', async () => {
+    const { runner, service } = setup();
+    runner.answer('instructions_change', { reply: 'That is about one topic.', change: null });
+    runner.answer('instructions_change', { reply: '', change: { text: input.instructions, summary: 'same' } });
+    runner.answer('instructions_change', { reply: '', change: { text: 'x'.repeat(30_000), summary: 'long' } });
+
+    expect(await service.proposeInstructionsChange(input)).toEqual({ reply: 'That is about one topic.', change: null });
+    expect((await service.proposeInstructionsChange(input)).change).toBeNull();
+    expect((await service.proposeInstructionsChange(input)).change).toBeNull();
   });
 });
 

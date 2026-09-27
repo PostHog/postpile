@@ -42,6 +42,7 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     prs: [pr1, pr2],
     knownFacts: [makeFact()],
     staleFacts: [makeFact({ id: 'fact-2', predicate: 'reviews', text: 'Bob reviews #1', staleReason: 'person_not_involved' })],
+    chatTurns: [],
     viewer,
     context: fullContext,
     ...overrides,

@@ -225,7 +225,7 @@ describe('chat and tailoring', () => {
     const h = await synced();
     h.store.topics.create(topic('depot'));
     h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
-    h.runner.answer('chat', { reply: 'Got it.', tailoring: 'Ignore preview deploys.' });
+    h.runner.answer('chat', { reply: 'Got it.', lasting: { text: 'Ignore preview deploys.', scope: 'topic' } });
 
     const reply = await h.engine.chat(tileId, 'preview deploys are noise here');
 

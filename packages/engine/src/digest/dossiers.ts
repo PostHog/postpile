@@ -1,4 +1,5 @@
 import {
+  CHAT_TURNS_IN_DOSSIER_PROMPT,
   dossierContextHash,
   FACTS_IN_DOSSIER_PROMPT,
   STALE_FACTS_IN_DOSSIER_PROMPT,
@@ -117,6 +118,7 @@ export class DossierUpdater {
       prs: [...prs.values()],
       knownFacts: this.knownFacts(topic, memberKeys),
       staleFacts,
+      chatTurns: store.chat.listUserForTopicSince(topic.id, previous?.createdAt ?? '', CHAT_TURNS_IN_DOSSIER_PROMPT),
       viewer: this.deps.viewer,
       context,
     };

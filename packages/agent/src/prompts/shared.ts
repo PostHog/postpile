@@ -41,6 +41,11 @@ const feedbackLabels: Record<FeedbackKind, string> = {
   memory_forget: 'said they do not care about this, stop assuming it',
 };
 
+/** "said this line of the topic memory is wrong", for prompts and source quotes. */
+export function feedbackLabel(kind: FeedbackKind): string {
+  return feedbackLabels[kind];
+}
+
 function feedbackLine(feedback: Feedback): string {
   const about = [feedback.prKey, feedback.setId && `set ${feedback.setId}`, feedback.eventId && `event ${feedback.eventId}`]
     .filter(Boolean)

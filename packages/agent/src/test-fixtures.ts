@@ -181,10 +181,18 @@ export function makeDelta(overrides: Partial<TopicDelta> = {}): TopicDelta {
   };
 }
 
-export const emptyContext: PromptContext = { instructions: '', tailoring: '', recentFeedback: [], standingRules: [] };
+export const emptyContext: PromptContext = { instructions: '', instructionsVersion: null, tailoring: '', recentFeedback: [], standingRules: [] };
 
 export const fullContext: PromptContext = {
   instructions: 'I am on the devex team. I care about CI cost.',
+  instructionsVersion: {
+    version: 3,
+    text: 'I am on the devex team. I care about CI cost.',
+    summary: 'Added CI cost',
+    origin: 'chat',
+    sourceChatMessageId: 11,
+    createdAt: '2026-09-01T08:00:00Z',
+  },
   tailoring: 'Flag anything that touches the cache keys.',
   recentFeedback: [makeFeedback()],
   standingRules: ['Never approve database migrations at a glance.'],

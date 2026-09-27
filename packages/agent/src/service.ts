@@ -8,6 +8,7 @@ import type {
   FactCandidate,
   Feedback,
   Glance,
+  InstructionsVersion,
   IsoTime,
   Loudness,
   Pr,
@@ -18,7 +19,6 @@ import type {
   Provenance,
   ReconcileAction,
   RuleProposal,
-  TailoringProposal,
   Tile,
   Topic,
   TopicDelta,
@@ -33,6 +33,8 @@ import type {
  */
 export interface PromptContext {
   instructions: string;
+  /** The stored version of `instructions`, so a dossier line can cite it. Null when none is stored. */
+  instructionsVersion: InstructionsVersion | null;
   tailoring: string;
   recentFeedback: Feedback[];
   /** Accepted global rules from consolidation, oldest first. Part of every input hash. */
@@ -96,10 +98,46 @@ export interface ChatInput {
   context: PromptContext;
 }
 
+/**
+ * topic: about this topic, becomes a tailoring proposal. all: about how the
+ * user works everywhere, becomes an instructions change proposal.
+ */
+export type LastingScope = 'topic' | 'all';
+
+export interface LastingPoint {
+  /** One short instruction, written as the user would say it. */
+  text: string;
+  scope: LastingScope;
+}
+
 export interface AgentChatReply {
   reply: string;
-  /** Set when the message holds a lasting point worth keeping as tailoring. */
-  tailoringProposal: TailoringProposal | null;
+  /** Set when the message holds a lasting point worth keeping. The engine turns it into a proposal. */
+  lasting: LastingPoint | null;
+}
+
+/**
+ * Only the user's own words and their current instructions. Never GitHub
+ * text: anyone can write that, and this call rewrites the text that shapes
+ * every other prompt.
+ */
+export interface InstructionsChangeInput {
+  instructions: string;
+  message: string;
+  /** Their earlier messages in the same chat, oldest first. Context only. */
+  earlierMessages: string[];
+}
+
+export interface InstructionsChange {
+  /** The full new text. */
+  text: string;
+  summary: string;
+}
+
+export interface InstructionsChangeReply {
+  reply: string;
+  /** Null when the message does not ask for a change across all topics, or the answer was unusable. */
+  change: InstructionsChange | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +148,8 @@ export interface AgentChatReply {
 export const FACTS_IN_DOSSIER_PROMPT = 60;
 /** Stale facts one dossier update rechecks; the rest wait for the next one. */
 export const STALE_FACTS_IN_DOSSIER_PROMPT = 20;
+/** The user's newest chat turns in a topic a dossier update sees. */
+export const CHAT_TURNS_IN_DOSSIER_PROMPT = 10;
 
 /** REFINE: old dossier + new events + instructions -> new dossier, facts and flags. */
 export interface DossierUpdateInput {
@@ -123,6 +163,8 @@ export interface DossierUpdateInput {
   knownFacts: Fact[];
   /** Facts that failed verification, at most STALE_FACTS_IN_DOSSIER_PROMPT. The answer confirms, closes or replaces each one. */
   staleFacts: Fact[];
+  /** The user's own chat messages in this topic since the previous version, at most CHAT_TURNS_IN_DOSSIER_PROMPT. */
+  chatTurns: ChatMessage[];
   viewer: Viewer;
   context: PromptContext;
 }
@@ -247,6 +289,8 @@ export interface AgentService {
   groupSets(input: SetGroupingInput): Promise<SetProposal[]>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;
   chat(input: ChatInput): Promise<AgentChatReply>;
+  /** A proposed new instructions text from one of the user's own messages. Nothing is written here. */
+  proposeInstructionsChange(input: InstructionsChangeInput): Promise<InstructionsChangeReply>;
 
   updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult>;
   /** At most one action per item; items the answer skipped are left out. */

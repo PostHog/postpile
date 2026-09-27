@@ -362,7 +362,8 @@ export type AgentCallKind =
   | 'event_classification'
   | 'consolidation'
   | 'draft_comment'
-  | 'chat';
+  | 'chat'
+  | 'instructions_change';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {

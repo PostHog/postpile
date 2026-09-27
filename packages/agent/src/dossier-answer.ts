@@ -1,5 +1,16 @@
 import { clampDossier, parsePrKey } from '@code-manager/core';
-import type { Dossier, DossierCare, DossierCareSource, DossierFlag, EntityRef, FactCandidate, IsoTime } from '@code-manager/core';
+import type {
+  Dossier,
+  DossierCare,
+  DossierCareSource,
+  DossierFlag,
+  DossierPrEntry,
+  DossierQuestion,
+  EntityRef,
+  FactCandidate,
+  IsoTime,
+  LineSources,
+} from '@code-manager/core';
 import type { z } from 'zod';
 import type { DossierRefs } from './dossier-refs.ts';
 import type { dossierUpdateOutput } from './schemas.ts';
@@ -8,6 +19,27 @@ import type { DossierUpdateInput, FactClose } from './service.ts';
 type DossierAnswer = z.infer<typeof dossierUpdateOutput>;
 type EntityAnswer = { kind: EntityRef['kind']; key: string };
 type ChangeAnswer = DossierAnswer['dossier']['recentChanges'][number];
+
+function hasSources(sources: LineSources): boolean {
+  return sources.refs.length > 0 || sources.userRefs.length > 0;
+}
+
+function sourcesOf(line: { refs?: LineSources['refs']; userRefs?: LineSources['userRefs'] } | undefined): LineSources | undefined {
+  return line ? { refs: line.refs ?? [], userRefs: line.userRefs ?? [] } : undefined;
+}
+
+/**
+ * What a line rests on: the ids the answer cited, or, when it cited none
+ * and the line did not change, the sources it had in the previous version.
+ * Ids the prompt never handed out are dropped by DossierRefs.
+ */
+function lineSources(cited: string[], refs: DossierRefs, unchanged: LineSources | undefined): LineSources {
+  const sources = refs.sources(cited);
+  if (!hasSources(sources) && unchanged) {
+    return unchanged;
+  }
+  return sources;
+}
 
 function isPrKey(key: string): boolean {
   try {
@@ -67,29 +99,57 @@ function careSources(input: DossierUpdateInput): Set<DossierCareSource> {
   return sources;
 }
 
-function toCares(answer: DossierAnswer['dossier']['userCares'], input: DossierUpdateInput): DossierCare[] {
-  const sources = careSources(input);
-  return answer.filter((care) => sources.has(care.source));
+function toCares(answer: DossierAnswer['dossier']['userCares'], input: DossierUpdateInput, refs: DossierRefs): DossierCare[] {
+  const allowed = careSources(input);
+  const previous = input.previous?.dossier.userCares ?? [];
+  return answer
+    .filter((care) => allowed.has(care.source))
+    .map((care) => {
+      const sources = lineSources(care.refs, refs, sourcesOf(previous.find((old) => old.text === care.text)));
+      return { text: care.text, source: care.source, ...sources };
+    });
+}
+
+function toQuestions(answer: DossierAnswer['dossier']['openQuestions'], input: DossierUpdateInput, refs: DossierRefs): DossierQuestion[] {
+  const previous = input.previous?.dossier.openQuestions ?? [];
+  return answer.map((q) => {
+    const sources = lineSources(q.refs, refs, sourcesOf(previous.find((old) => old.text === q.text)));
+    return { text: q.text, askedBy: q.askedBy ? login(q.askedBy) : null, ...sources };
+  });
+}
+
+/** PRs that left or never were members do not belong on the timeline. */
+function toTimeline(answer: DossierAnswer['dossier']['timeline'], input: DossierUpdateInput, refs: DossierRefs): DossierPrEntry[] {
+  const memberKeys = new Set(input.prs.map((pr) => pr.key));
+  const previous = input.previous?.dossier.timeline ?? [];
+  return answer
+    .filter((entry) => memberKeys.has(entry.prKey))
+    .map((entry) => {
+      const old = previous.find((candidate) => candidate.prKey === entry.prKey && candidate.role === entry.role);
+      return { prKey: entry.prKey, role: entry.role, ...lineSources(entry.refs, refs, sourcesOf(old)) };
+    });
 }
 
 function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, refs: DossierRefs, now: IsoTime): Dossier {
-  const memberKeys = new Set(input.prs.map((pr) => pr.key));
+  const previous = input.previous?.dossier;
+  const sameGoal = previous !== undefined && previous.goal === answer.goal;
+  const sameStatus = previous !== undefined && previous.status === answer.status && previous.statusNote === answer.statusNote;
   return clampDossier({
     goal: answer.goal,
+    goalSources: lineSources(answer.goalRefs, refs, sameGoal ? previous.goalSources : undefined),
     summary: answer.summary,
     status: answer.status,
     statusNote: answer.statusNote,
+    statusSources: lineSources(answer.statusRefs, refs, sameStatus ? previous.statusSources : undefined),
     people: answer.people.map((p) => ({ login: login(p.login), role: p.role, note: p.note })),
-    openQuestions: answer.openQuestions.map((q) => ({
-      text: q.text,
-      askedBy: q.askedBy ? login(q.askedBy) : null,
-      refs: refs.resolve(q.refs),
-    })),
-    // PRs that left or never were members do not belong on the timeline.
-    timeline: answer.timeline.filter((entry) => memberKeys.has(entry.prKey)),
+    openQuestions: toQuestions(answer.openQuestions, input, refs),
+    timeline: toTimeline(answer.timeline, input, refs),
     earlier: answer.earlier,
-    userCares: toCares(answer.userCares, input),
-    recentChanges: answer.recentChanges.map((c) => ({ at: changeTime(c, input, refs, now), text: c.text, refs: refs.resolve(c.refs) })),
+    userCares: toCares(answer.userCares, input, refs),
+    recentChanges: answer.recentChanges.map((c) => {
+      const old = previous?.recentChanges.find((candidate) => candidate.text === c.text);
+      return { at: changeTime(c, input, refs, now), text: c.text, ...lineSources(c.refs, refs, sourcesOf(old)) };
+    }),
   });
 }
 

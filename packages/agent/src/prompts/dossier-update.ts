@@ -1,6 +1,6 @@
 import { DOSSIER_LIMITS } from '@code-manager/core';
 import type { Fact, PrEvent } from '@code-manager/core';
-import type { DossierRefs } from '../dossier-refs.ts';
+import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
 import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine } from './shared.ts';
@@ -93,6 +93,29 @@ function membersBlock(input: DossierUpdateInput): string {
   return dataBlock('Member PRs now:', lines, '(none)') + more;
 }
 
+function userSourceLine(source: UserSource): string {
+  const { shortId, ref } = source;
+  if (ref.kind === 'instructions') {
+    return `- ${shortId} their general instructions above${ref.id ? ` (version ${ref.id})` : ''}`;
+  }
+  if (ref.kind === 'tailoring') {
+    return `- ${shortId} their instruction for this topic: ${clip(ref.quote, 300)}`;
+  }
+  if (ref.kind === 'feedback') {
+    return `- ${shortId} ${ref.at.slice(0, 10)} correction: ${clip(ref.quote, 300)}`;
+  }
+  return `- ${shortId} ${ref.at.slice(0, 10)} said in chat: ${clip(ref.quote, 500)}`;
+}
+
+/**
+ * The user's own words as citable sources. Chat turns are new content here:
+ * what the user said about this topic since the last version.
+ */
+function userSourcesBlock(refs: DossierRefs): string {
+  const lines = refs.userSources().map(userSourceLine);
+  return block("Sources in the user's own words (instructions, topic instructions, corrections, chat). Cite them by id:", lines);
+}
+
 function feedbackBlock(input: DossierUpdateInput): string {
   const lines = input.delta.newFeedback.map((f) => `- ${f.createdAt.slice(0, 10)} ${f.kind}${f.prKey ? ` (${f.prKey})` : ''}: ${clip(f.note, 300)}`);
   return block('New corrections from the user since the last version. Take them into the dossier:', lines);
@@ -100,13 +123,14 @@ function feedbackBlock(input: DossierUpdateInput): string {
 
 const answerShape = `{
   "dossier": {
-    "goal": "...", "summary": "...", "status": "starting" | "active" | "blocked" | "winding_down" | "finished",
-    "statusNote": "...",
+    "goal": "...", "goalRefs": ["owner/repo#1"],
+    "summary": "...", "status": "starting" | "active" | "blocked" | "winding_down" | "finished",
+    "statusNote": "...", "statusRefs": ["e4"],
     "people": [{"login": "alice", "role": "driver" | "contributor" | "reviewer" | "stakeholder", "note": "..."}],
     "openQuestions": [{"text": "...", "askedBy": "carol" | null, "refs": ["e3"]}],
-    "timeline": [{"prKey": "owner/repo#1", "role": "..."}],
+    "timeline": [{"prKey": "owner/repo#1", "role": "...", "refs": ["owner/repo#1"]}],
     "earlier": "...",
-    "userCares": [{"text": "...", "source": "instructions" | "tailoring" | "feedback" | "observed"}],
+    "userCares": [{"text": "...", "source": "instructions" | "tailoring" | "feedback" | "observed", "refs": ["T1"]}],
     "recentChanges": [{"text": "...", "refs": ["e5", "C1"]}]
   },
   "flags": [{"kind": "needs_user" | "contradiction" | "looks_finished" | "off_topic_pr", "text": "...", "prKey": "owner/repo#1" | null}],
@@ -134,7 +158,7 @@ ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Previous dossier:
 ${previous}
-${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
+${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
 - goal: what the initiative is for, max ${limits.goal} chars. summary: where it stands, max ${limits.summary}.
@@ -150,7 +174,10 @@ How to write the dossier:
 - recentChanges: newest first, max ${limits.recentChanges}, text max ${limits.changeText}. Add entries for
   what happened now, keep older ones that still matter (same text, or cite their C id).
 - refs: the short ids above: e1.. for new activity, Q1.. or C1.. to keep the sources of an entry
-  of the previous dossier, F1.. for a fact, or a member PR key.
+  of the previous dossier, F1.. for a fact, a member PR key, or I1 / T1.. / U1.. / M1.. for the
+  user's own words. Every line carries refs: goalRefs, statusRefs, each question, timeline entry,
+  care and change. Cite only what the line rests on, at most 3. A line you keep unchanged may
+  leave refs empty; it keeps its old sources. Only an observed care may cite activity.
 
 flags: needs_user when the user should act or decide something; contradiction when new activity
 contradicts the dossier or a fact; looks_finished when the work seems done; off_topic_pr (with

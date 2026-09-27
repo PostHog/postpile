@@ -31,6 +31,7 @@ import type { AgentCallLog } from './agent-call-log.ts';
 import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
+import { InstructionsHistory } from './instructions/history.ts';
 import { FactWriter } from './memory/fact-writer.ts';
 import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
@@ -65,7 +66,8 @@ export class Engine implements EngineService {
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
-    const contexts = new PromptContextSource(store, deps.instructionsFile);
+    const instructions = new InstructionsHistory(store, deps.instructionsFile, now);
+    const contexts = new PromptContextSource(store, instructions);
     this.reads = new ReadModels(store, deps.agent, contexts, now);
     const readMarker = new ReadMarker(store, deps.markReadQueue, now);
     this.tiles = new TileActions(store, readMarker, now);
