@@ -35,3 +35,14 @@ export function callStatsDetail(stats: AgentCallStats): string {
   }
   return lines.join('\n');
 }
+
+/** Work the call cap cut from a sync: topics, batches or PRs that wait for the next sync. */
+export function skippedByCap(stats: AgentCallStats): number {
+  return Object.values(stats.byKind).reduce((sum, count) => sum + (count?.skippedByBudget ?? 0), 0);
+}
+
+/** "stopped at call cap: 7 left for next sync", or null when the cap was not reached. */
+export function capNote(stats: AgentCallStats): string | null {
+  const left = skippedByCap(stats);
+  return left === 0 ? null : `stopped at call cap: ${left} left for next sync`;
+}

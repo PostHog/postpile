@@ -24,7 +24,7 @@ interface TestApp {
 
 /** Wraps the app so every request carries the token. */
 function appWithFake(): TestApp {
-  const app = createApp(new FakeEngine(), TOKEN, { fake: true, writesAllowed: true });
+  const app = createApp(new FakeEngine(), TOKEN, { fake: true, writesAllowed: true, syncCallCap: 30 });
   return {
     request: async (path, init = {}) => {
       const headers = { ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };

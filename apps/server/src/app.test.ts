@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 import { createApp, TOKEN_HEADER } from './app.ts';
+import { syncCallCapFromEnv } from './engine-from-env.ts';
 
-const CONFIG: AppConfig = { fake: false, writesAllowed: false };
+const CONFIG: AppConfig = { fake: false, writesAllowed: false, syncCallCap: 30 };
 
 function notImplemented(): never {
   throw new Error('not implemented');
@@ -74,7 +75,36 @@ describe('server app', () => {
     const app = createApp(fakeEngine({}), 'secret', CONFIG);
     expect((await app.request('/api/config')).status).toBe(401);
     const res = await app.request('/api/config', { headers: { [TOKEN_HEADER]: 'secret' } });
-    expect(await res.json()).toEqual({ fake: false, writesAllowed: false });
+    expect(await res.json()).toEqual({ fake: false, writesAllowed: false, syncCallCap: 30 });
+  });
+
+  it('applies the app call cap to a sync without one, and keeps an explicit cap', async () => {
+    const seen: unknown[] = [];
+    const sync = async (options: unknown) => {
+      seen.push(options);
+      return {} as never;
+    };
+    const app = createApp(fakeEngine({ sync }), 'secret', CONFIG);
+    const post = (body?: unknown) =>
+      app.request('/api/sync', {
+        method: 'POST',
+        headers: { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+
+    await post();
+    await post({ maxAgentCalls: 5 });
+    await post({ maxAgentCalls: 0 });
+
+    expect(seen).toEqual([{ maxAgentCalls: 30 }, { maxAgentCalls: 5 }, { maxAgentCalls: 0 }]);
+  });
+
+  it('reads the call cap from the environment', () => {
+    expect(syncCallCapFromEnv(undefined)).toBe(30);
+    expect(syncCallCapFromEnv('12')).toBe(12);
+    expect(syncCallCapFromEnv('0')).toBe(0);
+    expect(syncCallCapFromEnv('lots')).toBe(30);
+    expect(syncCallCapFromEnv('-3')).toBe(30);
   });
 
   it('refuses to start without a token', () => {

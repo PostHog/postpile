@@ -1,4 +1,5 @@
 import { useActions } from '../api/actions.tsx';
+import { capNote } from '../lib/agent-stats.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { LogoIcon, SyncIcon } from './icons.tsx';
@@ -17,6 +18,11 @@ function SyncStatus() {
     const age = ageLabel(report.finishedAt, now);
     const when = age === 'now' ? 'just now' : `${age} ago`;
     text = `synced ${when} · ${report.prsFetched} PRs fetched · ${report.newEvents} new events`;
+    const capped = capNote(report.agentCallStats);
+    if (capped) {
+      dot = 'bg-closer';
+      text = `${text} · ${capped}`;
+    }
   }
   return (
     <span className="ml-auto flex items-center gap-2 font-mono text-[11px] text-muted">

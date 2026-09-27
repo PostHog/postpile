@@ -18,6 +18,7 @@ import type {
   SnoozeCondition,
   SyncReport,
 } from '@code-manager/core';
+import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { useAppConfig } from './config.ts';
 import { prPath, request, tilePath } from './client.ts';
@@ -176,8 +177,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     try {
       const report = await request<SyncReport>('POST', '/api/sync');
       setLastSync(report);
+      const capped = capNote(report.agentCallStats);
       if (report.errors.length > 0) {
         show('error', `Synced with ${report.errors.length} problem(s): ${report.errors[0]}`);
+      } else if (capped) {
+        show('blocked', `Synced, ${capped}. Sync again to continue.`);
       }
       await refreshAll();
     } catch (error) {

@@ -14,6 +14,15 @@ export function engineFromEnv(): EngineService {
   return createEngine();
 }
 
+/** Default agent-call cap for app syncs. A full first sync is ~120 calls; this spreads it over a few. */
+export const DEFAULT_SYNC_CALL_CAP = 30;
+
+/** CODE_MANAGER_MAX_AGENT_CALLS, when it is a whole number >= 0; the default otherwise. */
+export function syncCallCapFromEnv(value: string | undefined): number {
+  const parsed = Number(value);
+  return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_SYNC_CALL_CAP;
+}
+
 /**
  * GitHub-writing actions (approve, comment, mark read) stay blocked in the UI
  * unless CODE_MANAGER_ALLOW_WRITES=1. Sample data never reaches GitHub, so
@@ -21,5 +30,9 @@ export function engineFromEnv(): EngineService {
  */
 export function appConfigFromEnv(): AppConfig {
   const fake = isFake();
-  return { fake, writesAllowed: fake || process.env.CODE_MANAGER_ALLOW_WRITES === '1' };
+  return {
+    fake,
+    writesAllowed: fake || process.env.CODE_MANAGER_ALLOW_WRITES === '1',
+    syncCallCap: syncCallCapFromEnv(process.env.CODE_MANAGER_MAX_AGENT_CALLS),
+  };
 }

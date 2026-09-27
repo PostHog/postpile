@@ -3,8 +3,8 @@ import { writeBlockedReason } from './guard.ts';
 
 describe('writeBlockedReason', () => {
   it('blocks GitHub writes unless the server allows them', () => {
-    expect(writeBlockedReason('approve', { fake: false, writesAllowed: false })).toMatch(/CODE_MANAGER_ALLOW_WRITES=1/);
-    expect(writeBlockedReason('approve', { fake: false, writesAllowed: true })).toBeNull();
+    expect(writeBlockedReason('approve', { fake: false, writesAllowed: false, syncCallCap: 30 })).toMatch(/CODE_MANAGER_ALLOW_WRITES=1/);
+    expect(writeBlockedReason('approve', { fake: false, writesAllowed: true, syncCallCap: 30 })).toBeNull();
   });
 
   it('blocks while the config is still loading', () => {

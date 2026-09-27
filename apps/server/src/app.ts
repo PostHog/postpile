@@ -144,8 +144,12 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
 
   app.get('/api/health', (c) => c.json({ ok: true }));
   app.get('/api/config', (c) => c.json(config));
-  // The bodies are optional: a bare POST syncs or consolidates with no limits.
-  app.post('/api/sync', async (c) => c.json(await engine.sync(syncBody.parse(await optionalJson(c)))));
+  // The bodies are optional. A sync without maxAgentCalls gets the app's cap, so
+  // opening the app never starts an uncapped (and costly) first sync.
+  app.post('/api/sync', async (c) => {
+    const options = syncBody.parse(await optionalJson(c));
+    return c.json(await engine.sync({ ...options, maxAgentCalls: options.maxAgentCalls ?? config.syncCallCap }));
+  });
   app.post('/api/consolidate', async (c) => c.json(await engine.consolidate(consolidateBody.parse(await optionalJson(c)))));
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
