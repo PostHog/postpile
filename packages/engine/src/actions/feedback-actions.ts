@@ -72,7 +72,12 @@ export class FeedbackActions {
     const topicId = this.realTopicId(key ? board.topicIdOf(key) : tile.topicId);
 
     return this.store.transaction(() => {
-      this.log({ kind: input.kind, topicId, tileId: input.tileId, prKey: key, setId, eventId: null, note: input.note });
+      // Glances only pick up feedback about their own PR, so "not mine" on a
+      // whole stack or set is logged once per member.
+      const aboutKeys = !key && input.kind === 'not_mine' ? tile.members.map((m) => m.prKey) : [key];
+      for (const about of aboutKeys) {
+        this.log({ kind: input.kind, topicId, tileId: input.tileId, prKey: about, setId, eventId: null, note: input.note });
+      }
       if (input.kind === 'not_mine') {
         return ok('Noted: not yours', this.notMine(tile, key));
       }

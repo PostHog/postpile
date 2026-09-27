@@ -58,6 +58,12 @@ describe('topicSummaryInputHash', () => {
     expect(topicSummaryInputHash({ ...input, prs: [b, a] })).toBe(hash);
     expect(topicSummaryInputHash({ ...input, prs: [makePr({ state: 'MERGED' }), b] })).not.toBe(hash);
   });
+
+  it('reacts to new feedback, which is in the prompt', () => {
+    const input = { topic: makeTopic(), prs: [makePr()], context: emptyContext };
+    const withFeedback = { ...input, context: { ...emptyContext, recentFeedback: [makeFeedback()] } };
+    expect(topicSummaryInputHash(withFeedback)).not.toBe(topicSummaryInputHash(input));
+  });
 });
 
 describe('setGroupingInputHash', () => {

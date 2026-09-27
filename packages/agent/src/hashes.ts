@@ -50,6 +50,7 @@ export function glanceInputHash(input: GlanceInput): string {
   );
 }
 
+/** Feedback is in the summary prompt, so it is in the hash too. */
 export function topicSummaryInputHash(input: TopicSummaryInput): string {
   const prs = [...input.prs].sort((a, b) => a.key.localeCompare(b.key)).map(prSummarySnapshot);
   return inputHash(
@@ -59,6 +60,7 @@ export function topicSummaryInputHash(input: TopicSummaryInput): string {
     prs,
     input.context.instructions,
     input.context.tailoring,
+    input.context.recentFeedback.map((f) => f.id),
   );
 }
 

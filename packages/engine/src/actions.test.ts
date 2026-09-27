@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type Topic } from '@code-manager/core';
+import { UNDO_WINDOW_MS, type Pr, type Topic } from '@code-manager/core';
 import { at, makeThreadFor } from '@code-manager/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
@@ -22,6 +22,29 @@ async function synced(): Promise<Harness> {
 /** Lets the queued send (and its awaits) run after the fake timer fired. */
 function settle(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
+}
+
+/** pr and a second PR in topic "depot", grouped by the agent into set s1. */
+async function syncedWithPairSet(): Promise<{ h: Harness; other: Pr }> {
+  const h = await synced();
+  h.store.topics.create(topic('depot'));
+  const other = reviewRequestedPr(2);
+  h.store.prs.upsert(other, at(0));
+  for (const key of [pr.key, other.key]) {
+    h.store.memberships.assign({ prKey: key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
+  }
+  h.store.sets.save({
+    id: 's1',
+    topicId: 'depot',
+    title: 'Pair',
+    take: '',
+    members: [{ prKey: pr.key, reason: 'a' }, { prKey: other.key, reason: 'b' }],
+    status: 'active',
+    inputHash: 'h',
+    createdAt: at(0),
+    updatedAt: at(0),
+  });
+  return { h, other };
 }
 
 async function tileState(h: Harness, topicId = UNSORTED_TOPIC_ID): Promise<string | undefined> {
@@ -167,29 +190,21 @@ describe('feedback', () => {
   });
 
   it('not_related drops the member and dissolves a set of two', async () => {
-    const h = await synced();
-    h.store.topics.create(topic('depot'));
-    const other = reviewRequestedPr(2);
-    h.store.prs.upsert(other, at(0));
-    for (const key of [pr.key, other.key]) {
-      h.store.memberships.assign({ prKey: key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
-    }
-    h.store.sets.save({
-      id: 's1',
-      topicId: 'depot',
-      title: 'Pair',
-      take: '',
-      members: [{ prKey: pr.key, reason: 'a' }, { prKey: other.key, reason: 'b' }],
-      status: 'active',
-      inputHash: 'h',
-      createdAt: at(0),
-      updatedAt: at(0),
-    });
+    const { h, other } = await syncedWithPairSet();
 
     const result = await h.engine.giveFeedback({ kind: 'not_related', tileId: 'set:s1', prKey: other.key, targetTopicId: null, note: '' });
 
     expect(result.ok).toBe(true);
     expect(h.store.sets.get('s1')?.status).toBe('dissolved');
+  });
+
+  it('not_mine on a whole set logs one entry per member so each glance hears about it', async () => {
+    const { h, other } = await syncedWithPairSet();
+
+    await h.engine.giveFeedback({ kind: 'not_mine', tileId: 'set:s1', prKey: null, targetTopicId: null, note: 'infra' });
+
+    const logged = h.store.feedback.recentForTopic('depot', 5).map((f) => f.prKey);
+    expect(logged.sort()).toEqual([pr.key, other.key].sort());
   });
 
   it('unmute sets a user override and logs it', async () => {
