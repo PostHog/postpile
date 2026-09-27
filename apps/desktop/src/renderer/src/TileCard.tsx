@@ -46,7 +46,8 @@ export function TileCard(props: TileCardProps) {
       {prs.map((pr) => (
         <div key={pr.key}>
           <span onClick={() => props.onOpenPr(pr.key)} style={clickable}>
-            {pr.key} {pr.title} ({pr.provenance.kind}, {pr.verdict ?? 'no glance'})
+            {pr.key} {pr.title} ({pr.provenance.kind}, {pr.verdict ?? 'no glance'}
+            {pr.glanceStale && ', stale'})
           </span>
           {pr.provenance.kind === 'pulled_in' && <i> {pr.provenance.reason}</i>}
           {tile.kind === 'set' && pr.provenance.kind === 'pulled_in' && (

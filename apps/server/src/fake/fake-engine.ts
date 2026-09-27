@@ -158,6 +158,7 @@ export class FakeEngine implements EngineService {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         verdict: glance?.verdict ?? null,
+        glanceStale: false,
         unseenLoudEvents: this.eventsOf(pr.key).filter(isUnseenLoud).length,
       });
     }
@@ -230,6 +231,7 @@ export class FakeEngine implements EngineService {
       pr,
       events,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
+      glanceStale: false,
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),

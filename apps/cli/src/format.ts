@@ -41,7 +41,8 @@ export function formatTopic(detail: TopicDetail): string {
       lines.push(`    ! ${reason.prKey}: ${reason.summary}`);
     }
     for (const pr of view.prs) {
-      lines.push(`    ${pr.key}  ${pr.title}  (${pr.provenance.kind}, ${pr.verdict ?? 'no glance'})`);
+      const verdict = pr.verdict ? `${pr.verdict}${pr.glanceStale ? ', stale' : ''}` : 'no glance';
+      lines.push(`    ${pr.key}  ${pr.title}  (${pr.provenance.kind}, ${verdict})`);
     }
   }
   return lines.join('\n');
@@ -60,6 +61,9 @@ export function formatPr(detail: PrDetail): string {
   }
   lines.push('');
   if (detail.glance) {
+    if (detail.glanceStale) {
+      lines.push('STALE glance: the PR or your instructions moved since; sync to refresh');
+    }
     lines.push(`${detail.glance.verdict}: ${detail.glance.forYou}`);
     lines.push(`does: ${detail.glance.does}`);
     lines.push(`risk: ${detail.glance.risk}`);

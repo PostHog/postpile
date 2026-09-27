@@ -1,6 +1,6 @@
 import type { GlanceInput } from '@code-manager/agent';
-import { isPinged, TILE_STATE_ORDER, type PrKey, type Provenance } from '@code-manager/core';
 import { Board } from '../board.ts';
+import { glanceInputs } from '../glance-inputs.ts';
 import { errorText, type DigestDeps } from './deps.ts';
 
 /**
@@ -10,37 +10,6 @@ import { errorText, type DigestDeps } from './deps.ts';
  */
 export class GlanceWriter {
   constructor(private readonly deps: DigestDeps) {}
-
-  /** Open PRs in tiles, most urgent tile first. A PR pinged anywhere counts as pinged. */
-  private wanted(board: Board): Map<PrKey, Provenance> {
-    const tiles = board
-      .allTiles()
-      .map((tile) => ({ tile, priority: TILE_STATE_ORDER[board.stateOf(tile).kind] }))
-      .sort((a, b) => a.priority - b.priority);
-    const result = new Map<PrKey, Provenance>();
-    for (const { tile } of tiles) {
-      for (const member of tile.members) {
-        if (board.prs.get(member.prKey)?.state !== 'OPEN') {
-          continue;
-        }
-        const known = result.get(member.prKey);
-        if (!known || (!isPinged(known) && isPinged(member.provenance))) {
-          result.set(member.prKey, member.provenance);
-        }
-      }
-    }
-    return result;
-  }
-
-  private input(board: Board, key: PrKey, provenance: Provenance): GlanceInput | null {
-    const pr = board.prs.get(key);
-    if (!pr) {
-      return null;
-    }
-    const topicId = board.memberships.get(key)?.topicId ?? null;
-    const topic = topicId === null ? null : this.deps.store.topics.get(topicId);
-    return { pr, viewer: this.deps.viewer, provenance, topic, context: this.deps.contexts.forTopic(topic?.id ?? null) };
-  }
 
   private async glance(input: GlanceInput): Promise<void> {
     const { store, agent } = this.deps;
@@ -55,14 +24,9 @@ export class GlanceWriter {
   }
 
   async run(): Promise<void> {
-    const board = Board.load(this.deps.store, this.deps.now().toISOString());
-    const inputs: GlanceInput[] = [];
-    for (const [key, provenance] of this.wanted(board)) {
-      const input = this.input(board, key, provenance);
-      if (input) {
-        inputs.push(input);
-      }
-    }
+    const { store, viewer, contexts } = this.deps;
+    const board = Board.load(store, this.deps.now().toISOString());
+    const inputs = [...glanceInputs(board, store, viewer, contexts).values()];
     // The runner caps concurrency; budget.take is synchronous so the cap holds.
     await Promise.all(inputs.map((input) => this.glance(input)));
   }

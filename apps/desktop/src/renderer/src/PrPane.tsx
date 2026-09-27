@@ -51,7 +51,7 @@ export function PrPane(props: PrPaneProps) {
   if (!props.detail) {
     return <div style={paneStyle}>No PR open</div>;
   }
-  const { pr, glance, events, userState } = props.detail;
+  const { pr, glance, glanceStale, events, userState } = props.detail;
   return (
     <div style={paneStyle}>
       <h3>
@@ -64,6 +64,7 @@ export function PrPane(props: PrPaneProps) {
       </div>
       {glance && (
         <div>
+          {glanceStale && <p>Stale glance: the PR or your instructions moved since. Sync to refresh.</p>}
           <p>
             <b>{glance.verdict}</b> {glance.forYou}
           </p>

@@ -10,8 +10,12 @@ import {
   type TopicDetail,
   type TopicListItem,
 } from '@code-manager/core';
+import type { AgentService, GlanceInput } from '@code-manager/agent';
 import type { Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
+import { glanceInputs } from './glance-inputs.ts';
+import type { PromptContextSource } from './prompt-context.ts';
+import { loadViewer } from './viewer-meta.ts';
 
 function compareTopics(a: TopicListItem, b: TopicListItem): number {
   if (a.group !== b.group) {
@@ -31,6 +35,8 @@ function compareTopics(a: TopicListItem, b: TopicListItem): number {
 export class ReadModels {
   constructor(
     private readonly store: Store,
+    private readonly agent: AgentService,
+    private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
   ) {}
 
@@ -38,7 +44,27 @@ export class ReadModels {
     return Board.load(this.store, this.now().toISOString());
   }
 
-  private prSummaries(board: Board, tile: Tile): PrSummary[] {
+  /**
+   * PRs whose stored glance no longer matches its current input: new commits,
+   * changed instructions or tailoring, new feedback. The hash only stops a
+   * regeneration; this stops an old verdict being shown next to Approve when
+   * the last sync skipped or failed the glance.
+   */
+  private staleGlances(board: Board, keys: PrKey[]): Set<PrKey> {
+    const glances = this.store.glances.getMany(keys);
+    const viewer = loadViewer(this.store);
+    const inputs = glances.size > 0 && viewer ? glanceInputs(board, this.store, viewer, this.contexts) : new Map<PrKey, GlanceInput>();
+    const stale = new Set<PrKey>();
+    for (const [key, glance] of glances) {
+      const input = inputs.get(key);
+      if (!input || glance.inputHash !== this.agent.glanceInputHash(input)) {
+        stale.add(key);
+      }
+    }
+    return stale;
+  }
+
+  private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     const summaries: PrSummary[] = [];
     for (const member of tile.members) {
@@ -55,6 +81,7 @@ export class ReadModels {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         verdict: glances.get(pr.key)?.verdict ?? null,
+        glanceStale: stale.has(pr.key),
         unseenLoudEvents: (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
       });
     }
@@ -62,10 +89,12 @@ export class ReadModels {
   }
 
   private tileViews(board: Board, topicId: string): TileView[] {
-    const views = board.tilesForTopic(topicId).map((tile) => ({
+    const tiles = board.tilesForTopic(topicId);
+    const stale = this.staleGlances(board, tiles.flatMap((tile) => tile.members.map((m) => m.prKey)));
+    const views = tiles.map((tile) => ({
       tile,
       state: board.stateOf(tile),
-      prs: this.prSummaries(board, tile),
+      prs: this.prSummaries(board, tile, stale),
     }));
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
   }
@@ -121,6 +150,7 @@ export class ReadModels {
       pr,
       events: (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) })),
       glance: this.store.glances.get(key),
+      glanceStale: this.staleGlances(board, [key]).has(key),
       userState: board.userStates.get(key) ?? null,
       topicId: board.topicIdOf(key),
       tileIds: [...tileIds],

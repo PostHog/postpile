@@ -41,6 +41,8 @@ export interface PrSummary {
   isDraft: boolean;
   provenance: Provenance;
   verdict: Verdict | null;
+  /** The PR, instructions or feedback moved since the glance was made; the verdict is old. */
+  glanceStale: boolean;
   unseenLoudEvents: number;
 }
 
@@ -66,6 +68,8 @@ export interface PrDetail {
   pr: Pr;
   events: EventView[];
   glance: Glance | null;
+  /** True when the glance was made for an older state of the PR or of the instructions. */
+  glanceStale: boolean;
   userState: UserPrState | null;
   topicId: string | null;
   /** Ids of every tile this PR appears in. */

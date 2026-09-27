@@ -110,6 +110,26 @@ describe('Engine.sync with the agent', () => {
     expect(h.writer.calls).toEqual([]);
   });
 
+  it('flags a stored glance as stale when the PR moved and no new glance was made', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    h.runner.answer('glance', glanceAnswer());
+    await h.engine.sync({ agentJobs: ['glances'] });
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
+
+    const pushed = { ...pr, headOid: 'new-head' };
+    h.reader.addPr(pushed, makeThreadFor(pushed, { updatedAt: '2026-09-03T00:00:00.000Z' }));
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const detail = await h.engine.getPr(pr.key);
+    expect(detail?.glance?.verdict).toBe('LOOKS_SAFE');
+    expect(detail?.glanceStale).toBe(true);
+    const tile = (await h.engine.getTopic(UNSORTED_TOPIC_ID))?.tiles[0];
+    expect(tile?.prs[0]?.glanceStale).toBe(true);
+  });
+
   it('respects maxAgentCalls and agentJobs', async () => {
     const h = makeHarness();
     for (const n of [1, 2]) {

@@ -56,7 +56,7 @@ export class Engine implements EngineService {
     const { store, now } = deps;
     this.contexts = new PromptContextSource(store, deps.instructionsFile);
     this.github = new GitHubSync(store, deps.reader, this.contexts, now);
-    this.reads = new ReadModels(store, now);
+    this.reads = new ReadModels(store, deps.agent, this.contexts, now);
     const readMarker = new ReadMarker(store, deps.markReadQueue, now);
     this.tiles = new TileActions(store, readMarker, now);
     this.prActions = new PrActions(store, deps.writer, deps.agent, this.contexts, readMarker, now);
