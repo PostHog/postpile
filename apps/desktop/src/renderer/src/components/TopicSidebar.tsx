@@ -71,6 +71,8 @@ interface TopicSidebarProps {
   inboxCount: number;
   inboxOpen: boolean;
   onOpenInbox: () => void;
+  instructionsOpen: boolean;
+  onOpenInstructions: () => void;
   loading: boolean;
   error: string | null;
 }
@@ -109,9 +111,12 @@ export function TopicSidebar(props: TopicSidebarProps) {
       <div className="mt-auto flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
         <button
           type="button"
-          disabled
-          title="Not in the app yet: edit ~/.config/code-manager/instructions.md"
-          className="flex items-center gap-2 rounded-control px-2.5 py-[7px] text-[12.5px] text-ink-2 opacity-60"
+          onClick={props.onOpenInstructions}
+          aria-current={props.instructionsOpen ? 'true' : undefined}
+          title="What the agent knows about you, in your words, with its version history"
+          className={`flex items-center gap-2 rounded-control px-2.5 py-[7px] text-left text-[12.5px] ${
+            props.instructionsOpen ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
+          }`}
         >
           <span className="text-muted">
             <InstructionsIcon />

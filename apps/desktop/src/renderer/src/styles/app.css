@@ -68,6 +68,12 @@
   --color-closed-soft: var(--closed-soft);
   --color-pending: var(--pending);
 
+  /* Line diffs */
+  --color-diff-add: var(--diff-add);
+  --color-diff-add-ink: var(--diff-add-ink);
+  --color-diff-del: var(--diff-del);
+  --color-diff-del-ink: var(--diff-del-ink);
+
   /* Avatars */
   --color-avatar-blue: var(--avatar-blue);
   --color-avatar-blue-ink: var(--avatar-blue-ink);

@@ -5,6 +5,7 @@ import { useProposals } from './api/proposals.ts';
 import { useTopic, useTopics } from './api/topics.ts';
 import { DetailPane } from './components/DetailPane.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
+import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { TileGrid } from './components/TileGrid.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
@@ -12,6 +13,9 @@ import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
 import { leadPr } from './lib/tiles.ts';
+
+/** What the middle pane shows. */
+type Pane = 'topic' | 'inbox' | 'instructions';
 
 interface TileSelection {
   tileId: string;
@@ -47,7 +51,7 @@ export function App() {
   const topics = useTopics();
   const [pickedTopicId, setPickedTopicId] = useState<string | null>(null);
   const [pickedTile, setPickedTile] = useState<TileSelection | null>(null);
-  const [inboxOpen, setInboxOpen] = useState(false);
+  const [pane, setPane] = useState<Pane>('topic');
   const proposals = useProposals();
 
   const items = topics.data ?? [];
@@ -56,10 +60,10 @@ export function App() {
   const selected = resolveSelection(pickedTile, topic.data);
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 
-  // A topic counts as seen when the user leaves it: picks another topic or
-  // the Inbox. Simpler than a visibility timer, and the "since you last
-  // looked" block stays put while they are still reading it.
-  const shownTopicId = inboxOpen ? null : (activeItem?.topic.id ?? null);
+  // A topic counts as seen when the user leaves it: picks another topic, the
+  // Inbox or their instructions. Simpler than a visibility timer, and the
+  // "since you last looked" block stays put while they are still reading it.
+  const shownTopicId = pane === 'topic' ? (activeItem?.topic.id ?? null) : null;
   const lastShownTopicId = useRef<string | null>(null);
   useEffect(() => {
     const left = lastShownTopicId.current;
@@ -80,8 +84,10 @@ export function App() {
   }, [actions]);
 
   let main = <EmptyMain text="Loading…" />;
-  if (inboxOpen) {
+  if (pane === 'inbox') {
     main = <InboxPane proposals={proposals.data} topics={items} error={proposals.error?.message ?? null} />;
+  } else if (pane === 'instructions') {
+    main = <InstructionsPane />;
   } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
   } else if (!topics.isPending && items.length === 0) {
@@ -111,12 +117,14 @@ export function App() {
           topics={items}
           activeTopicId={shownTopicId}
           onSelect={(topicId) => {
-            setInboxOpen(false);
+            setPane('topic');
             setPickedTopicId(topicId);
           }}
           inboxCount={inboxCount}
-          inboxOpen={inboxOpen}
-          onOpenInbox={() => setInboxOpen(true)}
+          inboxOpen={pane === 'inbox'}
+          onOpenInbox={() => setPane('inbox')}
+          instructionsOpen={pane === 'instructions'}
+          onOpenInstructions={() => setPane('instructions')}
           loading={topics.isPending}
           error={topics.error?.message ?? null}
         />

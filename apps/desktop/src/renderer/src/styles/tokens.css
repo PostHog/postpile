@@ -72,6 +72,10 @@
   --closed: #c0392b;
   --closed-soft: #fdecea;
   --pending: #d9a400;
+  --diff-add: #e7f5ec;
+  --diff-add-ink: #17633a;
+  --diff-del: #fdecea;
+  --diff-del-ink: #a3321f;
 
   /* Avatars: a few fixed tones, picked per login */
   --avatar-blue: #dbe7ff;

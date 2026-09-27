@@ -1,16 +1,22 @@
 import { useState } from 'react';
-import type { TailoringProposal, TileView } from '@code-manager/core';
+import type { InstructionsProposal, TailoringProposal, TileView } from '@code-manager/core';
 import { useActions } from '../api/actions.tsx';
 import { useChat } from '../api/chat.ts';
 import { Button } from './Button.tsx';
+import { InstructionsProposalCard } from './InstructionsProposalCard.tsx';
 
-/** Chat with the agent about a tile. Lasting points come back as a tailoring proposal to keep or not. */
+/**
+ * Chat with the agent about a tile. A lasting point comes back as tailoring
+ * for this topic ("keep it" / "just this once") or, when it applies to every
+ * topic, as a change to the user's instructions. The user can switch either way.
+ */
 export function TileChat(props: { view: TileView; onClose: () => void }) {
   const actions = useActions();
   const tileId = props.view.tile.id;
   const chat = useChat(tileId, true);
   const [draft, setDraft] = useState('');
   const [proposal, setProposal] = useState<TailoringProposal | null>(null);
+  const [instructions, setInstructions] = useState<InstructionsProposal | null>(null);
   const sending = actions.isBusy(`chat:${tileId}`);
 
   async function send() {
@@ -18,6 +24,7 @@ export function TileChat(props: { view: TileView; onClose: () => void }) {
     if (reply) {
       setDraft('');
       setProposal(reply.tailoringProposal);
+      setInstructions(reply.instructionsProposal);
     }
   }
 
@@ -25,6 +32,16 @@ export function TileChat(props: { view: TileView; onClose: () => void }) {
     if (proposal) {
       await actions.decideTailoring(proposal.topicId, proposal.text, keep);
       setProposal(null);
+    }
+  }
+
+  async function applyToAllTopics() {
+    if (proposal?.sourceChatMessageId) {
+      const changed = await actions.proposeInstructions(proposal.sourceChatMessageId, proposal.text, proposal.topicId);
+      if (changed) {
+        setProposal(null);
+        setInstructions(changed);
+      }
     }
   }
 
@@ -59,8 +76,21 @@ export function TileChat(props: { view: TileView; onClose: () => void }) {
                 Keep it
               </Button>
               <Button onClick={() => void decide(false)}>Just this once</Button>
+              {proposal.sourceChatMessageId !== null && (
+                <Button
+                  className="ml-auto"
+                  disabled={actions.isBusy('instructions:propose')}
+                  title="Propose it as a change to your general instructions instead"
+                  onClick={() => void applyToAllTopics()}
+                >
+                  Apply to all topics instead
+                </Button>
+              )}
             </div>
           </div>
+        )}
+        {instructions && (
+          <InstructionsProposalCard key={instructions.sourceChatMessageId} proposal={instructions} onDone={() => setInstructions(null)} />
         )}
       </div>
       <form

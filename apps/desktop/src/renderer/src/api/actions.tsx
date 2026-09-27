@@ -3,7 +3,21 @@
 // GitHub write go through the guard in lib/guard.ts first.
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { ActionResult, AppConfig, ChatReply, FeedbackInput, MemoryCorrection, PrKey, SnoozeCondition, SyncReport } from '@code-manager/core';
+import type {
+  ActionResult,
+  AppConfig,
+  ChatReply,
+  FeedbackInput,
+  InstructionsChatReply,
+  InstructionsDecision,
+  InstructionsProposal,
+  InstructionsProposalReply,
+  InstructionsSaveResult,
+  MemoryCorrection,
+  PrKey,
+  SnoozeCondition,
+  SyncReport,
+} from '@code-manager/core';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { useAppConfig } from './config.ts';
 import { prPath, request, tilePath } from './client.ts';
@@ -59,6 +73,12 @@ export interface Actions {
   /** Returns true when the comment went out. */
   sendComment(prKey: PrKey, body: string): Promise<boolean>;
   chat(tileId: string, message: string): Promise<ChatReply | null>;
+  /** A message in the "Your instructions" chat. Local, not a GitHub write. */
+  instructionsChat(message: string): Promise<InstructionsChatReply | null>;
+  /** "Apply to all topics instead": the same chat message asked as an instructions change. Null when it changes nothing. */
+  proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposal | null>;
+  /** Accepts a proposal: writes instructions.md. Local, not a GitHub write. */
+  saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult | null>;
 }
 
 const ActionsContext = createContext<Actions | null>(null);
@@ -210,6 +230,44 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function instructionsChat(message: string): Promise<InstructionsChatReply | null> {
+    try {
+      const reply = await withBusy('instructions:chat', () => request<InstructionsChatReply>('POST', '/api/instructions/chat', { message }));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.instructionsChat });
+      return reply;
+    } catch (error) {
+      show('error', `Chat failed: ${errorText(error)}`);
+      return null;
+    }
+  }
+
+  async function proposeInstructions(sourceChatMessageId: number, point: string, topicId: string | null): Promise<InstructionsProposal | null> {
+    try {
+      const body = { sourceChatMessageId, point, topicId };
+      const reply = await withBusy('instructions:propose', () => request<InstructionsProposalReply>('POST', '/api/instructions/proposals', body));
+      if (!reply.proposal) {
+        show('error', reply.reply || 'That does not change your instructions.');
+      }
+      return reply.proposal;
+    } catch (error) {
+      show('error', `Could not propose a change: ${errorText(error)}`);
+      return null;
+    }
+  }
+
+  /** A rebased result is not an error: the proposal comes back for another look, with the reason as the notice. */
+  async function saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult | null> {
+    try {
+      const result = await withBusy('instructions:save', () => request<InstructionsSaveResult>('POST', '/api/instructions', decision));
+      show(result.ok ? 'ok' : result.rebased ? 'blocked' : 'error', result.message);
+      await refreshAll();
+      return result;
+    } catch (error) {
+      show('error', `Could not save your instructions: ${errorText(error)}`);
+      return null;
+    }
+  }
+
   const actions: Actions = {
     config,
     notice,
@@ -257,6 +315,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     chat,
+    instructionsChat,
+    proposeInstructions,
+    saveInstructions,
   };
 
   return <ActionsContext.Provider value={actions}>{props.children}</ActionsContext.Provider>;
