@@ -108,9 +108,9 @@ describe('RunnerAgentService.updateDossier', () => {
         { kind: 'comment', prKey: 'acme/app#1', sourceId: 'c1', url: 'https://github.com/acme/app/pull/1#c1', at: '2026-09-21T10:00:00Z', headOid: null },
       ],
     });
-    expect(result.dossier.recentChanges[0]?.at).toBe('2026-09-22T00:00:00.000Z');
+    expect(result.dossier.recentChanges[0]?.at).toBe(NOW);
     expect(result.dossier.recentChanges[0]?.refs[0]).toMatchObject({ kind: 'review', sourceId: 'r1' });
-    expect(result.dossier.recentChanges[1]?.at).toBe(NOW);
+    expect(result.dossier.recentChanges[1]?.at).toBe('2026-09-19T00:00:00.000Z');
 
     expect(result.flags).toEqual([{ kind: 'needs_user', text: 'Decide on release builds', prKey: null }]);
 
@@ -131,6 +131,17 @@ describe('RunnerAgentService.updateDossier', () => {
     expect(result.closeFacts).toEqual([{ factId: 'fact-1', reason: 'Bob drives it now' }]);
     expect(result.confirmedFactIds).toEqual(['fact-2']);
     expect(calls).toMatchObject([{ purpose: 'dossier_update', ok: true, topicId: 'topic-1', attempt: 1 }]);
+  });
+
+  it('keeps the time of a change carried over by its text, whatever date the model wrote', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    answer.dossier = { ...answer.dossier, recentChanges: [{ at: '2030-01-01', text: 'Docker build PR opened', refs: [] }] };
+    runner.answer('dossier_update', answer);
+
+    const result = await service.updateDossier(dossierInput());
+
+    expect(result.dossier.recentChanges.map((c) => c.at)).toEqual(['2026-09-19T00:00:00.000Z']);
   });
 
   it('clamps an oversized dossier', async () => {

@@ -93,7 +93,7 @@ const answerShape = `{
     "timeline": [{"prKey": "owner/repo#1", "role": "..."}],
     "earlier": "...",
     "userCares": [{"text": "...", "source": "instructions" | "tailoring" | "feedback" | "observed"}],
-    "recentChanges": [{"at": "2026-09-20", "text": "...", "refs": ["e5", "C1"]}]
+    "recentChanges": [{"text": "...", "refs": ["e5", "C1"]}]
   },
   "flags": [{"kind": "needs_user" | "contradiction" | "looks_finished" | "off_topic_pr", "text": "...", "prKey": "owner/repo#1" | null}],
   "facts": [{"subject": {"kind": "person", "key": "alice"}, "predicate": "works_on", "object": {"kind": "pr", "key": "owner/repo#1"} | null, "text": "...", "refs": ["e2"]}],
@@ -135,7 +135,7 @@ How to write the dossier:
   instructions and corrections; text max ${limits.careText}. source says where it comes from;
   GitHub activity is never a source for what the user cares about.
 - recentChanges: newest first, max ${limits.recentChanges}, text max ${limits.changeText}. Add entries for
-  what happened now, keep older ones that still matter.
+  what happened now, keep older ones that still matter (same text, or cite their C id).
 - refs: the short ids above: e1.. for new activity, Q1.. or C1.. to keep the sources of an entry
   of the previous dossier, F1.. for a fact, or a member PR key.
 

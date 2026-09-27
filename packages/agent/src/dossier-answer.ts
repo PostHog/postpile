@@ -7,6 +7,7 @@ import type { DossierUpdateInput, FactClose } from './service.ts';
 
 type DossierAnswer = z.infer<typeof dossierUpdateOutput>;
 type EntityAnswer = { kind: EntityRef['kind']; key: string };
+type ChangeAnswer = DossierAnswer['dossier']['recentChanges'][number];
 
 function isPrKey(key: string): boolean {
   try {
@@ -38,10 +39,17 @@ export function normalizeEntity(entity: EntityAnswer, topicId: string): EntityRe
   return { kind: 'initiative', key: topicId };
 }
 
-/** A usable date for a change entry: the model's own when it parses, else now. */
-function changeTime(at: string, now: IsoTime): IsoTime {
-  const time = Date.parse(at);
-  return Number.isNaN(time) ? now : new Date(time).toISOString();
+/**
+ * When a change entry arrived, which is what "since you last looked" compares.
+ * An entry carried over from the previous version (same text, or citing its C
+ * id) keeps its time; anything else is new now. The model only ever sees
+ * dates, so its own `at` would hide same-day changes, and a future date would
+ * look new forever.
+ */
+function changeTime(change: ChangeAnswer, input: DossierUpdateInput, refs: DossierRefs, now: IsoTime): IsoTime {
+  const sameText = input.previous?.dossier.recentChanges.find((old) => old.text.trim() === change.text);
+  const cited = change.refs.map((shortId) => refs.change(shortId)).find((old) => old !== undefined);
+  return (sameText ?? cited)?.at ?? now;
 }
 
 /** The sources the prompt actually carried. A care citing any other source was made up, or planted in GitHub text. */
@@ -81,7 +89,7 @@ function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, 
     timeline: answer.timeline.filter((entry) => memberKeys.has(entry.prKey)),
     earlier: answer.earlier,
     userCares: toCares(answer.userCares, input),
-    recentChanges: answer.recentChanges.map((c) => ({ at: changeTime(c.at, now), text: c.text, refs: refs.resolve(c.refs) })),
+    recentChanges: answer.recentChanges.map((c) => ({ at: changeTime(c, input, refs, now), text: c.text, refs: refs.resolve(c.refs) })),
   });
 }
 

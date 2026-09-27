@@ -1,4 +1,4 @@
-import type { EventKind, Fact, FactRef, FactRefKind, Pr, PrEvent, PrKey } from '@code-manager/core';
+import type { DossierChange, EventKind, Fact, FactRef, FactRefKind, Pr, PrEvent, PrKey } from '@code-manager/core';
 import type { DossierUpdateInput } from './service.ts';
 
 const refKindByEvent: Partial<Record<EventKind, FactRefKind>> = {
@@ -51,6 +51,7 @@ export class DossierRefs {
   private readonly facts = new Map<string, Fact>();
   private readonly factShortIds = new Map<string, string>();
   private readonly carried = new Map<string, FactRef[]>();
+  private readonly changes = new Map<string, DossierChange>();
   private readonly prs = new Map<PrKey, Pr>();
 
   constructor(input: DossierUpdateInput) {
@@ -66,7 +67,10 @@ export class DossierRefs {
     }
     const previous = input.previous?.dossier;
     previous?.openQuestions.forEach((question, index) => this.carried.set(`Q${index + 1}`, question.refs));
-    previous?.recentChanges.forEach((change, index) => this.carried.set(`C${index + 1}`, change.refs));
+    previous?.recentChanges.forEach((change, index) => {
+      this.carried.set(`C${index + 1}`, change.refs);
+      this.changes.set(`C${index + 1}`, change);
+    });
     for (const pr of input.prs) {
       this.prs.set(pr.key, pr);
     }
@@ -100,6 +104,11 @@ export class DossierRefs {
   /** The stored fact behind a short id, or undefined for an id the prompt never showed. */
   fact(shortId: string): Fact | undefined {
     return this.facts.get(shortId.trim());
+  }
+
+  /** The previous dossier's change entry behind a C id, or undefined. */
+  change(shortId: string): DossierChange | undefined {
+    return this.changes.get(shortId.trim());
   }
 
   /** Maps short ids to refs, oldest first. Unknown ids are dropped, duplicates merged. */

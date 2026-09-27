@@ -85,7 +85,8 @@ export const dossierOutput = z.object({
   userCares: z
     .array(z.object({ text: text.min(1), source: z.enum(['instructions', 'tailoring', 'feedback', 'observed']) }))
     .default([]),
-  recentChanges: z.array(z.object({ at: text, text: text.min(1), refs: refIds })).default([]),
+  // at is ignored: the service stamps new entries itself. Older prompts asked for it.
+  recentChanges: z.array(z.object({ at: text.optional(), text: text.min(1), refs: refIds })).default([]),
 });
 
 export const dossierUpdateOutput = z.object({
