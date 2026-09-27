@@ -162,13 +162,14 @@ describe('buildTopicTiles', () => {
       ]),
       stacks: buildStacks([a, b, lone, quiet]),
       sets: [set],
+      pullInReasons: new Map([[a.key, 'stack layer below #2']]),
     });
     expect(tiles.map((t) => [t.id, t.kind, t.title])).toEqual([
       ['stack:PostHog/posthog#1', 'stack', 'PR 1 (stack of 2)'],
       ['set:s1', 'set', 'Depot runners'],
     ]);
     expect(tiles[0]?.members.map((m) => m.provenance)).toEqual([
-      { kind: 'pulled_in', reason: 'part of the stack' },
+      { kind: 'pulled_in', reason: 'stack layer below #2' },
       { kind: 'pinged', reason: 'review_requested' },
     ]);
     expect(tiles[1]?.members[1]?.provenance).toEqual({ kind: 'pulled_in', reason: 'moves the test job' });

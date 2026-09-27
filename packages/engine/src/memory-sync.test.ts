@@ -152,39 +152,6 @@ describe('the call cap', () => {
     expect(report.agentCallStats.byKind.glance_batch).toMatchObject({ calls: 1, skippedByBudget: 1 });
     expect(report.agentCalls).toBe(3);
   });
-
-  it('glances pinged PRs before pulled-in ones', async () => {
-    const h = makeHarness();
-    const pinged = reviewRequestedPr(1);
-    const pulledIn = reviewRequestedPr(3);
-    topicWithPrs(h, 'depot', [pinged]);
-    h.store.prs.upsert(pulledIn, at(0));
-    h.store.memberships.assign({ prKey: pulledIn.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
-    h.store.sets.save({
-      id: 's1',
-      topicId: 'depot',
-      title: 'Runner switch',
-      take: '',
-      members: [
-        { prKey: pinged.key, reason: 'switches runners' },
-        { prKey: pulledIn.key, reason: 'same runner image' },
-      ],
-      removedKeys: [],
-      status: 'active',
-      inputHash: 'h',
-      createdAt: at(0),
-      updatedAt: at(0),
-    });
-
-    const report = await h.engine.sync({ maxAgentCalls: 2, agentJobs: ['dossiers', 'glances'] });
-
-    expect(h.agent.glanceInputs.map((input) => input.items.map((item) => item.pr.key))).toEqual([[pinged.key]]);
-    expect(report.agentCallStats.byKind.glance_batch?.skippedByBudget).toBe(1);
-
-    await h.engine.sync({ agentJobs: ['glances'] });
-    const pulledGlance = h.store.glances.get(pulledIn.key);
-    expect(pulledGlance?.pullInReason).toBe('same runner image');
-  });
 });
 
 describe('batched glances', () => {

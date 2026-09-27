@@ -7,6 +7,9 @@ export function formatSync(report: SyncReport): string {
     `agent: ${formatCallStats(report.agentCallStats)}`,
     formatFactCounts(report.facts),
   ];
+  if (report.prsPulledIn > 0) {
+    lines.push(`${report.prsPulledIn} stack layers pulled in (no agent calls)`);
+  }
   if (report.prsSkipped > 0) {
     lines.push(`${report.prsSkipped} PRs left for the next sync (--limit)`);
   }

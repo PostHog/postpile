@@ -25,7 +25,10 @@ interface TopicParts {
   context: PromptContext;
 }
 
-/** Open PRs in tiles, most urgent tile first. A PR pinged anywhere counts as pinged. */
+/**
+ * Open pinged PRs in tiles, most urgent tile first. Pulled-in stack layers
+ * get no glance: they are context for the pinged PR, not work of their own.
+ */
 function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   const tiles = board
     .allTiles()
@@ -35,13 +38,10 @@ function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   for (const { tile } of tiles) {
     for (const member of tile.members) {
       const pr = board.prs.get(member.prKey);
-      if (pr?.state !== 'OPEN') {
+      if (pr?.state !== 'OPEN' || !isPinged(member.provenance) || result.has(member.prKey)) {
         continue;
       }
-      const known = result.get(member.prKey);
-      if (!known || (!isPinged(known.provenance) && isPinged(member.provenance))) {
-        result.set(member.prKey, { pr, provenance: member.provenance });
-      }
+      result.set(member.prKey, { pr, provenance: member.provenance });
     }
   }
   return result;

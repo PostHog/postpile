@@ -1,4 +1,4 @@
-import { GLANCE_BATCH_SIZE, isPinged, planGlanceBatches, type GlanceBatch, type GlanceGap, type PrKey } from '@code-manager/core';
+import { GLANCE_BATCH_SIZE, planGlanceBatches, type GlanceBatch, type GlanceGap, type PrKey } from '@code-manager/core';
 import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { GlanceInputs, type GlanceTarget } from '../glance-inputs.ts';
@@ -24,10 +24,10 @@ function groupByTopic(targets: GlanceTarget[]): Map<string | null, GlanceTarget[
 }
 
 /**
- * Glances as a view written from the topic dossier: per topic, the PRs whose
- * glance input changed, 18 per call. Pinged PRs go before pulled-in ones and
- * unread tiles first, so a capped budget is spent where the user looks
- * first. Every PR a batch leaves out or answers badly gets one more try in a
+ * Glances as a view written from the topic dossier: per topic, the pinged
+ * PRs whose glance input changed, 18 per call, unread tiles first, so a
+ * capped budget is spent where the user looks first. Pulled-in stack layers
+ * get none. Every PR a batch leaves out or answers badly gets one more try in a
  * retry batch; after that it is an error line and the next sync tries again.
  */
 export class GlanceBatchWriter {
@@ -128,12 +128,7 @@ export class GlanceBatchWriter {
     const needing = this.needingGlance(inputs, skipTopics);
     const byKey = new Map(needing.map((target) => [target.item.pr.key, target]));
 
-    const pinged = needing.filter((target) => isPinged(target.item.provenance));
-    const pulledIn = needing.filter((target) => !isPinged(target.item.provenance));
-    const missing = [
-      ...(await this.runRound(this.batchesFor(pinged, inputs), inputs, byKey)),
-      ...(await this.runRound(this.batchesFor(pulledIn, inputs), inputs, byKey)),
-    ];
+    const missing = await this.runRound(this.batchesFor(needing, inputs), inputs, byKey);
     const stillMissing = await this.runRound(this.retryBatches(missing, inputs, byKey), inputs, byKey);
     for (const key of stillMissing) {
       const detail = this.lastError.get(key) ?? MISSING_REASON;

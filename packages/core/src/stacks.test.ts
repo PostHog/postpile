@@ -39,6 +39,18 @@ describe('buildStacks', () => {
     expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['PostHog/posthog#2', 'PostHog/posthog#3']]);
   });
 
+  it('keeps recently merged layers when given the time, but never a stack without an open PR', () => {
+    const now = '2026-09-20T00:00:00.000Z';
+    const prs = [
+      makePr({ number: 1, headRef: 'b1', state: 'MERGED', mergedAt: '2026-09-01T00:00:00.000Z' }),
+      makePr({ number: 2, baseRef: 'b1', headRef: 'b2', state: 'MERGED', mergedAt: '2026-09-18T00:00:00.000Z' }),
+      makePr({ number: 3, baseRef: 'b2', headRef: 'b3' }),
+      makePr({ number: 7, headRef: 'b7', state: 'MERGED', mergedAt: '2026-09-18T00:00:00.000Z' }),
+      makePr({ number: 8, baseRef: 'b7', headRef: 'b8', state: 'MERGED', mergedAt: '2026-09-19T00:00:00.000Z' }),
+    ];
+    expect(buildStacks(prs, now).map((s) => s.prKeys)).toEqual([['PostHog/posthog#2', 'PostHog/posthog#3']]);
+  });
+
   it('continues a fork with the lowest number; the other branch stands alone', () => {
     const prs = [
       makePr({ number: 1, headRef: 'b1' }),

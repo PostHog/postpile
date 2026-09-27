@@ -42,6 +42,8 @@ export interface TopicTilesInput {
   /** Active sets of this topic. */
   sets: PrSet[];
   events?: Map<PrKey, PrEvent[]>;
+  /** Why the sync pulled in a stack layer ("stack layer below #12"), by PR. */
+  pullInReasons?: Map<PrKey, string>;
 }
 
 /** Most urgent first. Used to sort tiles for display and for the glance budget. */
@@ -179,7 +181,7 @@ function stackTiles(input: TopicTilesInput, memberKeys: Set<PrKey>): Tile[] {
       topicId: input.topicId,
       kind: 'stack',
       title: `${prTitle(input, stack.prKeys[0]!)} (stack of ${stack.prKeys.length})`,
-      members: stack.prKeys.map((key) => memberFor(input, key, 'part of the stack')),
+      members: stack.prKeys.map((key) => memberFor(input, key, input.pullInReasons?.get(key) ?? 'stack layer')),
     });
   }
   return tiles;

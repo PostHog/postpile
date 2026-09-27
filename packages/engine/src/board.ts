@@ -8,6 +8,7 @@ import {
   type Pr,
   type PrEvent,
   type PrKey,
+  type PullIn,
   type Snooze,
   type Stack,
   type Tile,
@@ -59,8 +60,9 @@ export class Board {
     readonly userStates: Map<PrKey, UserPrState>,
     readonly memberships: Map<PrKey, TopicMembership>,
     private readonly snoozes: Map<string, Snooze>,
+    readonly pullIns: Map<PrKey, PullIn>,
   ) {
-    this.stacks = buildStacks([...prs.values()]);
+    this.stacks = buildStacks([...prs.values()], now);
   }
 
   static load(store: Store, now: string): Board {
@@ -76,6 +78,7 @@ export class Board {
       store.userPrStates.getMany(keys),
       new Map(store.memberships.listAll().map((m) => [m.prKey, m])),
       new Map(store.snoozes.list().map((s) => [s.tileId, s])),
+      store.pullIns.listAll(),
     );
   }
 
@@ -119,6 +122,7 @@ export class Board {
       stacks: this.stacks,
       sets,
       events: this.events,
+      pullInReasons: new Map([...this.pullIns.values()].map((pullIn) => [pullIn.prKey, pullIn.reason])),
     });
     this.tileCache.set(topicId, tiles);
     return tiles;
@@ -145,11 +149,16 @@ export class Board {
     });
   }
 
+  /** A pulled-in stack layer has no topic of its own and shows in the topic of the pinged PR it hangs off. */
   topicIdOf(key: PrKey): string | null {
     const membership = this.memberships.get(key);
     if (membership) {
       return membership.topicId;
     }
-    return this.threads.has(key) && this.prs.has(key) ? UNSORTED_TOPIC_ID : null;
+    if (this.threads.has(key) && this.prs.has(key)) {
+      return UNSORTED_TOPIC_ID;
+    }
+    const anchor = this.pullIns.get(key)?.anchorPrKey;
+    return anchor && anchor !== key ? this.topicIdOf(anchor) : null;
   }
 }

@@ -1,4 +1,9 @@
-import type { Pr, Stack } from './types.ts';
+import type { IsoTime, Pr, Stack } from './types.ts';
+
+/** A merged layer stays part of its stack this long, so a stack does not lose its lower layers the moment they land. */
+export const MERGED_LAYER_DAYS = 14;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function byNumber(a: Pr, b: Pr): number {
   return a.ref.number - b.ref.number;
@@ -30,26 +35,40 @@ function stacksInRepo(repo: string, open: Pr[]): Stack[] {
       current = children[0];
       starts.push(...children.slice(1));
     }
-    if (chain.length >= 2) {
+    if (chain.length >= 2 && chain.some((pr) => pr.state === 'OPEN')) {
       stacks.push({ id: `stack:${chain[0]!.key}`, repo, prKeys: chain.map((pr) => pr.key) });
     }
   }
   return stacks;
 }
 
+function mergedSince(now: IsoTime | undefined): IsoTime | null {
+  return now === undefined ? null : new Date(new Date(now).getTime() - MERGED_LAYER_DAYS * DAY_MS).toISOString();
+}
+
+/** Open PRs, and with a `now`, PRs merged in the last MERGED_LAYER_DAYS. */
+function isLiveLayer(pr: Pr, since: IsoTime | null): boolean {
+  if (pr.state === 'OPEN') {
+    return true;
+  }
+  return since !== null && pr.state === 'MERGED' && pr.mergedAt !== null && pr.mergedAt >= since;
+}
+
 /**
  * Finds real stacks: PR B sits on PR A when B.baseRef equals A.headRef in the
- * same repo. Only chains of two or more open PRs count; merged or closed PRs
- * break a chain.
+ * same repo. Only chains of two or more PRs with at least one open PR count.
+ * Closed PRs break a chain; merged ones do too, unless `now` is given and
+ * they merged in the last MERGED_LAYER_DAYS.
  *
  * Stacks are linear. When two PRs sit on the same parent, the lowest-numbered
  * one continues the stack and the other starts a separate chain without the
  * parent, so it only becomes a stack if something sits on it in turn.
  */
-export function buildStacks(prs: Pr[]): Stack[] {
+export function buildStacks(prs: Pr[], now?: IsoTime): Stack[] {
+  const since = mergedSince(now);
   const openByRepo = new Map<string, Pr[]>();
   for (const pr of prs) {
-    if (pr.state !== 'OPEN') {
+    if (!isLiveLayer(pr, since)) {
       continue;
     }
     const list = openByRepo.get(pr.ref.repo) ?? [];

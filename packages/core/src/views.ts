@@ -153,6 +153,8 @@ export interface SyncReport {
   prsFetched: number;
   /** Unread PR threads still waiting to be enriched because of maxPrs. */
   prsSkipped: number;
+  /** Stack layers fetched to complete the stacks of pinged PRs (no agent calls for them). */
+  prsPulledIn: number;
   newEvents: number;
   /** Same as agentCallStats.total. */
   agentCalls: number;

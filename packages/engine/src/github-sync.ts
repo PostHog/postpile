@@ -10,7 +10,9 @@ import {
 } from '@code-manager/core';
 import type { GitHubReader } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
+import { errorText } from './errors.ts';
 import type { PromptContextSource } from './prompt-context.ts';
+import { StackLayerFinder } from './stack-layers.ts';
 import { saveViewer } from './viewer-meta.ts';
 
 const ETAG_KEY = 'notifications_etag';
@@ -22,9 +24,13 @@ export interface GitHubSyncResult {
   threads: number;
   prsFetched: number;
   prsSkipped: number;
-  /** PRs whose snapshot was written this sync; the verify pass rechecks facts about them. */
+  /** Stack layers fetched to complete a pinged PR's stack. Not counted in prsFetched. */
+  prsPulledIn: number;
+  /** PRs whose snapshot was written this sync, stack layers included; the verify pass rechecks facts about them. */
   fetchedPrKeys: PrKey[];
+  /** New events on pinged PRs. Events on stack layers are logged but are not new work. */
   newEventIds: string[];
+  errors: string[];
 }
 
 interface Candidate {
@@ -44,12 +50,16 @@ function refOf(thread: NotificationThread): PrRef | null {
  * Holds a GitHubReader only, so it has no way to write to GitHub.
  */
 export class GitHubSync {
+  private readonly layers: StackLayerFinder;
+
   constructor(
     private readonly store: Store,
     private readonly reader: GitHubReader,
     private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
-  ) {}
+  ) {
+    this.layers = new StackLayerFinder(reader, now);
+  }
 
   private setMeta(key: string, value: string | null): void {
     if (value === null) {
@@ -113,8 +123,11 @@ export class GitHubSync {
     return result;
   }
 
+  /** A stack layer has no topic of its own; it reads the context of its anchor's topic. */
   private caresAboutMerges(key: PrKey): boolean {
-    const topicId = this.store.memberships.get(key)?.topicId ?? null;
+    const anchor = this.store.pullIns.get(key)?.anchorPrKey;
+    const membership = this.store.memberships.get(key) ?? (anchor ? this.store.memberships.get(anchor) : null);
+    const topicId = membership?.topicId ?? null;
     const context = this.contexts.forTopic(topicId);
     return caresAboutUnreviewedMerges(context.instructions, context.tailoring);
   }
@@ -147,6 +160,35 @@ export class GitHubSync {
     });
   }
 
+  /**
+   * Fetches the missing layers of stacks that pinged PRs fetched this sync
+   * sit in, and records them as pulled in. A layer whose snapshot has not
+   * moved since the last fetch is not fetched again.
+   */
+  private async pullInStackLayers(fetched: Pr[], viewer: Viewer): Promise<Pr[]> {
+    const pinged = new Set(this.store.notifications.list().flatMap((thread) => {
+      const ref = refOf(thread);
+      return ref ? [prKey(ref)] : [];
+    }));
+    const seeds = fetched.filter((pr) => pinged.has(pr.key));
+    if (seeds.length === 0) {
+      return [];
+    }
+    const layers = await this.layers.find(seeds, pinged);
+    const storedAt = this.store.prs.updatedAtByKey();
+    this.store.transaction(() => {
+      for (const layer of layers) {
+        this.store.pullIns.put(layer.pullIn);
+      }
+    });
+    const moved = layers.filter((layer) => storedAt.get(layer.pullIn.prKey) !== layer.updatedAt).map((layer) => layer.ref);
+    const prs = moved.length > 0 ? [...(await this.reader.fetchPrs(moved)).values()] : [];
+    for (const pr of prs) {
+      this.storePr(pr, viewer);
+    }
+    return prs;
+  }
+
   async run(maxPrs: number): Promise<GitHubSyncResult> {
     const viewer = await this.reader.viewer();
     saveViewer(this.store, viewer);
@@ -160,14 +202,24 @@ export class GitHubSync {
     for (const pr of fetched.values()) {
       newEventIds.push(...this.storePr(pr, viewer));
     }
+    // A failed stack lookup should not cost the rest of the sync; the next sync tries again.
+    const errors: string[] = [];
+    let pulledIn: Pr[] = [];
+    try {
+      pulledIn = await this.pullInStackLayers([...fetched.values()], viewer);
+    } catch (error) {
+      errors.push(`stack layers: ${errorText(error)}`);
+    }
     return {
       viewer,
       notModified: notifications.notModified,
       threads: notifications.threads,
       prsFetched: fetched.size,
       prsSkipped: candidates.length - picked.length,
-      fetchedPrKeys: [...fetched.keys()],
+      prsPulledIn: pulledIn.length,
+      fetchedPrKeys: [...fetched.keys(), ...pulledIn.map((pr) => pr.key)],
       newEventIds,
+      errors,
     };
   }
 }

@@ -242,6 +242,7 @@ export class FakeEngine implements EngineService {
       threads: this.data.tiles.length,
       prsFetched: 0,
       prsSkipped: 0,
+      prsPulledIn: 0,
       newEvents: 0,
       agentCalls: 4,
       agentCallStats: sampleSyncStats(),

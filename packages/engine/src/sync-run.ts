@@ -18,6 +18,7 @@ function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): S
     threads: 0,
     prsFetched: 0,
     prsSkipped: 0,
+    prsPulledIn: 0,
     newEvents: 0,
     agentCalls: 0,
     agentCallStats: { total: 0, byKind: {} },
@@ -48,7 +49,9 @@ export class SyncRun {
       report.threads = fetched.threads;
       report.prsFetched = fetched.prsFetched;
       report.prsSkipped = fetched.prsSkipped;
+      report.prsPulledIn = fetched.prsPulledIn;
       report.newEvents = fetched.newEventIds.length;
+      errors.push(...fetched.errors);
 
       new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, tally.facts);
       reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
