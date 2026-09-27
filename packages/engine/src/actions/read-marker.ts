@@ -1,6 +1,6 @@
 import type { PrKey } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
-import type { MarkReadQueue, PendingBatch } from '../mark-read-queue.ts';
+import type { MarkReadQueue, PendingBatch, QueuedThread } from '../mark-read-queue.ts';
 
 /** What a mark-read changed locally, so an undo can put it back. */
 interface LocalChange {
@@ -31,8 +31,10 @@ export class ReadMarker {
     }
   }
 
-  private unreadThreadIds(keys: PrKey[]): string[] {
-    return [...this.store.notifications.getByPrKeys(keys).values()].filter((t) => t.unread).map((t) => t.id);
+  private unreadThreads(keys: PrKey[]): QueuedThread[] {
+    return [...this.store.notifications.getByPrKeys(keys).values()]
+      .filter((thread) => thread.unread)
+      .map((thread) => ({ id: thread.id, updatedAt: thread.updatedAt }));
   }
 
   /** Every event of `keys` becomes seen, `handleKeys` also count as done. Returns the undo token. */
@@ -51,7 +53,7 @@ export class ReadMarker {
         this.store.userPrStates.markHandled(key, at);
       }
     });
-    const batch = this.queue.enqueue(this.unreadThreadIds(keys), keys);
+    const batch = this.queue.enqueue(this.unreadThreads(keys), keys);
     this.changes.set(batch.token, change);
     return batch.token;
   }

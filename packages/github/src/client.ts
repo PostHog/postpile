@@ -1,7 +1,7 @@
-import type { Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
+import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
 import { GitHubError, GitHubHttp, type FetchFn } from './http.ts';
 import { toPr } from './normalize.ts';
-import { listNotifications } from './notifications.ts';
+import { getThread, listNotifications } from './notifications.ts';
 import { batchAlias, buildPrBatchQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
 import type { RawBatchResponse, RawViewerTeams } from './raw.ts';
 import { PR_BATCH_SIZE, type GitHubReader, type NotificationConditions, type NotificationsResult } from './reader.ts';
@@ -57,6 +57,10 @@ export class GitHubClient implements GitHubReader {
 
   listNotifications(conditions: NotificationConditions): Promise<NotificationsResult> {
     return listNotifications(this.http, conditions);
+  }
+
+  getThread(threadId: string): Promise<NotificationThread | null> {
+    return getThread(this.http, threadId);
   }
 
   async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {

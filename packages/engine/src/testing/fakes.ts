@@ -31,6 +31,10 @@ export class FakeReader implements GitHubReader {
     return { notModified: false, threads: this.threads, etag: this.etag, lastModified: null };
   }
 
+  async getThread(threadId: string): Promise<NotificationThread | null> {
+    return this.threads.find((thread) => thread.id === threadId) ?? null;
+  }
+
   async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {
     this.fetchedRefs.push(refs);
     const result = new Map<PrKey, Pr>();
@@ -77,8 +81,8 @@ export function makeHarness(instructionsFile = '/nonexistent/instructions.md'): 
   const writer = new FakeWriter();
   const runner = new FakeRunner();
   const timers = new FakeTimers();
-  const markReadQueue = new MarkReadQueue(writer, timers, undefined, (threadId) =>
-    store.notifications.markRead(threadId, NOW.toISOString()),
+  const markReadQueue = new MarkReadQueue(writer, reader, timers, undefined, (threadId, readAt) =>
+    store.notifications.markRead(threadId, readAt),
   );
   const engine = new Engine({
     store,

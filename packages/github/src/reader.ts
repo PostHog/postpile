@@ -19,6 +19,9 @@ export interface GitHubReader {
    */
   listNotifications(conditions: NotificationConditions): Promise<NotificationsResult>;
 
+  /** One thread by id, read or unread. Null when GitHub answers 404. */
+  getThread(threadId: string): Promise<NotificationThread | null>;
+
   /** Batched GraphQL enrichment, PR_BATCH_SIZE PRs aliased per query. Missing PRs are left out. */
   fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>>;
 }

@@ -101,6 +101,8 @@ export class Engine implements EngineService {
     } catch (error) {
       errors.push(`sync: ${errorText(error)}`);
     }
+    // Mark-reads run in the background; the sync report is where the user hears about them.
+    errors.push(...this.deps.markReadQueue.takeNotes());
     report.agentCalls = budget.calls;
     report.finishedAt = this.deps.now().toISOString();
     return report;

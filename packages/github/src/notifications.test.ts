@@ -83,3 +83,21 @@ describe('listNotifications', () => {
     await expect(call).rejects.toThrow(/401: Bad credentials/);
   });
 });
+
+describe('getThread', () => {
+  it('reads one thread and answers null for 404', async () => {
+    const [raw] = loadFixture('notifications-page1.json') as unknown[];
+    const fake = new FakeFetch([{ body: raw }, { status: 404, body: { message: 'Not Found' } }]);
+    const client = new GitHubClient(fakeTokens, fake.fn);
+
+    const thread = await client.getThread('1001');
+    const missing = await client.getThread('9999');
+
+    expect(thread?.id).toBe('1001');
+    expect(missing).toBeNull();
+    expect(fake.requests.map((r) => [r.method, r.url])).toEqual([
+      ['GET', 'https://api.github.com/notifications/threads/1001'],
+      ['GET', 'https://api.github.com/notifications/threads/9999'],
+    ]);
+  });
+});

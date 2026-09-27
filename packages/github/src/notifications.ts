@@ -61,6 +61,21 @@ export function toThread(raw: RawNotification): NotificationThread {
   };
 }
 
+/**
+ * One thread, read or not. Null when GitHub no longer knows it. Used right
+ * before a mark-read to check that nothing happened since the last sync.
+ */
+export async function getThread(http: GitHubHttp, threadId: string): Promise<NotificationThread | null> {
+  const response = await http.request('GET', `notifications/threads/${encodeURIComponent(threadId)}`);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw await errorFromResponse('GET notification thread', response);
+  }
+  return toThread((await response.json()) as RawNotification);
+}
+
 function conditionalHeaders(conditions: NotificationConditions): Record<string, string> {
   const headers: Record<string, string> = {};
   if (conditions.etag) {

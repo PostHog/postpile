@@ -19,6 +19,11 @@ async function synced(): Promise<Harness> {
   return h;
 }
 
+/** Lets the queued send (and its awaits) run after the fake timer fired. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 async function tileState(h: Harness, topicId = UNSORTED_TOPIC_ID): Promise<string | undefined> {
   return (await h.engine.getTopic(topicId))?.tiles.find((t) => t.tile.id === tileId)?.state.kind;
 }
@@ -34,8 +39,26 @@ describe('markRead and undo', () => {
     expect(await tileState(h)).toBe('done');
     expect(h.writer.calls).toEqual([]);
     h.timers.advance(UNDO_WINDOW_MS);
-    await Promise.resolve();
+    await settle();
     expect(h.writer.calls).toEqual(['markThreadRead thread-1']);
+    expect(h.store.notifications.list()[0]?.lastReadAt).toBe(pr.updatedAt);
+  });
+
+  it('leaves a thread unread on GitHub when it moved after the last sync', async () => {
+    const h = await synced();
+    // Someone mentions the user after the sync; GitHub bumps the thread.
+    h.reader.addPr(pr, makeThreadFor(pr, { updatedAt: '2026-09-02T13:00:00.000Z' }));
+    h.reader.etag = 'etag-2';
+
+    await h.engine.markRead(tileId);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+
+    expect(h.writer.calls).toEqual([]);
+    expect(h.store.notifications.list()[0]?.unread).toBe(true);
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(report.errors).toEqual([expect.stringContaining('left notification thread-1 unread')]);
+    expect(report.prsFetched).toBe(1);
   });
 
   it('undo inside the window restores unread and never calls GitHub', async () => {

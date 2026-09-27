@@ -24,16 +24,17 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const readOnly = options.readOnly ?? process.env.CODE_MANAGER_READ_ONLY === '1';
   const tokens = new GhCliTokenSource();
   const store = Store.open(paths.databaseFile);
+  const reader = new GitHubClient(tokens);
   const writer = makeWriter(tokens, readOnly);
-  const markThreadReadLocally = (threadId: string): void => {
-    store.notifications.markRead(threadId, new Date().toISOString());
+  const markThreadReadLocally = (threadId: string, readAt: string): void => {
+    store.notifications.markRead(threadId, readAt);
   };
   return new Engine({
     store,
-    reader: new GitHubClient(tokens),
+    reader,
     writer,
     agent: new RunnerAgentService(new ClaudeCliRunner()),
-    markReadQueue: new MarkReadQueue(writer, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
+    markReadQueue: new MarkReadQueue(writer, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
     instructionsFile: paths.instructionsFile,
     now: () => new Date(),
   });
