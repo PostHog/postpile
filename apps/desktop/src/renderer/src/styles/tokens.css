@@ -1,0 +1,107 @@
+/* code-manager design tokens, "Crisp native, refined".
+   Every color, radius, shadow and font the renderer uses is defined here once.
+   app.css maps them onto Tailwind names in its @theme block; components use
+   those names (bg-surface, text-muted, border-hairline, ...), never raw hex. */
+
+/* JetBrains Mono (OFL, see fonts/OFL.txt), latin subset, bundled so the app
+   needs no network for fonts. Used for numbers, ids and ages. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-latin.woff2') format('woff2');
+}
+
+:root {
+  /* Surfaces */
+  --bg-window: #f7f8fa;
+  --bg-titlebar: #f1f2f5;
+  --bg-sidebar: #eef0f4;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f7f8fa;
+  --bg-done: #f4f5f8;
+  --bg-actionbar: #fbfbfc;
+  --bg-segment: #eceef2;
+  --bg-chip: #dfe2e8;
+
+  /* Text */
+  --ink: #16181d;
+  --ink-2: #3a3f4b;
+  --muted: #6b7080;
+  --faint: #9aa0ad;
+  --ghost: #c3c7d0;
+
+  /* Lines */
+  --hairline: #e3e5ea;
+  --hairline-strong: #e0e2e8;
+  --hairline-soft: #eceef2;
+  --hairline-done: #e7e9ee;
+  --control-border: #dcdfe5;
+  --frame: #d5d8df;
+  --dot-quiet: #b9bec9;
+
+  /* Accent: selection, primary actions */
+  --accent: #2156d9;
+  --accent-soft: #edf2fd;
+  --accent-row: #e3ebfc;
+  --accent-line: #d5dcec;
+  --on-accent: #ffffff;
+
+  /* Unread (coral) */
+  --unread: #e5533d;
+  --unread-soft: #fdf1ee;
+  --unread-border: #f1cfc5;
+  --unread-strip-border: #f6dcd4;
+  --unread-ink: #a3321f;
+  --unread-when: #c46553;
+  --unread-row: #fffaf8;
+
+  /* Verdicts */
+  --safe: #17733e;
+  --safe-soft: #e5f4eb;
+  --closer: #8a5300;
+  --closer-soft: #fbf1dc;
+
+  /* PR states and diff */
+  --open: #1c8a4a;
+  --open-soft: #e7f5ec;
+  --merged: #7a5af0;
+  --merged-ink: #5b3fc4;
+  --merged-soft: #efeafe;
+  --closed: #c0392b;
+  --closed-soft: #fdecea;
+  --pending: #d9a400;
+
+  /* Avatars: a few fixed tones, picked per login */
+  --avatar-blue: #dbe7ff;
+  --avatar-blue-ink: #1e3f99;
+  --avatar-green: #e3f4e8;
+  --avatar-green-ink: #17633a;
+  --avatar-purple: #f6e6fb;
+  --avatar-purple-ink: #7a2d8f;
+  --avatar-orange: #fdeedb;
+  --avatar-orange-ink: #8a4b06;
+  --avatar-grey: #eceef2;
+  --avatar-grey-ink: #3a3f4b;
+
+  /* Radii */
+  --round-tile: 12px;
+  --round-row: 8px;
+  --round-control: 7px;
+
+  /* Shadows */
+  --elev-control: 0 1px 0 rgba(16, 24, 40, 0.03);
+  --elev-primary: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 1px 2px rgba(16, 24, 40, 0.2);
+  --elev-tile: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 20px -14px rgba(16, 24, 40, 0.22);
+  --elev-selected: 0 0 0 4px var(--accent-soft), 0 10px 24px -14px rgba(16, 24, 40, 0.28);
+  --elev-active-row: 0 1px 2px rgba(16, 24, 40, 0.06), 0 0 0 1px rgba(16, 24, 40, 0.04);
+  --elev-segment: 0 1px 2px rgba(16, 24, 40, 0.1);
+  --elev-menu: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 12px 28px -10px rgba(16, 24, 40, 0.3);
+  --elev-accent-top: inset 0 2px 0 var(--accent);
+  --elev-picked: 0 0 0 1px var(--accent), 0 1px 2px rgba(16, 24, 40, 0.08);
+
+  /* Type */
+  --type-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  --type-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}

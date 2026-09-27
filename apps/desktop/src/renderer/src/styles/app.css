@@ -1,0 +1,133 @@
+/* Tailwind v4 via @tailwindcss/vite, with preflight: this renderer has no
+   older CSS reset to protect. The @theme block below drops Tailwind's default
+   palette and maps color names onto tokens.css, so only our tokens exist as
+   utilities (bg-surface, text-muted, border-hairline, ...). */
+@import 'tailwindcss';
+
+@theme {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* Surfaces */
+  --color-window: var(--bg-window);
+  --color-titlebar: var(--bg-titlebar);
+  --color-sidebar: var(--bg-sidebar);
+  --color-surface: var(--bg-surface);
+  --color-subtle: var(--bg-subtle);
+  --color-done: var(--bg-done);
+  --color-actionbar: var(--bg-actionbar);
+  --color-segment: var(--bg-segment);
+  --color-chip: var(--bg-chip);
+
+  /* Text */
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-ghost: var(--ghost);
+
+  /* Lines */
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-hairline-soft: var(--hairline-soft);
+  --color-hairline-done: var(--hairline-done);
+  --color-control: var(--control-border);
+  --color-frame: var(--frame);
+  --color-dot-quiet: var(--dot-quiet);
+
+  /* Accent */
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-row: var(--accent-row);
+  --color-accent-line: var(--accent-line);
+  --color-on-accent: var(--on-accent);
+
+  /* Unread */
+  --color-unread: var(--unread);
+  --color-unread-soft: var(--unread-soft);
+  --color-unread-border: var(--unread-border);
+  --color-unread-strip: var(--unread-strip-border);
+  --color-unread-ink: var(--unread-ink);
+  --color-unread-when: var(--unread-when);
+  --color-unread-row: var(--unread-row);
+
+  /* Verdicts */
+  --color-safe: var(--safe);
+  --color-safe-soft: var(--safe-soft);
+  --color-closer: var(--closer);
+  --color-closer-soft: var(--closer-soft);
+
+  /* PR states */
+  --color-open: var(--open);
+  --color-open-soft: var(--open-soft);
+  --color-merged: var(--merged);
+  --color-merged-ink: var(--merged-ink);
+  --color-merged-soft: var(--merged-soft);
+  --color-closed: var(--closed);
+  --color-closed-soft: var(--closed-soft);
+  --color-pending: var(--pending);
+
+  /* Avatars */
+  --color-avatar-blue: var(--avatar-blue);
+  --color-avatar-blue-ink: var(--avatar-blue-ink);
+  --color-avatar-green: var(--avatar-green);
+  --color-avatar-green-ink: var(--avatar-green-ink);
+  --color-avatar-purple: var(--avatar-purple);
+  --color-avatar-purple-ink: var(--avatar-purple-ink);
+  --color-avatar-orange: var(--avatar-orange);
+  --color-avatar-orange-ink: var(--avatar-orange-ink);
+  --color-avatar-grey: var(--avatar-grey);
+  --color-avatar-grey-ink: var(--avatar-grey-ink);
+
+  /* Radii: rounded-tile, rounded-row, rounded-control */
+  --radius-tile: var(--round-tile);
+  --radius-row: var(--round-row);
+  --radius-control: var(--round-control);
+
+  /* Shadows: shadow-tile, shadow-selected, ... */
+  --shadow-control: var(--elev-control);
+  --shadow-primary: var(--elev-primary);
+  --shadow-tile: var(--elev-tile);
+  --shadow-selected: var(--elev-selected);
+  --shadow-active-row: var(--elev-active-row);
+  --shadow-segment: var(--elev-segment);
+  --shadow-menu: var(--elev-menu);
+  --shadow-accent-top: var(--elev-accent-top);
+  --shadow-picked: var(--elev-picked);
+
+  /* Fonts: font-sans is the default, font-mono for numbers, ids, ages */
+  --font-sans: var(--type-ui);
+  --font-mono: var(--type-mono);
+}
+
+html,
+body {
+  height: 100%;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--bg-window);
+  color: var(--ink);
+  font-family: var(--type-ui);
+  /* A desktop app: text is not selectable unless a component opts in. */
+  user-select: none;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* The title bar drags the window; its controls must not. */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.drag-region button,
+.drag-region a,
+.drag-region input {
+  -webkit-app-region: no-drag;
+}

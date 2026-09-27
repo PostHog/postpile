@@ -1,0 +1,8 @@
+// Every query key in one place, so actions can invalidate what they change.
+export const queryKeys = {
+  config: ['config'] as const,
+  topics: ['topics'] as const,
+  topic: (topicId: string) => ['topic', topicId] as const,
+  pr: (prKey: string) => ['pr', prKey] as const,
+  chat: (tileId: string) => ['chat', tileId] as const,
+};
