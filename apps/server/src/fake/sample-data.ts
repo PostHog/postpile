@@ -270,7 +270,6 @@ function buildGlances(clock: SampleClock): Glance[] {
       does: 'Minor Turbo bump.',
       risk: 'Low alone.',
       othersSaid: 'No human comments.',
-      pullInReason: '2.5 changes cache hashing.',
     }),
     sampleGlance(clock, 41855, {
       verdict: 'LOOK_CLOSER',
@@ -278,7 +277,6 @@ function buildGlances(clock: SampleClock): Glance[] {
       does: 'Sets cache: false on the storybook task.',
       risk: 'Slower CI, no breakage.',
       othersSaid: 'One approval, reason: stale snapshots.',
-      pullInReason: 'From Frontend build: turns off the cache you set up.',
     }),
     sampleGlance(clock, 41911, {
       verdict: 'LOOKS_SAFE',
@@ -286,22 +284,6 @@ function buildGlances(clock: SampleClock): Glance[] {
       does: 'Moves Playwright jobs to depot-ubuntu-24.04-8.',
       risk: 'Low. CI green.',
       othersSaid: 'No comments yet.',
-    }),
-    sampleGlance(clock, 41862, {
-      verdict: 'LOOKS_SAFE',
-      forYou: 'You approved it 3 days ago.',
-      does: 'Moves backend jobs to Depot.',
-      risk: 'None now.',
-      othersSaid: '2 approvals.',
-      pullInReason: 'Lower layer of the stack.',
-    }),
-    sampleGlance(clock, 41851, {
-      verdict: 'LOOKS_SAFE',
-      forYou: 'You approved it 6 days ago.',
-      does: 'Adds depot.json.',
-      risk: 'None.',
-      othersSaid: '2 approvals.',
-      pullInReason: 'Base of the stack.',
     }),
     sampleGlance(clock, 41915, {
       verdict: 'LOOK_CLOSER',
@@ -352,12 +334,13 @@ function buildTiles(): Tile[] {
   return [
     sampleTile(TOPIC.depot, 'set', 'set:turbo-cache', 'Three PRs change how Turbo caches', [
       pinged(41902, 'review_requested'),
-      pulledIn(41921, '2.5 changes cache hashing. Landing it apart from #41902 makes the cache go cold twice.'),
-      pulledIn(41855, 'From Frontend build: turns off the Turbo cache you set up.'),
+      pinged(41921, 'review_requested'),
+      pinged(41855, 'subscribed'),
     ]),
     sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(41851)}`, 'rowan/depot: e2e layer waits on you', [
-      pulledIn(41851, 'Base of the stack.'),
-      pulledIn(41862, 'Lower layer of the stack.'),
+      // Stack layers the sync pulled in by branch: no thread, no glance, no agent call.
+      pulledIn(41851, 'stack layer below #41902'),
+      pulledIn(41862, 'stack layer below #41902'),
       pinged(41902, 'review_requested'),
       pinged(41911, 'review_requested'),
     ]),
@@ -392,7 +375,7 @@ function buildSets(clock: SampleClock): PrSet[] {
       id: 'turbo-cache',
       topicId: TOPIC.depot,
       title: 'Three PRs change how Turbo caches',
-      take: 'Only #41902 pinged you. The other two touch the same cache keys.',
+      take: 'All three touch the same Turbo cache keys; land them together.',
       members: [
         { prKey: sampleKey(41902), reason: 'Moves the Turbo remote cache to Depot.' },
         { prKey: sampleKey(41921), reason: '2.5 changes cache hashing.' },
@@ -446,7 +429,7 @@ function buildUserStates(clock: SampleClock): UserPrState[] {
     approvedCommitOid: `sha${number}`,
     handledAt: null,
   });
-  return [approved(41899, 24), approved(41862, 72), approved(41851, 144)];
+  return [approved(41899, 24)];
 }
 
 function buildMembership(tiles: Tile[]): Map<PrKey, string> {

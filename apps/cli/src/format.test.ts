@@ -15,6 +15,6 @@ describe('format over the fake engine', () => {
     expect(topicText).toContain('! PostHog/posthog#41902: lyra mentioned you');
 
     const pr = await engine.getPr('PostHog/posthog#41921');
-    expect(formatPr(pr!)).toContain('pulled in: 2.5 changes cache hashing.');
+    expect(formatPr(pr!)).toContain('LOOKS_SAFE: Landing it apart from #41902');
   });
 });

@@ -69,7 +69,7 @@ export function DetailContext(props: DetailContextProps) {
                 <span className={`size-1.5 rounded-full ${lookDotTone(prLook(pr))}`} />
                 <span className={`font-mono text-[10px] ${picked ? 'text-accent' : 'text-muted'}`}>#{prNumber(pr.key)}</span>
                 <span className={`truncate ${picked ? 'font-semibold' : 'font-[450]'}`}>{pr.title}</span>
-                <span className="text-[10px] text-muted">{pr.provenance.kind === 'pinged' ? 'pinged' : 'pulled in'}</span>
+                <span className="text-[10px] text-muted">{pr.provenance.kind === 'pinged' ? 'pinged' : 'stack layer'}</span>
               </button>
             );
           })}

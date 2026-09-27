@@ -27,7 +27,7 @@ const PING_LABELS: Record<PingReason, string> = {
   other: 'GitHub notified you',
 };
 
-/** One line on why the PR is here: the ping reason or the agent's pull-in reason. */
+/** One line on why the PR is here: the ping reason, or which stack layer it is ("stack layer below #12"). */
 export function provenanceReason(provenance: Provenance): string {
   if (provenance.kind === 'pinged') {
     return PING_LABELS[provenance.reason];
