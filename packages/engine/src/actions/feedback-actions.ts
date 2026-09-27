@@ -41,8 +41,12 @@ export class FeedbackActions {
   /** "Wrong topic": move it when the user said where, otherwise let the next sync re-sort it. */
   private wrongTopic(key: PrKey, targetTopicId: string | null, note: string): ActionResult {
     if (targetTopicId !== null) {
-      if (!this.store.topics.get(targetTopicId)) {
+      const target = this.store.topics.get(targetTopicId);
+      if (!target) {
         return failed(`no topic ${targetTopicId}`);
+      }
+      if (target.status === 'retired') {
+        this.store.topics.setStatus(targetTopicId, 'active', this.now().toISOString());
       }
       this.store.memberships.assign({
         prKey: key,

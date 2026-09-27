@@ -22,6 +22,8 @@ export interface GitHubSyncResult {
   threads: number;
   prsFetched: number;
   prsSkipped: number;
+  /** PRs whose snapshot was written this sync; the verify pass rechecks facts about them. */
+  fetchedPrKeys: PrKey[];
   newEventIds: string[];
 }
 
@@ -117,7 +119,11 @@ export class GitHubSync {
     return caresAboutUnreviewedMerges(context.instructions, context.tailoring);
   }
 
-  /** Writes the snapshot and its events. Returns the ids of events that are new. */
+  /**
+   * Writes the snapshot and its events. Returns the ids of events that are new.
+   * Every event goes to the event log, not only the new ones: the log ignores
+   * ids it has, and this also picks up events stored before the log existed.
+   */
   private storePr(pr: Pr, viewer: Viewer): string[] {
     const at = this.now().toISOString();
     return this.store.transaction(() => {
@@ -125,6 +131,11 @@ export class GitHubSync {
       const userState = this.store.userPrStates.get(pr.key);
       const events = deriveEvents(pr, viewer, userState, { caresAboutUnreviewedMerges: this.caresAboutMerges(pr.key) });
       const created = this.store.events.upsertDerived(pr.key, events);
+      const inTimeOrder = [...events].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
+      this.store.eventLog.append(
+        inTimeOrder.map((event) => ({ id: event.id, prKey: pr.key })),
+        at,
+      );
       // Anything older than the user's last read on github.com was already seen there.
       const lastReadAt = this.store.notifications.getByPrKey(pr.key)?.lastReadAt ?? null;
       if (lastReadAt !== null) {
@@ -155,6 +166,7 @@ export class GitHubSync {
       threads: notifications.threads,
       prsFetched: fetched.size,
       prsSkipped: candidates.length - picked.length,
+      fetchedPrKeys: [...fetched.keys()],
       newEventIds,
     };
   }

@@ -254,7 +254,9 @@ Same entry point (`sync()`), same "skip when the input hash matches" rule.
 Each numbered step is one `AgentJob` or a deterministic pass.
 
 1. **fetch** (no agent): notifications, PR snapshots, events with rule
-   loudness, `event_log.append` for new event ids. Unchanged from v1.
+   loudness. Every derived event of a fetched PR goes to `event_log.append`
+   in time order; ids already logged are ignored, so events stored before
+   the log existed are picked up on the PR's next fetch.
 2. **verify pass** (no agent): `verifyFact` on every active fact touching a
    fetched PR (`FactRepo.listActiveTouchingPrs`). `invalidate` outcomes are
    closed right away (a merged PR ends "alice works on #12"); `stale` ones are
@@ -263,10 +265,7 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    topic carries `brief` = `dossierBrief(latest dossier)` (goal, status,
    driver, max 400 chars), not only name and summary. Recently retired topics
    (30 days) are offered too, marked finished; assigning to one reactivates it.
-4. **roles** (no agent): driver and user role, as v1. When a dossier exists,
-   its `driver` person wins over "most frequent author".
-5. **sets** (`set_grouping`): unchanged from v1 (see open questions).
-6. **dossiers** (`dossier_update`, one call per topic with a non-empty
+4. **dossiers** (`dossier_update`, one call per topic with a non-empty
    delta, topics with unread tiles first). Input: `DossierUpdateInput`:
    previous dossier, `TopicDelta` from `selectTopicDelta`, member PR
    snapshots, up to 60 known active facts on the topic's entities (verified,
@@ -275,20 +274,31 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    stale facts confirmed. Written in one transaction: new
    `topic_dossier` version (`through_seq` = `delta.toSeq`), `topic.summary`
    mirror, digest cursor, `closeFacts` closed, confirmed facts
-   `markVerified`, candidates through `preReconcile` (step 7).
-7. **facts** (`fact_reconcile`, only for ambiguous candidates, 40 per call,
+   `markVerified`, candidates through `preReconcile` (step 5). A member
+   missing from the previous timeline only counts as joined when its
+   membership is newer than that version, so a PR the model left out (or
+   that rolled into `earlier`) does not force an update on every sync.
+5. **facts** (`fact_reconcile`, only for ambiguous candidates, 40 per call,
    after all dossiers): see reconcile rules below. Usually zero calls.
+   Part of the `dossiers` job.
+6. **roles** (no agent): driver and user role, as v1. When a dossier exists,
+   its `driver` person wins over "most frequent author".
+7. **sets** (`set_grouping`): unchanged from v1 (see open questions).
 8. **glances** (`glance_batch`): per topic, PRs in a tile whose
-   `glanceItemInputHash` differs from the stored glance, unread tiles first,
-   in batches of 18. A topic whose dossier update was skipped by the budget
+   `glanceItemInputHash` differs from the stored glance, in batches of 18.
+   First pinged PRs of every topic, then pulled-in ones, unread tiles first
+   in each round. A topic whose dossier update was skipped by the budget
    gets no glances this sync (it would pay twice). Protocol below.
 9. **events** (`event_classification`, v2: one call per topic with new loud
    events, up to 20 PRs per call, `classifyEventBatch`): second opinion on new
    loud events only, as v1.
 10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts.
 
-With a call cap (`--max-agent-calls`) the budget is spent in that order.
-Consolidation is not part of `sync()`; see below.
+With a call cap (`--max-agent-calls`) the budget is spent in that order:
+topic assignment (everything needs it), dossiers, fact reconcile, sets,
+glances for pinged PRs, glances for pulled-in PRs, events. Consolidation is
+not part of `sync()` and never overlaps with it (each waits for the other,
+so every call lands in the right run's stats); see below.
 
 Rough first sync for 141 PRs in ~20 topics: 8 assignment + ~20 dossier +
 ~1 reconcile + sets as v1 + ~20-25 glance batches + ~20 event batches, so
@@ -517,8 +527,8 @@ topic, and retire topics that pass the gate and whose dossier status is
 - CLI: `sync` prints one line per kind (`dossier_update 3 (1 skipped
   unchanged) glance_batch 4 (1 retry) ... total 9, $0.12`).
   `--max-agent-calls` caps sync and consolidation.
-- Today (contracts commit) `AgentBudget.take(kind)` counts every granted
-  take as a call; the observer wiring replaces that with real outcomes.
+- Calls are only counted by the observer (`AgentCallLog`); the budget only
+  records skips. Chat and draft calls get run id `action`.
 
 ### EngineService and HTTP additions
 
@@ -532,7 +542,9 @@ topic, and retire topics that pass the gate and whose dossier status is
 | `POST /api/topics/:id/seen` | `markTopicSeen()` |
 | `POST /api/consolidate` `{onlyIfDue, maxAgentCalls}` | `consolidate()` |
 
-`POST /api/sync` accepts `dossiers` in `agentJobs` once the job lands.
+`POST /api/sync` takes `dossiers` in `agentJobs`; `summaries` is gone.
+`GET /api/facts` takes `entity=kind:key`, `predicate`, `topicId`, `since`,
+`includeClosed` and `limit`.
 
 ### What v2 removes or replaces
 
@@ -597,7 +609,8 @@ core  <- store, github, agent  <- engine  <- server, cli
 - **apps/desktop**: Electron via electron-vite. Main starts the server in-process on a random
   port with a random token and loads the renderer with `?api=...&token=...`. PATH is taken from
   the login shell (`fix-path`) so `gh` and `claude` resolve on a GUI launch.
-- **apps/cli**: `sync`, `topics`, `topic <id>`, `pr <owner/repo#n>`, plain text.
+- **apps/cli**: `sync`, `consolidate`, `topics`, `topic <id>` (with the dossier), `pr <owner/repo#n>`
+  (with facts), plain text.
 
 ### HTTP API
 

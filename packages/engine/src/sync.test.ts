@@ -1,7 +1,7 @@
 import { at, makeThreadFor } from '@code-manager/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
-import { glanceAnswer, makeHarness } from './testing/fakes.ts';
+import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 
 describe('Engine.sync without the agent', () => {
@@ -82,39 +82,53 @@ describe('Engine.sync without the agent', () => {
 });
 
 describe('Engine.sync with the agent', () => {
-  it('assigns topics, summarizes, glances, and skips all of it on an unchanged second sync', async () => {
+  it('assigns topics, then skips every agent call on an unchanged second sync', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
-    h.runner
-      .answer('topic_assignment', {
-        assignments: [{ prKey: pr.key, kind: 'new', name: 'Move CI to Depot', reason: 'CI runners' }],
-      })
-      .answer('topic_summary', { summary: 'Moving CI to Depot.' })
-      .answer('glance', glanceAnswer())
-      .answer('event_classification', { overrides: [] });
+    h.runner.answer('topic_assignment', {
+      assignments: [{ prKey: pr.key, kind: 'new', name: 'Move CI to Depot', reason: 'CI runners' }],
+    });
 
     const report = await h.engine.sync();
 
     expect(report.errors).toEqual([]);
+    expect(report.agentCallStats.byKind).toMatchObject({
+      topic_assignment: { calls: 1 },
+      dossier_update: { calls: 1 },
+      glance_batch: { calls: 1 },
+      event_classification: { calls: 1 },
+    });
     expect(report.agentCalls).toBe(4);
+    expect(report.dossiersUpdated).toBe(1);
     const [item] = await h.engine.listTopics();
-    expect(item?.topic).toMatchObject({ name: 'Move CI to Depot', summary: 'Moving CI to Depot.', driver: 'alice' });
+    expect(item?.topic).toMatchObject({ name: 'Move CI to Depot', summary: 'Move CI to Depot: 1 new events', driver: 'alice' });
     expect(item?.topic.userRole).toBe('reviewer');
-    expect((await h.engine.getPr(pr.key))?.glance?.verdict).toBe('LOOKS_SAFE');
+    expect((await h.engine.getPr(pr.key))?.glance).toMatchObject({ verdict: 'LOOKS_SAFE', dossierVersion: 1 });
 
     h.reader.etag = 'etag-2';
     const again = await h.engine.sync();
     expect(again.errors).toEqual([]);
     expect(again.agentCalls).toBe(0);
+    expect(again.agentCallStats.byKind.glance_batch?.skippedUnchanged).toBe(1);
     expect(h.writer.calls).toEqual([]);
+  });
+
+  it('writes one agent_call row per call with the sync as run id', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+
+    const report = await h.engine.sync({ agentJobs: ['glances'] });
+
+    expect(report.agentCallStats.byKind.glance_batch).toMatchObject({ calls: 1, failed: 0, durationMs: 5, costUsd: 0.01 });
+    expect(h.store.agentCalls.statsForRun(`sync:${report.startedAt}`).total).toBe(1);
   });
 
   it('flags a stored glance as stale when the PR moved and no new glance was made', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
-    h.runner.answer('glance', glanceAnswer());
     await h.engine.sync({ agentJobs: ['glances'] });
     expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
 
@@ -130,56 +144,18 @@ describe('Engine.sync with the agent', () => {
     expect(tile?.prs[0]?.glanceStale).toBe(true);
   });
 
-  it('files rename ideas from the summary as pending proposals, once', async () => {
-    const h = makeHarness();
-    const pr = reviewRequestedPr(1);
-    h.reader.addPr(pr, makeThreadFor(pr));
-    const topic = { id: 'depot', name: 'Depot', summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher' as const, status: 'active' as const, createdAt: at(0), updatedAt: at(0) };
-    h.store.topics.create(topic);
-    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
-    const rename = { kind: 'rename', name: 'Depot runners', reason: 'clearer' };
-    h.runner.answer('topic_summary', { summary: 'Runners move to Depot.', proposals: [rename] });
-
-    await h.engine.sync({ agentJobs: ['summaries'] });
-
-    const detail = await h.engine.getTopic('depot');
-    expect(detail?.topic.name).toBe('Depot');
-    expect(detail?.pendingProposals).toMatchObject([{ kind: 'rename', name: 'Depot runners', status: 'pending' }]);
-
-    // The user says no; the same idea on the next summary is not filed again.
-    await h.engine.decideTopicProposal(detail!.pendingProposals[0]!.id, false);
-    h.store.topics.setTailoring('depot', 'only runner cost', at(1));
-    h.runner.answer('topic_summary', { summary: 'Still runners.', proposals: [rename] });
-    const report = await h.engine.sync({ agentJobs: ['summaries'] });
-    expect(report.agentCalls).toBe(1);
-    expect((await h.engine.getTopic('depot'))?.pendingProposals).toEqual([]);
-  });
-
-  it('respects maxAgentCalls and agentJobs', async () => {
-    const h = makeHarness();
-    for (const n of [1, 2]) {
-      const pr = reviewRequestedPr(n);
-      h.reader.addPr(pr, makeThreadFor(pr));
-    }
-    h.runner.answer('glance', glanceAnswer()).answer('glance', glanceAnswer());
-
-    const report = await h.engine.sync({ maxAgentCalls: 1, agentJobs: ['glances'] });
-
-    expect(report.agentCalls).toBe(1);
-    expect(h.runner.requests.map((r) => r.purpose)).toEqual(['glance']);
-  });
-
   it('keeps going when one agent answer is broken', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
-    h.runner.answer('glance', 'not json at all');
+    h.runner.answer('topic_assignment', 'not json at all');
 
-    const report = await h.engine.sync({ agentJobs: ['glances'] });
+    const report = await h.engine.sync({ agentJobs: ['topics', 'glances'] });
 
     expect(report.errors).toHaveLength(1);
-    expect(report.errors[0]).toMatch(/^glance PostHog\/posthog#1/);
-    expect(await h.engine.listTopics()).toHaveLength(1);
+    expect(report.errors[0]).toMatch(/^topic assignment/);
+    expect(report.agentCallStats.byKind.topic_assignment).toMatchObject({ calls: 1, failed: 1 });
+    expect((await h.engine.getPr(pr.key))?.glance?.verdict).toBe('LOOKS_SAFE');
   });
 
   it('stores agent sets and keeps the set id when the agent keeps the title', async () => {

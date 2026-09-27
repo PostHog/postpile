@@ -19,6 +19,11 @@ export class PromptContextSource {
     return readInstructions(this.instructionsFile);
   }
 
+  /** Accepted global rules from consolidation. Accepted topic rules live in the topic's tailoring instead. */
+  private standingRules(): string[] {
+    return this.store.ruleProposals.listAcceptedGlobal().map((rule) => rule.text);
+  }
+
   forTopic(topicId: string | null): PromptContext {
     const instructions = this.instructions();
     if (topicId === null) {
@@ -26,8 +31,7 @@ export class PromptContextSource {
         instructions,
         tailoring: '',
         recentFeedback: this.store.feedback.recent(FEEDBACK_IN_PROMPTS),
-        // v2: accepted global rules from store.ruleProposals.listAcceptedGlobal().
-        standingRules: [],
+        standingRules: this.standingRules(),
       };
     }
     const topic = this.store.topics.get(topicId);
@@ -35,7 +39,7 @@ export class PromptContextSource {
       instructions,
       tailoring: topic?.tailoring ?? '',
       recentFeedback: this.store.feedback.recentForTopic(topicId, FEEDBACK_IN_PROMPTS),
-      standingRules: [],
+      standingRules: this.standingRules(),
     };
   }
 }

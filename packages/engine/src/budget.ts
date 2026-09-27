@@ -1,26 +1,30 @@
-import { emptyAgentCallStats, recordAgentCall, type AgentCallKind, type AgentCallStats } from '@code-manager/core';
+import { recordAgentCall, type AgentCallKind, type AgentCallStats } from '@code-manager/core';
 
 /**
- * Caps agent calls per sync and counts them by kind. take() is synchronous,
- * so parallel calls cannot overshoot the cap. A granted take counts as a
- * call; failures, duration and cost are not known here (engine memory v2
- * moves that part to the AgentCallObserver, see DESIGN.md).
+ * Caps agent calls per run. take() is synchronous, so parallel calls cannot
+ * overshoot the cap. Calls themselves are counted by the AgentCallLog (it
+ * knows about failures, duration and cost); the budget only adds the skips
+ * to the same stats.
  */
 export class AgentBudget {
-  readonly stats: AgentCallStats = emptyAgentCallStats();
+  private granted = 0;
 
-  constructor(private readonly max: number) {}
+  constructor(
+    private readonly max: number,
+    private readonly stats: AgentCallStats,
+  ) {}
 
   take(kind: AgentCallKind): boolean {
-    if (this.stats.total >= this.max) {
+    if (this.granted >= this.max) {
       recordAgentCall(this.stats, { kind, outcome: 'skipped_by_budget' });
       return false;
     }
-    recordAgentCall(this.stats, { kind, outcome: 'ok' });
+    this.granted += 1;
     return true;
   }
 
-  get calls(): number {
-    return this.stats.total;
+  /** Work whose input hash matched the stored answer. Not a call, only counted. */
+  skipUnchanged(kind: AgentCallKind): void {
+    recordAgentCall(this.stats, { kind, outcome: 'skipped_unchanged' });
   }
 }

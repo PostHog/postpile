@@ -2,6 +2,7 @@ import { ClaudeCliRunner, RunnerAgentService } from '@code-manager/agent';
 import { systemTimers, UNDO_WINDOW_MS } from '@code-manager/core';
 import { GhCliTokenSource, GitHubClient, GitHubWriteClient, type GitHubWriter, type TokenSource } from '@code-manager/github';
 import { Store } from '@code-manager/store';
+import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
 import { defaultPaths, type AppPaths } from './paths.ts';
@@ -29,13 +30,16 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const markThreadReadLocally = (threadId: string, readAt: string): void => {
     store.notifications.markRead(threadId, readAt);
   };
+  const now = (): Date => new Date();
+  const callLog = new AgentCallLog(store, now);
   return new Engine({
     store,
     reader,
     writer,
-    agent: new RunnerAgentService(new ClaudeCliRunner()),
+    agent: new RunnerAgentService(new ClaudeCliRunner(), { observer: callLog }),
+    callLog,
     markReadQueue: new MarkReadQueue(writer, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
     instructionsFile: paths.instructionsFile,
-    now: () => new Date(),
+    now,
   });
 }

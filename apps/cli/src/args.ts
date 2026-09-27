@@ -1,7 +1,8 @@
-import { ALL_AGENT_JOBS, type AgentJob, type SyncOptions } from '@code-manager/core';
+import { ALL_AGENT_JOBS, type AgentJob, type ConsolidateOptions, type SyncOptions } from '@code-manager/core';
 
 export type Command =
   | { name: 'sync'; options: SyncOptions }
+  | { name: 'consolidate'; options: ConsolidateOptions }
   | { name: 'topics' }
   | { name: 'topic'; topicId: string }
   | { name: 'pr'; prKey: string }
@@ -14,9 +15,12 @@ export const usage = `usage: code-manager <command>
     --no-agent           no agent calls at all
     --max-agent-calls <n>
     --agent-jobs <list>  comma separated: ${ALL_AGENT_JOBS.join(',')}
+  consolidate [flags]  propose topic merges/splits/renames and rules, retire finished topics
+    --if-due             only when 24h passed and a dossier changed since the last run
+    --max-agent-calls <n>
   topics               list topics with unread counts
-  topic <id>           show a topic and its tiles
-  pr <owner/repo#n>    show one PR: glance and events
+  topic <id>           show a topic: dossier, changes since seen, tiles
+  pr <owner/repo#n>    show one PR: glance, facts and events
 
 CODE_MANAGER_FAKE=1 runs on built-in sample data (no GitHub, no agent).`;
 
@@ -69,10 +73,34 @@ function parseSyncFlags(flags: string[]): SyncOptions | null {
   return options;
 }
 
+/** Returns null on a bad flag so the caller shows usage. */
+function parseConsolidateFlags(flags: string[]): ConsolidateOptions | null {
+  const options: ConsolidateOptions = {};
+  for (let i = 0; i < flags.length; i++) {
+    const flag = flags[i];
+    if (flag === '--if-due') {
+      options.onlyIfDue = true;
+    } else if (flag === '--max-agent-calls') {
+      const max = positiveInt(flags[++i], true);
+      if (max === null) {
+        return null;
+      }
+      options.maxAgentCalls = max;
+    } else {
+      return null;
+    }
+  }
+  return options;
+}
+
 export function parseArgs(argv: string[]): Command {
   const [name, arg, ...rest] = argv;
   if (name === 'sync') {
     const options = parseSyncFlags(argv.slice(1));
+    return options ? { name, options } : { name: 'help' };
+  }
+  if (name === 'consolidate') {
+    const options = parseConsolidateFlags(argv.slice(1));
     return options ? { name, options } : { name: 'help' };
   }
   if (name === 'topics' && arg === undefined) {

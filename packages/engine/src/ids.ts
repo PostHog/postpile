@@ -29,3 +29,11 @@ export function newProposalId(): string {
 export function prKeyOfEvent(eventId: string): string {
   return eventId.split(':')[0] ?? '';
 }
+
+export function newFactId(): string {
+  return `f${randomBytes(6).toString('hex')}`;
+}
+
+export function newRuleProposalId(): string {
+  return `r${randomBytes(5).toString('hex')}`;
+}

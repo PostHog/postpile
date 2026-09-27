@@ -1,45 +1,48 @@
 import type { AgentService } from '@code-manager/agent';
-import {
-  ALL_AGENT_JOBS,
-  type ActionResult,
-  type ChatMessage,
-  type ChatReply,
-  type ConsolidateOptions,
-  type ConsolidationReport,
-  type FactQuery,
-  type FactView,
-  type FeedbackInput,
-  type PendingProposals,
-  type PrDetail,
-  type PrKey,
-  type SnoozeCondition,
-  type SyncOptions,
-  type SyncReport,
-  type TopicDetail,
-  type TopicListItem,
+import type {
+  ActionResult,
+  ChatMessage,
+  ChatReply,
+  ConsolidateOptions,
+  ConsolidationReport,
+  FactQuery,
+  FactView,
+  FeedbackInput,
+  PendingProposals,
+  PrDetail,
+  PrKey,
+  SnoozeCondition,
+  SyncOptions,
+  SyncReport,
+  TopicDetail,
+  TopicListItem,
 } from '@code-manager/core';
 import type { GitHubReader, GitHubWriter } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { PrActions } from './actions/pr-actions.ts';
+import { MemoryActions } from './actions/memory-actions.ts';
 import { ProposalActions } from './actions/proposal-actions.ts';
 import { ReadMarker } from './actions/read-marker.ts';
 import { TileActions } from './actions/tile-actions.ts';
-import { AgentBudget } from './budget.ts';
-import { Digester } from './digest/digester.ts';
-import { errorText } from './errors.ts';
+import type { AgentCallLog } from './agent-call-log.ts';
+import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
+import { FactWriter } from './memory/fact-writer.ts';
 import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
 import type { EngineService } from './service.ts';
+import { SyncRun } from './sync-run.ts';
 
 export interface EngineDeps {
   store: Store;
   reader: GitHubReader;
   writer: GitHubWriter;
   agent: AgentService;
+  /** Must be the observer the agent service reports its calls to; the run stats come from it. */
+  callLog: AgentCallLog;
   markReadQueue: MarkReadQueue;
   instructionsFile: string;
   now: () => Date;
@@ -47,82 +50,60 @@ export interface EngineDeps {
 
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
 export class Engine implements EngineService {
-  private readonly contexts: PromptContextSource;
-  private readonly github: GitHubSync;
   private readonly reads: ReadModels;
   private readonly tiles: TileActions;
   private readonly prActions: PrActions;
   private readonly feedback: FeedbackActions;
   private readonly chats: ChatActions;
   private readonly proposals: ProposalActions;
-  private running: Promise<SyncReport> | null = null;
+  private readonly memoryActions: MemoryActions;
+  private readonly syncRun: SyncRun;
+  private readonly consolidationRun: ConsolidationRun;
+  private syncing: Promise<SyncReport> | null = null;
+  private consolidating: Promise<ConsolidationReport> | null = null;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
-    this.contexts = new PromptContextSource(store, deps.instructionsFile);
-    this.github = new GitHubSync(store, deps.reader, this.contexts, now);
-    this.reads = new ReadModels(store, deps.agent, this.contexts, now);
+    const contexts = new PromptContextSource(store, deps.instructionsFile);
+    this.reads = new ReadModels(store, deps.agent, contexts, now);
     const readMarker = new ReadMarker(store, deps.markReadQueue, now);
     this.tiles = new TileActions(store, readMarker, now);
-    this.prActions = new PrActions(store, deps.writer, deps.agent, this.contexts, readMarker, now);
+    this.prActions = new PrActions(store, deps.writer, deps.agent, contexts, readMarker, now);
     this.feedback = new FeedbackActions(store, readMarker, now);
-    this.chats = new ChatActions(store, deps.agent, this.contexts, now);
+    this.chats = new ChatActions(store, deps.agent, contexts, now);
     this.proposals = new ProposalActions(store, now);
+    this.memoryActions = new MemoryActions(store, now);
+    const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
+    this.syncRun = new SyncRun(runDeps, new GitHubSync(store, deps.reader, contexts, now), deps.markReadQueue);
+    this.consolidationRun = new ConsolidationRun(runDeps);
   }
 
-  private async runSync(options: SyncOptions): Promise<SyncReport> {
-    const startedAt = this.deps.now().toISOString();
-    const errors: string[] = [];
-    const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY);
-    const report: SyncReport = {
-      startedAt,
-      finishedAt: startedAt,
-      notificationsNotModified: false,
-      threads: 0,
-      prsFetched: 0,
-      prsSkipped: 0,
-      newEvents: 0,
-      agentCalls: 0,
-      agentCallStats: budget.stats,
-      dossiersUpdated: 0,
-      facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
-      errors,
-    };
-    try {
-      const fetched = await this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY);
-      report.notificationsNotModified = fetched.notModified;
-      report.threads = fetched.threads;
-      report.prsFetched = fetched.prsFetched;
-      report.prsSkipped = fetched.prsSkipped;
-      report.newEvents = fetched.newEventIds.length;
-
-      const digester = new Digester({
-        store: this.deps.store,
-        agent: this.deps.agent,
-        contexts: this.contexts,
-        budget,
-        viewer: fetched.viewer,
-        errors,
-        now: this.deps.now,
-      });
-      await digester.run(options.agentJobs ?? ALL_AGENT_JOBS, fetched.newEventIds);
-    } catch (error) {
-      errors.push(`sync: ${errorText(error)}`);
-    }
-    // Mark-reads run in the background; the sync report is where the user hears about them.
-    errors.push(...this.deps.markReadQueue.takeNotes());
-    report.agentCalls = budget.calls;
-    report.finishedAt = this.deps.now().toISOString();
-    return report;
-  }
-
+  /**
+   * A sync while one is running joins the running one. Sync and consolidation
+   * never overlap: each waits for the other, so agent calls land in the right run.
+   */
   sync(options: SyncOptions = {}): Promise<SyncReport> {
-    if (!this.running) {
-      this.running = this.runSync(options).finally(() => {
-        this.running = null;
-      });
+    if (!this.syncing) {
+      const before = this.consolidating?.catch(() => {}) ?? Promise.resolve();
+      this.syncing = before
+        .then(() => this.syncRun.run(options))
+        .finally(() => {
+          this.syncing = null;
+        });
     }
-    return this.running;
+    return this.syncing;
+  }
+
+  consolidate(options: ConsolidateOptions = {}): Promise<ConsolidationReport> {
+    if (!this.consolidating) {
+      const before = this.syncing?.catch(() => {}) ?? Promise.resolve();
+      this.consolidating = before
+        .then(() => this.consolidationRun.run(options))
+        .finally(() => {
+          this.consolidating = null;
+        });
+    }
+    return this.consolidating;
   }
 
   async listTopics(): Promise<TopicListItem[]> {
@@ -190,23 +171,19 @@ export class Engine implements EngineService {
   }
 
   async listFacts(query: FactQuery): Promise<FactView[]> {
-    throw new Error(`not implemented: listFacts (${JSON.stringify(query)})`);
+    return this.reads.listFacts(query);
   }
 
   async listProposals(): Promise<PendingProposals> {
-    throw new Error('not implemented: listProposals');
+    return this.memoryActions.listProposals();
   }
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    throw new Error(`not implemented: decideRuleProposal (${proposalId}, ${accept})`);
+    return this.memoryActions.decideRuleProposal(proposalId, accept);
   }
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {
-    throw new Error(`not implemented: markTopicSeen (${topicId})`);
-  }
-
-  async consolidate(options: ConsolidateOptions = {}): Promise<ConsolidationReport> {
-    throw new Error(`not implemented: consolidate (${JSON.stringify(options)})`);
+    return this.memoryActions.markTopicSeen(topicId);
   }
 
   flushPendingWrites(): Promise<void> {
@@ -214,7 +191,8 @@ export class Engine implements EngineService {
   }
 
   async close(): Promise<void> {
-    await this.running?.catch(() => {});
+    await this.syncing?.catch(() => {});
+    await this.consolidating?.catch(() => {});
     this.deps.store.close();
   }
 }

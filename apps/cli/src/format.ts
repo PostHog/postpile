@@ -1,8 +1,11 @@
 import type { PrDetail, SyncReport, TopicDetail, TopicListItem } from '@code-manager/core';
+import { formatCallStats, formatDossier, formatFactCounts, formatFacts } from './format-memory.ts';
 
 export function formatSync(report: SyncReport): string {
   const lines = [
-    `threads ${report.threads}, PRs fetched ${report.prsFetched}, new events ${report.newEvents}, agent calls ${report.agentCalls}`,
+    `threads ${report.threads}, PRs fetched ${report.prsFetched}, new events ${report.newEvents}, dossiers updated ${report.dossiersUpdated}`,
+    `agent: ${formatCallStats(report.agentCallStats)}`,
+    formatFactCounts(report.facts),
   ];
   if (report.prsSkipped > 0) {
     lines.push(`${report.prsSkipped} PRs left for the next sync (--limit)`);
@@ -30,6 +33,9 @@ export function formatTopic(detail: TopicDetail): string {
   const lines = [`${topic.name}  (driver ${topic.driver ?? 'unknown'}, you: ${topic.userRole})`, topic.summary];
   if (topic.tailoring) {
     lines.push(`tailoring: ${topic.tailoring}`);
+  }
+  if (detail.dossier) {
+    lines.push('', ...formatDossier(detail.dossier));
   }
   for (const proposal of detail.pendingProposals) {
     lines.push(`proposal ${proposal.id}: ${proposal.kind} ${proposal.name ?? ''} (${proposal.reason})`);
@@ -72,6 +78,10 @@ export function formatPr(detail: PrDetail): string {
       lines.push(`pulled in: ${detail.glance.pullInReason}`);
     }
     lines.push('');
+  }
+  const facts = formatFacts(detail.facts);
+  if (facts.length > 0) {
+    lines.push(...facts, '');
   }
   for (const view of detail.events) {
     lines.push(`${view.event.at}  [${view.display}]  ${view.event.summary}`);

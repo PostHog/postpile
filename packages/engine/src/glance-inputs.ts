@@ -1,24 +1,38 @@
-import type { GlanceInput, PromptContext } from '@code-manager/agent';
-import { isPinged, TILE_STATE_ORDER, type PrKey, type Provenance, type Viewer } from '@code-manager/core';
+import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@code-manager/agent';
+import { isPinged, TILE_STATE_ORDER, type DossierVersion, type PrKey, type Topic, type Viewer } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import type { Board } from './board.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 
+/** A PR that should have a glance, and the topic it sits in. */
+export interface GlanceTarget {
+  /** Null for the virtual Unsorted topic. */
+  topicId: string | null;
+  item: GlanceBatchItem;
+}
+
+interface TopicParts {
+  topic: Topic | null;
+  dossier: DossierVersion | null;
+  context: PromptContext;
+}
+
 /** Open PRs in tiles, most urgent tile first. A PR pinged anywhere counts as pinged. */
-function glanceProvenances(board: Board): Map<PrKey, Provenance> {
+function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   const tiles = board
     .allTiles()
     .map((tile) => ({ tile, priority: TILE_STATE_ORDER[board.stateOf(tile).kind] }))
     .sort((a, b) => a.priority - b.priority);
-  const result = new Map<PrKey, Provenance>();
+  const result = new Map<PrKey, GlanceBatchItem>();
   for (const { tile } of tiles) {
     for (const member of tile.members) {
-      if (board.prs.get(member.prKey)?.state !== 'OPEN') {
+      const pr = board.prs.get(member.prKey);
+      if (pr?.state !== 'OPEN') {
         continue;
       }
       const known = result.get(member.prKey);
-      if (!known || (!isPinged(known) && isPinged(member.provenance))) {
-        result.set(member.prKey, member.provenance);
+      if (!known || (!isPinged(known.provenance) && isPinged(member.provenance))) {
+        result.set(member.prKey, { pr, provenance: member.provenance });
       }
     }
   }
@@ -26,36 +40,54 @@ function glanceProvenances(board: Board): Map<PrKey, Provenance> {
 }
 
 /**
- * The glance input for every PR that should have a glance, most urgent first.
- * Shared by the glance job (what to generate) and the read models (whether a
- * stored glance still matches), so both hash exactly the same input.
+ * Builds glance batch inputs the same way for the glance job (what to
+ * generate) and the read models (whether a stored glance still matches), so
+ * both hash exactly the same input. Topic, dossier and context are loaded
+ * once per topic: forTopic reads the instructions file each time.
  */
-export function glanceInputs(
-  board: Board,
-  store: Store,
-  viewer: Viewer,
-  contexts: PromptContextSource,
-): Map<PrKey, GlanceInput> {
-  // One context per topic: forTopic reads the instructions file each time.
-  const contextByTopic = new Map<string | null, PromptContext>();
-  const contextFor = (topicId: string | null): PromptContext => {
-    let context = contextByTopic.get(topicId);
-    if (!context) {
-      context = contexts.forTopic(topicId);
-      contextByTopic.set(topicId, context);
-    }
-    return context;
-  };
+export class GlanceInputs {
+  private readonly parts = new Map<string | null, TopicParts>();
 
-  const result = new Map<PrKey, GlanceInput>();
-  for (const [key, provenance] of glanceProvenances(board)) {
-    const pr = board.prs.get(key);
-    if (!pr) {
-      continue;
+  constructor(
+    private readonly store: Store,
+    private readonly board: Board,
+    private readonly viewer: Viewer,
+    private readonly contexts: PromptContextSource,
+  ) {}
+
+  private partsFor(topicId: string | null): TopicParts {
+    let parts = this.parts.get(topicId);
+    if (!parts) {
+      const topic = topicId === null ? null : this.store.topics.get(topicId);
+      parts = {
+        topic,
+        dossier: topic ? this.store.dossiers.latest(topic.id) : null,
+        context: this.contexts.forTopic(topic?.id ?? null),
+      };
+      this.parts.set(topicId, parts);
     }
-    const topicId = board.memberships.get(key)?.topicId ?? null;
-    const topic = topicId === null ? null : store.topics.get(topicId);
-    result.set(key, { pr, viewer, provenance, topic, context: contextFor(topic?.id ?? null) });
+    return parts;
   }
-  return result;
+
+  /** Every PR that should have a glance, most urgent first. */
+  targets(): GlanceTarget[] {
+    return [...itemsByUrgency(this.board)].map(([key, item]) => ({
+      topicId: this.board.memberships.get(key)?.topicId ?? null,
+      item,
+    }));
+  }
+
+  dossierVersion(topicId: string | null): number | null {
+    return this.partsFor(topicId).dossier?.version ?? null;
+  }
+
+  batchInput(topicId: string | null, items: GlanceBatchItem[], attempt: 1 | 2): GlanceBatchInput {
+    const parts = this.partsFor(topicId);
+    return { topic: parts.topic, dossier: parts.dossier, items, viewer: this.viewer, context: parts.context, attempt };
+  }
+
+  /** The hash a stored glance must carry to still be current. Never depends on the other PRs in a batch. */
+  itemHash(agent: AgentService, target: GlanceTarget): string {
+    return agent.glanceItemInputHash(this.batchInput(target.topicId, [target.item], 1), target.item);
+  }
 }

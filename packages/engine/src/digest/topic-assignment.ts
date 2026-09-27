@@ -1,25 +1,22 @@
 import type { TopicAssignment, TopicChoice } from '@code-manager/agent';
-import { newTopic, type Pr, type Topic } from '@code-manager/core';
+import { dossierBrief, newTopic, type Pr, type Topic } from '@code-manager/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
+import { chunk } from '../lists.ts';
 import type { DigestDeps } from './deps.ts';
 
 /** PRs per assignment call. Keeps the prompt small enough for a quick answer. */
 export const ASSIGNMENT_BATCH_SIZE = 20;
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-}
+/** Retired topics stay on offer this long, so a late follow-up PR finds its old topic. */
+const RETIRED_OFFER_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Gives every PR without a topic to the agent, together with the existing
- * topics. The agent picks one or names a new topic. New topics are created
- * right away (otherwise a first sync would leave everything unsorted);
- * existing topics are never renamed or merged here.
+ * topics and their dossier briefs. The agent picks one or names a new topic.
+ * New topics are created right away (otherwise a first sync would leave
+ * everything unsorted); existing topics are never renamed or merged here.
+ * Recently retired topics are offered too; a PR joining one brings it back.
  */
 export class TopicAssigner {
   constructor(private readonly deps: DigestDeps) {}
@@ -31,14 +28,33 @@ export class TopicAssigner {
     return [...store.prs.getMany(keys.filter((key) => threads.has(key))).values()];
   }
 
+  /** Active topics plus topics retired in the last 30 days. */
+  private offeredTopics(): Topic[] {
+    const retiredSince = new Date(this.deps.now().getTime() - RETIRED_OFFER_MS).toISOString();
+    return this.deps.store.topics
+      .list()
+      .filter((t) => t.status === 'active' || (t.status === 'retired' && t.updatedAt >= retiredSince));
+  }
+
   private topicChoices(): TopicChoice[] {
-    return this.deps.store.topics.listActive().map((t) => ({ id: t.id, name: t.name, summary: t.summary, brief: '' }));
+    const topics = this.offeredTopics();
+    const dossiers = this.deps.store.dossiers.latestMany(topics.map((t) => t.id));
+    return topics.map((t) => {
+      const dossier = dossiers.get(t.id);
+      const brief = dossier ? dossierBrief(dossier.dossier) : '';
+      return {
+        id: t.id,
+        name: t.name,
+        summary: t.summary,
+        brief: t.status === 'retired' ? `Finished, retired. ${brief}`.trim() : brief,
+      };
+    });
   }
 
   private findOrCreateTopic(name: string): Topic {
     const { store } = this.deps;
     const wanted = name.trim().toLowerCase();
-    const existing = store.topics.listActive().find((t) => t.name.trim().toLowerCase() === wanted);
+    const existing = this.offeredTopics().find((t) => t.name.trim().toLowerCase() === wanted);
     if (existing) {
       return existing;
     }
@@ -53,6 +69,9 @@ export class TopicAssigner {
     store.transaction(() => {
       for (const assignment of assignments) {
         const topicId = assignment.kind === 'existing' ? assignment.topicId : this.findOrCreateTopic(assignment.name).id;
+        if (store.topics.get(topicId)?.status === 'retired') {
+          store.topics.setStatus(topicId, 'active', at);
+        }
         store.memberships.assign({
           prKey: assignment.prKey,
           topicId,

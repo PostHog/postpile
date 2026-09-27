@@ -2,6 +2,8 @@ import {
   displayState,
   isUnseenLoud,
   TILE_STATE_ORDER,
+  type FactQuery,
+  type FactView,
   type PrDetail,
   type PrKey,
   type PrSummary,
@@ -10,10 +12,11 @@ import {
   type TopicDetail,
   type TopicListItem,
 } from '@code-manager/core';
-import type { AgentService, GlanceInput } from '@code-manager/agent';
+import type { AgentService } from '@code-manager/agent';
 import type { Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
-import { glanceInputs } from './glance-inputs.ts';
+import { GlanceInputs } from './glance-inputs.ts';
+import { MemoryReads } from './memory/memory-reads.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { loadViewer } from './viewer-meta.ts';
 
@@ -33,12 +36,16 @@ function compareTopics(a: TopicListItem, b: TopicListItem): number {
 
 /** Builds the API read models. Every call loads a fresh Board, so state is always derived. */
 export class ReadModels {
+  private readonly memory: MemoryReads;
+
   constructor(
     private readonly store: Store,
     private readonly agent: AgentService,
     private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
-  ) {}
+  ) {
+    this.memory = new MemoryReads(store, now);
+  }
 
   private board(): Board {
     return Board.load(this.store, this.now().toISOString());
@@ -46,18 +53,22 @@ export class ReadModels {
 
   /**
    * PRs whose stored glance no longer matches its current input: new commits,
-   * changed instructions or tailoring, new feedback. The hash only stops a
-   * regeneration; this stops an old verdict being shown next to Approve when
-   * the last sync skipped or failed the glance.
+   * a new dossier version, changed instructions or tailoring, new feedback.
+   * The hash only stops a regeneration; this stops an old verdict being shown
+   * next to Approve when the last sync skipped or failed the glance.
    */
   private staleGlances(board: Board, keys: PrKey[]): Set<PrKey> {
     const glances = this.store.glances.getMany(keys);
     const viewer = loadViewer(this.store);
-    const inputs = glances.size > 0 && viewer ? glanceInputs(board, this.store, viewer, this.contexts) : new Map<PrKey, GlanceInput>();
+    if (glances.size === 0 || !viewer) {
+      return new Set(glances.keys());
+    }
+    const inputs = new GlanceInputs(this.store, board, viewer, this.contexts);
+    const targets = new Map(inputs.targets().map((target) => [target.item.pr.key, target]));
     const stale = new Set<PrKey>();
     for (const [key, glance] of glances) {
-      const input = inputs.get(key);
-      if (!input || glance.inputHash !== this.agent.glanceInputHash(input)) {
+      const target = targets.get(key);
+      if (!target || glance.inputHash !== inputs.itemHash(this.agent, target)) {
         stale.add(key);
       }
     }
@@ -134,8 +145,7 @@ export class ReadModels {
       tiles: this.tileViews(board, topicId),
       sets: isUnsorted ? [] : this.store.sets.listActiveForTopic(topicId),
       pendingProposals: isUnsorted ? [] : this.store.proposals.listPendingForTopic(topicId),
-      // v2: latest dossier, verified claims and changes since seen.
-      dossier: null,
+      dossier: isUnsorted ? null : this.memory.dossierView(topicId, board.prs),
     };
   }
 
@@ -159,8 +169,11 @@ export class ReadModels {
       userState: board.userStates.get(key) ?? null,
       topicId: board.topicIdOf(key),
       tileIds: [...tileIds],
-      // v2: active facts about or citing this PR, verified at read time.
-      facts: [],
+      facts: this.memory.prFacts(key),
     };
+  }
+
+  listFacts(query: FactQuery): FactView[] {
+    return this.memory.listFacts(query);
   }
 }

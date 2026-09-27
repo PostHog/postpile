@@ -1,11 +1,13 @@
 // Fakes for engine tests. Nothing here touches GitHub or the claude CLI.
-import { FakeRunner, RunnerAgentService } from '@code-manager/agent';
+import { FakeRunner } from '@code-manager/agent';
 import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
 import { FakeTimers, viewer as fixtureViewer } from '@code-manager/core/fixtures';
 import type { GitHubReader, GitHubWriter, NotificationConditions, NotificationsResult } from '@code-manager/github';
 import { Store } from '@code-manager/store';
+import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
+import { FakeAgent } from './fake-agent.ts';
 
 export class FakeReader implements GitHubReader {
   threads: NotificationThread[] = [];
@@ -75,12 +77,21 @@ export interface Harness {
   reader: FakeReader;
   writer: FakeWriter;
   runner: FakeRunner;
+  agent: FakeAgent;
   timers: FakeTimers;
 }
 
 export const NOW = new Date('2026-09-02T12:00:00Z');
 
-export function makeHarness(instructionsFile = '/nonexistent/instructions.md'): Harness {
+export interface HarnessOptions {
+  instructionsFile?: string;
+  /** Clock for the engine; tests move it forward by changing what it returns. */
+  now?: () => Date;
+}
+
+export function makeHarness(options: HarnessOptions = {}): Harness {
+  const instructionsFile = options.instructionsFile ?? '/nonexistent/instructions.md';
+  const now = options.now ?? (() => NOW);
   const store = Store.open(':memory:');
   const reader = new FakeReader();
   const writer = new FakeWriter();
@@ -89,18 +100,8 @@ export function makeHarness(instructionsFile = '/nonexistent/instructions.md'): 
   const markReadQueue = new MarkReadQueue(writer, reader, timers, undefined, (threadId, readAt) =>
     store.notifications.markRead(threadId, readAt),
   );
-  const engine = new Engine({
-    store,
-    reader,
-    writer,
-    agent: new RunnerAgentService(runner, { now: () => NOW.toISOString() }),
-    markReadQueue,
-    instructionsFile,
-    now: () => NOW,
-  });
-  return { engine, store, reader, writer, runner, timers };
-}
-
-export function glanceAnswer(verdict = 'LOOKS_SAFE'): unknown {
-  return { verdict, forYou: 'Small change.', does: 'Does a thing.', risk: 'Low.', othersSaid: 'Nothing yet.' };
+  const callLog = new AgentCallLog(store, now);
+  const agent = new FakeAgent(runner, callLog);
+  const engine = new Engine({ store, reader, writer, agent, callLog, markReadQueue, instructionsFile, now });
+  return { engine, store, reader, writer, runner, agent, timers };
 }

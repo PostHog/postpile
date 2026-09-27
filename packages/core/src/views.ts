@@ -86,12 +86,13 @@ export interface PrDetail {
 }
 
 /**
- * Agent jobs a sync can run, in the order it runs them. v2: 'dossiers'
- * replaces 'summaries'; ALL_AGENT_JOBS switches over when the dossier job lands.
+ * Agent jobs a sync can run. 'dossiers' includes reconciling the facts the
+ * dossier updates produced.
  */
-export type AgentJob = 'topics' | 'sets' | 'summaries' | 'dossiers' | 'glances' | 'events';
+export type AgentJob = 'topics' | 'dossiers' | 'sets' | 'glances' | 'events';
 
-export const ALL_AGENT_JOBS: AgentJob[] = ['topics', 'sets', 'summaries', 'glances', 'events'];
+/** In the order a sync runs them, which is also the order a capped budget is spent in. */
+export const ALL_AGENT_JOBS: AgentJob[] = ['topics', 'dossiers', 'sets', 'glances', 'events'];
 
 /** Knobs for cheap runs (smoke tests, first look). Everything is unlimited by default. */
 export interface SyncOptions {

@@ -5,3 +5,4 @@ export { defaultPaths, type AppPaths } from './paths.ts';
 export { UNSORTED_TOPIC_ID } from './board.ts';
 export { ReadOnlyWriter } from './read-only-writer.ts';
 export { createEngine, type CreateEngineOptions } from './create.ts';
+export { AgentCallLog, ACTION_RUN_ID } from './agent-call-log.ts';

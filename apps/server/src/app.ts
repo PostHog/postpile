@@ -30,9 +30,42 @@ const syncBody = z
   .object({
     maxPrs: z.number().int().positive().optional(),
     maxAgentCalls: z.number().int().min(0).optional(),
-    agentJobs: z.array(z.enum(['topics', 'sets', 'summaries', 'glances', 'events'])).optional(),
+    agentJobs: z.array(z.enum(['topics', 'dossiers', 'sets', 'glances', 'events'])).optional(),
   })
   .default({});
+
+const consolidateBody = z
+  .object({
+    onlyIfDue: z.boolean().optional(),
+    maxAgentCalls: z.number().int().min(0).optional(),
+  })
+  .default({});
+
+/** "person:alice" or "path:PostHog/posthog:.github/workflows/". Only the first ":" separates kind and key. */
+const entityParam = z
+  .string()
+  .regex(/^(person|path|initiative|pr):.+/, 'entity must look like kind:key')
+  .transform((value) => {
+    const split = value.indexOf(':');
+    return { kind: value.slice(0, split) as 'person' | 'path' | 'initiative' | 'pr', key: value.slice(split + 1) };
+  });
+
+const factQuery = z.object({
+  entity: entityParam.optional(),
+  predicate: z
+    .enum(['drives', 'works_on', 'reviews', 'owns', 'part_of', 'depends_on', 'blocked_by', 'decided', 'status', 'user_cares', 'note'])
+    .optional(),
+  topicId: z.string().optional(),
+  since: z.iso.datetime({ offset: true }).transform((value) => new Date(value).toISOString()).optional(),
+  includeClosed: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  limit: z.coerce.number().int().positive().max(1000).optional(),
+});
+
+/** Parses a JSON body that may be missing entirely. */
+async function optionalJson(c: { req: { text(): Promise<string> } }): Promise<unknown> {
+  const text = await c.req.text();
+  return text.trim() === '' ? undefined : JSON.parse(text);
+}
 
 /** Thrown for input the client got wrong; answered with 400 instead of 500. */
 class BadRequestError extends Error {}
@@ -77,12 +110,9 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
 
   app.get('/api/health', (c) => c.json({ ok: true }));
   app.get('/api/config', (c) => c.json(config));
-  app.post('/api/sync', async (c) => {
-    // The body is optional: a bare POST syncs with no limits.
-    const text = await c.req.text();
-    const options = syncBody.parse(text.trim() === '' ? undefined : JSON.parse(text));
-    return c.json(await engine.sync(options));
-  });
+  // The bodies are optional: a bare POST syncs or consolidates with no limits.
+  app.post('/api/sync', async (c) => c.json(await engine.sync(syncBody.parse(await optionalJson(c)))));
+  app.post('/api/consolidate', async (c) => c.json(await engine.consolidate(consolidateBody.parse(await optionalJson(c)))));
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
   app.get('/api/topics/:id', async (c) => {
@@ -93,9 +123,20 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     const body = z.object({ text: z.string(), keep: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.decideTailoring(c.req.param('id'), body.text, body.keep));
   });
+  app.post('/api/topics/:id/seen', async (c) => c.json(await engine.markTopicSeen(c.req.param('id'))));
+  app.get('/api/proposals', async (c) => c.json(await engine.listProposals()));
   app.post('/api/proposals/:id', async (c) => {
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.decideTopicProposal(c.req.param('id'), body.accept));
+  });
+
+  app.post('/api/rule-proposals/:id', async (c) => {
+    const body = z.object({ accept: z.boolean() }).parse(await c.req.json());
+    return c.json(await engine.decideRuleProposal(c.req.param('id'), body.accept));
+  });
+  app.get('/api/facts', async (c) => {
+    const { since, ...query } = factQuery.parse(c.req.query());
+    return c.json(await engine.listFacts({ ...query, changedSince: since }));
   });
 
   app.get('/api/prs/:owner/:repo/:number', async (c) => {

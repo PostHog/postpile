@@ -3,13 +3,14 @@ import type { Store } from '@code-manager/store';
 import { newTopicId } from '../ids.ts';
 import { failed, ok } from './results.ts';
 
-/** Topic renames, merges and new topics only happen here, after the user said yes. */
+/** Topic renames, merges, splits and new topics only happen here, after the user said yes. */
 export class ProposalActions {
   constructor(
     private readonly store: Store,
     private readonly now: () => Date,
   ) {}
 
+  /** new_topic and split both end up here: a new topic with the proposal's PRs moved into it. */
   private createTopic(proposal: TopicProposal, at: string): void {
     const name = proposal.name ?? 'New topic';
     const topic = newTopic(newTopicId(name), name, at);
@@ -20,12 +21,15 @@ export class ProposalActions {
   }
 
   private applyAccepted(proposal: TopicProposal, at: string): void {
-    if (proposal.kind === 'new_topic') {
+    if (proposal.kind === 'new_topic' || proposal.kind === 'split') {
       this.createTopic(proposal, at);
     } else if (proposal.kind === 'rename' && proposal.topicId && proposal.name) {
       this.store.topics.rename(proposal.topicId, proposal.name, at);
     } else if (proposal.kind === 'merge' && proposal.topicId && proposal.intoTopicId) {
-      this.store.memberships.moveAll(proposal.topicId, proposal.intoTopicId);
+      // A new created_at marks them as joined, so the target's next dossier update introduces them.
+      for (const membership of this.store.memberships.listForTopic(proposal.topicId)) {
+        this.store.memberships.assign({ ...membership, topicId: proposal.intoTopicId, createdAt: at });
+      }
       this.store.topics.setStatus(proposal.topicId, 'archived', at);
     }
   }

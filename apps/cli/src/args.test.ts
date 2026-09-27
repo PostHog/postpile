@@ -21,9 +21,19 @@ describe('parseArgs', () => {
     });
   });
 
+  it('parses consolidate flags', () => {
+    expect(parseArgs(['consolidate'])).toEqual({ name: 'consolidate', options: {} });
+    expect(parseArgs(['consolidate', '--if-due', '--max-agent-calls', '2'])).toEqual({
+      name: 'consolidate',
+      options: { onlyIfDue: true, maxAgentCalls: 2 },
+    });
+    expect(parseArgs(['consolidate', '--now'])).toEqual({ name: 'help' });
+  });
+
   it('rejects bad sync flags', () => {
     expect(parseArgs(['sync', '--limit', '0'])).toEqual({ name: 'help' });
     expect(parseArgs(['sync', '--agent-jobs', 'nope'])).toEqual({ name: 'help' });
+    expect(parseArgs(['sync', '--agent-jobs', 'summaries'])).toEqual({ name: 'help' });
     expect(parseArgs(['sync', '--what'])).toEqual({ name: 'help' });
   });
 });

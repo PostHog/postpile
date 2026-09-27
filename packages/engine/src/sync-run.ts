@@ -1,0 +1,79 @@
+import { ALL_AGENT_JOBS, type SyncOptions, type SyncReport } from '@code-manager/core';
+import { AgentBudget } from './budget.ts';
+import { reviveRetiredTopics } from './consolidation/revive.ts';
+import type { DigestTally } from './digest/deps.ts';
+import { Digester } from './digest/digester.ts';
+import { errorText } from './errors.ts';
+import type { GitHubSync } from './github-sync.ts';
+import type { MarkReadQueue } from './mark-read-queue.ts';
+import { FactVerifier } from './memory/fact-verifier.ts';
+import { emptyFactCounts } from './memory/fact-writer.ts';
+import type { RunDeps } from './run-deps.ts';
+
+function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): SyncReport {
+  return {
+    startedAt,
+    finishedAt: startedAt,
+    notificationsNotModified: false,
+    threads: 0,
+    prsFetched: 0,
+    prsSkipped: 0,
+    newEvents: 0,
+    agentCalls: 0,
+    agentCallStats: { total: 0, byKind: {} },
+    dossiersUpdated: 0,
+    facts: tally.facts,
+    errors,
+  };
+}
+
+/** One sync: fetch -> verify facts -> agent digest. Tiles are derived on read. */
+export class SyncRun {
+  constructor(
+    private readonly deps: RunDeps,
+    private readonly github: GitHubSync,
+    private readonly markReadQueue: MarkReadQueue,
+  ) {}
+
+  async run(options: SyncOptions): Promise<SyncReport> {
+    const { store, now, callLog } = this.deps;
+    const startedAt = now().toISOString();
+    const errors: string[] = [];
+    const tally: DigestTally = { dossiersUpdated: 0, facts: emptyFactCounts() };
+    const report = emptyReport(startedAt, tally, errors);
+    report.agentCallStats = callLog.begin(`sync:${startedAt}`);
+    try {
+      const fetched = await this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY);
+      report.notificationsNotModified = fetched.notModified;
+      report.threads = fetched.threads;
+      report.prsFetched = fetched.prsFetched;
+      report.prsSkipped = fetched.prsSkipped;
+      report.newEvents = fetched.newEventIds.length;
+
+      new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, tally.facts);
+      reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
+      const digester = new Digester({
+        store,
+        agent: this.deps.agent,
+        contexts: this.deps.contexts,
+        budget: new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats),
+        facts: this.deps.facts,
+        viewer: fetched.viewer,
+        errors,
+        tally,
+        now,
+      });
+      await digester.run(options.agentJobs ?? ALL_AGENT_JOBS, fetched.newEventIds);
+    } catch (error) {
+      errors.push(`sync: ${errorText(error)}`);
+    } finally {
+      callLog.end();
+    }
+    // Mark-reads run in the background; the sync report is where the user hears about them.
+    errors.push(...this.markReadQueue.takeNotes());
+    report.agentCalls = report.agentCallStats.total;
+    report.dossiersUpdated = tally.dossiersUpdated;
+    report.finishedAt = now().toISOString();
+    return report;
+  }
+}
