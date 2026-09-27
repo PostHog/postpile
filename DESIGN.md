@@ -101,6 +101,9 @@ Action details:
 
 ## Memory / agentic digesting layer (v1, to review)
 
+Being replaced step by step by **Engine memory (v2)** below; v1 code stays
+until its v2 replacement lands.
+
 Everything the agents know persists in SQLite, keyed so it survives restarts
 and only recomputes on change.
 
@@ -166,6 +169,408 @@ ghatchup, where they took a PR summary from ~30s to ~3s). Glances use
 (`CODE_MANAGER_MODEL`). An API-backed runner can replace it later without
 touching callers.
 
+## Engine memory (v2)
+
+v1 gives each PR a stateless glance and each topic a summary written over
+glances. That does not add up to an engine that knows the work: who drives
+what, how PRs relate over time, what changed since the user last looked. A
+first real sync also costs one glance call per PR (~141 today).
+
+v2 keeps the event log as the source of truth and builds three kinds of
+memory on top, each updated from new input only:
+
+- **Topic dossiers**: one living, bounded document per topic, refined from
+  the old dossier plus the events since the last refine. Versions are kept.
+- **Facts**: small statements about people, code areas, initiatives and PRs,
+  with provenance and validity times, reconciled against what is stored
+  (ADD / UPDATE / INVALIDATE / NOOP). Never deleted, only closed out.
+- **Glances** become a view written from the dossier, 18 PRs per call.
+
+Cheap deterministic checks run before any fact or dossier claim is shown or
+fed back (verify-before-use). A consolidation job ("sleep-time") runs on
+demand to propose topic merges, splits and renames, retire finished topics,
+fold duplicate facts, and turn repeated feedback into standing rules.
+
+Sources this follows: Letta memory blocks and sleep-time agents (bounded,
+structured blocks, consolidated off the hot path), Mem0 and Zep/Graphiti
+(extract then reconcile, bi-temporal facts), GitHub Copilot Memory
+(citations, verify before use), Karpathy's LLM wiki (living pages refined
+from new sources), Linear Triage (suggestions that know the surrounding
+work).
+
+Contracts are in code: `packages/core/src/memory.ts` (types),
+`memory-views.ts` (read models), `dossier.ts`, `fact-rules.ts`, `verify.ts`,
+`delta.ts`, `glance-batches.ts`, `agent-calls.ts`, `topic-changes.ts`;
+`packages/store/src/migrations/002_engine_memory.ts` and the new repos;
+`packages/agent/src/service.ts` (v2 block) and `schemas.ts`;
+`packages/engine/src/service.ts`. Bodies that still throw `not implemented`
+are the build work.
+
+### Data model
+
+New tables (migration 002). Everything else from v1 stays.
+
+| table | columns | notes |
+|---|---|---|
+| `event_log` | `seq` INTEGER PK AUTOINCREMENT, `event_id` UNIQUE, `pr_key`, `logged_at` | Append-only, one row per first sighting of an event id. `seq` is the unit every cursor counts in. Never reused (AUTOINCREMENT), rows stay when the `pr_event` row is later dropped. Backfilled for existing events in time order. |
+| `cursor` | PK (`kind`, `scope`), `seq`, `dossier_version`, `updated_at` | `digest:<topic>` = what the dossier has read; `seen:<topic>` = what the user has seen; `consolidate:global` = last consolidation. Only moves forward. |
+| `topic_dossier` | PK (`topic_id`, `version`), `json`, `flags_json`, `input_hash`, `through_seq`, `model`, `created_at` | Every version kept (pruned to the newest 50 per topic). Latest = highest version. |
+| `fact` | `id` PK, `subject_kind`, `subject_key`, `predicate`, `object_kind`, `object_key`, `text`, `topic_id`, `source` (agent/rule), `valid_from`, `invalid_at`, `invalid_reason`, `superseded_by`, `recorded_at`, `expired_at`, `stale_at`, `stale_reason`, `verified_at` | Bi-temporal: `valid_from`/`invalid_at` = world time, `recorded_at`/`expired_at` = when the engine believed it. Active = both `invalid_at` and `expired_at` null. |
+| `fact_ref` | PK (`fact_id`, `kind`, `pr_key`, `source_id`), `url`, `at`, `head_oid` | Provenance. `source_id` is `''` for kind `pr`. A NOOP reconcile adds refs here. |
+| `rule_proposal` | `id` PK, `text`, `topic_id` (null = global), `evidence_json` (feedback ids), `reason`, `status`, `created_at`, `decided_at` | Standing rules from consolidation, pending until the user decides. |
+| `agent_call` | `id` PK, `run_id`, `kind`, `topic_id`, `model`, `ok`, `attempt`, `duration_ms`, `cost_usd`, `at` | One row per runner call. Sync reports and cost over time read it. |
+
+Changed: `pr_glance` gets `dossier_version`. `topic.status` gets `retired`
+(finished, comes back when a new PR joins; `archived` still means merged
+away). `topic_proposal.kind` gets `split` (existing columns: `topic_id` =
+source, `name` = new topic, `pr_keys` = PRs to move; one proposal per new
+part). `topic.summary` stays and is written from `dossier.summary`;
+`topic.summary_input_hash` is no longer written and gets dropped in a later
+migration.
+
+### Cursors and "since last seen"
+
+- `EventRepo.upsertDerived` already reports new event ids. In the same
+  transaction `EventLogRepo.append` logs them, so `seq` order is the order
+  the engine learned about events, not their GitHub time (an old commit
+  pushed today is new).
+- **digest cursor** per topic: the `seq` the latest dossier has read
+  (`topic_dossier.through_seq`, mirrored into `cursor` in the same
+  transaction). A dossier update only ever gets `event_log` rows after it.
+- **seen cursor** per topic: moved by `markTopicSeen(topicId)`, which stores
+  the current max `seq` and the current dossier version. `getTopic` builds
+  `changesSinceSeen` from it: `recentChanges` entries newer than the cursor,
+  facts recorded or closed after it, and the count of new events.
+- **consolidate cursor**: time and `seq` of the last consolidation run, used
+  to decide when the next one is due.
+- A PR that joins a topic (assignment, accepted merge or split, user move)
+  has history the dossier never read. It shows up in the delta as
+  `joinedPrKeys` and gets a short intro in the prompt (title, author, state,
+  description head, its newest events), not its whole event history.
+
+### Sync flow
+
+Same entry point (`sync()`), same "skip when the input hash matches" rule.
+Each numbered step is one `AgentJob` or a deterministic pass.
+
+1. **fetch** (no agent): notifications, PR snapshots, events with rule
+   loudness, `event_log.append` for new event ids. Unchanged from v1.
+2. **verify pass** (no agent): `verifyFact` on every active fact touching a
+   fetched PR (`FactRepo.listActiveTouchingPrs`). `invalidate` outcomes are
+   closed right away (a merged PR ends "alice works on #12"); `stale` ones are
+   marked and go to the topic's next dossier update as the recheck list.
+3. **topics** (`topic_assignment`, batches of 20): as v1, but each offered
+   topic carries `brief` = `dossierBrief(latest dossier)` (goal, status,
+   driver, max 400 chars), not only name and summary. Recently retired topics
+   (30 days) are offered too, marked finished; assigning to one reactivates it.
+4. **roles** (no agent): driver and user role, as v1. When a dossier exists,
+   its `driver` person wins over "most frequent author".
+5. **sets** (`set_grouping`): unchanged from v1 (see open questions).
+6. **dossiers** (`dossier_update`, one call per topic with a non-empty
+   delta, topics with unread tiles first). Input: `DossierUpdateInput`:
+   previous dossier, `TopicDelta` from `selectTopicDelta`, member PR
+   snapshots, up to 60 known active facts on the topic's entities (verified,
+   context only), the stale facts to recheck, viewer and `PromptContext`.
+   Output: new dossier (clamped), flags, fact candidates, facts to close,
+   stale facts confirmed. Written in one transaction: new
+   `topic_dossier` version (`through_seq` = `delta.toSeq`), `topic.summary`
+   mirror, digest cursor, `closeFacts` closed, confirmed facts
+   `markVerified`, candidates through `preReconcile` (step 7).
+7. **facts** (`fact_reconcile`, only for ambiguous candidates, 40 per call,
+   after all dossiers): see reconcile rules below. Usually zero calls.
+8. **glances** (`glance_batch`): per topic, PRs in a tile whose
+   `glanceItemInputHash` differs from the stored glance, unread tiles first,
+   in batches of 18. A topic whose dossier update was skipped by the budget
+   gets no glances this sync (it would pay twice). Protocol below.
+9. **events** (`event_classification`, v2: one call per topic with new loud
+   events, up to 20 PRs per call, `classifyEventBatch`): second opinion on new
+   loud events only, as v1.
+10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts.
+
+With a call cap (`--max-agent-calls`) the budget is spent in that order.
+Consolidation is not part of `sync()`; see below.
+
+Rough first sync for 141 PRs in ~20 topics: 8 assignment + ~20 dossier +
+~1 reconcile + sets as v1 + ~20-25 glance batches + ~20 event batches, so
+around 80-90 calls instead of 141 glances plus one event call per PR. A
+quiet re-sync makes zero calls; a sync with activity in 3 topics makes ~3
+dossier + ~3 glance calls.
+
+### Delta selection
+
+`selectTopicDelta` (core, pure) gets the member PRs, the `event_log` rows
+after the digest cursor (`EventLogRepo.listSince`), the previous version,
+stale facts and claims, and topic feedback. It:
+
+- drops muted events, keeps bots (the prompt compacts them to counts)
+- caps at `DELTA_LIMITS.maxEvents` (120) with at most 15 per PR, newest
+  kept; the rest are only counted in `omittedEvents`
+- sets `toSeq` to the highest `seq` seen, capped or not, so dropped history
+  is not offered again
+- lists `joinedPrKeys` (members not in the previous timeline) and
+  `leftPrKeys` (in the timeline, no longer members)
+- keeps feedback newer than the previous version as `newFeedback`
+
+`isEmptyDelta` = no dossier update for that topic.
+
+### Dossier
+
+Structure (`Dossier` in core, zod `dossierOutput` in agent). Bounds in
+`DOSSIER_LIMITS`; the model is asked to respect them and `clampDossier`
+cuts after parsing, so one long answer cannot grow later prompts.
+
+| field | shape | bound |
+|---|---|---|
+| `goal` | what the initiative is for | 300 chars |
+| `summary` | where it stands, mirrored to `topic.summary` | 600 |
+| `status` | `starting` / `active` / `blocked` / `winding_down` / `finished` | - |
+| `statusNote` | why that status | 200 |
+| `people[]` | `{login, role: driver/contributor/reviewer/stakeholder, note}` | 8, note 120 |
+| `openQuestions[]` | `{text, askedBy, refs}` | 8, text 200 |
+| `timeline[]` | `{prKey, role}` oldest first: what each PR does for the initiative | 40, role 120 |
+| `earlier` | history of PRs rolled off the timeline | 600 |
+| `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}` | 6, text 160 |
+| `recentChanges[]` | `{at, text, refs}` newest first, rolling | 12, text 160 |
+
+PR state, author, reviewers and CI are **not** stored in the dossier. The
+renderer reads them from the current snapshot, so a dossier cannot carry a
+stale state line and those parts need no verification.
+
+`flags[]` (`needs_user`, `contradiction`, `looks_finished`, `off_topic_pr`)
+come with each version. `needs_user` shows in the topic view;
+`looks_finished` and `off_topic_pr` feed consolidation.
+
+**Dossier as prompt text** (`renderDossier` in agent, ~8k chars max):
+
+```
+Topic dossier "Move CI to Depot" (v7, written 2026-09-20)
+Goal: Run all CI on Depot runners to cut cost and queue time.
+Status: blocked - waiting on the runner image PR
+Summary: Test jobs moved; Docker builds next; ...
+People:
+- @alice driver: owns the rollout
+- @bob reviewer: signs off workflow changes
+What the user cares about here:
+- CI cost and cache keys (instructions)
+Open questions:
+- Q1 Do we keep GitHub runners for release builds? (asked by @carol, PostHog/posthog#41890)
+PR timeline, oldest first (state from GitHub now, not from memory):
+- PostHog/posthog#41880 merged by @alice: base runner image
+- PostHog/posthog#41899 open, CI failing, @alice: move Docker builds
+Earlier: ...
+Recent changes, newest first:
+- 2026-09-19 Docker build PR opened, waits on the image
+```
+
+`dossierBrief` (core) is goal + status + driver in 400 chars, for topic
+assignment and consolidation, where many topics share one prompt.
+
+**Dossier update prompt** input, in order: the rendered previous dossier
+(or "none yet"), the user's context block, member PR state lines, intros of
+joined PRs, the new events (short ids `e1..eN`, bots and CI compacted to
+counts per PR), left PRs, known facts (short ids `F1..Fn`), stale facts to
+recheck with their stale reason, new feedback. The answer (JSON,
+`dossierUpdateOutput`) is the whole new dossier plus `flags`, `facts`,
+`closeFacts`, `confirmedFactIds`. Refs in the answer are the short ids; the
+service maps them back to `FactRef`s and drops unknown ones. A candidate
+fact with no valid ref is dropped (provenance is required). `validFrom` =
+earliest ref time.
+
+Input hash (`dossierInputHash`): previous version (topic + number), delta
+event ids and `toSeq`, joined and left PRs, stale fact ids and claims, new
+feedback ids, tailoring, standing rules, model, prompt version. Not the
+instructions file (open question) and not the known facts (context only).
+A match with the latest version's hash skips the call; that also makes a
+retry after a crash free.
+
+### Facts
+
+`Fact` in core. Entities (`EntityRef`):
+
+| kind | key |
+|---|---|
+| `person` | GitHub login, lowercase |
+| `path` | `owner/repo:dir/prefix/` |
+| `initiative` | topic id (one initiative per topic) |
+| `pr` | PrKey |
+
+Predicates and their rules (`PREDICATE_RULES`):
+
+| predicate | typical shape | unique | ends with PR |
+|---|---|---|---|
+| `drives` | person -> initiative | one per object | no |
+| `works_on` | person -> pr / path / initiative | no | yes |
+| `reviews` | person -> pr / path | no | yes |
+| `owns` | person -> path | no | no |
+| `part_of` | pr -> initiative | one per subject | no |
+| `depends_on` | pr -> pr | no | yes |
+| `blocked_by` | pr / initiative -> pr / person | no | yes |
+| `decided` | initiative / pr, text | no | no |
+| `status` | initiative / pr, text | one per subject | no |
+| `user_cares` | initiative / path / person, text | no | no |
+| `note` | anything, text | no | no |
+
+**Reconcile** (Mem0 style, extract then reconcile). Candidates come out of
+the dossier update. `preReconcile` (core, pure) settles most of them against
+every active fact on the candidates' subjects, across all topics:
+
+1. same subject, predicate, object and normalised text: **NOOP**, merge refs, set `verified_at`
+2. unique predicate, different value, candidate newer: **UPDATE** (old fact closed with `invalid_at` = candidate `validFrom`, `superseded_by` = new id)
+3. same subject, predicate and object, different text: ambiguous
+4. nothing active on subject + predicate: **ADD**
+5. anything else: ambiguous
+
+Ambiguous candidates are batched across topics (40 per call) into
+`reconcileFacts`, which answers one of `add` / `update <factId>` /
+`invalidate <factId>` / `noop <factId>` per item. The dossier update itself
+may also close facts it was shown (`closeFacts`) or confirm stale ones.
+Closing never deletes: it sets `invalid_at`, `invalid_reason`,
+`superseded_by` and `expired_at`.
+
+Queries without prompts (`listFacts(FactQuery)`):
+- who is doing what: active `drives` / `works_on` / `reviews`, grouped by person
+- what changed since T: facts with `recorded_at > T` or `expired_at > T`
+- per PR: facts about the PR or citing it (`PrDetail.facts`)
+
+### Verify-before-use
+
+Deterministic, no agent, over stored snapshots (`verifyFact`,
+`verifyDossier` in core). Runs in the sync verify pass (writes) and again at
+read time in `getTopic` / `getPr` (does not write, only sets
+`FactView.stale` / `DossierView.staleClaims`).
+
+| check | outcome |
+|---|---|
+| referenced PR not in the store | stale `pr_missing` |
+| lifecycle predicate and its PR merged / closed | invalidate at `mergedAt` / close time (`pr_merged` / `pr_closed`) |
+| ref has `headOid` and the PR head moved | stale `head_moved` |
+| `reviews` / `works_on` and the person is no longer reviewer / author / committer | stale `person_not_involved` |
+| referenced comment, review or commit gone from the snapshot | stale `source_deleted` |
+| dossier question whose ref sits in a resolved review thread | stale claim `thread_resolved` |
+| dossier timeline entry for a PR that is no longer a member | stale claim, and the PR is in the next delta's `leftPrKeys` |
+
+Stale facts are left out of every prompt's context, shown greyed in the
+UI, and handed to the topic's next dossier update as the recheck list,
+which forces that update even without new events.
+
+### Batched glances
+
+- Per topic, `planGlanceBatches` splits the PRs needing a glance into
+  batches of `GLANCE_BATCH_SIZE` (18), unread first.
+- One `glanceBatch` call per batch: rendered dossier once, the user's
+  context block once, then one section per PR (`batchDetail` limits, smaller
+  than v1's `fullDetail`: body 1500, 15 files, last 8 human comments at 300
+  chars), each headed by its PrKey and how it reached the user.
+- Answer: `{"glances": [{prKey, verdict, forYou, does, risk, othersSaid}, ...]}`.
+  The outer object is parsed with `glanceBatchOutput`; each entry on its own
+  with `glanceBatchItemOutput`. Entries for PRs not in the batch or
+  duplicated are dropped. `GlanceBatchResult.missing` = asked for but absent
+  or invalid.
+- Missing PRs of all first-round batches of a topic go into one retry batch
+  (`retryBatch`, attempt 2). Still missing after that: one error line per PR
+  in the report; the unchanged hash retries it next sync. A batch whose outer
+  JSON does not parse counts all its PRs as missing.
+- `glanceItemInputHash` per PR: v1 snapshot fields, provenance, topic name,
+  **dossier version**, instructions, tailoring, standing rules, feedback on
+  that PR, model. Never the other PRs in the batch. Stored glances get
+  `dossierVersion`.
+- Model: the glance model (`claude-haiku-4-5`, `CODE_MANAGER_GLANCE_MODEL`).
+
+### Consolidation ("sleep-time")
+
+`consolidate(options)` on EngineService, CLI `consolidate [--if-due]
+[--max-agent-calls n]`, and the desktop app calls it with `onlyIfDue` after
+a sync once the user has been idle for a while. Due = 24h since the last run
+and at least one new dossier version since. One `consolidation` call (sonnet)
+over all active topics (split into chunks of 40 topics when needed).
+
+Input (`ConsolidationInput`): every active topic with its latest dossier,
+open/total PR counts and last activity; groups of active facts sharing
+subject + predicate; the newest 60 feedback entries across topics; decided
+rule and topic proposals (so nothing is proposed twice).
+
+Output and what happens:
+
+| output | effect |
+|---|---|
+| `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1 |
+| `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
+| `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
+| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 14 days, no unread or snoozed tile. Retiring is reversible |
+
+Also deterministic, in the same run: prune dossier versions to 50 per
+topic, and retire topics that pass the gate and whose dossier status is
+`finished`.
+
+### Cost accounting
+
+- `RunnerAgentService` takes an `AgentCallObserver` and reports every call,
+  failed ones included, with purpose, model, topic, attempt, duration and
+  cost (the CLI runner's JSON has `total_cost_usd`).
+- The engine's observer writes an `agent_call` row per call (run id = the
+  sync or consolidation) and adds it to that run's `AgentCallStats`.
+  `AgentBudget.take(kind)` decides and counts `skippedByBudget`; jobs count
+  `skippedUnchanged` on hash hits.
+- `SyncReport.agentCallStats` / `ConsolidationReport.agentCallStats`:
+  per kind `calls`, `failed`, `retries`, `skippedUnchanged`,
+  `skippedByBudget`, `durationMs`, `costUsd`. `agentCalls` stays as the total.
+- CLI: `sync` prints one line per kind (`dossier_update 3 (1 skipped
+  unchanged) glance_batch 4 (1 retry) ... total 9, $0.12`).
+  `--max-agent-calls` caps sync and consolidation.
+- Today (contracts commit) `AgentBudget.take(kind)` counts every granted
+  take as a call; the observer wiring replaces that with real outcomes.
+
+### EngineService and HTTP additions
+
+| route | engine call |
+|---|---|
+| `GET /api/topics/:id` | `getTopic()` now carries `dossier: DossierView` (dossier, flags, stale claims, `changesSinceSeen`, `eventsBehind`) |
+| `GET /api/prs/:owner/:repo/:number` | `getPr()` now carries `facts: FactView[]` |
+| `GET /api/facts?entity=person:alice&since=...` | `listFacts()` |
+| `GET /api/proposals` | `listProposals()` (topic + rule proposals) |
+| `POST /api/rule-proposals/:id` `{accept}` | `decideRuleProposal()` |
+| `POST /api/topics/:id/seen` | `markTopicSeen()` |
+| `POST /api/consolidate` `{onlyIfDue, maxAgentCalls}` | `consolidate()` |
+
+`POST /api/sync` accepts `dossiers` in `agentJobs` once the job lands.
+
+### What v2 removes or replaces
+
+| v1 | v2 |
+|---|---|
+| `summaries` job, `summarizeTopic`, `TopicSummaryInput/Result`, `topicSummaryOutput`, `topicSummaryInputHash`, summary prompt | `dossiers` job, `updateDossier`; `topic.summary` mirrors `dossier.summary` |
+| rename / merge ideas from the summary job | consolidation job (plus split) |
+| per-PR `glance()`, `glanceInputHash`, `GlanceWriter` one call per PR | `glanceBatch()`, `glanceItemInputHash`, 18 PRs per call |
+| per-PR `classifyEvents` | `classifyEventBatch`, one call per topic |
+| `TopicChoice` name + summary | + `brief` from the dossier |
+| `AgentBudget.take()` | `take(kind)` + observer stats |
+| `topic.summary_input_hash` | unused, dropped later |
+
+v1 methods stay (marked `@deprecated`) until the engine no longer calls
+them, so every step can land green.
+
+### Build split
+
+Three builders can work in parallel against these contracts:
+
+- **core + store**: `clampDossier`, `dossierBrief`, `preReconcile`,
+  `verifyFact`, `verifyDossier`, `selectTopicDelta`, `topicChangesSince`,
+  and every repo body in `event-log.ts`, `cursors.ts`, `dossiers.ts`,
+  `facts.ts`, `rule-proposals.ts`, `agent-calls.ts`, with tests.
+- **agent**: prompts (dossier update, reconcile, glance batch, event batch,
+  consolidation), `renderDossier`, `dossierInputHash`,
+  `glanceItemInputHash`, the `RunnerAgentService` v2 methods (short-id ref
+  mapping, per-entry glance validation, dropping unknown ids), `standingRules`
+  in `contextBlock` and in every input hash, `TopicChoice.brief` in the
+  assignment prompt, `PROMPT_VERSION` bump. Tests with `FakeRunner`.
+- **engine (+ server, CLI)**: `event_log.append` in `GitHubSync`, verify pass,
+  `DossierUpdater`, `FactReconciler`, `GlanceBatchWriter`, event batches,
+  `Consolidator`, the observer and `agent_call` rows, read models (dossier,
+  facts, changes since seen), the new EngineService methods, routes, CLI
+  output and commands, `ALL_AGENT_JOBS` swap. Engine tests need the store
+  builder's repos; until then they can run against a `FakeRunner` and the
+  stub-free parts.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.
@@ -177,7 +582,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, one migration (`migrations/001_init.ts`), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query) and `GitHubWriter` (mark thread read,
@@ -281,6 +686,29 @@ preflight and does not know the token, so CORS stays open.
   - how long dissolved sets and "not related" feedback keep suppressing a regroup
   - whether a PR may belong to more than one topic (schema says one; pulled-in appearances
     elsewhere go through sets)
+- **Engine memory v2** (current choices in brackets):
+  - instructions.md edits: re-run every dossier update, or let dossiers catch up on the next
+    event while glances pick the change up at once [catch up; instructions are not in the
+    dossier hash]
+  - glance hash includes the dossier version, so every dossier update regenerates the glances
+    of that topic (one or two batch calls). Alternative: hash only the glance-relevant parts
+    (goal, status, userCares, people) [version, as decided]
+  - when "seen" moves: explicit `markTopicSeen` when leaving a topic, or on opening it
+    [explicit, the UI calls it when the user leaves the topic]
+  - retiring finished topics: automatic behind the deterministic gate (all PRs merged/closed,
+    14 quiet days, nothing unread or snoozed) or a proposal like merges [automatic, reversible]
+  - accepted global rules: kept in the database and added to every prompt, or appended to
+    instructions.md [database; instructions.md stays the user's own file]
+  - fold set grouping into the dossier update to save one call per topic [not yet, sets stay a
+    separate job]
+  - first dossier update of a big topic: 120 events max, 15 per PR, older ones only counted
+    [yes]
+  - one initiative per topic, or initiatives spanning topics [one per topic]
+  - consolidation cadence: due after 24h and at least one new dossier version, triggered by
+    the desktop app when idle and by `consolidate` in the CLI [yes]
+  - dossier history: keep the newest 50 versions per topic [50]
+  - glance batches on haiku with 18 PRs per call [yes; sonnet if quality drops]
+  - dossier driver overrides "most frequent author" for the topic driver [yes]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
   snooze started ends it, so a mention is never hidden. Confirm.
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
