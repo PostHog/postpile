@@ -7,6 +7,7 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  MemoryCorrection,
   PendingProposals,
   PrDetail,
   PrKey,
@@ -64,6 +65,12 @@ export interface EngineService {
   decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
   /** Moves the topic's seen cursor to now, so "changes since seen" starts over. */
   markTopicSeen(topicId: string): Promise<ActionResult>;
+  /**
+   * "Wrong" on a fact or dossier line, "Forget" on a care. A fact is closed
+   * right away; every correction is logged as feedback, so the topic's next
+   * dossier update sees it. Local only, never a GitHub write.
+   */
+  correctMemory(input: MemoryCorrection): Promise<ActionResult>;
 
   /**
    * The sleep-time job: proposes topic merges, splits and renames, retires

@@ -141,6 +141,22 @@ export interface FeedbackInput {
   note: string;
 }
 
+export type MemoryCorrectionKind = 'wrong' | 'forget';
+
+/**
+ * "Wrong" on a fact or a dossier line, "Forget" on a "what you care about"
+ * line. Local memory only, never a GitHub write.
+ */
+export interface MemoryCorrection {
+  kind: MemoryCorrectionKind;
+  /** A fact is closed right away. Null for a dossier line. */
+  factId: string | null;
+  /** The topic whose dossier holds the line. For a fact the engine takes the fact's topic. */
+  topicId: string | null;
+  /** The line as the user saw it. Logged, so the next dossier update drops or fixes it. */
+  text: string;
+}
+
 /**
  * How the server runs, for the UI. writesAllowed is false unless the process
  * was started with CODE_MANAGER_ALLOW_WRITES=1 (or runs on sample data, where

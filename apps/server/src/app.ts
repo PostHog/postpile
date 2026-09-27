@@ -26,6 +26,13 @@ const feedbackBody = z.object({
   note: z.string().default(''),
 });
 
+const memoryCorrectionBody = z.object({
+  kind: z.enum(['wrong', 'forget']),
+  factId: z.string().nullable().default(null),
+  topicId: z.string().nullable().default(null),
+  text: z.string().default(''),
+});
+
 const syncBody = z
   .object({
     maxPrs: z.number().int().positive().optional(),
@@ -134,6 +141,7 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.decideRuleProposal(c.req.param('id'), body.accept));
   });
+  app.post('/api/memory/corrections', async (c) => c.json(await engine.correctMemory(memoryCorrectionBody.parse(await c.req.json()))));
   app.get('/api/facts', async (c) => {
     const { since, ...query } = factQuery.parse(c.req.query());
     return c.json(await engine.listFacts({ ...query, changedSince: since }));

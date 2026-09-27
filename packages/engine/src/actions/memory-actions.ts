@@ -1,9 +1,9 @@
-import type { ActionResult, PendingProposals } from '@code-manager/core';
+import type { ActionResult, FeedbackKind, MemoryCorrection, PendingProposals } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import { UNSORTED_TOPIC_ID } from '../board.ts';
 import { failed, ok } from './results.ts';
 
-/** User decisions on engine memory: standing rules and "I have seen this topic". */
+/** User decisions on engine memory: standing rules, "I have seen this topic" and corrections. */
 export class MemoryActions {
   constructor(
     private readonly store: Store,
@@ -48,5 +48,40 @@ export class MemoryActions {
       updatedAt: this.now().toISOString(),
     });
     return ok('Marked seen');
+  }
+
+  /**
+   * A fact marked wrong is closed now, so it leaves every list and prompt. A
+   * dossier line stays until the topic's next dossier update, which gets the
+   * logged feedback and must drop or fix it.
+   */
+  correctMemory(input: MemoryCorrection): ActionResult {
+    const at = this.now().toISOString();
+    const kind: FeedbackKind = input.kind === 'forget' ? 'memory_forget' : 'memory_wrong';
+    if (input.factId === null) {
+      if (input.topicId === null || !this.store.topics.get(input.topicId)) {
+        return failed(`no topic ${input.topicId ?? ''}`);
+      }
+      this.store.feedback.add({ kind, topicId: input.topicId, tileId: null, prKey: null, setId: null, eventId: null, note: input.text, createdAt: at });
+      return ok('Noted. The next sync rewrites the topic memory without it.');
+    }
+    const fact = this.store.facts.get(input.factId);
+    if (!fact) {
+      return failed(`no fact ${input.factId}`);
+    }
+    this.store.transaction(() => {
+      this.store.facts.close(fact.id, { invalidAt: at, reason: 'the user said it is wrong', supersededBy: null, expiredAt: at });
+      this.store.feedback.add({
+        kind,
+        topicId: fact.topicId,
+        tileId: null,
+        prKey: fact.refs[0]?.prKey ?? null,
+        setId: null,
+        eventId: null,
+        note: fact.text,
+        createdAt: at,
+      });
+    });
+    return ok('Forgot that fact');
   }
 }

@@ -32,6 +32,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     listProposals: notImplemented,
     decideRuleProposal: notImplemented,
     markTopicSeen: notImplemented,
+    correctMemory: notImplemented,
     consolidate: notImplemented,
     flushPendingWrites: notImplemented,
     close: notImplemented,

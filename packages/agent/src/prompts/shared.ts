@@ -37,6 +37,8 @@ const feedbackLabels: Record<FeedbackKind, string> = {
   unmute: 'unmuted an event that had been muted as noise',
   tailoring_kept: 'asked to keep this for the topic',
   tailoring_once: 'said this, for one time only',
+  memory_wrong: 'said this line of the topic memory is wrong',
+  memory_forget: 'said they do not care about this, stop assuming it',
 };
 
 function feedbackLine(feedback: Feedback): string {

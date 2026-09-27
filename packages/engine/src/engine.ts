@@ -8,6 +8,7 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  MemoryCorrection,
   PendingProposals,
   PrDetail,
   PrKey,
@@ -184,6 +185,10 @@ export class Engine implements EngineService {
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {
     return this.memoryActions.markTopicSeen(topicId);
+  }
+
+  async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
+    return this.memoryActions.correctMemory(input);
   }
 
   flushPendingWrites(): Promise<void> {

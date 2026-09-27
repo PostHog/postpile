@@ -33,6 +33,14 @@ export interface TopicChanges {
   newEvents: number;
 }
 
+/** One stored dossier version and what it changed against the version before. */
+export interface DossierVersionNote {
+  version: number;
+  createdAt: IsoTime;
+  /** Short lines like "Status: active → blocked". Empty for the first version. */
+  changes: string[];
+}
+
 export interface DossierView {
   version: number;
   createdAt: IsoTime;
@@ -44,6 +52,10 @@ export interface DossierView {
   changesSinceSeen: TopicChanges | null;
   /** New events since this version was written: the dossier is behind until the next sync. */
   eventsBehind: number;
+  /** Newest first, the latest version included. At most DOSSIER_HISTORY_SHOWN entries. */
+  history: DossierVersionNote[];
+  /** Lines the user marked wrong or asked to forget since this version was written. Matched by text. */
+  correctedClaims: string[];
 }
 
 /** Filters for listFacts. Every field narrows; an empty query returns active facts, newest first. */

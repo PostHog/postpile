@@ -39,6 +39,8 @@ describe('memory formatting', () => {
         newEvents: 4,
       },
       eventsBehind: 2,
+      history: [],
+      correctedClaims: [],
     };
 
     const text = formatDossier(view).join('\n');

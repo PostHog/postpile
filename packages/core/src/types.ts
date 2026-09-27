@@ -459,7 +459,11 @@ export type FeedbackKind =
   | 'wrong_topic'
   | 'unmute'
   | 'tailoring_kept'
-  | 'tailoring_once';
+  | 'tailoring_once'
+  /** A fact or dossier line the user marked wrong. The note holds the line. */
+  | 'memory_wrong'
+  /** A "what you care about" line the user asked to forget. The note holds the line. */
+  | 'memory_forget';
 
 /** A user correction. The newest few per topic go back into prompts. */
 export interface Feedback {
