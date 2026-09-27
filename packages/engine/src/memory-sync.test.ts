@@ -414,6 +414,24 @@ describe('event classification', () => {
   });
 });
 
+describe('event classification under the call cap', () => {
+  it('keeps the batches the cap skipped for the next sync, and asks only once', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    topicWithPrs(h, 'billing', [reviewRequestedPr(2)]);
+
+    const capped = await h.engine.sync({ maxAgentCalls: 1, agentJobs: ['events'] });
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ agentJobs: ['events'] });
+    h.reader.etag = 'etag-3';
+    const quiet = await h.engine.sync({ agentJobs: ['events'] });
+
+    expect(capped.agentCallStats.byKind.event_classification).toMatchObject({ calls: 1, skippedByBudget: 1 });
+    expect(h.agent.eventInputs.map((input) => input.topic?.id).sort()).toEqual(['billing', 'depot']);
+    expect(quiet.agentCalls).toBe(0);
+  });
+});
+
 describe('changes since seen', () => {
   it('shows what moved in a topic after the user marked it seen', async () => {
     const { h, setNow } = movableHarness();

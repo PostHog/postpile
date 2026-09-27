@@ -12,13 +12,13 @@ import { refreshDriversAndRoles } from './topic-roles.ts';
  * The agentic half of a sync, in dependency order, which is also the order
  * a capped budget is spent in: topics (everything else needs them), dossiers
  * with their fact reconcile, sets, glances (pinged before pulled-in) and a
- * second opinion on new loud events. Every job skips work whose input did not
+ * second opinion on loud events not classified yet. Every job skips work whose input did not
  * change, so a quiet sync makes no agent calls.
  */
 export class Digester {
   constructor(private readonly deps: DigestDeps) {}
 
-  async run(jobs: AgentJob[], newEventIds: string[]): Promise<void> {
+  async run(jobs: AgentJob[]): Promise<void> {
     if (jobs.includes('topics')) {
       await new TopicAssigner(this.deps).run();
     }
@@ -37,7 +37,7 @@ export class Digester {
       await new GlanceBatchWriter(this.deps).run(dossiersSkippedByBudget);
     }
     if (jobs.includes('events')) {
-      await new EventBatchClassifier(this.deps).run(newEventIds);
+      await new EventBatchClassifier(this.deps).run();
     }
   }
 }

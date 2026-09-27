@@ -21,12 +21,14 @@ export interface LoggedEvent {
  * digest: how far a topic's dossier has read the event log.
  * seen: how far the user had read a topic when they last marked it seen.
  * consolidate: how far the last consolidation run got (scope "global").
+ * classify: how far the event second opinion got per topic ("unsorted" for
+ * PRs without one).
  */
-export type CursorKind = 'digest' | 'seen' | 'consolidate';
+export type CursorKind = 'digest' | 'seen' | 'consolidate' | 'classify';
 
 export interface Cursor {
   kind: CursorKind;
-  /** Topic id, or "global" for consolidate. */
+  /** Topic id, "unsorted" for classify, or "global" for consolidate. */
   scope: string;
   /** Last event_log seq covered. 0 means nothing yet. */
   seq: number;

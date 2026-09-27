@@ -63,7 +63,7 @@ export class SyncRun {
         tally,
         now,
       });
-      await digester.run(options.agentJobs ?? ALL_AGENT_JOBS, fetched.newEventIds);
+      await digester.run(options.agentJobs ?? ALL_AGENT_JOBS);
     } catch (error) {
       errors.push(`sync: ${errorText(error)}`);
     } finally {
