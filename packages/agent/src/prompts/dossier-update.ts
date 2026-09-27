@@ -5,8 +5,6 @@ import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
 import { clip, contextBlock, entityText, jsonOnly, prLine, viewerLine } from './shared.ts';
 
-const L = DOSSIER_LIMITS;
-
 function factLine(fact: Fact, shortId: string, staleNote: string): string {
   const since = fact.validFrom.slice(0, 10);
   return `- ${shortId} [${fact.predicate}] ${entityText(fact.subject)} -> ${entityText(fact.object)}: ${fact.text} (since ${since})${staleNote}`;
@@ -96,6 +94,7 @@ const answerShape = `{
  * with short-id refs; the service maps refs back and drops unknown ids.
  */
 export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs): string {
+  const limits = DOSSIER_LIMITS;
   const prsByKey = new Map(input.prs.map((pr) => [pr.key, pr]));
   const previous = input.previous ? renderDossier(input.previous, prsByKey) : 'None yet. This is the first write-up of the topic.';
   const members = input.prs.map((pr) => `- ${prLine(pr)}`);
@@ -111,16 +110,16 @@ ${previous}
 ${block('Member PRs now:', members, '(none)')}${joinedBlock(input)}${eventsBlock(input, refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
-- goal: what the initiative is for, max ${L.goal} chars. summary: where it stands, max ${L.summary}.
-- status and statusNote (max ${L.statusNote}): why that status.
-- people: max ${L.people}, the driver first; note max ${L.personNote} chars. Logins without "@".
-- openQuestions: max ${L.openQuestions}, only questions still open; text max ${L.questionText}.
+- goal: what the initiative is for, max ${limits.goal} chars. summary: where it stands, max ${limits.summary}.
+- status and statusNote (max ${limits.statusNote}): why that status.
+- people: max ${limits.people}, the driver first; note max ${limits.personNote} chars. Logins without "@".
+- openQuestions: max ${limits.openQuestions}, only questions still open; text max ${limits.questionText}.
 - timeline: member PRs only, oldest first, role = what the PR does for the initiative, max
-  ${L.timelineRole} chars. Max ${L.timeline} entries; fold older ones into earlier (max ${L.earlier}).
+  ${limits.timelineRole} chars. Max ${limits.timeline} entries; fold older ones into earlier (max ${limits.earlier}).
   Do not write PR state, CI or reviewers anywhere: those are read from GitHub at display time.
-- userCares: max ${L.userCares}, what this user cares about in this topic, judged by their
-  instructions and corrections; text max ${L.careText}.
-- recentChanges: newest first, max ${L.recentChanges}, text max ${L.changeText}. Add entries for
+- userCares: max ${limits.userCares}, what this user cares about in this topic, judged by their
+  instructions and corrections; text max ${limits.careText}.
+- recentChanges: newest first, max ${limits.recentChanges}, text max ${limits.changeText}. Add entries for
   what happened now, keep older ones that still matter.
 - refs: the short ids above: e1.. for new activity, Q1.. or C1.. to keep the sources of an entry
   of the previous dossier, F1.. for a fact, or a member PR key.

@@ -95,6 +95,25 @@ export class RunnerAgentService implements AgentService {
     this.observer = options.observer ?? null;
   }
 
+  private observe(
+    purpose: AgentPurpose,
+    model: string,
+    ok: boolean,
+    label: CallLabel,
+    startedAt: number,
+    costUsd: number | null,
+  ): void {
+    this.observer?.onCall({
+      purpose,
+      model,
+      ok,
+      topicId: label.topicId,
+      attempt: label.attempt,
+      durationMs: Date.now() - startedAt,
+      costUsd,
+    });
+  }
+
   private async ask<T>(
     purpose: AgentPurpose,
     prompt: string,
@@ -113,25 +132,6 @@ export class RunnerAgentService implements AgentService {
       this.observe(purpose, response?.model ?? model, false, label, startedAt, response?.costUsd ?? null);
       throw error;
     }
-  }
-
-  private observe(
-    purpose: AgentPurpose,
-    model: string,
-    ok: boolean,
-    label: CallLabel,
-    startedAt: number,
-    costUsd: number | null,
-  ): void {
-    this.observer?.onCall({
-      purpose,
-      model,
-      ok,
-      topicId: label.topicId,
-      attempt: label.attempt,
-      durationMs: Date.now() - startedAt,
-      costUsd,
-    });
   }
 
   async assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]> {
