@@ -50,8 +50,13 @@ export class FakeReader implements GitHubReader {
 
 export class FakeWriter implements GitHubWriter {
   readonly calls: string[] = [];
+  /** markThreadRead throws for these ids. */
+  readonly failingThreads = new Set<string>();
 
   async markThreadRead(threadId: string): Promise<void> {
+    if (this.failingThreads.has(threadId)) {
+      throw new Error(`boom ${threadId}`);
+    }
     this.calls.push(`markThreadRead ${threadId}`);
   }
 

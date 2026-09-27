@@ -88,9 +88,19 @@ export class MarkReadQueue {
     this.onMarked(thread.id, current.updatedAt);
   }
 
+  /**
+   * One failed thread must not stop the rest of the batch. Nothing retries a
+   * failure: the batch already left the undo queue. The thread stays unread
+   * locally and on GitHub, and the next sync report says so.
+   */
   private async send(payload: MarkReadPayload): Promise<void> {
     for (const thread of payload.threads) {
-      await this.markOne(thread);
+      try {
+        await this.markOne(thread);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.notes.push(`mark-read: notification ${thread.id} failed: ${message}`);
+      }
     }
   }
 
