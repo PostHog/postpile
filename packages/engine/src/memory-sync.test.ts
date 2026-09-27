@@ -62,6 +62,28 @@ describe('dossier updates', () => {
     expect(detail?.topic.summary).toBe('depot: 1 new events');
   });
 
+  it('reads the older events of a PR that joins an existing topic', async () => {
+    const { h, setNow } = movableHarness();
+    const pr1 = reviewRequestedPr(1);
+    const pr2 = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [pr1]);
+    h.reader.addPr(pr2, makeThreadFor(pr2));
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    // A newer event on the old member moves the digest cursor past everything pr2 logged.
+    setNow(LATER);
+    pushSnapshot(h, { ...pr1, comments: [makeComment({ id: 'c5', createdAt: at(30) })] }, 'etag-2');
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    setNow('2026-09-04T00:00:00.000Z');
+    h.store.memberships.assign({ prKey: pr2.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: '2026-09-04T00:00:00.000Z' });
+    const report = await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(report.errors).toEqual([]);
+    const third = h.agent.dossierInputs[2];
+    expect(third?.delta.joinedPrKeys).toEqual([pr2.key]);
+    expect(third?.delta.events.map((e) => [e.prKey, e.kind])).toEqual([[pr2.key, 'review_requested']]);
+  });
+
   it('makes no call for a topic without new input', async () => {
     const h = makeHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

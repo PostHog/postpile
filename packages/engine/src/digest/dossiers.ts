@@ -1,6 +1,7 @@
 import { FACTS_IN_DOSSIER_PROMPT, type DossierUpdateInput, type DossierUpdateResult } from '@code-manager/agent';
 import {
   isEmptyDelta,
+  joinedMembers,
   selectTopicDelta,
   verifyDossier,
   verifyFact,
@@ -73,12 +74,15 @@ export class DossierUpdater {
     const cursorSeq = store.cursors.get('digest', topic.id)?.seq ?? previous?.throughSeq ?? 0;
     const staleFacts = store.facts.listStaleForTopic(topic.id);
     const world = { prs, memberKeys: new Set(memberKeys), now: this.deps.now().toISOString() };
+    const memberSince = new Map(memberships.map((m) => [m.prKey, m.createdAt]));
+    const joinedKeys = cursorSeq > 0 ? joinedMembers(memberKeys, memberSince, previous) : [];
     const delta = selectTopicDelta({
       topicId: topic.id,
       cursorSeq,
       memberKeys,
-      memberSince: new Map(memberships.map((m) => [m.prKey, m.createdAt])),
+      memberSince,
       logged: store.eventLog.listSince(memberKeys, cursorSeq),
+      joinedHistory: store.eventLog.listSince(joinedKeys, 0),
       previous,
       staleFacts,
       staleClaims: previous ? verifyDossier(previous.dossier, world) : [],

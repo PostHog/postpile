@@ -48,8 +48,12 @@ function eventsBlock(input: DossierUpdateInput, refs: DossierRefs): string {
   });
   const omitted =
     input.delta.omittedEvents > 0 ? `(${input.delta.omittedEvents} older events were left out to keep this short)\n` : '';
+  const title =
+    input.delta.joinedPrKeys.length > 0
+      ? 'New activity since the last update, and the history of PRs that just joined, oldest first:'
+      : 'New activity since the last update, oldest first:';
   return (
-    dataBlock('New activity since the last update, oldest first:', human, '(no new human activity)') +
+    dataBlock(title, human, '(no new human activity)') +
     omitted +
     block('Bot and CI activity, counted only:', botCounts(input.delta.events))
   );

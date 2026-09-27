@@ -14,15 +14,17 @@ export interface TopicDeltaInput {
   /** Digest cursor seq, 0 when the topic has no dossier yet. */
   cursorSeq: number;
   memberKeys: PrKey[];
-  /**
-   * When each member joined the topic. A member missing from the previous
-   * timeline only counts as joined when it joined after that version was
-   * written; one that was a member then was already offered (the model left
-   * it out, or it rolled off into `earlier`). Missing entries count as new.
-   */
+  /** When each member joined the topic, for joinedMembers. Missing entries count as new. */
   memberSince: Map<PrKey, string>;
   /** Everything in the event log after cursorSeq for the member PRs, oldest first. */
   logged: LoggedEvent[];
+  /**
+   * Log entries of joined members (joinedMembers) at or before cursorSeq. A
+   * PR that joins brings history the dossier never read: logged in an earlier
+   * sync, while it sat in another topic, or interleaved with other PRs. It is
+   * read once, together with the new events.
+   */
+  joinedHistory: LoggedEvent[];
   previous: DossierVersion | null;
   staleFacts: Fact[];
   staleClaims: DossierIssue[];
@@ -62,27 +64,45 @@ function capEvents(logged: LoggedEvent[]): LoggedEvent[] {
 }
 
 /**
- * Picks what a dossier update gets to read: new events (muted dropped, capped
- * by DELTA_LIMITS, bots kept since the prompt compacts them), members that
- * joined after the previous version, members that left, stale facts and claims,
- * and new feedback. toSeq is the highest seq in `logged`, capped or not.
+ * Members the previous dossier does not know yet: not in its timeline, and
+ * joined after it was written. A PR that was already a member then was
+ * offered once (the model left it out, or it rolled into `earlier`) and must
+ * not force an update on every sync. Without a previous dossier every member
+ * is new.
+ */
+export function joinedMembers(
+  memberKeys: PrKey[],
+  memberSince: Map<PrKey, string>,
+  previous: DossierVersion | null,
+): PrKey[] {
+  const known = new Set(previous?.dossier.timeline.map((entry) => entry.prKey) ?? []);
+  const previousAt = previous?.createdAt ?? null;
+  return memberKeys.filter((key) => {
+    const since = memberSince.get(key);
+    return !known.has(key) && (previousAt === null || since === undefined || since > previousAt);
+  });
+}
+
+/**
+ * Picks what a dossier update gets to read: new events plus the history of
+ * joined members (muted dropped, capped by DELTA_LIMITS, bots kept since the
+ * prompt compacts them), members that joined after the previous version,
+ * members that left, stale facts and claims, and new feedback. toSeq is the
+ * highest seq in `logged`, capped or not.
  */
 export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
   const members = new Set(input.memberKeys);
-  const fresh = input.logged
-    .filter((entry) => entry.seq > input.cursorSeq && members.has(entry.event.prKey))
-    .sort(bySeq);
+  const fresh = input.logged.filter((entry) => entry.seq > input.cursorSeq && members.has(entry.event.prKey));
   const toSeq = fresh.reduce((max, entry) => Math.max(max, entry.seq), input.cursorSeq);
-  const audible = fresh.filter((entry) => !isMuted(entry.event));
+  const joined = joinedMembers(input.memberKeys, input.memberSince, input.previous);
+  const joinedKeys = new Set(joined);
+  const history = input.joinedHistory.filter(
+    (entry) => entry.seq <= input.cursorSeq && joinedKeys.has(entry.event.prKey),
+  );
+  const audible = [...history, ...fresh].sort(bySeq).filter((entry) => !isMuted(entry.event));
   const kept = capEvents(audible);
-
-  const timelineKeys = input.previous?.dossier.timeline.map((entry) => entry.prKey) ?? [];
-  const known = new Set(timelineKeys);
+  const timelineKeys = new Set(input.previous?.dossier.timeline.map((entry) => entry.prKey) ?? []);
   const previousAt = input.previous?.createdAt ?? null;
-  const isJoined = (key: PrKey): boolean => {
-    const since = input.memberSince.get(key);
-    return !known.has(key) && (previousAt === null || since === undefined || since > previousAt);
-  };
 
   return {
     topicId: input.topicId,
@@ -90,8 +110,8 @@ export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
     toSeq,
     events: kept.map((entry) => entry.event),
     omittedEvents: audible.length - kept.length,
-    joinedPrKeys: input.memberKeys.filter(isJoined),
-    leftPrKeys: [...known].filter((key) => !members.has(key)),
+    joinedPrKeys: joined,
+    leftPrKeys: [...timelineKeys].filter((key) => !members.has(key)),
     staleFactIds: input.staleFacts.map((fact) => fact.id),
     staleClaims: input.staleClaims,
     newFeedback: input.feedback.filter((entry) => previousAt === null || entry.createdAt > previousAt),

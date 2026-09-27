@@ -46,6 +46,7 @@ function input(overrides: Partial<TopicDeltaInput> = {}): TopicDeltaInput {
     memberKeys: [pr1, pr2],
     memberSince: new Map(),
     logged: [],
+    joinedHistory: [],
     previous: makeDossierVersion({ topicId: 'ci', dossier, createdAt: at(50), throughSeq: 10 }),
     staleFacts: [],
     staleClaims: [],
@@ -125,6 +126,20 @@ describe('selectTopicDelta', () => {
     ]);
     const delta = selectTopicDelta(input({ memberKeys: [pr1, pr2, pr3, pr4], memberSince }));
     expect(delta.joinedPrKeys).toEqual([pr4]);
+  });
+
+  it('reads the older history of a joined PR once, next to the new events', () => {
+    const pr3 = 'PostHog/posthog#3';
+    const delta = selectTopicDelta(
+      input({
+        memberKeys: [pr1, pr2, pr3],
+        logged: [logged(12, pr1)],
+        joinedHistory: [logged(4, pr3), logged(8, pr3, { ruleLoudness: 'muted' }), logged(11, pr3), logged(5, pr1)],
+      }),
+    );
+    expect(delta.joinedPrKeys).toEqual([pr3]);
+    expect(delta.events.map((event) => event.sourceId)).toEqual(['4', '12']);
+    expect(delta.toSeq).toBe(12);
   });
 
   it('treats every member as joined when there is no dossier yet', () => {
