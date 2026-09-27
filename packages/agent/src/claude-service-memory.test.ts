@@ -394,7 +394,7 @@ describe('RunnerAgentService.glanceBatch', () => {
         pullInReason: null,
         dossierVersion: 7,
         inputHash: glanceItemInputHash(input, input.items[0]!),
-        model: 'claude-haiku-4-5',
+        model: 'sonnet',
         createdAt: NOW,
       },
     ]);

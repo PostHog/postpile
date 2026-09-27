@@ -26,7 +26,7 @@ const glanceEntry = {
 describe('RunnerAgentService models', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('glances on haiku unless CODE_MANAGER_GLANCE_MODEL says otherwise', async () => {
+  it('glances on sonnet unless CODE_MANAGER_GLANCE_MODEL says otherwise', async () => {
     const input: GlanceBatchInput = {
       topic: null,
       dossier: null,
@@ -38,13 +38,13 @@ describe('RunnerAgentService models', () => {
     const first = setup();
     first.runner.answer('glance_batch', { glances: [glanceEntry] });
     await first.service.glanceBatch(input);
-    expect(first.runner.requests[0]?.model).toBe('claude-haiku-4-5');
+    expect(first.runner.requests[0]?.model).toBe('sonnet');
 
-    vi.stubEnv('CODE_MANAGER_GLANCE_MODEL', 'claude-sonnet-4-5');
+    vi.stubEnv('CODE_MANAGER_GLANCE_MODEL', 'claude-haiku-4-5');
     const second = setup();
     second.runner.answer('glance_batch', { glances: [glanceEntry] });
     await second.service.glanceBatch(input);
-    expect(second.runner.requests[0]?.model).toBe('claude-sonnet-4-5');
+    expect(second.runner.requests[0]?.model).toBe('claude-haiku-4-5');
   });
 });
 
