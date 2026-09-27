@@ -107,6 +107,17 @@ describe('PrRepo', () => {
   });
 });
 
+describe('PullInRepo', () => {
+  it('stores a stack layer with its anchor and replaces it when found again', () => {
+    store.pullIns.put({ prKey: 'acme/app#1', anchorPrKey: 'acme/app#2', reason: 'stack layer below #2', pulledAt: at(1) });
+    store.pullIns.put({ prKey: 'acme/app#1', anchorPrKey: 'acme/app#3', reason: 'stack layer below #3', pulledAt: at(2) });
+
+    expect(store.pullIns.get('acme/app#1')).toEqual({ prKey: 'acme/app#1', anchorPrKey: 'acme/app#3', reason: 'stack layer below #3', pulledAt: at(2) });
+    expect([...store.pullIns.listAll().keys()]).toEqual(['acme/app#1']);
+    expect(store.pullIns.get('acme/app#9')).toBeNull();
+  });
+});
+
 describe('EventRepo', () => {
   const key = 'PostHog/posthog#1';
 

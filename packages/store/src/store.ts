@@ -15,6 +15,7 @@ import { MetaRepo } from './repos/meta.ts';
 import { NotificationRepo } from './repos/notifications.ts';
 import { TopicProposalRepo } from './repos/proposals.ts';
 import { PrRepo } from './repos/prs.ts';
+import { PullInRepo } from './repos/pull-ins.ts';
 import { RuleProposalRepo } from './repos/rule-proposals.ts';
 import { PrSetRepo } from './repos/sets.ts';
 import { SnoozeRepo } from './repos/snoozes.ts';
@@ -43,6 +44,7 @@ export class Store {
   readonly ruleProposals: RuleProposalRepo;
   readonly agentCalls: AgentCallRepo;
   readonly instructions: InstructionsRepo;
+  readonly pullIns: PullInRepo;
 
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
@@ -65,6 +67,7 @@ export class Store {
     this.ruleProposals = new RuleProposalRepo(db);
     this.agentCalls = new AgentCallRepo(db);
     this.instructions = new InstructionsRepo(db);
+    this.pullIns = new PullInRepo(db);
   }
 
   static open(path: string): Store {

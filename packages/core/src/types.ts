@@ -263,11 +263,26 @@ export type PingReason = NotificationReason;
 /**
  * Why a PR is inside a tile.
  * pinged: GitHub notified the user about it.
- * pulled_in: the agent (or a stack) added it for context.
+ * pulled_in: fetched only to complete a stack of a pinged PR ("stack layer below #N").
  */
 export type Provenance =
   | { kind: 'pinged'; reason: PingReason }
   | { kind: 'pulled_in'; reason: string };
+
+/**
+ * A PR the sync fetched only to complete a stack, found by branch without
+ * the agent. Provenance stays derived: once it gets its own notification it
+ * counts as pinged. Until then it gets no glance, no topic assignment and no
+ * dossier work; it shows in the topic of its anchor.
+ */
+export interface PullIn {
+  prKey: PrKey;
+  /** The pinged PR whose stack it completes. */
+  anchorPrKey: PrKey;
+  /** "stack layer below #41902" / "stack layer above #41902". */
+  reason: string;
+  pulledAt: IsoTime;
+}
 
 // ---------------------------------------------------------------------------
 // Topics, sets, stacks, tiles
