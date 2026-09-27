@@ -336,6 +336,11 @@ export interface PrSet {
   /** The agent's combined take on the set. */
   take: string;
   members: PrSetMember[];
+  /**
+   * PRs the user said are "not related" to this set. Kept so a regroup never
+   * puts them back together with the remaining members.
+   */
+  removedKeys: PrKey[];
   status: PrSetStatus;
   inputHash: string;
   createdAt: IsoTime;

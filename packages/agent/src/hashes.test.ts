@@ -81,6 +81,7 @@ describe('setGroupingInputHash', () => {
       title: 'Depot',
       take: '',
       members: [{ prKey: 'o/r#1', reason: '' }, { prKey: 'o/r#2', reason: '' }],
+      removedKeys: [],
       status: 'active',
       inputHash: 'h',
       createdAt: '',

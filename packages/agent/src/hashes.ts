@@ -65,15 +65,16 @@ export function topicSummaryInputHash(input: TopicSummaryInput): string {
 }
 
 /**
- * Sets regroup when membership, dissolved sets or any topic feedback changes.
- * Active sets are left out on purpose: they are the agent's own last answer,
- * and counting them would make every regroup trigger the next one.
+ * Sets regroup when membership, the user's set corrections (dissolved sets,
+ * removed members) or any topic feedback changes. Active members are left
+ * out on purpose: they are the agent's own last answer, and counting them
+ * would make every regroup trigger the next one.
  */
 export function setGroupingInputHash(input: SetGroupingInput): string {
   const prs = [...input.prs].sort((a, b) => a.key.localeCompare(b.key)).map((pr) => [pr.key, pr.title, pr.baseRef, pr.headRef]);
   const sets = input.existingSets
-    .filter((s) => s.status === 'dissolved')
-    .map((s) => [s.id, s.members.map((m) => m.prKey)]);
+    .filter((s) => s.status === 'dissolved' || s.removedKeys.length > 0)
+    .map((s) => [s.id, s.status === 'dissolved' ? s.members.map((m) => m.prKey) : [], s.removedKeys]);
   return inputHash(
     'set_grouping',
     modelFor('set_grouping'),

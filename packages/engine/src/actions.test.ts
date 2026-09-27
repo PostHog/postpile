@@ -39,6 +39,7 @@ async function syncedWithPairSet(): Promise<{ h: Harness; other: Pr }> {
     title: 'Pair',
     take: '',
     members: [{ prKey: pr.key, reason: 'a' }, { prKey: other.key, reason: 'b' }],
+    removedKeys: [],
     status: 'active',
     inputHash: 'h',
     createdAt: at(0),

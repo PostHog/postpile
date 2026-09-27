@@ -342,6 +342,7 @@ function buildSets(clock: SampleClock): PrSet[] {
         { prKey: sampleKey(41921), reason: '2.5 changes cache hashing.' },
         { prKey: sampleKey(41855), reason: 'Turns off the cache for Storybook.' },
       ],
+      removedKeys: [],
       status: 'active',
       inputHash: 'sample',
       createdAt: clock.hoursAgo(3),

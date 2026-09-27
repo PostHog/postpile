@@ -116,11 +116,13 @@ CREATE TABLE pr_set (
 );
 CREATE INDEX pr_set_topic ON pr_set (topic_id);
 
+-- removed_at is set when the user said "not related"; the row stays as memory.
 CREATE TABLE pr_set_member (
-  set_id   TEXT NOT NULL REFERENCES pr_set (id) ON DELETE CASCADE,
-  pr_key   TEXT NOT NULL,
-  reason   TEXT NOT NULL,
-  position INTEGER NOT NULL,
+  set_id     TEXT NOT NULL REFERENCES pr_set (id) ON DELETE CASCADE,
+  pr_key     TEXT NOT NULL,
+  reason     TEXT NOT NULL,
+  position   INTEGER NOT NULL,
+  removed_at TEXT,
   PRIMARY KEY (set_id, pr_key)
 );
 

@@ -82,8 +82,10 @@ Action details:
   done until something loud happens), thread mark-read queued. Undo reverts both.
 - approve: GitHub approval right away, then the same mark-read for that PR. The
   undo token only brings back the unread state, never the approval.
-- not mine: PR(s) handled + feedback. not related: member dropped from the set
-  (a set left with one member dissolves). wrong topic: moved as a user
+- not mine: same as mark read (events seen, handled, thread mark-read queued,
+  undo token) + feedback, one row per member for a stack or set tile. not
+  related: member marked removed in the set (a set left with one member
+  dissolves); regroups never put it back with the remaining members. wrong topic: moved as a user
   assignment when a target is given, otherwise membership removed so the next
   sync re-sorts it with the feedback in the prompt.
 - unmute: user override (`quiet`, or the rule loudness if that was not muted).
@@ -100,7 +102,7 @@ and only recomputes on change.
 | topic | `topic`: name, summary + `summary_input_hash`, tailoring, driver, user_role | summary: member PRs change |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
 | topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides | - |
-| sets | `pr_set` + `pr_set_member` with combined take and per-member reason | agent regroups; "not related" drops a member or dissolves the set and is remembered |
+| sets | `pr_set` + `pr_set_member` with combined take and per-member reason; `removed_at` keeps "not related" members | agent regroups; removed members never come back with the rest, a corrected set the agent drops is kept as dissolved |
 | feedback | `feedback`: not_mine / not_related / wrong_topic / unmute / tailoring_kept / tailoring_once | append-only; newest 10 per topic go into prompts |
 | event overrides | `pr_event.override_*` with reason | kept across re-derivation |
 | other agent answers | `agent_cache`, keyed by hash of prompt + model | prompt changes |

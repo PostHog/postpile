@@ -5,7 +5,11 @@ import { clip, contextBlock, jsonOnly, prLine } from './shared.ts';
 function setLine(set: PrSet): string {
   const members = set.members.map((m) => m.prKey).join(', ');
   const status = set.status === 'dissolved' ? ' (DISSOLVED by the user, do not propose it again)' : '';
-  return `- "${set.title}"${status}: ${members}`;
+  const removed =
+    set.removedKeys.length > 0
+      ? `\n  the user said NOT related, never group again with the PRs above: ${set.removedKeys.join(', ')}`
+      : '';
+  return `- "${set.title}"${status}: ${members}${removed}`;
 }
 
 /**

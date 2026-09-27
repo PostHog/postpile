@@ -186,4 +186,38 @@ describe('Engine.sync with the agent', () => {
     expect(after?.sets.map((s) => s.id)).toEqual(detail?.sets.map((s) => s.id));
     expect(after?.sets[0]?.take).toBe('Still both.');
   });
+
+  it('never puts a PR back into a set the user removed it from', async () => {
+    const h = makeHarness();
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
+    for (const pr of prs) {
+      h.reader.addPr(pr, makeThreadFor(pr));
+    }
+    const topic = { id: 'depot', name: 'Depot', summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher' as const, status: 'active' as const, createdAt: at(0), updatedAt: at(0) };
+    h.store.topics.create(topic);
+    for (const pr of prs) {
+      h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    }
+    const members = prs.map((pr) => ({ prKey: pr.key, reason: 'runner change' }));
+    h.runner.answer('set_grouping', { sets: [{ title: 'Runner switch', take: 'All three.', members }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;
+
+    const removed = prs[2]!.key;
+    await h.engine.giveFeedback({ kind: 'not_related', tileId: `set:${setId}`, prKey: removed, targetTopicId: null, note: '' });
+    // The agent proposes the same grouping again, once under the old title and once under a new one.
+    h.runner.answer('set_grouping', {
+      sets: [
+        { title: 'Runner switch', take: 'All three again.', members },
+        { title: 'Other name', take: 'Same pair.', members: [members[0], members[2]] },
+      ],
+    });
+    const report = await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(report.agentCalls).toBe(1);
+    const sets = h.store.sets.listActiveForTopic('depot');
+    expect(sets.map((s) => s.id)).toEqual([setId]);
+    expect(sets[0]?.members.map((m) => m.prKey)).toEqual([prs[0]!.key, prs[1]!.key]);
+    expect(sets[0]?.removedKeys).toEqual([removed]);
+  });
 });

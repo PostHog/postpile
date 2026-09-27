@@ -11,6 +11,32 @@ function memberSignature(keys: string[]): string {
   return [...keys].sort().join(' ');
 }
 
+function pairKey(removed: string, kept: string): string {
+  return `${removed} | ${kept}`;
+}
+
+/**
+ * "Not related" as pairs: the removed PR must not share a set with the PRs it
+ * was removed from. Stored as "removed | kept" so the removed one is dropped.
+ */
+function rejectedPairs(sets: PrSet[]): Set<string> {
+  const pairs = new Set<string>();
+  for (const set of sets) {
+    for (const removed of set.removedKeys) {
+      for (const member of set.members) {
+        pairs.add(pairKey(removed, member.prKey));
+      }
+    }
+  }
+  return pairs;
+}
+
+/** Drops every member the user already said is not related to another member of the proposal. */
+function withoutRejected(proposal: SetProposal, rejected: Set<string>): SetProposal['members'] {
+  const keys = proposal.members.map((m) => m.prKey);
+  return proposal.members.filter((member) => !keys.some((other) => rejected.has(pairKey(member.prKey, other))));
+}
+
 /**
  * Asks the agent to group related open PRs of a topic into sets. Runs only
  * when the topic's PRs, dissolved sets or feedback changed. A set the agent
@@ -24,12 +50,14 @@ export class SetGrouper {
     const at = this.deps.now().toISOString();
     const active = existing.filter((s) => s.status === 'active');
     const dissolved = new Set(existing.filter((s) => s.status === 'dissolved').map((s) => memberSignature(s.members.map((m) => m.prKey))));
+    const rejected = rejectedPairs(existing);
     const kept = new Set<string>();
 
     store.transaction(() => {
       for (const proposal of proposals) {
-        // The prompt says never to bring back a dissolved set; enforce it.
-        if (dissolved.has(memberSignature(proposal.members.map((m) => m.prKey)))) {
+        // The prompt says to respect the user's corrections; enforce it.
+        const members = withoutRejected(proposal, rejected);
+        if (members.length < 2 || dissolved.has(memberSignature(members.map((m) => m.prKey)))) {
           continue;
         }
         const previous = active.find((s) => s.title.trim().toLowerCase() === proposal.title.trim().toLowerCase());
@@ -40,7 +68,8 @@ export class SetGrouper {
           topicId: topic.id,
           title: proposal.title,
           take: proposal.take,
-          members: proposal.members,
+          members,
+          removedKeys: previous?.removedKeys ?? [],
           status: 'active',
           inputHash,
           createdAt: previous?.createdAt ?? at,
@@ -48,7 +77,13 @@ export class SetGrouper {
         });
       }
       for (const set of active) {
-        if (!kept.has(set.id)) {
+        if (kept.has(set.id)) {
+          continue;
+        }
+        // A set the user corrected is kept as dissolved, so the correction is not lost with it.
+        if (set.removedKeys.length > 0) {
+          store.sets.dissolve(set.id, at);
+        } else {
           store.sets.delete(set.id);
         }
       }

@@ -26,9 +26,17 @@ export class PrSetRepo {
   private membersOf(setId: string): PrSetMember[] {
     return all<MemberRow>(
       this.db,
-      'SELECT set_id, pr_key, reason FROM pr_set_member WHERE set_id = ? ORDER BY position',
+      'SELECT set_id, pr_key, reason FROM pr_set_member WHERE set_id = ? AND removed_at IS NULL ORDER BY position',
       setId,
     ).map((row) => ({ prKey: row.pr_key, reason: row.reason }));
+  }
+
+  private removedKeysOf(setId: string): PrKey[] {
+    return all<MemberRow>(
+      this.db,
+      'SELECT set_id, pr_key, reason FROM pr_set_member WHERE set_id = ? AND removed_at IS NOT NULL ORDER BY removed_at',
+      setId,
+    ).map((row) => row.pr_key);
   }
 
   private toSet(row: SetRow): PrSet {
@@ -38,6 +46,7 @@ export class PrSetRepo {
       title: row.title,
       take: row.take,
       members: this.membersOf(row.id),
+      removedKeys: this.removedKeysOf(row.id),
       status: row.status as PrSetStatus,
       inputHash: row.input_hash,
       createdAt: row.created_at,
@@ -45,7 +54,11 @@ export class PrSetRepo {
     };
   }
 
-  /** Insert or replace the set and all of its members. */
+  /**
+   * Insert or replace the set and its members. set.removedKeys is not written:
+   * only removeMember records a removal, and a removed PR stays removed even
+   * if `members` lists it again.
+   */
   save(set: PrSet): void {
     inTransaction(this.db, () => {
       run(
@@ -64,11 +77,12 @@ export class PrSetRepo {
         set.createdAt,
         set.updatedAt,
       );
-      run(this.db, 'DELETE FROM pr_set_member WHERE set_id = ?', set.id);
+      run(this.db, 'DELETE FROM pr_set_member WHERE set_id = ? AND removed_at IS NULL', set.id);
       set.members.forEach((member, position) => {
         run(
           this.db,
-          'INSERT INTO pr_set_member (set_id, pr_key, reason, position) VALUES (?, ?, ?, ?)',
+          `INSERT INTO pr_set_member (set_id, pr_key, reason, position) VALUES (?, ?, ?, ?)
+           ON CONFLICT (set_id, pr_key) DO NOTHING`,
           set.id,
           member.prKey,
           member.reason,
@@ -111,15 +125,16 @@ export class PrSetRepo {
   }
 
   /**
-   * User said "not related" about one member. A set left with fewer than two
+   * User said "not related" about one member. The row is kept, marked
+   * removed, so regrouping remembers it. A set left with fewer than two
    * members is no longer a set, so it gets dissolved.
    */
   removeMember(setId: string, prKey: PrKey, at: string): void {
     inTransaction(this.db, () => {
-      run(this.db, 'DELETE FROM pr_set_member WHERE set_id = ? AND pr_key = ?', setId, prKey);
+      run(this.db, 'UPDATE pr_set_member SET removed_at = ? WHERE set_id = ? AND pr_key = ?', at, setId, prKey);
       const left = one<{ count: number }>(
         this.db,
-        'SELECT COUNT(*) AS count FROM pr_set_member WHERE set_id = ?',
+        'SELECT COUNT(*) AS count FROM pr_set_member WHERE set_id = ? AND removed_at IS NULL',
         setId,
       );
       const status = (left?.count ?? 0) < 2 ? 'dissolved' : 'active';

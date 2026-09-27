@@ -85,6 +85,7 @@ describe('setGroupingPrompt', () => {
           title: 'Old grouping',
           take: '',
           members: [{ prKey: 'acme/app#1', reason: '' }],
+          removedKeys: [],
           status: 'dissolved',
           inputHash: 'h',
           createdAt: '',

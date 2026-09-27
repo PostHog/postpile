@@ -40,6 +40,7 @@ function makeSet(overrides: Partial<PrSet> = {}): PrSet {
       { prKey: 'PostHog/posthog#2', reason: 'test job' },
       { prKey: 'PostHog/posthog#3', reason: 'lint job' },
     ],
+    removedKeys: [],
     status: 'active',
     inputHash: 'h1',
     createdAt: at(0),
@@ -281,7 +282,11 @@ describe('PrSetRepo', () => {
   it('drops a member on "not related" and dissolves the set below two members', () => {
     store.sets.save(makeSet());
     store.sets.removeMember('set-1', 'PostHog/posthog#2', at(1));
-    expect(store.sets.get('set-1')).toMatchObject({ status: 'active' });
+    expect(store.sets.get('set-1')).toMatchObject({ status: 'active', removedKeys: ['PostHog/posthog#2'] });
+    expect(store.sets.get('set-1')?.members.map((m) => m.prKey)).toEqual(['PostHog/posthog#1', 'PostHog/posthog#3']);
+    // A save that lists the removed PR again does not bring it back.
+    store.sets.save(makeSet({ inputHash: 'h2' }));
+    expect(store.sets.get('set-1')?.members.map((m) => m.prKey)).toEqual(['PostHog/posthog#1', 'PostHog/posthog#3']);
     store.sets.removeMember('set-1', 'PostHog/posthog#3', at(2));
     expect(store.sets.get('set-1')).toMatchObject({ status: 'dissolved', updatedAt: at(2) });
     expect(store.sets.listActiveForTopic('topic-1')).toEqual([]);
