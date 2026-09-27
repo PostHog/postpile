@@ -3,8 +3,8 @@ import type { DigestDeps } from './deps.ts';
 import { EventOverrider } from './event-overrides.ts';
 import { GlanceWriter } from './glances.ts';
 import { SetGrouper } from './set-grouping.ts';
-import { refreshDriversAndRoles } from './topic-people.ts';
 import { TopicAssigner } from './topic-assignment.ts';
+import { refreshDriversAndRoles } from './topic-roles.ts';
 import { TopicSummarizer } from './topic-summaries.ts';
 
 /**

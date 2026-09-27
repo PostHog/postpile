@@ -1,4 +1,5 @@
-import { sameLogin, type NotificationReason, type Pr, type UserRole } from '@code-manager/core';
+import { sameLogin } from './mentions.ts';
+import type { NotificationReason, Pr, UserRole } from './types.ts';
 
 /** Whoever authored most of the topic's PRs. Ties go to the author seen first. */
 export function topicDriver(prs: Pr[]): string | null {

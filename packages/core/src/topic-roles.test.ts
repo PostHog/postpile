@@ -1,5 +1,5 @@
-import { makePr } from '@code-manager/core/fixtures';
 import { describe, expect, it } from 'vitest';
+import { makePr } from './fixtures.ts';
 import { topicDriver, userRoleFor } from './topic-roles.ts';
 
 describe('topicDriver', () => {

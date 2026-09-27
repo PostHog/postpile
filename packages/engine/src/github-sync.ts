@@ -1,4 +1,5 @@
 import {
+  caresAboutUnreviewedMerges,
   deriveEvents,
   prKey,
   type NotificationThread,
@@ -9,7 +10,6 @@ import {
 } from '@code-manager/core';
 import type { GitHubReader } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
-import { caresAboutUnreviewedMerges } from './instructions.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { saveViewer } from './viewer-meta.ts';
 

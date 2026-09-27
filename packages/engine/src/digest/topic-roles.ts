@@ -1,5 +1,4 @@
-import type { NotificationReason } from '@code-manager/core';
-import { topicDriver, userRoleFor } from '../topic-roles.ts';
+import { topicDriver, userRoleFor, type NotificationReason } from '@code-manager/core';
 import type { DigestDeps } from './deps.ts';
 
 /** Driver and user role come from PR authors and ping reasons, no agent needed. */

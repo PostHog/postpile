@@ -11,4 +11,6 @@ export * from './stacks.ts';
 export * from './snooze.ts';
 export * from './tiles.ts';
 export * from './topics.ts';
+export * from './topic-roles.ts';
+export * from './instructions.ts';
 export * from './deferred-queue.ts';
