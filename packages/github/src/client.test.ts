@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GitHubClient } from './client.ts';
 import { FakeFetch, fakeTokens, loadFixture } from './fake-fetch.ts';
-import { buildPrBatchQuery } from './queries.ts';
+import { buildBranchQuery, buildPrBatchQuery } from './queries.ts';
 import { PR_BATCH_SIZE } from './reader.ts';
 
 const refs = [
@@ -170,5 +170,59 @@ describe('viewer', () => {
       { body: { data: null, errors: [{ message: 'missing read:org scope' }] } },
     ]);
     expect(await new GitHubClient(fakeTokens, fake.fn).viewer()).toEqual({ login: 'viewer', teams: [] });
+  });
+});
+
+describe('findPrsByBranch', () => {
+  const lookups = [
+    { repo: 'acme/app', branch: 'alice/base', side: 'head' as const },
+    { repo: 'acme/app', branch: 'master', side: 'head' as const },
+    { repo: 'acme/app', branch: 'alice/top', side: 'base' as const },
+    { repo: 'acme/hidden', branch: 'x', side: 'base' as const },
+  ];
+
+  it('asks for open and merged PRs by head or base branch, one alias per lookup', () => {
+    const query = buildBranchQuery(lookups);
+    expect(query).toContain('b0: repository(owner: "acme", name: "app") { defaultBranchRef { name } pullRequests(headRefName: "alice/base"');
+    expect(query).toContain('b2: repository(owner: "acme", name: "app") { defaultBranchRef { name } pullRequests(baseRefName: "alice/top"');
+    expect(query).toContain('states: [OPEN, MERGED]');
+  });
+
+  it('answers in lookup order, drops forks, and finds nothing below the default branch', async () => {
+    const node = (number: number, extra: Record<string, unknown> = {}) => ({
+      number,
+      state: 'OPEN',
+      mergedAt: null,
+      updatedAt: '2026-09-19T10:00:00Z',
+      baseRefName: 'master',
+      headRefName: `branch-${number}`,
+      isCrossRepository: false,
+      ...extra,
+    });
+    const fake = new FakeFetch([
+      {
+        body: {
+          data: {
+            b0: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(10), node(11, { isCrossRepository: true })] } },
+            b1: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(12)] } },
+            b2: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(13, { state: 'MERGED', mergedAt: '2026-09-18T10:00:00Z' })] } },
+            b3: null,
+          },
+        },
+      },
+    ]);
+
+    const found = await new GitHubClient(fakeTokens, fake.fn).findPrsByBranch(lookups);
+
+    expect(found.map((prs) => prs.map((pr) => pr.ref.number))).toEqual([[10], [], [13], []]);
+    expect(found[2]?.[0]).toEqual({
+      ref: { repo: 'acme/app', number: 13 },
+      state: 'MERGED',
+      mergedAt: '2026-09-18T10:00:00.000Z',
+      updatedAt: '2026-09-19T10:00:00.000Z',
+      baseRef: 'master',
+      headRef: 'branch-13',
+    });
+    expect(fake.requests).toHaveLength(1);
   });
 });

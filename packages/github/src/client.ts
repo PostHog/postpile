@@ -1,10 +1,18 @@
 import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
 import { GitHubError, GitHubHttp, type FetchFn } from './http.ts';
-import { toPr } from './normalize.ts';
+import { toBranchPr, toPr } from './normalize.ts';
 import { getThread, listNotifications } from './notifications.ts';
-import { batchAlias, buildPrBatchQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
-import type { RawBatchResponse, RawViewerTeams } from './raw.ts';
-import { PR_BATCH_SIZE, type GitHubReader, type NotificationConditions, type NotificationsResult } from './reader.ts';
+import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
+import type { RawBatchResponse, RawBranchResponse, RawViewerTeams } from './raw.ts';
+import {
+  BRANCH_BATCH_SIZE,
+  PR_BATCH_SIZE,
+  type BranchLookup,
+  type BranchPr,
+  type GitHubReader,
+  type NotificationConditions,
+  type NotificationsResult,
+} from './reader.ts';
 import type { TokenSource } from './token.ts';
 
 // GitHub's secondary rate limiter cares about burst concurrency more than
@@ -17,6 +25,22 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(i, i + size));
   }
   return chunks;
+}
+
+/** Runs fn over every batch, at most MAX_PARALLEL_BATCHES at a time. Results keep the batch order. */
+async function inParallel<T, R>(batches: T[], fn: (batch: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(batches.length);
+  let next = 0;
+  // A tiny worker pool: each worker takes the next batch until none are left.
+  const worker = async (): Promise<void> => {
+    while (next < batches.length) {
+      const index = next++;
+      results[index] = await fn(batches[index]!);
+    }
+  };
+  const workers = Math.min(MAX_PARALLEL_BATCHES, batches.length);
+  await Promise.all(Array.from({ length: workers }, worker));
+  return results;
 }
 
 /** Real reader over REST (notifications) and GraphQL (viewer, PRs). */
@@ -64,22 +88,35 @@ export class GitHubClient implements GitHubReader {
   }
 
   async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {
-    const batches = chunk(refs, PR_BATCH_SIZE);
-    const result = new Map<PrKey, Pr>();
-    let next = 0;
+    const batches = await inParallel(chunk(refs, PR_BATCH_SIZE), (batch) => this.fetchBatch(batch));
+    return new Map(batches.flat().map((pr) => [pr.key, pr]));
+  }
 
-    // A tiny worker pool: each worker takes the next batch until none are left.
-    const worker = async (): Promise<void> => {
-      while (next < batches.length) {
-        const batch = batches[next++]!;
-        for (const pr of await this.fetchBatch(batch)) {
-          result.set(pr.key, pr);
-        }
+  /**
+   * One aliased branch query. A repo the token cannot see answers nothing
+   * for its lookups; forks are left out (their branch names say nothing
+   * about this repo's stacks).
+   */
+  private async findBranchBatch(batch: BranchLookup[]): Promise<BranchPr[][]> {
+    const response = await this.http.graphql<RawBranchResponse>(buildBranchQuery(batch));
+    if (!response.data) {
+      const message = response.errors[0]?.message ?? 'no data';
+      throw new GitHubError(`GitHub branch query failed: ${message}`, 200);
+    }
+    return batch.map((lookup, index) => {
+      const repo = response.data?.[branchAlias(index)];
+      if (!repo || (lookup.side === 'head' && repo.defaultBranchRef?.name === lookup.branch)) {
+        return [];
       }
-    };
-    const workers = Math.min(MAX_PARALLEL_BATCHES, batches.length);
-    await Promise.all(Array.from({ length: workers }, worker));
-    return result;
+      return repo.pullRequests.nodes
+        .filter((node) => node !== null && !node.isCrossRepository)
+        .map((node) => toBranchPr(lookup.repo, node!));
+    });
+  }
+
+  async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {
+    const batches = await inParallel(chunk(lookups, BRANCH_BATCH_SIZE), (batch) => this.findBranchBatch(batch));
+    return batches.flat();
   }
 
   /**

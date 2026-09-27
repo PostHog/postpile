@@ -127,6 +127,23 @@ export interface RawPullRequest {
   timelineItems: { nodes: RawTimelineItem[] };
 }
 
+/** A PR node from a branch lookup (queries.ts buildBranchQuery). */
+export interface RawBranchPr {
+  number: number;
+  state: string;
+  mergedAt: string | null;
+  updatedAt: string;
+  baseRefName: string;
+  headRefName: string;
+  isCrossRepository: boolean;
+}
+
+/** Response of the branch query: b0, b1, ... one per lookup. Null when the repo is not visible. */
+export type RawBranchResponse = Record<
+  string,
+  { defaultBranchRef: { name: string } | null; pullRequests: { nodes: (RawBranchPr | null)[] } } | null
+>;
+
 /** Response of the batched query: p0, p1, ... one per PR. Null when the repo is not visible. */
 export type RawBatchResponse = Record<string, { pullRequest: RawPullRequest | null } | null>;
 

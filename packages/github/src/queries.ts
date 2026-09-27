@@ -1,4 +1,5 @@
 import type { PrRef } from '@code-manager/core';
+import type { BranchLookup } from './reader.ts';
 
 // Limits per PR. Picked so 12 aliased PRs stay well inside GitHub's node
 // limit even when every PR drags in its full conversation.
@@ -95,6 +96,26 @@ export function buildPrBatchQuery(refs: PrRef[]): string {
     return `  ${batchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { ...prData } }`;
   });
   return `query {\n${lines.join('\n')}\n}\n${FRAGMENTS}`;
+}
+
+export function branchAlias(index: number): string {
+  return `b${index}`;
+}
+
+/** Newest PRs per branch lookup. Closed ones never complete a stack, so only open and merged are asked for. */
+const BRANCH_PRS_PER_LOOKUP = 5;
+
+/** One aliased repository lookup per branch (b0, b1, ...): the repo's default branch plus matching PRs. */
+export function buildBranchQuery(lookups: BranchLookup[]): string {
+  const lines = lookups.map((lookup, index) => {
+    const [owner, name] = lookup.repo.split('/');
+    const filter = lookup.side === 'head' ? 'headRefName' : 'baseRefName';
+    const prs =
+      `pullRequests(${filter}: ${JSON.stringify(lookup.branch)}, first: ${BRANCH_PRS_PER_LOOKUP}, states: [OPEN, MERGED], ` +
+      'orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number state mergedAt updatedAt baseRefName headRefName isCrossRepository } }';
+    return `  ${branchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { defaultBranchRef { name } ${prs} }`;
+  });
+  return `query {\n${lines.join('\n')}\n}`;
 }
 
 export const VIEWER_LOGIN_QUERY = 'query { viewer { login } }';

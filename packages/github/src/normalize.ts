@@ -15,8 +15,10 @@ import {
   type TimelineItem,
   type TimelineItemKind,
 } from '@code-manager/core';
+import type { BranchPr } from './reader.ts';
 import type {
   RawActor,
+  RawBranchPr,
   RawCheckContext,
   RawComment,
   RawCommit,
@@ -100,6 +102,17 @@ function toPrState(state: string): PrState {
     return state;
   }
   return 'OPEN';
+}
+
+export function toBranchPr(repo: string, raw: RawBranchPr): BranchPr {
+  return {
+    ref: { repo, number: raw.number },
+    state: toPrState(raw.state),
+    mergedAt: isoTimeOrNull(raw.mergedAt),
+    updatedAt: isoTime(raw.updatedAt),
+    baseRef: raw.baseRefName,
+    headRef: raw.headRefName,
+  };
 }
 
 function toReviewDecision(decision: string | null): ReviewDecision {

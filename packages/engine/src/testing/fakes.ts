@@ -2,24 +2,37 @@
 import { FakeRunner } from '@code-manager/agent';
 import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
 import { FakeTimers, viewer as fixtureViewer } from '@code-manager/core/fixtures';
-import type { GitHubReader, GitHubWriter, NotificationConditions, NotificationsResult } from '@code-manager/github';
+import type { BranchLookup, BranchPr, GitHubReader, GitHubWriter, NotificationConditions, NotificationsResult } from '@code-manager/github';
 import { Store } from '@code-manager/store';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
 import { FakeAgent } from './fake-agent.ts';
 
+function toBranchPr(pr: Pr): BranchPr {
+  return { ref: pr.ref, state: pr.state, mergedAt: pr.mergedAt, updatedAt: pr.updatedAt, baseRef: pr.baseRef, headRef: pr.headRef };
+}
+
 export class FakeReader implements GitHubReader {
   threads: NotificationThread[] = [];
   prs = new Map<PrKey, Pr>();
   etag = 'etag-1';
   fetchedRefs: PrRef[][] = [];
+  /** Every findPrsByBranch call, one entry per batch. */
+  branchLookups: BranchLookup[][] = [];
+  /** Head lookups on this branch answer nothing, like the real client on a repo's default branch. */
+  defaultBranch = 'master';
 
   constructor(private readonly who: Viewer = fixtureViewer) {}
 
   addPr(pr: Pr, thread: NotificationThread): void {
     this.prs.set(pr.key, pr);
     this.threads = [thread, ...this.threads.filter((t) => t.id !== thread.id)];
+  }
+
+  /** A PR on GitHub the user has no notification for, e.g. another layer of a stack. */
+  addStackPr(pr: Pr): void {
+    this.prs.set(pr.key, pr);
   }
 
   async viewer(): Promise<Viewer> {
@@ -47,6 +60,19 @@ export class FakeReader implements GitHubReader {
       }
     }
     return result;
+  }
+
+  async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {
+    this.branchLookups.push(lookups);
+    return lookups.map((lookup) => {
+      if (lookup.side === 'head' && lookup.branch === this.defaultBranch) {
+        return [];
+      }
+      return [...this.prs.values()]
+        .filter((pr) => pr.ref.repo === lookup.repo && pr.state !== 'CLOSED')
+        .filter((pr) => (lookup.side === 'head' ? pr.headRef : pr.baseRef) === lookup.branch)
+        .map(toBranchPr);
+    });
   }
 }
 

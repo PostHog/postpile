@@ -1,4 +1,4 @@
-import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
+import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@code-manager/core';
 
 export interface NotificationConditions {
   etag: string | null;
@@ -8,6 +8,27 @@ export interface NotificationConditions {
 export type NotificationsResult =
   | { notModified: true }
   | { notModified: false; threads: NotificationThread[]; etag: string | null; lastModified: string | null };
+
+/**
+ * PRs to look up by branch, for completing stacks. side head: PRs whose head
+ * branch is `branch` (the layer below a PR based on it). side base: PRs whose
+ * base branch is `branch` (the layer above a PR with that head).
+ */
+export interface BranchLookup {
+  repo: string;
+  branch: string;
+  side: 'head' | 'base';
+}
+
+/** Just enough of a PR to walk a stack and decide whether to fetch it. */
+export interface BranchPr {
+  ref: PrRef;
+  state: PrState;
+  mergedAt: IsoTime | null;
+  updatedAt: IsoTime;
+  baseRef: string;
+  headRef: string;
+}
 
 /** Every read GitHub call the app makes. Safe to use against the real API in smoke tests. */
 export interface GitHubReader {
@@ -24,7 +45,18 @@ export interface GitHubReader {
 
   /** Batched GraphQL enrichment, PR_BATCH_SIZE PRs aliased per query. Missing PRs are left out. */
   fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>>;
+
+  /**
+   * Open and merged same-repo PRs per lookup (a few newest each), answers in
+   * lookup order. Batched GraphQL, BRANCH_BATCH_SIZE lookups per query. A
+   * head lookup on the repo's default branch answers nothing: that is where
+   * a stack ends, not a layer.
+   */
+  findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]>;
 }
 
 /** PRs aliased per GraphQL query. 12 kept ghatchup well inside the node limit. */
 export const PR_BATCH_SIZE = 12;
+
+/** Branch lookups aliased per GraphQL query. Each answers a handful of small nodes. */
+export const BRANCH_BATCH_SIZE = 30;
