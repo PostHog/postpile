@@ -20,6 +20,8 @@ import type {
   UserPrState,
   Verdict,
 } from './types.ts';
+import type { AgentCallStats } from './memory.ts';
+import type { DossierView, FactChangeCounts, FactView } from './memory-views.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
@@ -57,6 +59,8 @@ export interface TopicDetail {
   tiles: TileView[];
   sets: PrSet[];
   pendingProposals: TopicProposal[];
+  /** Null until the first dossier update for the topic (and always for Unsorted). */
+  dossier: DossierView | null;
 }
 
 export interface EventView {
@@ -74,10 +78,15 @@ export interface PrDetail {
   topicId: string | null;
   /** Ids of every tile this PR appears in. */
   tileIds: string[];
+  /** Active facts about this PR or citing it, verified at read time. */
+  facts: FactView[];
 }
 
-/** Agent jobs a sync can run, in the order it runs them. */
-export type AgentJob = 'topics' | 'sets' | 'summaries' | 'glances' | 'events';
+/**
+ * Agent jobs a sync can run, in the order it runs them. v2: 'dossiers'
+ * replaces 'summaries'; ALL_AGENT_JOBS switches over when the dossier job lands.
+ */
+export type AgentJob = 'topics' | 'sets' | 'summaries' | 'dossiers' | 'glances' | 'events';
 
 export const ALL_AGENT_JOBS: AgentJob[] = ['topics', 'sets', 'summaries', 'glances', 'events'];
 
@@ -101,7 +110,11 @@ export interface SyncReport {
   /** Unread PR threads still waiting to be enriched because of maxPrs. */
   prsSkipped: number;
   newEvents: number;
+  /** Same as agentCallStats.total. */
   agentCalls: number;
+  agentCallStats: AgentCallStats;
+  dossiersUpdated: number;
+  facts: FactChangeCounts;
   errors: string[];
 }
 

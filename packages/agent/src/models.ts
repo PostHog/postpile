@@ -7,7 +7,7 @@ const GLANCE_MODEL = 'claude-haiku-4-5';
 const DEFAULT_MODEL = 'sonnet';
 
 export function modelFor(purpose: AgentPurpose): string {
-  if (purpose === 'glance') {
+  if (purpose === 'glance' || purpose === 'glance_batch') {
     return process.env.CODE_MANAGER_GLANCE_MODEL || GLANCE_MODEL;
   }
   return process.env.CODE_MANAGER_MODEL || DEFAULT_MODEL;

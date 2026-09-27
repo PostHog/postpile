@@ -4,7 +4,12 @@ import {
   type ActionResult,
   type ChatMessage,
   type ChatReply,
+  type ConsolidateOptions,
+  type ConsolidationReport,
+  type FactQuery,
+  type FactView,
   type FeedbackInput,
+  type PendingProposals,
   type PrDetail,
   type PrKey,
   type SnoozeCondition,
@@ -78,6 +83,9 @@ export class Engine implements EngineService {
       prsSkipped: 0,
       newEvents: 0,
       agentCalls: 0,
+      agentCallStats: budget.stats,
+      dossiersUpdated: 0,
+      facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors,
     };
     try {
@@ -179,6 +187,26 @@ export class Engine implements EngineService {
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     return this.proposals.decide(proposalId, accept);
+  }
+
+  async listFacts(query: FactQuery): Promise<FactView[]> {
+    throw new Error(`not implemented: listFacts (${JSON.stringify(query)})`);
+  }
+
+  async listProposals(): Promise<PendingProposals> {
+    throw new Error('not implemented: listProposals');
+  }
+
+  async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
+    throw new Error(`not implemented: decideRuleProposal (${proposalId}, ${accept})`);
+  }
+
+  async markTopicSeen(topicId: string): Promise<ActionResult> {
+    throw new Error(`not implemented: markTopicSeen (${topicId})`);
+  }
+
+  async consolidate(options: ConsolidateOptions = {}): Promise<ConsolidationReport> {
+    throw new Error(`not implemented: consolidate (${JSON.stringify(options)})`);
   }
 
   flushPendingWrites(): Promise<void> {

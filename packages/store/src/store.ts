@@ -1,7 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { inTransaction, openDatabase } from './database.ts';
+import { AgentCallRepo } from './repos/agent-calls.ts';
 import { ChatRepo } from './repos/chat.ts';
+import { CursorRepo } from './repos/cursors.ts';
+import { DossierRepo } from './repos/dossiers.ts';
+import { EventLogRepo } from './repos/event-log.ts';
 import { EventRepo } from './repos/events.ts';
+import { FactRepo } from './repos/facts.ts';
 import { FeedbackRepo } from './repos/feedback.ts';
 import { GlanceRepo } from './repos/glances.ts';
 import { TopicMembershipRepo } from './repos/memberships.ts';
@@ -9,6 +14,7 @@ import { MetaRepo } from './repos/meta.ts';
 import { NotificationRepo } from './repos/notifications.ts';
 import { TopicProposalRepo } from './repos/proposals.ts';
 import { PrRepo } from './repos/prs.ts';
+import { RuleProposalRepo } from './repos/rule-proposals.ts';
 import { PrSetRepo } from './repos/sets.ts';
 import { SnoozeRepo } from './repos/snoozes.ts';
 import { TopicRepo } from './repos/topics.ts';
@@ -29,6 +35,12 @@ export class Store {
   readonly snoozes: SnoozeRepo;
   readonly feedback: FeedbackRepo;
   readonly chat: ChatRepo;
+  readonly eventLog: EventLogRepo;
+  readonly cursors: CursorRepo;
+  readonly dossiers: DossierRepo;
+  readonly facts: FactRepo;
+  readonly ruleProposals: RuleProposalRepo;
+  readonly agentCalls: AgentCallRepo;
 
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
@@ -44,6 +56,12 @@ export class Store {
     this.snoozes = new SnoozeRepo(db);
     this.feedback = new FeedbackRepo(db);
     this.chat = new ChatRepo(db);
+    this.eventLog = new EventLogRepo(db);
+    this.cursors = new CursorRepo(db);
+    this.dossiers = new DossierRepo(db);
+    this.facts = new FactRepo(db);
+    this.ruleProposals = new RuleProposalRepo(db);
+    this.agentCalls = new AgentCallRepo(db);
   }
 
   static open(path: string): Store {

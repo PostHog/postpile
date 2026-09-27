@@ -14,7 +14,7 @@ export class GlanceWriter {
 
   private async glance(input: GlanceInput): Promise<void> {
     const { store, agent } = this.deps;
-    if (store.glances.get(input.pr.key)?.inputHash === agent.glanceInputHash(input) || !this.deps.budget.take()) {
+    if (store.glances.get(input.pr.key)?.inputHash === agent.glanceInputHash(input) || !this.deps.budget.take('glance')) {
       return;
     }
     try {

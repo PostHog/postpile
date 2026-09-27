@@ -32,7 +32,7 @@ export class TopicAssigner {
   }
 
   private topicChoices(): TopicChoice[] {
-    return this.deps.store.topics.listActive().map((t) => ({ id: t.id, name: t.name, summary: t.summary }));
+    return this.deps.store.topics.listActive().map((t) => ({ id: t.id, name: t.name, summary: t.summary, brief: '' }));
   }
 
   private findOrCreateTopic(name: string): Topic {
@@ -66,7 +66,7 @@ export class TopicAssigner {
 
   async run(): Promise<void> {
     for (const batch of chunk(this.unassignedPrs(), ASSIGNMENT_BATCH_SIZE)) {
-      if (!this.deps.budget.take()) {
+      if (!this.deps.budget.take('topic_assignment')) {
         break;
       }
       try {

@@ -131,6 +131,8 @@ export class ReadModels {
       tiles: this.tileViews(board, topicId),
       sets: isUnsorted ? [] : this.store.sets.listActiveForTopic(topicId),
       pendingProposals: isUnsorted ? [] : this.store.proposals.listPendingForTopic(topicId),
+      // v2: latest dossier, verified claims and changes since seen.
+      dossier: null,
     };
   }
 
@@ -154,6 +156,8 @@ export class ReadModels {
       userState: board.userStates.get(key) ?? null,
       topicId: board.topicIdOf(key),
       tileIds: [...tileIds],
+      // v2: active facts about or citing this PR, verified at read time.
+      facts: [],
     };
   }
 }

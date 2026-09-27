@@ -36,7 +36,7 @@ export class TopicSummarizer {
     const otherTopics = this.deps.store.topics
       .listActive()
       .filter((t) => t.id !== topic.id)
-      .map((t) => ({ id: t.id, name: t.name, summary: t.summary }));
+      .map((t) => ({ id: t.id, name: t.name, summary: t.summary, brief: '' }));
     return { topic, prs, otherTopics, context: this.deps.contexts.forTopic(topic.id) };
   }
 
@@ -71,7 +71,7 @@ export class TopicSummarizer {
       return;
     }
     const input = this.input(topic, prs);
-    if (topicSummaryInputHash(input) === topic.summaryInputHash || !this.deps.budget.take()) {
+    if (topicSummaryInputHash(input) === topic.summaryInputHash || !this.deps.budget.take('topic_summary')) {
       return;
     }
     try {

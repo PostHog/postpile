@@ -3,7 +3,7 @@ import type { Pr } from '@code-manager/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
 import { humanComments } from './prompts/shared.ts';
-import type { GlanceInput, SetGroupingInput, TopicSummaryInput } from './service.ts';
+import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, GlanceInput, SetGroupingInput, TopicSummaryInput } from './service.ts';
 
 // Input hashes decide when a stored answer is stale. They cover what the
 // answer depends on, not every byte of the prompt: a bot comment or a CI
@@ -85,4 +85,25 @@ export function setGroupingInputHash(input: SetGroupingInput): string {
     input.context.tailoring,
     input.context.recentFeedback.map((f) => f.id),
   );
+}
+
+/**
+ * What a dossier update depends on: the previous version (topic + number),
+ * the delta (event ids, toSeq, joined and left PRs, stale fact ids and
+ * claims, new feedback ids), tailoring, standing rules, model and prompt
+ * version. Not the instructions file (see DESIGN.md open questions) and not
+ * knownFacts, which are context only.
+ */
+export function dossierInputHash(input: DossierUpdateInput): string {
+  throw new Error(`not implemented: dossierInputHash (${input.topic.id})`);
+}
+
+/**
+ * Per PR inside a batch: prGlanceSnapshot, provenance, topic name, dossier
+ * version, instructions, tailoring, standing rules, feedback on this PR,
+ * model. Never the other PRs in the batch, so batch composition cannot
+ * invalidate a glance.
+ */
+export function glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+  throw new Error(`not implemented: glanceItemInputHash (${item.pr.key}, v${input.dossier?.version ?? 0})`);
 }

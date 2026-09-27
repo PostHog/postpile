@@ -275,7 +275,8 @@ export type Provenance =
 
 export type UserRole = 'driver' | 'reviewer' | 'stakeholder' | 'watcher';
 
-export type TopicStatus = 'active' | 'archived';
+/** archived: merged away, never comes back. retired: finished, comes back when a new PR joins. */
+export type TopicStatus = 'active' | 'archived' | 'retired';
 
 export interface Topic {
   /** Stable id, never reused. Renames keep the id. */
@@ -304,7 +305,8 @@ export interface TopicMembership {
   createdAt: IsoTime;
 }
 
-export type TopicProposalKind = 'new_topic' | 'rename' | 'merge';
+/** split: move prKeys out of topicId into a new topic called name. One proposal per new part. */
+export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split';
 export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
 
 /** Topic changes are never applied silently. The agent proposes, the user decides. */
@@ -313,11 +315,11 @@ export interface TopicProposal {
   kind: TopicProposalKind;
   /** new_topic: null. rename/merge: the topic being changed. */
   topicId: string | null;
-  /** new_topic/rename: the proposed name. */
+  /** new_topic/rename/split: the proposed name. */
   name: string | null;
   /** merge: the topic to merge into. */
   intoTopicId: string | null;
-  /** new_topic: the PRs that triggered it. */
+  /** new_topic: the PRs that triggered it. split: the PRs to move. */
   prKeys: PrKey[];
   reason: string;
   status: ProposalStatus;
@@ -415,6 +417,8 @@ export interface Glance {
   othersSaid: string;
   /** Only for pulled-in PRs. */
   pullInReason: string | null;
+  /** Dossier version the glance was read against. Null for v1 glances and Unsorted. */
+  dossierVersion: number | null;
   inputHash: string;
   model: string;
   createdAt: IsoTime;

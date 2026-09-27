@@ -2,11 +2,14 @@ import type {
   ActionResult,
   ChatMessage,
   ChatReply,
+  ConsolidationReport,
   EventDisplayState,
   EventView,
+  FactView,
   Feedback,
   FeedbackInput,
   Loudness,
+  PendingProposals,
   PrDetail,
   PrEvent,
   PrKey,
@@ -21,7 +24,7 @@ import type {
   UnreadReason,
   UserPrState,
 } from '@code-manager/core';
-import { setIdFromTileId } from '@code-manager/core';
+import { emptyAgentCallStats, setIdFromTileId } from '@code-manager/core';
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -189,6 +192,9 @@ export class FakeEngine implements EngineService {
       prsSkipped: 0,
       newEvents: 0,
       agentCalls: 0,
+      agentCallStats: emptyAgentCallStats(),
+      dossiersUpdated: 0,
+      facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
     };
   }
@@ -217,6 +223,7 @@ export class FakeEngine implements EngineService {
       tiles: this.tilesOfTopic(topicId).map((tile) => this.tileView(tile)),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
+      dossier: null,
     };
   }
 
@@ -236,6 +243,7 @@ export class FakeEngine implements EngineService {
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
+      facts: [],
     };
   }
 
@@ -432,6 +440,39 @@ export class FakeEngine implements EngineService {
       topic.name = proposal.name;
     }
     return ok(accept ? 'accepted' : 'rejected');
+  }
+
+  // Engine memory v2: the sample data has no dossiers, facts or rule proposals yet.
+
+  async listFacts(): Promise<FactView[]> {
+    return [];
+  }
+
+  async listProposals(): Promise<PendingProposals> {
+    return { topics: this.data.proposals.filter((proposal) => proposal.status === 'pending'), rules: [] };
+  }
+
+  async decideRuleProposal(proposalId: string): Promise<ActionResult> {
+    return fail(`no pending rule proposal ${proposalId}`);
+  }
+
+  async markTopicSeen(topicId: string): Promise<ActionResult> {
+    return ok(`marked ${topicId} seen`);
+  }
+
+  async consolidate(): Promise<ConsolidationReport> {
+    const startedAt = this.timestamp();
+    return {
+      startedAt,
+      finishedAt: this.timestamp(),
+      skipped: null,
+      topicProposalsFiled: 0,
+      ruleProposalsFiled: 0,
+      factsMerged: 0,
+      topicsRetired: 0,
+      agentCallStats: emptyAgentCallStats(),
+      errors: [],
+    };
   }
 
   async flushPendingWrites(): Promise<void> {

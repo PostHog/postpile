@@ -10,6 +10,7 @@ interface GlanceRow {
   risk: string;
   others_said: string;
   pull_in_reason: string | null;
+  dossier_version: number | null;
   input_hash: string;
   model: string;
   created_at: string;
@@ -24,6 +25,7 @@ function toGlance(row: GlanceRow): Glance {
     risk: row.risk,
     othersSaid: row.others_said,
     pullInReason: row.pull_in_reason,
+    dossierVersion: row.dossier_version,
     inputHash: row.input_hash,
     model: row.model,
     createdAt: row.created_at,
@@ -55,12 +57,12 @@ export class GlanceRepo {
     run(
       this.db,
       `INSERT INTO pr_glance
-         (pr_key, verdict, for_you, does, risk, others_said, pull_in_reason, input_hash, model, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (pr_key, verdict, for_you, does, risk, others_said, pull_in_reason, dossier_version, input_hash, model, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (pr_key) DO UPDATE SET
          verdict = excluded.verdict, for_you = excluded.for_you, does = excluded.does, risk = excluded.risk,
          others_said = excluded.others_said, pull_in_reason = excluded.pull_in_reason,
-         input_hash = excluded.input_hash, model = excluded.model, created_at = excluded.created_at`,
+         dossier_version = excluded.dossier_version, input_hash = excluded.input_hash, model = excluded.model, created_at = excluded.created_at`,
       glance.prKey,
       glance.verdict,
       glance.forYou,
@@ -68,6 +70,7 @@ export class GlanceRepo {
       glance.risk,
       glance.othersSaid,
       glance.pullInReason,
+      glance.dossierVersion,
       glance.inputHash,
       glance.model,
       glance.createdAt,

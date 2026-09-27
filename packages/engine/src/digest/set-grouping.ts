@@ -102,7 +102,7 @@ export class SetGrouper {
     const existingSets = store.sets.listForTopic(topic.id);
     const input = { topic, prs, existingSets, context: this.deps.contexts.forTopic(topic.id) };
     const inputHash = setGroupingInputHash(input);
-    if (store.meta.get(hashKey(topic.id)) === inputHash || !this.deps.budget.take()) {
+    if (store.meta.get(hashKey(topic.id)) === inputHash || !this.deps.budget.take('set_grouping')) {
       return;
     }
     try {

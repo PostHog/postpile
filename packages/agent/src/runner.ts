@@ -1,12 +1,7 @@
-/** What a call is for. Used for cache keys, logging and picking a model. */
-export type AgentPurpose =
-  | 'glance'
-  | 'topic_assignment'
-  | 'set_grouping'
-  | 'topic_summary'
-  | 'event_classification'
-  | 'draft_comment'
-  | 'chat';
+import type { AgentCallKind } from '@code-manager/core';
+
+/** What a call is for. Used for cache keys, logging, cost accounting and picking a model. */
+export type AgentPurpose = AgentCallKind;
 
 export interface AgentRequest {
   purpose: AgentPurpose;
@@ -29,4 +24,24 @@ export interface AgentResponse {
  */
 export interface AgentRunner {
   run(request: AgentRequest): Promise<AgentResponse>;
+}
+
+/** One finished call, success or not, as the service saw it. */
+export interface ObservedCall {
+  purpose: AgentPurpose;
+  model: string;
+  /** False when the runner failed or the answer did not parse. */
+  ok: boolean;
+  topicId: string | null;
+  attempt: number;
+  durationMs: number;
+  costUsd: number | null;
+}
+
+/**
+ * Told about every call RunnerAgentService makes. The engine uses it for the
+ * per-kind stats in the sync report and the agent_call table.
+ */
+export interface AgentCallObserver {
+  onCall(call: ObservedCall): void;
 }

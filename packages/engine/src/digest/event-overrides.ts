@@ -27,7 +27,7 @@ export class EventOverrider {
   private async classify(key: PrKey, events: PrEvent[]): Promise<void> {
     const { store } = this.deps;
     const pr = store.prs.get(key);
-    if (!pr || !this.deps.budget.take()) {
+    if (!pr || !this.deps.budget.take('event_classification')) {
       return;
     }
     try {

@@ -3,6 +3,7 @@ import { RunnerAgentService } from './claude-service.ts';
 import { FakeRunner } from './fake-runner.ts';
 import { glanceInputHash } from './hashes.ts';
 import { AgentOutputError } from './json.ts';
+import type { ObservedCall } from './runner.ts';
 import type { GlanceInput } from './service.ts';
 import { emptyContext, fullContext, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
 
@@ -36,6 +37,7 @@ describe('RunnerAgentService.glance', () => {
       prKey: 'acme/app#1',
       ...glanceAnswer,
       pullInReason: 'same migration',
+      dossierVersion: null,
       inputHash: glanceInputHash(input),
       model: 'claude-haiku-4-5',
       createdAt: NOW,
@@ -75,7 +77,7 @@ describe('RunnerAgentService.assignTopics', () => {
     });
     const prs = [1, 2, 3].map((number) => makePr({ ref: { repo: 'acme/app', number } }));
 
-    const result = await service.assignTopics({ prs, viewer, topics: [{ id: 't1', name: 'CI', summary: '' }], context: emptyContext });
+    const result = await service.assignTopics({ prs, viewer, topics: [{ id: 't1', name: 'CI', summary: '', brief: '' }], context: emptyContext });
 
     expect(result).toEqual([
       { prKey: 'acme/app#1', kind: 'existing', topicId: 't1', reason: 'CI work' },
@@ -147,7 +149,7 @@ describe('RunnerAgentService.summarizeTopic', () => {
         { kind: 'merge', intoTopicId: 'invented', reason: 'hallucinated' },
       ],
     });
-    const otherTopics = [{ id: 'runners', name: 'Runners', summary: '' }];
+    const otherTopics = [{ id: 'runners', name: 'Runners', summary: '', brief: '' }];
     const result = await service.summarizeTopic({ topic, prs: [makePr()], otherTopics, context: emptyContext });
     expect(result.proposals).toEqual([
       { kind: 'rename', name: 'Depot runners', reason: 'clearer' },
@@ -210,5 +212,23 @@ describe('RunnerAgentService.draftComment and chat', () => {
       reply: 'It adds a runner label.',
       tailoringProposal: null,
     });
+  });
+});
+
+describe('RunnerAgentService observer', () => {
+  it('reports every call, including answers that do not parse', async () => {
+    const calls: ObservedCall[] = [];
+    const runner = new FakeRunner();
+    const service = new RunnerAgentService(runner, { now: () => NOW, observer: { onCall: (call) => calls.push(call) } });
+    const input: GlanceInput = { pr: makePr(), viewer, provenance: { kind: 'pinged', reason: 'review_requested' }, topic: null, context: emptyContext };
+    runner.answer('glance', glanceAnswer).answer('glance', 'not json');
+
+    await service.glance(input);
+    await expect(service.glance(input)).rejects.toThrow();
+
+    expect(calls.map((call) => [call.purpose, call.ok, call.attempt])).toEqual([
+      ['glance', true, 1],
+      ['glance', false, 1],
+    ]);
   });
 });

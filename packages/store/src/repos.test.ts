@@ -312,13 +312,14 @@ describe('GlanceRepo', () => {
       risk: 'low',
       othersSaid: 'bob approved',
       pullInReason: null,
+      dossierVersion: 3,
       inputHash: 'h1',
       model: 'claude-haiku-4-5',
       createdAt: at(0),
     };
     store.glances.put(glance);
     store.glances.put({ ...glance, verdict: 'LOOK_CLOSER', inputHash: 'h2' });
-    expect(store.glances.get(glance.prKey)).toMatchObject({ verdict: 'LOOK_CLOSER', inputHash: 'h2' });
+    expect(store.glances.get(glance.prKey)).toMatchObject({ verdict: 'LOOK_CLOSER', inputHash: 'h2', dossierVersion: 3 });
     expect(store.glances.getMany([glance.prKey, 'x/y#1']).size).toBe(1);
     expect(store.glances.get('x/y#1')).toBeNull();
   });

@@ -27,7 +27,7 @@ describe('every prompt carries the memory and asks for JSON', () => {
   const topic = makeTopic();
   const prompts: Record<string, string> = {
     glance: glancePrompt({ pr, viewer, provenance: { kind: 'pinged', reason: 'review_requested' }, topic, context: fullContext }),
-    topics: topicAssignmentPrompt({ prs: [pr], viewer, topics: [{ id: 't1', name: 'CI', summary: '' }], context: fullContext }),
+    topics: topicAssignmentPrompt({ prs: [pr], viewer, topics: [{ id: 't1', name: 'CI', summary: '', brief: '' }], context: fullContext }),
     sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext }),
     summary: topicSummaryPrompt({ topic, prs: [pr], otherTopics: [], context: fullContext }),
     events: eventClassificationPrompt({ pr, viewer, events: [makeEvent()], context: fullContext }),

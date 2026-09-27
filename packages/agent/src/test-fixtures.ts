@@ -106,10 +106,11 @@ export function makeEvent(overrides: Partial<PrEvent> = {}): PrEvent {
   };
 }
 
-export const emptyContext: PromptContext = { instructions: '', tailoring: '', recentFeedback: [] };
+export const emptyContext: PromptContext = { instructions: '', tailoring: '', recentFeedback: [], standingRules: [] };
 
 export const fullContext: PromptContext = {
   instructions: 'I am on the devex team. I care about CI cost.',
   tailoring: 'Flag anything that touches the cache keys.',
   recentFeedback: [makeFeedback()],
+  standingRules: [],
 };

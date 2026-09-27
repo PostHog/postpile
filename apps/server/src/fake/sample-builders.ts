@@ -151,6 +151,7 @@ export function sampleGlance(clock: SampleClock, number: number, input: SampleGl
     risk: input.risk,
     othersSaid: input.othersSaid,
     pullInReason: input.pullInReason ?? null,
+    dossierVersion: null,
     inputHash: `sample-${number}`,
     model: 'sample',
     createdAt: clock.hoursAgo(0),

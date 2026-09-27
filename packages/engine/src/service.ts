@@ -2,7 +2,12 @@ import type {
   ActionResult,
   ChatMessage,
   ChatReply,
+  ConsolidateOptions,
+  ConsolidationReport,
+  FactQuery,
+  FactView,
   FeedbackInput,
+  PendingProposals,
   PrDetail,
   PrKey,
   SnoozeCondition,
@@ -25,8 +30,14 @@ export interface EngineService {
   sync(options?: SyncOptions): Promise<SyncReport>;
 
   listTopics(): Promise<TopicListItem[]>;
+  /** Carries the topic dossier and what changed since the user last marked the topic seen. */
   getTopic(topicId: string): Promise<TopicDetail | null>;
+  /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
+  /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */
+  listFacts(query: FactQuery): Promise<FactView[]>;
+  /** Topic and rule proposals waiting for the user, across all topics. */
+  listProposals(): Promise<PendingProposals>;
   getChat(tileId: string): Promise<ChatMessage[]>;
 
   /** Immediate and final: GitHub approvals cannot be undone. */
@@ -49,6 +60,18 @@ export interface EngineService {
   /** keep=true stores the text as topic tailoring; false logs it as "just this once". */
   decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult>;
   decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
+  /** Accepting a global rule adds it to every prompt; a topic rule is appended to that topic's tailoring. */
+  decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
+  /** Moves the topic's seen cursor to now, so "changes since seen" starts over. */
+  markTopicSeen(topicId: string): Promise<ActionResult>;
+
+  /**
+   * The sleep-time job: proposes topic merges, splits and renames, retires
+   * finished topics, folds duplicate facts, and proposes standing rules from
+   * repeated feedback. On demand or when the host is idle after a sync.
+   * A consolidation while one is running joins the running one.
+   */
+  consolidate(options?: ConsolidateOptions): Promise<ConsolidationReport>;
 
   /** Sends every queued mark-read now. Call on quit: the user meant to clear them. */
   flushPendingWrites(): Promise<void>;
