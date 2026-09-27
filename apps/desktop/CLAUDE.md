@@ -27,7 +27,8 @@ in the sidebar. Hiding it makes the gap invisible to the next agent.
 ## Data: typed query hooks, types from core
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`),
-  `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`).
+  `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
+  `proposals.ts` (`useProposals`, the Inbox).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@code-manager/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -53,6 +54,13 @@ in the sidebar. Hiding it makes the gap invisible to the next agent.
 - After an action the provider invalidates every query except the config.
   Mark-read results carry an undo token; the toast offers Undo for the 6s
   window and the footer counts pending mark-reads.
+- Memory corrections ("Wrong" on a fact or dossier line, "Forget" on a
+  care) go through `correctMemory`. They only touch local memory, so they
+  are not on the `GithubWrite` list. A fact closes right away; a dossier
+  line shows struck through (`DossierView.correctedClaims`) until the next
+  sync rewrites the dossier.
+- `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
+  leaves a topic (another topic or the Inbox), not on a timer.
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, next to the glance.
 
@@ -80,19 +88,23 @@ in the sidebar. Hiding it makes the gap invisible to the next agent.
 ## Components: small files, extract for behavior
 
 - One component per file in `components/`, named like the UI part:
-  `TitleBar`, `TopicSidebar`, `TopicHeader`, `TileGrid`, `Tile`, `PrRow`,
+  `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
+  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`,
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
-  `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`), `StatusFooter`,
-  `Toast`.
+  `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
+  `StatusFooter`, `Toast`.
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, provenance,
-  PR state), `icons.tsx`. Something used in three places goes here; two call
+  PR state), `icons.tsx`, and for memory `MemoryLine` (text, source chips,
+  stale / marked-wrong badge, Wrong / Forget on hover), `MemoryButton`,
+  `SourceChip`. Something used in three places goes here; two call
   sites can stay duplicated.
 - Don't extract a component that has more props than JSX children.
 - Order functions so they are defined before they are used.
 
 ## Selection
 
-`App.tsx` holds the picked topic and the picked tile + PR. Everything else is
+`App.tsx` holds the picked topic, whether the Inbox is open, and the picked
+tile + PR. Everything else is
 derived on render (`resolveSelection`): a missing pick falls back to the first
 topic, its first tile and that tile's lead PR. Don't mirror server data into
 `useState`.

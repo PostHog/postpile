@@ -74,13 +74,23 @@ now".
     by slot, not by subject + predicate.
   - Bounded: closed members only counted in the dossier prompt, versions
     pruned to 50 on every save, 1 + 10 refs per fact.
+- Desktop shows memory v2: dossier in the topic header ("Since you last
+  looked" first, full dossier behind a disclosure with version history),
+  "What the agent knows" per PR, an Inbox for topic and rule proposals,
+  agent call stats of the last sync in the footer. Topics are marked seen
+  when the user leaves them. Every fact and dossier line has "Wrong" (cares
+  also "Forget") via the new `correctMemory`: facts close right away,
+  dossier lines are logged as feedback and fixed by the next dossier update.
+- Fake mode carries sample memory (`apps/server/src/fake/sample-memory.ts`,
+  `FakeMemory`): Depot and Frontend build dossiers, facts with one stale,
+  a seen cursor, a merge proposal and standing-rule proposals.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
 
 - Desktop UI follows the chosen style, but the layout is still open. Not in
   the UI yet: editing general instructions, a "handled quietly" list (both
-  shown disabled), topic dossier and facts from memory v2, keyboard
+  shown disabled), keyboard
   navigation, dark mode, one-press approve from a tile (Approve lives in the
   detail pane, next to the glance).
 - The write guard is a UI guard. The server itself still accepts writes from
@@ -92,11 +102,14 @@ now".
 - The mark-read undo queue is in memory. Quit flushes it; a crash drops
   pending mark-reads (local state already says read, GitHub stays unread).
 - Nothing files `new_topic` proposals: new topics are created directly.
-- Desktop does not show dossiers, facts or rule proposals yet, does not call
-  `markTopicSeen` when leaving a topic, and does not run
-  `consolidate({onlyIfDue})` when idle. Server routes for all of it exist.
-- Fake sample data has no dossiers, facts or rule proposals, so fake mode
-  shows none.
+- Desktop does not run `consolidate({onlyIfDue})` when idle yet. Quitting
+  the app while on a topic does not mark it seen.
+- Dossier corrections are matched by text: a line the next update rewords
+  slightly loses its "marked wrong" mark, which is the intended outcome.
+  Fact corrections also land in `correctedClaims` (harmless, no dossier
+  line has that text).
+- Stale dossier claims in fake mode are hardcoded (one question), the fake
+  does not run `verifyDossier`.
 - Ambiguous fact candidates the call cap does not reach are dropped (the
   dossier already moved past their events).
 - `PROMPT_VERSION` moved to v2: the first real sync on an old database
