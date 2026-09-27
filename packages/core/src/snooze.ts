@@ -1,3 +1,4 @@
+import { PUSH_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import type { EventKind, IsoTime, Pr, PrEvent, Snooze } from './types.ts';
@@ -23,8 +24,6 @@ const replyKinds: EventKind[] = [
   'review_commented',
 ];
 
-const pushKinds: EventKind[] = ['commits_pushed', 'commits_after_approval', 'force_pushed'];
-
 function isByViewer(event: PrEvent, viewerLogin: string | undefined): boolean {
   return viewerLogin !== undefined && sameLogin(event.actor, viewerLogin);
 }
@@ -40,7 +39,7 @@ function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
 }
 
 function newPush(snooze: Snooze, context: SnoozeContext): boolean {
-  return context.events.some((event) => event.at > snooze.since && pushKinds.includes(event.kind));
+  return context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
 }
 
 function ciGreen(context: SnoozeContext): boolean {

@@ -1,4 +1,5 @@
 import { isBot, isMachineComment } from './bots.ts';
+import { ADDRESSED_KINDS } from './kinds.ts';
 import { ruleLoudness } from './loudness.ts';
 import { isOwnTeam, mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
@@ -24,8 +25,6 @@ interface ApprovalPoint {
   at: IsoTime;
   commitOid: string | null;
 }
-
-const addressedKinds: EventKind[] = ['mention', 'team_mention', 'reply_to_user', 'question_to_user'];
 
 const deployBody = /\b(deploy(ed|ment)?|preview)\b/i;
 
@@ -353,7 +352,7 @@ export function deriveEvents(
       userState,
       caresAboutUnreviewedMerges: options.caresAboutUnreviewedMerges,
       subject: raw.subject,
-      userRepliedAfter: addressedKinds.includes(raw.kind) && viewerSpokeAfter(pr, viewer, raw.at),
+      userRepliedAfter: ADDRESSED_KINDS.includes(raw.kind) && viewerSpokeAfter(pr, viewer, raw.at),
       requestAnswered: requestAnswered(pr, viewer, raw),
     });
     return {

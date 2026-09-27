@@ -1,3 +1,4 @@
+import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import type { EventDisplayState, EventKind, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
@@ -24,11 +25,6 @@ export interface LoudnessDecision {
   reason: string;
 }
 
-// A human talking to the viewer directly.
-const addressedKinds: EventKind[] = ['mention', 'team_mention', 'reply_to_user', 'question_to_user'];
-
-const pushKinds: EventKind[] = ['commits_pushed', 'force_pushed'];
-
 // Machine activity that never needs a person: shown with a dot at most.
 const machineKinds: EventKind[] = ['ci', 'deploy', 'merge_queue', 'bot_comment'];
 
@@ -51,7 +47,7 @@ function isViewersPr(input: LoudnessInput): boolean {
 
 function machineLoudness(input: LoudnessInput): LoudnessDecision {
   // A bot rebasing or updating a draft is pure churn; nobody reviews drafts.
-  if (input.isBot && pushKinds.includes(input.kind) && input.pr.isDraft) {
+  if (input.isBot && PUSH_KINDS.includes(input.kind) && input.pr.isDraft) {
     return decide('muted', 'bot pushed to a draft');
   }
   return decide('quiet', 'bot activity');
@@ -91,7 +87,7 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
   if (input.isBot || machineKinds.includes(input.kind)) {
     return machineLoudness(input);
   }
-  if (addressedKinds.includes(input.kind)) {
+  if (ADDRESSED_KINDS.includes(input.kind)) {
     return addressedLoudness(input);
   }
   if (reviewKinds.includes(input.kind)) {

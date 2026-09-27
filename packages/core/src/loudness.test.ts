@@ -49,6 +49,8 @@ describe('ruleLoudness', () => {
     expect(ruleLoudness(input({ kind: 'commits_pushed', actor: 'renovate', isBot: true, pr: draft })).loudness).toBe(
       'muted',
     );
+    const afterApproval = input({ kind: 'commits_after_approval', actor: 'renovate', isBot: true, pr: draft });
+    expect(ruleLoudness(afterApproval).loudness).toBe('muted');
     expect(ruleLoudness(input({ kind: 'force_pushed', actor: 'trunk-io', isBot: true })).loudness).toBe('quiet');
     expect(ruleLoudness(input({ kind: 'force_pushed', actor: 'alice', pr: draft })).loudness).toBe('quiet');
   });

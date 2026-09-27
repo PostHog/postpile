@@ -2,6 +2,7 @@ export * from './types.ts';
 export * from './views.ts';
 export * from './keys.ts';
 export * from './bots.ts';
+export * from './kinds.ts';
 export * from './mentions.ts';
 export * from './provenance.ts';
 export * from './loudness.ts';
