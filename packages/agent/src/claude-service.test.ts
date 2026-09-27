@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RunnerAgentService } from './claude-service.ts';
 import { FakeRunner } from './fake-runner.ts';
-import { glanceInputHash } from './hashes.ts';
 import { AgentOutputError } from './json.ts';
 import type { ObservedCall } from './runner.ts';
-import type { GlanceInput } from './service.ts';
-import { emptyContext, fullContext, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
+import type { GlanceBatchInput } from './service.ts';
+import { emptyContext, makePr, makeTopic, viewer } from './test-fixtures.ts';
 
 const NOW = '2026-09-27T12:00:00.000Z';
 
@@ -15,7 +14,8 @@ function setup() {
   return { runner, service };
 }
 
-const glanceAnswer = {
+const glanceEntry = {
+  prKey: 'acme/app#1',
   verdict: 'LOOKS_SAFE',
   forYou: 'CI only, your area. Approve.',
   does: 'Moves CI runners to Depot.',
@@ -23,43 +23,28 @@ const glanceAnswer = {
   othersSaid: 'nobody yet',
 };
 
-describe('RunnerAgentService.glance', () => {
+describe('RunnerAgentService models', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('maps the answer onto a Glance with hash, model and time', async () => {
-    const { runner, service } = setup();
-    runner.answer('glance', '```json\n' + JSON.stringify(glanceAnswer) + '\n```');
-    const input: GlanceInput = { pr: makePr(), viewer, provenance: { kind: 'pulled_in', reason: 'same migration' }, topic: makeTopic(), context: fullContext };
+  it('glances on haiku unless CODE_MANAGER_GLANCE_MODEL says otherwise', async () => {
+    const input: GlanceBatchInput = {
+      topic: null,
+      dossier: null,
+      items: [{ pr: makePr(), provenance: { kind: 'pinged', reason: 'mention' } }],
+      viewer,
+      context: emptyContext,
+      attempt: 1,
+    };
+    const first = setup();
+    first.runner.answer('glance_batch', { glances: [glanceEntry] });
+    await first.service.glanceBatch(input);
+    expect(first.runner.requests[0]?.model).toBe('claude-haiku-4-5');
 
-    const glance = await service.glance(input);
-
-    expect(glance).toEqual({
-      prKey: 'acme/app#1',
-      ...glanceAnswer,
-      pullInReason: 'same migration',
-      dossierVersion: null,
-      inputHash: glanceInputHash(input),
-      model: 'claude-haiku-4-5',
-      createdAt: NOW,
-    });
-    expect(service.glanceInputHash(input)).toBe(glance.inputHash);
-    expect(runner.requests[0]?.model).toBe('claude-haiku-4-5');
-  });
-
-  it('uses CODE_MANAGER_GLANCE_MODEL', async () => {
     vi.stubEnv('CODE_MANAGER_GLANCE_MODEL', 'claude-sonnet-4-5');
-    const { runner, service } = setup();
-    runner.answer('glance', glanceAnswer);
-    await service.glance({ pr: makePr(), viewer, provenance: { kind: 'pinged', reason: 'mention' }, topic: null, context: emptyContext });
-    expect(runner.requests[0]?.model).toBe('claude-sonnet-4-5');
-  });
-
-  it('rejects an answer with a made-up verdict', async () => {
-    const { runner, service } = setup();
-    runner.answer('glance', { ...glanceAnswer, verdict: 'SHIP_IT' });
-    await expect(
-      service.glance({ pr: makePr(), viewer, provenance: { kind: 'pinged', reason: 'mention' }, topic: null, context: emptyContext }),
-    ).rejects.toBeInstanceOf(AgentOutputError);
+    const second = setup();
+    second.runner.answer('glance_batch', { glances: [glanceEntry] });
+    await second.service.glanceBatch(input);
+    expect(second.runner.requests[0]?.model).toBe('claude-sonnet-4-5');
   });
 });
 
@@ -127,61 +112,6 @@ describe('RunnerAgentService.groupSets', () => {
   });
 });
 
-describe('RunnerAgentService.summarizeTopic', () => {
-  it('returns the summary with its input hash', async () => {
-    const { runner, service } = setup();
-    runner.answer('topic_summary', { summary: 'CI moves to Depot. Two PRs in flight.' });
-    const result = await service.summarizeTopic({ topic: makeTopic(), prs: [makePr()], otherTopics: [], context: emptyContext });
-    expect(result.summary).toBe('CI moves to Depot. Two PRs in flight.');
-    expect(result.inputHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(result.proposals).toEqual([]);
-  });
-
-  it('keeps real rename and merge ideas and drops no-ops and made-up topics', async () => {
-    const { runner, service } = setup();
-    const topic = makeTopic();
-    runner.answer('topic_summary', {
-      summary: 'Same work as the runner topic.',
-      proposals: [
-        { kind: 'rename', name: topic.name, reason: 'no change' },
-        { kind: 'rename', name: 'Depot runners', reason: 'clearer' },
-        { kind: 'merge', intoTopicId: 'runners', reason: 'same work' },
-        { kind: 'merge', intoTopicId: 'invented', reason: 'hallucinated' },
-      ],
-    });
-    const otherTopics = [{ id: 'runners', name: 'Runners', summary: '', brief: '' }];
-    const result = await service.summarizeTopic({ topic, prs: [makePr()], otherTopics, context: emptyContext });
-    expect(result.proposals).toEqual([
-      { kind: 'rename', name: 'Depot runners', reason: 'clearer' },
-      { kind: 'merge', intoTopicId: 'runners', reason: 'same work' },
-    ]);
-  });
-});
-
-describe('RunnerAgentService.classifyEvents', () => {
-  it('keeps only real changes to known events and never touches user overrides', async () => {
-    const { runner, service } = setup();
-    runner.answer('event_classification', {
-      overrides: [
-        { eventId: 'e1', loudness: 'loud', reason: 'bob asks you directly' },
-        { eventId: 'e2', loudness: 'quiet', reason: 'same as rules' },
-        { eventId: 'e3', loudness: 'muted', reason: 'user unmuted this' },
-        { eventId: 'e9', loudness: 'muted', reason: 'invented' },
-      ],
-    });
-    const events = [
-      makeEvent({ id: 'e1' }),
-      makeEvent({ id: 'e2' }),
-      makeEvent({ id: 'e3', override: { loudness: 'quiet', reason: 'unmuted', by: 'user' } }),
-    ];
-
-    const result = await service.classifyEvents({ pr: makePr(), viewer, events, context: emptyContext });
-
-    expect(result).toEqual([{ eventId: 'e1', loudness: 'loud', reason: 'bob asks you directly' }]);
-    expect(runner.promptsFor('event_classification')[0]).not.toContain('id e3');
-  });
-});
-
 describe('RunnerAgentService.draftComment and chat', () => {
   it('returns the drafted body', async () => {
     const { runner, service } = setup();
@@ -220,15 +150,15 @@ describe('RunnerAgentService observer', () => {
     const calls: ObservedCall[] = [];
     const runner = new FakeRunner();
     const service = new RunnerAgentService(runner, { now: () => NOW, observer: { onCall: (call) => calls.push(call) } });
-    const input: GlanceInput = { pr: makePr(), viewer, provenance: { kind: 'pinged', reason: 'review_requested' }, topic: null, context: emptyContext };
-    runner.answer('glance', glanceAnswer).answer('glance', 'not json');
+    const input = { prs: [makePr()], viewer, topics: [], context: emptyContext };
+    runner.answer('topic_assignment', { assignments: [] }).answer('topic_assignment', 'not json');
 
-    await service.glance(input);
-    await expect(service.glance(input)).rejects.toThrow();
+    await service.assignTopics(input);
+    await expect(service.assignTopics(input)).rejects.toBeInstanceOf(AgentOutputError);
 
     expect(calls.map((call) => [call.purpose, call.ok, call.attempt])).toEqual([
-      ['glance', true, 1],
-      ['glance', false, 1],
+      ['topic_assignment', true, 1],
+      ['topic_assignment', false, 1],
     ]);
   });
 });

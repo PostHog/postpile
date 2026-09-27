@@ -146,7 +146,7 @@ export class FakeAgent extends RunnerAgentService {
 
   override glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
     return inputHash(
-      'glance',
+      'glance_batch',
       item.pr.key,
       item.pr.headOid,
       item.provenance,

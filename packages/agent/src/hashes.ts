@@ -3,7 +3,7 @@ import type { Pr } from '@code-manager/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
 import { humanComments } from './prompts/shared.ts';
-import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, GlanceInput, SetGroupingInput, TopicSummaryInput } from './service.ts';
+import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, SetGroupingInput } from './service.ts';
 
 // Input hashes decide when a stored answer is stale. They cover what the
 // answer depends on, not every byte of the prompt: a bot comment or a CI
@@ -24,46 +24,6 @@ function prGlanceSnapshot(pr: Pr): unknown {
     reviews: pr.reviews.filter((r) => !isBot(r.author)).map((r) => [r.id, r.state]),
     comments: humanComments(pr).map((c) => c.id),
   };
-}
-
-/** What a topic summary depends on: which PRs are in it and roughly where each stands. */
-function prSummarySnapshot(pr: Pr): unknown {
-  return [pr.key, pr.title, pr.state, pr.isDraft];
-}
-
-/**
- * Only feedback about this PR goes into the glance hash. Feeding every topic
- * correction in would regenerate every glance in the topic on each click.
- */
-export function glanceInputHash(input: GlanceInput): string {
-  const ownFeedback = input.context.recentFeedback.filter((f) => f.prKey === input.pr.key).map((f) => f.id);
-  return inputHash(
-    'glance',
-    modelFor('glance'),
-    prGlanceSnapshot(input.pr),
-    input.viewer,
-    input.provenance,
-    input.topic?.name ?? null,
-    input.context.instructions,
-    input.context.tailoring,
-    input.context.standingRules,
-    ownFeedback,
-  );
-}
-
-/** Feedback is in the summary prompt, so it is in the hash too. */
-export function topicSummaryInputHash(input: TopicSummaryInput): string {
-  const prs = [...input.prs].sort((a, b) => a.key.localeCompare(b.key)).map(prSummarySnapshot);
-  return inputHash(
-    'topic_summary',
-    modelFor('topic_summary'),
-    input.topic.name,
-    prs,
-    input.context.instructions,
-    input.context.tailoring,
-    input.context.standingRules,
-    input.context.recentFeedback.map((f) => f.id),
-  );
 }
 
 /**

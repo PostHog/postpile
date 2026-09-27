@@ -316,19 +316,12 @@ export interface RuleProposal {
 // Agent call accounting
 // ---------------------------------------------------------------------------
 
-/**
- * Every kind of agent call. The agent package uses this as AgentPurpose.
- * v1 kinds marked below go away once their v2 replacement lands.
- */
+/** Every kind of agent call. The agent package uses this as AgentPurpose. */
 export type AgentCallKind =
   | 'topic_assignment'
   | 'set_grouping'
-  /** v1, replaced by dossier_update. */
-  | 'topic_summary'
   | 'dossier_update'
   | 'fact_reconcile'
-  /** v1, replaced by glance_batch. */
-  | 'glance'
   | 'glance_batch'
   | 'event_classification'
   | 'consolidation'
@@ -355,7 +348,7 @@ export interface AgentCallCount {
   failed: number;
   /** Retry calls (glance_batch attempt 2). Already counted in calls. */
   retries: number;
-  /** Work skipped because its input hash had not changed. Not a call. */
+  /** Work skipped because its input hash had not changed. Not a call. Per PR for glance_batch, per topic otherwise. */
   skippedUnchanged: number;
   /** Work skipped because the call cap was reached. Not a call. */
   skippedByBudget: number;

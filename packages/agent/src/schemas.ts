@@ -6,7 +6,7 @@ import { z } from 'zod';
 const text = z.string().trim();
 const loudness = z.enum(['loud', 'quiet', 'muted']);
 
-export const glanceOutput = z.object({
+const glanceOutput = z.object({
   verdict: z.enum(['LOOKS_SAFE', 'LOOK_CLOSER', 'NOT_YOURS']),
   forYou: text,
   does: text,
@@ -31,22 +31,6 @@ export const setGroupingOutput = z.object({
       members: z.array(z.object({ prKey: text, reason: text })),
     }),
   ),
-});
-
-export const topicSummaryOutput = z.object({
-  summary: text.min(1),
-  proposals: z
-    .array(
-      z.discriminatedUnion('kind', [
-        z.object({ kind: z.literal('rename'), name: text.min(1), reason: text.min(1) }),
-        z.object({ kind: z.literal('merge'), intoTopicId: text, reason: text.min(1) }),
-      ]),
-    )
-    .default([]),
-});
-
-export const eventClassificationOutput = z.object({
-  overrides: z.array(z.object({ eventId: text, loudness, reason: text.min(1) })),
 });
 
 export const draftCommentOutput = z.object({
@@ -147,8 +131,10 @@ export const glanceBatchItemOutput = glanceOutput.extend({
   prKey: text,
 });
 
-/** Same shape as the single-PR answer; event ids are unique across the batch. */
-export const eventBatchOutput = eventClassificationOutput;
+/** Only the events the rules got wrong. Event ids are unique across the batch. */
+export const eventBatchOutput = z.object({
+  overrides: z.array(z.object({ eventId: text, loudness, reason: text.min(1) })),
+});
 
 export const consolidationOutput = z.object({
   topicProposals: z

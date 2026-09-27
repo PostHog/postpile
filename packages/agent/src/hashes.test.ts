@@ -1,7 +1,7 @@
 import type { PrSet } from '@code-manager/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dossierInputHash, glanceInputHash, glanceItemInputHash, setGroupingInputHash, topicSummaryInputHash } from './hashes.ts';
-import type { DossierUpdateInput, GlanceBatchInput, GlanceInput } from './service.ts';
+import { dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
+import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';
 import {
   emptyContext,
   makeComment,
@@ -15,39 +15,46 @@ import {
   viewer,
 } from './test-fixtures.ts';
 
-function glanceInput(overrides: Partial<GlanceInput> = {}): GlanceInput {
-  return { pr: makePr(), viewer, provenance: { kind: 'pinged', reason: 'review_requested' }, topic: null, context: emptyContext, ...overrides };
+const item = { pr: makePr(), provenance: { kind: 'pinged', reason: 'review_requested' } } as const;
+
+function glanceBatch(overrides: Partial<GlanceBatchInput> = {}): GlanceBatchInput {
+  return { topic: makeTopic(), dossier: makeDossierVersion(), items: [item], viewer, context: emptyContext, attempt: 1, ...overrides };
 }
 
-describe('glanceInputHash', () => {
-  const base = glanceInputHash(glanceInput());
+/** The item hash for one PR, alone in its batch. */
+function glanceHash(pr = item.pr, overrides: Partial<GlanceBatchInput> = {}): string {
+  const own = { ...item, pr };
+  return glanceItemInputHash(glanceBatch({ items: [own], ...overrides }), own);
+}
+
+describe('glanceItemInputHash', () => {
+  const base = glanceHash();
 
   it('is stable for the same input', () => {
-    expect(glanceInputHash(glanceInput())).toBe(base);
+    expect(glanceHash()).toBe(base);
   });
 
-  it('ignores bot comments and PR update timestamps', () => {
-    const pr = makePr({ updatedAt: '2026-09-09T00:00:00Z', comments: [makeComment({ author: 'dependabot[bot]' })] });
-    expect(glanceInputHash(glanceInput({ pr }))).toBe(base);
-  });
-
-  it('ignores CI re-runs', () => {
-    const pr = makePr({ checks: { rollup: 'FAILURE', contexts: [] } });
-    expect(glanceInputHash(glanceInput({ pr }))).toBe(base);
+  it('ignores bot comments, PR update timestamps and CI re-runs', () => {
+    expect(glanceHash(makePr({ updatedAt: '2026-09-09T00:00:00Z', comments: [makeComment({ author: 'dependabot[bot]' })] }))).toBe(base);
+    expect(glanceHash(makePr({ checks: { rollup: 'FAILURE', contexts: [] } }))).toBe(base);
   });
 
   it('changes on a new push, a human comment, instructions or tailoring', () => {
-    expect(glanceInputHash(glanceInput({ pr: makePr({ headOid: 'def' }) }))).not.toBe(base);
-    expect(glanceInputHash(glanceInput({ pr: makePr({ comments: [makeComment()] }) }))).not.toBe(base);
-    expect(glanceInputHash(glanceInput({ context: { ...emptyContext, instructions: 'x' } }))).not.toBe(base);
-    expect(glanceInputHash(glanceInput({ context: { ...emptyContext, tailoring: 'x' } }))).not.toBe(base);
+    expect(glanceHash(makePr({ headOid: 'def' }))).not.toBe(base);
+    expect(glanceHash(makePr({ comments: [makeComment()] }))).not.toBe(base);
+    expect(glanceHash(item.pr, { context: { ...emptyContext, instructions: 'x' } })).not.toBe(base);
+    expect(glanceHash(item.pr, { context: { ...emptyContext, tailoring: 'x' } })).not.toBe(base);
   });
 
-  it('only reacts to feedback about this PR', () => {
-    const other = { ...emptyContext, recentFeedback: [makeFeedback({ prKey: 'acme/app#9' })] };
-    const own = { ...emptyContext, recentFeedback: [makeFeedback({ prKey: 'acme/app#1' })] };
-    expect(glanceInputHash(glanceInput({ context: other }))).toBe(base);
-    expect(glanceInputHash(glanceInput({ context: own }))).not.toBe(base);
+  it('does not depend on the other PRs in the batch or the attempt', () => {
+    const other = { pr: makePr({ ref: { repo: 'acme/app', number: 2 } }), provenance: { kind: 'pinged', reason: 'mention' } } as const;
+    expect(glanceItemInputHash(glanceBatch({ items: [other, item], attempt: 2 }), item)).toBe(base);
+  });
+
+  it('covers the dossier version and feedback on this PR only', () => {
+    expect(glanceHash(item.pr, { dossier: makeDossierVersion({ version: 8 }) })).not.toBe(base);
+    expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: 'acme/app#9' })] } })).toBe(base);
+    expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: item.pr.key })] } })).not.toBe(base);
   });
 
   describe('model', () => {
@@ -55,25 +62,8 @@ describe('glanceInputHash', () => {
 
     it('changes when the glance model changes', () => {
       vi.stubEnv('CODE_MANAGER_GLANCE_MODEL', 'claude-sonnet-4-5');
-      expect(glanceInputHash(glanceInput())).not.toBe(base);
+      expect(glanceHash()).not.toBe(base);
     });
-  });
-});
-
-describe('topicSummaryInputHash', () => {
-  it('ignores PR order but reacts to a state change', () => {
-    const a = makePr();
-    const b = makePr({ ref: { repo: 'acme/app', number: 2 } });
-    const input = { topic: makeTopic(), prs: [a, b], otherTopics: [], context: emptyContext };
-    const hash = topicSummaryInputHash(input);
-    expect(topicSummaryInputHash({ ...input, prs: [b, a] })).toBe(hash);
-    expect(topicSummaryInputHash({ ...input, prs: [makePr({ state: 'MERGED' }), b] })).not.toBe(hash);
-  });
-
-  it('reacts to new feedback, which is in the prompt', () => {
-    const input = { topic: makeTopic(), prs: [makePr()], otherTopics: [], context: emptyContext };
-    const withFeedback = { ...input, context: { ...emptyContext, recentFeedback: [makeFeedback()] } };
-    expect(topicSummaryInputHash(withFeedback)).not.toBe(topicSummaryInputHash(input));
   });
 });
 
@@ -107,9 +97,7 @@ describe('setGroupingInputHash', () => {
 describe('standing rules', () => {
   it('are part of every input hash', () => {
     const withRule = { ...emptyContext, standingRules: ['skip docs PRs'] };
-    expect(glanceInputHash(glanceInput({ context: withRule }))).not.toBe(glanceInputHash(glanceInput()));
-    const summary = { topic: makeTopic(), prs: [makePr()], otherTopics: [], context: emptyContext };
-    expect(topicSummaryInputHash({ ...summary, context: withRule })).not.toBe(topicSummaryInputHash(summary));
+    expect(glanceHash(item.pr, { context: withRule })).not.toBe(glanceHash());
     const sets = { topic: makeTopic(), prs: [makePr()], existingSets: [], context: emptyContext };
     expect(setGroupingInputHash({ ...sets, context: withRule })).not.toBe(setGroupingInputHash(sets));
   });
@@ -146,30 +134,5 @@ describe('dossierInputHash', () => {
   it('ignores the instructions file and known facts', () => {
     expect(dossierInputHash(dossierInput({ context: { ...emptyContext, instructions: 'new text' } }))).toBe(base);
     expect(dossierInputHash(dossierInput({ knownFacts: [makeFact()] }))).toBe(base);
-  });
-});
-
-describe('glanceItemInputHash', () => {
-  const pr1 = makePr();
-  const pr2 = makePr({ ref: { repo: 'acme/app', number: 2 } });
-  const item = { pr: pr1, provenance: { kind: 'pinged', reason: 'review_requested' } } as const;
-  function batch(overrides: Partial<GlanceBatchInput> = {}): GlanceBatchInput {
-    return { topic: makeTopic(), dossier: makeDossierVersion(), items: [item], viewer, context: emptyContext, attempt: 1, ...overrides };
-  }
-  const base = glanceItemInputHash(batch(), item);
-
-  it('does not depend on the other PRs in the batch or the attempt', () => {
-    const other = { pr: pr2, provenance: { kind: 'pinged', reason: 'mention' } } as const;
-    expect(glanceItemInputHash(batch({ items: [other, item], attempt: 2 }), item)).toBe(base);
-  });
-
-  it('covers the dossier version and feedback on this PR only', () => {
-    expect(glanceItemInputHash(batch({ dossier: makeDossierVersion({ version: 8 }) }), item)).not.toBe(base);
-    expect(glanceItemInputHash(batch({ context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: 'acme/app#9' })] } }), item)).toBe(base);
-    expect(glanceItemInputHash(batch({ context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: pr1.key })] } }), item)).not.toBe(base);
-  });
-
-  it('differs from the v1 glance hash', () => {
-    expect(base).not.toBe(glanceInputHash(glanceInput()));
   });
 });

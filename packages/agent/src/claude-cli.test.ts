@@ -13,7 +13,7 @@ function fakeClaude(script: string): string {
   return path;
 }
 
-const request = { purpose: 'glance' as const, model: 'claude-haiku-4-5', prompt: 'hello', timeoutMs: 5000 };
+const request = { purpose: 'glance_batch' as const, model: 'claude-haiku-4-5', prompt: 'hello', timeoutMs: 5000 };
 
 describe('claude cli runner', () => {
   it('strips settings, MCP and tools for speed', () => {

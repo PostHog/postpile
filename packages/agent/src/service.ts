@@ -39,14 +39,6 @@ export interface PromptContext {
   standingRules: string[];
 }
 
-export interface GlanceInput {
-  pr: Pr;
-  viewer: Viewer;
-  provenance: Provenance;
-  topic: Topic | null;
-  context: PromptContext;
-}
-
 export interface TopicChoice {
   id: string;
   name: string;
@@ -77,37 +69,6 @@ export interface SetProposal {
   title: string;
   take: string;
   members: PrSetMember[];
-}
-
-/** @deprecated v1, replaced by DossierUpdateInput. */
-export interface TopicSummaryInput {
-  topic: Topic;
-  prs: Pr[];
-  /**
-   * The other active topics, as merge targets. Left out of the input hash on
-   * purpose: a new topic elsewhere must not rewrite every summary.
-   */
-  otherTopics: TopicChoice[];
-  context: PromptContext;
-}
-
-/** A rename or merge the agent suggests while summarizing. Only the user can apply it. @deprecated v1 */
-export type TopicChangeProposal =
-  | { kind: 'rename'; name: string; reason: string }
-  | { kind: 'merge'; intoTopicId: string; reason: string };
-
-/** @deprecated v1, replaced by DossierUpdateResult. */
-export interface TopicSummaryResult {
-  summary: string;
-  inputHash: string;
-  proposals: TopicChangeProposal[];
-}
-
-export interface EventClassificationInput {
-  pr: Pr;
-  viewer: Viewer;
-  events: PrEvent[];
-  context: PromptContext;
 }
 
 export interface EventOverrideProposal {
@@ -275,20 +236,13 @@ export interface ConsolidationResult {
 /**
  * Every digesting job the agent does. Implementations build the prompt,
  * call the AgentRunner and parse the answer. Caching by input hash is the
- * engine's job: it calls glanceInputHash first and skips glance() on a hit.
+ * engine's job: it compares the *InputHash methods with what is stored and
+ * skips the call on a hit.
  */
 export interface AgentService {
-  /** @deprecated v1, replaced by glanceItemInputHash. */
-  glanceInputHash(input: GlanceInput): string;
-  /** @deprecated v1, replaced by glanceBatch. */
-  glance(input: GlanceInput): Promise<Glance>;
   /** v2: topics carry their dossier brief. */
   assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]>;
   groupSets(input: SetGroupingInput): Promise<SetProposal[]>;
-  /** @deprecated v1, replaced by updateDossier. */
-  summarizeTopic(input: TopicSummaryInput): Promise<TopicSummaryResult>;
-  /** @deprecated v1, replaced by classifyEventBatch. */
-  classifyEvents(input: EventClassificationInput): Promise<EventOverrideProposal[]>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;
   chat(input: ChatInput): Promise<AgentChatReply>;
 

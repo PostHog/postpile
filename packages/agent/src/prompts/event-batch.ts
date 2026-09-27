@@ -1,10 +1,17 @@
+import type { PrEvent } from '@code-manager/core';
 import type { EventBatchInput } from '../service.ts';
-import { eventLine } from './events.ts';
 import { contextBlock, jsonOnly, prLine, viewerLine } from './shared.ts';
+
+function eventLine(event: PrEvent): string {
+  const bot = event.isBot ? ' (bot)' : '';
+  return `- id ${event.id} | ${event.at} | ${event.kind} by @${event.actor}${bot} | rules said ${event.ruleLoudness} (${event.ruleReason}) | ${event.summary}`;
+}
 
 /**
  * Second opinion on rule loudness for every PR of one topic with new loud
- * events, in one call. Same levels and rules as the single-PR prompt.
+ * events, in one call. Rules cannot tell "can you take a look?" from
+ * "thanks!", or a meaningful bot comment from a rebase on a draft. The agent
+ * only returns the events it disagrees with.
  */
 export function eventBatchPrompt(input: EventBatchInput): string {
   const topic = input.topic ? ` They belong to the topic "${input.topic.name}".` : '';

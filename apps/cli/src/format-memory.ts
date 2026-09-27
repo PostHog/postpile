@@ -19,8 +19,6 @@ const KIND_ORDER: AgentCallKind[] = [
   'glance_batch',
   'event_classification',
   'consolidation',
-  'topic_summary',
-  'glance',
   'draft_comment',
   'chat',
 ];

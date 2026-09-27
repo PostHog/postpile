@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { chatPrompt } from './prompts/chat.ts';
 import { draftCommentPrompt } from './prompts/comment.ts';
-import { eventClassificationPrompt } from './prompts/events.ts';
-import { glancePrompt } from './prompts/glance.ts';
+import { eventBatchPrompt } from './prompts/event-batch.ts';
+import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
 import { contextBlock } from './prompts/shared.ts';
-import { topicSummaryPrompt } from './prompts/summary.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
+import type { Pr, Provenance } from '@code-manager/core';
+import type { PromptContext } from './service.ts';
 import { emptyContext, fullContext, makeComment, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
+
+/** A glance batch prompt for one PR without a topic. */
+function oneGlancePrompt(pr: Pr, provenance: Provenance, context: PromptContext = emptyContext): string {
+  return glanceBatchPrompt({ topic: null, dossier: null, items: [{ pr, provenance }], viewer, context, attempt: 1 });
+}
 
 describe('contextBlock', () => {
   it('carries instructions, tailoring and feedback', () => {
@@ -26,11 +32,10 @@ describe('every prompt carries the memory and asks for JSON', () => {
   const pr = makePr();
   const topic = makeTopic();
   const prompts: Record<string, string> = {
-    glance: glancePrompt({ pr, viewer, provenance: { kind: 'pinged', reason: 'review_requested' }, topic, context: fullContext }),
+    glance: oneGlancePrompt(pr, { kind: 'pinged', reason: 'review_requested' }, fullContext),
     topics: topicAssignmentPrompt({ prs: [pr], viewer, topics: [{ id: 't1', name: 'CI', summary: '', brief: '' }], context: fullContext }),
     sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext }),
-    summary: topicSummaryPrompt({ topic, prs: [pr], otherTopics: [], context: fullContext }),
-    events: eventClassificationPrompt({ pr, viewer, events: [makeEvent()], context: fullContext }),
+    events: eventBatchPrompt({ topic, items: [{ pr, events: [makeEvent()] }], viewer, context: fullContext }),
     comment: draftCommentPrompt({ pr, viewer, person: 'bob', intent: 'is the cache key stable?', context: fullContext }),
     chat: chatPrompt({
       topic,
@@ -53,12 +58,12 @@ describe('every prompt carries the memory and asks for JSON', () => {
   }
 });
 
-describe('glancePrompt', () => {
+describe('glanceBatchPrompt, per PR', () => {
   it('leaves bot comments out and says why a pulled-in PR is there', () => {
     const pr = makePr({
       comments: [makeComment({ id: 'h', body: 'human concern here' }), makeComment({ id: 'b', author: 'github-actions', body: 'bot noise here' })],
     });
-    const prompt = glancePrompt({ pr, viewer, provenance: { kind: 'pulled_in', reason: 'same migration' }, topic: null, context: emptyContext });
+    const prompt = oneGlancePrompt(pr, { kind: 'pulled_in', reason: 'same migration' });
     expect(prompt).toContain('human concern here');
     expect(prompt).not.toContain('bot noise here');
     expect(prompt).toContain('pulled in for context because: same migration');
@@ -69,7 +74,7 @@ describe('glancePrompt', () => {
       headOid: 'new',
       reviews: [{ id: 'r', author: 'viewer', state: 'APPROVED', body: '', submittedAt: '2026-09-01T00:00:00Z', commitOid: 'old' }],
     });
-    const prompt = glancePrompt({ pr, viewer, provenance: { kind: 'pinged', reason: 'author' }, topic: null, context: emptyContext });
+    const prompt = oneGlancePrompt(pr, { kind: 'pinged', reason: 'author' });
     expect(prompt).toContain("The user's own last review: approved, commits were pushed since");
   });
 });

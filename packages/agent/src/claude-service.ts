@@ -1,10 +1,10 @@
-import type { Glance, ReconcileAction } from '@code-manager/core';
+import type { ReconcileAction } from '@code-manager/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
 import { DossierRefs } from './dossier-refs.ts';
 import { mapGlanceAnswer } from './glance-answer.ts';
-import { dossierInputHash, glanceInputHash, glanceItemInputHash, topicSummaryInputHash } from './hashes.ts';
+import { dossierInputHash, glanceItemInputHash } from './hashes.ts';
 import { AgentOutputError, parseAgentJson } from './json.ts';
 import { modelFor } from './models.ts';
 import { chatPrompt } from './prompts/chat.ts';
@@ -12,12 +12,9 @@ import { draftCommentPrompt } from './prompts/comment.ts';
 import { consolidationPrompt } from './prompts/consolidation.ts';
 import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
-import { eventClassificationPrompt } from './prompts/events.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
-import { glancePrompt } from './prompts/glance.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
-import { topicSummaryPrompt } from './prompts/summary.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
 import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
@@ -27,13 +24,10 @@ import {
   dossierUpdateOutput,
   draftCommentOutput,
   eventBatchOutput,
-  eventClassificationOutput,
   factReconcileOutput,
   glanceBatchOutput,
-  glanceOutput,
   setGroupingOutput,
   topicAssignmentOutput,
-  topicSummaryOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -45,28 +39,22 @@ import type {
   DossierUpdateResult,
   DraftCommentInput,
   EventBatchInput,
-  EventClassificationInput,
   EventOverrideProposal,
   FactReconcileInput,
   GlanceBatchInput,
   GlanceBatchItem,
   GlanceBatchResult,
-  GlanceInput,
   SetGroupingInput,
   SetProposal,
   TopicAssignment,
   TopicAssignmentInput,
-  TopicSummaryInput,
-  TopicSummaryResult,
 } from './service.ts';
 
-// Glances are small and fire per PR; everything else may look at a whole topic.
+// Most calls look at a whole topic; drafts and chat answer one question.
 const timeouts: Record<AgentPurpose, number> = {
-  glance: 90_000,
   glance_batch: 240_000,
   topic_assignment: 240_000,
   set_grouping: 240_000,
-  topic_summary: 180_000,
   dossier_update: 240_000,
   fact_reconcile: 180_000,
   event_classification: 120_000,
@@ -146,28 +134,6 @@ export class RunnerAgentService implements AgentService {
     });
   }
 
-  glanceInputHash(input: GlanceInput): string {
-    return glanceInputHash(input);
-  }
-
-  async glance(input: GlanceInput): Promise<Glance> {
-    const { value, model } = await this.ask('glance', glancePrompt(input), glanceOutput);
-    return {
-      prKey: input.pr.key,
-      verdict: value.verdict,
-      forYou: value.forYou,
-      does: value.does,
-      risk: value.risk,
-      othersSaid: value.othersSaid,
-      // The reason is already known from provenance; no need to ask the model to repeat it.
-      pullInReason: input.provenance.kind === 'pulled_in' ? input.provenance.reason : null,
-      dossierVersion: null,
-      inputHash: glanceInputHash(input),
-      model,
-      createdAt: this.now(),
-    };
-  }
-
   async assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]> {
     if (input.prs.length === 0) {
       return [];
@@ -209,35 +175,6 @@ export class RunnerAgentService implements AgentService {
       }
     }
     return result;
-  }
-
-  async summarizeTopic(input: TopicSummaryInput): Promise<TopicSummaryResult> {
-    const { value } = await this.ask('topic_summary', topicSummaryPrompt(input), topicSummaryOutput);
-    const currentName = input.topic.name.trim().toLowerCase();
-    const mergeTargets = new Set(input.otherTopics.map((t) => t.id).filter((id) => id !== input.topic.id));
-    // Drop no-op renames and merges into topics the model made up.
-    const proposals = value.proposals.filter((p) =>
-      p.kind === 'rename' ? p.name.toLowerCase() !== currentName : mergeTargets.has(p.intoTopicId),
-    );
-    return { summary: value.summary, inputHash: topicSummaryInputHash(input), proposals };
-  }
-
-  async classifyEvents(input: EventClassificationInput): Promise<EventOverrideProposal[]> {
-    // A user's own unmute or override always wins; the agent never sees those events.
-    const events = input.events.filter((e) => e.override?.by !== 'user');
-    if (events.length === 0) {
-      return [];
-    }
-    const { value } = await this.ask(
-      'event_classification',
-      eventClassificationPrompt({ ...input, events }),
-      eventClassificationOutput,
-    );
-    const byId = new Map(events.map((e) => [e.id, e]));
-    return value.overrides.filter((o) => {
-      const event = byId.get(o.eventId);
-      return event !== undefined && o.loudness !== event.ruleLoudness;
-    });
   }
 
   async draftComment(input: DraftCommentInput): Promise<{ body: string }> {
