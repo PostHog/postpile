@@ -1,6 +1,7 @@
 // Small status chips used across panes: verdict, provenance, PR state.
-import type { GlanceGap, Provenance, Verdict } from '@code-manager/core';
+import type { GlanceGap, Provenance, TopicRelation, Verdict } from '@code-manager/core';
 import { glanceGapText } from '../lib/glance.ts';
+import { relationLabel } from '../lib/sidebar.ts';
 import type { PrLook } from '../lib/pr.ts';
 import { PrIcon } from './icons.tsx';
 
@@ -72,6 +73,21 @@ export function StatePill(props: { look: PrLook }) {
     <span className={`flex h-[21px] items-center gap-[5px] rounded-full pr-2 pl-1.5 text-[11px] font-semibold ${look.tone}`}>
       <PrIcon size={11} strokeWidth={1.8} />
       {look.label}
+    </span>
+  );
+}
+
+const RELATION_TONES: Record<TopicRelation, string> = {
+  team: 'bg-accent-soft text-accent',
+  routed: 'bg-closer-soft text-closer',
+  fyi: 'bg-segment text-muted',
+};
+
+/** Small "team" / "routed" / "FYI" tag next to a topic name. */
+export function RelationBadge(props: { relation: TopicRelation }) {
+  return (
+    <span className={`flex h-[15px] shrink-0 items-center rounded px-1 text-[9.5px] font-semibold tracking-[0.02em] ${RELATION_TONES[props.relation]}`}>
+      {relationLabel(props.relation)}
     </span>
   );
 }

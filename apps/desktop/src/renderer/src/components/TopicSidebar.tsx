@@ -1,8 +1,9 @@
-import type { TopicGroup, TopicListItem } from '@code-manager/core';
+import { useState, type ReactNode } from 'react';
+import type { TopicListItem } from '@code-manager/core';
 import { statusLabel } from '../lib/memory.ts';
-import { CheckIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
-
-const GROUP_LABELS: Record<TopicGroup, string> = { needs_you: 'Needs you', quiet: 'Quiet' };
+import { sidebarGroups } from '../lib/sidebar.ts';
+import { CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
+import { RelationBadge } from './pills.tsx';
 
 /** Second line under the name: the dossier's short state line, else tile counts. */
 function topicLine(item: TopicListItem): string {
@@ -12,10 +13,11 @@ function topicLine(item: TopicListItem): string {
   return `${item.openTiles} open · ${item.totalTiles} tiles`;
 }
 
-function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
+function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; showRelation?: boolean }) {
   const unread = props.item.unreadTiles > 0;
   const weight = props.active || unread ? 'font-semibold' : 'font-normal';
   const badge = props.active ? 'bg-accent text-on-accent' : 'bg-chip text-ink-2';
+  const relation = props.item.placement?.relation;
   return (
     <button
       type="button"
@@ -26,7 +28,10 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       }`}
     >
       <span className={`size-[7px] justify-self-center rounded-full ${unread ? 'bg-unread ring-3 ring-unread/15' : ''}`} />
-      <span className={`truncate text-[13px] tracking-[-0.005em] ${weight}`}>{props.item.topic.name}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className={`truncate text-[13px] tracking-[-0.005em] ${weight}`}>{props.item.topic.name}</span>
+        {props.showRelation && relation && <RelationBadge relation={relation} />}
+      </span>
       <span
         className={`flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] font-mono text-[10.5px] font-semibold ${
           unread ? badge : ''
@@ -36,6 +41,20 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       </span>
       <span />
       <span className="col-span-2 truncate text-[11.5px] text-muted">{topicLine(props.item)}</span>
+    </button>
+  );
+}
+
+/** A section title that folds its topics away. */
+function GroupHeader(props: { label: string; count: number; open: boolean; onToggle: () => void; small?: boolean }) {
+  const size = props.small ? 'text-[10.5px] font-medium text-faint' : 'text-[11px] font-semibold tracking-[0.04em] text-muted';
+  return (
+    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center gap-1.5 pb-1.5 text-left ${props.small ? 'px-3.5' : 'px-2.5'}`}>
+      <span className={`text-faint ${props.open ? '' : '-rotate-90'}`}>
+        <ChevronIcon />
+      </span>
+      <span className={size}>{props.label}</span>
+      <span className="font-mono text-[10.5px] text-faint">{props.count}</span>
     </button>
   );
 }
@@ -78,8 +97,39 @@ interface TopicSidebarProps {
   error: string | null;
 }
 
+/** Section keys for the fold state: "team", "routed", "fyi", or "area:<name>". */
+type SectionKey = string;
+
+/**
+ * Routed and FYI start folded: they are other teams' work. Unread topics
+ * never hide in them, they are listed under "Needs you" whatever their
+ * relation.
+ */
+const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi'];
+
 export function TopicSidebar(props: TopicSidebarProps) {
-  const groups: TopicGroup[] = ['needs_you', 'quiet'];
+  const [folded, setFolded] = useState<SectionKey[]>(FOLDED_BY_DEFAULT);
+  const groups = sidebarGroups(props.topics);
+  const isOpen = (key: SectionKey) => !folded.includes(key);
+  const toggle = (key: SectionKey) => setFolded(isOpen(key) ? [...folded, key] : folded.filter((entry) => entry !== key));
+  const topicItems = (items: TopicListItem[], showRelation = false) =>
+    items.map((item) => (
+      <TopicItem
+        key={item.topic.id}
+        item={item}
+        active={item.topic.id === props.activeTopicId}
+        onSelect={() => props.onSelect(item.topic.id)}
+        showRelation={showRelation}
+      />
+    ));
+  const section = (key: SectionKey, label: string, items: TopicListItem[], children: ReactNode) =>
+    items.length === 0 ? null : (
+      <div key={key} className="flex flex-col gap-0.5">
+        <GroupHeader label={label} count={items.length} open={isOpen(key)} onToggle={() => toggle(key)} />
+        {isOpen(key) && children}
+      </div>
+    );
+  const teamItems = groups.team.flatMap((group) => group.items);
   return (
     <nav aria-label="Topics" className="flex min-h-0 flex-col gap-[18px] overflow-auto border-r border-hairline-strong bg-sidebar px-2.5 pt-3.5 pb-2.5">
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
@@ -87,28 +137,20 @@ export function TopicSidebar(props: TopicSidebarProps) {
       {!props.error && !props.loading && props.topics.length === 0 && (
         <p className="px-2.5 text-xs leading-relaxed text-muted">No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.</p>
       )}
-      {groups.map((group) => {
-        const items = props.topics.filter((item) => item.group === group);
-        if (items.length === 0) {
-          return null;
-        }
-        return (
-          <div key={group} className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-1.5 px-2.5 pb-1.5">
-              <span className="text-[11px] font-semibold tracking-[0.04em] text-muted">{GROUP_LABELS[group]}</span>
-              <span className="font-mono text-[10.5px] text-faint">{items.length}</span>
-            </div>
-            {items.map((item) => (
-              <TopicItem
-                key={item.topic.id}
-                item={item}
-                active={item.topic.id === props.activeTopicId}
-                onSelect={() => props.onSelect(item.topic.id)}
-              />
-            ))}
+      {section('needs', 'Needs you', groups.needsYou, topicItems(groups.needsYou, true))}
+      {section(
+        'team',
+        'Your team',
+        teamItems,
+        groups.team.map((group) => (
+          <div key={group.area} className="flex flex-col gap-0.5">
+            <GroupHeader small label={group.area} count={group.items.length} open={isOpen(`area:${group.area}`)} onToggle={() => toggle(`area:${group.area}`)} />
+            {isOpen(`area:${group.area}`) && topicItems(group.items)}
           </div>
-        );
-      })}
+        )),
+      )}
+      {section('routed', 'Routed to you', groups.routed, topicItems(groups.routed))}
+      {section('fyi', 'FYI', groups.fyi, topicItems(groups.fyi))}
       <div className="mt-auto flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
         <button
           type="button"

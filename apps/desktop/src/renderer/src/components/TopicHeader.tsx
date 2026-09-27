@@ -10,6 +10,7 @@ import { Button } from './Button.tsx';
 import { DossierPanel } from './DossierPanel.tsx';
 import { ChevronIcon, QuoteIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
+import { RelationLine } from './RelationLine.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -104,7 +105,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string }) {
 
 /** Breadcrumb, name, who drives, the dossier (or the plain summary before one exists) and what the user told the agent. */
 export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; topics: TopicListItem[] }) {
-  const { topic, tiles, pendingProposals, dossier } = props.detail;
+  const { topic, tiles, pendingProposals, dossier, placement } = props.detail;
   const counts = countPrs(tiles);
   const prCount = counts.pinged + counts.pulledIn;
   return (
@@ -113,6 +114,12 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
         <span>Topics</span>
         <span>›</span>
         <span className="text-muted">{props.group === 'needs_you' ? 'Needs you' : 'Quiet'}</span>
+        {placement?.area && (
+          <>
+            <span>›</span>
+            <span className="text-muted">{placement.area}</span>
+          </>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">{topic.name}</h1>
@@ -129,6 +136,7 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
           </span>
         </span>
       </div>
+      {placement && <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} />}
       {topic.summary && <p className="max-w-[680px] text-[13.5px] leading-normal text-pretty text-ink-2">{topic.summary}</p>}
       {dossier && <DossierSummary dossier={dossier} topicId={topic.id} />}
       {topic.tailoring && (
