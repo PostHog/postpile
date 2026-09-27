@@ -1,5 +1,5 @@
 import type { TopicAssignment, TopicChoice } from '@code-manager/agent';
-import type { Pr, Topic } from '@code-manager/core';
+import { newTopic, type Pr, type Topic } from '@code-manager/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import type { DigestDeps } from './deps.ts';
@@ -42,19 +42,7 @@ export class TopicAssigner {
     if (existing) {
       return existing;
     }
-    const at = this.deps.now().toISOString();
-    const topic: Topic = {
-      id: newTopicId(name),
-      name: name.trim(),
-      summary: '',
-      summaryInputHash: null,
-      tailoring: '',
-      driver: null,
-      userRole: 'watcher',
-      status: 'active',
-      createdAt: at,
-      updatedAt: at,
-    };
+    const topic = newTopic(newTopicId(name), name.trim(), this.deps.now().toISOString());
     store.topics.create(topic);
     return topic;
   }

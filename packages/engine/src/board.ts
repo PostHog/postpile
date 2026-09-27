@@ -2,6 +2,7 @@ import {
   buildStacks,
   buildTopicTiles,
   deriveTileState,
+  newTopic,
   prKey,
   type NotificationThread,
   type Pr,
@@ -22,18 +23,7 @@ import { loadViewer } from './viewer-meta.ts';
 export const UNSORTED_TOPIC_ID = 'unsorted';
 
 function unsortedTopic(): Topic {
-  return {
-    id: UNSORTED_TOPIC_ID,
-    name: 'Unsorted',
-    summary: 'PRs the agent has not placed in a topic yet.',
-    summaryInputHash: null,
-    tailoring: '',
-    driver: null,
-    userRole: 'watcher',
-    status: 'active',
-    createdAt: '',
-    updatedAt: '',
-  };
+  return { ...newTopic(UNSORTED_TOPIC_ID, 'Unsorted', ''), summary: 'PRs the agent has not placed in a topic yet.' };
 }
 
 function threadsByPrKey(threads: NotificationThread[]): Map<PrKey, NotificationThread> {

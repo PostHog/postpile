@@ -1,4 +1,4 @@
-import type { ActionResult, Topic, TopicProposal } from '@code-manager/core';
+import { newTopic, type ActionResult, type TopicProposal } from '@code-manager/core';
 import type { Store } from '@code-manager/store';
 import { newTopicId } from '../ids.ts';
 import { failed, ok } from './results.ts';
@@ -12,18 +12,7 @@ export class ProposalActions {
 
   private createTopic(proposal: TopicProposal, at: string): void {
     const name = proposal.name ?? 'New topic';
-    const topic: Topic = {
-      id: newTopicId(name),
-      name,
-      summary: '',
-      summaryInputHash: null,
-      tailoring: '',
-      driver: null,
-      userRole: 'watcher',
-      status: 'active',
-      createdAt: at,
-      updatedAt: at,
-    };
+    const topic = newTopic(newTopicId(name), name, at);
     this.store.topics.create(topic);
     for (const prKey of proposal.prKeys) {
       this.store.memberships.assign({ prKey, topicId: topic.id, assignedBy: 'user', reason: proposal.reason, createdAt: at });
