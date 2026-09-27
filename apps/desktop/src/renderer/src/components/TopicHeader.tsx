@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { DossierStatus, DossierView, TopicDetail, TopicGroup, TopicListItem, TopicProposal, UserRole } from '@code-manager/core';
 import { useActions } from '../api/actions.tsx';
-import { statusLabel } from '../lib/memory.ts';
+import { fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { proposalText } from '../lib/proposals.ts';
 import { countPrs } from '../lib/tiles.ts';
@@ -59,6 +59,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string }) {
           correction={{ kind: 'wrong', factId: null, topicId, text: statusText }}
           stale={null}
           corrected={view.correctedClaims.includes(statusText)}
+          fixedTo={fixedText(view, statusText)}
           why={lineTarget(topicId, view, 'status')}
         >
           <span className={`mr-2 inline-flex h-[19px] items-center rounded-full px-2 text-[10.5px] font-semibold ${STATUS_TONES[dossier.status]}`}>
@@ -71,6 +72,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string }) {
             correction={{ kind: 'wrong', factId: null, topicId, text: dossier.goal }}
             stale={null}
             corrected={view.correctedClaims.includes(dossier.goal)}
+          fixedTo={fixedText(view, dossier.goal)}
             why={lineTarget(topicId, view, 'goal')}
           >
             <span className="text-muted">Goal:</span> {dossier.goal}

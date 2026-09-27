@@ -382,7 +382,9 @@ export type AgentCallKind =
   | 'consolidation'
   | 'draft_comment'
   | 'chat'
-  | 'instructions_change';
+  | 'instructions_change'
+  /** "Recheck" on one memory line, asked by the user. */
+  | 'memory_recheck';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {

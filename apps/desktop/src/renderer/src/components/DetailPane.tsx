@@ -1,16 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TileView } from '@code-manager/core';
 import { usePr } from '../api/pr.ts';
 import { ActionBar } from './ActionBar.tsx';
 import { AskComposer } from './AskComposer.tsx';
 import { DetailContext } from './DetailContext.tsx';
 import { PrBody } from './PrBody.tsx';
+import type { ChatRequest } from './TellAgent.tsx';
 import { TileChat } from './TileChat.tsx';
 
 interface DetailPaneProps {
   view: TileView | null;
   prKey: string | null;
   onSelectPr: (prKey: string) => void;
+  /** A newer request than the one seen at mount opens the chat with its draft. */
+  chatRequest: ChatRequest | null;
 }
 
 const paneFrame = 'flex min-h-0 flex-col border-l border-hairline-strong bg-surface';
@@ -20,6 +23,17 @@ export function DetailPane(props: DetailPaneProps) {
   const pr = usePr(props.prKey);
   const [chatOpen, setChatOpen] = useState(false);
   const [askingFor, setAskingFor] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState('');
+  // The pane remounts per tile; a request made before that is not for this tile's chat.
+  const handledSeq = useRef(props.chatRequest?.seq ?? 0);
+  useEffect(() => {
+    const chatRequest = props.chatRequest;
+    if (chatRequest && chatRequest.seq > handledSeq.current) {
+      handledSeq.current = chatRequest.seq;
+      setChatDraft(chatRequest.draft);
+      setChatOpen(true);
+    }
+  }, [props.chatRequest]);
 
   if (!props.view || !props.prKey) {
     return (
@@ -34,7 +48,7 @@ export function DetailPane(props: DetailPaneProps) {
 
   let body = <p className="flex-1 px-[22px] py-[18px] text-xs text-muted">Loading {prKey}…</p>;
   if (chatOpen) {
-    body = <TileChat view={view} onClose={() => setChatOpen(false)} />;
+    body = <TileChat key={chatDraft} view={view} initialDraft={chatDraft} onClose={() => setChatOpen(false)} />;
   } else if (pr.error) {
     body = <p className="flex-1 px-[22px] py-[18px] text-xs text-unread-ink">Could not load {prKey}: {pr.error.message}</p>;
   } else if (pr.data) {

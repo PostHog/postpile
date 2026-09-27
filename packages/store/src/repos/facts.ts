@@ -349,6 +349,23 @@ export class FactRepo {
     );
   }
 
+  /** Undoes close(): only for taking back a user's correction inside its undo window. */
+  reopen(factId: string): void {
+    run(this.db, 'UPDATE fact SET invalid_at = NULL, invalid_reason = NULL, superseded_by = NULL, expired_at = NULL WHERE id = ?', factId);
+  }
+
+  /** Puts stale_* and verified_at back as they were, to undo a confirm. */
+  restoreCheck(fact: Pick<Fact, 'id' | 'staleAt' | 'staleReason' | 'verifiedAt'>): void {
+    run(
+      this.db,
+      'UPDATE fact SET stale_at = ?, stale_reason = ?, verified_at = ? WHERE id = ?',
+      fact.staleAt,
+      fact.staleReason,
+      fact.verifiedAt,
+      fact.id,
+    );
+  }
+
   /** Keeps the first stale time and reason while the fact stays stale. */
   markStale(factId: string, reason: StaleReason, at: string): void {
     run(

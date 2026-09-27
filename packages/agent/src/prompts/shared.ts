@@ -39,6 +39,8 @@ const feedbackLabels: Record<FeedbackKind, string> = {
   tailoring_once: 'said this, for one time only',
   memory_wrong: 'said this line of the topic memory is wrong',
   memory_forget: 'said they do not care about this, stop assuming it',
+  memory_confirmed: 'checked this line of the topic memory and confirmed it is right, keep it',
+  memory_fixed: 'replaced a line of the topic memory with a corrected one (old line, then the new one)',
 };
 
 /** "said this line of the topic memory is wrong", for prompts and source quotes. */

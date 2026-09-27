@@ -365,6 +365,8 @@ describe('FeedbackRepo', () => {
     expect(store.feedback.recentForTopic('topic-1', 1).map((f) => f.kind)).toEqual(['not_related']);
     expect(store.feedback.recent(2).map((f) => f.kind)).toEqual(['not_related', 'wrong_topic']);
     expect(store.feedback.listForPr('a/b#1')).toHaveLength(1);
+    store.feedback.delete(last.id);
+    expect(store.feedback.recentForTopic('topic-1', 10).map((f) => f.kind)).toEqual(['not_mine']);
   });
 });
 

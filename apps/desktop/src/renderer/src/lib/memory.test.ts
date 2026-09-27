@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DossierView } from '@code-manager/core';
 import { at, makeDossierVersion, makeFact, makeFactRef } from '@code-manager/core/fixtures';
-import { claimStaleReason, refLabel, sinceLastLooked } from './memory.ts';
+import { claimStaleReason, fixedText, refLabel, sinceLastLooked } from './memory.ts';
 
 function view(overrides: Partial<DossierView> = {}): DossierView {
   return {
@@ -17,6 +17,7 @@ function view(overrides: Partial<DossierView> = {}): DossierView {
     eventsBehind: 0,
     history: [],
     correctedClaims: [],
+    fixedClaims: [],
     ...overrides,
   };
 }
@@ -59,5 +60,13 @@ describe('sinceLastLooked', () => {
     expect(block.heading).toBe('Since you last looked');
     expect(block.changes.map((change) => change.text)).toEqual(['change 4']);
     expect(block.counts).toBe('1 new event · 2 facts learned');
+  });
+});
+
+describe('fixedText', () => {
+  it('returns the newest fix of a line, or null', () => {
+    const fixed = view({ fixedClaims: [{ text: 'a', fixed: 'b2' }, { text: 'a', fixed: 'b1' }] });
+    expect(fixedText(fixed, 'a')).toBe('b2');
+    expect(fixedText(fixed, 'x')).toBeNull();
   });
 });

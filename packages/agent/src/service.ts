@@ -11,6 +11,8 @@ import type {
   InstructionsVersion,
   IsoTime,
   Loudness,
+  MemoryRecheckOutcome,
+  MemorySource,
   Pr,
   PrEvent,
   PrKey,
@@ -304,6 +306,37 @@ export interface ConsolidationResult {
   finishedTopics: { topicId: string; reason: string }[];
 }
 
+/** Newest events per PR a memory recheck sees. */
+export const EVENTS_PER_PR_IN_RECHECK = 12;
+/** PRs a memory recheck sees at most. */
+export const PRS_IN_RECHECK = 8;
+
+/** "Recheck" on one fact or dossier line: does it still hold against GitHub? */
+export interface MemoryRecheckInput {
+  /** The line as the user saw it. */
+  claim: string;
+  /** "Fact" or "Dossier v3", for the prompt. */
+  recordedIn: string;
+  /** Null when the line lives outside a topic. */
+  topic: Topic | null;
+  dossier: DossierVersion | null;
+  /** Sources behind the line, as the "Why?" panel shows them. */
+  sources: MemorySource[];
+  /** The PRs the line is about (its sources), else the topic's newest. At most PRS_IN_RECHECK. */
+  prs: Pr[];
+  /** Newest events of those PRs, at most EVENTS_PER_PR_IN_RECHECK each. */
+  events: PrEvent[];
+  viewer: Viewer;
+  context: PromptContext;
+}
+
+export interface MemoryRecheckAnswer {
+  outcome: MemoryRecheckOutcome;
+  /** The corrected line for fix, the claim unchanged otherwise. */
+  text: string;
+  why: string;
+}
+
 /**
  * Every digesting job the agent does. Implementations build the prompt,
  * call the AgentRunner and parse the answer. Caching by input hash is the
@@ -327,4 +360,6 @@ export interface AgentService {
   glanceBatch(input: GlanceBatchInput): Promise<GlanceBatchResult>;
   classifyEventBatch(input: EventBatchInput): Promise<EventOverrideProposal[]>;
   consolidate(input: ConsolidationInput): Promise<ConsolidationResult>;
+  /** One line, asked by the user. A fix that changes nothing reads as holds. */
+  recheckMemory(input: MemoryRecheckInput): Promise<MemoryRecheckAnswer>;
 }

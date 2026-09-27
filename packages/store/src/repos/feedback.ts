@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Feedback, FeedbackKind } from '@code-manager/core';
-import { all, insertReturningId } from '../sql.ts';
+import { all, insertReturningId, run } from '../sql.ts';
 
 export type NewFeedback = Omit<Feedback, 'id'>;
 
@@ -49,6 +49,14 @@ export class FeedbackRepo {
       feedback.createdAt,
     );
     return { id, ...feedback };
+  }
+
+  /**
+   * The one exception to append-only: undoing a memory correction inside its
+   * undo window takes the row back, as if the click never happened.
+   */
+  delete(id: number): void {
+    run(this.db, 'DELETE FROM feedback WHERE id = ?', id);
   }
 
   /** Newest first. Fed back into prompts for that topic. */

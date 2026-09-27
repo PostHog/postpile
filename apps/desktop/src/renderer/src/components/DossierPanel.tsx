@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { DossierCare, DossierView } from '@code-manager/core';
-import { claimStaleReason } from '../lib/memory.ts';
+import { claimStaleReason, fixedText } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { ageLabel } from '../lib/time.ts';
@@ -38,6 +38,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             correction={wrong(question.text)}
             stale={claimStaleReason(`openQuestions[${index}]`, view.staleClaims)}
             corrected={corrected(question.text)}
+            fixedTo={fixedText(view, question.text)}
             refs={question.refs}
             why={why(`openQuestions[${index}]`)}
           >
@@ -55,6 +56,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             correction={wrong(`${entry.prKey}: ${entry.role}`)}
             stale={claimStaleReason(`timeline[${index}]`, view.staleClaims)}
             corrected={corrected(`${entry.prKey}: ${entry.role}`)}
+            fixedTo={fixedText(view, `${entry.prKey}: ${entry.role}`)}
             why={why(`timeline[${index}]`)}
           >
             <span className="font-mono text-[11px] text-muted">#{prNumber(entry.prKey)}</span> {entry.role}
@@ -71,6 +73,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             correction={wrong(care.text)}
             stale={null}
             corrected={corrected(care.text)}
+            fixedTo={fixedText(view, care.text)}
             canForget
             why={why(`userCares[${index}]`)}
           >
@@ -84,7 +87,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
         {dossier.people.map((person) => {
           const text = `@${person.login} ${person.role}: ${person.note}`;
           return (
-            <MemoryLine key={person.login} correction={wrong(text)} stale={null} corrected={corrected(text)}>
+            <MemoryLine key={person.login} correction={wrong(text)} stale={null} corrected={corrected(text)} fixedTo={fixedText(view, text)}>
               <span className="font-medium text-ink">@{person.login}</span> <span className="text-muted">{person.role}</span>
               {person.note && ` · ${person.note}`}
             </MemoryLine>

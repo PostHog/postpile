@@ -57,6 +57,12 @@ export class AgentCallRepo {
     return stats;
   }
 
+  /** Calls of this kind at or after `since`, failed ones included. Caps user-asked calls like memory rechecks. */
+  countSince(kind: AgentCallKind, since: string): number {
+    const row = one<{ count: number }>(this.db, 'SELECT COUNT(*) AS count FROM agent_call WHERE kind = ? AND at >= ?', kind, since);
+    return row?.count ?? 0;
+  }
+
   /** Time of the newest successful call of this kind, or null. Consolidation uses it to decide when it is due. */
   lastOkAt(kind: AgentCallKind): string | null {
     const row = one<{ at: string | null }>(this.db, 'SELECT MAX(at) AS at FROM agent_call WHERE kind = ? AND ok = 1', kind);

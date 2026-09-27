@@ -44,6 +44,12 @@ export const chatOutput = z.object({
   lasting: z.object({ text: text.min(1) }).nullable().default(null),
 });
 
+export const memoryRecheckOutput = z.object({
+  outcome: z.enum(['holds', 'fix', 'drop']),
+  text: text.default(''),
+  why: text.min(1),
+});
+
 export const instructionsChangeOutput = z.object({
   reply: text.default(''),
   change: z.object({ text: text.min(1), summary: text.min(1) }).nullable(),

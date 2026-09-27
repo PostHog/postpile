@@ -49,6 +49,16 @@ describe('server routes over the fake engine', () => {
     expect(topics.find((item) => item.topic.id === 'topic-frontend-build')?.group).toBe('quiet');
   });
 
+  it('rechecks a memory line and validates the body', async () => {
+    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, writesAllowed: true, syncCallCap: 30 });
+    const headers = { [TOKEN_HEADER]: TOKEN, 'content-type': 'application/json' };
+    const body = { factId: 'fact-rowan-drives', topicId: null, text: 'rowan drives it', target: { kind: 'fact', factId: 'fact-rowan-drives' } };
+    const res = await app.request('/api/memory/recheck', { method: 'POST', headers, body: JSON.stringify(body) });
+    expect(await res.json()).toMatchObject({ status: 'answered', outcome: 'holds' });
+    const bad = await app.request('/api/memory/recheck', { method: 'POST', headers, body: JSON.stringify({ text: '' }) });
+    expect(bad.status).toBe(400);
+  });
+
   it('filters topics and tiles by a search query', async () => {
     const app = appWithFake();
     const res = await app.request(`/api/search?q=${encodeURIComponent('turbo #41921')}`);

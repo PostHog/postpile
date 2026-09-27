@@ -11,11 +11,11 @@ import { InstructionsProposalCard } from './InstructionsProposalCard.tsx';
  * proposed change to their instructions, shown as a diff) or "Just this once".
  * The agent never picks the scope.
  */
-export function TileChat(props: { view: TileView; onClose: () => void }) {
+export function TileChat(props: { view: TileView; initialDraft?: string; onClose: () => void }) {
   const actions = useActions();
   const tileId = props.view.tile.id;
   const chat = useChat(tileId, true);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(props.initialDraft ?? '');
   const [point, setPoint] = useState<LastingPointProposal | null>(null);
   const [instructions, setInstructions] = useState<InstructionsProposal | null>(null);
   const sending = actions.isBusy(`chat:${tileId}`);
@@ -118,6 +118,8 @@ export function TileChat(props: { view: TileView; onClose: () => void }) {
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Tell the agent…"
           aria-label="Message to the agent"
+          // Opened from "Tell the agent what's wrong": the user finishes the quoted draft.
+          autoFocus={Boolean(props.initialDraft)}
         />
         <Button type="submit" variant="primary" disabled={sending || draft.trim() === ''}>
           Send

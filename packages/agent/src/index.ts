@@ -9,7 +9,13 @@ export { renderDossier } from './prompts/dossier.ts';
 export { AgentOutputError, extractJson, parseAgentJson } from './json.ts';
 export { modelFor } from './models.ts';
 export type * from './service.ts';
-export { CHAT_TURNS_IN_DOSSIER_PROMPT, FACTS_IN_DOSSIER_PROMPT, STALE_FACTS_IN_DOSSIER_PROMPT } from './service.ts';
+export {
+  CHAT_TURNS_IN_DOSSIER_PROMPT,
+  EVENTS_PER_PR_IN_RECHECK,
+  FACTS_IN_DOSSIER_PROMPT,
+  PRS_IN_RECHECK,
+  STALE_FACTS_IN_DOSSIER_PROMPT,
+} from './service.ts';
 export { INSTRUCTIONS_MAX_CHARS } from './prompts/instructions.ts';
 export { RunnerAgentService } from './claude-service.ts';
 export type { RunnerAgentServiceOptions } from './claude-service.ts';

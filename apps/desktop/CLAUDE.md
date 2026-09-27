@@ -54,13 +54,20 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   list.
 - Buttons for guarded actions carry the blocked reason as their `title`.
 - After an action the provider invalidates every query except the config.
-  Mark-read results carry an undo token; the toast offers Undo for the 6s
-  window and the footer counts pending mark-reads.
-- Memory corrections ("Wrong" on a fact or dossier line, "Forget" on a
-  care) go through `correctMemory`. They only touch local memory, so they
-  are not on the `GithubWrite` list. A fact closes right away; a dossier
-  line shows struck through (`DossierView.correctedClaims`) until the next
-  sync rewrites the dossier.
+  Mark-read and memory correction results carry an undo token; the toast
+  offers Undo for the 6s window and the footer counts pending mark-reads
+  (tokens starting with `memory:` are not mark-reads).
+- Memory lines get "Recheck" (and "Forget" on a care). Recheck opens
+  `RecheckDialog`: `recheckMemory` runs one agent call and writes nothing;
+  the user then accepts the outcome through `correctMemory` (holds ->
+  `confirm`, fix -> `fix` with `fixedText`, drop -> `wrong`) or picks "Tell
+  the agent what's wrong", which opens the selected tile's chat with the
+  line quoted (`TellAgentContext`). Corrections only touch local memory, so
+  they are not on the `GithubWrite` list, and carry an undo token (toast
+  Undo, 6s). A fact changes right away; a dossier line shows struck through
+  (`correctedClaims`) or with its fix (`fixedClaims`) until the next sync
+  rewrites the dossier. Never fire `recheckMemory` from an effect without
+  a guard: StrictMode would double the agent call.
 - Instructions writes (`instructionsChat`, `proposeInstructions`,
   `saveInstructions`) are local (instructions.md + SQLite), not on the
   `GithubWrite` list. The user's instructions are never changed without an
@@ -70,7 +77,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   the scope. A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
-- Agent-derived memory is steered only by chat and Wrong / Forget, never by
+- Agent-derived memory is steered only by chat, Recheck and Forget, never by
   editing its text. Every memory line takes a `why` target
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
@@ -109,7 +116,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `StatusFooter`, `Toast`, `SearchField` (title bar filter).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, provenance,
   PR state), `icons.tsx`, and for memory `MemoryLine` (text, source chips,
-  stale / marked-wrong badge, Wrong / Forget on hover), `MemoryButton`,
+  stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
+  `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
   `InstructionsProposalCard` (tile chat and the instructions view),
   `RelationBadge` (in `pills.tsx`).

@@ -129,6 +129,13 @@ now".
   "Swipe between pages" setting; not tried on hardware yet).
 - Title bar search that filters topics and tiles (Cmd+F, Esc clears):
   `GET /api/search?q=`, in-memory over stored PRs, same matcher in fake mode.
+- GitHub avatars in the renderer (avatars.githubusercontent.com, no API
+  call), initials underneath as placeholder and fallback; bots and teams
+  keep initials.
+- "Recheck" replaces "Wrong" on memory lines: one `memory_recheck` agent
+  call, then Accept (keep / fix / drop) or tell the agent in the tile chat;
+  every memory correction has a 6s Undo. DESIGN.md "Recheck instead of
+  Wrong".
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -170,6 +177,11 @@ now".
 - Search matches title, number, author, repo, head branch, topic name and
   area only (no PR body, comments or labels) and does not highlight the
   matched text. Filter state and history are not kept across restarts.
+- Sample logins (rowan, lyra, nell, ...) are real GitHub accounts, so fake
+  mode shows strangers' avatars instead of the initials fallback.
+- Recheck: not run against the real agent yet; the fake answers cycle
+  holds / fix / drop after 1.5s. The daily cap (40) is a guess. A fix of a
+  fact keeps the old refs; no new ref points at the evidence in `why`.
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 

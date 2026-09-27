@@ -635,8 +635,37 @@ Memory is split by who wrote it.
   priority in every prompt. The agent never changes it without the user
   accepting a proposal. Hand edits are fine at any time.
 - **Agent-derived**: dossiers, facts, topic tailoring distilled from chat.
-  The agent maintains them; the user steers by chat and by one-click
-  Wrong / Forget, never by editing agent prose. Every line answers "Why?".
+  The agent maintains them; the user steers by chat, "Recheck" and
+  one-click Forget, never by editing agent prose. Every line answers "Why?".
+
+**Recheck instead of Wrong.** A one-click "Wrong" was too easy to hit and
+threw away lines that were right. Every fact and dossier line now has
+"Recheck": `recheckMemory` makes one `memory_recheck` call (sonnet,
+recorded in `agent_call` under the `action` run, at most
+`RECHECKS_PER_DAY` = 40 per rolling 24h) with the line, its "Why?" sources
+(GitHub ones fenced, the user's own words not), the topic dossier, and the
+PRs the line cites (else the topic's newest, max 8) with their newest 12
+events each. The zod-checked answer is `{outcome: holds | fix | drop,
+text, why}`; a fix without a new line reads as holds. Nothing is written
+until the user accepts in the dialog, through `correctMemory`:
+
+- holds -> `confirm`: a fact gets `markVerified` (not stale, verified now);
+  a dossier line logs `memory_confirmed` so the next update keeps it.
+- fix -> `fix` + `fixedText`: a fact is closed (superseded) by a copy with
+  the corrected text and the same refs; a dossier line logs
+  `memory_fixed` with `fixedClaimNote` (old line, "→", new line) and shows
+  the fix right away (`DossierView.fixedClaims`) until the next update
+  writes it in.
+- drop -> `wrong`: as before, the fact closes, the line logs `memory_wrong`.
+- Every outcome and errors (failed call, cap, gone fact) also offer "Tell
+  the agent what's wrong": the tile chat opens with the line quoted.
+
+Every correction returns an undo token (`memory:` prefix) valid for
+`UNDO_WINDOW_MS`: undo deletes the feedback row (the only non-append
+write on `feedback`), reopens a closed fact, closes a fix's replacement,
+restores a confirmed fact's check state, or restores a relation override.
+The undo map is in memory, like the mark-read queue. The relation "Wrong"
+(with the real relation) stays as it was; it is a choice, not a claim.
 
 **Instructions changes via chat.** Tile chat returns a lasting point
 without a scope; the user picks it: "Keep for this topic" stores tailoring,

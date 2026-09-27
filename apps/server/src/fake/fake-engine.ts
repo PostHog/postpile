@@ -18,6 +18,10 @@ import type {
   InstructionsView,
   Loudness,
   MemoryCorrection,
+  MemoryCorrectionKind,
+  MemoryRecheckOutcome,
+  MemoryRecheckRequest,
+  MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
   PendingProposals,
@@ -35,7 +39,7 @@ import type {
   UnreadReason,
   UserPrState,
 } from '@code-manager/core';
-import { emptyAgentCallStats, searchTopics, setIdFromTileId, type AgentCallStats, type SearchableTopic, type SearchResult } from '@code-manager/core';
+import { emptyAgentCallStats, fixedClaimNote, searchTopics, setIdFromTileId, type AgentCallStats, type SearchableTopic, type SearchResult } from '@code-manager/core';
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeMemory } from './fake-memory.ts';
@@ -50,7 +54,25 @@ interface MarkReadBatch {
 
 export interface FakeEngineOptions {
   now?: () => Date;
+  /** How long a canned recheck "thinks". Tests pass 0. */
+  recheckDelayMs?: number;
 }
+
+const FAKE_FEEDBACK_KINDS: Record<MemoryCorrectionKind, FeedbackKind> = {
+  wrong: 'memory_wrong',
+  forget: 'memory_forget',
+  confirm: 'memory_confirmed',
+  fix: 'memory_fixed',
+};
+
+const FAKE_LINE_MESSAGES: Record<MemoryCorrectionKind, string> = {
+  wrong: 'Noted. The next sync rewrites the topic memory without it.',
+  forget: 'Noted. The next sync rewrites the topic memory without it.',
+  confirm: 'Kept. The next sync keeps that line.',
+  fix: 'Fixed. The next sync writes the corrected line into the topic memory.',
+};
+
+const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 
 function ok(message: string, undoToken: string | null = null): ActionResult {
   return { ok: true, message, undoToken };
@@ -103,12 +125,16 @@ export class FakeEngine implements EngineService {
   private readonly chats = new Map<string, ChatMessage[]>();
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
+  private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
+  private readonly recheckDelayMs: number;
+  private recheckCount = 0;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
 
 
   constructor(options: FakeEngineOptions = {}) {
     this.now = options.now ?? (() => new Date());
+    this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.data = buildSampleData(this.now());
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
@@ -368,6 +394,15 @@ export class FakeEngine implements EngineService {
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
+    const memoryUndo = undoToken ? this.memoryUndos.get(undoToken) : undefined;
+    if (undoToken && memoryUndo) {
+      this.memoryUndos.delete(undoToken);
+      if (memoryUndo.until <= this.now().getTime()) {
+        return fail('undo window closed');
+      }
+      memoryUndo.undo();
+      return ok('Undone');
+    }
     const index = undoToken ? this.batches.findIndex((batch) => batch.token === undoToken) : this.batches.length - 1;
     const batch = this.batches[index];
     if (!batch) {
@@ -568,9 +603,29 @@ export class FakeEngine implements EngineService {
     return ok('Marked seen');
   }
 
-  /** Same contract as the real engine: a fact closes now, a dossier line waits for the next update. */
+  private memoryUndo(undo: () => void): string {
+    const token = `memory:${this.newId()}`;
+    this.memoryUndos.set(token, { until: this.now().getTime() + UNDO_WINDOW_MS, undo });
+    return token;
+  }
+
+  /** Feedback for a correction, and an undo that takes it back out. */
+  private logCorrection(kind: FeedbackKind, topicId: string | null, prKey: PrKey | null, note: string): Feedback {
+    this.recordFeedback({ kind, topicId, tileId: null, prKey, setId: null, eventId: null, note });
+    return this.feedback[this.feedback.length - 1]!;
+  }
+
+  private dropFeedback(entry: Feedback): void {
+    this.feedback.splice(this.feedback.indexOf(entry), 1);
+  }
+
+  /** Same contract as the real engine: a fact changes now, a dossier line waits for the next update. Undoable. */
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
-    const kind: FeedbackKind = input.kind === 'forget' ? 'memory_forget' : 'memory_wrong';
+    const kind = FAKE_FEEDBACK_KINDS[input.kind];
+    const fixed = input.fixedText?.trim() ?? '';
+    if (input.kind === 'fix' && fixed === '') {
+      return fail('a fix needs the corrected line');
+    }
     if (input.factId === null) {
       if (!this.data.topics.some((topic) => topic.id === input.topicId)) {
         return fail(`no topic ${input.topicId ?? ''}`);
@@ -578,17 +633,60 @@ export class FakeEngine implements EngineService {
       if (input.relation && input.topicId) {
         this.memory.overrideRelation(input.topicId, input.relation);
       }
-      const note = input.relation ? `${input.text} (it is actually: ${input.relation})` : input.text;
-      this.recordFeedback({ kind, topicId: input.topicId, tileId: null, prKey: null, setId: null, eventId: null, note });
-      return ok(input.relation ? 'Moved. It stays there until something new happens in the topic.' : 'Noted. The next sync rewrites the topic memory without it.');
+      let note = input.relation ? `${input.text} (it is actually: ${input.relation})` : input.text;
+      if (input.kind === 'fix') {
+        note = fixedClaimNote({ text: input.text, fixed });
+      }
+      const entry = this.logCorrection(kind, input.topicId, null, note);
+      const token = this.memoryUndo(() => this.dropFeedback(entry));
+      return ok(input.relation ? 'Moved. It stays there until something new happens in the topic.' : FAKE_LINE_MESSAGES[input.kind], token);
     }
-    const fact = this.memory.closeFact(input.factId, 'the user said it is wrong');
-    if (!fact) {
+    const fact = this.memory.findFact(input.factId);
+    if (!fact || fact.invalidAt !== null) {
       return fail(`no fact ${input.factId}`);
     }
+    const before = { ...fact };
     const prKey = fact.refs[0]?.prKey ?? null;
-    this.recordFeedback({ kind, topicId: fact.topicId, tileId: null, prKey, setId: null, eventId: null, note: fact.text });
-    return ok('Forgot that fact');
+    if (input.kind === 'confirm') {
+      fact.staleAt = null;
+      fact.staleReason = null;
+      fact.verifiedAt = this.timestamp();
+      const entry = this.logCorrection(kind, fact.topicId, prKey, fact.text);
+      return ok('Kept that fact', this.memoryUndo(() => {
+        Object.assign(fact, before);
+        this.dropFeedback(entry);
+      }));
+    }
+    if (input.kind === 'fix') {
+      const replacement = this.memory.replaceFact(fact, fixed, `f-fix-${this.newId()}`);
+      const entry = this.logCorrection(kind, fact.topicId, prKey, fixedClaimNote({ text: fact.text, fixed }));
+      return ok('Replaced that fact with the corrected one', this.memoryUndo(() => {
+        Object.assign(fact, before);
+        this.memory.closeFact(replacement.id, 'the user undid the fix');
+        this.dropFeedback(entry);
+      }));
+    }
+    this.memory.closeFact(fact.id, 'the user said it is wrong');
+    const entry = this.logCorrection(kind, fact.topicId, prKey, fact.text);
+    return ok('Forgot that fact', this.memoryUndo(() => {
+      Object.assign(fact, before);
+      this.dropFeedback(entry);
+    }));
+  }
+
+  /**
+   * Canned answers after a short wait, cycling holds / fix / drop so every
+   * dialog state can be seen. No agent, no cap.
+   */
+  async recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult> {
+    await new Promise((resolve) => setTimeout(resolve, this.recheckDelayMs));
+    const outcome = RECHECK_CYCLE[this.recheckCount % RECHECK_CYCLE.length] ?? 'holds';
+    this.recheckCount += 1;
+    if (outcome === 'fix') {
+      return { status: 'answered', outcome, text: `${request.text.replace(/\.$/, '')} (sample correction).`, why: 'Sample answer: a newer comment on the PR says otherwise.' };
+    }
+    const why = outcome === 'holds' ? 'Sample answer: the newest review and comments still say the same.' : 'Sample answer: the PR this came from was closed and nobody picked it up.';
+    return { status: 'answered', outcome, text: request.text, why };
   }
 
   async getMemorySources(target: MemoryTarget): Promise<MemorySources | null> {

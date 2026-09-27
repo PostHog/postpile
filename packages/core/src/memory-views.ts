@@ -58,6 +58,32 @@ export interface DossierView {
   history: DossierVersionNote[];
   /** Lines the user marked wrong or asked to forget since this version was written. Matched by text. */
   correctedClaims: string[];
+  /** Lines the user replaced with a recheck's fix since this version; shown fixed until the next update. */
+  fixedClaims: FixedClaim[];
+}
+
+export interface FixedClaim {
+  text: string;
+  fixed: string;
+}
+
+/**
+ * A memory_fixed feedback note holds both lines: the old one first, so the
+ * prompt reads it as "this line -> that line", and the UI can split it again.
+ */
+const FIX_ARROW = '\n→ ';
+
+export function fixedClaimNote(claim: FixedClaim): string {
+  return `${claim.text}${FIX_ARROW}${claim.fixed}`;
+}
+
+/** Null for a note that was not written by fixedClaimNote. */
+export function parseFixedClaimNote(note: string): FixedClaim | null {
+  const split = note.indexOf(FIX_ARROW);
+  if (split < 0) {
+    return null;
+  }
+  return { text: note.slice(0, split), fixed: note.slice(split + FIX_ARROW.length) };
 }
 
 /** Filters for listFacts. Every field narrows; an empty query returns active facts, newest first. */

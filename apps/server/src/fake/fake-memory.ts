@@ -27,6 +27,7 @@ import {
   factCheck,
   findDossierLine,
   lineCheck,
+  parseFixedClaimNote,
   topicChangesSince,
   topicPlacement,
 } from '@code-manager/core';
@@ -177,6 +178,10 @@ export class FakeMemory {
       eventsBehind: this.eventsAfter(topicId, latest.createdAt),
       history: dossierVersionNotes(versionsNewestFirst),
       correctedClaims: this.correctedClaims(topicId, latest.createdAt, feedback),
+      fixedClaims: feedback
+        .filter((entry) => entry.topicId === topicId && entry.createdAt > latest.createdAt && entry.kind === 'memory_fixed')
+        .map((entry) => parseFixedClaimNote(entry.note))
+        .filter((claim) => claim !== null),
     };
   }
 
@@ -238,6 +243,20 @@ export class FakeMemory {
     fact.invalidReason = reason;
     fact.expiredAt = at;
     return fact;
+  }
+
+  findFact(factId: string): Fact | null {
+    return this.memory.facts.find((candidate) => candidate.id === factId) ?? null;
+  }
+
+  /** A copy of the fact with new text, stored as active; the old one is closed and points at it. */
+  replaceFact(fact: Fact, text: string, newId: string): Fact {
+    const at = this.now().toISOString();
+    const replacement: Fact = { ...fact, id: newId, text, validFrom: at, recordedAt: at, staleAt: null, staleReason: null, verifiedAt: at };
+    this.memory.facts.push(replacement);
+    this.closeFact(fact.id, 'the user accepted a corrected version');
+    fact.supersededBy = newId;
+    return replacement;
   }
 
   /** Files the sample's next rule proposal once. A second run finds nothing new. */

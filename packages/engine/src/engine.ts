@@ -14,6 +14,8 @@ import type {
   InstructionsSaveResult,
   InstructionsView,
   MemoryCorrection,
+  MemoryRecheckRequest,
+  MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
   PendingProposals,
@@ -43,6 +45,7 @@ import type { MarkReadQueue } from './mark-read-queue.ts';
 import { InstructionsHistory } from './instructions/history.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { FactWriter } from './memory/fact-writer.ts';
+import { MemoryRechecker } from './memory/memory-recheck.ts';
 import { MemorySourcesReads } from './memory/memory-sources-reads.ts';
 import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
@@ -71,6 +74,7 @@ export class Engine implements EngineService {
   private readonly proposals: ProposalActions;
   private readonly memoryActions: MemoryActions;
   private readonly memorySources: MemorySourcesReads;
+  private readonly rechecker: MemoryRechecker;
   private readonly instructions: InstructionsActions;
   private readonly syncRun: SyncRun;
   private readonly consolidationRun: ConsolidationRun;
@@ -91,6 +95,7 @@ export class Engine implements EngineService {
     this.proposals = new ProposalActions(store, now);
     this.memoryActions = new MemoryActions(store, now);
     this.memorySources = new MemorySourcesReads(store, now);
+    this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
     this.syncRun = new SyncRun(runDeps, new GitHubSync(store, deps.reader, contexts, now), deps.markReadQueue);
@@ -150,6 +155,9 @@ export class Engine implements EngineService {
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
+    if (undoToken !== null && this.memoryActions.isMemoryUndo(undoToken)) {
+      return this.memoryActions.undo(undoToken);
+    }
     return this.tiles.undo(undoToken);
   }
 
@@ -211,6 +219,10 @@ export class Engine implements EngineService {
 
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
     return this.memoryActions.correctMemory(input);
+  }
+
+  recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult> {
+    return this.rechecker.recheck(request);
   }
 
   async getMemorySources(target: MemoryTarget): Promise<MemorySources | null> {

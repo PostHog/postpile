@@ -1,5 +1,5 @@
 import type { DossierView } from '@code-manager/core';
-import { sinceLastLooked } from '../lib/memory.ts';
+import { fixedText, sinceLastLooked } from '../lib/memory.ts';
 import { changePath, lineTarget } from '../lib/sources.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -33,6 +33,7 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string }
               correction={{ kind: 'wrong', factId: null, topicId: props.topicId, text: change.text }}
               stale={null}
               corrected={dossier.correctedClaims.includes(change.text)}
+          fixedTo={fixedText(dossier, change.text)}
               refs={change.refs}
               why={path === null ? undefined : lineTarget(props.topicId, dossier, path)}
             >

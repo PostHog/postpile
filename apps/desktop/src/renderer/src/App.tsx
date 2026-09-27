@@ -8,6 +8,7 @@ import { DetailPane } from './components/DetailPane.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { SearchField } from './components/SearchField.tsx';
+import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { TileGrid } from './components/TileGrid.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
@@ -52,6 +53,8 @@ export function App() {
   const proposals = useProposals();
 
   const [query, setQuery] = useState('');
+  // "Tell the agent what's wrong" from a memory line opens the selected tile's chat with a draft.
+  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
   const search = useSearch(query);
 
   const items = topics.data ?? [];
@@ -134,40 +137,48 @@ export function App() {
     );
   }
 
+  const tellAgent = {
+    available: selected.view !== null,
+    tell: (draft: string) => setChatRequest({ seq: (chatRequest?.seq ?? 0) + 1, draft }),
+  };
+
   return (
-    <div className="flex h-full flex-col">
-      <TitleBar
-        canBack={nav.canBack}
-        canForward={nav.canForward}
-        onBack={nav.back}
-        onForward={nav.forward}
-        search={<SearchField value={query} onChange={setQuery} />}
-      />
-      <div className="grid min-h-0 flex-1 grid-cols-[264px_minmax(0,1fr)_404px]">
-        <TopicSidebar
-          topics={items}
-          activeTopicId={shownTopicId}
-          onSelect={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })}
-          inboxCount={inboxCount}
-          inboxOpen={pane === 'inbox'}
-          onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
-          instructionsOpen={pane === 'instructions'}
-          onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
-          loading={topics.isPending}
-          error={topics.error?.message ?? null}
-          filter={filter}
-          onClearFilter={() => setQuery('')}
+    <TellAgentContext value={tellAgent}>
+      <div className="flex h-full flex-col">
+        <TitleBar
+          canBack={nav.canBack}
+          canForward={nav.canForward}
+          onBack={nav.back}
+          onForward={nav.forward}
+          search={<SearchField value={query} onChange={setQuery} />}
         />
-        {main}
-        <DetailPane
-          key={selected.view?.tile.id ?? 'none'}
-          view={selected.view}
-          prKey={selected.prKey}
-          onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
-        />
+        <div className="grid min-h-0 flex-1 grid-cols-[264px_minmax(0,1fr)_404px]">
+          <TopicSidebar
+            topics={items}
+            activeTopicId={shownTopicId}
+            onSelect={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })}
+            inboxCount={inboxCount}
+            inboxOpen={pane === 'inbox'}
+            onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
+            instructionsOpen={pane === 'instructions'}
+            onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
+            loading={topics.isPending}
+            error={topics.error?.message ?? null}
+            filter={filter}
+            onClearFilter={() => setQuery('')}
+          />
+          {main}
+          <DetailPane
+            key={selected.view?.tile.id ?? 'none'}
+            view={selected.view}
+            prKey={selected.prKey}
+            onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
+            chatRequest={chatRequest}
+          />
+        </div>
+        <StatusFooter topics={items} detail={topic.data} />
+        <Toast />
       </div>
-      <StatusFooter topics={items} detail={topic.data} />
-      <Toast />
-    </div>
+    </TellAgentContext>
   );
 }

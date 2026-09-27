@@ -74,3 +74,8 @@ export function sinceLastLooked(view: DossierView): SinceLastLooked {
   }
   return { heading: 'Since you last looked', changes: seen.changes, counts: counts.join(' · ') };
 }
+
+/** The corrected text of a line the user fixed through Recheck, newest fix first; null when not fixed. */
+export function fixedText(view: DossierView, text: string): string | null {
+  return view.fixedClaims.find((claim) => claim.text === text)?.fixed ?? null;
+}

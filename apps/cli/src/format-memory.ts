@@ -22,6 +22,7 @@ const KIND_ORDER: AgentCallKind[] = [
   'draft_comment',
   'chat',
   'instructions_change',
+  'memory_recheck',
 ];
 
 function day(iso: string): string {

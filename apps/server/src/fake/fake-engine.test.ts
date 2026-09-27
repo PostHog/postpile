@@ -102,3 +102,26 @@ describe('FakeEngine memory', () => {
     expect(topics.map((item) => item.topic.id)).not.toContain('topic-frontend-build');
   });
 });
+
+describe('FakeEngine rechecks', () => {
+  it('cycles holds, fix and drop so every dialog state can be seen', async () => {
+    const engine = new FakeEngine({ recheckDelayMs: 0 });
+    const request = { factId: null, topicId: 'topic-depot', text: 'rowan drives it.', target: null };
+    const outcomes = [];
+    for (let i = 0; i < 4; i += 1) {
+      const result = await engine.recheckMemory(request);
+      outcomes.push(result.status === 'answered' ? result.outcome : result.status);
+    }
+    expect(outcomes).toEqual(['holds', 'fix', 'drop', 'holds']);
+  });
+
+  it('replaces a fact on an accepted fix and undoes it', async () => {
+    const engine = new FakeEngine();
+    const key = 'PostHog/posthog#41902';
+    const before = (await engine.getPr(key))?.facts.map((view) => view.fact.text) ?? [];
+    const fixed = await engine.correctMemory({ kind: 'fix', factId: 'fact-lyra-reviews-41902', topicId: null, text: '', fixedText: 'lyra and nell review #41902.' });
+    expect((await engine.getPr(key))?.facts.map((view) => view.fact.text)).toContain('lyra and nell review #41902.');
+    await engine.undo(fixed.undoToken);
+    expect((await engine.getPr(key))?.facts.map((view) => view.fact.text).sort()).toEqual([...before].sort());
+  });
+});

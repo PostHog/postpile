@@ -482,7 +482,11 @@ export type FeedbackKind =
   /** A fact or dossier line the user marked wrong. The note holds the line. */
   | 'memory_wrong'
   /** A "what you care about" line the user asked to forget. The note holds the line. */
-  | 'memory_forget';
+  | 'memory_forget'
+  /** The user accepted a recheck that found the line still right: keep it. The note holds the line. */
+  | 'memory_confirmed'
+  /** The user accepted a recheck's corrected line. The note is fixedClaimNote(). */
+  | 'memory_fixed';
 
 /** A user correction. The newest few per topic go back into prompts. */
 export interface Feedback {

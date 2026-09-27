@@ -21,7 +21,7 @@ import type {
   Verdict,
 } from './types.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
-import type { DossierView, FactChangeCounts, FactView } from './memory-views.ts';
+import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
@@ -183,23 +183,55 @@ export interface FeedbackInput {
   note: string;
 }
 
-export type MemoryCorrectionKind = 'wrong' | 'forget';
+/**
+ * wrong / forget: the line goes (a fact closes now, a dossier line on the next
+ * update). confirm: the user accepted a recheck that found the line still
+ * right. fix: the user accepted a recheck's corrected line (`fixedText`).
+ */
+export type MemoryCorrectionKind = 'wrong' | 'forget' | 'confirm' | 'fix';
 
 /**
- * "Wrong" on a fact or a dossier line, "Forget" on a "what you care about"
- * line. Local memory only, never a GitHub write.
+ * A decision on a fact or a dossier line: "Forget" on a "what you care
+ * about" line, or accepting a "Recheck" outcome. Local memory only, never a
+ * GitHub write. The result carries an undo token for UNDO_WINDOW_MS.
  */
 export interface MemoryCorrection {
   kind: MemoryCorrectionKind;
-  /** A fact is closed right away. Null for a dossier line. */
+  /** A fact is closed, confirmed or replaced right away. Null for a dossier line. */
   factId: string | null;
   /** The topic whose dossier holds the line. For a fact the engine takes the fact's topic. */
   topicId: string | null;
-  /** The line as the user saw it. Logged, so the next dossier update drops or fixes it. */
+  /** The line as the user saw it. Logged, so the next dossier update drops, keeps or fixes it. */
   text: string;
   /** "Wrong" on a topic's relation, with what it really is. Wins until new evidence arrives. */
   relation?: TopicRelation;
+  /** kind fix: the corrected line. */
+  fixedText?: string;
 }
+
+/** "Recheck" on a fact or dossier line: what the agent should look at. */
+export interface MemoryRecheckRequest {
+  factId: string | null;
+  topicId: string | null;
+  /** The line as the user saw it. */
+  text: string;
+  /** Where the line's sources are; null for lines without a "Why?" target. */
+  target: MemoryTarget | null;
+}
+
+export type MemoryRecheckOutcome = 'holds' | 'fix' | 'drop';
+
+/** unavailable: the agent could not answer (failed call, daily cap, unknown line). */
+export type MemoryRecheckResult =
+  | {
+      status: 'answered';
+      outcome: MemoryRecheckOutcome;
+      /** The corrected line when outcome is fix, else the line unchanged. */
+      text: string;
+      /** One or two sentences with the evidence. */
+      why: string;
+    }
+  | { status: 'unavailable'; reason: 'budget' | 'failed' | 'not_found'; message: string };
 
 /**
  * How the server runs, for the UI. writesAllowed is false unless the process

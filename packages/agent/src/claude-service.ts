@@ -13,6 +13,7 @@ import { consolidationPrompt } from './prompts/consolidation.ts';
 import { INSTRUCTIONS_MAX_CHARS, INSTRUCTIONS_SUMMARY_MAX, instructionsChangePrompt } from './prompts/instructions.ts';
 import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
+import { memoryRecheckPrompt } from './prompts/memory-recheck.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
@@ -28,6 +29,7 @@ import {
   factReconcileOutput,
   glanceBatchOutput,
   instructionsChangeOutput,
+  memoryRecheckOutput,
   setGroupingOutput,
   topicAssignmentOutput,
 } from './schemas.ts';
@@ -48,6 +50,8 @@ import type {
   GlanceBatchResult,
   InstructionsChangeInput,
   InstructionsChangeReply,
+  MemoryRecheckAnswer,
+  MemoryRecheckInput,
   SetGroupingInput,
   SetProposal,
   TopicAssignment,
@@ -66,7 +70,12 @@ const timeouts: Record<AgentPurpose, number> = {
   draft_comment: 120_000,
   chat: 120_000,
   instructions_change: 120_000,
+  memory_recheck: 120_000,
 };
+
+/** Keeps a corrected line about as short as a dossier line or fact. */
+const RECHECK_TEXT_MAX = 300;
+const RECHECK_WHY_MAX = 600;
 
 export interface RunnerAgentServiceOptions {
   /** Clock for Glance.createdAt. Tests pass a fixed one. */
@@ -272,6 +281,20 @@ export class RunnerAgentService implements AgentService {
       seen.add(o.eventId);
       return keep;
     });
+  }
+
+  /** A fix without a usable new line (empty or the same text) counts as holds. */
+  async recheckMemory(input: MemoryRecheckInput): Promise<MemoryRecheckAnswer> {
+    const { value } = await this.ask('memory_recheck', memoryRecheckPrompt(input), memoryRecheckOutput, {
+      topicId: input.topic?.id ?? null,
+      attempt: 1,
+    });
+    const why = clipText(value.why, RECHECK_WHY_MAX);
+    const fixed = clipText(value.text, RECHECK_TEXT_MAX);
+    if (value.outcome === 'fix' && fixed !== '' && fixed !== input.claim.trim()) {
+      return { outcome: 'fix', text: fixed, why };
+    }
+    return { outcome: value.outcome === 'drop' ? 'drop' : 'holds', text: input.claim, why };
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

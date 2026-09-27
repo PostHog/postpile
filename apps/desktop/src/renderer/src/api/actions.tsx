@@ -14,6 +14,8 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   MemoryCorrection,
+  MemoryRecheckRequest,
+  MemoryRecheckResult,
   PrKey,
   SnoozeCondition,
   SyncReport,
@@ -27,6 +29,8 @@ import { queryKeys } from './keys.ts';
 // Matches UNDO_WINDOW_MS in the engine. The renderer imports types only.
 const UNDO_WINDOW_MS = 6000;
 const NOTICE_MS = 6000;
+// Matches the engine's memory correction undo tokens.
+const MEMORY_UNDO_PREFIX = 'memory:';
 const PROBLEM_NOTICE_MS = 12000;
 
 export type NoticeTone = 'ok' | 'error' | 'blocked';
@@ -65,8 +69,10 @@ export interface Actions {
   decideTailoring(topicId: string, text: string, keep: boolean): Promise<void>;
   decideProposal(proposalId: string, accept: boolean): Promise<void>;
   decideRuleProposal(proposalId: string, accept: boolean): Promise<void>;
-  /** "Wrong" / "Forget" on a fact or dossier line. Local memory, not a GitHub write. */
-  correctMemory(input: MemoryCorrection): Promise<void>;
+  /** "Forget", or accepting a recheck outcome. Local memory, not a GitHub write. The toast offers Undo. */
+  correctMemory(input: MemoryCorrection): Promise<boolean>;
+  /** "Recheck": one agent call, nothing written. Null when the request itself failed. */
+  recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult | null>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
@@ -223,6 +229,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function recheckMemory(body: MemoryRecheckRequest): Promise<MemoryRecheckResult | null> {
+    try {
+      return await withBusy(`recheck:${body.factId ?? body.text}`, () => request<MemoryRecheckResult>('POST', '/api/memory/recheck', body));
+    } catch (error) {
+      show('error', `Recheck failed: ${errorText(error)}`);
+      return null;
+    }
+  }
+
   async function chat(tileId: string, message: string): Promise<ChatReply | null> {
     try {
       const reply = await withBusy(`chat:${tileId}`, () => request<ChatReply>('POST', `${tilePath(tileId)}/chat`, { message }));
@@ -278,7 +293,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     dismissNotice: () => setNotice(null),
     syncing,
     lastSync,
-    pendingMarkReads: pendingUndos.length,
+    // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
+    pendingMarkReads: pendingUndos.filter((entry) => !entry.token.startsWith(MEMORY_UNDO_PREFIX)).length,
     isBusy: (key) => busy.includes(key),
     blockedReason: (write) => writeBlockedReason(write, config),
 
@@ -312,9 +328,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
       const path = `/api/rule-proposals/${encodeURIComponent(proposalId)}`;
       await run(`rule:${proposalId}`, null, () => request('POST', path, { accept }));
     },
-    correctMemory: async (input) => {
-      await run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input));
-    },
+    correctMemory: (input) => run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input)),
+    recheckMemory,
     markTopicSeen,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),

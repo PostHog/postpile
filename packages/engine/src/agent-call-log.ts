@@ -5,6 +5,9 @@ import type { Store } from '@code-manager/store';
 /** Run id for calls made outside a sync or consolidation: chat, drafts and instructions proposals. */
 export const ACTION_RUN_ID = 'action';
 
+/** Calls the user asks for directly; they never count toward a sync or consolidation. */
+const ACTION_KINDS = new Set<ObservedCall['purpose']>(['chat', 'draft_comment', 'instructions_change', 'memory_recheck']);
+
 interface ActiveRun {
   id: string;
   stats: AgentCallStats;
@@ -35,7 +38,7 @@ export class AgentCallLog implements AgentCallObserver {
   }
 
   private runFor(call: ObservedCall): ActiveRun | null {
-    if (call.purpose === 'chat' || call.purpose === 'draft_comment' || call.purpose === 'instructions_change') {
+    if (ACTION_KINDS.has(call.purpose)) {
       return null;
     }
     return this.active;

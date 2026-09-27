@@ -13,6 +13,8 @@ import type {
   InstructionsSaveResult,
   InstructionsView,
   MemoryCorrection,
+  MemoryRecheckRequest,
+  MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
   PendingProposals,
@@ -55,7 +57,7 @@ export interface EngineService {
   approve(prKey: PrKey): Promise<ActionResult>;
   /** Marks the tile's events seen and queues the GitHub mark-read behind the undo window. */
   markRead(tileId: string): Promise<ActionResult>;
-  /** undoToken null undoes the most recent pending batch. */
+  /** undoToken null undoes the most recent pending mark-read batch. Memory correction tokens undo that correction. */
   undo(undoToken: string | null): Promise<ActionResult>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult>;
   unsnooze(tileId: string): Promise<ActionResult>;
@@ -76,11 +78,18 @@ export interface EngineService {
   /** Moves the topic's seen cursor to now, so "changes since seen" starts over. */
   markTopicSeen(topicId: string): Promise<ActionResult>;
   /**
-   * "Wrong" on a fact or dossier line, "Forget" on a care. A fact is closed
-   * right away; every correction is logged as feedback, so the topic's next
-   * dossier update sees it. Local only, never a GitHub write.
+   * "Forget" on a care, or accepting a recheck outcome: drop (kind wrong),
+   * holds (confirm) or fix. A fact changes right away; every correction is
+   * logged as feedback, so the topic's next dossier update sees it. Local
+   * only, never a GitHub write. The result's undo token works with undo()
+   * inside UNDO_WINDOW_MS.
    */
   correctMemory(input: MemoryCorrection): Promise<ActionResult>;
+  /**
+   * "Recheck" on a fact or dossier line: one agent call against the line's
+   * sources, the dossier and recent activity. Writes nothing. Capped per day.
+   */
+  recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult>;
   /** "Why?" on a fact or dossier line: its sources and whether it still checks out. Null for an unknown target. */
   getMemorySources(target: MemoryTarget): Promise<MemorySources | null>;
 

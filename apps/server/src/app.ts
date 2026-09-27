@@ -27,11 +27,25 @@ const feedbackBody = z.object({
 });
 
 const memoryCorrectionBody = z.object({
-  kind: z.enum(['wrong', 'forget']),
+  kind: z.enum(['wrong', 'forget', 'confirm', 'fix']),
   factId: z.string().nullable().default(null),
   topicId: z.string().nullable().default(null),
   text: z.string().default(''),
   relation: z.enum(['team', 'routed', 'fyi']).optional(),
+  fixedText: z.string().optional(),
+});
+
+/** Same target shape as the "Why?" query, as JSON. */
+const memoryTargetBody = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('fact'), factId: z.string().min(1) }),
+  z.object({ kind: z.literal('dossier_line'), topicId: z.string().min(1), version: z.number().int().positive(), path: z.string().min(1) }),
+]);
+
+const memoryRecheckBody = z.object({
+  factId: z.string().nullable().default(null),
+  topicId: z.string().nullable().default(null),
+  text: z.string().min(1),
+  target: memoryTargetBody.nullable().default(null),
 });
 
 const syncBody = z
@@ -172,6 +186,8 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     return c.json(await engine.decideRuleProposal(c.req.param('id'), body.accept));
   });
   app.post('/api/memory/corrections', async (c) => c.json(await engine.correctMemory(memoryCorrectionBody.parse(await c.req.json()))));
+  // Runs one agent call (seconds); the answer is only shown, correctMemory applies it.
+  app.post('/api/memory/recheck', async (c) => c.json(await engine.recheckMemory(memoryRecheckBody.parse(await c.req.json()))));
   app.get('/api/memory/sources', async (c) => {
     const sources = await engine.getMemorySources(memoryTargetQuery.parse(c.req.query()));
     return sources ? c.json(sources) : c.json({ error: 'not found' }, 404);

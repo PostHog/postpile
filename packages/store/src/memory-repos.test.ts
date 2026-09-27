@@ -149,6 +149,16 @@ describe('FactRepo', () => {
   const alice = { kind: 'person' as const, key: 'alice' };
   const initiative = { kind: 'initiative' as const, key: 'topic-1' };
 
+  it('reopens a closed fact and restores its check state (undo)', () => {
+    const fact = makeFact({ staleAt: at(5), staleReason: 'head_moved', verifiedAt: null });
+    store.facts.add(fact);
+    store.facts.close('f1', { invalidAt: at(10), reason: 'wrong', supersededBy: 'f2', expiredAt: at(10) });
+    store.facts.reopen('f1');
+    store.facts.markVerified(['f1'], at(11));
+    store.facts.restoreCheck(fact);
+    expect(store.facts.get('f1')).toEqual(fact);
+  });
+
   it('round-trips a fact with its refs', () => {
     const fact = makeFact({
       refs: [
@@ -334,5 +344,7 @@ describe('AgentCallRepo', () => {
     expect(store.agentCalls.lastOkAt('dossier_update')).toBe(at(1));
     expect(store.agentCalls.lastOkAt('consolidation')).toBe(at(4));
     expect(store.agentCalls.lastOkAt('fact_reconcile')).toBeNull();
+    expect(store.agentCalls.countSince('dossier_update', at(2))).toBe(1);
+    expect(store.agentCalls.countSince('dossier_update', at(0))).toBe(2);
   });
 });
