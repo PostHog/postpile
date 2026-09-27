@@ -99,10 +99,11 @@ Action details:
   prompt.
 - unmute: user override (`quiet`, or the rule loudness if that was not muted).
 
-## Memory / agentic digesting layer (v1, to review)
+## Memory / agentic digesting layer (v1 base)
 
-Being replaced step by step by **Engine memory (v2)** below; v1 code stays
-until its v2 replacement lands.
+**Engine memory (v2)** below replaced the topic summaries, the per-PR glance
+calls and the per-PR event calls. Everything else here (instructions,
+membership, sets, feedback, overrides, the runner) still works as described.
 
 Everything the agents know persists in SQLite, keyed so it survives restarts
 and only recomputes on change.
@@ -110,8 +111,8 @@ and only recomputes on change.
 | what | where | invalidated when |
 |---|---|---|
 | general instructions | `~/.config/code-manager/instructions.md`, in every prompt; absent = none | file edited (part of every input hash) |
-| glance | `pr_glance`, latest per PR + `input_hash`, `model` | PR snapshot moves (not CI), instructions, tailoring or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
-| topic | `topic`: name, summary + `summary_input_hash`, tailoring, driver, user_role | summary: member PRs change |
+| glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI), dossier version, instructions, tailoring, standing rules or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
+| topic | `topic`: name, summary, tailoring, driver, user_role, status | summary mirrors the latest `dossier.summary` |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
 | topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides | - |
 | sets | `pr_set` + `pr_set_member` with combined take and per-member reason; `removed_at` keeps "not related" members | agent regroups; removed members never come back with the rest, a corrected set the agent drops is kept as dissolved |
@@ -120,15 +121,13 @@ and only recomputes on change.
 | other agent answers | not cached: topic assignment and event overrides only run for new PRs and events, drafts and chat run on request | - |
 
 Topic assignment: PRs without a topic go to the agent in batches of 20,
-together with the list of existing topics (name + summary). It picks one or
-names a new topic. **New topics are created directly** (otherwise a first sync
-would leave everything unsorted); renames and merges are proposals only.
-They come out of the topic summary job: its answer may carry rename or merge
-ideas, which are filed as pending `topic_proposal` rows (never the same idea
-twice, so a rejected rename stays rejected). Other topics are in that prompt
-as merge targets but not in its hash, so a new topic does not rewrite every
-summary. Nothing produces `new_topic` proposals yet, since new topics are
-created directly.
+together with the list of existing topics (name, summary and dossier brief).
+It picks one or names a new topic. **New topics are created directly**
+(otherwise a first sync would leave everything unsorted); renames, merges and
+splits are proposals only. They come out of the consolidation job and are
+filed as pending `topic_proposal` rows (never the same idea twice, so a
+rejected rename stays rejected). Nothing produces `new_topic` proposals yet,
+since new topics are created directly.
 Until the agent has placed a PR it shows up in a virtual **Unsorted** topic
 (id `unsorted`, never stored), so `--no-agent` syncs are still usable.
 
@@ -137,23 +136,17 @@ author among the topic's PRs; role = driver if that is the user, else reviewer
 if any PR has a review-request ping, else stakeholder (mention, author, ...),
 else watcher.
 
-When agent jobs run (sync order, each skipped when its input hash is unchanged):
-
-1. `topics`: assign PRs without a topic
-2. `sets`: per topic with 2+ open PRs; hash = PRs + dissolved sets + topic
-   feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active sets are not
-   in the hash, they are the agent's own last answer. A set the agent keeps
-   under the same title keeps its id (tile id, snooze and chat survive); sets it
-   drops are deleted; dissolved sets are never brought back.
-3. `summaries`: per topic, newest 40 PRs
-4. `glances`: every open PR that is in a tile, unread tiles first
-5. `events`: second opinion on **new loud events only** (a wrong loud costs an
-   unread tile, a wrong quiet is still visible)
+Sets (`set_grouping`) run per topic with 2+ open PRs; hash = PRs + dissolved
+sets + topic feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active
+sets are not in the hash, they are the agent's own last answer. A set the
+agent keeps under the same title keeps its id (tile id, snooze and chat
+survive); sets it drops are deleted; dissolved sets are never brought back.
+The full job order is in the v2 sync flow below.
 
 A broken agent answer is logged in `SyncReport.errors` and retried next sync.
 
 Every prompt carries a `PromptContext`: general instructions + topic tailoring
-+ recent feedback for that topic.
++ recent feedback for that topic + accepted standing rules.
 
 All agent calls go through one `AgentRunner` interface. Today:
 `ClaudeCliRunner`, which runs
@@ -203,8 +196,8 @@ Contracts are in code: `packages/core/src/memory.ts` (types),
 `delta.ts`, `glance-batches.ts`, `agent-calls.ts`, `topic-changes.ts`;
 `packages/store/src/migrations/002_engine_memory.ts` and the new repos;
 `packages/agent/src/service.ts` (v2 block) and `schemas.ts`;
-`packages/engine/src/service.ts`. Bodies that still throw `not implemented`
-are the build work.
+`packages/engine/src/service.ts`. Everything is implemented; the v1 agent
+calls they replaced are deleted.
 
 ### Data model
 
@@ -225,7 +218,8 @@ Changed: `pr_glance` gets `dossier_version`. `topic.status` gets `retired`
 away). `topic_proposal.kind` gets `split` (existing columns: `topic_id` =
 source, `name` = new topic, `pr_keys` = PRs to move; one proposal per new
 part). `topic.summary` stays and is written from `dossier.summary`;
-`topic.summary_input_hash` is no longer written and gets dropped in a later
+`topic.summary_input_hash` still gets the dossier input hash (the store's
+`updateSummary` takes one), nothing reads it, and it gets dropped in a later
 migration.
 
 ### Cursors and "since last seen"
@@ -264,7 +258,8 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 3. **topics** (`topic_assignment`, batches of 20): as v1, but each offered
    topic carries `brief` = `dossierBrief(latest dossier)` (goal, status,
    driver, max 400 chars), not only name and summary. Recently retired topics
-   (30 days) are offered too, marked finished; assigning to one reactivates it.
+   (30 days) are offered too, their brief prefixed "Finished, retired.";
+   assigning to one reactivates it.
 4. **dossiers** (`dossier_update`, one call per topic with a non-empty
    delta, topics with unread tiles first). Input: `DossierUpdateInput`:
    previous dossier, `TopicDelta` from `selectTopicDelta`, member PR
@@ -274,13 +269,12 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    stale facts confirmed. Written in one transaction: new
    `topic_dossier` version (`through_seq` = `delta.toSeq`), `topic.summary`
    mirror, digest cursor, `closeFacts` closed, confirmed facts
-   `markVerified`, candidates through `preReconcile` (step 5). A member
-   missing from the previous timeline only counts as joined when its
-   membership is newer than that version, so a PR the model left out (or
-   that rolled into `earlier`) does not force an update on every sync.
+   `markVerified`, candidates through `preReconcile` (step 5).
 5. **facts** (`fact_reconcile`, only for ambiguous candidates, 40 per call,
    after all dossiers): see reconcile rules below. Usually zero calls.
-   Part of the `dossiers` job.
+   Part of the `dossiers` job. Ambiguous candidates the budget does not
+   reach are dropped; the dossier already moved past their events, so they
+   only come back if a later update states them again.
 6. **roles** (no agent): driver and user role, as v1. When a dossier exists,
    its `driver` person wins over "most frequent author".
 7. **sets** (`set_grouping`): unchanged from v1 (see open questions).
@@ -317,8 +311,13 @@ stale facts and claims, and topic feedback. It:
   kept; the rest are only counted in `omittedEvents`
 - sets `toSeq` to the highest `seq` seen, capped or not, so dropped history
   is not offered again
-- lists `joinedPrKeys` (members not in the previous timeline) and
-  `leftPrKeys` (in the timeline, no longer members)
+- lists `joinedPrKeys`: members not in the previous timeline whose
+  membership (`memberSince`) is newer than that version. A PR that was
+  already a member then was offered once (the model left it out, or it
+  rolled into `earlier`) and must not force an update on every sync
+- lists `leftPrKeys` (in the timeline, no longer members). The agent drops
+  timeline entries of non-members from its answer, so a left PR is offered
+  once
 - keeps feedback newer than the previous version as `newFeedback`
 
 `isEmptyDelta` = no dossier update for that topic.
@@ -422,24 +421,31 @@ Predicates and their rules (`PREDICATE_RULES`):
 
 **Reconcile** (Mem0 style, extract then reconcile). Candidates come out of
 the dossier update. `preReconcile` (core, pure) settles most of them against
-every active fact on the candidates' subjects, across all topics:
+every active fact on the candidates' subjects **and objects**, across all
+topics (objects matter for per-object slots: "bob drives X" has to see
+"alice drives X"):
 
 1. same subject, predicate, object and normalised text: **NOOP**, merge refs, set `verified_at`
 2. unique predicate, different value, candidate newer: **UPDATE** (old fact closed with `invalid_at` = candidate `validFrom`, `superseded_by` = new id)
 3. same subject, predicate and object, different text: ambiguous
-4. nothing active on subject + predicate: **ADD**
+4. nothing in the way: **ADD**. In the way means an occupant of a unique
+   slot; for predicates without a uniqueness rule a different object is just
+   another fact ("alice works on #1" and "alice works on #2")
 5. anything else: ambiguous
 
 Ambiguous candidates are batched across topics (40 per call) into
 `reconcileFacts`, which answers one of `add` / `update <factId>` /
 `invalidate <factId>` / `noop <factId>` per item. The dossier update itself
 may also close facts it was shown (`closeFacts`) or confirm stale ones.
+`invalidate` closes the named stored fact and does not add the candidate
+(Mem0 DELETE).
 Closing never deletes: it sets `invalid_at`, `invalid_reason`,
 `superseded_by` and `expired_at`.
 
 Queries without prompts (`listFacts(FactQuery)`):
 - who is doing what: active `drives` / `works_on` / `reviews`, grouped by person
 - what changed since T: facts with `recorded_at > T` or `expired_at > T`
+  (`changedSince` includes closed facts)
 - per PR: facts about the PR or citing it (`PrDetail.facts`)
 
 ### Verify-before-use
@@ -453,11 +459,12 @@ read time in `getTopic` / `getPr` (does not write, only sets
 |---|---|
 | referenced PR not in the store | stale `pr_missing` |
 | lifecycle predicate and its PR merged / closed | invalidate at `mergedAt` / close time (`pr_merged` / `pr_closed`) |
+| `status` fact about a PR that merged / closed after the fact's `valid_from` | stale `pr_merged` / `pr_closed`, the next dossier update restates it |
 | ref has `headOid` and the PR head moved | stale `head_moved` |
 | `reviews` / `works_on` and the person is no longer reviewer / author / committer | stale `person_not_involved` |
 | referenced comment, review or commit gone from the snapshot | stale `source_deleted` |
 | dossier question whose ref sits in a resolved review thread | stale claim `thread_resolved` |
-| dossier timeline entry for a PR that is no longer a member | stale claim, and the PR is in the next delta's `leftPrKeys` |
+| dossier timeline entry for a PR that is no longer a member | stale claim `left_topic`, and the PR is in the next delta's `leftPrKeys` |
 
 Stale facts are left out of every prompt's context, shown greyed in the
 UI, and handed to the topic's next dossier update as the recheck list,
@@ -479,7 +486,8 @@ which forces that update even without new events.
 - Missing PRs of all first-round batches of a topic go into one retry batch
   (`retryBatch`, attempt 2). Still missing after that: one error line per PR
   in the report; the unchanged hash retries it next sync. A batch whose outer
-  JSON does not parse counts all its PRs as missing.
+  JSON does not parse counts all its PRs as missing; so does a runner failure
+  (timeout, process error), which the engine catches per batch.
 - `glanceItemInputHash` per PR: v1 snapshot fields, provenance, topic name,
   **dossier version**, instructions, tailoring, standing rules, feedback on
   that PR, model. Never the other PRs in the batch. Stored glances get
@@ -503,7 +511,7 @@ Output and what happens:
 
 | output | effect |
 |---|---|
-| `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1 |
+| `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1. Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
 | `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
 | `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
 | `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 14 days, no unread or snoozed tile. Retiring is reversible |
@@ -524,6 +532,8 @@ topic, and retire topics that pass the gate and whose dossier status is
 - `SyncReport.agentCallStats` / `ConsolidationReport.agentCallStats`:
   per kind `calls`, `failed`, `retries`, `skippedUnchanged`,
   `skippedByBudget`, `durationMs`, `costUsd`. `agentCalls` stays as the total.
+  `skippedUnchanged` counts PRs for `glance_batch` (a quiet sync over 141
+  PRs shows 141), topics or batches for the other kinds.
 - CLI: `sync` prints one line per kind (`dossier_update 3 (1 skipped
   unchanged) glance_batch 4 (1 retry) ... total 9, $0.12`).
   `--max-agent-calls` caps sync and consolidation.
@@ -558,30 +568,16 @@ topic, and retire topics that pass the gate and whose dossier status is
 | `AgentBudget.take()` | `take(kind)` + observer stats |
 | `topic.summary_input_hash` | unused, dropped later |
 
-v1 methods stay (marked `@deprecated`) until the engine no longer calls
-them, so every step can land green.
+The v1 agent methods, prompts, schemas and hashes are deleted, and so are
+the `glance` and `topic_summary` call kinds. `PROMPT_VERSION` is `v2`, so
+every hash stored before v2 goes stale once and the first sync regenerates
+within `--max-agent-calls`.
 
 ### Build split
 
-Three builders can work in parallel against these contracts:
-
-- **core + store**: `clampDossier`, `dossierBrief`, `preReconcile`,
-  `verifyFact`, `verifyDossier`, `selectTopicDelta`, `topicChangesSince`,
-  and every repo body in `event-log.ts`, `cursors.ts`, `dossiers.ts`,
-  `facts.ts`, `rule-proposals.ts`, `agent-calls.ts`, with tests.
-- **agent**: prompts (dossier update, reconcile, glance batch, event batch,
-  consolidation), `renderDossier`, `dossierInputHash`,
-  `glanceItemInputHash`, the `RunnerAgentService` v2 methods (short-id ref
-  mapping, per-entry glance validation, dropping unknown ids), `standingRules`
-  in `contextBlock` and in every input hash, `TopicChoice.brief` in the
-  assignment prompt, `PROMPT_VERSION` bump. Tests with `FakeRunner`.
-- **engine (+ server, CLI)**: `event_log.append` in `GitHubSync`, verify pass,
-  `DossierUpdater`, `FactReconciler`, `GlanceBatchWriter`, event batches,
-  `Consolidator`, the observer and `agent_call` rows, read models (dossier,
-  facts, changes since seen), the new EngineService methods, routes, CLI
-  output and commands, `ALL_AGENT_JOBS` swap. Engine tests need the store
-  builder's repos; until then they can run against a `FakeRunner` and the
-  stub-free parts.
+Built in three parts against these contracts: core + store (pure rules and
+repos), agent (prompts, answer mapping, hashes) and engine + server + CLI
+(sync, consolidation, read models, routes). All three landed.
 
 ## Architecture
 
@@ -600,8 +596,9 @@ core  <- store, github, agent  <- engine  <- server, cli
   batched GraphQL PR enrichment, 12 PRs per query) and `GitHubWriter` (mark thread read,
   approve, comment) as separate interfaces. Token from `gh auth token`, read once, cached in
   memory.
-- **packages/agent**: `AgentRunner`, `ClaudeCliRunner`, `AgentService` (glance, topic
-  assignment, set grouping, topic summary, event classification, draft comment, chat).
+- **packages/agent**: `AgentRunner`, `ClaudeCliRunner`, `AgentService` (topic assignment,
+  set grouping, dossier update, fact reconcile, glance batch, event batch, consolidation,
+  draft comment, chat).
 - **packages/engine**: `EngineService`, the API the server and CLI call. Sync pipeline:
   fetch -> store -> classify -> agent digest -> derive tiles. `MarkReadQueue`. `createEngine`
   wires real dependencies; tests build `Engine` with fakes.
@@ -690,8 +687,6 @@ preflight and does not know the token, so CORS stays open.
   not final.
 - **Memory layer details** (the v1 above is a proposal; current choices in brackets):
   - how many feedback entries per topic go into prompts [10]
-  - whether topic summaries regenerate on every membership change or only on sync [on sync,
-    when the hash of member PRs changes]
   - whether sets are regrouped on every sync or only when membership changes [on sync, when
     open PRs, dissolved sets or topic feedback change]
   - new topics: created directly or only as proposals [directly]

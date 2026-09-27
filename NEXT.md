@@ -1,18 +1,36 @@
 # Where things stand
 
-Snapshot after the first build and the review-fix round. DESIGN.md has the
-full design; this file is the short "what now".
+Snapshot after engine memory v2 landed (dossiers, facts, batched glances,
+consolidation). DESIGN.md has the full design; this file is the short "what
+now".
 
 ## Done
 
 - Engine works end to end: notifications (ETag), batched GraphQL PR fetch,
-  events with rule loudness, topics, sets, stacks, derived tile state, glances,
-  topic summaries, event overrides by the agent. All state in SQLite
-  (`node:sqlite`, no native module).
+  events with rule loudness, topics, sets, stacks, derived tile state, event
+  overrides by the agent. All state in SQLite (`node:sqlite`, no native
+  module).
+- Engine memory v2:
+  - append-only `event_log` with digest and seen cursors; dossier updates
+    only read events after the digest cursor
+  - one living dossier per topic (versions kept, 50 max), refined from the
+    new events, joined/left PRs, stale facts and feedback
+  - facts with provenance and validity times, reconciled Mem0 style (rules
+    first, agent only for ambiguous ones), never deleted
+  - verify-before-use in the sync verify pass and at read time
+  - glances written from the dossier, 18 PRs per call, per-entry validation
+    and one retry batch
+  - event second opinion as one call per topic
+  - `consolidate` (on demand or `--if-due`): topic and rule proposals, fact
+    merges, retiring behind a deterministic gate
+  - every call lands in `agent_call`; `sync` prints calls by kind and cost,
+    `--max-agent-calls` caps sync and consolidation
+  - v1 summaries, per-PR glances and per-PR event calls are deleted
 - Actions: approve (pinned to the synced head commit), mark read with the 6s
   undo queue, not mine / not related / wrong topic feedback, snooze, unmute,
   ask-a-person draft + send, tile chat with "keep it" tailoring, topic
-  rename/merge proposals (filed by the summary job, applied only on accept).
+  rename/merge/split and standing-rule proposals (filed by consolidation,
+  applied only on accept).
 - CLI, HTTP server (Hono) and an Electron + React UI over the same
   EngineService.
 - Desktop renderer rebuilt in the "Crisp native, refined" style: Tailwind v4
@@ -53,6 +71,17 @@ full design; this file is the short "what now".
 - The mark-read undo queue is in memory. Quit flushes it; a crash drops
   pending mark-reads (local state already says read, GitHub stays unread).
 - Nothing files `new_topic` proposals: new topics are created directly.
+- Desktop does not show dossiers, facts or rule proposals yet, does not call
+  `markTopicSeen` when leaving a topic, and does not run
+  `consolidate({onlyIfDue})` when idle. Server routes for all of it exist.
+- Fake sample data has no dossiers, facts or rule proposals, so fake mode
+  shows none.
+- Ambiguous fact candidates the call cap does not reach are dropped (the
+  dossier already moved past their events).
+- `PROMPT_VERSION` moved to v2: the first real sync on an old database
+  regenerates every glance and set hash once.
+- Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
+  consolidation can only propose splits over timeline PRs.
 - No packaged/signed macOS build yet; `npm run build` only bundles for
   electron-vite.
 - Web app: not started. The renderer already talks HTTP and takes
@@ -73,13 +102,18 @@ full design; this file is the short "what now".
   approval". Alternative: refuse and ask for a sync when the head moved.
 - **Stale glance UX**: currently shown with a "stale" label. Alternatives: hide
   the verdict, or disable one-press Approve until a fresh glance exists.
-- **Proposals**: rename/merge ideas only come from the summary job, and other
-  topics are left out of the summary hash (so a new topic does not rewrite every
-  summary). OK?
+- **Memory v2 choices** listed under "Engine memory v2" in DESIGN.md's open
+  questions, most notably: instructions.md edits not in the dossier hash,
+  glance hash tied to the dossier version (each dossier update re-glances
+  its topic), automatic retiring behind the gate.
+- **First real sync cost**: a capped smoke run (15 PRs, 6 calls) made 1
+  topic assignment + 5 dossier updates for about $0.18, with 7 more dossier
+  updates, 5 glance batches and 4 event batches waiting on the cap. A full
+  first sync over ~140 PRs should land around 80-90 calls; worth a watched
+  run before relying on it.
 - Still open from DESIGN.md: UI framework final call, three-pane layout,
-  memory numbers (10 feedback entries per prompt, when summaries and sets
-  regroup), snooze wake-up on any loud human event, the extra loudness rules,
-  repo name.
+  memory numbers (10 feedback entries per prompt, when sets regroup), snooze
+  wake-up on any loud human event, the extra loudness rules, repo name.
 
 ## How to run
 
@@ -95,10 +129,18 @@ CLI (the main way to test without UI):
 ```
 npm run cli -- sync --limit 10 --no-agent     # cheap first look, no claude calls
 npm run cli -- sync                           # full sync with the agent
-npm run cli -- sync --max-agent-calls 5 --agent-jobs topics,glances
+npm run cli -- sync --max-agent-calls 5 --agent-jobs topics,dossiers,glances
 npm run cli -- topics
-npm run cli -- topic <id>
-npm run cli -- pr owner/repo#123
+npm run cli -- topic <id>                     # with the dossier and changes since seen
+npm run cli -- pr owner/repo#123              # with facts
+npm run cli -- consolidate [--if-due] [--max-agent-calls n]
+```
+
+Smoke run on a throwaway database, read-only:
+
+```
+CODE_MANAGER_READ_ONLY=1 CODE_MANAGER_DB=/tmp/cm-smoke/db.sqlite \
+  npm run cli -- sync --limit 15 --max-agent-calls 6
 ```
 
 Desktop and server:
