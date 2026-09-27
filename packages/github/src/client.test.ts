@@ -55,13 +55,13 @@ describe('fetchPrs', () => {
     expect(pr.reviewerUsers).toEqual(['viewer']);
     expect(pr.reviewerTeams).toEqual(['acme/infra']);
     expect(pr.reviews).toEqual([
-      { id: 'R1', author: 'bob', state: 'APPROVED', body: 'LGTM', submittedAt: '2026-09-19T10:00:00Z', commitOid: 'c1' },
+      { id: 'R1', author: 'bob', state: 'APPROVED', body: 'LGTM', submittedAt: '2026-09-19T10:00:00.000Z', commitOid: 'c1' },
       // Bot logins get the REST-style suffix so isBot() catches them.
-      { id: 'R2', author: 'greptile-apps[bot]', state: 'COMMENTED', body: '  ', submittedAt: '2026-09-19T11:00:00Z', commitOid: 'c1' },
+      { id: 'R2', author: 'greptile-apps[bot]', state: 'COMMENTED', body: '  ', submittedAt: '2026-09-19T11:00:00.000Z', commitOid: 'c1' },
     ]);
     expect(pr.commits).toEqual([
-      { oid: 'c1', headline: 'Add depot config', author: 'alice', committedAt: '2026-09-18T09:00:00Z' },
-      { oid: 'c2', headline: 'Fix cache', author: 'Alice Laptop', committedAt: '2026-09-20T09:00:00Z' },
+      { oid: 'c1', headline: 'Add depot config', author: 'alice', committedAt: '2026-09-18T09:00:00.000Z' },
+      { oid: 'c2', headline: 'Fix cache', author: 'Alice Laptop', committedAt: '2026-09-20T09:00:00.000Z' },
     ]);
   });
 
@@ -87,16 +87,16 @@ describe('fetchPrs', () => {
     const pr = prs.get('acme/app#42')!;
 
     expect(pr.timeline).toEqual([
-      { id: 'E1', kind: 'review_requested', actor: 'alice', at: '2026-09-18T09:05:00Z', subject: 'acme/infra' },
-      { id: 'E2', kind: 'head_ref_force_pushed', actor: 'alice', at: '2026-09-20T09:00:00Z', subject: null },
-      { id: 'E3', kind: 'added_to_merge_queue', actor: 'trunk-io[bot]', at: '2026-09-20T10:00:00Z', subject: null },
+      { id: 'E1', kind: 'review_requested', actor: 'alice', at: '2026-09-18T09:05:00.000Z', subject: 'acme/infra' },
+      { id: 'E2', kind: 'head_ref_force_pushed', actor: 'alice', at: '2026-09-20T09:00:00.000Z', subject: null },
+      { id: 'E3', kind: 'added_to_merge_queue', actor: 'trunk-io[bot]', at: '2026-09-20T10:00:00.000Z', subject: null },
     ]);
     expect(pr.checks).toEqual({
       rollup: 'PENDING',
       contexts: [
-        { name: 'test', conclusion: 'SUCCESS', completedAt: '2026-09-20T09:10:00Z' },
+        { name: 'test', conclusion: 'SUCCESS', completedAt: '2026-09-20T09:10:00.000Z' },
         { name: 'lint', conclusion: null, completedAt: null },
-        { name: 'deploy/preview', conclusion: 'FAILURE', completedAt: '2026-09-20T09:05:00Z' },
+        { name: 'deploy/preview', conclusion: 'FAILURE', completedAt: '2026-09-20T09:05:00.000Z' },
         { name: 'ci/legacy', conclusion: null, completedAt: null },
       ],
     });
@@ -106,7 +106,7 @@ describe('fetchPrs', () => {
       state: 'MERGED',
       author: 'dependabot[bot]',
       mergedBy: 'bob',
-      mergedAt: '2026-09-17T10:00:00Z',
+      mergedAt: '2026-09-17T10:00:00.000Z',
       reviewDecision: 'NONE',
       files: [],
       checks: { rollup: 'NONE', contexts: [] },

@@ -28,6 +28,19 @@ import type {
   RawTimelineItem,
 } from './raw.ts';
 
+/**
+ * Core compares timestamps as strings, so every time must be in the same
+ * form. GitHub sends "...Z" without milliseconds while the app writes
+ * toISOString() with them; normalising both avoids off-by-a-second compares.
+ */
+export function isoTime(value: string): string {
+  return new Date(value).toISOString();
+}
+
+export function isoTimeOrNull(value: string | null): string | null {
+  return value === null ? null : isoTime(value);
+}
+
 const TIMELINE_KINDS: Record<string, TimelineItemKind> = {
   ReviewRequestedEvent: 'review_requested',
   ReviewRequestRemovedEvent: 'review_request_removed',
@@ -99,7 +112,7 @@ function toReview(raw: RawReview): Review {
     author: actorLogin(raw.author),
     state: REVIEW_STATES.has(raw.state) ? (raw.state as ReviewState) : 'COMMENTED',
     body: raw.body,
-    submittedAt: raw.submittedAt ?? raw.createdAt,
+    submittedAt: isoTime(raw.submittedAt ?? raw.createdAt),
     commitOid: raw.commit?.oid ?? null,
   };
 }
@@ -109,7 +122,7 @@ function toIssueComment(raw: RawComment): Comment {
     id: raw.id,
     author: actorLogin(raw.author),
     body: raw.body,
-    createdAt: raw.createdAt,
+    createdAt: isoTime(raw.createdAt),
     kind: 'comment',
     url: raw.url,
     path: null,
@@ -122,7 +135,7 @@ function toReviewBodyComment(raw: RawReview): Comment {
     id: raw.id,
     author: actorLogin(raw.author),
     body: raw.body,
-    createdAt: raw.submittedAt ?? raw.createdAt,
+    createdAt: isoTime(raw.submittedAt ?? raw.createdAt),
     kind: 'review',
     url: raw.url,
     path: null,
@@ -135,7 +148,7 @@ function toThread(raw: RawReviewThread): ReviewThread {
     id: c.id,
     author: actorLogin(c.author),
     body: c.body,
-    createdAt: c.createdAt,
+    createdAt: isoTime(c.createdAt),
     kind: 'review_comment',
     url: c.url,
     path: raw.path,
@@ -167,7 +180,7 @@ function toCommit(raw: RawCommit): Commit {
     oid: raw.commit.oid,
     headline: raw.commit.messageHeadline,
     author: author?.user?.login ?? author?.name ?? '',
-    committedAt: raw.commit.committedDate,
+    committedAt: isoTime(raw.commit.committedDate),
   };
 }
 
@@ -180,7 +193,7 @@ function toTimelineItem(raw: RawTimelineItem): TimelineItem | null {
     id: raw.id,
     kind,
     actor: actorLogin(raw.actor),
-    at: raw.createdAt,
+    at: isoTime(raw.createdAt),
     subject: reviewerName(raw.requestedReviewer),
   };
 }
@@ -203,13 +216,13 @@ function toCheckRollup(state: string | undefined): CheckRollup {
 /** Old-style commit statuses have a state instead of a conclusion; map them onto check-run terms. */
 function toCheckContext(raw: RawCheckContext): CheckContext {
   if (raw.__typename === 'CheckRun') {
-    return { name: raw.name ?? '', conclusion: raw.conclusion ?? null, completedAt: raw.completedAt ?? null };
+    return { name: raw.name ?? '', conclusion: raw.conclusion ?? null, completedAt: isoTimeOrNull(raw.completedAt ?? null) };
   }
   const rollup = toCheckRollup(raw.state);
   if (rollup === 'PENDING' || rollup === 'NONE') {
     return { name: raw.context ?? '', conclusion: null, completedAt: null };
   }
-  return { name: raw.context ?? '', conclusion: rollup, completedAt: raw.createdAt ?? null };
+  return { name: raw.context ?? '', conclusion: rollup, completedAt: isoTimeOrNull(raw.createdAt ?? null) };
 }
 
 function toChecks(raw: RawStatusCheckRollup | null | undefined): Checks {
@@ -273,9 +286,9 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     timeline,
     checks: toChecks(raw.headCommit.nodes[0]?.commit.statusCheckRollup),
     headOid: raw.headRefOid,
-    createdAt: raw.createdAt,
-    updatedAt: raw.updatedAt,
-    mergedAt: raw.mergedAt,
+    createdAt: isoTime(raw.createdAt),
+    updatedAt: isoTime(raw.updatedAt),
+    mergedAt: isoTimeOrNull(raw.mergedAt),
     mergedBy: raw.mergedBy ? actorLogin(raw.mergedBy) : null,
   };
 }

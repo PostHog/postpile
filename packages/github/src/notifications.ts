@@ -1,4 +1,5 @@
 import type { NotificationReason, NotificationThread } from '@code-manager/core';
+import { isoTime, isoTimeOrNull } from './normalize.ts';
 import { errorFromResponse, type GitHubHttp } from './http.ts';
 import type { RawNotification } from './raw.ts';
 import type { NotificationConditions, NotificationsResult } from './reader.ts';
@@ -51,8 +52,8 @@ export function toThread(raw: RawNotification): NotificationThread {
     id: raw.id,
     reason: toReason(raw.reason),
     unread: raw.unread,
-    updatedAt: raw.updated_at,
-    lastReadAt: raw.last_read_at,
+    updatedAt: isoTime(raw.updated_at),
+    lastReadAt: isoTimeOrNull(raw.last_read_at),
     subjectType: raw.subject.type,
     repo: raw.repository.full_name,
     number: subjectNumber(raw),

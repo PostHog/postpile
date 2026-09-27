@@ -40,7 +40,7 @@ describe('listNotifications', () => {
       ['1003', 'team_mention', 'acme/api', 7, 'Issue'],
       ['1004', 'mention', 'acme/api', null, 'Discussion'],
     ]);
-    expect(result.threads[1]?.lastReadAt).toBe('2026-09-19T09:00:00Z');
+    expect(result.threads[1]?.lastReadAt).toBe('2026-09-19T09:00:00.000Z');
 
     expect(fake.requests.map((r) => r.url)).toEqual([
       'https://api.github.com/notifications?all=false&per_page=50',
