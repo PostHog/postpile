@@ -146,6 +146,10 @@ export class FakeWriter implements GitHubWriter {
     this.calls.push(`markThreadRead ${threadId}`);
   }
 
+  async markAllReadBefore(lastReadAt: string): Promise<void> {
+    this.calls.push(`markAllReadBefore ${lastReadAt}`);
+  }
+
   async approvePr(ref: PrRef, _body: string, commitOid: string): Promise<void> {
     this.calls.push(`approvePr ${ref.repo}#${ref.number}@${commitOid}`);
   }

@@ -42,7 +42,10 @@ export interface FakeBatch {
 interface FakePending {
   id: number;
   createdAt: IsoTime;
-  batch: FakeBatch;
+  /** A mark-read click. Null for a cleanup. */
+  batch: FakeBatch | null;
+  /** The inbox cleanup's cutoff. Null for a mark-read. */
+  readBefore: IsoTime | null;
 }
 
 /** What FakeWrites needs from FakeEngine's sample data. */
@@ -53,6 +56,8 @@ export interface FakeSample {
   markReadHere(prKeys: PrKey[], handleKeys: PrKey[]): void;
   /** Tile or PR title for the footer's pending list. */
   title(prKeys: PrKey[], threadId: string | null): string;
+  /** Ids of sample threads unread "on GitHub" with no activity since `cutoff`. */
+  unreadBefore(cutoff: IsoTime): string[];
 }
 
 type LogInput = Pick<NewActionLogEntry, 'action' | 'origin' | 'outcome'> & Partial<NewActionLogEntry>;
@@ -80,16 +85,62 @@ export class FakeWrites {
   ) {}
 
   private pendingViews(): PendingWriteView[] {
-    return this.pending.map((write) => ({
-      id: write.id,
-      createdAt: write.createdAt,
-      origin: write.batch.origin,
-      title: this.sample.title(write.batch.prKeys, write.batch.threads[0]?.id ?? null),
-      prKeys: write.batch.prKeys,
-      tileId: write.batch.tileId,
-      threadCount: write.batch.threads.length,
-      error: null,
-    }));
+    return this.pending.map((write): PendingWriteView => {
+      if (write.batch === null) {
+        const cutoff = write.readBefore ?? '';
+        return {
+          id: write.id,
+          kind: 'mark_all_read_before',
+          createdAt: write.createdAt,
+          origin: 'cleanup',
+          title: `Cleanup: mark everything before ${cutoff.slice(0, 10)} read`,
+          prKeys: [],
+          tileId: null,
+          threadCount: this.sample.unreadBefore(cutoff).length,
+          error: null,
+        };
+      }
+      return {
+        id: write.id,
+        kind: 'mark_read',
+        createdAt: write.createdAt,
+        origin: write.batch.origin,
+        title: this.sample.title(write.batch.prKeys, write.batch.threads[0]?.id ?? null),
+        prKeys: write.batch.prKeys,
+        tileId: write.batch.tileId,
+        threadCount: write.batch.threads.length,
+        error: null,
+      };
+    });
+  }
+
+  /** The cleanup's cutoff while one waits for the lock. */
+  pendingCleanupCutoff(): IsoTime | null {
+    return this.pending.filter((write) => write.batch === null).at(-1)?.readBefore ?? null;
+  }
+
+  /**
+   * "Mark everything before `cutoff` read on GitHub": flips the sample
+   * threads right away while unlocked, else one pending write. Returns
+   * whether it went out.
+   */
+  cleanup(cutoff: IsoTime): boolean {
+    const detail = `last_read_at=${cutoff}`;
+    if (!this.enabled) {
+      this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch: null, readBefore: cutoff });
+      this.nextId += 1;
+      this.record({ action: 'mark_all_read_before', origin: 'cleanup', outcome: 'pending', detail: `${detail}: ${PENDING_DETAIL}` });
+      return false;
+    }
+    this.markBefore(cutoff, 'cleanup');
+    return true;
+  }
+
+  private markBefore(cutoff: IsoTime, origin: 'cleanup' | 'footer'): void {
+    for (const threadId of this.sample.unreadBefore(cutoff)) {
+      this.githubUnread.set(threadId, false);
+    }
+    this.record({ action: 'mark_all_read_before', origin, outcome: 'github', detail: `last_read_at=${cutoff}: ${SAMPLE_DETAIL}` });
   }
 
   status(): GitHubWritesStatus {
@@ -171,7 +222,7 @@ export class FakeWrites {
 
   private park(batch: FakeBatch): void {
     this.sample.revert(batch.local);
-    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch });
+    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch, readBefore: null });
     this.nextId += 1;
     for (const thread of batch.threads) {
       this.record({
@@ -233,7 +284,7 @@ export class FakeWrites {
   pendingByPrKey(): Map<PrKey, TilePendingWrite> {
     const marks = new Map<PrKey, TilePendingWrite>();
     for (const write of this.pending) {
-      for (const key of write.batch.prKeys) {
+      for (const key of write.batch?.prKeys ?? []) {
         marks.set(key, { since: write.createdAt, error: null });
       }
     }
@@ -248,6 +299,10 @@ export class FakeWrites {
       return { ok: false, message: 'Not sent: GitHub writes are off. Unlock GitHub writes first.', done: 0, failed: writes.length, status: this.status() };
     }
     for (const write of writes) {
+      if (write.batch === null) {
+        this.markBefore(write.readBefore ?? '', 'footer');
+        continue;
+      }
       this.markThreads(write.batch, 'footer');
       this.sample.markReadHere(write.batch.prKeys, write.batch.handleKeys);
     }
@@ -258,6 +313,10 @@ export class FakeWrites {
   discardPending(): PendingWritesResult {
     const writes = this.pending.splice(0);
     for (const write of writes) {
+      if (write.batch === null) {
+        this.record({ action: 'mark_all_read_before', origin: 'footer', outcome: 'discarded', detail: `last_read_at=${write.readBefore ?? ''}: ${DISCARDED_DETAIL}` });
+        continue;
+      }
       for (const thread of write.batch.threads) {
         this.record({
           action: 'mark_read',

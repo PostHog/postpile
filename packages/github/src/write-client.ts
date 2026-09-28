@@ -1,4 +1,4 @@
-import type { PrRef } from '@postpile/core';
+import type { IsoTime, PrRef } from '@postpile/core';
 import { GitHubHttp, type FetchFn } from './http.ts';
 import type { TokenSource } from './token.ts';
 import type { GitHubWriter } from './writer.ts';
@@ -17,6 +17,15 @@ export class GitHubWriteClient implements GitHubWriter {
   /** GitHub answers 205 Reset Content. There is no way back: no mark-unread API. */
   async markThreadRead(threadId: string): Promise<void> {
     await this.http.requestOk('PATCH', `notifications/threads/${encodeURIComponent(threadId)}`);
+  }
+
+  /**
+   * https://docs.github.com/en/rest/activity/notifications#mark-notifications-as-read
+   * Threads updated after `lastReadAt` stay unread. 205 when done, 202 when
+   * GitHub finishes it in the background; either way the next read shows it.
+   */
+  async markAllReadBefore(lastReadAt: IsoTime): Promise<void> {
+    await this.http.requestOk('PUT', 'notifications', { body: { last_read_at: lastReadAt, read: true } });
   }
 
   /**

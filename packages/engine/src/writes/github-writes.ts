@@ -1,4 +1,4 @@
-import type { ActionOrigin, LoggedAction, PrKey, PrRef, WriteSwitchState } from '@postpile/core';
+import type { ActionOrigin, IsoTime, LoggedAction, PrKey, PrRef, WriteSwitchState } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import type { ActionLog } from './action-log.ts';
 import type { WriteSwitch } from './write-switch.ts';
@@ -10,6 +10,8 @@ export interface WriteContext {
   tileId?: string | null;
   threadId?: string | null;
   batch?: string | null;
+  /** Log detail when the call reaches GitHub. */
+  detail?: string;
 }
 
 /** 'sent' reached GitHub; 'off' means writes were off and nothing was sent. */
@@ -81,6 +83,12 @@ export class GitHubWrites {
 
   markThreadRead(threadId: string, context: WriteContext): Promise<WriteResult> {
     return this.send('mark_read', { ...context, threadId }, () => this.writeSwitch.writer().markThreadRead(threadId), notTakenDetail);
+  }
+
+  /** The inbox cleanup: one PUT /notifications with last_read_at. */
+  markAllReadBefore(lastReadAt: IsoTime, context: WriteContext): Promise<WriteResult> {
+    const detail = `last_read_at=${lastReadAt}`;
+    return this.send('mark_all_read_before', { detail, ...context }, () => this.writeSwitch.writer().markAllReadBefore(lastReadAt), (reason) => `${detail}: ${reason}`);
   }
 
   approvePr(ref: PrRef, body: string, commitOid: string, context: WriteContext): Promise<WriteResult> {

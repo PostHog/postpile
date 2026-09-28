@@ -12,6 +12,8 @@ import type {
   FeedbackInput,
   FeedbackKind,
   GitHubWritesChange,
+  CleanupAge,
+  InboxCleanupView,
   PendingWritesResult,
   GitHubWritesStatus,
   GlanceGap,
@@ -56,7 +58,12 @@ import type {
 import {
   compareTopicUrgency,
   actionTrail,
+  applyBaseline,
+  cleanupCutoff,
+  cleanupLook,
+  CLEANUP_SNOOZE_DAYS,
   DEFAULT_REPO_SETTINGS,
+  unreadOlderThan,
   isPrInQuietRepo,
   isQuietTile,
   isTileInScope,
@@ -195,6 +202,10 @@ export class FakeEngine implements EngineService {
   private recheckCount = 0;
   // The repo menu's choices; in memory like the lock, gone on restart.
   private repoSettings: RepoSettings = DEFAULT_REPO_SETTINGS;
+  // Inbox cleanup, in memory: every fake start counts as a first run, so the banner shows.
+  private cleanupProminent = true;
+  private cleanupHiddenUntil: string | null = null;
+  private baseline: string | null = null;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
 
@@ -210,6 +221,7 @@ export class FakeEngine implements EngineService {
       revert: (local) => this.revertLocal(local.eventIds, local.handledPrKeys),
       markReadHere: (prKeys, handleKeys) => this.markSampleRead(prKeys, handleKeys),
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
+      unreadBefore: (cutoff) => this.threadsOnGitHub().filter((thread) => thread.unread && thread.updatedAt < cutoff).map((thread) => thread.id),
     });
     this.workContext = new FakeWorkContext(this.data.topics, this.now, options.sweepDelayMs ?? 2000);
     this.instructions = new FakeInstructions({
@@ -246,8 +258,12 @@ export class FakeEngine implements EngineService {
     return this.data.tiles.find((tile) => tile.id === tileId);
   }
 
+  /** With "start fresh" on, events before the baseline read as seen (copies; the sample keeps its state). */
   private eventsOf(prKey: PrKey): PrEvent[] {
-    return this.data.events.filter((event) => event.prKey === prKey);
+    return applyBaseline(
+      this.data.events.filter((event) => event.prKey === prKey),
+      this.baseline,
+    );
   }
 
   private userStateOf(prKey: PrKey): UserPrState {
@@ -513,6 +529,47 @@ export class FakeEngine implements EngineService {
     return this.listRepos();
   }
 
+  async inboxCleanup(): Promise<InboxCleanupView> {
+    this.writes.settle();
+    const now = this.timestamp();
+    const threads = this.threadsOnGitHub();
+    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14), this.baseline);
+    const hiddenUntil = this.cleanupHiddenUntil !== null && this.cleanupHiddenUntil > now ? this.cleanupHiddenUntil : null;
+    return {
+      unreadOlderThan14,
+      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30), this.baseline),
+      look: cleanupLook({ unreadOlderThan14, prominent: this.cleanupProminent, hiddenUntil }, now),
+      baseline: this.baseline,
+      hiddenUntil,
+      pendingCutoff: this.writes.pendingCleanupCutoff(),
+    };
+  }
+
+  async cleanUpInbox(age: CleanupAge): Promise<ActionResult> {
+    this.cleanupProminent = false;
+    if (!this.writes.cleanup(cleanupCutoff(this.timestamp(), age))) {
+      return ok(`Pending: marks everything older than ${age} days read once you unlock and send it from the lock`);
+    }
+    return ok(`fake: marked the sample threads older than ${age} days read, nothing sent to GitHub`);
+  }
+
+  async startFresh(): Promise<ActionResult> {
+    this.cleanupProminent = false;
+    this.baseline = this.timestamp();
+    return ok('Started fresh: everything before now is background here. GitHub is unchanged.');
+  }
+
+  async clearStartFresh(): Promise<ActionResult> {
+    this.baseline = null;
+    return ok('Start fresh cleared: older unread threads count again');
+  }
+
+  async hideInboxCleanup(): Promise<ActionResult> {
+    this.cleanupProminent = false;
+    this.cleanupHiddenUntil = new Date(this.now().getTime() + CLEANUP_SNOOZE_DAYS * 24 * 3_600_000).toISOString();
+    return ok(`Hidden for ${CLEANUP_SNOOZE_DAYS} days`);
+  }
+
   async getViewer(): Promise<ViewerView> {
     return { login: this.data.viewer, teamMembers: this.data.viewerTeamMembers };
   }
@@ -529,7 +586,7 @@ export class FakeEngine implements EngineService {
       tiles: this.scopedTiles(topicId).map((tile) => this.tileView(tile)),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
-      dossier: this.memory.dossierView(topicId, this.feedback),
+      dossier: this.memory.dossierView(topicId, this.feedback, this.baseline),
     };
   }
 

@@ -1,11 +1,14 @@
-import type { GitHubWritesStatus, PendingThread, PendingWrite, PendingWriteView, PendingWritesResult, PrKey, TilePendingWrite } from '@postpile/core';
+import { unreadOlderThan, type GitHubWritesStatus, type IsoTime, type PendingThread, type PendingWrite, type PendingWriteView, type PendingWritesResult, type PrKey, type TilePendingWrite } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { putBackLocalChange } from '../actions/local-change.ts';
+import { errorText } from '../errors.ts';
 import type { MarkReadQueue, ParkedBatch, ThreadOutcome } from '../mark-read-queue.ts';
 import { notTakenDetail, type GitHubWrites } from './github-writes.ts';
 
 export const PENDING_DETAIL = 'GitHub writes are locked: waits until you unlock and send it';
 export const DISCARDED_DETAIL = 'discarded while locked: stays unread, like on GitHub';
+export const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup waits until you unlock and send it';
+export const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
 export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or another client; pending mark-read cleared';
 
 /**
@@ -34,6 +37,8 @@ export class PendingWrites {
     this.store.transaction(() => {
       putBackLocalChange(this.store, batch.local);
       this.store.pendingWrites.add({
+        kind: 'mark_read',
+        readBefore: null,
         createdAt,
         origin: batch.origin,
         tileId: batch.tileId,
@@ -57,11 +62,38 @@ export class PendingWrites {
     }
   }
 
+  /**
+   * The inbox cleanup while locked: one pending "mark everything before
+   * `readBefore` read on GitHub". Nothing changes in the app until it is sent.
+   */
+  parkCleanup(readBefore: IsoTime, batch: string): void {
+    this.store.pendingWrites.add({
+      kind: 'mark_all_read_before',
+      readBefore,
+      createdAt: this.now().toISOString(),
+      origin: 'cleanup',
+      tileId: null,
+      batch,
+      prKeys: [],
+      handleKeys: [],
+      threads: [],
+    });
+    this.writes.log.record({ action: 'mark_all_read_before', origin: 'cleanup', outcome: 'pending', batch, detail: `last_read_at=${readBefore}: ${CLEANUP_PENDING_DETAIL}` });
+  }
+
   list(): PendingWrite[] {
     return this.store.pendingWrites.list();
   }
 
+  /** The cutoff of a cleanup waiting for the lock, the newest if several. */
+  pendingCleanupCutoff(): IsoTime | null {
+    return this.list().filter((write) => write.kind === 'mark_all_read_before').at(-1)?.readBefore ?? null;
+  }
+
   private title(write: PendingWrite): string {
+    if (write.kind === 'mark_all_read_before') {
+      return `Cleanup: mark everything before ${(write.readBefore ?? '').slice(0, 10)} read`;
+    }
     const firstKey = write.prKeys[0] ?? write.threads[0]?.prKey ?? null;
     const pr = firstKey === null ? null : this.store.prs.get(firstKey);
     const more = write.prKeys.length > 1 ? ` (+${write.prKeys.length - 1})` : '';
@@ -73,14 +105,16 @@ export class PendingWrites {
   }
 
   views(): PendingWriteView[] {
+    const threads = this.store.notifications.list();
     return this.list().map((write) => ({
       id: write.id,
+      kind: write.kind,
       createdAt: write.createdAt,
       origin: write.origin,
       title: this.title(write),
       prKeys: write.prKeys,
       tileId: write.tileId,
-      threadCount: write.threads.length,
+      threadCount: write.kind === 'mark_all_read_before' ? unreadOlderThan(threads, write.readBefore ?? '', null) : write.threads.length,
       error: write.error,
     }));
   }
@@ -143,7 +177,24 @@ export class PendingWrites {
    * after the last sync, its reason goes to `notTaken`). Threads that failed
    * stay, with the error.
    */
+  /** The cleanup's single PUT. Done when GitHub took it; a failure stays pending with the error. */
+  private async sendCleanup(write: PendingWrite, notTaken: string[]): Promise<boolean> {
+    try {
+      await this.writes.markAllReadBefore(write.readBefore ?? '', { origin: 'footer', batch: write.batch });
+    } catch (error) {
+      const message = errorText(error);
+      this.store.pendingWrites.keepAfterTry(write.id, [], message, this.now().toISOString());
+      notTaken.push(`${this.title(write)}: GitHub didn't take it: ${message}; still pending`);
+      return false;
+    }
+    this.store.pendingWrites.remove(write.id);
+    return true;
+  }
+
   private async sendOne(write: PendingWrite, queue: MarkReadQueue, notTaken: string[]): Promise<boolean> {
+    if (write.kind === 'mark_all_read_before') {
+      return this.sendCleanup(write, notTaken);
+    }
     const outcomes = await queue.markThreads(write.threads, { origin: 'footer', tileId: write.tileId, batchId: write.batch });
     const left: PendingThread[] = [];
     const errors: string[] = [];
@@ -177,6 +228,9 @@ export class PendingWrites {
   observeRead(threadIds: ReadonlySet<string>, origin: 'sync' | 'poll'): Set<string> {
     const cleared = new Set<string>();
     for (const write of this.list()) {
+      if (write.kind === 'mark_all_read_before') {
+        continue;
+      }
       const observed = write.threads.filter((thread) => threadIds.has(thread.id));
       if (observed.length === 0) {
         continue;
@@ -223,6 +277,15 @@ export class PendingWrites {
     const writes = this.list();
     for (const write of writes) {
       this.store.pendingWrites.remove(write.id);
+      if (write.kind === 'mark_all_read_before') {
+        this.writes.log.record({
+          action: 'mark_all_read_before',
+          origin: 'footer',
+          outcome: 'discarded',
+          batch: write.batch,
+          detail: `last_read_at=${write.readBefore ?? ''}: ${CLEANUP_DISCARDED_DETAIL}`,
+        });
+      }
       for (const thread of write.threads) {
         this.writes.log.record({
           action: 'mark_read',

@@ -1,4 +1,5 @@
 import { ALL_AGENT_JOBS, type SyncOptions, type SyncReport } from '@postpile/core';
+import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { reviveRetiredTopics } from './consolidation/revive.ts';
 import type { DigestTally } from './digest/deps.ts';
@@ -44,6 +45,7 @@ export class SyncRun {
     const tally: DigestTally = { dossiersUpdated: 0, facts: emptyFactCounts() };
     const report = emptyReport(startedAt, tally, errors);
     report.agentCallStats = callLog.begin(`sync:${startedAt}`);
+    noteSyncStart(store, startedAt);
     try {
       const fetched = await this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY);
       report.notificationsNotModified = fetched.notModified;

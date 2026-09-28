@@ -1,9 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ActionOrigin, PendingThread, PendingWrite, PrKey } from '@postpile/core';
+import type { ActionOrigin, PendingThread, PendingWrite, PendingWriteKind, PrKey } from '@postpile/core';
 import { all, insertReturningId, run } from '../sql.ts';
 
 interface PendingWriteRow {
   id: number;
+  kind: string;
+  read_before: string | null;
   created_at: string;
   origin: string;
   tile_id: string | null;
@@ -18,6 +20,8 @@ interface PendingWriteRow {
 function toPendingWrite(row: PendingWriteRow): PendingWrite {
   return {
     id: row.id,
+    kind: row.kind as PendingWriteKind,
+    readBefore: row.read_before,
     createdAt: row.created_at,
     origin: row.origin as ActionOrigin,
     tileId: row.tile_id,
@@ -32,15 +36,17 @@ function toPendingWrite(row: PendingWriteRow): PendingWrite {
 
 export type NewPendingWrite = Omit<PendingWrite, 'id' | 'error' | 'triedAt'>;
 
-/** Mark-reads waiting for the writes lock, one row per click. */
+/** Mark-reads waiting for the writes lock, one row per click (or per cleanup). */
 export class PendingWriteRepo {
   constructor(private readonly db: DatabaseSync) {}
 
   add(write: NewPendingWrite): number {
     return insertReturningId(
       this.db,
-      `INSERT INTO pending_write (created_at, origin, tile_id, batch, pr_keys, handle_keys, threads)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pending_write (kind, read_before, created_at, origin, tile_id, batch, pr_keys, handle_keys, threads)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      write.kind,
+      write.readBefore,
       write.createdAt,
       write.origin,
       write.tileId,

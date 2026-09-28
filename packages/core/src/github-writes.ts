@@ -23,12 +23,19 @@ export interface PendingThread {
 }
 
 /**
+ * mark_read: one click's threads. mark_all_read_before: the inbox cleanup's
+ * single PUT /notifications with last_read_at = `readBefore`.
+ */
+export type PendingWriteKind = 'mark_read' | 'mark_all_read_before';
+
+/**
  * A mark-read made while GitHub writes were locked. Nothing changed in the
  * app: the tile keeps its state until the write reaches GitHub. Stored, so it
  * survives a restart; one row per click (tile, debug row, "not mine").
  */
 export interface PendingWrite {
   id: number;
+  kind: PendingWriteKind;
   createdAt: IsoTime;
   origin: ActionOrigin;
   tileId: string | null;
@@ -38,8 +45,10 @@ export interface PendingWrite {
   prKeys: PrKey[];
   /** PRs that also count as handled then (pinged members). */
   handleKeys: PrKey[];
-  /** Threads still to mark read on GitHub. */
+  /** Threads still to mark read on GitHub. Empty for mark_all_read_before. */
   threads: PendingThread[];
+  /** mark_all_read_before: the cutoff sent as last_read_at. Null for mark_read. */
+  readBefore: IsoTime | null;
   /** The last send's error, null before any try. */
   error: string | null;
   triedAt: IsoTime | null;
@@ -48,12 +57,14 @@ export interface PendingWrite {
 /** A pending write as the footer lists it. */
 export interface PendingWriteView {
   id: number;
+  kind: PendingWriteKind;
   createdAt: IsoTime;
   origin: ActionOrigin;
   /** Tile or PR title, or the notification's title for a thread without a stored PR. */
   title: string;
   prKeys: PrKey[];
   tileId: string | null;
+  /** For mark_all_read_before: stored unread threads older than the cutoff, as far as the app knows. */
   threadCount: number;
   error: string | null;
 }
@@ -86,10 +97,19 @@ export interface GitHubWritesChange {
  * What was done. `undo_mark_read` is the 6s undo, `writes_on` / `writes_off`
  * the lock. `bring_back` is gone (GitHub has no mark-unread, so it only split
  * the state); old rows may still carry it.
+ * `mark_all_read_before` is the inbox cleanup (PUT /notifications).
  * mark_done, subscribe and unsubscribe get added with their writer methods;
  * nothing sends them today.
  */
-export type LoggedAction = 'mark_read' | 'undo_mark_read' | 'approve' | 'comment' | 'bring_back' | 'writes_on' | 'writes_off';
+export type LoggedAction =
+  | 'mark_read'
+  | 'mark_all_read_before'
+  | 'undo_mark_read'
+  | 'approve'
+  | 'comment'
+  | 'bring_back'
+  | 'writes_on'
+  | 'writes_off';
 
 /**
  * Who decided it.
@@ -100,8 +120,9 @@ export type LoggedAction = 'mark_read' | 'undo_mark_read' | 'approve' | 'comment
  * - sync / poll: the full sync or the live poll saw a thread leave the inbox
  *   (read on github.com or another client) and mirrored it locally
  * - footer: the lock in the status footer (also sending or discarding pending writes)
+ * - cleanup: the inbox cleanup dialog ("mark everything older than N days read")
  */
-export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer';
+export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup';
 
 /**
  * What came of it.

@@ -203,6 +203,16 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     const body = z.object({ enabled: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.setGitHubWrites(body.enabled));
   });
+  // Inbox cleanup: old unread threads, "mark everything older than N days read" (a GitHub
+  // write through the lock, pending while locked), "start fresh" (local) and "Not now".
+  app.get('/api/inbox-cleanup', async (c) => c.json(await engine.inboxCleanup()));
+  app.post('/api/inbox-cleanup/mark-read', async (c) => {
+    const body = z.object({ olderThanDays: z.union([z.literal(14), z.literal(30)]) }).parse(await c.req.json());
+    return c.json(await engine.cleanUpInbox(body.olderThanDays));
+  });
+  app.post('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.startFresh()));
+  app.delete('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.clearStartFresh()));
+  app.post('/api/inbox-cleanup/not-now', async (c) => c.json(await engine.hideInboxCleanup()));
   // Mark-reads made while locked. Send is refused (ok: false) while writes are off; discard changes nothing in the app.
   app.post('/api/github-writes/pending/send', async (c) => c.json(await engine.sendPendingWrites()));
   app.post('/api/github-writes/pending/discard', async (c) => c.json(await engine.discardPendingWrites()));

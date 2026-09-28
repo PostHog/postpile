@@ -10,6 +10,8 @@ import type {
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
+  CleanupAge,
+  InboxCleanupView,
   PendingWritesResult,
   InstructionsChatReply,
   InstructionsDecision,
@@ -108,6 +110,20 @@ export interface EngineService {
   sendPendingWrites(): Promise<PendingWritesResult>;
   /** "Discard": drops the pending writes. Nothing changes in the app, the tiles stay unread like on GitHub. */
   discardPendingWrites(): Promise<PendingWritesResult>;
+  /** Old unread GitHub threads (14 / 30 days), how to show the cleanup, the start-fresh baseline. */
+  inboxCleanup(): Promise<InboxCleanupView>;
+  /**
+   * "Mark everything older than N days read on GitHub": one PUT
+   * /notifications through the writes door, logged as mark_all_read_before
+   * (origin cleanup). Locked, it becomes one pending write. The inbox is
+   * read again afterwards; GitHub may finish it in the background.
+   */
+  cleanUpInbox(age: CleanupAge): Promise<ActionResult>;
+  /** "Leave GitHub alone, start fresh here": a local baseline, nothing written to GitHub. */
+  startFresh(): Promise<ActionResult>;
+  clearStartFresh(): Promise<ActionResult>;
+  /** "Not now": hides the cleanup line and banner for CLEANUP_SNOOZE_DAYS. */
+  hideInboxCleanup(): Promise<ActionResult>;
   /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
   /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */

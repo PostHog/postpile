@@ -37,6 +37,18 @@ export function sampleThreads(data: SampleData, now: Date): NotificationThread[]
     }
   }
   const extras: NotificationThread[] = [
+    // Old unread threads, so the inbox cleanup line and dialog show in fake mode.
+    ...[16, 22, 45].map((days, index): NotificationThread => ({
+      id: `sample-thread-old-${days}`,
+      reason: index === 1 ? 'mention' : 'subscribed',
+      unread: true,
+      updatedAt: hoursBefore(now, days * 24),
+      lastReadAt: null,
+      subjectType: 'Issue',
+      repo: SAMPLE_REPO,
+      number: 41000 + days,
+      title: ['Flaky test tracker (weekly)', 'RFC: move the dev env to Flox', 'Old CI cost report'][index] ?? 'Old thread',
+    })),
     {
       id: 'sample-thread-issue-41700',
       reason: 'mention',

@@ -1,4 +1,5 @@
 import {
+  applyBaseline,
   buildStacks,
   buildTopicTiles,
   deriveTileState,
@@ -18,6 +19,7 @@ import {
   type UserPrState,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
+import { loadBaseline } from './baseline-meta.ts';
 import { loadViewer } from './viewer-meta.ts';
 
 /** PRs the agent has not placed yet. Not stored: it is whatever has no membership. */
@@ -65,16 +67,25 @@ export class Board {
     this.stacks = buildStacks([...prs.values()], now);
   }
 
+  /**
+   * Events before the "start fresh" baseline read as seen here (not in the
+   * store), so tiles, counts and pings treat them as background.
+   */
   static load(store: Store, now: string): Board {
     const prs = new Map(store.prs.listAll().map((pr) => [pr.key, pr]));
     const keys = [...prs.keys()];
+    const baseline = loadBaseline(store);
+    const events = store.events.listForPrs(keys);
+    for (const [key, list] of events) {
+      events.set(key, applyBaseline(list, baseline));
+    }
     return new Board(
       store,
       now,
       loadViewer(store)?.login,
       prs,
       threadsByPrKey(store.notifications.list()),
-      store.events.listForPrs(keys),
+      events,
       store.userPrStates.getMany(keys),
       new Map(store.memberships.listAll().map((m) => [m.prKey, m])),
       new Map(store.snoozes.list().map((s) => [s.tileId, s])),

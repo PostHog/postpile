@@ -15,6 +15,14 @@ describe('GitHubWriteClient', () => {
     ]);
   });
 
+  it('marks everything before a time read with one PUT, and takes a 202', async () => {
+    const fake = new FakeFetch([{ status: 202, body: { message: 'queued' } }]);
+    await new GitHubWriteClient(fakeTokens, fake.fn).markAllReadBefore('2026-09-14T12:00:00.000Z');
+    expect(fake.requests.map((r) => [r.method, r.url, r.body])).toEqual([
+      ['PUT', 'https://api.github.com/notifications', { last_read_at: '2026-09-14T12:00:00.000Z', read: true }],
+    ]);
+  });
+
   it('approves with an APPROVE review and leaves out an empty body', async () => {
     const fake = new FakeFetch([{ body: { id: 1 } }, { body: { id: 2 } }]);
     const writer = new GitHubWriteClient(fakeTokens, fake.fn);

@@ -11,6 +11,8 @@ import type {
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
+  CleanupAge,
+  InboxCleanupView,
   PendingWritesResult,
   InstructionsChatReply,
   InstructionsDecision,
@@ -45,6 +47,7 @@ import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
+import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
 import { PrActions } from './actions/pr-actions.ts';
 import { MemoryActions } from './actions/memory-actions.ts';
@@ -115,6 +118,7 @@ export class Engine implements EngineService {
   private readonly sweeper: WorkContextSweeper;
   private readonly workContext: WorkContextMemory;
   private readonly sweepSchedule: WorkContextSchedule;
+  private readonly cleanup: InboxCleanup;
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
@@ -152,6 +156,12 @@ export class Engine implements EngineService {
       capPerDay: deps.pingDecisionsPerDay ?? PING_DECISIONS_PER_DAY,
     });
     this.pollRun = new PollRun(runDeps, github, decider);
+    this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
+  }
+
+  /** After a cleanup reached GitHub: one poll cycle, so the threads it read show up as read. */
+  private async rereadInbox(): Promise<void> {
+    await this.pollOnce();
   }
 
   /** Settles when every run in the list has, whatever the outcome. */
@@ -278,8 +288,34 @@ export class Engine implements EngineService {
     return { ...change, status: this.writesStatus() };
   }
 
-  sendPendingWrites(): Promise<PendingWritesResult> {
-    return this.deps.pendingWrites.send(this.deps.markReadQueue, () => this.writesStatus());
+  async sendPendingWrites(): Promise<PendingWritesResult> {
+    const hadCleanup = this.deps.pendingWrites.pendingCleanupCutoff() !== null;
+    const result = await this.deps.pendingWrites.send(this.deps.markReadQueue, () => this.writesStatus());
+    if (hadCleanup && this.deps.pendingWrites.pendingCleanupCutoff() === null) {
+      await this.rereadInbox().catch(() => {});
+      return { ...result, status: this.writesStatus() };
+    }
+    return result;
+  }
+
+  async inboxCleanup(): Promise<InboxCleanupView> {
+    return this.cleanup.view();
+  }
+
+  cleanUpInbox(age: CleanupAge): Promise<ActionResult> {
+    return this.cleanup.markReadBefore(age);
+  }
+
+  async startFresh(): Promise<ActionResult> {
+    return this.cleanup.startFresh();
+  }
+
+  async clearStartFresh(): Promise<ActionResult> {
+    return this.cleanup.clearStartFresh();
+  }
+
+  async hideInboxCleanup(): Promise<ActionResult> {
+    return this.cleanup.hide();
   }
 
   async discardPendingWrites(): Promise<PendingWritesResult> {

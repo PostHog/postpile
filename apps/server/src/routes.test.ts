@@ -10,6 +10,8 @@ import type {
   InstructionsView,
   MemorySources,
   NotificationDebugRow,
+  GitHubWritesStatus,
+  InboxCleanupView,
   PrDetail,
   RepoOverview,
   SearchResult,
@@ -44,6 +46,28 @@ async function post<T>(app: TestApp, path: string, body: unknown = {}): Promise<
 }
 
 describe('server routes over the fake engine', () => {
+  it('shows the inbox cleanup on sample data, parks it while locked and starts fresh', async () => {
+    const app = appWithFake();
+    const view = (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
+    expect(view).toMatchObject({ unreadOlderThan14: 3, unreadOlderThan30: 1, look: 'banner', baseline: null, pendingCutoff: null });
+
+    const parked = await post<{ ok: boolean; message: string }>(app, '/api/inbox-cleanup/mark-read', { olderThanDays: 14 });
+    expect(parked.json.message).toMatch(/^Pending/);
+    const writes = (await (await app.request('/api/github-writes')).json()) as GitHubWritesStatus;
+    expect(writes.pending).toEqual([expect.objectContaining({ kind: 'mark_all_read_before', origin: 'cleanup', threadCount: 3 })]);
+    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).look).toBe('line');
+
+    await post(app, '/api/github-writes', { enabled: true });
+    await post(app, '/api/github-writes/pending/send');
+    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).unreadOlderThan14).toBe(0);
+
+    expect((await post(app, '/api/inbox-cleanup/mark-read', { olderThanDays: 7 })).status).toBe(400);
+    await post(app, '/api/inbox-cleanup/start-fresh');
+    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).baseline).not.toBeNull();
+    await app.request('/api/inbox-cleanup/start-fresh', { method: 'DELETE' });
+    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).baseline).toBeNull();
+  });
+
   it('lists repos, narrows topics to the scope and sets a repo quiet', async () => {
     const app = appWithFake();
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
