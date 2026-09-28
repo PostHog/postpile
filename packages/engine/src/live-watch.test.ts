@@ -1,5 +1,5 @@
 import type { Pr } from '@postpile/core';
-import { makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
+import { makeComment, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -208,6 +208,26 @@ describe('refresh after a write and on focus', () => {
     expect(result.ok).toBe(true);
     expect(h.reader.fetchedRefs.slice(fetches)).toEqual([[pr.ref]]);
     expect(h.store.prs.get(pr.key)?.reviewDecision).toBe('APPROVED');
+  });
+
+  it('keeps a teammate\'s comment that the refresh after an approve brings in unseen', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const comment = makeComment({ id: 'c-new', author: 'lyra', body: 'one more thing', createdAt: '2026-09-02T12:02:00.000Z' });
+    h.reader.prs.set(pr.key, {
+      ...pr,
+      updatedAt: '2026-09-02T12:02:00.000Z',
+      comments: [...pr.comments, comment],
+      reviews: [makeReview({ id: 'r-me', author: viewer.login, state: 'APPROVED' })],
+    });
+
+    await h.engine.approve(pr.key);
+
+    const fresh = h.store.events.listForPr(pr.key).filter((event) => event.sourceId === 'c-new');
+    expect(fresh).toHaveLength(1);
+    expect(fresh[0]?.seenAt).toBeNull();
   });
 
   it('looks up the thread of a PR opened on github.com, and fetches one without a thread', async () => {

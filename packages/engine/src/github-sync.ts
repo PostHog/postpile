@@ -551,10 +551,9 @@ export class GitHubSync {
     this.store.meta.set(POLLED_KEY, JSON.stringify([...new Set([...known, ...keys])]));
   }
 
-  /** PRs the poll fetched since the last full sync, still stored. Clears the list. */
-  private takePolled(skip: Map<PrKey, Pr>): Pr[] {
+  /** PRs the poll fetched since the last full sync, still stored. The list is cleared once the run got through (`run`). */
+  private polledPrs(skip: Map<PrKey, Pr>): Pr[] {
     const keys = JSON.parse(this.store.meta.get(POLLED_KEY) ?? '[]') as PrKey[];
-    this.store.meta.delete(POLLED_KEY);
     return [...this.store.prs.getMany(keys.filter((key) => !skip.has(key))).values()];
   }
 
@@ -621,22 +620,6 @@ export class GitHubSync {
     return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds, readOnGitHub };
   }
 
-  /**
-   * Fetches these PRs now and stores them, e.g. right after the app
-   * approved or commented on one, so the tile shows GitHub's new state
-   * without waiting for a thread to move. Returns the PRs stored.
-   */
-  async refreshPrs(refs: PrRef[]): Promise<PrKey[]> {
-    const viewer = loadViewer(this.store);
-    if (!viewer || refs.length === 0) {
-      return [];
-    }
-    const fetched = await this.reader.fetchPrs(refs);
-    this.storeAll(fetched, viewer);
-    this.rememberPolled([...fetched.keys()]);
-    return [...fetched.keys()];
-  }
-
   async run(maxPrs: number): Promise<GitHubSyncResult> {
     this.readOnGitHub = new Set();
     const viewer = await this.teamMembers.attach(await this.reader.viewer());
@@ -661,7 +644,7 @@ export class GitHubSync {
       newEventIds.push(...this.storePr(pr, viewer));
     }
     // The poll fetched these already; they still get their stacks walked and facts verified here.
-    const polled = this.takePolled(fetched);
+    const polled = this.polledPrs(fetched);
     const found = await this.syncFound(viewer, fetched, errors);
     let pulledIn: Pr[] = [];
     try {
@@ -669,6 +652,8 @@ export class GitHubSync {
     } catch (error) {
       errors.push(`stack layers: ${errorText(error)}`);
     }
+    // Only now: a run that threw above keeps the list for the next sync.
+    this.store.meta.delete(POLLED_KEY);
     return {
       viewer,
       notModified: notifications.notModified,

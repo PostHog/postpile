@@ -174,6 +174,20 @@ export class PingDecider {
     });
   }
 
+  /**
+   * The agent call takes seconds; the user may have read the PR meanwhile
+   * (in the app or on github.com). Only a thread that is still unread with
+   * at least one of its events still unseen pings.
+   */
+  private stillNews(candidate: Candidate): boolean {
+    const { store } = this.deps;
+    if (!store.notifications.get(candidate.threadId)?.unread) {
+      return false;
+    }
+    const ids = new Set(candidate.events.map((event) => event.id));
+    return store.events.listForPr(candidate.pr.key).some((event) => ids.has(event.id) && event.seenAt === null);
+  }
+
   async decide(prKeys: PrKey[], newEventIds: string[], viewer: Viewer): Promise<PingDecisions> {
     const { store, now } = this.deps;
     const board = Board.load(store, now().toISOString());
@@ -190,10 +204,10 @@ export class PingDecider {
         store.pingDecisions.add(decision);
       }
     });
-    const targets = new Map(candidates.map((c) => [c.threadId, c.target]));
+    const byThread = new Map(candidates.map((c) => [c.threadId, c]));
     const pings = decided
-      .filter((d) => d.ping)
-      .map((d): Ping => ({ title: d.title, body: d.body, target: targets.get(d.threadId)! }));
+      .filter((d) => d.ping && this.stillNews(byThread.get(d.threadId)!))
+      .map((d): Ping => ({ title: d.title, body: d.body, target: byThread.get(d.threadId)!.target }));
     return { decisions, pings, errors };
   }
 }

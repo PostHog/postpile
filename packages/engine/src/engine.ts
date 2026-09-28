@@ -171,13 +171,21 @@ export class Engine implements EngineService {
   }
 
   /**
-   * Right after an approve or comment reached GitHub: fetch that PR now, so
-   * the action's answer already carries GitHub's new review state. A
-   * failure is logged; the write itself went through.
+   * Right after an approve or comment reached GitHub: one poll cycle that
+   * also fetches that PR, so the action's answer already carries GitHub's
+   * new review state. It runs as a normal cycle (serialized with sync and
+   * consolidation, new events get ping handling). A cycle already running
+   * started before the write, so it is waited for first. A failure is
+   * logged; the write itself went through.
    */
   private async refreshAfterWrite(key: PrKey): Promise<void> {
+    if (this.syncing || this.consolidating) {
+      return;
+    }
+    await this.polling?.catch(() => {});
+    this.focus = { threadIds: this.focus.threadIds, prRefs: [...this.focus.prRefs, parsePrKey(key)] };
     try {
-      await this.github.refreshPrs([parsePrKey(key)]);
+      await this.pollOnce();
     } catch (error) {
       (this.deps.syncLog ?? console.log)(`refresh after write: ${key}: ${errorText(error)}`);
     }

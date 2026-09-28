@@ -47,8 +47,9 @@ export class PrActions {
       return failed(`Approve failed: ${errorText(error)}`);
     }
     this.store.userPrStates.markApproved(key, pr.headOid, this.now().toISOString());
-    await this.refreshPr(key);
+    // Mark read first: what the refresh brings in is news the user has not seen.
     const batch = this.readMarker.markRead([key], [], { origin: 'tile', tileId: null });
+    await this.refreshPr(key);
     return ok('Approved', batch.token);
   }
 

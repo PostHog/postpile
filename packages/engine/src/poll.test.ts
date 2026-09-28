@@ -72,6 +72,27 @@ describe('Engine.pollOnce', () => {
     ]);
   });
 
+  it('drops a ping when the PR was read while the agent decided', async () => {
+    const h = makeHarness();
+    const mentioned = await syncedPr(h, 1);
+    withActivity(h, mentioned, mention(mentioned), 'etag-2');
+    h.runner.answer('ping_decision', { decisions: [{ id: 'thread-1', ping: true, title: 'ask', body: '', reason: 'direct question' }] });
+    const run = h.runner.run.bind(h.runner);
+    h.runner.run = async (request) => {
+      if (request.purpose === 'ping_decision') {
+        const ids = h.store.events.listForPr(mentioned.key).map((event) => event.id);
+        h.store.events.markSeen(ids, NOW.toISOString());
+      }
+      return run(request);
+    };
+
+    const cycle = await h.engine.pollOnce();
+
+    if (cycle.kind !== 'done') throw new Error('expected a done cycle');
+    expect(cycle.decisions.map((d) => d.ping)).toEqual([true]);
+    expect(cycle.pings).toEqual([]);
+  });
+
   it('records a veto and pings nothing', async () => {
     const h = makeHarness();
     const pr = await syncedPr(h, 1);
@@ -200,6 +221,27 @@ describe('Engine.pollOnce', () => {
     // The polled PR seeds a stack walk although the sync itself fetched nothing.
     expect(h.reader.branchLookups.length).toBeGreaterThan(lookupsBefore);
     expect(h.store.meta.get('poll_fetched_since_sync')).toBeNull();
+  });
+
+  it('keeps the polled PRs for the next sync when the sync fails', async () => {
+    let clock = NOW;
+    const h = makeHarness({ now: () => clock });
+    const pr = await syncedPr(h, 1);
+    withActivity(h, pr, mention(pr), 'etag-2');
+    clock = new Date('2026-09-02T12:05:00.000Z');
+    h.runner.answer('ping_decision', { decisions: [] });
+    await h.engine.pollOnce();
+    const polled = h.store.meta.get('poll_fetched_since_sync');
+    expect(polled).not.toBeNull();
+    h.reader.addFoundPr(reviewRequestedPr(7), 'review_requested', 'review requested');
+    h.reader.fetchPrsPartial = async () => {
+      throw new Error('GitHub is down');
+    };
+
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(report.errors.join(' ')).toContain('GitHub is down');
+    expect(h.store.meta.get('poll_fetched_since_sync')).toBe(polled);
   });
 
   it('records ping_decision calls under the poll run', async () => {
