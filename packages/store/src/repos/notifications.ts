@@ -74,6 +74,11 @@ export class NotificationRepo {
     return all<ThreadRow>(this.db, 'SELECT * FROM notification_thread ORDER BY updated_at DESC, id').map(toThread);
   }
 
+  get(threadId: string): NotificationThread | null {
+    const row = one<ThreadRow>(this.db, 'SELECT * FROM notification_thread WHERE id = ?', threadId);
+    return row ? toThread(row) : null;
+  }
+
   /** GitHub keeps one thread per PR; if there are several, the newest wins. */
   getByPrKey(key: PrKey): NotificationThread | null {
     const row = one<ThreadRow>(

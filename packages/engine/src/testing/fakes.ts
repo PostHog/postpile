@@ -15,6 +15,9 @@ import { Store } from '@code-manager/store';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
+import { ActionLog } from '../writes/action-log.ts';
+import { GitHubWrites } from '../writes/github-writes.ts';
+import { WriteSwitch } from '../writes/write-switch.ts';
 import { FakeAgent } from './fake-agent.ts';
 
 function toBranchPr(pr: Pr): BranchPr {
@@ -134,34 +137,53 @@ export class FakeWriter implements GitHubWriter {
   }
 }
 
+export const NOW = new Date('2026-09-02T12:00:00Z');
+
+/** GitHubWrites over a fake writer, on unless told otherwise. */
+export function makeWrites(store: Store, writer: GitHubWriter, now: () => Date = () => NOW, enabled = true): GitHubWrites {
+  const writeSwitch = new WriteSwitch(store, writer);
+  writeSwitch.set(enabled);
+  return new GitHubWrites(writeSwitch, new ActionLog(store, now));
+}
+
 export interface Harness {
   engine: Engine;
   store: Store;
   reader: FakeReader;
   writer: FakeWriter;
+  writes: GitHubWrites;
   runner: FakeRunner;
   agent: FakeAgent;
   timers: FakeTimers;
 }
-
-export const NOW = new Date('2026-09-02T12:00:00Z');
 
 export interface HarnessOptions {
   instructionsFile?: string;
   /** Clock for the engine; tests move it forward by changing what it returns. */
   now?: () => Date;
   pingDecisionsPerDay?: number;
+  /** GitHub writes on (the default here, so action tests reach FakeWriter) or off, as on a first real run. */
+  writesEnabled?: boolean;
+  /** Build the switch with no real writer, like CODE_MANAGER_READ_ONLY=1. */
+  forcedReadOnly?: boolean;
+  /** Reuse a store, e.g. to check what survives a restart. */
+  store?: Store;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
   const instructionsFile = options.instructionsFile ?? '/nonexistent/instructions.md';
   const now = options.now ?? (() => NOW);
-  const store = Store.open(':memory:');
+  const store = options.store ?? Store.open(':memory:');
   const reader = new FakeReader();
   const writer = new FakeWriter();
+  const writeSwitch = new WriteSwitch(store, options.forcedReadOnly ? null : writer);
+  if (options.writesEnabled ?? true) {
+    writeSwitch.set(true);
+  }
+  const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const runner = new FakeRunner();
   const timers = new FakeTimers();
-  const markReadQueue = new MarkReadQueue(writer, reader, timers, undefined, (threadId, readAt) =>
+  const markReadQueue = new MarkReadQueue(writes, reader, timers, undefined, (threadId, readAt) =>
     store.notifications.markRead(threadId, readAt),
   );
   const callLog = new AgentCallLog(store, now);
@@ -169,7 +191,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const engine = new Engine({
     store,
     reader,
-    writer,
+    writes,
     agent,
     callLog,
     markReadQueue,
@@ -178,5 +200,5 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     timers,
     pingDecisionsPerDay: options.pingDecisionsPerDay,
   });
-  return { engine, store, reader, writer, runner, agent, timers };
+  return { engine, store, reader, writer, writes, runner, agent, timers };
 }

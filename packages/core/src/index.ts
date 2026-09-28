@@ -2,6 +2,7 @@ export * from './types.ts';
 export * from './views.ts';
 export * from './debug-views.ts';
 export * from './debug-notifications.ts';
+export * from './github-writes.ts';
 export * from './keys.ts';
 export * from './bots.ts';
 export * from './kinds.ts';

@@ -2,6 +2,7 @@ import {
   caresAboutUnreviewedMerges,
   deriveEvents,
   prKey,
+  threadPrKey,
   type NotificationThread,
   type Pr,
   type PrKey,
@@ -15,6 +16,7 @@ import type { PromptContextSource } from './prompt-context.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
 import { loadViewer, saveViewer } from './viewer-meta.ts';
+import type { ActionLog } from './writes/action-log.ts';
 
 const ETAG_KEY = 'notifications_etag';
 const LAST_MODIFIED_KEY = 'notifications_last_modified';
@@ -80,6 +82,7 @@ export class GitHubSync {
     private readonly reader: GitHubReader,
     private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
+    private readonly log: ActionLog,
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.teamMembers = new TeamMembers(store, reader, now);
@@ -93,7 +96,12 @@ export class GitHubSync {
     }
   }
 
-  private async syncNotifications(): Promise<NotificationsSync> {
+  /**
+   * `origin` is who noticed: a thread that left the inbox was read on
+   * github.com or another client, and that lands in the action log as
+   * observed. Nothing here writes to GitHub.
+   */
+  private async syncNotifications(origin: 'sync' | 'poll'): Promise<NotificationsSync> {
     const result = await this.reader.listNotifications({
       etag: this.store.meta.get(ETAG_KEY),
       lastModified: this.store.meta.get(LAST_MODIFIED_KEY),
@@ -110,6 +118,14 @@ export class GitHubSync {
       for (const stored of this.store.notifications.list()) {
         if (stored.unread && !fetchedIds.has(stored.id)) {
           this.store.notifications.markRead(stored.id, at);
+          this.log.record({
+            action: 'mark_read',
+            origin,
+            outcome: 'observed',
+            threadId: stored.id,
+            prKey: threadPrKey(stored),
+            detail: 'left the inbox: read on github.com or another client',
+          });
         }
       }
       this.setMeta(ETAG_KEY, result.etag);
@@ -247,7 +263,7 @@ export class GitHubSync {
    */
   async poll(maxPrs: number): Promise<InboxPollResult> {
     const firstLook = this.store.notifications.list().length === 0;
-    const notifications = await this.syncNotifications();
+    const notifications = await this.syncNotifications('poll');
     const { pollIntervalSeconds } = notifications;
     if (notifications.notModified) {
       return { notModified: true, pollIntervalSeconds, firstLook, viewer: null, fetchedPrKeys: [], newEventIds: [] };
@@ -265,7 +281,7 @@ export class GitHubSync {
   async run(maxPrs: number): Promise<GitHubSyncResult> {
     const viewer = await this.teamMembers.attach(await this.reader.viewer());
     saveViewer(this.store, viewer);
-    const notifications = await this.syncNotifications();
+    const notifications = await this.syncNotifications('sync');
 
     const candidates = this.candidates();
     const picked = candidates.slice(0, maxPrs);

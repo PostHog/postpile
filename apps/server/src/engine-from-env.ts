@@ -24,15 +24,12 @@ export function syncCallCapFromEnv(value: string | undefined): number {
 }
 
 /**
- * GitHub-writing actions (approve, comment, mark read) stay blocked in the UI
- * unless CODE_MANAGER_ALLOW_WRITES=1. Sample data never reaches GitHub, so
- * fake mode allows them to keep every flow clickable.
+ * Fixed for the process. Whether GitHub writes are on is the engine's
+ * runtime switch (footer lock, GET /api/github-writes), not config.
  */
 export function appConfigFromEnv(): AppConfig {
-  const fake = isFake();
   return {
-    fake,
-    writesAllowed: fake || process.env.CODE_MANAGER_ALLOW_WRITES === '1',
+    fake: isFake(),
     syncCallCap: syncCallCapFromEnv(process.env.CODE_MANAGER_MAX_AGENT_CALLS),
   };
 }

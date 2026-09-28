@@ -1,4 +1,5 @@
 import type {
+  ActionLogEntry,
   ActionResult,
   ChatMessage,
   ChatReply,
@@ -7,6 +8,8 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  GitHubWritesChange,
+  GitHubWritesStatus,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposalReply,
@@ -65,6 +68,17 @@ export interface EngineService {
    * threads with where each landed in the app. Read only, never marks anything read.
    */
   debugNotifications(limit: number): Promise<NotificationDebugRow[]>;
+  /** The newest `limit` action log entries: every GitHub-affecting action, local mark-reads and bring-backs. */
+  actionLog(limit: number): Promise<ActionLogEntry[]>;
+
+  /** The footer lock: are GitHub writes on, and is read-only forced by the env. */
+  githubWrites(): Promise<GitHubWritesStatus>;
+  /**
+   * Flips the lock at runtime and keeps the choice. Refused (ok false) when
+   * CODE_MANAGER_READ_ONLY=1 forces read-only. Mark-reads queued while off
+   * stay local even if writes come on inside their undo window.
+   */
+  setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange>;
   /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
   /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */
@@ -75,8 +89,19 @@ export interface EngineService {
 
   /** Immediate and final: GitHub approvals cannot be undone. */
   approve(prKey: PrKey): Promise<ActionResult>;
-  /** Marks the tile's events seen and queues the GitHub mark-read behind the undo window. */
+  /**
+   * Marks the tile's events seen and queues the GitHub mark-read behind the
+   * undo window. With GitHub writes off it only changes the app.
+   */
   markRead(tileId: string): Promise<ActionResult>;
+  /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
+  markThreadRead(threadId: string): Promise<ActionResult>;
+  /**
+   * "Bring back" in the debug view: GitHub has no mark-unread, so this resets
+   * the app's own state only. The PR is not handled any more and its tiles
+   * read as unread ("brought back by you") until the next mark-read.
+   */
+  bringBack(prKey: PrKey): Promise<ActionResult>;
   /** undoToken null undoes the most recent pending mark-read batch. Memory correction tokens undo that correction. */
   undo(undoToken: string | null): Promise<ActionResult>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult>;

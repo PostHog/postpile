@@ -175,4 +175,52 @@ describe('FakeEngine rechecks', () => {
     await engine.undo(fixed.undoToken);
     expect((await engine.getPr(key))?.facts.map((view) => view.fact.text).sort()).toEqual([...before].sort());
   });
+
+  it('flips the writes lock and fills the action log with fake queue sends', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now });
+    expect(await engine.githubWrites()).toEqual({ enabled: false, forcedOffReason: null });
+    await engine.setGitHubWrites(true);
+
+    const marked = await engine.markRead('set:turbo-cache');
+    expect(marked.message).not.toMatch(/here only/);
+    now = new Date(now.getTime() + 7000);
+
+    const rows = await engine.debugNotifications(100);
+    const sent = rows.filter((row) => row.lastAction?.origin === 'queue');
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((row) => !row.thread.unread && row.lastAction?.outcome === 'github' && row.decidedBy?.origin === 'tile')).toBe(true);
+    const log = await engine.actionLog(50);
+    expect(log.at(-1)).toMatchObject({ action: 'writes_on', origin: 'footer' });
+  });
+
+  it('keeps read-only mark-reads local: the sample thread stays unread "on GitHub"', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now });
+    const before = await engine.debugNotifications(100);
+    const unread = before.filter((row) => row.thread.unread && row.landing.kind === 'tile' && row.landing.tileId === 'set:turbo-cache');
+    expect(unread.length).toBeGreaterThan(0);
+
+    await engine.markRead('set:turbo-cache');
+    await engine.setGitHubWrites(true);
+    now = new Date(now.getTime() + 7000);
+
+    const after = await engine.debugNotifications(100);
+    for (const row of unread) {
+      const again = after.find((candidate) => candidate.thread.id === row.thread.id);
+      expect(again?.thread.unread).toBe(true);
+      expect(again?.lastAction).toMatchObject({ action: 'mark_read', outcome: 'local' });
+    }
+  });
+
+  it('brings a PR back: its tile turns unread with "brought back by you"', async () => {
+    const engine = new FakeEngine();
+    await engine.markRead('pr:PostHog/posthog#41822');
+    await engine.bringBack('PostHog/posthog#41822');
+    const topicId = (await engine.getPr('PostHog/posthog#41822'))?.topicId;
+    const topic = await engine.getTopic(topicId!);
+    const view = topic?.tiles.find((candidate) => candidate.tile.id === 'pr:PostHog/posthog#41822');
+    expect(view?.state.kind).toBe('unread');
+    expect(view?.state.unreadBecause[0]).toMatchObject({ kind: 'brought_back', summary: 'brought back by you' });
+  });
 });

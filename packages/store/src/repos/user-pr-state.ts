@@ -7,6 +7,7 @@ interface UserPrStateRow {
   approved_at: string | null;
   approved_commit_oid: string | null;
   handled_at: string | null;
+  brought_back_at: string | null;
 }
 
 function toState(row: UserPrStateRow): UserPrState {
@@ -15,6 +16,7 @@ function toState(row: UserPrStateRow): UserPrState {
     approvedAt: row.approved_at,
     approvedCommitOid: row.approved_commit_oid,
     handledAt: row.handled_at,
+    broughtBackAt: row.brought_back_at,
   };
 }
 
@@ -63,5 +65,21 @@ export class UserPrStateRepo {
   /** Undo of a local mark-read inside the 6s window. */
   clearHandled(prKey: PrKey): void {
     run(this.db, 'UPDATE user_pr_state SET handled_at = NULL WHERE pr_key = ?', prKey);
+  }
+
+  /** "Bring back": not handled any more, and unread until the next mark-read. */
+  markBroughtBack(prKey: PrKey, at: string): void {
+    run(
+      this.db,
+      `INSERT INTO user_pr_state (pr_key, brought_back_at) VALUES (?, ?)
+       ON CONFLICT (pr_key) DO UPDATE SET brought_back_at = excluded.brought_back_at, handled_at = NULL`,
+      prKey,
+      at,
+    );
+  }
+
+  /** A mark-read ends a bring-back; its undo passes the old value back in. */
+  setBroughtBack(prKey: PrKey, at: string | null): void {
+    run(this.db, 'UPDATE user_pr_state SET brought_back_at = ? WHERE pr_key = ?', at, prKey);
   }
 }

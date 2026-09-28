@@ -469,12 +469,14 @@ function buildUserStates(clock: SampleClock): UserPrState[] {
     approvedAt: clock.hoursAgo(hoursAgo),
     approvedCommitOid: `sha${number}`,
     handledAt: null,
+    broughtBackAt: null,
   });
   const approvedOlderHead: UserPrState = {
     prKey: sampleKey(41911),
     approvedAt: clock.hoursAgo(4),
     approvedCommitOid: 'sha41911-a',
     handledAt: null,
+    broughtBackAt: null,
   };
   return [approved(41899, 24), approvedOlderHead];
 }

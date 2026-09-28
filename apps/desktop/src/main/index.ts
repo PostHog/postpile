@@ -96,7 +96,7 @@ async function start(): Promise<void> {
   // The token keeps other local processes and web pages from driving the API.
   const token = randomBytes(24).toString('hex');
   // CODE_MANAGER_FAKE=1 runs on sample data, see engineFromEnv.
-  // CODE_MANAGER_ALLOW_WRITES=1 unblocks GitHub writes in the UI, see appConfigFromEnv.
+  // GitHub writes stay off until the footer lock is opened (kept in the store); CODE_MANAGER_READ_ONLY=1 forces off.
   engine = engineFromEnv();
   server = await startServer({ engine, port: 0, token, config: appConfigFromEnv() });
   mainWindow = await openWindow(server.url, token);

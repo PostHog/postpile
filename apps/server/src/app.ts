@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
-import { DEBUG_NOTIFICATIONS_DEFAULT_LIMIT, DEBUG_NOTIFICATIONS_MAX_LIMIT, prKey, type AppConfig } from '@code-manager/core';
+import {
+  ACTION_LOG_DEFAULT_LIMIT,
+  ACTION_LOG_MAX_LIMIT,
+  DEBUG_NOTIFICATIONS_DEFAULT_LIMIT,
+  DEBUG_NOTIFICATIONS_MAX_LIMIT,
+  prKey,
+  type AppConfig,
+} from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 
 /** Every /api request must carry the server's token in this header. */
@@ -49,6 +56,7 @@ const memoryRecheckBody = z.object({
 });
 
 const debugLimit = z.coerce.number().int().positive().max(DEBUG_NOTIFICATIONS_MAX_LIMIT).default(DEBUG_NOTIFICATIONS_DEFAULT_LIMIT);
+const actionLogLimit = z.coerce.number().int().positive().max(ACTION_LOG_MAX_LIMIT).default(ACTION_LOG_DEFAULT_LIMIT);
 
 const syncBody = z
   .object({
@@ -172,6 +180,15 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   app.get('/api/search', async (c) => c.json(await engine.search(c.req.query('q') ?? '')));
   // Debug view of the stored notification threads. Read only: nothing is marked read.
   app.get('/api/debug/notifications', async (c) => c.json(await engine.debugNotifications(debugLimit.parse(c.req.query('limit')))));
+  app.get('/api/debug/actions', async (c) => c.json(await engine.actionLog(actionLogLimit.parse(c.req.query('limit')))));
+  // Debug view actions. Mark read goes through the same queue, lock and log as a tile; bring back is local only.
+  app.post('/api/notifications/:threadId/mark-read', async (c) => c.json(await engine.markThreadRead(c.req.param('threadId'))));
+  // The footer lock. Turning writes on answers ok: false while CODE_MANAGER_READ_ONLY=1 forces read-only.
+  app.get('/api/github-writes', async (c) => c.json(await engine.githubWrites()));
+  app.post('/api/github-writes', async (c) => {
+    const body = z.object({ enabled: z.boolean() }).parse(await c.req.json());
+    return c.json(await engine.setGitHubWrites(body.enabled));
+  });
   app.get('/api/topics/:id', async (c) => {
     const topic = await engine.getTopic(c.req.param('id'));
     return topic ? c.json(topic) : c.json({ error: 'not found' }, 404);
@@ -223,6 +240,9 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   });
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
     return c.json(await engine.approve(prKeyFromParams(c.req.param())));
+  });
+  app.post('/api/prs/:owner/:repo/:number/bring-back', async (c) => {
+    return c.json(await engine.bringBack(prKeyFromParams(c.req.param())));
   });
   app.post('/api/prs/:owner/:repo/:number/draft-ask', async (c) => {
     const body = z.object({ person: z.string(), intent: z.string().default('') }).parse(await c.req.json());

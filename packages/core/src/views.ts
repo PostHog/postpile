@@ -252,13 +252,12 @@ export type MemoryRecheckResult =
   | { status: 'unavailable'; reason: 'budget' | 'failed' | 'not_found'; message: string };
 
 /**
- * How the server runs, for the UI. writesAllowed is false unless the process
- * was started with CODE_MANAGER_ALLOW_WRITES=1 (or runs on sample data, where
- * nothing reaches GitHub); the renderer blocks GitHub-writing actions then.
+ * How the server runs, for the UI. Fixed for the process. Whether GitHub
+ * writes are on is not here: it changes at runtime (the footer lock, see
+ * GitHubWritesStatus and GET /api/github-writes).
  */
 export interface AppConfig {
   fake: boolean;
-  writesAllowed: boolean;
   /**
    * Agent-call cap for syncs the app starts (on launch and "Sync now") when
    * the request names none. CODE_MANAGER_MAX_AGENT_CALLS, default 30. Work
