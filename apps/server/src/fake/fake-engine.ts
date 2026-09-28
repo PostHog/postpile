@@ -298,7 +298,8 @@ export class FakeEngine implements EngineService {
 
   private tileState(tile: Tile): TileState {
     const unreadBecause: UnreadReason[] = [];
-    for (const member of tile.members) {
+    // A found PR (no notification) never makes its tile unread, like the real rule.
+    for (const member of tile.members.filter((candidate) => candidate.provenance.kind !== 'found')) {
       for (const event of this.eventsOf(member.prKey).filter(isUnseenLoud)) {
         unreadBecause.push({
           prKey: member.prKey,
@@ -316,7 +317,7 @@ export class FakeEngine implements EngineService {
     if (this.isSnoozed(tile.id)) {
       return { kind: 'snoozed', unreadBecause };
     }
-    const pingedMembers = tile.members.filter((member) => member.provenance.kind === 'pinged');
+    const pingedMembers = tile.members.filter((member) => member.provenance.kind !== 'pulled_in');
     if (pingedMembers.every((member) => this.isPrDone(member.prKey))) {
       return { kind: 'done', unreadBecause };
     }
@@ -360,7 +361,7 @@ export class FakeEngine implements EngineService {
         glanceStale: false,
         forYou: glance?.forYou ?? null,
         glanceGap: this.glanceGapOf(pr.key),
-        unseenLoudEvents: this.eventsOf(pr.key).filter(isUnseenLoud).length,
+        unseenLoudEvents: member.provenance.kind === 'found' ? 0 : this.eventsOf(pr.key).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
         quietRepo,
       });
@@ -447,6 +448,7 @@ export class FakeEngine implements EngineService {
       prsFetched: 0,
       prsSkipped: 0,
       prsPulledIn: 0,
+      prsFound: 0,
       newEvents: 0,
       agentCalls: 4,
       agentCallStats: sampleSyncStats(),
@@ -782,7 +784,7 @@ export class FakeEngine implements EngineService {
       return fail(`no tile ${tileId}`);
     }
     const keys = tile.members.map((member) => member.prKey);
-    const pinged = tile.members.filter((member) => member.provenance.kind === 'pinged').map((member) => member.prKey);
+    const pinged = tile.members.filter((member) => member.provenance.kind !== 'pulled_in').map((member) => member.prKey);
     return this.markPrsRead(keys, pinged, 'tile', tileId);
   }
 

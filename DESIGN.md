@@ -23,13 +23,31 @@ read, never stored.
 
 - `pinged`: GitHub notified the user (review request, mention, team mention,
   author, subscribed, ...)
+- `found`: not in the inbox; the full sync found it with one GraphQL request
+  (`findPrs`, `buildFoundQuery` in packages/github; never in the live poll):
+  the user's own open PRs (`own_open`, "your open PR", code AU), reviews asked
+  of them (`review_requested`, `user-review-requested:@me`, RV) or of each of
+  their teams (`team_review_requested`, one search alias per team, RT), and PRs
+  involving them merged in the last 7 days (`involved_merged`, AU or CM).
+  Ids and updatedAt only, at most 200; stored in `pr_found` (migration 014,
+  replaced on every sync); PRs not stored yet or with a newer updatedAt go
+  through the batched PR fetch, unchanged ones are skipped. No teammates'-PR
+  fetch.
 - `pulled_in`: a stack layer the sync fetched by branch to complete a pinged
   PR's stack, reason "stack layer below/above #N" (see "Stack completion")
 
-A tile only exists if at least one member is pinged. Provenance is derived from
-whether a notification thread exists, so a pulled-in PR that later gets a real
-ping becomes pinged without anything having to update it. Sets are agent-grouped
-among pinged PRs only; the agent never pulls PRs in.
+A tile only exists if at least one member is pinged or found (`isTracked`).
+Provenance is derived: a notification thread makes a PR pinged, then a
+`pr_found` row makes it found, then a pinging event, else pulled in. So a
+pulled-in or found PR that later gets a real ping becomes pinged without
+anything having to update it. Found PRs work like pinged ones for tiles,
+topics (Unsorted until assigned), dossiers, glances, whose turn and the
+queues, but never make a tile unread on their own (their loud events are
+skipped in `unreadReasons`, `unseenLoudEvents` is 0); an owed review still
+says "Your move" and lifts the topic. Quiet repos apply to them too. The why
+badge tooltip says "found: <reason>; not in your inbox, found via GitHub".
+Stack completion still only walks from PRs with a thread. Sets are
+agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 **Events**: every GitHub activity on a PR becomes an event line. Loudness:
 
@@ -98,10 +116,10 @@ github.com while the app was closed turns calm on the next start.
 
 - **Read list**: besides the unread inbox, the sync asks
   `GET /notifications?all=true&since=<start of the last full sync>` (all
-  pages, own ETag, meta `read_threads_since` / `read_threads_etag`; the
-  first run looks back 3 days). The full sync always asks and then moves
+  pages, own ETag, meta `read_threads_since` / `read_threads_etag`). The full sync always asks and then moves
   `since` to its own start; the live poll asks only when the inbox moved,
-  with the same `since`, so it mostly gets a 304. Read threads the app never
+  with the same `since`, so it mostly gets a 304. Without a stored `since`
+  (first run, or no last-sync marker) it looks back 7 days. Read threads the app never
   saw unread are stored too, and their PRs are fetched like unread ones: a
   PR handled entirely on github.com still gets its events logged (as seen),
   lands in Unsorted / a topic and feeds dossiers and facts.

@@ -11,6 +11,7 @@ import type {
   NotificationsResult,
   TeamMembersResult,
   ThreadsSinceResult,
+  FoundRef,
 } from '@postpile/github';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
@@ -102,6 +103,27 @@ export class FakeReader implements GitHubReader {
     }
     const threads = (this.readList ?? this.threads).filter((thread) => thread.updatedAt >= since);
     return { notModified: false, threads, etag: this.readListEtag };
+  }
+
+  /** What findPrs answers; set with addFoundPr. */
+  found: FoundRef[] = [];
+  /** Every findPrs call as [teams, mergedSince]. */
+  findCalls: [string[], string][] = [];
+  /** Set to make findPrs throw. */
+  findError: Error | null = null;
+
+  /** A PR on GitHub without a notification, which the finder query returns. */
+  addFoundPr(pr: Pr, via: FoundRef['via'], reason: string): void {
+    this.prs.set(pr.key, pr);
+    this.found = [...this.found.filter((entry) => `${entry.ref.repo}#${entry.ref.number}` !== pr.key), { ref: pr.ref, updatedAt: pr.updatedAt, via, reason }];
+  }
+
+  async findPrs(teams: string[], mergedSince: string): Promise<FoundRef[]> {
+    this.findCalls.push([teams, mergedSince]);
+    if (this.findError) {
+      throw this.findError;
+    }
+    return this.found.map((entry) => ({ ...entry, updatedAt: this.prs.get(`${entry.ref.repo}#${entry.ref.number}`)?.updatedAt ?? entry.updatedAt }));
   }
 
   async getThread(threadId: string): Promise<NotificationThread | null> {

@@ -309,3 +309,15 @@ describe('FakeEngine queues', () => {
     expect(set?.prs[0]?.authorRelation).toBe('team');
   });
 });
+
+describe('FakeEngine found PRs', () => {
+  it('shows found PRs calm, with their turn and a why code', async () => {
+    const engine = new FakeEngine();
+    const detail = await engine.getTopic('topic-ci-tests');
+    const byKey = new Map(detail!.tiles.map((view) => [view.prs[0]!.key, view]));
+    const review = byKey.get('PostHog/posthog#41955');
+    expect(review).toMatchObject({ state: { kind: 'open' }, why: 'RV', turn: { kind: 'you' } });
+    expect(review?.prs[0]?.provenance).toEqual({ kind: 'found', via: 'review_requested', reason: 'review requested from you' });
+    expect(byKey.get('PostHog/posthog#41950')?.why).toBe('AU');
+  });
+});

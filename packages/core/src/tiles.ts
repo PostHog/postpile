@@ -1,8 +1,9 @@
 import { isUnseenLoud } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
-import { isPinged, provenanceFor } from './provenance.ts';
+import { isTracked, provenanceFor } from './provenance.ts';
 import { breaksSnooze, isSnoozeOver } from './snooze.ts';
 import type {
+  FoundPr,
   IsoTime,
   NotificationThread,
   Pr,
@@ -44,6 +45,8 @@ export interface TopicTilesInput {
   events?: Map<PrKey, PrEvent[]>;
   /** Why the sync pulled in a stack layer ("stack layer below #12"), by PR. */
   pullInReasons?: Map<PrKey, string>;
+  /** PRs the full sync found outside the inbox, by PR. */
+  found?: Map<PrKey, FoundPr>;
 }
 
 /** Most urgent first. Used to sort tiles for display and for the glance budget. */
@@ -93,9 +96,10 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewerLogin?: st
   return approvedHeadOnGitHub(pr, viewerLogin);
 }
 
+/** A found PR (no notification thread) never makes its tile unread; its events are there for whose turn and memory. */
 function unreadReasons(input: TileStateInput): UnreadReason[] {
   const reasons: UnreadReason[] = [];
-  for (const member of input.tile.members) {
+  for (const member of input.tile.members.filter((m) => m.provenance.kind !== 'found')) {
     for (const event of input.events.get(member.prKey) ?? []) {
       if (!isUnseenLoud(event)) {
         continue;
@@ -128,7 +132,7 @@ function isSnoozeActive(input: TileStateInput): boolean {
 }
 
 function allPingedDone(input: TileStateInput): boolean {
-  return input.tile.members.filter((m) => isPinged(m.provenance)).every((member) => {
+  return input.tile.members.filter((m) => isTracked(m.provenance)).every((member) => {
     const pr = input.prs.get(member.prKey);
     if (!pr) {
       return false;
@@ -170,7 +174,7 @@ export function explainTileState(state: TileState): string {
 function memberFor(input: TopicTilesInput, prKey: PrKey, pulledInReason: string): TileMember {
   const thread = input.threads.get(prKey) ?? null;
   const events = input.events?.get(prKey) ?? [];
-  return { prKey, provenance: provenanceFor(thread, pulledInReason, events) };
+  return { prKey, provenance: provenanceFor(thread, pulledInReason, events, input.found?.get(prKey) ?? null) };
 }
 
 function prTitle(input: TopicTilesInput, prKey: PrKey): string {
@@ -209,7 +213,7 @@ function setTiles(input: TopicTilesInput): Tile[] {
 /**
  * Builds the tiles of one topic. Stacks come first, then sets, then a single
  * tile for every topic PR that is in neither. A PR can be in a stack and a
- * set at once. Tiles without a pinged member are dropped.
+ * set at once. Tiles without a pinged or found member are dropped.
  */
 export function buildTopicTiles(input: TopicTilesInput): Tile[] {
   const memberKeys = new Set(input.memberKeys);
@@ -224,5 +228,5 @@ export function buildTopicTiles(input: TopicTilesInput): Tile[] {
       title: prTitle(input, key),
       members: [memberFor(input, key, 'in this topic')],
     }));
-  return [...grouped, ...singles].filter((tile) => tile.members.some((m) => isPinged(m.provenance)));
+  return [...grouped, ...singles].filter((tile) => tile.members.some((m) => isTracked(m.provenance)));
 }

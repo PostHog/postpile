@@ -21,7 +21,7 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
       </span>
       {counts && (
         <span>
-          {counts.pinged} pinged · {counts.pulledIn} pulled in
+          {counts.pinged} pinged{counts.found > 0 ? ` · ${counts.found} found` : ''} · {counts.pulledIn} pulled in
         </span>
       )}
       <WritesLock />

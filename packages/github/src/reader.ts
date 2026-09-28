@@ -1,4 +1,5 @@
 import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@postpile/core';
+import type { FoundRef } from './found.ts';
 
 export interface NotificationConditions {
   etag: string | null;
@@ -67,6 +68,13 @@ export interface GitHubReader {
    * Never marks anything read.
    */
   listThreadsSince(since: IsoTime, etag: string | null): Promise<ThreadsSinceResult>;
+
+  /**
+   * PRs the inbox may not show, in one GraphQL request: the viewer's own
+   * open PRs, reviews asked of them or of `teams`, and PRs involving them
+   * merged since `mergedSince` (YYYY-MM-DD). Ids and updatedAt only.
+   */
+  findPrs(teams: string[], mergedSince: string): Promise<FoundRef[]>;
 
   /** One thread by id, read or unread. Null when GitHub answers 404. */
   getThread(threadId: string): Promise<NotificationThread | null>;

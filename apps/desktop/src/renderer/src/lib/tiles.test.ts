@@ -73,6 +73,13 @@ describe('tile helpers', () => {
   it('counts a PR pinged in any tile as pinged, once', () => {
     const first = setView([summary(1), summary(2, { provenance: pulled })]);
     const second = setView([summary(2), summary(3, { provenance: pulled })]);
-    expect(countPrs([first, second])).toEqual({ pinged: 2, pulledIn: 1 });
+    expect(countPrs([first, second])).toEqual({ pinged: 2, found: 0, pulledIn: 1 });
+  });
+
+  it('counts found PRs apart, unless pinged elsewhere', () => {
+    const found = { kind: 'found' as const, via: 'own_open' as const, reason: 'your open PR' };
+    const view = setView([summary(1, { provenance: found }), summary(2), summary(3, { provenance: pulled })]);
+    expect(countPrs([view])).toEqual({ pinged: 1, found: 1, pulledIn: 1 });
+    expect(leadPr(setView([summary(4, { provenance: pulled, state: 'OPEN' }), summary(5, { provenance: found })]))?.key).toBe('PostHog/posthog#5');
   });
 });

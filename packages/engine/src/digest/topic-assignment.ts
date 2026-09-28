@@ -52,8 +52,10 @@ export class TopicAssigner {
   private unassignedPrs(): Pr[] {
     const { store } = this.deps;
     const keys = store.memberships.listUnassignedPrKeys().filter((key) => !this.isDeferred(key));
+    // Pinged or found; a pulled-in stack layer gets no topic of its own.
     const threads = store.notifications.getByPrKeys(keys);
-    return [...store.prs.getMany(keys.filter((key) => threads.has(key))).values()];
+    const found = store.foundPrs.listAll();
+    return [...store.prs.getMany(keys.filter((key) => threads.has(key) || found.has(key))).values()];
   }
 
   /** Active topics plus topics retired in the last 30 days. */

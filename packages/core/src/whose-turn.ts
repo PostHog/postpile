@@ -2,7 +2,7 @@
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
 import { isBot } from './bots.ts';
 import { isUnseenLoud } from './loudness.ts';
-import { isPinged } from './provenance.ts';
+import { isTracked } from './provenance.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
 
@@ -308,7 +308,7 @@ export function isMergeApprovedMove(turn: WhoseTurn): boolean {
 }
 
 /**
- * Whose move it is on a tile. Each pinged PR gets a turn by the rules in
+ * Whose move it is on a tile. Each pinged or found PR gets a turn by the rules in
  * DESIGN.md; the tile takes the most urgent one (you over them over none).
  * On a tie the PR with the newest unseen loud event wins, so the footer
  * talks about the same PR as the unread strip; else the first in tile order.
@@ -324,7 +324,7 @@ export function whoseTurn(input: WhoseTurnInput): WhoseTurn {
   let bestNews = '';
   for (const member of input.tile.members) {
     const pr = input.prs.get(member.prKey);
-    if (!pr || !isPinged(member.provenance)) {
+    if (!pr || !isTracked(member.provenance)) {
       continue;
     }
     const events = input.events.get(pr.key) ?? [];

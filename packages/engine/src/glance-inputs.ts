@@ -1,6 +1,6 @@
 import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@postpile/agent';
 import {
-  isPinged,
+  isTracked,
   TILE_STATE_ORDER,
   withoutStaleClaims,
   type DossierVersion,
@@ -26,7 +26,7 @@ interface TopicParts {
 }
 
 /**
- * Open pinged PRs in tiles, most urgent tile first. Pulled-in stack layers
+ * Open pinged and found PRs in tiles, most urgent tile first. Pulled-in stack layers
  * get no glance: they are context for the pinged PR, not work of their own.
  */
 function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
@@ -38,7 +38,7 @@ function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   for (const { tile } of tiles) {
     for (const member of tile.members) {
       const pr = board.prs.get(member.prKey);
-      if (pr?.state !== 'OPEN' || !isPinged(member.provenance) || result.has(member.prKey)) {
+      if (pr?.state !== 'OPEN' || !isTracked(member.provenance) || result.has(member.prKey)) {
         continue;
       }
       result.set(member.prKey, { pr, provenance: member.provenance });

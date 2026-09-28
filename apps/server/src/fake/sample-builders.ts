@@ -262,6 +262,11 @@ export function pinged(number: number, reason: Extract<Provenance, { kind: 'ping
   return { prKey: sampleKey(number), provenance: { kind: 'pinged', reason } };
 }
 
+/** A PR the sync found outside the inbox (own open PR, review request, recent merge). */
+export function found(number: number, via: Extract<Provenance, { kind: 'found' }>['via'], reason: string): TileMember {
+  return { prKey: sampleKey(number), provenance: { kind: 'found', via, reason } };
+}
+
 export function pulledIn(number: number, reason: string): TileMember {
   return { prKey: sampleKey(number), provenance: { kind: 'pulled_in', reason } };
 }

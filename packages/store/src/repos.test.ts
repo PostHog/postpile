@@ -514,3 +514,14 @@ describe('PendingWriteRepo', () => {
     expect(store.pendingWrites.list().map((write) => write.batch)).toEqual(['b2']);
   });
 });
+
+describe('FoundPrRepo', () => {
+  it('replaces the whole list on every sync', () => {
+    store.foundPrs.replaceAll([
+      { prKey: 'a/b#1', via: 'own_open', reason: 'your open PR', foundAt: at(1) },
+      { prKey: 'a/b#2', via: 'review_requested', reason: 'review requested from you', foundAt: at(1) },
+    ]);
+    store.foundPrs.replaceAll([{ prKey: 'a/b#2', via: 'team_review_requested', reason: 'review requested from o/t', foundAt: at(2) }]);
+    expect([...store.foundPrs.listAll().values()]).toEqual([{ prKey: 'a/b#2', via: 'team_review_requested', reason: 'review requested from o/t', foundAt: at(2) }]);
+  });
+});

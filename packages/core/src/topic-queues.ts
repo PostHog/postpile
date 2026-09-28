@@ -103,13 +103,13 @@ export function tileTier(tiers: PrTier[]): PrTier {
 }
 
 /**
- * PRs some tile of the topic holds as pinged. Any other PR there was only
- * pulled in as a stack layer: context on its tile, outside the queues.
+ * PRs some tile of the topic holds as pinged or found. Any other PR there was
+ * only pulled in as a stack layer: context on its tile, outside the queues.
  */
 export function pingedPrKeys(tiles: Tile[]): Set<PrKey> {
   const keys = new Set<PrKey>();
   for (const member of tiles.flatMap((tile) => tile.members)) {
-    if (member.provenance.kind === 'pinged') {
+    if (member.provenance.kind !== 'pulled_in') {
       keys.add(member.prKey);
     }
   }

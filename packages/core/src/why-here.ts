@@ -2,7 +2,7 @@
 // the notification reason (provenance) plus what the PR says about the
 // viewer and their teams. The UI shows it as a mono badge with a tooltip.
 import { isOwnTeam, sameLogin } from './mentions.ts';
-import type { Pr, Provenance, Viewer } from './types.ts';
+import type { FoundVia, Pr, Provenance, Viewer } from './types.ts';
 
 /**
  * RV review asked of you, RT review asked of your team, @ mentioned you,
@@ -39,12 +39,29 @@ function reviewRequestCode(pr: Pr, viewer: Viewer): 'RV' | 'RT' {
   return 'RV';
 }
 
+/** A found PR reuses the codes of the notification it would have had. */
+function foundCode(via: FoundVia, authored: boolean): WhyCode {
+  switch (via) {
+    case 'own_open':
+      return 'AU';
+    case 'review_requested':
+      return 'RV';
+    case 'team_review_requested':
+      return 'RT';
+    case 'involved_merged':
+      return authored ? 'AU' : 'CM';
+  }
+}
+
 /** The code for one PR in a tile. `pr` and `viewer` sharpen it; without them the reason alone decides. */
 export function whyHere(provenance: Provenance, pr: Pr | null, viewer: Viewer | null): WhyCode {
   if (provenance.kind === 'pulled_in') {
     return 'ST';
   }
   const authored = pr !== null && viewer !== null && sameLogin(pr.author, viewer.login);
+  if (provenance.kind === 'found') {
+    return foundCode(provenance.via, authored);
+  }
   switch (provenance.reason) {
     case 'review_requested':
     case 'approval_requested':

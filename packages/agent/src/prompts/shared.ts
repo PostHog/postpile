@@ -111,6 +111,9 @@ export function howItReached(provenance: Provenance): string {
   if (provenance.kind === 'pinged') {
     return `GitHub notified them about it (reason: ${provenance.reason}).`;
   }
+  if (provenance.kind === 'found') {
+    return `Not in their notifications; the app found it on GitHub: ${provenance.reason}.`;
+  }
   return `GitHub did not notify them. It was pulled in for context because: ${provenance.reason}`;
 }
 

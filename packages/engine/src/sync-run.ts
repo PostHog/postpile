@@ -21,6 +21,7 @@ function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): S
     prsFetched: 0,
     prsSkipped: 0,
     prsPulledIn: 0,
+    prsFound: 0,
     newEvents: 0,
     agentCalls: 0,
     agentCallStats: { total: 0, byKind: {} },
@@ -53,6 +54,7 @@ export class SyncRun {
       report.prsFetched = fetched.prsFetched;
       report.prsSkipped = fetched.prsSkipped;
       report.prsPulledIn = fetched.prsPulledIn;
+      report.prsFound = fetched.prsFound;
       report.newEvents = fetched.newEventIds.length;
       errors.push(...fetched.errors);
 

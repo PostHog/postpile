@@ -3,6 +3,7 @@
 // the agent.
 import type { Glance, Pr, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
 import {
+  found,
   pinged,
   pulledIn,
   SAMPLE_VIEWER,
@@ -261,6 +262,15 @@ function buildPrs(clock: SampleClock): Pr[] {
       number: 41870, title: 'Make hogli start default to minimal stack', author: 'sol', state: 'OPEN',
       size: [70, 12, 4], checks: 'SUCCESS', openedHoursAgo: 72, reviewerTeams: ['PostHog/team-devex'],
     }),
+    // Found outside the inbox: the viewer's own open PR, and a review asked of them they already read on GitHub.
+    samplePr(clock, {
+      number: 41950, title: 'Cache pnpm store in the hogli CI image', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [34, 8, 2], checks: 'PENDING', openedHoursAgo: 30,
+    }),
+    samplePr(clock, {
+      number: 41955, title: 'Pin the Playwright browser version', author: 'nell', state: 'OPEN',
+      size: [12, 4, 2], checks: 'SUCCESS', openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
+    }),
   ];
 }
 
@@ -331,6 +341,10 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 41870, [
       { kind: 'review_requested', actor: 'sol', text: 'requested @team-devex', hoursAgo: 72, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41955, [
+      // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
+      { kind: 'review_requested', actor: 'nell', text: 'requested your review', hoursAgo: 26, rule: 'loud' },
     ]),
   ];
 }
@@ -451,6 +465,10 @@ function buildTiles(): Tile[] {
       pinged(41930, 'review_requested'),
     ]),
     sampleTile(TOPIC.desktop, 'single', `pr:${sampleKey(41940)}`, 'Desktop 2.3 release thread', [pinged(41940, 'subscribed')]),
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(41950)}`, 'Your pnpm cache PR waits for CI', [found(41950, 'own_open', 'your open PR')]),
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(41955)}`, 'nell wants your review on the Playwright pin', [
+      found(41955, 'review_requested', 'review requested from you'),
+    ]),
   ];
 }
 

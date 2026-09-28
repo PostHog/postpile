@@ -25,7 +25,7 @@ export function newestUnreadReason(view: TileView): UnreadReason | null {
 
 /**
  * The PR the tile is mostly about: the one behind the newest unread reason,
- * else the first open pinged PR, else the first PR.
+ * else the first open pinged or found PR, else the first PR.
  */
 export function leadPr(view: TileView): PrSummary | null {
   const reason = newestUnreadReason(view);
@@ -33,7 +33,7 @@ export function leadPr(view: TileView): PrSummary | null {
   if (fromReason) {
     return fromReason;
   }
-  const openPinged = view.prs.find((pr) => pr.provenance.kind === 'pinged' && pr.state === 'OPEN');
+  const openPinged = view.prs.find((pr) => pr.provenance.kind !== 'pulled_in' && pr.state === 'OPEN');
   return openPinged ?? view.prs[0] ?? null;
 }
 
@@ -55,20 +55,26 @@ export function tileUpdatedAt(view: TileView): string | null {
 
 export interface PrCounts {
   pinged: number;
+  /** Not in the inbox, found by the sync (own open PRs, review requests, recent merges). */
+  found: number;
   pulledIn: number;
 }
 
-/** Distinct PRs across tiles; a PR pinged in any tile counts as pinged. */
+/** Distinct PRs across tiles; a PR pinged in any tile counts as pinged, then found, else pulled in. */
 export function countPrs(views: TileView[]): PrCounts {
   const pinged = new Set<string>();
+  const found = new Set<string>();
   const all = new Set<string>();
   for (const view of views) {
     for (const pr of view.prs) {
       all.add(pr.key);
       if (pr.provenance.kind === 'pinged') {
         pinged.add(pr.key);
+      } else if (pr.provenance.kind === 'found') {
+        found.add(pr.key);
       }
     }
   }
-  return { pinged: pinged.size, pulledIn: all.size - pinged.size };
+  const foundOnly = [...found].filter((key) => !pinged.has(key)).length;
+  return { pinged: pinged.size, found: foundOnly, pulledIn: all.size - pinged.size - foundOnly };
 }

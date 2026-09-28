@@ -10,6 +10,7 @@ import {
   type PrEvent,
   type PrKey,
   type PullIn,
+  type FoundPr,
   type Snooze,
   type Stack,
   type Tile,
@@ -63,6 +64,7 @@ export class Board {
     readonly memberships: Map<PrKey, TopicMembership>,
     private readonly snoozes: Map<string, Snooze>,
     readonly pullIns: Map<PrKey, PullIn>,
+    readonly found: Map<PrKey, FoundPr>,
   ) {
     this.stacks = buildStacks([...prs.values()], now);
   }
@@ -90,11 +92,13 @@ export class Board {
       new Map(store.memberships.listAll().map((m) => [m.prKey, m])),
       new Map(store.snoozes.list().map((s) => [s.tileId, s])),
       store.pullIns.listAll(),
+      store.foundPrs.listAll(),
     );
   }
 
+  /** PRs with a notification thread, or found by the sync, that have no topic yet. */
   private unsortedKeys(): PrKey[] {
-    return [...this.prs.keys()].filter((key) => !this.memberships.has(key) && this.threads.has(key));
+    return [...this.prs.keys()].filter((key) => !this.memberships.has(key) && (this.threads.has(key) || this.found.has(key)));
   }
 
   private memberKeys(topicId: string): PrKey[] {
@@ -134,6 +138,7 @@ export class Board {
       sets,
       events: this.events,
       pullInReasons: new Map([...this.pullIns.values()].map((pullIn) => [pullIn.prKey, pullIn.reason])),
+      found: this.found,
     });
     this.tileCache.set(topicId, tiles);
     return tiles;
@@ -166,7 +171,7 @@ export class Board {
     if (membership) {
       return membership.topicId;
     }
-    if (this.threads.has(key) && this.prs.has(key)) {
+    if ((this.threads.has(key) || this.found.has(key)) && this.prs.has(key)) {
       return UNSORTED_TOPIC_ID;
     }
     const anchor = this.pullIns.get(key)?.anchorPrKey;

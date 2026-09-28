@@ -1,4 +1,4 @@
-import { isPinged, setIdFromTileId, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@postpile/core';
+import { isTracked, setIdFromTileId, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@postpile/core';
 import type { NewFeedback, Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
@@ -36,7 +36,7 @@ export class FeedbackActions {
       return this.readMarker.markRead([key], [key], origin);
     }
     const keys = tile.members.map((m) => m.prKey);
-    const pinged = tile.members.filter((m) => isPinged(m.provenance)).map((m) => m.prKey);
+    const pinged = tile.members.filter((m) => isTracked(m.provenance)).map((m) => m.prKey);
     return this.readMarker.markRead(keys, pinged, origin);
   }
 

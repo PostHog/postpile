@@ -11,6 +11,7 @@ export {
   type ThreadsSinceResult,
 } from './reader.ts';
 export type { GitHubWriter } from './writer.ts';
+export { buildFoundQuery, foundRefs, FOUND_CAP, type FoundRef } from './found.ts';
 export { GhCliTokenSource, type TokenSource } from './token.ts';
 export { GitHubError, type FetchFn } from './http.ts';
 export { GitHubClient } from './client.ts';

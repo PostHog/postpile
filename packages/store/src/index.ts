@@ -5,6 +5,7 @@ export { MetaRepo } from './repos/meta.ts';
 export { NotificationRepo } from './repos/notifications.ts';
 export { PrRepo } from './repos/prs.ts';
 export { PullInRepo } from './repos/pull-ins.ts';
+export { FoundPrRepo } from './repos/found-prs.ts';
 export { PingDecisionRepo } from './repos/ping-decisions.ts';
 export { ActionLogRepo } from './repos/action-log.ts';
 export { PendingWriteRepo, type NewPendingWrite } from './repos/pending-writes.ts';

@@ -11,6 +11,9 @@ describe('why helpers', () => {
   it('spells the code out, with the layer for pulled-in PRs', () => {
     expect(whyTitle('RT')).toBe('Review asked of your team');
     expect(whyTitle('ST', { kind: 'pulled_in', reason: 'stack layer below #12' })).toBe('Pulled in as stack context: stack layer below #12');
+    expect(whyTitle('RV', { kind: 'found', via: 'review_requested', reason: 'review requested from you' })).toBe(
+      'Review asked of you (found: review requested from you; not in your inbox, found via GitHub)',
+    );
   });
 
   it('writes turn and person tooltips', () => {

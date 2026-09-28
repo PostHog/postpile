@@ -1,6 +1,7 @@
 import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
 import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem } from './http.ts';
 import { toBranchPr, toPr } from './normalize.ts';
+import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { listTeamMembers } from './teams.ts';
 import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
@@ -132,6 +133,16 @@ export class GitHubClient implements GitHubReader {
         .filter((node) => node !== null && !node.isCrossRepository)
         .map((node) => toBranchPr(lookup.repo, node!));
     });
+  }
+
+  /** One aliased query; an alias the token cannot answer is null next to an error, the rest still counts. */
+  async findPrs(teams: string[], mergedSince: string): Promise<FoundRef[]> {
+    const query = buildFoundQuery(teams, mergedSince);
+    const response = await this.http.graphql<RawFoundResponse>(query.query);
+    if (!response.data) {
+      throw graphqlFailure('found PRs query', response.errors);
+    }
+    return foundRefs(query, response.data);
   }
 
   async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {

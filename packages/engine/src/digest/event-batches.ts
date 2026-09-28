@@ -43,10 +43,11 @@ export class EventBatchClassifier {
       scope: topic.id,
       prKeys: store.memberships.listForTopic(topic.id).map((m) => m.prKey),
     }));
-    // Only pinged PRs: a pulled-in stack layer gets no agent calls of its own.
+    // Only pinged and found PRs: a pulled-in stack layer gets no agent calls of its own.
     const unassigned = store.memberships.listUnassignedPrKeys();
     const threads = store.notifications.getByPrKeys(unassigned);
-    const unsorted = { topicId: null, scope: UNSORTED_SCOPE, prKeys: unassigned.filter((key) => threads.has(key)) };
+    const found = store.foundPrs.listAll();
+    const unsorted = { topicId: null, scope: UNSORTED_SCOPE, prKeys: unassigned.filter((key) => threads.has(key) || found.has(key)) };
     return [...topics, unsorted];
   }
 

@@ -219,6 +219,15 @@ now".
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
+- Found PRs and the read backfill (DESIGN.md "Product model",
+  provenance): the first sync reads read threads of the last 7 days, later
+  ones since the last sync. One GraphQL request per full sync finds the
+  user's own open PRs, review requests for them and their teams, and PRs
+  involving them merged in the last 7 days; new or moved ones are fetched.
+  Provenance `found` (AU / RV / RT / CM, tooltip "found via GitHub"): tiles,
+  topics, dossiers, glances and queues like pinged, never unread on their
+  own, whose turn still lifts the topic; pinged once a thread appears.
+  Migration 014. Fake data has two found PRs in CI & tests.
 - Notification permission at a calm moment: a welcome Mac notification on
   the first launch (flag in userData) triggers the macOS prompt; "test ping"
   next to the lock in the footer sends a test one. Dev runs register as
@@ -438,6 +447,15 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
 
 ## Needs Julian's decisions
 
+- **Found PRs**: one request per sync, first page of each alias only (own
+  100, searches 50 each, 200 total); a real run returned 18 own, 1 review,
+  22 for team-devex and 50 merged (capped), so the first sync after this
+  fetches ~90 PRs and asks topic assignment about them. "From you" uses
+  `user-review-requested:@me` (direct only) so team requests keep their own
+  reason. Merged PRs that involve you (7 days) can be many and mostly calm;
+  keep them, or only own merged ones? Found PRs do not seed stack
+  completion.
+
 - **Dev profile**: `pnpm cli` now reads the dev database by default, so
   real smoke runs need `POSTPILE_PROFILE=default` (or `POSTPILE_DB`). The
   dev profile is chosen by a script env default, not by detecting the
@@ -454,11 +472,11 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
 
 - **Read list**: PRs handled entirely on github.com now become tiles
   (calm, all events seen) and go through topic assignment and dossiers,
-  which costs agent calls; the first run looks back 3 days. GitHub's
+  which costs agent calls; the first run looks back 7 days. GitHub's
   `since` filters by `updated_at`, so a plain read without new activity is
   only found when the thread leaves the inbox; its read time then comes
-  from one thread lookup (20 per sync, the sync time beyond that). Keep the
-  3 days? Should read-only PRs stay out of the tiles (memory only)?
+  from one thread lookup (20 per sync, the sync time beyond that). Should
+  read-only PRs stay out of the tiles (memory only)?
 
 - **Repo scope / quiet repos**: the scope applies to the whole app
   (sidebar, tiles, footer counts, search) but not to the live poll, Mac

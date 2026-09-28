@@ -19,11 +19,17 @@ export const WHY: Record<WhyCode, { label: string; tone: WhyTone }> = {
   ST: { label: 'Pulled in as stack context', tone: 'context' },
 };
 
-/** The badge tooltip. A pulled-in PR also says which layer it is ("stack layer below #12"). */
+/**
+ * The badge tooltip. A pulled-in PR also says which layer it is ("stack
+ * layer below #12"); a found PR says it is not in the inbox.
+ */
 export function whyTitle(code: WhyCode, provenance?: Provenance): string {
   const label = WHY[code].label;
   if (provenance?.kind === 'pulled_in') {
     return `${label}: ${provenance.reason}`;
+  }
+  if (provenance?.kind === 'found') {
+    return `${label} (found: ${provenance.reason}; not in your inbox, found via GitHub)`;
   }
   return label;
 }

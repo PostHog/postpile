@@ -19,6 +19,7 @@ import { PrRepo } from './repos/prs.ts';
 import { PendingWriteRepo } from './repos/pending-writes.ts';
 import { PingDecisionRepo } from './repos/ping-decisions.ts';
 import { PullInRepo } from './repos/pull-ins.ts';
+import { FoundPrRepo } from './repos/found-prs.ts';
 import { RuleProposalRepo } from './repos/rule-proposals.ts';
 import { PrSetRepo } from './repos/sets.ts';
 import { SnoozeRepo } from './repos/snoozes.ts';
@@ -49,6 +50,7 @@ export class Store {
   readonly agentCalls: AgentCallRepo;
   readonly instructions: InstructionsRepo;
   readonly pullIns: PullInRepo;
+  readonly foundPrs: FoundPrRepo;
   readonly pingDecisions: PingDecisionRepo;
   readonly workContext: WorkContextRepo;
 
@@ -77,6 +79,7 @@ export class Store {
     this.agentCalls = new AgentCallRepo(db);
     this.instructions = new InstructionsRepo(db);
     this.pullIns = new PullInRepo(db);
+    this.foundPrs = new FoundPrRepo(db);
     this.pingDecisions = new PingDecisionRepo(db);
     this.actionLog = new ActionLogRepo(db);
     this.pendingWrites = new PendingWriteRepo(db);

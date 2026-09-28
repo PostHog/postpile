@@ -208,6 +208,8 @@ export interface SyncReport {
   prsSkipped: number;
   /** Stack layers fetched to complete the stacks of pinged PRs (no agent calls for them). */
   prsPulledIn: number;
+  /** PRs found outside the inbox (own open, review requests, recent merges) and fetched because they are new or moved. */
+  prsFound: number;
   newEvents: number;
   /** Same as agentCallStats.total. */
   agentCalls: number;

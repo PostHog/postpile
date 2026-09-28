@@ -215,3 +215,34 @@ describe('tile ids', () => {
     expect(setIdFromTileId('stack:PostHog/posthog#1')).toBeNull();
   });
 });
+
+describe('found PRs', () => {
+  const pr = makePr({ number: 9 });
+  const found = { prKey: pr.key, via: 'review_requested' as const, reason: 'review requested from you', foundAt: at(0) };
+
+  it('builds a tile for a found PR without a thread', () => {
+    const tiles = buildTopicTiles({ topicId: 't', memberKeys: [pr.key], prs: new Map([[pr.key, pr]]), threads: new Map(), stacks: [], sets: [], found: new Map([[pr.key, found]]) });
+    expect(tiles.map((tile) => tile.members[0]?.provenance)).toEqual([{ kind: 'found', via: 'review_requested', reason: 'review requested from you' }]);
+  });
+
+  it('never makes the tile unread from a found PR', () => {
+    const tile: Tile = { id: 'pr:x', topicId: 't', kind: 'single', title: 'x', members: [{ prKey: pr.key, provenance: { kind: 'found', via: 'review_requested', reason: 'r' } }] };
+    const loud = makeEvent({ prKey: pr.key, ruleLoudness: 'loud' });
+    expect(deriveTileState(stateInput(tile, [pr], [loud])).kind).toBe('open');
+  });
+
+  it('turns pinged and unread once a thread appears', () => {
+    const tiles = buildTopicTiles({
+      topicId: 't',
+      memberKeys: [pr.key],
+      prs: new Map([[pr.key, pr]]),
+      threads: new Map([[pr.key, makeThreadFor(pr)]]),
+      stacks: [],
+      sets: [],
+      found: new Map([[pr.key, found]]),
+    });
+    const loud = makeEvent({ prKey: pr.key, ruleLoudness: 'loud' });
+    expect(tiles[0]?.members[0]?.provenance.kind).toBe('pinged');
+    expect(deriveTileState(stateInput(tiles[0]!, [pr], [loud])).kind).toBe('unread');
+  });
+});

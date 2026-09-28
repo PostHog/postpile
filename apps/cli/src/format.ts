@@ -8,6 +8,9 @@ export function formatSync(report: SyncReport): string {
     `agent: ${formatCallStats(report.agentCallStats)}`,
     formatFactCounts(report.facts),
   ];
+  if (report.prsFound > 0) {
+    lines.push(`${report.prsFound} PRs found outside the inbox (own open, review requests, recent merges)`);
+  }
   if (report.prsPulledIn > 0) {
     lines.push(`${report.prsPulledIn} stack layers pulled in (no agent calls)`);
   }

@@ -165,7 +165,8 @@ export class ReadModels {
         glanceStale: stale.has(pr.key),
         forYou: glance?.forYou ?? null,
         glanceGap: this.glanceGap(pr.key, glance !== undefined),
-        unseenLoudEvents: (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
+        // A found PR never counts as unread; its events are there for whose turn and memory.
+        unseenLoudEvents: member.provenance.kind === 'found' ? 0 : (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
         quietRepo,
       });

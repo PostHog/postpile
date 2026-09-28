@@ -267,13 +267,35 @@ export interface PrEvent {
 export type PingReason = NotificationReason;
 
 /**
+ * How the full sync found a PR that is not in the inbox:
+ * own_open: the viewer's own open PR; review_requested: a review is asked of
+ * the viewer; team_review_requested: of one of their teams; involved_merged:
+ * involves the viewer and merged in the last days.
+ */
+export type FoundVia = 'own_open' | 'review_requested' | 'team_review_requested' | 'involved_merged';
+
+/**
  * Why a PR is inside a tile.
  * pinged: GitHub notified the user about it.
+ * found: not in the inbox; the full sync found it through GitHub search
+ *   (own open PRs, review requests, recently merged ones involving the
+ *   user). Works like pinged for tiles, topics and queues, but never makes
+ *   a tile unread on its own.
  * pulled_in: fetched only to complete a stack of a pinged PR ("stack layer below #N").
  */
 export type Provenance =
   | { kind: 'pinged'; reason: PingReason }
+  | { kind: 'found'; via: FoundVia; reason: string }
   | { kind: 'pulled_in'; reason: string };
+
+/** A PR the full sync found, stored until the next sync finds a new list. */
+export interface FoundPr {
+  prKey: PrKey;
+  via: FoundVia;
+  /** "your open PR", "review requested from you", "review requested from PostHog/team-devex", "involves you, merged 2026-09-24". */
+  reason: string;
+  foundAt: IsoTime;
+}
 
 /**
  * A PR the sync fetched only to complete a stack, found by branch without
