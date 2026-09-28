@@ -105,3 +105,20 @@ describe('effective loudness and display state', () => {
     expect(isUnseenLoud(makeEvent({ ruleLoudness: 'loud' }))).toBe(true);
   });
 });
+
+describe('ruleLoudness on drafts', () => {
+  const draft = makePr({ author: 'rowan', isDraft: true, reviewerUsers: [viewer.login] });
+
+  it('keeps a review request and commits after approval quiet on a draft', () => {
+    expect(ruleLoudness(input({ kind: 'review_requested', pr: draft, subject: viewer.login })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'commits_after_approval', pr: draft })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'mention', pr: draft })).loudness).toBe('loud');
+  });
+
+  it('makes mark-ready loud when a review is asked of you or your team', () => {
+    const ready = makePr({ author: 'rowan', reviewerUsers: [viewer.login] });
+    expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: ready }))).toEqual({ loudness: 'loud', reason: 'ready for your review' });
+    expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: makePr({ author: 'rowan' }) })).loudness).toBe('quiet');
+    expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: makePr({ author: 'rowan', reviewerTeams: ['PostHog/team-devex'] }) })).loudness).toBe('loud');
+  });
+});

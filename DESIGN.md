@@ -972,6 +972,28 @@ authors.
      approved, else that reviewer "is reviewing".
    - else none (following, subscribed, took part earlier).
 
+**Drafts** (2026-09-28): nobody reviews or approves a draft right away and
+it won't merge soon. Rules in core:
+
+- whose-turn (`draftTurn`): an open draft is your move only for a personal
+  question, mention or reply you have not answered ("Reply to ada on
+  draft", `PERSONAL_ASK_KINDS`; a team mention is not enough). On your own
+  draft also for review threads waiting on you ("Address 2 comments on your
+  draft") or a standing change request. Never Review, Re-check, Fix CI or
+  Merge.
+- tier: a draft never lands in To review (`prTier`); needs_reply still
+  works for personal asks.
+- loudness: a review request naming you on a draft and commits after your
+  approval on a draft are quiet, so neither makes the tile unread or the
+  topic urgent. Mark-ready (`ready_for_review`) is loud when a review of you
+  or your team is pending or was asked ("ready for your review"), which
+  brings the PR back as reviewable.
+- pings (`isAddressedToViewer`): drafts ping only for a personal question,
+  mention or reply.
+- UI: a tile whose open tracked PRs are all drafts gets a grey "Draft" chip,
+  a dashed frame (a dashed left band when it has a for-whom band) and a
+  muted title; the status pill already says "draft".
+
 **Own PRs never ask for a review** (2026-09-28, Julian got asked to
 approve his own PRs). The rules above already route own PRs to rule 3 before
 any review ask; on top of that:

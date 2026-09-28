@@ -3,6 +3,7 @@
 import { isBot } from './bots.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
+import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
 
@@ -291,9 +292,37 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   return NO_TURN;
 }
 
+/**
+ * Drafts: nobody reviews, approves or merges one right away. Only a personal
+ * question, mention or reply is a move ("Reply to ada on draft"); on the
+ * viewer's own draft also review comments to address. Never review, re-check
+ * or merge.
+ */
+function draftTurn(ctx: PrContext): WhoseTurn {
+  const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer, [...PERSONAL_ASK_KINDS]);
+  if (ask) {
+    return you(ctx, `Reply to ${ask.actor} on draft`);
+  }
+  if (!sameLogin(ctx.pr.author, ctx.viewer.login)) {
+    return NO_TURN;
+  }
+  const threads = threadsWaitingOnViewer(ctx);
+  if (threads.count > 0) {
+    return you(ctx, `Address ${plural(threads.count, 'comment')} on your draft`);
+  }
+  const changesBy = changesRequestedBy(ctx);
+  if (changesBy) {
+    return you(ctx, `Address ${changesBy}'s changes on your draft`);
+  }
+  return NO_TURN;
+}
+
 function prTurn(ctx: PrContext): WhoseTurn {
   if (ctx.pr.state !== 'OPEN') {
     return NO_TURN;
+  }
+  if (ctx.pr.isDraft) {
+    return draftTurn(ctx);
   }
   const ask = openAsk(ctx);
   if (ask) {

@@ -95,6 +95,8 @@ export interface SamplePrInput {
   threads?: SampleThreadInput[];
   /** In the merge queue: adds an added_to_merge_queue timeline item. */
   queued?: boolean;
+  /** A draft: never a review move, only personal asks count. */
+  draft?: boolean;
 }
 
 /** Like GitHub with a review rule: a standing change request wins, then any approval. */
@@ -119,7 +121,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     body: input.body ?? '',
     author: input.author,
     state: input.state,
-    isDraft: false,
+    isDraft: input.draft ?? false,
     baseRef: input.baseRef ?? 'master',
     headRef: input.headRef ?? `${input.author}/pr-${input.number}`,
     additions,

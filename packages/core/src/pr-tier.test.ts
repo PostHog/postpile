@@ -48,3 +48,12 @@ describe('prTier', () => {
     expect(tier({ pr: makePr({ author: me, state: 'MERGED' }) })).toBe('rest');
   });
 });
+
+describe('prTier on drafts', () => {
+  it('never puts a draft in To review, but a personal question still counts', () => {
+    const draft = makePr({ author: 'ada', isDraft: true, reviewerUsers: [me] });
+    expect(tier({ pr: draft })).toBe('rest');
+    expect(tier({ pr: { ...draft, isDraft: false } })).toBe('to_review');
+    expect(tier({ pr: draft, events: [question] })).toBe('needs_reply');
+  });
+});

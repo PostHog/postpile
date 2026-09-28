@@ -64,7 +64,8 @@ export function prTier(input: PrTierInput): PrTier {
   if (isTeammate(pr.author, viewer)) {
     return 'team';
   }
-  if (reviewAsked(pr, viewer) && !reviewedHead(pr, viewer)) {
+  // A draft is not up for review: it never lands in To review.
+  if (!pr.isDraft && reviewAsked(pr, viewer) && !reviewedHead(pr, viewer)) {
     return 'to_review';
   }
   if (teamMentioned(input)) {

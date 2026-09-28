@@ -337,3 +337,15 @@ describe('FakeEngine sync progress', () => {
     expect(await engine.syncProgress()).toBeNull();
   });
 });
+
+describe('FakeEngine drafts', () => {
+  it('has a draft of yours with a draft pill and no move', async () => {
+    const engine = new FakeEngine();
+    const topics = await engine.listTopics();
+    const views = (await Promise.all(topics.map((item) => engine.getTopic(item.topic.id)))).flatMap((detail) => detail?.tiles ?? []);
+    const draft = views.flatMap((view) => view.prs.map((pr) => ({ view, pr }))).find(({ pr }) => pr.isDraft);
+    expect(draft?.pr.status.lifecycle).toBe('draft');
+    expect(draft?.pr.tier).not.toBe('to_review');
+    expect(draft?.view.turn.kind).not.toBe('you');
+  });
+});

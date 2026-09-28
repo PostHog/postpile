@@ -2,7 +2,7 @@
 // notification says when the agent does not write it. Rules only, no IO.
 // DESIGN.md "Live poll and Mac pings" has the whole flow.
 import { clipText } from './dossier.ts';
-import { ADDRESSED_KINDS } from './kinds.ts';
+import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import type { IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
@@ -104,6 +104,10 @@ export const OFF_POLL_STATUS: LivePollStatus = {
 export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
   if (effectiveLoudness(event) !== 'loud') {
     return false;
+  }
+  // Nobody reviews a draft right away: only a personal question or mention pings.
+  if (pr.isDraft && pr.state === 'OPEN') {
+    return PERSONAL_ASK_KINDS.includes(event.kind);
   }
   if (ADDRESSED_KINDS.includes(event.kind)) {
     return true;

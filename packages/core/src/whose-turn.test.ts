@@ -208,3 +208,34 @@ describe('whoseTurn: multi-PR tiles', () => {
     });
   });
 });
+
+describe('whoseTurn: drafts', () => {
+  const draft = makePr({ author: 'rowan', isDraft: true, reviewerUsers: [me] });
+
+  it('never asks for a review, a re-check or a merge on a draft', () => {
+    const requested = makeEvent({ kind: 'review_requested', actor: 'rowan' });
+    expect(single(draft, [requested]).kind).toBe('none');
+    const approvedOld = { ...draft, headOid: 'c2', reviews: [makeReview({ author: me, commitOid: 'head' })], commits: [makeCommit({ oid: 'head' }), makeCommit({ oid: 'c2' })] };
+    expect(single(approvedOld).kind).toBe('none');
+    const ownApproved = makePr({ author: me, isDraft: true, reviewDecision: 'APPROVED' });
+    expect(single(ownApproved).kind).toBe('none');
+  });
+
+  it('is your move only for a personal question or mention', () => {
+    const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30) });
+    const team = makeEvent({ kind: 'team_mention', actor: 'ada', at: at(30) });
+    expect(single(draft, [question])).toMatchObject({ kind: 'you', what: 'Reply to ada on draft' });
+    expect(single(draft, [team]).kind).toBe('none');
+  });
+
+  it('asks you to address comments on your own draft', () => {
+    const own = makePr({ author: me, isDraft: true, threads: [makeThread('t1', [makeComment({ author: 'mira' })]), makeThread('t2', [makeComment({ author: 'mira' })])] });
+    expect(single(own)).toMatchObject({ kind: 'you', what: 'Address 2 comments on your draft' });
+    expect(single({ ...own, threads: [], checks: { rollup: 'FAILURE' as const, contexts: [] } }).kind).toBe('none');
+  });
+
+  it('turns back to a review once the draft is ready', () => {
+    const requested = makeEvent({ kind: 'review_requested', actor: 'rowan' });
+    expect(single({ ...draft, isDraft: false }, [requested])).toMatchObject({ kind: 'you', what: 'Review, rowan asked' });
+  });
+});

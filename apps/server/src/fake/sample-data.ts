@@ -236,7 +236,7 @@ function buildPrs(clock: SampleClock): Pr[] {
     // mention (Team mentioned), a bot bump (Other topics) and a merged PR with
     // news on it (unread, but calm).
     samplePr(clock, {
-      number: 41945, title: 'Cap CI shard retries at 2', author: SAMPLE_VIEWER, state: 'OPEN',
+      number: 41945, title: 'Cap CI shard retries at 2', author: SAMPLE_VIEWER, state: 'OPEN', draft: true,
       size: [14, 6, 2], checks: 'SUCCESS', openedHoursAgo: 8, reviewerUsers: ['lyra'],
       reviews: [['remy', 'COMMENTED', 'Would 3 hide fewer real flakes?']],
     }),

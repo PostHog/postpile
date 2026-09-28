@@ -80,3 +80,16 @@ describe('pingTemplate', () => {
     expect(text.body.endsWith('…')).toBe(true);
   });
 });
+
+describe('pingRule on drafts', () => {
+  const draft = makePr({ number: 9, author: 'alice', isDraft: true });
+
+  it('pings a draft only for a personal question or mention', () => {
+    const request = makeEvent({ kind: 'review_requested', ruleLoudness: 'loud' });
+    const team = makeEvent({ id: 't', kind: 'team_mention', ruleLoudness: 'loud' });
+    const mention = makeEvent({ id: 'm', kind: 'mention', ruleLoudness: 'loud' });
+    expect(pingRule([request], draft, viewer, false).class).toBe('not_addressed');
+    expect(pingRule([team], draft, viewer, false).class).toBe('not_addressed');
+    expect(pingRule([mention], draft, viewer, false).class).toBe('addressed');
+  });
+});

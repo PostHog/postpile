@@ -45,6 +45,17 @@ function isViewersPr(input: LoudnessInput): boolean {
   return sameLogin(input.pr.author, input.viewer.login);
 }
 
+function isOpenDraft(input: LoudnessInput): boolean {
+  return input.pr.isDraft && input.pr.state === 'OPEN';
+}
+
+/** A review of the viewer or one of their teams is pending, or was asked in the timeline. */
+function reviewAskedOfViewer(input: LoudnessInput): boolean {
+  const pending = [...input.pr.reviewerUsers, ...input.pr.reviewerTeams].some((subject) => isViewerSubject(subject, input.viewer));
+  const asked = input.pr.timeline.some((item) => item.kind === 'review_requested' && isViewerSubject(item.subject, input.viewer));
+  return pending || asked;
+}
+
 function machineLoudness(input: LoudnessInput): LoudnessDecision {
   // A bot rebasing or updating a draft is pure churn; nobody reviews drafts.
   if (input.isBot && PUSH_KINDS.includes(input.kind) && input.pr.isDraft) {
@@ -95,6 +106,10 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
   }
   switch (input.kind) {
     case 'review_requested':
+      // A draft is not up for review yet; marking it ready is what calls for a look.
+      if (isViewerSubject(input.subject, input.viewer) && isOpenDraft(input)) {
+        return decide('quiet', 'review requested on a draft');
+      }
       if (isViewerSubject(input.subject, input.viewer)) {
         if (input.requestAnswered) {
           return decide('quiet', 'review request already answered or removed');
@@ -103,7 +118,15 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
       }
       return decide('quiet', 'review requested from someone else');
     case 'commits_after_approval':
+      if (isOpenDraft(input)) {
+        return decide('quiet', 'new commits on a draft after you approved');
+      }
       return decide('loud', 'new commits after you approved');
+    case 'ready_for_review':
+      if (!isViewersPr(input) && reviewAskedOfViewer(input)) {
+        return decide('loud', 'ready for your review');
+      }
+      return decide('quiet', 'ready for review');
     case 'merged_without_review':
       if (input.caresAboutUnreviewedMerges) {
         return decide('loud', 'merged without your review');
