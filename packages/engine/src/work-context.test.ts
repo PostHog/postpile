@@ -86,7 +86,7 @@ describe('WorkContextCollector', () => {
     fake.write('.claude/projects/-Users-me-workspace-app/memory/MEMORY.md', '- [Depot](depot.md) CI move', OLD);
     fake.write('.claude/projects/-Users-me-workspace-app/memory/depot.md', 'Depot move notes', RECENT);
     fake.write('.claude/projects/-Users-me-workspace-app/memory/old.md', 'Old notes', OLD);
-    fake.write('.claude/projects/-Users-me-workspace-hobby/memory/notes.txt', 'not markdown', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-garden/memory/notes.txt', 'not markdown', RECENT);
 
     const { items, stats } = await collector().collect();
 
@@ -155,9 +155,9 @@ describe('WorkContextCollector', () => {
 
   it('never reads project folders on the skip list, memory or sessions, and counts them', async () => {
     fake.write('.claude/projects/-Users-me-workspace-app/memory/MEMORY.md', 'app work', RECENT);
-    fake.write('.claude/projects/-Users-me-workspace-taxes/memory/MEMORY.md', 'PRIVATE money notes', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-private-taxes/memory/MEMORY.md', 'PRIVATE money notes', RECENT);
     fake.write('.claude/projects/-Users-me-workspace-personal-site/memory/MEMORY.md', 'PRIVATE site notes', RECENT);
-    fake.session('-Users-me-workspace-garden-nas', 'h', [userLine('PRIVATE nas prompt', '2026-09-27T10:00:00.000Z')], RECENT);
+    fake.session('-Users-me-private-garden-shed', 'h', [userLine('PRIVATE shed prompt', '2026-09-27T10:00:00.000Z')], RECENT);
     fake.session('-Users-me-workspace-app', 'p', [userLine('app prompt', '2026-09-27T10:00:00.000Z')], RECENT);
     const logs: string[] = [];
 
@@ -173,7 +173,7 @@ describe('WorkContextCollector', () => {
     expect(items.map((item) => item.text).join('\n')).not.toContain('PRIVATE');
     expect(items).toHaveLength(2);
     expect(stats).toMatchObject({ skippedProjects: 3, skipPatterns: DEFAULT_SWEEP_SKIP, sessionFilesScanned: 1 });
-    expect(JSON.stringify(stats.dropped)).not.toContain('workspace-taxes');
+    expect(JSON.stringify(stats.dropped)).not.toContain('private-taxes');
     expect(logs).toContain('work context: skipped 3 project folders (skip list)');
   });
 
@@ -185,9 +185,9 @@ describe('WorkContextCollector', () => {
 
 describe('sweep skip list', () => {
   it('matches the pattern as a run of whole tokens in the folder name', () => {
-    const list = new SweepSkipList(['taxes', 'hobby', 'my-blog-com']);
+    const list = new SweepSkipList(['taxes', 'tax', 'my-blog-com']);
     expect(list.skips('-Users-me-workspace-taxes')).toBe(true);
-    expect(list.skips('-Users-me-workspace-hobby')).toBe(true);
+    expect(list.skips('-Users-me-workspace-tax')).toBe(true);
     expect(list.skips('-Users-me-workspace-my-blog-com')).toBe(true);
     expect(list.skips('-Users-me-workspace-app')).toBe(false);
     expect(list.skips('-Users-me-workspace-ghatchup')).toBe(false);
@@ -195,16 +195,16 @@ describe('sweep skip list', () => {
   });
 
   it('matches names that go on after the pattern, and punctuation or case never count', () => {
-    const list = new SweepSkipList(['Taxes', 'hobby', 'my-blog.com']);
+    const list = new SweepSkipList(['Taxes', 'tax', 'my-blog.com']);
     expect(list.skips('-Users-me-workspace-taxes-tools')).toBe(true);
-    expect(list.skips('-Users-me-workspace-hobby-notes')).toBe(true);
+    expect(list.skips('-Users-me-workspace-tax-notes')).toBe(true);
     expect(list.skips('-Users-me-workspace-my-blog-com-v2')).toBe(true);
   });
 
   it('needs whole tokens: a pattern never matches part of a token', () => {
-    const list = new SweepSkipList(['hobby', 'my-blog-com']);
-    expect(list.skips('-Users-me-workspace-hass')).toBe(false);
-    expect(list.skips('-Users-me-workspace-sha-tools')).toBe(false);
+    const list = new SweepSkipList(['tax', 'my-blog-com']);
+    expect(list.skips('-Users-me-workspace-taxes')).toBe(false);
+    expect(list.skips('-Users-me-workspace-syntax-tools')).toBe(false);
     expect(list.skips('-Users-me-workspace-my-blog')).toBe(false);
     expect(list.skips('-Users-me-workspace-my-blog-org')).toBe(false);
   });
@@ -212,14 +212,14 @@ describe('sweep skip list', () => {
   it('errs on the side of skipping when the pattern sits in a parent folder or mid-name', () => {
     // Without the disk the folder cannot be split into path segments, and
     // over-skipping only loses context.
-    const list = new SweepSkipList(['hobby', 'taxes']);
-    expect(list.skips('-Users-me-workspace-app-hobby-x')).toBe(true);
+    const list = new SweepSkipList(['garden', 'taxes']);
+    expect(list.skips('-Users-me-workspace-app-garden-x')).toBe(true);
     expect(list.skips('-Users-me-taxes-archive-2024')).toBe(true);
   });
 
   it('takes POSTPILE_SWEEP_SKIP over the defaults, empty means skip nothing', () => {
-    expect(sweepSkipFromEnv(undefined)).toEqual(['taxes', 'garden', 'hobby', 'personal', 'private']);
-    expect(sweepSkipFromEnv(' taxes , taxes,,')).toEqual(['taxes', 'taxes']);
+    expect(sweepSkipFromEnv(undefined)).toEqual(['personal', 'private']);
+    expect(sweepSkipFromEnv(' taxes , garden,,')).toEqual(['taxes', 'garden']);
     expect(sweepSkipFromEnv('')).toEqual([]);
     expect(new SweepSkipList([]).skips('-Users-me-workspace-taxes')).toBe(false);
   });

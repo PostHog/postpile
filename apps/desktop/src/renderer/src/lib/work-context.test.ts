@@ -38,7 +38,7 @@ describe('work context labels', () => {
   });
 
   it('edits the skip list as comma separated text', () => {
-    expect(skipText(['taxes', 'hobby'])).toBe('taxes, hobby');
+    expect(skipText(['taxes', 'garden'])).toBe('taxes, garden');
     expect(parseSkipText(' taxes ,, side-project ,')).toEqual(['taxes', 'side-project']);
     expect(parseSkipText('')).toEqual([]);
   });

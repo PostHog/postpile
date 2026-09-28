@@ -14,7 +14,7 @@ describe('formatSweep', () => {
       droppedCount: 2,
       dropped: [{ kind: 'session' as const, ref: 'lsp · 2026-09-21 16:46', reason: 'started by a program (SDK)' }],
       skippedProjects: 2,
-      skipPatterns: ['taxes', 'hobby'],
+      skipPatterns: ['taxes', 'garden'],
     };
     const text = formatSweep(
       { ok: true, message: 'Work context v2: 1 threads from 1200 chars', version: 2, stats },
@@ -39,14 +39,14 @@ describe('formatSweep', () => {
         },
         lastError: null,
         running: false,
-        skipPatterns: ['taxes', 'hobby'],
+        skipPatterns: ['taxes', 'garden'],
       },
     );
     expect(text).toBe(
       [
         'Work context v2: 1 threads from 1200 chars',
         'input 1200 of 60000 chars: 1 CLAUDE.md, 2 memory files, 3 sessions (of 5 session files), 0 secrets masked',
-        'skipped 2 project folders (skip list: taxes, hobby)',
+        'skipped 2 project folders (skip list: taxes, garden)',
         'dropped 2:',
         '  session lsp · 2026-09-21 16:46: started by a program (SDK)',
         '  ... and 1 more',

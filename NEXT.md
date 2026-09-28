@@ -290,8 +290,8 @@ now".
   Project folders on the skip list are never read; the count is in the
   input stats. The list is edited under the digest and saved to
   `~/.config/postpile/config.json` (`sweepSkip`), read on every sweep;
-  `POSTPILE_SWEEP_SKIP` wins over it, the defaults (taxes, garden, hobby,
-  personal, private) come last.
+  `POSTPILE_SWEEP_SKIP` wins over it, the defaults (personal, private)
+  come last.
 - Default agent-call cap for app syncs raised from 30 to 150
   (`POSTPILE_MAX_AGENT_CALLS`).
 - App bundle: `pnpm dist` makes an ad-hoc signed `PostPile.app` (arm64,
@@ -811,9 +811,9 @@ the app meanwhile.
 
 - **Sweep skip list** (2026-09-28): private projects are kept out by a
   skip list before anything leaves the machine, not only by the prompt.
-  `~/.claude/projects` folders matching `taxes`, `garden`, `hobby`,
-  `personal`, `private` (or `POSTPILE_SWEEP_SKIP`) are never read.
-  Defaults made generic for the public repo (2026-09-28); a personal
+  `~/.claude/projects` folders matching `personal`, `private` (or `POSTPILE_SWEEP_SKIP`) are
+  never read. Defaults made generic for the public repo (2026-09-28): they
+  ship with the app, so they hold no real project names; a personal
   list goes in `sweepSkip` of `~/.config/postpile/config.json` (editable in
   the app, works for the packaged app from Finder), or `POSTPILE_SWEEP_SKIP`,
   which wins.
@@ -933,7 +933,7 @@ Env switches:
   reads, default `~/.claude`. `POSTPILE_SWEEP_MODEL`: its model, default
   `opus`. `POSTPILE_SWEEP_SKIP`: comma-separated project folders the sweep
   never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`
-  (dev: `postpile-dev`), then the default `taxes,garden,hobby,personal,private`;
+  (dev: `postpile-dev`), then the default `personal,private`;
   empty = none.
 - `POSTPILE_DB`, `POSTPILE_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/PostPile/db.sqlite`) and the

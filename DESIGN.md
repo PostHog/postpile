@@ -1907,8 +1907,8 @@ from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
   Lines in code fences do not count. Depth 3.
 - **Skip list first**: `projects/*` folders on the skip list are never
   opened, neither memory nor sessions, so private projects never leave the
-  machine (`work-context/skip-list.ts`). Defaults: `taxes`, `garden`,
-  `hobby`, `personal`, `private`. The user's own list lives in `sweepSkip` of
+  machine (`work-context/skip-list.ts`). Defaults: generic words only,
+  `personal`, `private`, since they ship with the app. The user's own list lives in `sweepSkip` of
   `~/.config/postpile/config.json` (dev: `~/.config/postpile-dev/`), edited
   as one comma-separated input under the digest and read again on every
   sweep, so it holds for the packaged app launched from Finder (no shell
@@ -1921,8 +1921,8 @@ from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
   tokens (lowercased, split on non-alphanumerics) appear as a run of whole
   tokens anywhere in the folder name. The encoding is lossy (`/`, `.`, `_`
   and `-` all become `-`), so a match in a parent folder or mid-name skips
-  too: over-skipping only loses context, under-skipping leaks. `hobby` still
-  never matches `hass`. The count lands in `inputStats.skippedProjects` (names stay
+  too: over-skipping only loses context, under-skipping leaks. `tax` still
+  never matches `taxes`. The count lands in `inputStats.skippedProjects` (names stay
   out), the log says "skipped N project folders", and the UI shows the list
   read-only under the digest (`WorkContextView.skipPatterns`).
 - Every other `projects/*/memory/*.md`, ref = path incl. the project folder.
@@ -2196,7 +2196,7 @@ preflight and does not know the token, so CORS stays open.
   - dossier driver overrides "most frequent author" for the topic driver [yes]
 - **Work context sweep** (current choices in brackets):
   - model [opus; cost is no concern, the call has to judge work vs. private in loose notes]
-  - private projects (taxes, home automation, personal sites) are sent to the model and
+  - private projects (side projects, household paperwork, a personal blog) are sent to the model and
     filtered by the prompt [yes; a skip list of project folders would keep them local]
   - which prompts get the digest [topic assignment, dossiers, glances, pings, chat; not sets,
     events, consolidation, recheck, drafts]

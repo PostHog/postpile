@@ -13,8 +13,12 @@ import type { SweepSkipSource } from '@postpile/core';
 // skipping: a pattern matches wherever its tokens show up as a run, since
 // the tokens after it may still belong to the same project folder name.
 
-/** Default skip list: personal projects. sweepSkip in config.json or POSTPILE_SWEEP_SKIP replaces it. */
-export const DEFAULT_SWEEP_SKIP = ['taxes', 'garden', 'hobby', 'personal', 'private'];
+/**
+ * Default skip list: generic words only, since the defaults ship with the
+ * app. Real project names belong in sweepSkip in config.json, or
+ * POSTPILE_SWEEP_SKIP; either replaces this list.
+ */
+export const DEFAULT_SWEEP_SKIP = ['personal', 'private'];
 
 /** Comma separated patterns, trimmed, empties dropped. */
 export function parseSkipList(text: string): string[] {
@@ -65,7 +69,7 @@ function containsRun(all: string[], run: string[]): boolean {
  * Whether a ~/.claude/projects folder is on the skip list: the pattern's
  * tokens appear as a consecutive run of whole tokens in the folder name.
  * Case and punctuation do not count ("my-blog-com" matches my-blog.com),
- * but tokens must match whole ("hobby" does not match "hass"). A match in a
+ * but tokens must match whole ("tax" does not match "taxes"). A match in a
  * parent folder or in the middle of a name also skips: over-skipping only
  * loses context, under-skipping leaks a private project.
  */
