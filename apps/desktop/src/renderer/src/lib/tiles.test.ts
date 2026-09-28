@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { countPrs, isFyiNews, kindLabel, leadPr, tileForYou } from './tiles.ts';
+import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -61,6 +61,15 @@ describe('own PR helpers', () => {
     expect(isFyiNews({ ...view, turn: { kind: 'you', who: null, what: 'Answer 1 thread', prKey: 'PostHog/posthog#1' } })).toBe(false);
     expect(isFyiNews(setView([summary(1)], ['PostHog/posthog#1']))).toBe(false);
     expect(isFyiNews(setView([mine(1)]))).toBe(false);
+  });
+});
+
+describe('isDraftTile', () => {
+  it('is a draft tile when every open tracked PR is a draft', () => {
+    expect(isDraftTile(setView([summary(1, { isDraft: true }), summary(2, { isDraft: true, provenance: pulled })]))).toBe(true);
+    expect(isDraftTile(setView([summary(1, { isDraft: true }), summary(2)]))).toBe(false);
+    expect(isDraftTile(setView([summary(1, { isDraft: true }), summary(2, { state: 'MERGED' })]))).toBe(true);
+    expect(isDraftTile(setView([summary(1, { state: 'MERGED' })]))).toBe(false);
   });
 });
 

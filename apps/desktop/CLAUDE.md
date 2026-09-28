@@ -185,7 +185,10 @@ tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
   `Tile.tsx`); PR rows get the small chip, no band. The tooltip keeps the
   long why-here reason (`whyTitle`). Grey on done tiles.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
-  badge (`Glyph`), coral dot, age.
+  badge (`Glyph`), a coral "NEW" pill, age. Only unread tiles have the
+  strip; read tiles get a quieter (ink-2) title, done and draft tiles a
+  muted one. Drafts (`isDraftTile`): grey "Draft" chip and a dashed frame
+  or dashed left band.
 - PR status: `StatusPill`, one segment pill; open threads after it. Both
   go grey on done tiles, like the why badge.
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for

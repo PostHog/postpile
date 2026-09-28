@@ -37,6 +37,12 @@ export function leadPr(view: TileView): PrSummary | null {
   return openPinged ?? view.prs[0] ?? null;
 }
 
+/** Every open PR the tile tracks (not pulled-in context) is a draft: grey Draft chip, dashed frame, muted title. */
+export function isDraftTile(view: TileView): boolean {
+  const open = view.prs.filter((pr) => pr.provenance.kind !== 'pulled_in' && pr.state === 'OPEN');
+  return open.length > 0 && open.every((pr) => pr.isDraft);
+}
+
 /**
  * The unread news is on the viewer's own PR and asks nothing of them (a bot,
  * a finished review): the strip says what happened and adds that no move is

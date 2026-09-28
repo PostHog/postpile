@@ -47,7 +47,12 @@ export function UnreadStrip(props: { view: TileView }) {
           +{more}
         </span>
       )}
-      <span aria-label="New since you looked" className="ml-auto size-[7px] shrink-0 rounded-full bg-unread" />
+      <span
+        aria-label="New since you looked"
+        className="ml-auto flex h-4 shrink-0 items-center rounded-full bg-unread px-1.5 text-[9.5px] font-bold tracking-[0.04em] text-on-ink"
+      >
+        NEW
+      </span>
       <span className="shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(reason.at, now)}</span>
     </div>
   );

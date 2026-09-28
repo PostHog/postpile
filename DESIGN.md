@@ -1043,6 +1043,10 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
 - **Middle column**: one tile wide, tiles never sit side by side, so the
   selected tile's notch always points at the detail pane.
 - **Detail pane**: takes the remaining width.
+- **Unread vs read tiles** (2026-09-28): unread tiles keep the warm strip
+  with a coral "NEW" pill (was a 7px dot); read tiles have no strip and a
+  quieter title (ink-2 instead of ink). Coral stays "new since you looked"
+  only. PR rows show their own for-whom chip only in multi-PR tiles.
 - **Detail pane assessment** (2026-09-28, mockup ForWhom2 part 2 variant
   1, "verdict as the box title"; `GlanceCard`, split in `lib/assessment.ts`).
   Box 1 is titled with the verdict ("LOOK CLOSER · for you", honey; "LOOKS

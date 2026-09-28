@@ -312,6 +312,13 @@ now".
     a separate "RISK · level" box, plain Does / Others lines, and the
     action bar right under it (glance text split into lines in the
     renderer, schema unchanged).
+  - Sidebar: no counts on section headers; unread rows bold with a warm
+    background, read rows muted.
+  - Tiles: unread tiles carry a coral NEW pill in the strip, read tiles a
+    quieter title.
+  - Drafts: no review / re-check / merge moves, never To review, quiet
+    review requests and post-approval pushes, loud mark-ready, pings only
+    for personal asks; Draft chip and dashed frame. Fake #41945 is a draft.
 
 ## Stubbed or thin
 

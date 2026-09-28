@@ -13,6 +13,8 @@ interface PrRowProps {
   /** Done tiles grey the why badge, the status pill and the thread count. */
   greyed: boolean;
   first: boolean;
+  /** Only rows of multi-PR tiles show their own "for whom" chip; a single PR's is the tile's. */
+  showForWhom: boolean;
   onClick: () => void;
 }
 
@@ -39,7 +41,7 @@ export function PrRow(props: PrRowProps) {
       <span className={`font-mono text-[10.5px] ${props.selected ? 'text-accent' : 'text-muted'}`}>#{prNumber(pr.key)}</span>
       <span className="flex min-w-0 items-center gap-1.5">
         <span className={`truncate ${weight} ${titleTone}`}>{pr.title}</span>
-        <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={props.greyed} size="row" />
+        {props.showForWhom && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={props.greyed} size="row" />}
         {pr.repoLabel && <RepoLabel label={pr.repoLabel} />}
       </span>
       <span className="flex items-center gap-1">

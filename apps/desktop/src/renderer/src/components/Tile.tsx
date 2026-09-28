@@ -1,7 +1,7 @@
 import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { ageLabel } from '../lib/time.ts';
-import { kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { isDraftTile, kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
@@ -26,17 +26,19 @@ interface TileProps {
   filterMatch: boolean | null;
 }
 
-function frameClasses(props: TileProps): string {
+/** Drafts get a dashed frame (selection keeps its solid accent line). */
+function frameClasses(props: TileProps, draft: boolean): string {
+  const dashed = draft ? 'border-dashed' : '';
   if (props.selected) {
     return 'border-[1.5px] border-accent shadow-selected';
   }
   if (props.filterMatch === true) {
-    return 'border border-match-line shadow-tile';
+    return `border border-match-line shadow-tile ${dashed}`;
   }
   if (props.view.state.kind === 'done') {
-    return 'border border-hairline-done';
+    return `border border-hairline-done ${dashed}`;
   }
-  return 'border border-hairline-strong shadow-tile';
+  return draft ? 'border border-dashed border-frame' : 'border border-hairline-strong shadow-tile';
 }
 
 /** The left band per "for whom": honey for you, sea for your team, neutral for your own PR, none else. */
@@ -44,6 +46,14 @@ const BANDS: Record<ForWhom['kind'], string | null> = {
   you: 'bg-honey',
   team: 'bg-sea',
   own: 'bg-muted',
+  none: null,
+};
+
+/** The same band, dashed, on drafts. */
+const DASHED_BANDS: Record<ForWhom['kind'], string | null> = {
+  you: 'border-honey',
+  team: 'border-sea',
+  own: 'border-muted',
   none: null,
 };
 
@@ -68,6 +78,12 @@ export function Tile(props: TileProps) {
   const { tile, state } = view;
   const done = state.kind === 'done';
   const unread = state.kind === 'unread';
+  const draft = isDraftTile(view);
+  // Unread: full ink. Read: a notch quieter. Done and drafts: muted.
+  let titleLook = unread ? 'font-semibold text-ink' : 'font-semibold text-ink-2';
+  if (done || draft) {
+    titleLook = 'font-medium text-muted';
+  }
   const lead = leadPr(view);
   const forYou = tileForYou(view, props.sets);
   const updatedAt = tileUpdatedAt(view);
@@ -85,7 +101,7 @@ export function Tile(props: TileProps) {
   }
 
   return (
-    <article className={`relative flex min-w-0 flex-col rounded-tile ${background} ${frameClasses(props)} ${fade}`}>
+    <article className={`relative flex min-w-0 flex-col rounded-tile ${background} ${frameClasses(props, draft)} ${fade}`}>
       {props.selected && (
         // The notch points at the detail pane, which shows this tile.
         <span
@@ -93,9 +109,12 @@ export function Tile(props: TileProps) {
           className={`absolute top-1/2 -right-[7px] z-10 -mt-1.5 size-3 rotate-45 border-t-[1.5px] border-r-[1.5px] border-accent ${background}`}
         />
       )}
-      {BANDS[view.forWhom.kind] && (
+      {BANDS[view.forWhom.kind] && !draft && (
         // The "for whom" band down the left edge, in the chip's color; grey on done tiles.
         <span aria-hidden="true" className={`absolute inset-y-0 left-0 z-[1] w-1 rounded-l-[11px] ${done ? 'bg-ghost' : BANDS[view.forWhom.kind]}`} />
+      )}
+      {DASHED_BANDS[view.forWhom.kind] && draft && (
+        <span aria-hidden="true" className={`absolute inset-y-0 left-0 z-[1] w-1 border-l-4 border-dashed ${done ? 'border-ghost' : DASHED_BANDS[view.forWhom.kind]}`} />
       )}
       {unread && <UnreadStrip view={view} />}
       <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pt-3 pb-3">
@@ -103,6 +122,14 @@ export function Tile(props: TileProps) {
           <div className="flex items-center gap-[7px]">
             <ForWhomChip forWhom={view.forWhom} code={view.why} greyed={done} />
             <span className={`shrink-0 text-[11px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>{kindLabel(view)}</span>
+            {draft && (
+              <span
+                title="A draft: nobody reviews or approves it yet, and it won't merge soon"
+                className="flex h-5 shrink-0 items-center rounded-full bg-segment px-2 text-[10.5px] font-semibold text-muted"
+              >
+                Draft
+              </span>
+            )}
             <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} gap={lead?.glanceGap} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}
@@ -115,7 +142,7 @@ export function Tile(props: TileProps) {
             <PeopleStack people={view.people} />
             {!unread && updatedAt && <span className="shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(updatedAt, now)}</span>}
           </div>
-          <h2 className={`text-[14.5px] leading-snug font-semibold tracking-[-0.01em] ${done ? 'text-muted' : 'text-ink'}`}>{tile.title}</h2>
+          <h2 className={`text-[14.5px] leading-snug tracking-[-0.01em] ${titleLook}`}>{tile.title}</h2>
           {view.pendingWrite && (
             <div className="flex">
               <PendingWritePill pending={view.pendingWrite} />
@@ -129,6 +156,7 @@ export function Tile(props: TileProps) {
               key={pr.key}
               pr={pr}
               first={index === 0}
+              showForWhom={view.prs.length > 1}
               selected={props.selected && pr.key === props.selectedPrKey}
               strong={unread && pr.key === lead?.key}
               greyed={done}
