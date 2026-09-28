@@ -351,6 +351,46 @@ now".
 - Fake mode keeps instructions in memory (path shown as sample data) and
   cannot simulate a hand edit on disk.
 
+## Performance findings (pass of 2026-09-28)
+
+Measured on a copy of the real DB (~145 PRs, ~7k events, 62 topics).
+Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
+~57 ms -> ~13 ms), pr_event index (migration 012), minified renderer
+(981 -> 391 KB), react-query staleTime 30s, ready-to-show,
+`POSTPILE_SYNC_ON_START=0`. Left, most impact first:
+
+- **Board rebuilt per request** (~10 ms of the ~13 ms): every read model
+  request loads all PRs and all ~7k events (`events.listForPrs`, ~7 ms) and
+  rebuilds stacks and tiles. A Board cached per data version (`PRAGMA
+  data_version` plus a local write counter, rebuilt when `now` crosses a
+  snooze deadline) would make topics / topic / PR reads ~2-3 ms. Not needed
+  at today's sizes; worth it if the event count grows 5-10x.
+- **fixPath blocks the main process ~130-190 ms** at launch (sync login
+  shell spawn, before `app.whenReady`). About a third of launch -> renderer
+  start (~350 ms). Could run async (shell-env) and only be awaited before
+  the first `gh` / `claude` spawn.
+- **ready-to-show fires on the empty body paint**, ~80 ms before React's
+  first contentful paint, so the window still shows an empty (correctly
+  coloured) frame briefly. Showing it on an IPC "first render" signal from
+  the renderer would close that; cosmetic.
+- **Request waterfall on load**: topics -> topic -> PR, ~20 ms each in
+  series; first tile ~85 ms after navigation in Chrome, ~580 ms after launch
+  in the packaged app (warm). Fine today; the server could inline the first
+  topic's detail in `/api/topics` if it ever matters.
+- **Parsed PR cache memory**: holds all parsed PR snapshots (~15 MB json,
+  more as objects) for the process lifetime. Slimming the stored `Pr`
+  (comment and thread bodies are ~90% of the json) would help both memory
+  and the first cold read (~45 ms parse).
+- **`/api/debug/notifications`** is ~29 ms and 270 KB; debug pane only.
+- Not issues, checked: re-render on a search keystroke ~2 ms, clearing the
+  filter ~14 ms (whole App re-renders, no memo needed at this size); the 5s
+  live status refetch only re-renders when the status changes; one topic
+  switch fires 2-3 requests (topic, PR, the left topic's `seen`); event
+  derivation over all PRs ~18 ms per sync, stacks <1 ms, no quadratic loop
+  over events or PRs at this size. `run()` in `store/sql.ts` prepares a
+  statement per call (~7k per full sync event write); a statement cache
+  would shave a little off sync.
+
 ## Needs Julian's decisions
 
 - **Fake mode**: rebuild it on the real Engine (in-memory store, fake GitHub
