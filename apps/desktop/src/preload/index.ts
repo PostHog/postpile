@@ -1,8 +1,8 @@
 // Runs sandboxed before the renderer. It hands over where the API lives, the app version, two
 // listeners (trackpad swipes, clicks on Mac notifications) and one call (the
-// test notification), nothing else: no node access, no other ipc. The main
-// process passes the API values as extra command line arguments, which a
-// sandboxed preload can still read.
+// test notification), nothing else: no node access, no other ipc. The API URL
+// and token come from the main process over one sync ipc call (it answers
+// only the app's own page); the version comes as a command line argument.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { PingTarget } from '@postpile/core';
 
@@ -12,9 +12,11 @@ function argValue(name: string): string {
   return arg ? arg.slice(prefix.length) : '';
 }
 
+const connection = (ipcRenderer.sendSync('postpile:connection') as { apiUrl: string; token: string } | null) ?? { apiUrl: '', token: '' };
+
 contextBridge.exposeInMainWorld('postpile', {
-  apiUrl: argValue('postpile-api'),
-  token: argValue('postpile-token'),
+  apiUrl: connection.apiUrl,
+  token: connection.token,
   /** The app version, e.g. 0.1.0-alpha.0, for the status footer. */
   version: argValue('postpile-version'),
   /** Shows a test Mac notification; answers shown, off (POSTPILE_MAC_NOTIFICATIONS=0) or unsupported. */

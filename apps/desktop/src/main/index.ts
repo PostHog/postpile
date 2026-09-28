@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
 import fixPath from 'fix-path';
 import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
+import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
@@ -72,6 +73,8 @@ if (!firstInstance) {
 // apps/desktop/build, next to out/. Only there in a dev checkout; the packaged
 // app takes its icon from build/icon.icns through electron-builder.
 const iconFile = join(import.meta.dirname, '../../build/icon.png');
+// The bundled renderer page; the only page (besides the dev server) that gets the API token.
+const rendererFile = join(import.meta.dirname, '../renderer/index.html');
 
 let engine: EngineService | null = null;
 let server: RunningServer | null = null;
@@ -82,10 +85,13 @@ let quitting = false;
 const openedPrs = new OpenedPrs();
 
 function openExternalLink(url: string): void {
-  if (url.startsWith('https://')) {
-    openedPrs.remember(url, Date.now());
-    void shell.openExternal(url);
+  const problem = externalLinkProblem(url);
+  if (problem) {
+    console.log(`dropped a link, ${problem}: ${url.slice(0, 200)}`);
+    return;
   }
+  openedPrs.remember(url, Date.now());
+  void shell.openExternal(url);
 }
 
 /**
@@ -137,7 +143,40 @@ function showWindow(): void {
   mainWindow.focus();
 }
 
-async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow> {
+/**
+ * The preload asks for the API URL and token over a sync ipc call instead of
+ * reading them from the command line, where every local user sees them in
+ * `ps`. Only the app's own page gets an answer.
+ */
+function serveConnection(apiUrl: string, token: string): void {
+  ipcMain.on('postpile:connection', (event) => {
+    const url = event.senderFrame?.url ?? '';
+    if (isAppPage(url, rendererFile, process.env.ELECTRON_RENDERER_URL)) {
+      event.returnValue = { apiUrl, token };
+    } else {
+      console.log(`refused the API connection to ${url.slice(0, 200)}`);
+      event.returnValue = null;
+    }
+  });
+}
+
+/**
+ * No web permission is ever granted (camera, mic, location, notifications
+ * from the page...), except writing to the clipboard from the app's own
+ * page ("Copy path"). Mac notifications come from the main process.
+ */
+function denyPermissions(): void {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    const own = isAppPage(webContents.getURL(), rendererFile, process.env.ELECTRON_RENDERER_URL);
+    const allowed = own && permission === 'clipboard-sanitized-write';
+    if (!allowed) {
+      console.log(`denied the ${permission} permission to ${webContents.getURL().slice(0, 200)}`);
+    }
+    callback(allowed);
+  });
+}
+
+async function openWindow(): Promise<BrowserWindow> {
   const window = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -156,8 +195,8 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
     show: false,
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
-      // Read by the preload script, see src/preload/index.ts.
-      additionalArguments: [`--postpile-api=${apiUrl}`, `--postpile-token=${token}`, `--postpile-version=${app.getVersion()}`],
+      // Read by the preload script, see src/preload/index.ts. Nothing secret here: the token goes over ipc.
+      additionalArguments: [`--postpile-version=${app.getVersion()}`],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -195,13 +234,14 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
   if (devUrl) {
     await window.loadURL(devUrl);
   } else {
-    await window.loadFile(join(import.meta.dirname, '../renderer/index.html'));
+    await window.loadFile(rendererFile);
   }
   return window;
 }
 
 async function start(): Promise<void> {
   setAppMenu();
+  denyPermissions();
   // A dev run is the Electron binary, which shows the Electron icon in the Dock.
   if (process.platform === 'darwin' && !app.isPackaged) {
     app.dock?.setIcon(nativeImage.createFromPath(iconFile));
@@ -229,7 +269,8 @@ async function start(): Promise<void> {
   const config = appConfigFromEnv();
   server = await startServer({ engine, port: 0, token, config });
   console.log(`server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}`);
-  mainWindow = await openWindow(server.url, token);
+  serveConnection(server.url, token);
+  mainWindow = await openWindow();
   // A click opens the tile: show the window, then let the renderer navigate.
   const notifier = new MacNotifier({
     enabled: process.env.POSTPILE_MAC_NOTIFICATIONS !== '0',
