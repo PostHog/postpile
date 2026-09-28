@@ -23,6 +23,13 @@ describe('pingRule', () => {
     expect(pingRule([request, commits, comment], pr, viewer, false).event?.id).toBe('c');
   });
 
+  it('pings for a team review request on a teammate\'s PR like a personal one', () => {
+    const withTeam = { ...viewer, teamMembers: ['lyra'] };
+    const byTeammate = makePr({ number: 10, author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    const request = makeEvent({ kind: 'review_requested', actor: 'lyra', ruleLoudness: 'loud', ruleReason: 'review requested from you' });
+    expect(pingRule([request], byTeammate, withTeam, false)).toMatchObject({ class: 'addressed', event: { id: request.id } });
+  });
+
   it('counts changes requested as addressed only on the viewer’s own PR', () => {
     const changes = makeEvent({ kind: 'review_changes_requested', ruleLoudness: 'loud' });
     expect(pingRule([changes], ownPr, viewer, false).class).toBe('addressed');

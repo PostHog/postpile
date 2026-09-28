@@ -71,6 +71,7 @@ import {
   CLEANUP_SNOOZE_DAYS,
   DEFAULT_REPO_SETTINGS,
   unreadOlderThan,
+  isPrDone,
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
@@ -315,11 +316,14 @@ export class FakeEngine implements EngineService {
     return state;
   }
 
-  /** An approval on any commit makes the PR done, like the real rule. */
+  /** Same done rule as the engine: a PR that still asks something of the viewer is never done. */
   private isPrDone(prKey: PrKey): boolean {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
-    const state = this.data.userStates.find((candidate) => candidate.prKey === prKey);
-    return Boolean(state?.approvedAt || state?.handledAt || pr?.state !== 'OPEN');
+    if (!pr) {
+      return false;
+    }
+    const state = this.data.userStates.find((candidate) => candidate.prKey === prKey) ?? null;
+    return isPrDone(pr, state, this.viewer(), this.eventsOf(prKey));
   }
 
   private viewer(): Viewer {

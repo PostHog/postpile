@@ -20,6 +20,7 @@ import {
   type Topic,
   type TopicMembership,
   type UserPrState,
+  type Viewer,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { loadBaseline } from './baseline-meta.ts';
@@ -61,7 +62,7 @@ export class Board {
   private constructor(
     private readonly store: Store,
     readonly now: string,
-    readonly viewerLogin: string | undefined,
+    readonly viewer: Viewer | null,
     readonly prs: Map<PrKey, Pr>,
     readonly threads: Map<PrKey, NotificationThread>,
     readonly events: Map<PrKey, PrEvent[]>,
@@ -129,7 +130,7 @@ export class Board {
     return new Board(
       store,
       now,
-      loadViewer(store)?.login,
+      loadViewer(store),
       prs,
       threadsByPrKey(store.notifications.list()),
       events,
@@ -209,7 +210,7 @@ export class Board {
       userStates: this.userStates,
       snooze: this.snoozes.get(tile.id) ?? null,
       now: this.now,
-      viewerLogin: this.viewerLogin,
+      viewer: this.viewer,
     });
   }
 

@@ -240,7 +240,8 @@ describe('FakeEngine rechecks', () => {
     const sent = await engine.sendPendingWrites();
     expect(sent).toMatchObject({ ok: true, done: 1 });
     expect(sent.status.pending).toEqual([]);
-    expect((await tileOf())?.state.kind).toBe('done');
+    // Read, but reviews are still asked of you there: it stays open, not done.
+    expect((await tileOf())?.state.kind).toBe('open');
     const sentRows = await engine.debugNotifications(100);
     expect(unread.every((row) => sentRows.find((candidate) => candidate.thread.id === row.thread.id)?.thread.unread === false)).toBe(true);
   });

@@ -3,11 +3,13 @@
 // codes still decide, the UI shows words instead of RV / RT / @ / ...
 import { changesAnswered } from './changes-answered.ts';
 import { isOwnTeam, mentionsTeam, sameLogin } from './mentions.ts';
+import { reviewRequest } from './review-request.ts';
 import type { Pr, Viewer } from './types.ts';
 import type { WhyCode } from './why-here.ts';
 
 /**
- * you: asked of or addressed to the viewer personally (RV, @, AS).
+ * you: asked of or addressed to the viewer personally (RV, @, AS), or a
+ * team request on a teammate's PR nobody else on the team covered yet.
  * team: one of their teams is asked or mentioned and nothing is for the
  * viewer personally (RT, @T); `team` is the short slug ("team-devex").
  * own: the viewer wrote it (AU). none: everything else, no chip, no band.
@@ -52,6 +54,10 @@ export function forWhom(code: WhyCode, pr: Pr | null, viewer: Viewer | null): Fo
   }
   // The author addressed the viewer's changes request: a re-review for them, whatever the notification said.
   if (pr !== null && viewer !== null && !pr.isDraft && changesAnswered(pr, viewer) !== null) {
+    return { kind: 'you' };
+  }
+  // A team request on a teammate's PR that no other teammate covered yet counts like a personal one.
+  if (pr !== null && viewer !== null && reviewRequest(pr, viewer) === 'team_for_you') {
     return { kind: 'you' };
   }
   switch (code) {

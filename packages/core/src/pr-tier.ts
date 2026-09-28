@@ -2,8 +2,8 @@
 // open PR belongs to. Rules only, no agent. The sidebar's queue sections
 // are built on it (`topicQueues`).
 import { changesAnswered } from './changes-answered.ts';
-import { isOwnTeam, sameLogin } from './mentions.ts';
-import { isApprovedByViewer } from './tiles.ts';
+import { sameLogin } from './mentions.ts';
+import { isPersonalRequest, isTeammate, reviewedHead, reviewRequest } from './review-request.ts';
 import type { EventKind, NotificationReason, Pr, PrEvent, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';
 
@@ -12,7 +12,9 @@ import { unansweredAsk } from './whose-turn.ts';
  * they have not answered. mine: the viewer wrote it. team: a teammate wrote
  * it. to_review: a review is asked of the viewer or their team and they have
  * not reviewed the head, or the author addressed the viewer's changes request
- * (pushed or replied after it, no re-request needed). team_mentioned: the team was @-mentioned. rest:
+ * (pushed or replied after it, no re-request needed). A personal request and
+ * a team request on a teammate's PR go before `team`; a teammate's PR with
+ * only a taken team request stays `team`. team_mentioned: the team was @-mentioned. rest:
  * everything else, and every PR that is not open.
  */
 export type PrTier = 'needs_reply' | 'mine' | 'team' | 'to_review' | 'team_mentioned' | 'rest';
@@ -29,21 +31,6 @@ export interface PrTierInput {
   viewer: Viewer;
   /** The notification thread's reason, when there is a thread. */
   reason: NotificationReason | null;
-}
-
-function isTeammate(login: string, viewer: Viewer): boolean {
-  return (viewer.teamMembers ?? []).some((member) => sameLogin(member, login));
-}
-
-/** The viewer reviewed the current head, or approved on any commit (an approval does not follow the head). */
-function reviewedHead(pr: Pr, viewer: Viewer): boolean {
-  const onHead = pr.reviews.some((review) => sameLogin(review.author, viewer.login) && review.state !== 'PENDING' && review.commitOid === pr.headOid);
-  return onHead || isApprovedByViewer(pr, null, viewer.login);
-}
-
-function reviewAsked(pr: Pr, viewer: Viewer): boolean {
-  const asksYou = pr.reviewerUsers.some((login) => sameLogin(login, viewer.login));
-  return asksYou || pr.reviewerTeams.some((team) => isOwnTeam(team, viewer.teams));
 }
 
 /**
@@ -73,11 +60,16 @@ export function prTier(input: PrTierInput): PrTier {
   if (sameLogin(pr.author, viewer.login)) {
     return 'mine';
   }
+  // A draft is not up for review: it never lands in To review.
+  const request = pr.isDraft || reviewedHead(pr, viewer) ? null : reviewRequest(pr, viewer);
+  // A personal request, or a team request on a teammate's PR, is owed even to a teammate.
+  if (isPersonalRequest(request)) {
+    return 'to_review';
+  }
   if (isTeammate(pr.author, viewer)) {
     return 'team';
   }
-  // A draft is not up for review: it never lands in To review.
-  if (!pr.isDraft && reviewAsked(pr, viewer) && !reviewedHead(pr, viewer)) {
+  if (request !== null) {
     return 'to_review';
   }
   if (teamMentioned(input)) {

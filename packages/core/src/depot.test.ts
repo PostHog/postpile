@@ -16,7 +16,7 @@ function tileState(pr: Pr, userState: UserPrState | null) {
     userStates: new Map(userState ? [[pr.key, userState]] : []),
     snooze: null,
     now: at(100),
-    viewerLogin: viewer.login,
+    viewer,
   });
   return { events, state };
 }

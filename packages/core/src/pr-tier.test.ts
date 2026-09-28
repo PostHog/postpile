@@ -29,9 +29,26 @@ describe('prTier', () => {
     expect(tier({ events: [team] })).toBe('team_mentioned');
   });
 
-  it('files teammates’ PRs as team, before review requests', () => {
-    expect(tier({ pr: makePr({ author: 'lyra', reviewerUsers: [me] }) })).toBe('team');
+  it('files teammates’ PRs as team when no review is owed', () => {
+    expect(tier({ pr: makePr({ author: 'lyra' }) })).toBe('team');
     expect(tier({ pr: makePr({ author: 'lyra' }), viewer })).toBe('rest');
+    const reviewed = makePr({ author: 'lyra', reviewerUsers: [me], reviews: [makeReview({ author: me, state: 'COMMENTED' })] });
+    expect(tier({ pr: reviewed })).toBe('team');
+  });
+
+  it('puts a personal request on a teammate’s PR in To review', () => {
+    expect(tier({ pr: makePr({ author: 'lyra', reviewerUsers: [me] }) })).toBe('to_review');
+  });
+
+  it('puts a team request on a teammate’s PR in To review until another teammate approves or asks for changes', () => {
+    const pr = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    expect(tier({ pr })).toBe('to_review');
+    expect(tier({ pr: { ...pr, reviews: [makeReview({ author: 'rowan', state: 'COMMENTED' })] } })).toBe('to_review');
+    expect(tier({ pr: { ...pr, reviews: [makeReview({ author: 'rowan', state: 'APPROVED' })] } })).toBe('team');
+  });
+
+  it('keeps a routed team request in To review', () => {
+    expect(tier({ pr: makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'] }) })).toBe('to_review');
   });
 
   it('asks for review until you reviewed the head or approved any commit', () => {

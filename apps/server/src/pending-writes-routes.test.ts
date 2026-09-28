@@ -110,6 +110,7 @@ describe('pending writes routes (fake mode)', () => {
     const sent = await app.post<PendingWritesResult>('/api/github-writes/pending/send');
     expect(sent).toMatchObject({ ok: true, done: 1 });
     const topic = await app.get<TopicDetail>('/api/topics/topic-depot');
-    expect(topic.tiles.find((view) => view.tile.id === 'set:turbo-cache')?.state.kind).toBe('done');
+    // Read, but reviews are still asked of you there: it stays open, not done.
+    expect(topic.tiles.find((view) => view.tile.id === 'set:turbo-cache')?.state.kind).toBe('open');
   });
 });

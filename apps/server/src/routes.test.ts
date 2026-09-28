@@ -202,7 +202,8 @@ describe('server routes over the fake engine', () => {
     const marked = await post<ActionResult>(app, `/api/tiles/${setTile}/mark-read`);
     expect(marked.json.undoToken).toBeTruthy();
     let topic = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
-    expect(topic.tiles.find((view) => view.tile.id === 'set:turbo-cache')?.state.kind).toBe('done');
+    // Read, but reviews are still asked of you there: it stays open, not done.
+    expect(topic.tiles.find((view) => view.tile.id === 'set:turbo-cache')?.state.kind).toBe('open');
 
     const undone = await post<ActionResult>(app, '/api/undo', { undoToken: marked.json.undoToken });
     expect(undone.json.ok).toBe(true);

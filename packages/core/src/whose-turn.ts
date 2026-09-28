@@ -4,9 +4,9 @@ import { isBot } from './bots.ts';
 import { changesAnswered, type ChangesAnswer } from './changes-answered.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
-import { isApprovedByViewer } from './tiles.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
+import { isApprovedByViewer, isPersonalRequest, reviewRequest, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
 
 export type WhoseTurnKind = 'you' | 'them' | 'none';
@@ -128,42 +128,9 @@ function requester(ctx: PrContext): string | null {
   return requests[requests.length - 1]?.actor ?? null;
 }
 
-/** Humans other than the author and the viewer who submitted a review. */
-function otherReviewers(ctx: PrContext): string[] {
-  const logins = ctx.pr.reviews
-    .filter((r) => r.state !== 'PENDING' && !isViewer(ctx, r.author) && !sameLogin(r.author, ctx.pr.author) && !isBot(r.author))
-    .map((r) => r.author);
-  return [...new Set(logins)];
-}
-
-/**
- * Other reviewers who are on one of the viewer's teams. Until the member
- * list has been fetched (`teamMembers` missing) any other reviewer counts.
- */
-function teammateReviewers(ctx: PrContext): string[] {
-  const members = ctx.viewer.teamMembers;
-  const others = otherReviewers(ctx);
-  if (members === undefined) {
-    return others;
-  }
-  return others.filter((login) => members.some((member) => sameLogin(member, login)));
-}
-
-type ReviewAsk = 'you' | 'team' | 'team_taken' | null;
-
-/**
- * you: the viewer is a requested reviewer. team: one of the viewer's teams
- * is, and no teammate has reviewed yet. team_taken: a teammate already
- * picked the team request up.
- */
-function reviewAsk(ctx: PrContext): ReviewAsk {
-  if (ctx.pr.reviewerUsers.some((login) => isViewer(ctx, login))) {
-    return 'you';
-  }
-  if (!ctx.pr.reviewerTeams.some((team) => isOwnTeam(team, ctx.viewer.teams))) {
-    return null;
-  }
-  return teammateReviewers(ctx).length === 0 ? 'team' : 'team_taken';
+/** The pending review request that concerns the viewer (see `reviewRequest`). */
+function reviewAsk(ctx: PrContext): ReviewRequest {
+  return reviewRequest(ctx.pr, ctx.viewer);
 }
 
 function ownTeamSlug(ctx: PrContext): string {
@@ -183,9 +150,12 @@ function askText(ask: PrEvent, reviewToo: boolean): string {
   return reviewToo ? `Review, ${ask.actor} ${verbs.withReview}` : verbs.alone(ask.actor);
 }
 
-function reviewText(ctx: PrContext, ask: ReviewAsk): string {
+function reviewText(ctx: PrContext, ask: ReviewRequest): string {
   if (ask === 'team') {
     return `Review for ${ownTeamSlug(ctx)}`;
+  }
+  if (ask === 'team_for_you') {
+    return `Review for ${ownTeamSlug(ctx)}: ${ctx.pr.author}'s PR`;
   }
   const by = requester(ctx);
   return by && !isViewer(ctx, by) ? `Review, ${by} asked` : 'Review';
@@ -254,7 +224,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return them(ctx, pr.author, 'to merge');
   }
   const reviewed = headReview(ctx);
-  if (reviewed === null && (ask === 'you' || ask === 'team')) {
+  if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
     return you(ctx, reviewText(ctx, ask));
   }
   if (reviewed?.state === 'APPROVED') {
@@ -271,7 +241,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     if (pr.reviewDecision === 'APPROVED') {
       return them(ctx, pr.author, 'to merge');
     }
-    return them(ctx, teammateReviewers(ctx)[0]!, 'is reviewing');
+    return them(ctx, teamRequestTakenBy(ctx.pr, ctx.viewer)[0]!, 'is reviewing');
   }
   return NO_TURN;
 }
@@ -323,10 +293,15 @@ function prTurn(ctx: PrContext): WhoseTurn {
   if (ask) {
     const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login)
       ? false
-      : reviewAsk(ctx) === 'you' && headReview(ctx) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
+      : isPersonalRequest(reviewAsk(ctx)) && headReview(ctx) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
     return you(ctx, askText(ask, reviewToo));
   }
   return sameLogin(ctx.pr.author, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
+}
+
+/** Whose move it is on one PR, as a single-PR tile would say it (tracked or not). */
+export function prWhoseTurn(input: { pr: Pr; events: PrEvent[]; userState: UserPrState | null; viewer: Viewer }): WhoseTurn {
+  return prTurn({ ...input, where: '' });
 }
 
 /** When the newest unseen loud event on the PR happened, '' when there is none. */

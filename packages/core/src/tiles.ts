@@ -1,8 +1,9 @@
 import { isUnseenLoud } from './loudness.ts';
-import { sameLogin } from './mentions.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
+import { isApprovedByViewer, reviewPending } from './review-request.ts';
 import { breaksSnooze, isSnoozeOver } from './snooze.ts';
 import { stackByPrKey } from './stacks.ts';
+import { prWhoseTurn } from './whose-turn.ts';
 import type {
   FoundPr,
   IsoTime,
@@ -19,6 +20,7 @@ import type {
   TileStateKind,
   UnreadReason,
   UserPrState,
+  Viewer,
 } from './types.ts';
 
 export interface TileStateInput {
@@ -28,8 +30,11 @@ export interface TileStateInput {
   userStates: Map<PrKey, UserPrState>;
   snooze: Snooze | null;
   now: IsoTime;
-  /** Lets an approval made on github.com count as done, not only ones made in the app. */
-  viewerLogin?: string;
+  /**
+   * Lets an approval made on github.com count as done, and keeps a PR that
+   * still asks something of the viewer out of done. Null: handled is enough.
+   */
+  viewer?: Viewer | null;
 }
 
 export interface TopicTilesInput {
@@ -76,38 +81,31 @@ export function setIdFromTileId(tileId: string): string | null {
 }
 
 /**
- * The viewer approved the PR, on any commit: from the app (the stored
- * approval) or on github.com (their newest approve-or-request-changes
- * review is an approval). Approvals do not follow the head: a push after
- * approval does not undo it (Julian, 2026-09-28).
+ * A pinged PR is done only when nothing is asked of the viewer (2026-09-28):
+ * merged or closed, or approved by them (on any commit; a later push stays
+ * quiet unless someone pings again or the agent raises it), or handled
+ * (marked read) while whose turn is not theirs and no review is still
+ * pending of them or their team. Marking read a PR that still waits on the
+ * viewer's review makes it read, not done. Without a viewer, handled is
+ * enough.
  */
-export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
-  const decisive = viewerLogin === undefined
-    ? []
-    : pr.reviews
-        .filter((r) => (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED' || r.state === 'DISMISSED') && sameLogin(r.author, viewerLogin))
-        .sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
-  const newest = decisive[decisive.length - 1];
-  const approvedInApp = userState?.approvedAt ?? null;
-  if (approvedInApp !== null && (!newest || approvedInApp >= newest.submittedAt)) {
-    return true;
-  }
-  return newest?.state === 'APPROVED';
-}
-
-/**
- * A pinged PR is done once it is merged/closed, the user handled it, or the
- * user approved it (on any commit). A later push stays quiet unless someone
- * pings again or the agent raises it.
- */
-export function isPrDone(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
+export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer | null = null, events: PrEvent[] = []): boolean {
   if (pr.state !== 'OPEN') {
     return true;
   }
-  if (userState?.handledAt) {
+  if (isApprovedByViewer(pr, userState, viewer?.login)) {
     return true;
   }
-  return isApprovedByViewer(pr, userState, viewerLogin);
+  if (!userState?.handledAt) {
+    return false;
+  }
+  if (viewer === null) {
+    return true;
+  }
+  if (reviewPending(pr, viewer, userState)) {
+    return false;
+  }
+  return prWhoseTurn({ pr, events, userState, viewer }).kind !== 'you';
 }
 
 /** A found PR (no notification thread) never makes its tile unread; its events are there for whose turn and memory. */
@@ -142,7 +140,7 @@ function isSnoozeActive(input: TileStateInput): boolean {
   if (events.some((event) => breaksSnooze(event, snooze))) {
     return false;
   }
-  return !isSnoozeOver(snooze, { prs, events, now: input.now, viewerLogin: input.viewerLogin });
+  return !isSnoozeOver(snooze, { prs, events, now: input.now, viewerLogin: input.viewer?.login });
 }
 
 function allPingedDone(input: TileStateInput): boolean {
@@ -151,7 +149,7 @@ function allPingedDone(input: TileStateInput): boolean {
     if (!pr) {
       return false;
     }
-    return isPrDone(pr, input.userStates.get(member.prKey) ?? null, input.viewerLogin);
+    return isPrDone(pr, input.userStates.get(member.prKey) ?? null, input.viewer ?? null, input.events.get(member.prKey) ?? []);
   });
 }
 

@@ -55,8 +55,9 @@ changes requested on their own PR. Ping by default. Say no ping only when it is 
 an interruption now, for example a thank-you or "no action needed" mention, a review request
 their instructions say they do not care about, or chatter already answered.
 "Why it reached them" codes: RV review asked of them, RT review asked of their team (not them in
-person, so ping only when it looks like it needs them), @ mentioned them, @T mentioned their team,
-AS assigned, AU their own PR, CM they took part, FW following.
+person, so ping only when it looks like it needs them; but when whose turn reads "Review for
+<team>: <author>'s PR" a teammate wrote it and it counts like RV), @ mentioned them, @T mentioned
+their team, AS assigned, AU their own PR, CM they took part, FW following.
 
 ${sections}
 

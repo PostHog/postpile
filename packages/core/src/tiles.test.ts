@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, singleTile } from './fixtures.ts';
+import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, singleTile, viewer } from './fixtures.ts';
 import { buildStacks } from './stacks.ts';
 import {
   buildTopicTiles,
@@ -11,7 +11,7 @@ import {
   singleTileId,
   type TileStateInput,
 } from './tiles.ts';
-import type { Pr, PrEvent, PrSet, Tile, UserPrState } from './types.ts';
+import type { Pr, PrEvent, PrSet, Tile, UserPrState, Viewer } from './types.ts';
 
 function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPrState[] = []): TileStateInput {
   const eventMap = new Map<string, PrEvent[]>();
@@ -25,9 +25,12 @@ function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPr
     userStates: new Map(userStates.map((s) => [s.prKey, s])),
     snooze: null,
     now: at(100),
-    viewerLogin: 'viewer',
+    viewer: teamViewer,
   };
 }
+
+const teamViewer: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
+const handled = makeUserState({ handledAt: at(50) });
 
 describe('isPrDone', () => {
   it('is done when merged or closed', () => {
@@ -39,7 +42,47 @@ describe('isPrDone', () => {
     const pr = makePr({ headOid: 'h2' });
     expect(isPrDone(pr, null)).toBe(false);
     expect(isPrDone(pr, makeUserState({ handledAt: at(1) }))).toBe(true);
+    expect(isPrDone(pr, makeUserState({ handledAt: at(1) }), teamViewer)).toBe(true);
     expect(isPrDone(pr, makeUserState({ approvedAt: at(1), approvedCommitOid: 'h2' }))).toBe(true);
+  });
+
+  it('is not done after mark-read while your personal review is pending', () => {
+    const pr = makePr({ author: 'ada', reviewerUsers: [viewer.login] });
+    expect(isPrDone(pr, handled, teamViewer)).toBe(false);
+  });
+
+  it('is not done after mark-read while a team review is pending on a teammate\'s PR', () => {
+    const pr = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    expect(isPrDone(pr, handled, teamViewer)).toBe(false);
+  });
+
+  it('is not done after mark-read while a routed team review is pending without your review', () => {
+    const pr = makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'] });
+    expect(isPrDone(pr, handled, teamViewer)).toBe(false);
+  });
+
+  it('is done after mark-read once a teammate took the routed team request', () => {
+    const pr = makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'], reviews: [makeReview({ author: 'lyra' })] });
+    expect(isPrDone(pr, handled, teamViewer)).toBe(true);
+  });
+
+  it('is done after mark-read once you reviewed the head and nothing else is asked', () => {
+    const pr = makePr({ author: 'ada', reviewerUsers: [viewer.login], reviews: [makeReview({ author: viewer.login, state: 'COMMENTED' })] });
+    expect(isPrDone(pr, handled, teamViewer)).toBe(true);
+  });
+
+  it('is done once you approved, and once it merged, even with the request still listed', () => {
+    const pr = makePr({ author: 'lyra', reviewerUsers: [viewer.login], reviewerTeams: ['PostHog/team-devex'] });
+    const approved = { ...pr, reviews: [makeReview({ author: viewer.login, commitOid: 'old' })] };
+    expect(isPrDone(approved, null, teamViewer)).toBe(true);
+    expect(isPrDone({ ...pr, state: 'MERGED' }, null, teamViewer)).toBe(true);
+  });
+
+  it('is not done after mark-read while an ask to you is unanswered', () => {
+    const pr = makePr({ author: 'ada' });
+    const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30), seenAt: at(40) });
+    expect(isPrDone(pr, handled, teamViewer, [question])).toBe(false);
+    expect(isPrDone(pr, handled, teamViewer)).toBe(true);
   });
 
   it('stays done when someone pushed after the approval', () => {
@@ -49,7 +92,7 @@ describe('isPrDone', () => {
 
   it('counts an approval made on github.com, on any commit', () => {
     const pr = makePr({ headOid: 'h3', reviews: [makeReview({ author: 'viewer', commitOid: 'h2' })] });
-    expect(isPrDone(pr, null, 'viewer')).toBe(true);
+    expect(isPrDone(pr, null, viewer)).toBe(true);
     expect(isPrDone(pr, null)).toBe(false);
   });
 
@@ -60,7 +103,7 @@ describe('isPrDone', () => {
         makeReview({ id: 'b', author: 'viewer', state: 'CHANGES_REQUESTED', submittedAt: at(2) }),
       ],
     });
-    expect(isPrDone(pr, null, 'viewer')).toBe(false);
+    expect(isPrDone(pr, null, viewer)).toBe(false);
   });
 });
 

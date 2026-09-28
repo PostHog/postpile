@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { forWhom, tileForWhom } from './for-whom.ts';
-import { makeComment, makePr, makeTimelineItem, viewer } from './fixtures.ts';
+import { makeComment, makePr, makeReview, makeTimelineItem, viewer } from './fixtures.ts';
 
 const other = makePr({ author: 'rowan' });
 
@@ -18,6 +18,18 @@ describe('forWhom', () => {
     const mentioned = { ...other, comments: [makeComment({ body: 'cc @PostHog/team-devex' })] };
     expect(forWhom('@T', mentioned, viewer)).toEqual({ kind: 'team', team: 'team-devex' });
     expect(forWhom('@T', other, { ...viewer, teams: [] })).toEqual({ kind: 'team', team: 'your team' });
+  });
+
+  it('says "for you" for a team request on a teammate\'s PR nobody else on the team covered', () => {
+    const withTeam = { ...viewer, teamMembers: ['lyra', 'rowan'] };
+    const byTeammate = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    expect(forWhom('RT', byTeammate, withTeam)).toEqual({ kind: 'you' });
+    const commented = { ...byTeammate, reviews: [makeReview({ author: 'rowan', state: 'COMMENTED' })] };
+    expect(forWhom('RT', commented, withTeam)).toEqual({ kind: 'you' });
+    const approved = { ...byTeammate, reviews: [makeReview({ author: 'rowan', state: 'APPROVED' })] };
+    expect(forWhom('RT', approved, withTeam)).toEqual({ kind: 'team', team: 'team-devex' });
+    const routed = makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'] });
+    expect(forWhom('RT', routed, withTeam)).toEqual({ kind: 'team', team: 'team-devex' });
   });
 
   it('marks the viewer\'s own PR as own, even with a team request on it', () => {

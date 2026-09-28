@@ -49,6 +49,35 @@ describe('whoseTurn: your move', () => {
     expect(turnOf(singleTile(teammate), [teammate], [], [], withTeam)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
   });
 
+  it('asks for a team review on a teammate\'s PR like a personal one, naming the author', () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
+    const pr = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    const turn = (p: Pr) => turnOf(singleTile(p), [p], [], [], withTeam);
+    expect(turn(pr)).toMatchObject({ kind: 'you', what: "Review for team-devex: lyra's PR" });
+    // A teammate's comment alone does not cover it.
+    const commented = { ...pr, reviews: [makeReview({ author: 'rowan', state: 'COMMENTED' })] };
+    expect(turn(commented)).toMatchObject({ kind: 'you', what: "Review for team-devex: lyra's PR" });
+    const changes = { ...pr, reviews: [makeReview({ author: 'rowan', state: 'CHANGES_REQUESTED' })] };
+    expect(turn(changes)).toMatchObject({ kind: 'them', who: 'rowan', what: 'is reviewing' });
+    const approved = { ...pr, reviewDecision: 'APPROVED' as const, reviews: [makeReview({ author: 'rowan', state: 'APPROVED' })] };
+    expect(turn(approved)).toMatchObject({ kind: 'them', who: 'lyra', what: 'to merge' });
+  });
+
+  it('keeps the routed team request wording on a PR from outside the team', () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
+    const pr = makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'] });
+    expect(turnOf(singleTile(pr), [pr], [], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review for team-devex' });
+    const commented = { ...pr, reviews: [makeReview({ author: 'rowan', state: 'COMMENTED' })] };
+    expect(turnOf(singleTile(commented), [commented], [], [], withTeam)).toMatchObject({ kind: 'them', who: 'rowan', what: 'is reviewing' });
+  });
+
+  it('adds the review to an ask on a teammate\'s PR with a team request', () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
+    const pr = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    const mention = makeEvent({ kind: 'mention', actor: 'lyra', at: at(30) });
+    expect(turnOf(singleTile(pr), [pr], [mention], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you' });
+  });
+
   it('never asks to re-check commits that landed after your approval', () => {
     const pr = makePr({
       author: 'rowan',
