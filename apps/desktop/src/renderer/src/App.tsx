@@ -11,6 +11,7 @@ import { DetailPane } from './components/DetailPane.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { NotificationsPane } from './components/NotificationsPane.tsx';
+import { RepoScopeMenu } from './components/RepoScopeMenu.tsx';
 import { SearchField } from './components/SearchField.tsx';
 import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
@@ -189,6 +190,7 @@ export function App() {
           onBack={nav.back}
           onForward={nav.forward}
           search={<SearchField value={query} onChange={setQuery} />}
+          repoScope={<RepoScopeMenu />}
         />
         {/* Sidebar | tiles | detail. The tile column stays one tile wide and the detail
             pane takes the rest; widths hold from the 1100px minimum window up. */}

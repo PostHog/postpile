@@ -23,6 +23,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     glanceGap: null,
     unseenLoudEvents: 0,
     updatedAt: at(number),
+    quietRepo: false,
     ...overrides,
   };
 }
@@ -40,6 +41,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
     pendingWrite: null,
+    quietRepo: false,
   };
 }
 

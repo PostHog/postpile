@@ -20,6 +20,7 @@ import type {
   MemoryRecheckResult,
   PendingWritesResult,
   PrKey,
+  RepoOverview,
   SnoozeCondition,
   SyncReport,
   WorkContextSweepResult,
@@ -91,6 +92,10 @@ export interface Actions {
   correctMemory(input: MemoryCorrection): Promise<boolean>;
   /** "Recheck": one agent call, nothing written. Null when the request itself failed. */
   recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult | null>;
+  /** The repo menu's scope; null shows all repos. Local, quiet (no toast). */
+  setRepoScope(repos: string[] | null): Promise<void>;
+  /** "Let it go stale" on a repo, or waking it up again. Local, not a GitHub write. */
+  setRepoQuiet(repo: string, quiet: boolean): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
@@ -268,6 +273,25 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function setRepoScope(repos: string[] | null): Promise<void> {
+    try {
+      await withBusy('repos', () => request<RepoOverview>('POST', '/api/repos/scope', { repos }));
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not change the repo filter: ${errorText(error)}`);
+    }
+  }
+
+  async function setRepoQuiet(repo: string, quiet: boolean): Promise<void> {
+    try {
+      await withBusy('repos', () => request<RepoOverview>('POST', '/api/repos/quiet', { repo, quiet }));
+      show('ok', quiet ? `${repo} goes quiet: still synced, never urgent, never pings` : `${repo} counts again`);
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not change ${repo}: ${errorText(error)}`);
+    }
+  }
+
   async function draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null> {
     try {
       const draft = await withBusy(`ask:${prKey}`, () =>
@@ -401,6 +425,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     },
     correctMemory: (input) => run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input)),
     recheckMemory,
+    setRepoScope,
+    setRepoQuiet,
     markTopicSeen,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),

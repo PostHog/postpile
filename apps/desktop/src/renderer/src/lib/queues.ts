@@ -11,9 +11,10 @@ export const QUEUE_FILTERS: QueueFilter[] = ['mine', 'team', 'reply', 'review'];
 /**
  * Mine / Team: open PRs you or a teammate wrote. Reply / Review: that tier.
  * A pulled-in stack layer never matches: it is context, outside the queues.
+ * Neither does a PR in a quiet repo ("Let it go stale").
  */
 export function prMatchesFilter(pr: PrSummary, filter: QueueFilter): boolean {
-  if (pr.provenance.kind === 'pulled_in') {
+  if (pr.provenance.kind === 'pulled_in' || pr.quietRepo) {
     return false;
   }
   if (filter === 'mine') {

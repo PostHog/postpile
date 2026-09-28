@@ -93,6 +93,11 @@ export function Tile(props: TileProps) {
             <span className={`shrink-0 text-[11px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>{kindLabel(view)}</span>
             <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} gap={lead?.glanceGap} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
+            {view.quietRepo && (
+              <span className="shrink-0 text-[10.5px] text-faint" title="This repo is set to “Let it go stale” in the repo menu: still synced, never urgent, never pings">
+                quiet repo
+              </span>
+            )}
             <span className="ml-auto" />
             <PeopleStack people={view.people} />
             {!unread && updatedAt && <span className="shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(updatedAt, now)}</span>}

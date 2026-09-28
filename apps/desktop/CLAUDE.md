@@ -34,7 +34,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
   (`useMemorySources`, only enabled while a "Why?" panel is open), `debug.ts`
   (`useDebugNotifications`, the notifications debug pane), `writes.ts`
-  (`useGitHubWrites`, the footer lock), `live.ts`
+  (`useGitHubWrites`, the footer lock), `repos.ts` (`useRepos`, the
+  title bar repo menu), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
@@ -144,7 +145,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`),
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
-  `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter).
+  `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
+  `RepoScopeMenu` (title bar repo scope + "Let it go stale").
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `WhyBadge`,
   `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
@@ -206,6 +208,13 @@ the mouse side buttons and the trackpad swipe (main process 'swipe' -> preload
 `onSwipe`) move through it. A click on a Mac notification arrives as preload
 `onOpenPing` and goes through `go()` too. Anything new that navigates should
 call `go()`.
+
+The repo scope (`RepoScopeMenu`) is applied by the server: `/api/topics`,
+`/api/topics/:id` and `/api/search` already leave out-of-scope tiles out,
+so the renderer never filters by repo itself. Setting the scope or a quiet
+repo goes through `useActions()` (`setRepoScope`, `setRepoQuiet`, local,
+not on the `GithubWrite` list). Popovers use `lib/use-dismiss.ts` to close
+on outside click and Escape.
 
 The title bar search filters, it has no result list: `GET /api/search`
 (matcher `searchTopics` in core) returns matching topics and tiles, the

@@ -917,6 +917,37 @@ avatars and filters", QueuesB2).
   most urgent tier among its PRs), needs reply first, rest last; inside a
   tier the old order (unread before open). Single column as before.
 
+### Repo scope and quiet repos
+
+A repo menu in the title bar (right column, before the sync status; the
+left column clips popovers). Rules in core `repo-scope.ts`, settings in
+meta (`repo_settings`: `{scope, quiet}`), `GET /api/repos`, `POST
+/api/repos/scope {repos}`, `POST /api/repos/quiet {repo, quiet}`. Both are
+local; nothing goes to GitHub.
+
+- **Scope**: "All repos" or a multi-select of the repos with PRs in some
+  tile, each with its PR count (counted over all repos, so the menu does not
+  shrink while narrowed). A repo the settings name but with no PRs left
+  still shows with 0, so it can be unchecked. An empty selection is "All
+  repos". The engine applies the scope in the read models: a tile is in
+  scope when one of its PRs is (`isTileInScope`; a set can mix repos),
+  topics without tiles in scope drop out of `listTopics`, `getTopic` and
+  search only return tiles in scope, and every count (unread, queues,
+  filter counts) is over the scoped tiles. That is why it combines with
+  search and the Mine / Team / Reply / Review filters without renderer
+  logic. Unchecking one repo out of "All repos" keeps the others; "Only"
+  picks one.
+- **Quiet repos ("Let it go stale")**: PRs still sync, get events, topics,
+  dossiers and facts. They never make a topic urgent (`UrgencyTile.quiet`
+  when every PR of a tile is quiet; a mixed tile only passes the states of
+  its non-quiet PRs), never ping (`pingRule(..., quietRepo)` gives class
+  `quiet_repo`, decided by rules, never shown to the agent), and stay out
+  of `topicQueues` and the filter counts. Their `PrSummary.tier` is `rest`
+  (`memberTier`) and filters never match them. The tile still shows unread
+  (grey count on the row, since it is never urgent) and a small "quiet
+  repo" note. FakeEngine applies the same rules; its settings live in
+  memory.
+
 ### Notification debug view
 
 A read-only look at the raw stream, for checking the sorting. Sidebar
@@ -1302,6 +1333,9 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/sync` | `sync()` |
 | `GET /api/topics` | `listTopics()` |
 | `GET /api/topics/:id` | `getTopic()` |
+| `GET /api/repos` | `listRepos()` (repo menu: counts, scope, quiet) |
+| `POST /api/repos/scope` `{repos}` | `setRepoScope()` (null or [] = all) |
+| `POST /api/repos/quiet` `{repo, quiet}` | `setRepoQuiet()` |
 | `GET /api/debug/notifications?limit=` | `debugNotifications()` (default 200, max 1000) |
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
 | `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |

@@ -56,6 +56,8 @@ interface TitleBarProps {
   onForward: () => void;
   /** The search field, centered in the bar. */
   search: ReactNode;
+  /** The repo filter, first in the right column (the left one clips popovers). */
+  repoScope: ReactNode;
 }
 
 /**
@@ -95,6 +97,7 @@ export function TitleBar(props: TitleBarProps) {
       </div>
       {props.search}
       <div className="flex min-w-0 items-center justify-end gap-3.5">
+        {props.repoScope}
         <SyncStatus />
         <button
           type="button"

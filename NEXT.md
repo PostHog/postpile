@@ -219,6 +219,14 @@ now".
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
+- Repo scope and quiet repos (DESIGN.md "Repo scope and quiet repos"): a
+  repo menu in the title bar ("All repos" or some, with PR counts) narrows
+  topics, queues, tiles and search in the engine read models, so it
+  combines with search and the queue filters. Per repo "Let it go stale":
+  still synced and remembered, never urgent, never pings, out of the queue
+  and filter counts, tiles say "quiet repo". Rules in core
+  (`repo-scope.ts`), settings in meta. Fake data has PRs in
+  posthog-desktop and posthog-python.
 - pnpm instead of npm workspaces (2026-09-28): `pnpm-workspace.yaml`,
   `packageManager: pnpm@12.6.0`, `workspace:*` deps, `pnpm-lock.yaml`
   (imported from the npm lock). Each package declares what it imports; the
@@ -399,6 +407,13 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   would shave a little off sync.
 
 ## Needs Julian's decisions
+
+- **Repo scope / quiet repos**: the scope applies to the whole app
+  (sidebar, tiles, footer counts, search) but not to the live poll, Mac
+  pings or the notifications debug view: a ping from an out-of-scope repo
+  still arrives (quiet repos never ping). Should the scope also mute pings?
+  The repo counts are PRs in tiles, not unread threads. A mixed set tile
+  (quiet + loud repo) counts only its loud PRs for urgency.
 
 - **Fake mode**: rebuild it on the real Engine (in-memory store, fake GitHub
   reader with the Depot sample, canned agent answers) and delete FakeEngine, or

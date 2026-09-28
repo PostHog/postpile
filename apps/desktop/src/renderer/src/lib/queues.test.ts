@@ -52,6 +52,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     glanceGap: null,
     unseenLoudEvents: 0,
     updatedAt: at(0),
+    quietRepo: false,
     ...overrides,
   };
 }
@@ -66,6 +67,7 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
     pendingWrite: null,
+    quietRepo: false,
   };
 }
 
@@ -110,6 +112,10 @@ describe('queue filters', () => {
   it('never matches a pulled-in stack layer', () => {
     const layer = pr({ authorRelation: 'team', provenance: { kind: 'pulled_in', reason: 'stack layer below #2' } });
     expect(prMatchesFilter(layer, 'team')).toBe(false);
+  });
+
+  it('never matches a PR in a quiet repo', () => {
+    expect(prMatchesFilter(pr({ authorRelation: 'you', quietRepo: true }), 'mine')).toBe(false);
   });
 });
 
