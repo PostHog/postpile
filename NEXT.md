@@ -471,6 +471,9 @@ the app meanwhile.
   start as soon as its own dossier lands, fact reconcile batches run side by
   side. Before, sets waited for every dossier, glances for every set,
   retries for every glance, events for every retry.
+- Per-phase timings (`phaseMs`) in the last sync report, the `sync: done`
+  log line and the sync tooltip, so the next slow sync says where the time
+  went.
 - Open: measure the next real sync. The per-kind durations in
   `agent_call` include the time queued in the limiter, so they read longer
   than the model took.

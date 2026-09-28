@@ -149,6 +149,18 @@ describe('Engine.sync with the agent', () => {
     expect(h.writer.calls).toEqual([]);
   });
 
+  it('logs per-phase timings and keeps them in the report', async () => {
+    const lines: string[] = [];
+    const h = makeHarness({ syncLog: (line) => lines.push(line) });
+    const pr = reviewRequestedPr(1, { reviewerUsers: [viewer.login] });
+    h.reader.addPr(pr, makeThreadFor(pr));
+
+    const report = await h.engine.sync();
+
+    expect(Object.keys(report.phaseMs ?? {}).sort()).toEqual(['dossiers', 'events', 'facts', 'fetch', 'glances', 'sets', 'topics']);
+    expect(lines.find((line) => line.startsWith('sync: done'))).toMatch(/; phases fetch 0\.0s, topics 0\.0s, dossiers 0\.0s/);
+  });
+
   it('writes one agent_call row per call with the sync as run id', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);

@@ -11,6 +11,7 @@ import type { MarkReadQueue } from './mark-read-queue.ts';
 import { FactVerifier } from './memory/fact-verifier.ts';
 import { emptyFactCounts } from './memory/fact-writer.ts';
 import { advanceSeenFromGitHub } from './memory/seen-from-github.ts';
+import { PhaseClock } from './phase-clock.ts';
 import type { RunDeps } from './run-deps.ts';
 
 function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): SyncReport {
@@ -50,8 +51,9 @@ export class SyncRun {
     report.agentCallStats = callLog.begin(`sync:${startedAt}`);
     noteSyncStart(store, startedAt);
     this.log(`sync: started (max agent calls ${options.maxAgentCalls ?? 'unlimited'})`);
+    const phases = new PhaseClock(now);
     try {
-      const fetched = await this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY);
+      const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY));
       report.notificationsNotModified = fetched.notModified;
       report.threads = fetched.threads;
       report.prsFetched = fetched.prsFetched;
@@ -73,7 +75,7 @@ export class SyncRun {
         errors,
         tally,
         now,
-      });
+      }, phases);
       await digester.run(options.agentJobs ?? ALL_AGENT_JOBS);
       // After the digest, so dossier changes about events already read on GitHub count as seen too.
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
@@ -89,6 +91,7 @@ export class SyncRun {
     report.agentCalls = report.agentCallStats.total;
     report.dossiersUpdated = tally.dossiersUpdated;
     report.finishedAt = now().toISOString();
+    report.phaseMs = phases.timings();
     for (const line of syncReportLogLines(report)) {
       this.log(line);
     }

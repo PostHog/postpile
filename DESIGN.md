@@ -367,7 +367,12 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    without an override logged after the topic's classify cursor. Driven by
    the event log, not by this sync's new ids, so capped batches are not
    lost.
-10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts.
+10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts,
+    and `phaseMs`: wall time per phase (`fetch`, `topics`, `dossiers`,
+    `facts`, `sets`, `glances`, `events`; `PhaseClock`). Phases overlap
+    after topics, so they do not add up to the total; glances include the
+    wait for their dossiers. The log's summary line ends with them
+    (`; phases fetch 12.3s, topics 8.1s, ...`), the sync tooltip shows them.
 
 **Scheduling** (`Digester`). The numbers above are data dependencies, not
 a queue. Topic assignment runs alone first (its batches one after another,

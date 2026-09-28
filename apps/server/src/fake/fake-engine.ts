@@ -488,6 +488,7 @@ export class FakeEngine implements EngineService {
       dossiersUpdated: 2,
       facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
+      phaseMs: { fetch: 2100, topics: 0, dossiers: 38000, facts: 0, sets: 0, glances: 47000, events: 6000 },
     };
     return this.lastSync;
   }

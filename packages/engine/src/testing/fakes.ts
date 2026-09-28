@@ -224,6 +224,8 @@ export interface HarnessOptions {
   store?: Store;
   /** Fake ~/.claude for the work context sweep. Defaults to a path that does not exist. */
   claudeDir?: string;
+  /** Gets the sync's log lines (start, summary, errors). */
+  syncLog?: (line: string) => void;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -264,7 +266,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     timers,
     pingDecisionsPerDay: options.pingDecisionsPerDay,
     claudeDir: options.claudeDir ?? '/nonexistent/claude',
-    syncLog: () => {},
+    syncLog: options.syncLog ?? (() => {}),
   });
   return { engine, store, reader, writer, writes, runner, agent, timers };
 }

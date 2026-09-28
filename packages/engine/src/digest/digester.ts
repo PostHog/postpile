@@ -1,4 +1,5 @@
-import type { AgentJob } from '@postpile/core';
+import type { AgentJob, SyncPhase } from '@postpile/core';
+import type { PhaseClock } from '../phase-clock.ts';
 import type { DigestDeps } from './deps.ts';
 import { DossierUpdater, type DossierRun } from './dossiers.ts';
 import { EventBatchClassifier } from './event-batches.ts';
@@ -29,21 +30,30 @@ const NO_DOSSIERS: DossierRun = {
  * sync makes no agent calls.
  */
 export class Digester {
-  constructor(private readonly deps: DigestDeps) {}
+  constructor(
+    private readonly deps: DigestDeps,
+    private readonly phases: PhaseClock,
+  ) {}
+
+  /** Times the job when the sync asked for it; nothing to wait for otherwise. */
+  private job(jobs: AgentJob[], job: AgentJob, phase: SyncPhase, work: () => Promise<void>): Promise<void> {
+    return jobs.includes(job) ? this.phases.time(phase, work) : Promise.resolve();
+  }
 
   async run(jobs: AgentJob[]): Promise<void> {
-    if (jobs.includes('topics')) {
-      await new TopicAssigner(this.deps).run();
-    }
+    await this.job(jobs, 'topics', 'topics', () => new TopicAssigner(this.deps).run());
     const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps).start() : NO_DOSSIERS;
-    const facts = jobs.includes('dossiers')
-      ? dossiers.done.then((candidates) => new FactReconciler(this.deps).run(candidates))
-      : Promise.resolve();
+    const dossiersDone = this.job(jobs, 'dossiers', 'dossiers', async () => {
+      await dossiers.done;
+    });
+    const facts = dossiers.done.then((candidates) =>
+      this.job(jobs, 'dossiers', 'facts', () => new FactReconciler(this.deps).run(candidates)),
+    );
     // After the dossiers: a dossier's driver wins over the most frequent author.
     const roles = dossiers.done.then(() => refreshDriversAndRoles(this.deps));
-    const sets = jobs.includes('sets') ? new SetGrouper(this.deps).run() : Promise.resolve();
-    const events = jobs.includes('events') ? new EventBatchClassifier(this.deps).run() : Promise.resolve();
-    const glances = jobs.includes('glances') ? new GlanceBatchWriter(this.deps).run(dossiers) : Promise.resolve();
-    await Promise.all([facts, roles, sets, events, glances]);
+    const sets = this.job(jobs, 'sets', 'sets', () => new SetGrouper(this.deps).run());
+    const events = this.job(jobs, 'events', 'events', () => new EventBatchClassifier(this.deps).run());
+    const glances = this.job(jobs, 'glances', 'glances', () => new GlanceBatchWriter(this.deps).run(dossiers));
+    await Promise.all([dossiersDone, facts, roles, sets, events, glances]);
   }
 }

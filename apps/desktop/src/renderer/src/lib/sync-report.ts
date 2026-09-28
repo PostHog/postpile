@@ -1,4 +1,4 @@
-import type { SyncReport } from '@postpile/core';
+import type { SyncPhase, SyncPhaseTimings, SyncReport } from '@postpile/core';
 import { callStatsDetail, skippedByCap } from './agent-stats.ts';
 
 /** "12.3s" or "2m 05s". */
@@ -12,6 +12,17 @@ export function durationLabel(report: SyncReport): string {
   return `${Math.floor(whole / 60)}m ${String(whole % 60).padStart(2, '0')}s`;
 }
 
+// Same order as SYNC_PHASES in core; the renderer imports types only.
+const PHASE_ORDER: SyncPhase[] = ['fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
+
+/** "fetch 12.3s · topics 8.0s", in sync order. Empty for old reports without timings. */
+export function phaseTimingsLine(timings: SyncPhaseTimings | undefined): string {
+  return PHASE_ORDER.flatMap((phase) => {
+    const ms = timings?.[phase];
+    return ms === undefined ? [] : [`${phase} ${(ms / 1000).toFixed(1)}s`];
+  }).join(' · ');
+}
+
 /**
  * The whole report as plain lines, for the footer and title bar tooltips and
  * the debug view: timing, what was fetched, agent calls per kind, what the
@@ -23,6 +34,11 @@ export function syncReportDetail(report: SyncReport): string {
     `Threads ${report.threads}${report.notificationsNotModified ? ' (inbox unchanged)' : ''} · PRs fetched ${report.prsFetched} · found ${report.prsFound} · pulled in ${report.prsPulledIn} · waiting ${report.prsSkipped}`,
     `New events ${report.newEvents} · dossiers updated ${report.dossiersUpdated}`,
   ];
+  const phases = phaseTimingsLine(report.phaseMs);
+  if (phases !== '') {
+    // Phases overlap after topics, so they do not add up to the total.
+    lines.push(`Phases (overlapping): ${phases}`);
+  }
   const calls = callStatsDetail(report.agentCallStats);
   lines.push(calls === '' ? 'No agent calls' : `Agent calls ${report.agentCallStats.total}:\n${calls}`);
   const capped = skippedByCap(report.agentCallStats);
