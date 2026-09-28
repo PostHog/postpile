@@ -47,6 +47,53 @@ export function editsFromDraft(draft: SetupDraft): SetupSectionEdit[] {
   return draft.sections.map((section) => ({ heading: section.heading, body: section.body }));
 }
 
+/**
+ * The quiet repo and main repo picks, plus which of them the user changed
+ * by hand. `touchedQuiet` lists repos whose toggle the user flipped; a
+ * refine keeps those and moves only the others to the new draft.
+ */
+export interface SetupPicks {
+  quiet: string[];
+  touchedQuiet: string[];
+  mainRepo: string | null;
+}
+
+function withoutRepo(repos: string[], repo: string | null): string[] {
+  return repos.filter((entry) => entry !== repo);
+}
+
+/**
+ * The picks a fresh draft starts with: its quiet suggestions toggled on and
+ * "All repos". The suggested main repo only shows as a chip; the scope
+ * narrows only when the user picks it.
+ */
+export function picksFromDraft(draft: SetupDraft): SetupPicks {
+  return { quiet: draft.quietRepos.map((pick) => pick.repo), touchedQuiet: [], mainRepo: null };
+}
+
+/**
+ * The picks after a refine: toggles the user flipped keep their state,
+ * the others follow the new draft's suggestions. The main repo is always
+ * the user's own pick, and it is never also quiet.
+ */
+export function picksAfterRefine(previous: SetupPicks, draft: SetupDraft): SetupPicks {
+  const suggested = draft.quietRepos.map((pick) => pick.repo).filter((repo) => !previous.touchedQuiet.includes(repo));
+  const kept = previous.quiet.filter((repo) => previous.touchedQuiet.includes(repo));
+  return { quiet: withoutRepo([...kept, ...suggested], previous.mainRepo), touchedQuiet: previous.touchedQuiet, mainRepo: previous.mainRepo };
+}
+
+/** The user flips a quiet toggle. */
+export function toggleQuiet(picks: SetupPicks, repo: string, quiet: boolean): SetupPicks {
+  const others = withoutRepo(picks.quiet, repo);
+  const touchedQuiet = picks.touchedQuiet.includes(repo) ? picks.touchedQuiet : [...picks.touchedQuiet, repo];
+  return { ...picks, quiet: quiet ? [...others, repo] : others, touchedQuiet };
+}
+
+/** The user picks a main repo (null is "All repos"); it stops being quiet. */
+export function pickMainRepo(picks: SetupPicks, repo: string | null): SetupPicks {
+  return { ...picks, mainRepo: repo, quiet: withoutRepo(picks.quiet, repo) };
+}
+
 /** Repos the quiet toggles and main repo radios offer: the busiest ones, plus any suggestion outside them. */
 export function repoChoices(draft: SetupDraft, max = 8): SetupRepoCount[] {
   const shown = draft.repos.slice(0, max);
@@ -82,7 +129,7 @@ export function repoCountText(repo: SetupRepoCount): string {
 const SOURCE_KIND_WORDS: Record<SetupSource['kind'], string> = {
   team: 'Team',
   pr: 'PR',
-  codeowners: 'CODEOWNERS',
+  codeowners: 'Owners file',
   digest: 'Digest',
 };
 

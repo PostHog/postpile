@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { SetupCurrentInstructions, SetupDraft, SetupSectionEdit } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useSetupSweep } from '../api/setup.ts';
-import { editsFromDraft, type SetupStepKey } from '../lib/setup.ts';
+import { editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, toggleQuiet, type SetupPicks, type SetupStepKey } from '../lib/setup.ts';
 import { SetupAcceptStep } from './SetupAcceptStep.tsx';
 import { SetupChecksStep } from './SetupChecksStep.tsx';
 import { SetupReviewStep } from './SetupReviewStep.tsx';
@@ -13,13 +13,12 @@ import { SetupSweepStep } from './SetupSweepStep.tsx';
 interface Review {
   draft: SetupDraft;
   edits: SetupSectionEdit[];
-  quiet: string[];
-  mainRepo: string | null;
+  picks: SetupPicks;
   base: SetupCurrentInstructions;
 }
 
 function reviewFrom(draft: SetupDraft, base: SetupCurrentInstructions): Review {
-  return { draft, edits: editsFromDraft(draft), quiet: draft.quietRepos.map((pick) => pick.repo), mainRepo: draft.mainRepo?.repo ?? null, base };
+  return { draft, edits: editsFromDraft(draft), picks: picksFromDraft(draft), base };
 }
 
 /**
@@ -70,18 +69,21 @@ export function SetupFlow(props: {
     setReview((current) => current && { ...current, edits: current.edits.map((entry, at) => (at === index ? { ...entry, body } : entry)) });
   }
 
-  /** A refine replaces the text with the agent's new version (which kept the user's edits) and its picks. */
+  /**
+   * A refine replaces the text with the agent's new version (which kept the
+   * user's edits). The user's own repo picks stay; untouched quiet toggles
+   * follow the new draft.
+   */
   function refined(draft: SetupDraft) {
-    setReview((current) => current && reviewFrom(draft, current.base));
+    setReview((current) => current && { ...current, draft, edits: editsFromDraft(draft), picks: picksAfterRefine(current.picks, draft) });
   }
 
   function setQuiet(repo: string, quiet: boolean) {
-    setReview((current) => current && { ...current, quiet: quiet ? [...current.quiet, repo] : current.quiet.filter((entry) => entry !== repo) });
+    setReview((current) => current && { ...current, picks: toggleQuiet(current.picks, repo, quiet) });
   }
 
   function setMainRepo(repo: string | null) {
-    // The main repo cannot also be quiet.
-    setReview((current) => current && { ...current, mainRepo: repo, quiet: current.quiet.filter((entry) => entry !== repo) });
+    setReview((current) => current && { ...current, picks: pickMainRepo(current.picks, repo) });
   }
 
   let screen = null;
@@ -105,9 +107,9 @@ export function SetupFlow(props: {
         onEdit={edit}
         onRefined={refined}
         base={review.base}
-        quiet={review.quiet}
+        quiet={review.picks.quiet}
         onQuiet={setQuiet}
-        mainRepo={review.mainRepo}
+        mainRepo={review.picks.mainRepo}
         onMainRepo={setMainRepo}
         onContinue={() => onStep('accept')}
         onBack={() => onStep('sweep')}
@@ -118,8 +120,8 @@ export function SetupFlow(props: {
       <SetupAcceptStep
         edits={review.edits}
         base={review.base}
-        quiet={review.quiet}
-        mainRepo={review.mainRepo}
+        quiet={review.picks.quiet}
+        mainRepo={review.picks.mainRepo}
         onBaseChanged={(base) => {
           setReview({ ...review, base });
           onStep('review');

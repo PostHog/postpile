@@ -1,6 +1,6 @@
 import type { SetupDraft } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
-import { acceptPlan, draftText, editsFromDraft, repoChoices, repoCountText, sourcesFor } from './setup.ts';
+import { acceptPlan, draftText, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
 
 function repo(name: string, prs: number) {
   return { repo: name, prs, authored: prs > 2 ? 2 : 0, reviewed: prs > 2 ? prs - 2 : prs, requested: 0 };
@@ -27,6 +27,33 @@ describe('draftText', () => {
     expect(draftText(editsFromDraft(draft))).toBe('# About me\n- DevEx.\n');
     expect(draftText([{ heading: '', body: 'Intro' }, { heading: 'B', body: ' - b ' }])).toBe('Intro\n\n# B\n- b\n');
     expect(draftText([])).toBe('');
+  });
+});
+
+describe('setup picks', () => {
+  it('starts with the quiet suggestions and all repos, the main repo only suggested', () => {
+    expect(picksFromDraft(draft)).toEqual({ quiet: ['acme/rare'], touchedQuiet: [], mainRepo: null });
+  });
+
+  it("keeps the user's toggles and main repo on a refine, untouched toggles follow the new draft", () => {
+    let picks = picksFromDraft(draft);
+    picks = toggleQuiet(picks, 'acme/rare', false);
+    picks = toggleQuiet(picks, 'acme/docs', true);
+    picks = pickMainRepo(picks, 'acme/app');
+    const next: SetupDraft = {
+      ...draft,
+      quietRepos: [
+        { repo: 'acme/rare', why: 'Still rare.', sourceIds: [] },
+        { repo: 'acme/tools', why: 'Bots only.', sourceIds: [] },
+        { repo: 'acme/app', why: 'Wrong.', sourceIds: [] },
+      ],
+      mainRepo: { repo: 'acme/docs', why: 'Changed its mind.', sourceIds: [] },
+    };
+    expect(picksAfterRefine(picks, next)).toEqual({ quiet: ['acme/docs', 'acme/tools'], touchedQuiet: ['acme/rare', 'acme/docs'], mainRepo: 'acme/app' });
+  });
+
+  it('drops the main repo from the quiet ones', () => {
+    expect(pickMainRepo(picksFromDraft(draft), 'acme/rare').quiet).toEqual([]);
   });
 });
 

@@ -220,7 +220,10 @@ needed; a first-run "Skip for now" runs it. Screens: `SetupChecksStep`,
 chips) and `SetupChip` (OK / Fix this / Working ...). The step lives in
 `App` so the sidebar can name it; the draft, edits and picks live in
 `SetupFlow`. Pure helpers in `lib/setup.ts`, including `draftText`, a copy
-of core's `formatInstructionsSections`: keep them in step.
+of core's `formatInstructionsSections`: keep them in step. The repo picks
+are a `SetupPicks` (`picksFromDraft`: suggested quiet repos on, main repo
+"All repos"; `toggleQuiet` records touched toggles; `picksAfterRefine`
+keeps them and the main repo on a refine).
 
 ## Selection
 
