@@ -323,20 +323,30 @@ export class GitHubSync {
   }
 
   /**
-   * Fetches the missing layers of stacks that pinged PRs fetched this sync
-   * sit in, and records them as pulled in. A layer whose snapshot has not
-   * moved since the last fetch is not fetched again.
+   * Fetches the missing layers of the stacks tracked PRs (pinged or found)
+   * sit in, and records them as pulled in. Seeds are the tracked PRs fetched
+   * this sync plus every stored open tracked PR, since a new layer on top
+   * (often a draft) does not move the PR below it. A layer whose snapshot
+   * has not moved since the last fetch is not fetched again.
    */
   private async pullInStackLayers(fetched: Pr[], viewer: Viewer): Promise<Pr[]> {
-    const pinged = new Set(this.store.notifications.list().flatMap((thread) => {
+    const tracked = new Set(this.store.notifications.list().flatMap((thread) => {
       const ref = refOf(thread);
       return ref ? [prKey(ref)] : [];
     }));
-    const seeds = fetched.filter((pr) => pinged.has(pr.key));
-    if (seeds.length === 0) {
+    for (const key of this.store.foundPrs.listAll().keys()) {
+      tracked.add(key);
+    }
+    const seeds = new Map<PrKey, Pr>();
+    for (const pr of [...fetched, ...this.store.prs.listAll().filter((stored) => stored.state === 'OPEN')]) {
+      if (tracked.has(pr.key) && !seeds.has(pr.key)) {
+        seeds.set(pr.key, pr);
+      }
+    }
+    if (seeds.size === 0) {
       return [];
     }
-    const layers = await this.layers.find(seeds, pinged);
+    const layers = await this.layers.find([...seeds.values()], tracked);
     const storedAt = this.store.prs.updatedAtByKey();
     this.store.transaction(() => {
       for (const layer of layers) {
@@ -460,7 +470,7 @@ export class GitHubSync {
     const found = await this.syncFound(viewer, fetched, errors);
     let pulledIn: Pr[] = [];
     try {
-      pulledIn = await this.pullInStackLayers([...fetched.values(), ...polled], viewer);
+      pulledIn = await this.pullInStackLayers([...fetched.values(), ...polled, ...found], viewer);
     } catch (error) {
       errors.push(`stack layers: ${errorText(error)}`);
     }

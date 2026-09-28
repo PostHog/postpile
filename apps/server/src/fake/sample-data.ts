@@ -167,6 +167,12 @@ function buildPrs(clock: SampleClock): Pr[] {
       ],
     }),
     samplePr(clock, {
+      // Closed on top of the stack: it still shows there, greyed.
+      number: 41930, title: 'Drop GitHub runners for release builds', author: 'rowan', state: 'CLOSED',
+      size: [2, 30, 2], checks: 'SUCCESS', openedHoursAgo: 5,
+      baseRef: 'rowan/depot-4', headRef: 'rowan/depot-5',
+    }),
+    samplePr(clock, {
       number: 41862, title: 'Backend jobs on Depot', author: 'rowan', state: 'MERGED',
       size: [60, 60, 6], checks: 'SUCCESS', openedHoursAgo: 96, mergedHoursAgo: 72,
       baseRef: 'rowan/depot-1', headRef: 'rowan/depot-2',
@@ -437,6 +443,7 @@ function buildTiles(): Tile[] {
       pulledIn(41862, 'stack layer below #41902'),
       pinged(41902, 'review_requested'),
       pinged(41911, 'review_requested'),
+      pulledIn(41930, 'stack layer above #41911'),
     ]),
     sampleTile(TOPIC.depot, 'single', `pr:${sampleKey(41915)}`, 'DEPOT_TOKEN went in as a repo secret', [
       pinged(41915, 'team_mention'),

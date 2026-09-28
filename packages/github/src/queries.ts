@@ -34,6 +34,10 @@ const simpleTimelineSelections = SIMPLE_TIMELINE_EVENTS.map(
   (type) => `... on ${type} { id createdAt actor { ...actor } }`,
 ).join('\n        ');
 
+/** Former base branches, so a PR GitHub moved down after the layer below merged still finds that layer. */
+const BASE_REF_CHANGES =
+  'baseRefChanges: timelineItems(last: 10, itemTypes: [BASE_REF_CHANGED_EVENT]) { nodes { ... on BaseRefChangedEvent { previousRefName } } }';
+
 const FRAGMENTS = `
 fragment actor on Actor { __typename login }
 
@@ -50,6 +54,7 @@ fragment prData on PullRequest {
   baseRefName headRefName headRefOid
   additions deletions changedFiles reviewDecision
   createdAt updatedAt mergedAt
+  ${BASE_REF_CHANGES}
   author { ...actor }
   mergedBy { ...actor }
   labels(first: 20) { nodes { name } }
@@ -102,8 +107,8 @@ export function branchAlias(index: number): string {
   return `b${index}`;
 }
 
-/** Newest PRs per branch lookup. Closed ones never complete a stack, so only open and merged are asked for. */
-const BRANCH_PRS_PER_LOOKUP = 5;
+/** Newest PRs per branch lookup, in any state: open, merged and closed layers all belong to a stack. */
+const BRANCH_PRS_PER_LOOKUP = 10;
 
 /** One aliased repository lookup per branch (b0, b1, ...): the repo's default branch plus matching PRs. */
 export function buildBranchQuery(lookups: BranchLookup[]): string {
@@ -111,8 +116,9 @@ export function buildBranchQuery(lookups: BranchLookup[]): string {
     const [owner, name] = lookup.repo.split('/');
     const filter = lookup.side === 'head' ? 'headRefName' : 'baseRefName';
     const prs =
-      `pullRequests(${filter}: ${JSON.stringify(lookup.branch)}, first: ${BRANCH_PRS_PER_LOOKUP}, states: [OPEN, MERGED], ` +
-      'orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number state mergedAt updatedAt baseRefName headRefName isCrossRepository } }';
+      `pullRequests(${filter}: ${JSON.stringify(lookup.branch)}, first: ${BRANCH_PRS_PER_LOOKUP}, states: [OPEN, MERGED, CLOSED], ` +
+      'orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number state createdAt mergedAt updatedAt baseRefName headRefName isCrossRepository ' +
+      `${BASE_REF_CHANGES} } }`;
     return `  ${branchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { defaultBranchRef { name } ${prs} }`;
   });
   return `query {\n${lines.join('\n')}\n}`;

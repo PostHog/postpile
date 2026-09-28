@@ -40,8 +40,12 @@ export class FeedbackActions {
     return this.readMarker.markRead(keys, pinged, origin);
   }
 
-  /** "Wrong topic": move it when the user said where, otherwise let the next sync re-sort it. */
-  private wrongTopic(key: PrKey, targetTopicId: string | null, note: string): ActionResult {
+  /**
+   * "Wrong topic": move it when the user said where, otherwise let the next
+   * sync re-sort it. A stack moves as one: every layer with a topic or a
+   * thread goes along (`keys`), pulled-in layers follow on their own.
+   */
+  private wrongTopic(keys: PrKey[], targetTopicId: string | null, note: string): ActionResult {
     if (targetTopicId !== null) {
       const target = this.store.topics.get(targetTopicId);
       if (!target) {
@@ -50,16 +54,18 @@ export class FeedbackActions {
       if (target.status === 'retired') {
         this.store.topics.setStatus(targetTopicId, 'active', this.now().toISOString());
       }
-      this.store.memberships.assign({
-        prKey: key,
-        topicId: targetTopicId,
-        assignedBy: 'user',
-        reason: note || 'moved by the user',
-        createdAt: this.now().toISOString(),
-      });
+      for (const key of keys) {
+        this.store.memberships.assign({
+          prKey: key,
+          topicId: targetTopicId,
+          assignedBy: 'user',
+          reason: note || 'moved by the user',
+          createdAt: this.now().toISOString(),
+        });
+      }
       return ok('Moved');
     }
-    this.store.memberships.remove(key);
+    keys.forEach((key) => this.store.memberships.remove(key));
     return ok('Will be re-sorted on the next sync');
   }
 
@@ -88,13 +94,16 @@ export class FeedbackActions {
         if (!setId || !key) {
           return failed('"Not related" needs a set tile and the PR to drop');
         }
-        this.store.sets.removeMember(setId, key, this.now().toISOString());
+        // A stack leaves a set whole, like it joined it.
+        for (const layer of board.stackKeysOf(key)) {
+          this.store.sets.removeMember(setId, layer, this.now().toISOString());
+        }
         return ok('Removed from the set');
       }
       if (!key) {
         return failed('"Wrong topic" needs the PR');
       }
-      return this.wrongTopic(key, input.targetTopicId, input.note);
+      return this.wrongTopic(board.movesWith(key), input.targetTopicId, input.note);
     });
   }
 

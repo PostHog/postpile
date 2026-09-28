@@ -208,6 +208,83 @@ describe('buildTopicTiles', () => {
   });
 });
 
+describe('buildTopicTiles with stacks as units', () => {
+  const bottom = makePr({ number: 1, headRef: 'b1', state: 'MERGED', mergedAt: at(50) });
+  const middle = makePr({ number: 2, baseRef: 'b1', headRef: 'b2', isDraft: true });
+  const top = makePr({ number: 3, baseRef: 'b2', headRef: 'b3', state: 'CLOSED', updatedAt: at(60) });
+  const other = makePr({ number: 4 });
+  const all = [bottom, middle, top, other];
+  const prs = new Map(all.map((pr) => [pr.key, pr]));
+  const stacks = buildStacks(all);
+  const stackId = 'stack:PostHog/posthog#1';
+
+  function setOf(keys: string[]): PrSet {
+    return {
+      id: 's1',
+      topicId: 'topic-1',
+      title: 'Depot runners',
+      take: '',
+      members: keys.map((prKey) => ({ prKey, reason: 'same rollout' })),
+      removedKeys: [],
+      status: 'active',
+      inputHash: 'h',
+      createdAt: at(0),
+      updatedAt: at(0),
+    };
+  }
+
+  const threads = new Map([
+    [middle.key, makeThreadFor(middle)],
+    [other.key, makeThreadFor(other)],
+  ]);
+
+  it('shows every layer in order, whatever its state', () => {
+    const tiles = buildTopicTiles({ topicId: 'topic-1', memberKeys: [middle.key], prs, threads, stacks, sets: [] });
+    expect(tiles.map((t) => [t.id, t.members.map((m) => m.prKey)])).toEqual([[stackId, [bottom.key, middle.key, top.key]]]);
+  });
+
+  it('shows a stack only in its own topic, and keeps its layers out of other topics', () => {
+    const stackTopicIds = new Map([[stackId, 'topic-2']]);
+    const here = buildTopicTiles({ topicId: 'topic-1', memberKeys: [middle.key, other.key], prs, threads, stacks, stackTopicIds, sets: [] });
+    expect(here.map((t) => t.id)).toEqual(['pr:PostHog/posthog#4']);
+    const home = buildTopicTiles({ topicId: 'topic-2', memberKeys: [], prs, threads, stacks, stackTopicIds, sets: [] });
+    expect(home.map((t) => [t.id, t.members.length])).toEqual([[stackId, 3]]);
+  });
+
+  it('pulls the whole stack into a set that names one layer, instead of tearing the layer out', () => {
+    const tiles = buildTopicTiles({
+      topicId: 'topic-1',
+      memberKeys: [middle.key, other.key],
+      prs,
+      threads,
+      stacks,
+      sets: [setOf([other.key, middle.key])],
+    });
+    expect(tiles.map((t) => [t.id, t.members.map((m) => m.prKey)])).toEqual([
+      ['set:s1', [other.key, bottom.key, middle.key, top.key]],
+    ]);
+    expect(tiles[0]?.members.map((m) => m.provenance.kind)).toEqual(['pinged', 'pulled_in', 'pinged', 'pulled_in']);
+  });
+
+  it('keeps the stack tile when a set would hold nothing but that stack', () => {
+    const tiles = buildTopicTiles({ topicId: 'topic-1', memberKeys: [middle.key], prs, threads, stacks, sets: [setOf([middle.key, top.key])] });
+    expect(tiles.map((t) => t.id)).toEqual([stackId]);
+  });
+
+  it('leaves a stack shown in another topic out of this topic\'s sets', () => {
+    const tiles = buildTopicTiles({
+      topicId: 'topic-1',
+      memberKeys: [other.key],
+      prs,
+      threads,
+      stacks,
+      stackTopicIds: new Map([[stackId, 'topic-2']]),
+      sets: [setOf([other.key, middle.key])],
+    });
+    expect(tiles.map((t) => [t.id, t.members.map((m) => m.prKey)])).toEqual([['set:s1', [other.key]]]);
+  });
+});
+
 describe('tile ids', () => {
   it('parses the set id back out of a set tile id only', () => {
     expect(setIdFromTileId(setTileId('s1'))).toBe('s1');

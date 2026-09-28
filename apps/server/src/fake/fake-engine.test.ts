@@ -94,7 +94,8 @@ describe('FakeEngine tile faces', () => {
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
     const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
     expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Re-check 2 commits on #41911' });
-    expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV']);
+    expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV', 'ST']);
+    expect(stack?.prs.map((pr) => pr.status.lifecycle)).toEqual(['merged', 'merged', 'open', 'open', 'closed']);
     expect(depot.find((view) => view.tile.id === 'pr:PostHog/posthog#41899')?.turn).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
     const desktop = (await engine.getTopic('topic-desktop-release'))?.tiles[0];
     expect(desktop).toMatchObject({ why: 'FW', turn: { kind: 'none' } });
@@ -294,7 +295,7 @@ describe('FakeEngine queues', () => {
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
     const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
     const layers = stack?.prs.filter((pr) => pr.provenance.kind === 'pulled_in') ?? [];
-    expect(layers.map((pr) => pr.tier)).toEqual(['rest', 'rest']);
+    expect(layers.map((pr) => pr.tier)).toEqual(['rest', 'rest', 'rest']);
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-depot');
     // rowan's two open layers would add 2 to team and byTeam; only pinged PRs count.
     expect(item?.queues.tiers.team).toBe(2);

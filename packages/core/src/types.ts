@@ -145,6 +145,13 @@ export interface Pr {
   updatedAt: IsoTime;
   mergedAt: IsoTime | null;
   mergedBy: string | null;
+  /**
+   * Base branches the PR had before, oldest first. GitHub moves a stacked PR
+   * onto the next branch down when the layer below merges and its branch is
+   * deleted; this is how the merged layer stays in the stack. Missing on
+   * snapshots stored before it existed.
+   */
+  previousBaseRefs?: string[];
 }
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,16 @@ import { WriteSwitch } from '../writes/write-switch.ts';
 import { FakeAgent } from './fake-agent.ts';
 
 function toBranchPr(pr: Pr): BranchPr {
-  return { ref: pr.ref, state: pr.state, mergedAt: pr.mergedAt, updatedAt: pr.updatedAt, baseRef: pr.baseRef, headRef: pr.headRef };
+  return {
+    ref: pr.ref,
+    state: pr.state,
+    createdAt: pr.createdAt,
+    mergedAt: pr.mergedAt,
+    updatedAt: pr.updatedAt,
+    baseRef: pr.baseRef,
+    headRef: pr.headRef,
+    previousBaseRefs: pr.previousBaseRefs ?? [],
+  };
 }
 
 export class FakeReader implements GitHubReader {
@@ -159,7 +168,7 @@ export class FakeReader implements GitHubReader {
         return [];
       }
       return [...this.prs.values()]
-        .filter((pr) => pr.ref.repo === lookup.repo && pr.state !== 'CLOSED')
+        .filter((pr) => pr.ref.repo === lookup.repo)
         .filter((pr) => (lookup.side === 'head' ? pr.headRef : pr.baseRef) === lookup.branch)
         .map(toBranchPr);
     });

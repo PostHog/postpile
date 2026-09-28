@@ -227,7 +227,7 @@ export class ReadModels {
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
   }
 
-  /** Each PR of the topic's tiles once, in tile order. A PR can sit in a set tile and a stack tile. */
+  /** Each PR of the topic's tiles once, in tile order. */
   private topicPrs(board: Board, tiles: Tile[]): Pr[] {
     const prs = new Map<PrKey, Pr>();
     for (const member of tiles.flatMap((tile) => tile.members)) {

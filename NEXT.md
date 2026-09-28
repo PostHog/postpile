@@ -319,6 +319,15 @@ now".
   - Drafts: no review / re-check / merge moves, never To review, quiet
     review requests and post-approval pushes, loud mark-ready, pings only
     for personal asks; Draft chip and dashed frame. Fake #41945 is a draft.
+  - Stacks stay whole: every layer shows, open, draft, merged at any age and
+    closed (greyed, pill "closed"). The walk seeds from found PRs and every
+    stored open tracked PR too, the branch lookup asks for any state, and
+    former base branches (`BaseRefChangedEvent`) keep a merged layer after
+    GitHub moved the PR above onto master. The 14-day merged cutoff is gone.
+  - A stack is one unit: one topic (newest layer membership wins), one tile
+    or inside one set, never split. Topic assignment asks once per stack and
+    new layers join their stack's topic; "wrong topic", splits and "not
+    related" move whole stacks (DESIGN.md "Stacks as one unit").
 
 ## Stubbed or thin
 

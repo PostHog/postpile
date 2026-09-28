@@ -192,17 +192,19 @@ describe('findPrsByBranch', () => {
     { repo: 'acme/hidden', branch: 'x', side: 'base' as const },
   ];
 
-  it('asks for open and merged PRs by head or base branch, one alias per lookup', () => {
+  it('asks for PRs in every state by head or base branch, with former bases, one alias per lookup', () => {
     const query = buildBranchQuery(lookups);
     expect(query).toContain('b0: repository(owner: "acme", name: "app") { defaultBranchRef { name } pullRequests(headRefName: "alice/base"');
     expect(query).toContain('b2: repository(owner: "acme", name: "app") { defaultBranchRef { name } pullRequests(baseRefName: "alice/top"');
-    expect(query).toContain('states: [OPEN, MERGED]');
+    expect(query).toContain('states: [OPEN, MERGED, CLOSED]');
+    expect(query).toContain('itemTypes: [BASE_REF_CHANGED_EVENT]');
   });
 
   it('answers in lookup order, drops forks, and finds nothing below the default branch', async () => {
     const node = (number: number, extra: Record<string, unknown> = {}) => ({
       number,
       state: 'OPEN',
+      createdAt: '2026-09-10T10:00:00Z',
       mergedAt: null,
       updatedAt: '2026-09-19T10:00:00Z',
       baseRefName: 'master',
@@ -216,7 +218,11 @@ describe('findPrsByBranch', () => {
           data: {
             b0: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(10), node(11, { isCrossRepository: true })] } },
             b1: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(12)] } },
-            b2: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(13, { state: 'MERGED', mergedAt: '2026-09-18T10:00:00Z' })] } },
+            b2: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(13, {
+                      state: 'MERGED',
+                      mergedAt: '2026-09-18T10:00:00Z',
+                      baseRefChanges: { nodes: [{ previousRefName: 'alice/older' }, {}, { previousRefName: 'alice/older' }] },
+                    })] } },
             b3: null,
           },
         },
@@ -229,10 +235,12 @@ describe('findPrsByBranch', () => {
     expect(found[2]?.[0]).toEqual({
       ref: { repo: 'acme/app', number: 13 },
       state: 'MERGED',
+      createdAt: '2026-09-10T10:00:00.000Z',
       mergedAt: '2026-09-18T10:00:00.000Z',
       updatedAt: '2026-09-19T10:00:00.000Z',
       baseRef: 'master',
       headRef: 'branch-13',
+      previousBaseRefs: ['alice/older'],
     });
     expect(fake.requests).toHaveLength(1);
   });
