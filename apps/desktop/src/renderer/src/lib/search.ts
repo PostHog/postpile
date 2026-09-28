@@ -1,4 +1,5 @@
 import type { SearchResult, TopicListItem } from '@code-manager/core';
+import { queueLayout } from './queues.ts';
 import { sidebarGroups } from './sidebar.ts';
 
 /** What the search bar lets through. Null means no filter: the query is empty or has no answer yet. */
@@ -25,23 +26,32 @@ export function filterTopics(items: TopicListItem[], filter: SearchFilter | null
   return filter ? items.filter((item) => filter.tilesByTopic.has(item.topic.id)) : items;
 }
 
-/** Topics top to bottom as the sidebar shows them. */
+/** Topics top to bottom as the sidebar shows them, each once (its first section). */
 export function sidebarOrder(items: TopicListItem[]): TopicListItem[] {
-  const groups = sidebarGroups(items);
-  return [...groups.needsYou, ...groups.team.flatMap((group) => group.items), ...groups.routed, ...groups.fyi];
+  const layout = queueLayout(items);
+  const groups = sidebarGroups(layout.other);
+  const all = [
+    ...layout.sections.flatMap((section) => section.rows.map((row) => row.item)),
+    ...groups.needsYou,
+    ...groups.team.flatMap((group) => group.items),
+    ...groups.routed,
+    ...groups.fyi,
+  ];
+  return all.filter((item, index) => all.indexOf(item) === index);
 }
 
 /**
- * The topic to show: the picked one, unless a filter hides it, then the
- * first match in sidebar order. Without a pick, the first listed topic.
+ * The topic to show: the picked one, unless the search or a queue filter
+ * hides it, then the first shown one in sidebar order. `shown` is null when
+ * nothing narrows the list. Without a pick, the first listed topic.
  */
-export function visibleTopic(items: TopicListItem[], pickedId: string | null, filter: SearchFilter | null): TopicListItem | null {
+export function visibleTopic(items: TopicListItem[], pickedId: string | null, shown: TopicListItem[] | null): TopicListItem | null {
   const picked = items.find((item) => item.topic.id === pickedId) ?? null;
-  if (!filter) {
+  if (!shown) {
     return picked ?? items[0] ?? null;
   }
-  if (picked && filter.tilesByTopic.has(picked.topic.id)) {
+  if (picked && shown.includes(picked)) {
     return picked;
   }
-  return sidebarOrder(filterTopics(items, filter))[0] ?? null;
+  return sidebarOrder(shown)[0] ?? null;
 }

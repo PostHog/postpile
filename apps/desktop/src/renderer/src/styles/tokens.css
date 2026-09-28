@@ -63,6 +63,11 @@
   --honey-ink: #6b4d00;
   --sea-soft: #dff0ee;
   --sea-ink: #1f6a61;
+  /* Queue sections and faces: the section dots and the ring around your
+     team's avatars. */
+  --honey: #e8b92f;
+  --sea: #3aa596;
+  --sea-pale: #9fd3cc;
   --quiet-soft: #f0f1f4;
   --why-done: #e9ebef;
 
@@ -70,6 +75,8 @@
      stays for "new since you looked" only. */
   --warm-strip: #fffaf0;
   --warm-strip-line: #f4e8cf;
+  /* A tile matching the sidebar's queue filter: warm strip fill, honey line. */
+  --match-line: #e8c97a;
   --move: #fff6dd;
   --move-line: #f1e2b5;
 

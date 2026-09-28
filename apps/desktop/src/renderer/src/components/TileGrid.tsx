@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { TileView, TopicDetail, TopicListItem } from '@code-manager/core';
+import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';
 
@@ -13,6 +14,8 @@ interface TileGridProps {
   onSelect: (tileId: string, prKey: string) => void;
   /** Tiles the search bar lets through; null shows all. */
   matchingTileIds: Set<string> | null;
+  /** The sidebar's queue filter: matching tiles stand out, the others fade but stay. */
+  queueFilter: QueueFilter | null;
 }
 
 function FilterButton(props: { label: string; active: boolean; onClick: () => void }) {
@@ -40,6 +43,7 @@ function Grid(props: TileGridProps & { views: TileView[] }) {
           selected={view.tile.id === props.selectedTileId}
           selectedPrKey={props.selectedPrKey}
           onSelect={(prKey) => props.onSelect(view.tile.id, prKey)}
+          filterMatch={props.queueFilter === null ? null : tileMatchesFilter(view, props.queueFilter)}
         />
       ))}
     </div>
@@ -79,11 +83,15 @@ function emptyText(filter: TileFilter, total: number, searching: boolean): strin
   return filter === 'unread' ? 'No unread tiles here.' : 'Nothing open here.';
 }
 
-/** The topic's live tiles (unread first, then open); snoozed and done ones fold into a row each. */
+/**
+ * The whole topic, tiles in queue order (needs reply first, rest last; unread
+ * before open inside a tier). Snoozed and done ones fold into a row each.
+ */
 export function TileGrid(props: TileGridProps) {
   const [filter, setFilter] = useState<TileFilter>('all');
   const matching = props.matchingTileIds;
-  const tiles = matching ? props.detail.tiles.filter((view) => matching.has(view.tile.id)) : props.detail.tiles;
+  const ordered = tilesInTierOrder(props.detail.tiles);
+  const tiles = matching ? ordered.filter((view) => matching.has(view.tile.id)) : ordered;
   const unread = tiles.filter((view) => view.state.kind === 'unread');
   const live = tiles.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
   const shown = filter === 'unread' ? unread : live;

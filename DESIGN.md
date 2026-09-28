@@ -763,10 +763,11 @@ work it is.
   its area. Consolidation sees areas and live tile counts; it may propose
   `area_merge` (topic_proposal with `from_area`, applied on accept) and
   splits for topics that keep more than 12 live tiles.
-- **UI**: sidebar sections Needs you (unread, any relation, with a badge) /
-  Your team (by area) / Routed to you / FYI, the last two folded by
-  default. The topic header says "Owned by X · you're here because Y".
-  Tiles: live ones first, snoozed and done folded into one row each.
+- **UI**: inside the sidebar's "Other topics" section (see "Queue
+  sections") the groups are Needs you (any relation) / Your team (by area)
+  / Routed to you / FYI, the last two folded by default. The topic header
+  says "Owned by X · you're here because Y". Tiles: snoozed and done folded
+  into one row each.
 
 Topic assignment against fragmentation (first real sync: 61 topics for
 142 PRs): the prompt shows member counts and asks for existing topics
@@ -852,23 +853,56 @@ the sync.
 check as whose-turn), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
-Pure and tested, not in the UI yet: how PR-level queues sit next to topics
-is still being wireframed.
+Pure and tested; the sidebar's queue sections are built on it.
 
 ### Three-pane balance
 
 Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
 1440px that is about 317 | 475 | 648, at the 1100px minimum 248 | 420 | 432.
 
-- **Sidebar rows**: name, unread count (coral: new since you looked), the
-  topic summary from the dossier (two lines when the sidebar has room, one
-  at the minimum; the snippet is what shrinks first), then small
-  indicators: "N your move" in honey (live tiles whose turn is the user's,
-  `TopicListItem.yourMoveTiles`, same `whoseTurn` as the tile footer) and
-  the relation badge where sections mix relations (Needs you).
+- **Sidebar rows**: see "Queue sections" below.
 - **Middle column**: one tile wide, tiles never sit side by side, so the
   selected tile's notch always points at the detail pane.
 - **Detail pane**: takes the remaining width.
+
+### Queue sections
+
+The sidebar lists topics under ghatchup's PR queues (mockup "B with
+avatars and filters", QueuesB2).
+
+- **Sections**, in order: Needs reply, My PRs, Team's PRs, To review, Team
+  mentioned (one per `prTier`), then Other topics. Each lists topics, not
+  PRs: a topic sits in every section where it has at least one PR of that
+  tier, with that count on the row. Other topics holds topics with only
+  `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
+  Routed, FYI; Routed and FYI folded). Section tint: honey for reply and
+  review, ink for mine, sea for team and team mentioned, grey for other.
+- **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
+  per tier over the PRs in the topic's tiles (each PR once, stack layers
+  included), plus open PRs by you / by a teammate. Only open PRs get a real
+  tier; merged and closed ones are `rest`.
+- **Rows**: name, unread mark, face stack, the section's count, then a
+  one-line summary. Faces are `TopicListItem.people` (`topicPeople`):
+  authors, reviewers (submitted, then requested) and commenters, no bots,
+  you and your team first with a sea ring, four at most then "+N".
+- **Urgency** (`topicUrgency` in core): a topic needs you when an unread
+  tile still has an open PR, or whose-turn says it's your move on a live
+  tile. Only then is its unread mark a coral dot and does it rank as
+  `needs_you`. When every unread tile is merged or closed the row shows a
+  grey dot and count ("merged since you looked") and ranks below the urgent
+  ones (`compareTopicUrgency`: needs you, then open unread tiles, then any
+  unread). Tiles still show unread as before.
+- **Filters**: Mine (your avatar), Team (up to three teammates), Reply,
+  Review, each with its PR count over all topics. One at a time, a second
+  click clears. A filter keeps topics with a matching PR (Mine: open PR you
+  wrote; Team: open PR a teammate wrote; Reply / Review: that tier) and
+  drops sections left empty. It narrows together with the title bar
+  search. In the open topic, matching tiles get the warm strip fill and a
+  honey line, the rest fade to 45% but stay. Plain UI state, not in the
+  back / forward history. The avatars come from `GET /api/viewer`.
+- **Topic column**: the whole topic, tiles sorted by `TileView.tier` (the
+  most urgent tier among its PRs), needs reply first, rest last; inside a
+  tier the old order (unread before open). Single column as before.
 
 ### Notification debug view
 

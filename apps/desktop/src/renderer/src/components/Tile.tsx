@@ -21,11 +21,16 @@ interface TileProps {
   /** The PR open in the detail pane, when this tile is selected. */
   selectedPrKey: string | null;
   onSelect: (prKey: string) => void;
+  /** With a queue filter on: true stands out warm, false fades. Null without a filter. */
+  filterMatch: boolean | null;
 }
 
 function frameClasses(props: TileProps): string {
   if (props.selected) {
     return 'border-[1.5px] border-accent shadow-selected';
+  }
+  if (props.filterMatch === true) {
+    return 'border border-match-line shadow-tile';
   }
   if (props.view.state.kind === 'done') {
     return 'border border-hairline-done';
@@ -57,7 +62,9 @@ export function Tile(props: TileProps) {
   const lead = leadPr(view);
   const forYou = tileForYou(view, props.sets);
   const updatedAt = tileUpdatedAt(view);
-  const background = done ? 'bg-done' : 'bg-surface';
+  const background = done ? 'bg-done' : props.filterMatch === true ? 'bg-warm-strip' : 'bg-surface';
+  // A filter never hides a tile of the open topic; the ones it does not match fade.
+  const fade = props.filterMatch === false ? 'opacity-45 hover:opacity-80' : '';
   const menuPrKey = props.selected ? props.selectedPrKey : (lead?.key ?? null);
   const yourMove = view.turn.kind === 'you' && !done;
   const footer = yourMove ? 'border-t border-move-line bg-move' : `border-t ${done ? 'border-hairline-done' : 'border-hairline-soft'}`;
@@ -69,7 +76,7 @@ export function Tile(props: TileProps) {
   }
 
   return (
-    <article className={`relative flex min-w-0 flex-col rounded-tile ${background} ${frameClasses(props)}`}>
+    <article className={`relative flex min-w-0 flex-col rounded-tile ${background} ${frameClasses(props)} ${fade}`}>
       {props.selected && (
         // The notch points at the detail pane, which shows this tile.
         <span

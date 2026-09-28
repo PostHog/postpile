@@ -28,6 +28,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
+  `viewer.ts` (`useViewer`, login and teammates for the filter buttons),
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
@@ -150,12 +151,18 @@ tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
 
 ## Selection
 
-The sidebar groups topics with `lib/sidebar.ts` (`sidebarGroups`): Needs you,
-Your team by area, Routed to you, FYI. Fold state is local UI state; Routed
-and FYI start folded. Relation corrections go through `correctMemory` with
-`relation` set (`RelationLine`), local only. `TileGrid` shows live tiles and
-folds snoozed / done ones. Tiles stay in one column (DESIGN.md "Three-pane
-balance"); sidebar rows show the dossier summary and a "your move" chip.
+The sidebar lists topics in queue sections (`lib/queues.ts`,
+`queueLayout`; DESIGN.md "Queue sections"): Needs reply, My PRs, Team's
+PRs, To review, Team mentioned, then Other topics, which keeps the old
+groups from `lib/sidebar.ts` (`sidebarGroups`: Needs you, Your team by
+area, Routed, FYI). A topic can sit in several sections on purpose. Fold
+state is local UI state; Routed and FYI start folded. The Mine / Team /
+Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
+not history entries; they narrow together with the search. Relation
+corrections go through `correctMemory` with `relation` set
+(`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
+the ones a queue filter does not match and folds snoozed / done ones.
+Tiles stay in one column (DESIGN.md "Three-pane balance").
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
 "Your instructions", the notifications debug list, which also takes the

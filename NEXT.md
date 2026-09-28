@@ -146,7 +146,7 @@ now".
   viewer's teams, REST with ETags, refreshed at most daily in sync, on
   `Viewer.teamMembers`. Whose turn's "teammate is reviewing" uses it.
   `prTier` (ghatchup's needs_reply / mine / team / to_review /
-  team_mentioned / rest) is in core with tests, not wired into the UI.
+  team_mentioned / rest) is in core with tests and drives the sidebar.
   The first real sync after this makes one members call per viewer team
   (a 403 on a SAML-protected org counts as an empty team).
 - Notification debug view (DESIGN.md "Notification debug view"):
@@ -169,6 +169,17 @@ now".
   notifications grouped per tile (2 min) and as a summary above 3; a click
   opens the tile. Closing the window hides it, Cmd+Q quits. Fake mode pings a
   sample question every ~45s. CLI `poll` runs one cycle.
+- Queue sidebar (DESIGN.md "Queue sections"): topics listed under Needs
+  reply / My PRs / Team's PRs / To review / Team mentioned / Other topics,
+  a topic in every section it has PRs for; rows with a face stack (team
+  first, sea ring), the section's count and a one-line summary; Mine /
+  Team / Reply / Review filter buttons that narrow with the search and
+  highlight / fade tiles in the open topic; topic column in tier order.
+  Urgency fix: a topic only ranks as needs-you (coral) when an unread tile
+  is still open or it's your move; merged-only unread shows a grey count.
+  New read-model fields (`queues`, `people`, `urgentUnreadTiles`, PR and
+  tile `tier`) and `GET /api/viewer`. Fake data gained own PRs, a team
+  mention, a bot bump and a merged PR with news.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -256,9 +267,14 @@ now".
   plus the touched directory, the CODEOWNERS file is not read.
 - Existing topics get a relation and area on their next dossier update; until
   then they sit under Your team / "Other".
-- Loud topics always show under Needs you, so the Routed and FYI sections
-  only hold quiet topics and stay folded; there is no "open when loud" case
-  left in practice.
+- Inside Other topics, topics that need you show under Needs you, so the
+  Routed and FYI groups only hold quiet topics and stay folded. A calm
+  topic (unread, all merged) can sit in a folded group with its grey count.
+- Queue sections: tier counts include pulled-in stack layers; the queue
+  filter is not kept across restarts or in history; the "N your move" chip
+  and the relation badge are gone from sidebar rows (the sections carry
+  most of it, whose turn is still on the tiles). Topic names truncate early
+  at the 1100px minimum because of the face stack.
 - Unsorted PRs are not shown to consolidation; they are only re-offered to
   topic assignment after a consolidation run.
 - Dossiers written before line sources show "no source recorded" on goal,
@@ -307,6 +323,13 @@ now".
 - Still open from DESIGN.md: UI framework final call, three-pane layout,
   memory numbers (10 feedback entries per prompt, when sets regroup), snooze
   wake-up on any loud human event, the extra loudness rules, repo name.
+
+- **Queue sidebar**: (1) "Your move" alone now makes a topic needs-you,
+  as asked; that includes "Merge, it is approved" on own PRs, which may
+  lift more topics than wanted. (2) Mine / Team count open PRs only, so a
+  topic with just merged PRs of yours drops out of Mine. (3) The row lost
+  the "N your move" chip; bring it back next to the faces? (4) Tier counts
+  include pulled-in stack layers the user was not pinged for.
 
 - **Live poll**: poll at 10s and only show GitHub's X-Poll-Interval (60s), or
   obey it? Should loud-but-not-addressed activity (approval or comment on your
