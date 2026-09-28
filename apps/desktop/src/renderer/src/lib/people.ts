@@ -21,7 +21,7 @@ export function isTeam(login: string): boolean {
   return login.includes('/');
 }
 
-/** "rowan" -> "RA", "renovate[bot]" -> "RE", "PostHog/team-devex" -> "TE". */
+/** "rowan" -> "RO", "renovate[bot]" -> "RE", "acme/team-platform" -> "TE". */
 export function initials(login: string): string {
   const name = login.replace(/\[bot\]$/, '').split('/').pop() ?? login;
   return name.slice(0, 2).toUpperCase();
@@ -43,9 +43,12 @@ export function avatarTone(login: string): string {
  * GitHub's public avatar for a user login, `px` wide. No API call and no
  * token. Null for teams (no such URL) and bots: their avatar needs the app
  * id, which the API does not give us yet, so they keep the grey initials.
+ * Null with `remote` off: sample data (and the moments before the config
+ * says it is real) never loads avatars, since an invented login can still
+ * be a real stranger's account on GitHub.
  */
-export function avatarUrl(login: string, px: number): string | null {
-  if (isBotLogin(login) || isTeam(login) || login === '') {
+export function avatarUrl(login: string, px: number, remote: boolean): string | null {
+  if (!remote || isBotLogin(login) || isTeam(login) || login === '') {
     return null;
   }
   return `https://avatars.githubusercontent.com/${encodeURIComponent(login)}?s=${px}`;

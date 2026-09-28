@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAppConfig } from '../api/config.ts';
 import { avatarTone, avatarUrl, initials, isTeam } from '../lib/people.ts';
 
 const SIZES = {
@@ -9,12 +10,14 @@ const SIZES = {
 
 /**
  * The GitHub avatar over initials in a tone picked from the login. The
- * initials show while the image loads and stay when it fails (fake logins
- * 404), so the box never changes size. Teams get a rounded square.
+ * initials show while the image loads and stay when it fails, so the box
+ * never changes size. Teams get a rounded square. Sample data shows only
+ * initials: remote avatars load once the config says the data is real.
  */
 export function Avatar(props: { login: string; size?: keyof typeof SIZES; className?: string }) {
   const size = SIZES[props.size ?? 'sm'];
-  const url = avatarUrl(props.login, size.px);
+  const realData = useAppConfig().data?.fake === false;
+  const url = avatarUrl(props.login, size.px, realData);
   // Kept per URL, so a reused Avatar with another login starts over.
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);

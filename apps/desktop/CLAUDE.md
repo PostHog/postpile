@@ -12,7 +12,9 @@ The renderer shows what the local API returned and nothing else.
 - **Sample data lives in one place: `FakeEngine`** (apps/server), switched on
   with `POSTPILE_FAKE=1`. The renderer never has its own fixtures and never
   has a `fake ? sample : real` branch. The title bar shows a "Sample data" pill
-  when `/api/config` says `fake: true`; that is the only difference.
+  when `/api/config` says `fake: true`. The one other difference: `Avatar`
+  loads GitHub avatars only when the config says `fake: false`, so sample
+  logins (invented, but maybe real accounts) always show initials.
 - **Don't fill empty screens.** No topics, no tiles, no glance, no reviews:
   render the empty state ("No topics yet…", "No glance yet…"), never
   placeholder people, counts or repo names.
