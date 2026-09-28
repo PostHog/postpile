@@ -65,6 +65,8 @@ import type {
 } from '@postpile/core';
 import {
   activityList,
+  agentOnlyApprovers,
+  standingApprovals,
   UNDO_WINDOW_MS,
   viewerApproval,
   buildPrSummary,
@@ -736,6 +738,7 @@ export class FakeEngine implements EngineService {
       glanceGap: this.glanceGapOf(prKey),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
+      agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
       facts: this.memory.prFacts(prKey),

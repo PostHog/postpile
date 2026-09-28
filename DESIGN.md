@@ -239,7 +239,12 @@ claude --no-session-persistence -p --output-format json --model <m> \
 
 with `MAX_THINKING_TOKENS=0` and the prompt on stdin (flags carried over from
 ghatchup, where they took a PR summary from ~30s to ~3s). Everything runs on
-`sonnet` (`POSTPILE_MODEL`); glances can be switched separately with
+Sonnet 5.5, pinned by full id `claude-sonnet-5-5` (`POSTPILE_MODEL`; since
+2026-09-28, before that the `sonnet` alias). The alias maps to the same model
+in claude CLI 2.1.284 but moves with CLI updates and user settings, and the
+model is part of the glance and set input hashes, so the pin keeps answers
+and their records stable. The sweep and setup stay on the `opus` alias to
+follow the newest Opus. Glances can be switched separately with
 `POSTPILE_GLANCE_MODEL` (they ran on `claude-haiku-4-5` until a side-by-side
 run showed Sonnet judging verdicts better). An API-backed runner can replace it later without
 touching callers.
@@ -654,7 +659,7 @@ stored and before a dossier goes into a glance prompt
   **dossier version**, instructions, tailoring, standing rules, feedback on
   that PR, model. Never the other PRs in the batch. Stored glances get
   `dossierVersion`.
-- Model: the glance model (`sonnet` by default, `POSTPILE_GLANCE_MODEL`).
+- Model: the glance model (`claude-sonnet-5-5` by default, `POSTPILE_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
 
@@ -1231,6 +1236,34 @@ any review ask; on top of that:
 - Prompts: `prDetails` adds a note outside the GitHub fence that the user
   wrote the PR and cannot approve or re-review it, so glances do not advise
   approving.
+
+**Agent approvals are a neutral fact, in words** (2026-09-28). In a busy
+repo a good share of approved PRs are approved only by a bot, mostly an AI
+review agent, and nearly all of them merge. That is not a problem to flag:
+it says an agent reviewer looked and found the change fine. It is still
+worth seeing, so the app says who approved instead of a bare "approved".
+
+- Core's `standingApprovals` splits standing approvals (each reviewer's
+  latest approve / change request / dismissal is an approval) into people
+  and agents with `isBot`, the one bot rule: the "[bot]" suffix (the GraphQL
+  reader adds it for `__typename Bot`) plus the known automation list. The
+  renderer never imports it; it gets the result as data.
+- `PrStatus.agentApprovers` / `PrDetail.agentApprovers` (`agentOnlyApprovers`)
+  hold the agent names ("reviewbot") only when no person approved. The
+  status pill then reads "approved by agent" (tooltip "Approved by reviewbot
+  (agent)"), the detail's "To merge" says "approved by reviewbot (agent)",
+  and the Approve button's review glyph says the same in its tooltip. Same
+  calm green as any approval, no warning colors. Once a person approved it
+  is the usual "approved".
+- GitHub's semantics stay: `reviewDecision`, whose turn, tiers and Done do
+  not change. An agent approval counts; "Merge, it is approved" and
+  "Approve as well" apply after one too.
+- Prompts: `prDetails` adds "Approved by: @alice (person), @reviewbot[bot]
+  (agent)" (the user's own approval has its own line). The glance prompt
+  says both are real approvals and that who looked is a fact the verdict,
+  forYou or risk may use, e.g. whether a person reviewed a change in the
+  user's areas. Agent approvals count in the glance input hash; the key is
+  only added when there are some, so other PRs' hashes did not move.
 
 A tile takes the most urgent member (you over them over none); on a tie the
 PR with the newest unseen loud event wins, so the footer and the unread strip

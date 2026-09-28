@@ -1,4 +1,4 @@
-import { isBot, isMachineComment, sameLogin } from '@postpile/core';
+import { isBot, isMachineComment, sameLogin, standingApprovals } from '@postpile/core';
 import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
@@ -155,6 +155,20 @@ export const batchDetail: PrDetailLimits = { body: 1500, files: 15, comments: 8,
 export const OWN_PR_NOTE =
   'The user wrote this PR. They cannot approve or re-review it; for them it is about answering reviewers, getting reviews and merging.';
 
+/**
+ * Who approved, each marked person or agent: "Approved by: @alice (person),
+ * @reviewbot[bot] (agent)". A plain fact the agent may weigh; an agent's
+ * approval counts on GitHub like any other. The user's own approval has its
+ * own line. Null without approvals.
+ */
+export function approvedByLine(pr: Pr, viewer: Viewer | null): string | null {
+  const approvals = standingApprovals(pr);
+  const people = approvals.people.filter((login) => !viewer || !sameLogin(login, viewer.login)).map((login) => `@${login} (person)`);
+  const agents = approvals.agents.map((login) => `@${login} (agent)`);
+  const all = [...people, ...agents];
+  return all.length > 0 ? `Approved by: ${all.join(', ')}` : null;
+}
+
 export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits): string {
   const lines: string[] = [prLine(pr), `Base ${pr.baseRef} <- head ${pr.headRef}`];
   if (pr.labels.length > 0) {
@@ -179,6 +193,10 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
     .map((r) => `@${r.author} ${r.state.toLowerCase()}`);
   if (reviews.length > 0) {
     lines.push(`Review states: ${reviews.join(', ')}`);
+  }
+  const approvedBy = approvedByLine(pr, viewer);
+  if (approvedBy) {
+    lines.push(approvedBy);
   }
   const ownReview = viewer ? pr.reviews.filter((r) => r.author === viewer.login).at(-1) : undefined;
   if (ownReview) {

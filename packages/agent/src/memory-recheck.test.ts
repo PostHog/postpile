@@ -37,7 +37,7 @@ describe('RunnerAgentService.recheckMemory', () => {
     const answer = await service.recheckMemory(input());
     expect(answer).toEqual({ outcome: 'fix', text: 'bob drives the Depot move.', why: 'bob took over on #1.' });
     expect(calls).toMatchObject([{ purpose: 'memory_recheck', ok: true, topicId: 'topic-1' }]);
-    expect(runner.requests[0]?.model).toBe('sonnet');
+    expect(runner.requests[0]?.model).toBe('claude-sonnet-5-5');
   });
 
   it('reads a fix without a new line as holds', async () => {

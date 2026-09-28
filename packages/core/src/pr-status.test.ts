@@ -5,7 +5,7 @@ import { isQueued, openThreadCount, prStatus } from './pr-status.ts';
 describe('prStatus', () => {
   it('has lifecycle, review and checks for an open PR', () => {
     const pr = makePr({ reviewDecision: 'APPROVED', checks: { rollup: 'SUCCESS', contexts: [] } });
-    expect(prStatus(pr)).toEqual({ lifecycle: 'open', review: 'approved', checks: 'ok' });
+    expect(prStatus(pr)).toEqual({ lifecycle: 'open', review: 'approved', checks: 'ok', agentApprovers: [] });
   });
 
   it('maps changes, failing and running checks', () => {
@@ -13,18 +13,20 @@ describe('prStatus', () => {
       lifecycle: 'open',
       review: 'changes',
       checks: 'fail',
+      agentApprovers: [],
     });
     expect(prStatus(makePr({ checks: { rollup: 'PENDING', contexts: [] } })).checks).toBe('pending');
   });
 
   it('leaves out parts that do not apply', () => {
-    expect(prStatus(makePr({ reviewDecision: 'NONE' }))).toEqual({ lifecycle: 'open', review: null, checks: null });
+    expect(prStatus(makePr({ reviewDecision: 'NONE' }))).toEqual({ lifecycle: 'open', review: null, checks: null, agentApprovers: [] });
     expect(prStatus(makePr({ isDraft: true, checks: { rollup: 'SUCCESS', contexts: [] } }))).toEqual({
       lifecycle: 'draft',
       review: null,
       checks: 'ok',
+      agentApprovers: [],
     });
-    expect(prStatus(makePr({ state: 'MERGED', reviewDecision: 'APPROVED' }))).toEqual({ lifecycle: 'merged', review: null, checks: null });
+    expect(prStatus(makePr({ state: 'MERGED', reviewDecision: 'APPROVED' }))).toEqual({ lifecycle: 'merged', review: null, checks: null, agentApprovers: [] });
     expect(prStatus(makePr({ state: 'CLOSED' })).lifecycle).toBe('closed');
   });
 

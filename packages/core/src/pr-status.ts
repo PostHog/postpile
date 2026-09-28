@@ -1,5 +1,6 @@
 // The PR status pill: lifecycle, review and checks, each left out when it
 // does not apply. Pure, from the PR snapshot.
+import { agentOnlyApprovers, standingApprovals } from './approvals.ts';
 import type { Pr } from './types.ts';
 
 export type PrLifecycle = 'open' | 'draft' | 'queued' | 'merged' | 'closed';
@@ -12,6 +13,12 @@ export interface PrStatus {
   review: PrReviewStatus | null;
   /** Null for merged / closed PRs and PRs without checks. */
   checks: PrChecksStatus | null;
+  /**
+   * Bot names ("reviewbot") when the review is approved and only agents
+   * approved, so the pill can say "approved by agent". Empty otherwise,
+   * including as soon as a person approved.
+   */
+  agentApprovers: string[];
 }
 
 /** In the merge queue: the newest queue entry on the timeline is an "added". */
@@ -57,12 +64,14 @@ const CHECKS: Record<Pr['checks']['rollup'], PrChecksStatus | null> = {
 export function prStatus(pr: Pr): PrStatus {
   const life = lifecycle(pr);
   if (life === 'merged' || life === 'closed') {
-    return { lifecycle: life, review: null, checks: null };
+    return { lifecycle: life, review: null, checks: null, agentApprovers: [] };
   }
+  const review = life === 'draft' ? null : REVIEW[pr.reviewDecision];
   return {
     lifecycle: life,
-    review: life === 'draft' ? null : REVIEW[pr.reviewDecision],
+    review,
     checks: CHECKS[pr.checks.rollup],
+    agentApprovers: review === 'approved' ? agentOnlyApprovers(standingApprovals(pr)) : [],
   };
 }
 
