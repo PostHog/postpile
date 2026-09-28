@@ -29,6 +29,10 @@ describe('approveButton', () => {
     expect(approveButton(input({ reviews: [review('lyra', 'APPROVED')] }))).toEqual({ label: 'Approve as well', variant: 'primary', ...fresh });
   });
 
+  it('reads Approve as well after an agent approval too', () => {
+    expect(approveButton(input({ reviews: [review('reviewbot[bot]', 'APPROVED')] })).label).toBe('Approve as well');
+  });
+
   it('ignores dismissed approvals from others', () => {
     expect(approveButton(input({ reviews: [review('lyra', 'DISMISSED')] })).label).toBe('Approve');
   });
@@ -62,21 +66,25 @@ describe('approveButton', () => {
 
 describe('approveStateGlyphs', () => {
   it('shows lifecycle and review state', () => {
-    expect(approveStateGlyphs('open', 'APPROVED')).toEqual([
+    expect(approveStateGlyphs('open', 'APPROVED', [])).toEqual([
       { glyph: 'ready', title: 'Open and ready for review' },
       { glyph: 'check', title: 'Approved' },
     ]);
   });
 
   it('keeps the review glyph on drafts', () => {
-    expect(approveStateGlyphs('draft', 'REVIEW_REQUIRED').map((part) => part.glyph)).toEqual(['draft', 'eye']);
+    expect(approveStateGlyphs('draft', 'REVIEW_REQUIRED', []).map((part) => part.glyph)).toEqual(['draft', 'eye']);
   });
 
   it('leaves out the review glyph without a review rule', () => {
-    expect(approveStateGlyphs('open', 'NONE').map((part) => part.glyph)).toEqual(['ready']);
+    expect(approveStateGlyphs('open', 'NONE', []).map((part) => part.glyph)).toEqual(['ready']);
   });
 
   it('shows changes requested', () => {
-    expect(approveStateGlyphs('open', 'CHANGES_REQUESTED')[1]).toEqual({ glyph: 'changes', title: 'Changes requested' });
+    expect(approveStateGlyphs('open', 'CHANGES_REQUESTED', [])[1]).toEqual({ glyph: 'changes', title: 'Changes requested' });
+  });
+
+  it('names the agent in the tooltip when only an agent approved', () => {
+    expect(approveStateGlyphs('open', 'APPROVED', ['reviewbot'])[1]).toEqual({ glyph: 'check', title: 'Approved by reviewbot (agent)' });
   });
 });

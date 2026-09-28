@@ -288,6 +288,8 @@ describe('FakeEngine queues', () => {
     const migrations = (await engine.getTopic('topic-migrations'))?.tiles ?? [];
     const approved = migrations.find((view) => view.tile.id === 'pr:PostHog/posthog#41808');
     expect(approved?.turn).toMatchObject({ kind: 'you', what: 'Merge, it is approved' });
+    // An agent's approval counts like any other; the pill only names who gave it.
+    expect(approved?.prs[0]?.status).toMatchObject({ review: 'approved', agentApprovers: ['reviewbot'] });
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-migrations');
     expect(item?.yourMoveTiles).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
   });

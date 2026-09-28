@@ -248,7 +248,8 @@ function buildPrs(clock: SampleClock): Pr[] {
     }),
     samplePr(clock, {
       number: 41808, title: 'Drop the old error_tracking re-exports', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [3, 40, 2], checks: 'SUCCESS', openedHoursAgo: 20, reviews: [['nell', 'APPROVED']],
+      // Approved by an agent only: the pill reads "approved by agent", whose turn stays "Merge".
+      size: [3, 40, 2], checks: 'SUCCESS', openedHoursAgo: 20, reviews: [['reviewbot[bot]', 'APPROVED']],
     }),
     samplePr(clock, {
       number: 41934, title: 'Ingestion runner pool as a Terraform module', author: 'ines', state: 'OPEN',

@@ -199,7 +199,10 @@ tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
   muted one. Drafts (`isDraftTile`): grey "Draft" chip and a dashed frame
   or dashed left band.
 - PR status: `StatusPill`, one segment pill; open threads after it. Both
-  go grey on done tiles, like the why badge.
+  go grey on done tiles, like the why badge. When only agents approved
+  (`PrStatus.agentApprovers`) the review segment reads "approved by agent"
+  in the usual green, names in the tooltip; the detail uses
+  `PrDetail.agentApprovers` with `approvedText` in `lib/pr.ts`.
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for
   "Your move".
 - Coral (`unread`) means "new since you looked" and nothing else on a tile.

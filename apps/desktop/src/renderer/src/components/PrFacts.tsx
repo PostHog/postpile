@@ -29,7 +29,8 @@ function Fact(props: { label: string; children: ReactNode }) {
 }
 
 /** Size, checks, age and what stands between the PR and a merge. */
-export function PrFacts(props: { pr: Pr }) {
+/** `agentApprovers` (`PrDetail.agentApprovers`) lets "To merge" say "approved by reviewbot (agent)". */
+export function PrFacts(props: { pr: Pr; agentApprovers: string[] }) {
   const now = useNow();
   const { pr } = props;
   const checks = checkCounts(pr.checks);
@@ -74,7 +75,7 @@ export function PrFacts(props: { pr: Pr }) {
         </span>
       </Fact>
       <Fact label="To merge">
-        <span className="text-[12.5px]">{mergeStatus(pr)}</span>
+        <span className="text-[12.5px]">{mergeStatus(pr, props.agentApprovers)}</span>
       </Fact>
     </div>
   );

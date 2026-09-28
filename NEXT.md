@@ -737,6 +737,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Bot approvals are a neutral signal, shown in words** (2026-09-28): an
+  approval by a bot (an AI review agent like reviewbot[bot]) counts like
+  any approval, as on GitHub. The app says who approved ("approved by
+  reviewbot (agent)") instead of warning about it, and glances get it as a
+  fact. Treating agent-only approvals as a warning was considered and
+  dropped.
+
 - **Setup picks** (2026-09-28): Accept does not narrow the repo scope by
   default. The main repo radio starts on "All repos"; the suggested main
   repo carries a "suggested" chip with its reason and the user can pick

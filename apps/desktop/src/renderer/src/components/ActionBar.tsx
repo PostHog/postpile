@@ -90,7 +90,7 @@ export function ActionBar(props: ActionBarProps) {
         >
           {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}
           <span className="flex items-center gap-1 opacity-75">
-            {approveStateGlyphs(lifecycleOf(props), pr.reviewDecision).map((part) => (
+            {approveStateGlyphs(lifecycleOf(props), pr.reviewDecision, props.detail.agentApprovers).map((part) => (
               <span key={part.glyph} role="img" aria-label={part.title} title={part.title} className="flex">
                 <Glyph glyph={part.glyph} size={11} strokeWidth={1.8} />
               </span>
