@@ -1,5 +1,6 @@
 import {
   caresAboutUnreviewedMerges,
+  daysBefore,
   deriveEvents,
   eventsReadOnGitHub,
   prKey,
@@ -29,10 +30,12 @@ const POLLED_KEY = 'poll_fetched_since_sync';
 const READ_SINCE_KEY = 'read_threads_since';
 /** ETag of the read-threads call; only valid for the stored `since`. */
 const READ_ETAG_KEY = 'read_threads_etag';
-/** Without a stored `since` (first run), read threads this far back. */
-export const FIRST_READ_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+/** Without a stored `since` (first run, or no last-sync marker), read threads this far back. */
+export const FIRST_READ_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** getThread lookups per sync for threads that left the inbox without showing up in the read list. */
 export const READ_TIME_LOOKUPS = 20;
+/** Found PRs: merged ones count when merged this many days back. */
+export const FOUND_MERGED_DAYS = 7;
 
 export interface GitHubSyncResult {
   viewer: Viewer;
@@ -42,6 +45,8 @@ export interface GitHubSyncResult {
   prsSkipped: number;
   /** Stack layers fetched to complete a pinged PR's stack. Not counted in prsFetched. */
   prsPulledIn: number;
+  /** Found PRs (not in the inbox) fetched because they were new or moved. Not counted in prsFetched. */
+  prsFound: number;
   /** PRs whose snapshot was written this sync, stack layers included; the verify pass rechecks facts about them. */
   fetchedPrKeys: PrKey[];
   /** New events on pinged PRs. Events on stack layers are logged but are not new work. */
@@ -346,6 +351,32 @@ export class GitHubSync {
     return prs;
   }
 
+  /**
+   * One finder request per full sync (never in the poll): the viewer's own
+   * open PRs, review requests for them and their teams, and PRs involving
+   * them merged in the last FOUND_MERGED_DAYS. The list replaces the stored
+   * one; PRs not stored yet or with a newer updatedAt go through the
+   * batched fetch. A failure is reported and the rest of the sync goes on.
+   */
+  private async syncFound(viewer: Viewer, alreadyFetched: Map<PrKey, Pr>, errors: string[]): Promise<Pr[]> {
+    const at = this.now().toISOString();
+    let refs;
+    try {
+      refs = await this.reader.findPrs(viewer.teams, daysBefore(at, FOUND_MERGED_DAYS).slice(0, 10));
+    } catch (error) {
+      errors.push(`found PRs: ${errorText(error)}`);
+      return [];
+    }
+    this.store.foundPrs.replaceAll(refs.map((found) => ({ prKey: prKey(found.ref), via: found.via, reason: found.reason, foundAt: at })));
+    const storedAt = this.store.prs.updatedAtByKey();
+    const moved = refs.filter((found) => !alreadyFetched.has(prKey(found.ref)) && storedAt.get(prKey(found.ref)) !== found.updatedAt);
+    const prs = moved.length > 0 ? [...(await this.reader.fetchPrs(moved.map((found) => found.ref))).values()] : [];
+    for (const pr of prs) {
+      this.storePr(pr, viewer);
+    }
+    return prs;
+  }
+
   /** Remembers what the poll fetched, so the next full sync verifies facts and walks stacks for them too. */
   private rememberPolled(keys: PrKey[]): void {
     const known = JSON.parse(this.store.meta.get(POLLED_KEY) ?? '[]') as PrKey[];
@@ -409,6 +440,7 @@ export class GitHubSync {
     const polled = this.takePolled(fetched);
     // A failed stack lookup should not cost the rest of the sync; the next sync tries again.
     const errors: string[] = [];
+    const found = await this.syncFound(viewer, fetched, errors);
     let pulledIn: Pr[] = [];
     try {
       pulledIn = await this.pullInStackLayers([...fetched.values(), ...polled], viewer);
@@ -422,7 +454,8 @@ export class GitHubSync {
       prsFetched: fetched.size,
       prsSkipped: candidates.length - picked.length,
       prsPulledIn: pulledIn.length,
-      fetchedPrKeys: [...fetched.keys(), ...polled.map((pr) => pr.key), ...pulledIn.map((pr) => pr.key)],
+      prsFound: found.length,
+      fetchedPrKeys: [...fetched.keys(), ...polled.map((pr) => pr.key), ...pulledIn.map((pr) => pr.key), ...found.map((pr) => pr.key)],
       newEventIds,
       readOnGitHub: this.takeReadOnGitHub(),
       errors,

@@ -97,7 +97,7 @@ describe('GitHub read times', () => {
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
     await h.engine.sync({ maxAgentCalls: 0 });
-    expect(h.reader.readListCalls).toEqual([['2026-08-30T12:00:00.000Z', null]]);
+    expect(h.reader.readListCalls).toEqual([['2026-08-26T12:00:00.000Z', null]]);
     expect(h.store.meta.get('read_threads_since')).toBe(NOW.toISOString());
 
     // An unchanged inbox: the poll does not ask for the read list.
