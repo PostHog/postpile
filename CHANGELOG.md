@@ -13,6 +13,8 @@ First public build. macOS arm64 only, ad-hoc signed, not notarized.
 - Live notification poll with Mac notifications for pings that are your move.
 - GitHub stays the source of truth for read/unread. Writes (approve, comment, mark read) sit behind a lock, and queued mark-reads have an undo window.
 - `instructions.md` for your own rules, changed only by hand or through accepted proposals.
-- Daily work context sweep over `~/.claude` with secret masking and a skip list (default `taxes,garden,hobby,personal,private`, set `POSTPILE_SWEEP_SKIP` to change it).
+- Daily work context sweep over `~/.claude` with secret masking and a skip list (default `taxes,garden,hobby,personal,private`). Edit your own list under "What you're working on"; it is saved to `~/.config/postpile/config.json` as `sweepSkip`, so it also holds when the app is started from Finder. `POSTPILE_SWEEP_SKIP` still wins when set.
+- A team @-mention stops being your move once you read the tile; personal questions and mentions stay until you answer.
+- The CLI's `sync` and `consolidate` now respect `POSTPILE_MAX_AGENT_CALLS` (default 150) when no `--max-agent-calls` is given, and `pnpm cli ... --read-only` opens the database read-only.
 - About box with version, Help links to the repo and issues.
 - FYI for anyone who ran a pre-release build: the bundle id changed from `com.postpile.app` to `com.posthog.postpile`, so macOS asks for notification permission again. Data stays in `~/Library/Application Support/PostPile`.

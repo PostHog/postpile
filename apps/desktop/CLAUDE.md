@@ -255,7 +255,9 @@ history entry, and clearing the filter brings the pick back.
 - `titleBarStyle: 'hiddenInset'`: the renderer draws the 52px title bar and
   keeps 88px free on the left for the traffic lights. Interactive elements in
   the bar must stay clickable (`.drag-region` sets them to no-drag).
-- The preload hands over only the API URL and token, plus the swipe and
+- The preload hands over only the API URL and token (asked from main with
+  `ipcRenderer.sendSync('postpile:connection')`; main answers only its own
+  page, and nothing secret goes into `additionalArguments`), plus the swipe and
   notification-click listeners and `sendTestNotification` (the footer's
   "test ping", through `useActions().sendTestNotification`). The first
   launch shows a welcome notification (`main/welcome.ts`, flag in userData). As a plain web page the

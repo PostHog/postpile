@@ -6,6 +6,32 @@ now".
 
 ## Done
 
+- Code review fixes (2026-09-28):
+  - Rules: GitHub verdicts win over the stored approval once GitHub shows
+    it; an approved PR with a later ask stays out of Done; snoozed tiles are
+    no "your move"; tiers see in-app approvals; "Review, X asked" names who
+    asked the viewer; team mentions ask only until read.
+  - Engine: the refresh after approve/comment is a normal poll cycle;
+    approve marks read before it; mark-reads the lock stopped mid-send
+    become pending writes; a double "Send" joins the running one; the
+    polled-PR list survives a failed sync; pings recheck unread/unseen after
+    the agent call; the CLI's `--read-only` opens the database read-only
+    without migrations; the stale lock takeover re-reads and checks the
+    holder's start time.
+  - Renderer: the fallback tile is the grid's first and gets pinned into the
+    history entry, the fallback topic is the sidebar's first; the cleanup
+    actions have their own busy keys. The CLI and `/api/consolidate` honour
+    `POSTPILE_MAX_AGENT_CALLS`.
+  - Security: GitHub-derived memory is fenced in every prompt, fence tag
+    names are neutralised in any spelling, the GitHub token only goes to the
+    API base URL, unreadable sweep files are skipped, the API token left the
+    command line, web permissions are denied.
+  - Privacy: the sweep skip list lives in `~/.config/postpile/config.json`
+    (`sweepSkip`), editable under the digest.
+  - Simplify: core builds PR rows and tile views for engine and FakeEngine;
+    one verdict helper (`viewerApproval` also feeds the Approve button);
+    github-sync reads threads once per run.
+
 - Done and team-request rules (2026-09-28): read-but-review-pending PRs
   stay out of the Done fold (`isPrDone` + `reviewPending`), team requests
   on a teammate's PR count like personal ones (`reviewRequest` in core
@@ -671,6 +697,15 @@ the app meanwhile.
   be persisted in fake mode?
 
 ## Later
+
+- Replace FakeEngine with the real Engine over a seeded store. Not now
+  (decided 2026-09-28): the shared core builders (`buildTileView`,
+  `deriveTileState`, …) already keep the two in step.
+- Split `github-sync.ts` (notifications, fetch, stack walk, freshness). Not
+  now (decided 2026-09-28).
+- Keep the legacy/rename transition code (`applyLegacyEnv`,
+  `legacy-data.ts`) for one more release, then drop it (see below).
+- Memoise the ActionsProvider value. Not now (decided 2026-09-28).
 
 - Dig deeper: a chat send mode that runs Opus with read-only tools (local
   checkout, gh pr view/diff) for a user's hunch, writing findings back into

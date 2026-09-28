@@ -734,7 +734,7 @@ dossier save, not here.
 | `GET /api/proposals` | `listProposals()` (topic + rule proposals) |
 | `POST /api/rule-proposals/:id` `{accept}` | `decideRuleProposal()` |
 | `POST /api/topics/:id/seen` | `markTopicSeen()` |
-| `POST /api/consolidate` `{onlyIfDue, maxAgentCalls}` | `consolidate()` |
+| `POST /api/consolidate` `{onlyIfDue, maxAgentCalls}` | `consolidate()`, capped like a sync when no cap is given |
 
 `POST /api/sync` takes `dossiers` in `agentJobs`; `summaries` is gone.
 `GET /api/facts` takes `entity=kind:key`, `predicate`, `topicId`, `since`,
@@ -1561,9 +1561,12 @@ standalone server never starts it.
   the full fetch. Every full sync runs it, the poll at most once a minute
   (`FRESHNESS_POLL_EVERY_MS`). The sync always logs the counts, the poll
   when something moved.
-- After a write: approve and comment fetch that PR again before they
-  answer, so the renderer's refresh after the action already shows the new
-  review state.
+- After a write: approve and comment run one normal poll cycle with that PR
+  as focus (`focus.prRefs`) before they answer, so the renderer's refresh
+  after the action already shows the new review state. It is serialized
+  like any cycle (a running one is waited for first), and teammates' events
+  it brings in get ping and revive handling. Approve marks read before that
+  refresh, so what the refresh brings in stays unseen.
 - Focus refresh (2026-09-28): the main process remembers PR links opened
   from the app (`OpenedPrs`, 30 minutes). When the window gets focus back,
   `refreshOnFocus` runs one cycle now that also looks those threads up
@@ -1607,7 +1610,9 @@ beyond what the full sync already does for threads that left the inbox).
   instructions, topic tailoring, dossier brief, glance, the new events (fenced
   as `<github_data>`), rule loudness and reason, whose turn and the why-here
   code. Answer per item (zod): `{ id, ping, title, body, reason }`. The agent
-  may veto or rephrase, never add.
+  may veto or rephrase, never add. The call takes seconds, so right before a
+  ping goes out the thread must still be unread and one of its events still
+  unseen; a PR read meanwhile does not ping.
 - Fallback when the call fails, skips an item, or the daily cap is spent
   (`POSTPILE_PING_CAP`, default 200 calls per rolling 24h): ping with
   `pingTemplate` text ("@bob asked you something · posthog#41850").
@@ -1748,7 +1753,8 @@ with the sources (file path, or session project + start time + title), Forget
 per thread (feedback `work_context_forget`, 6s Undo, struck through until the
 next sweep drops it), input stats, the last updated time or the last error,
 and Refresh. Routes: `GET /api/work-context`, `POST /api/work-context/sweep`,
-`POST /api/work-context/forget {version, index}`. Fake mode shows a sample
+`POST /api/work-context/forget {version, index}`, `PUT
+/api/work-context/skip-list {patterns}` (saved to config.json). Fake mode shows a sample
 digest linked to the sample topics.
 
 ## Architecture
@@ -1795,8 +1801,12 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 Ids containing `/`, `#` or `:` (tile ids, event ids) are `encodeURIComponent`-ed
 in paths. Every request needs `x-postpile-token`. The desktop app makes a
-per-launch token; the standalone server prints a per-run one unless
-`POSTPILE_TOKEN` is set. A web page cannot send the header without a
+per-launch token and hands it to the preload over a sync ipc call
+(`postpile:connection`, answered only for the app's own page), never on the
+command line where `ps` shows it; the standalone server prints a per-run one unless
+`POSTPILE_TOKEN` is set. The bearer token for GitHub only goes to URLs under
+the API base URL. The desktop app denies every web permission except
+clipboard writes from its own page. A web page cannot send the header without a
 preflight and does not know the token, so CORS stays open.
 
 | route | engine call |
