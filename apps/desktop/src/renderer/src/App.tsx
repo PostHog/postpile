@@ -12,6 +12,7 @@ import { InboxCleanup } from './components/InboxCleanup.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { NotificationsPane } from './components/NotificationsPane.tsx';
+import { PaneDivider } from './components/PaneDivider.tsx';
 import { RepoScopeMenu } from './components/RepoScopeMenu.tsx';
 import { SearchField } from './components/SearchField.tsx';
 import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
@@ -24,7 +25,9 @@ import { TopicSidebar } from './components/TopicSidebar.tsx';
 import { sameView, type NavEntry } from './lib/history.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
+import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { leadPr } from './lib/tiles.ts';
+import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 
 function MainPane(props: { children: ReactNode }) {
@@ -61,6 +64,8 @@ export function App() {
   const live = useLivePoll();
   const viewer = useViewer();
   const config = useAppConfig();
+  const panes = usePaneWidths(viewer.data?.login ?? null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const [query, setQuery] = useState('');
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
@@ -185,6 +190,23 @@ export function App() {
     );
   }
 
+  // The grid's resolved px columns: [sidebar, tiles, detail].
+  const gridColumns = () => resolvedColumnWidths(gridRef.current ? getComputedStyle(gridRef.current).gridTemplateColumns : '');
+  const columnIndex: Record<ResizablePane, number> = { sidebar: 0, tiles: 1 };
+  const dividerProps = (pane: ResizablePane) => ({
+    startWidth: () => gridColumns()[columnIndex[pane]] ?? 0,
+    clamp: (width: number) => {
+      const columns = gridColumns();
+      const total = columns.reduce((sum, column) => sum + column, 0);
+      const other = columns[pane === 'sidebar' ? 1 : 0] ?? 0;
+      return clampPaneWidth(pane, width, total - other - DETAIL_MIN_WIDTH);
+    },
+    onResize: (width: number) => panes.setWidth(pane, width),
+    onCommit: (width: number) => panes.commit({ ...panes.widths, [pane]: width }),
+    onReset: () => panes.reset(pane),
+  });
+  const columns = paneColumns(panes.widths);
+
   const tellAgent = {
     available: selected.view !== null,
     tell: (draft: string) => setChatRequest({ seq: (chatRequest?.seq ?? 0) + 1, draft }),
@@ -202,8 +224,10 @@ export function App() {
           repoScope={<RepoScopeMenu />}
         />
         {/* Sidebar | tiles | detail. The tile column stays one tile wide and the detail
-            pane takes the rest; widths hold from the 1100px minimum window up. */}
-        <div className="grid min-h-0 flex-1 grid-cols-[clamp(248px,22vw,330px)_clamp(420px,33vw,480px)_minmax(0,1fr)]">
+            pane takes the rest; widths hold from the 1100px minimum window up. The two
+            dividers resize the sidebar and the tile column (kept per viewer), so the
+            columns are an inline style: they are render-time values. */}
+        <div ref={gridRef} className="relative grid min-h-0 flex-1" style={{ gridTemplateColumns: columns.template }}>
           <TopicSidebar
             topics={items}
             activeTopicId={shownTopicId}
@@ -236,6 +260,9 @@ export function App() {
               chatRequest={chatRequest}
             />
           )}
+          <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />
+          {/* The notifications list spans both right columns, so there is no tile edge to drag. */}
+          {pane !== 'notifications' && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
         </div>
         <StatusFooter topics={items} detail={topic.data} live={live.data} />
         <Toast />

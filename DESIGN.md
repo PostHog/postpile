@@ -928,6 +928,13 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
 - **Middle column**: one tile wide, tiles never sit side by side, so the
   selected tile's notch always points at the detail pane.
 - **Detail pane**: takes the remaining width.
+- **Resizable**: the two edges (sidebar | tiles, tiles | detail) are draggable
+  (`PaneDivider`, pointer capture, a 12px invisible hit area, col-resize
+  cursor). Limits: sidebar 200-440px, tile column 340-720px, and a drag never
+  leaves the detail pane under 360px. Double-click an edge to go back to the
+  clamp above, which stays the default. Dragged widths are kept per viewer in
+  localStorage (`postpile.paneWidths.<login>`, `lib/pane-widths.ts`); a
+  blocked storage just forgets them on reload.
 
 ### Queue sections
 

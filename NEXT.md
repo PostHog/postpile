@@ -285,6 +285,10 @@ now".
   needed, electron-builder works with the strict layout. `allowBuilds` in
   the workspace file (esbuild yes, electron-winstaller no), since pnpm 12
   fails the install on unapproved build scripts.
+- First real use feedback (2026-09-28):
+  - Resizable panes: drag the sidebar | tiles and tiles | detail edges,
+    double-click resets to the default clamps, widths kept per viewer in
+    localStorage (DESIGN.md "Three-pane balance").
 
 ## Stubbed or thin
 
