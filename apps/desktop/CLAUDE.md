@@ -124,7 +124,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
   leaves a topic (another topic or the Inbox), not on a timer.
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
-  the detail pane, next to the glance.
+  the detail pane, in the action bar right under the assessment boxes.
 
 ## Styling: tokens + Tailwind utilities
 

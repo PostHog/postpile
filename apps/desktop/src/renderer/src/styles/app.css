@@ -81,6 +81,11 @@
   /* Verdicts */
   --color-safe: var(--safe);
   --color-safe-soft: var(--safe-soft);
+  --color-mark-honey: var(--mark-honey);
+  --color-safe-line: var(--safe-line);
+  --color-mark-safe: var(--mark-safe);
+  --color-risk-line: var(--risk-line);
+  --color-mark-risk: var(--mark-risk);
   --color-closer: var(--closer);
   --color-closer-soft: var(--closer-soft);
 

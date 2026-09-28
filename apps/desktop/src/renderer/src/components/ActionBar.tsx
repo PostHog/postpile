@@ -57,7 +57,7 @@ export function ActionBar(props: ActionBarProps) {
     </Button>
   );
   return (
-    <div className="flex shrink-0 items-center gap-1.5 border-t border-hairline bg-actionbar px-[22px] py-3">
+    <div className="flex flex-wrap items-center gap-1.5">
       {(primary === 'approve' || primary === 'approved') && (
         <Button
           variant="primary"
@@ -87,30 +87,38 @@ export function ActionBar(props: ActionBarProps) {
         </Button>
       )}
       {primary !== 'mark_read' && markRead('secondary')}
-      <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" up />
-      {glance && (
-        <Button size="md" title="Recheck this assessment: the agent reads the whole glance against the PR, its activity and the topic dossier" onClick={() => setRecheckOpen(true)}>
-          Recheck
-        </Button>
-      )}
+      <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" />
+      {/* Recheck and chat stay together at the end, and wrap as one when the pane is narrow. */}
+      <span className="ml-auto flex items-center gap-1">
+        {glance && (
+          <button
+            type="button"
+            title="Recheck this assessment: the agent reads the whole glance against the PR, its activity and the topic dossier"
+            onClick={() => setRecheckOpen(true)}
+            className="h-[30px] px-2 text-xs text-muted hover:text-ink"
+          >
+            Recheck
+          </button>
+        )}
+        <button
+          type="button"
+          aria-label="Chat about this tile"
+          aria-pressed={props.chatOpen}
+          title="Chat about this tile"
+          onClick={props.onToggleChat}
+          className={`flex size-[30px] items-center justify-center rounded-control border ${
+            props.chatOpen ? 'border-accent bg-accent-soft text-accent' : 'border-control bg-surface text-ink-2 hover:bg-subtle'
+          }`}
+        >
+          <ChatIcon />
+        </button>
+      </span>
       {recheckOpen && glance && (
         <RecheckDialog
           request={{ factId: null, topicId: props.detail.topicId, text: glanceClaim(glance), target: null, prKey: pr.key }}
           onClose={() => setRecheckOpen(false)}
         />
       )}
-      <button
-        type="button"
-        aria-label="Chat about this tile"
-        aria-pressed={props.chatOpen}
-        title="Chat about this tile"
-        onClick={props.onToggleChat}
-        className={`ml-auto flex size-[30px] items-center justify-center rounded-control border ${
-          props.chatOpen ? 'border-accent bg-accent-soft text-accent' : 'border-control bg-surface text-ink-2 hover:bg-subtle'
-        }`}
-      >
-        <ChatIcon />
-      </button>
     </div>
   );
 }

@@ -979,6 +979,21 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
 - **Middle column**: one tile wide, tiles never sit side by side, so the
   selected tile's notch always points at the detail pane.
 - **Detail pane**: takes the remaining width.
+- **Detail pane assessment** (2026-09-28, mockup ForWhom2 part 2 variant
+  1, "verdict as the box title"; `GlanceCard`, split in `lib/assessment.ts`).
+  Box 1 is titled with the verdict ("LOOK CLOSER · for you", honey; "LOOKS
+  SAFE · for you", green; "NOT YOURS", grey; the tag follows the PR's for
+  whom) and holds the glance's for-you text as short marked lines: "!" the
+  main point, "?" a later sentence that asks for a check. Box 2 "RISK ·
+  <level>" (red) holds the risk text (▲) and a failing CI (✕), only when
+  there is risk content. Then plain lines "→ Does:" and "“ Others:". Each
+  box caps at 3 lines. Nothing repeats: no verdict pill or for-whom chip in
+  the pane, the risk level only in box 2's title. The glance schema stays
+  prose; sentences split into lines in the renderer (a dot followed by a
+  space and a capital or digit ends one), so stored glances keep working.
+  The action bar (primary, Ask, Mark read, Snooze, then Recheck and chat at
+  the end) sits right under the assessment, above the PR facts and the
+  activity list; the ask composer opens under it.
 - **Detail pane activity** (`activityList` in core `activity.ts`, shipped
   as `PrDetail.activity`; 2026-09-28, the full event list was too long and
   noisy). Shown by default: human comments and reviews, mentions, review

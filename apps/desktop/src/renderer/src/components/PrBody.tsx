@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { PrDetail, PrSummary, TileView } from '@postpile/core';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
@@ -11,6 +12,8 @@ interface PrBodyProps {
   detail: PrDetail;
   summary: PrSummary | null;
   view: TileView;
+  /** The action bar (and the ask composer), right under the assessment. */
+  actions: ReactNode;
 }
 
 /** "head → base", plus the layer for stacks (bottom layer is 1). */
@@ -48,6 +51,7 @@ export function PrBody(props: PrBodyProps) {
         <span className="font-mono text-[11px] text-muted select-text">{branchLine(props)}</span>
       </div>
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
+      {props.actions}
       <PrFacts pr={pr} />
       <ReviewList pr={pr} />
       <AgentFacts facts={props.detail.facts} />

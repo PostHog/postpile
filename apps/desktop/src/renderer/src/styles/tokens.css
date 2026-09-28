@@ -99,6 +99,14 @@
   --closer: #8a5300;
   --closer-soft: #fbf1dc;
 
+  /* Assessment boxes in the detail pane: verdict box (honey for look closer,
+     green for looks safe), risk box (red), and the small line marks in them. */
+  --mark-honey: #ffe7a3;
+  --safe-line: #c6e4d1;
+  --mark-safe: #cdebd9;
+  --risk-line: #f2cdc6;
+  --mark-risk: #f7cfc7;
+
   /* PR states and diff */
   --open: #1c8a4a;
   --open-soft: #e7f5ec;

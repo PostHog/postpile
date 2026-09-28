@@ -308,6 +308,10 @@ now".
     assessment" on the whole glance (`MemoryRecheckRequest.prKey`).
   - "For whom" chips and left bands replace the tile code badges
     (`forWhom` in core; "For you", "For team-devex", "Your PR").
+  - Detail pane assessment: verdict as the box title with marked lines,
+    a separate "RISK · level" box, plain Does / Others lines, and the
+    action bar right under it (glance text split into lines in the
+    renderer, schema unchanged).
 
 ## Stubbed or thin
 
@@ -589,6 +593,11 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Assessment boxes** (2026-09-28): the detail pane shows the glance as
+  a box titled with the verdict plus a risk box, marked short lines, and
+  the action bar under it (mockup ForWhom2, part 2 variant 1). The verdict
+  and risk level each appear once.
 
 - **For whom as words and a band** (2026-09-28): tiles show "For you" /
   "For <team>" / "Your PR" chips and a 4px left band in honey / sea /

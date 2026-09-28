@@ -52,25 +52,20 @@ export function DetailPane(props: DetailPaneProps) {
   } else if (pr.error) {
     body = <p className="flex-1 px-[22px] py-[18px] text-xs text-unread-ink">Could not load {prKey}: {pr.error.message}</p>;
   } else if (pr.data) {
-    body = <PrBody detail={pr.data} summary={summary} view={view} />;
+    const detail = pr.data;
+    const actions = (
+      <div className="flex flex-col gap-2">
+        <ActionBar detail={detail} view={view} chatOpen={chatOpen} onAsk={() => setAskingFor(prKey)} onToggleChat={() => setChatOpen(!chatOpen)} />
+        {askingFor === prKey && <AskComposer key={prKey} prKey={prKey} author={detail.pr.author} onClose={() => setAskingFor(null)} />}
+      </div>
+    );
+    body = <PrBody detail={detail} summary={summary} view={view} actions={actions} />;
   }
 
   return (
     <aside aria-label="Details" className={`${paneFrame} shadow-accent-top`}>
       <DetailContext view={view} prKey={prKey} onSelectPr={props.onSelectPr} />
       {body}
-      {pr.data && askingFor === prKey && (
-        <AskComposer key={prKey} prKey={prKey} author={pr.data.pr.author} onClose={() => setAskingFor(null)} />
-      )}
-      {pr.data && (
-        <ActionBar
-          detail={pr.data}
-          view={view}
-          chatOpen={chatOpen}
-          onAsk={() => setAskingFor(prKey)}
-          onToggleChat={() => setChatOpen(!chatOpen)}
-        />
-      )}
     </aside>
   );
 }
