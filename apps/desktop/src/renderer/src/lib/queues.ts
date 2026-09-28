@@ -86,9 +86,17 @@ export function queueLayout(items: TopicListItem[]): QueueLayout {
   return { sections, other: items.filter((item) => !inSomeTier(item)) };
 }
 
-/** Tiles by queue, most urgent tier first; the order inside a tier stays. */
+/**
+ * Inside To review: reviews for you (personal requests and team requests on
+ * a teammate's PR, both "For you") before routed team requests. 0 elsewhere.
+ */
+function reviewRank(view: TileView): number {
+  return view.tier === 'to_review' && view.forWhom.kind !== 'you' ? 1 : 0;
+}
+
+/** Tiles by queue, most urgent tier first; inside To review, reviews for you first; else the order inside a tier stays. */
 export function tilesInTierOrder(views: TileView[]): TileView[] {
-  return views.toSorted((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+  return views.toSorted((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier) || reviewRank(a) - reviewRank(b));
 }
 
 /**

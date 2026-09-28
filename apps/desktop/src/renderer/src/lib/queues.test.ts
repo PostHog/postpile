@@ -128,6 +128,12 @@ describe('tilesInTierOrder', () => {
     const views = [tile('a', 'rest'), tile('b', 'team'), tile('c', 'needs_reply'), tile('d', 'team')];
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['c', 'b', 'd', 'a']);
   });
+
+  it('puts reviews for you before routed team requests inside To review', () => {
+    const routed = { ...tile('routed', 'to_review'), forWhom: { kind: 'team' as const, team: 'team-devex' } };
+    const views = [routed, tile('personal', 'to_review'), tile('rest', 'rest'), tile('teammate', 'to_review')];
+    expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['personal', 'teammate', 'routed', 'rest']);
+  });
 });
 
 describe('unreadLook', () => {
