@@ -2,6 +2,7 @@ export type * from './raw.ts';
 export {
   BRANCH_BATCH_SIZE,
   PR_BATCH_SIZE,
+  UPDATED_AT_BATCH_SIZE,
   type BranchLookup,
   type BranchPr,
   type GitHubReader,

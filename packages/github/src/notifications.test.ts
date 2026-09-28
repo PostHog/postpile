@@ -65,6 +65,22 @@ describe('listNotifications', () => {
     expect(fake.requests[0]?.headers['if-modified-since']).toBe('Sat, 20 Sep 2026 10:00:00 GMT');
   });
 
+  it('hands over the shorter list and new ETag when a thread was read elsewhere', async () => {
+    // Seen on real data (2026-09-28, PostHog/example-infra#4242): after a read on github.com the conditional
+    // inbox read came back 200 with a new ETag and without the thread, not 304. The engine logs which
+    // way each "read elsewhere" was noticed, so a 304 that hides a read would show up in main.log.
+    const [kept] = loadFixture('notifications-page1.json') as unknown[];
+    const fake = new FakeFetch([{ body: [kept], headers: { etag: 'W/"after-read"', 'last-modified': 'Sun, 28 Sep 2026 12:16:10 GMT' } }]);
+    const client = new GitHubClient(fakeTokens, fake.fn);
+
+    const result = await client.listNotifications({ etag: 'W/"before-read"', lastModified: 'Sun, 28 Sep 2026 12:15:37 GMT' });
+
+    expect(fake.requests[0]?.headers['if-none-match']).toBe('W/"before-read"');
+    expect(result).toMatchObject({ notModified: false, etag: 'W/"after-read"', lastModified: 'Sun, 28 Sep 2026 12:16:10 GMT' });
+    if (result.notModified) throw new Error('expected threads');
+    expect(result.threads.map((thread) => thread.id)).toEqual(['1001']);
+  });
+
   it('only makes the first page conditional', async () => {
     const fake = new FakeFetch([
       { body: [], headers: { link: `<${PAGE_2}>; rel="next"` } },

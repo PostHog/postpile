@@ -88,6 +88,13 @@ export interface GitHubReader {
   /** One thread by id, read or unread. Null when GitHub answers 404. */
   getThread(threadId: string): Promise<NotificationThread | null>;
 
+  /**
+   * updatedAt per PR, UPDATED_AT_BATCH_SIZE aliased per GraphQL query (one
+   * query for a normal board). Cheap: no connections, one point per query.
+   * PRs GitHub does not answer for are left out.
+   */
+  prUpdatedAts(refs: PrRef[]): Promise<Map<PrKey, IsoTime>>;
+
   /** Batched GraphQL enrichment, PR_BATCH_SIZE PRs aliased per query. Missing PRs are left out. */
   fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>>;
 
@@ -109,6 +116,9 @@ export interface GitHubReader {
 
 /** PRs aliased per GraphQL query. 12 kept ghatchup well inside the node limit. */
 export const PR_BATCH_SIZE = 12;
+
+/** PRs aliased per updatedAt query. Each is a single scalar, so a board's worth fits in one. */
+export const UPDATED_AT_BATCH_SIZE = 100;
 
 /** Branch lookups aliased per GraphQL query. Each answers a handful of small nodes. */
 export const BRANCH_BATCH_SIZE = 30;

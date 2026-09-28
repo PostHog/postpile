@@ -142,6 +142,21 @@ export class FakeReader implements GitHubReader {
     return this.threads.find((thread) => thread.id === threadId) ?? null;
   }
 
+  /** Every prUpdatedAts call, one entry per call. */
+  updatedAtCalls: PrRef[][] = [];
+
+  async prUpdatedAts(refs: PrRef[]): Promise<Map<PrKey, string>> {
+    this.updatedAtCalls.push(refs);
+    const result = new Map<PrKey, string>();
+    for (const ref of refs) {
+      const pr = this.prs.get(`${ref.repo}#${ref.number}`);
+      if (pr) {
+        result.set(pr.key, pr.updatedAt);
+      }
+    }
+    return result;
+  }
+
   async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {
     this.fetchedRefs.push(refs);
     const result = new Map<PrKey, Pr>();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GitHubClient } from './client.ts';
 import { FakeFetch, fakeTokens, loadFixture } from './fake-fetch.ts';
-import { buildBranchQuery, buildPrBatchQuery } from './queries.ts';
+import { buildBranchQuery, buildPrBatchQuery, buildUpdatedAtQuery } from './queries.ts';
 import { PR_BATCH_SIZE } from './reader.ts';
 
 const refs = [
@@ -17,6 +17,26 @@ describe('buildPrBatchQuery', () => {
     expect(query).toContain('p2: repository(owner: "acme", name: "api") { pullRequest(number: 8) { ...prData } }');
     expect(query).toContain('fragment prData on PullRequest');
     expect(query).toContain('... on DeployedEvent { id createdAt actor { ...actor } }');
+  });
+});
+
+describe('prUpdatedAts', () => {
+  it('asks for updatedAt only, one alias per PR, and skips PRs GitHub does not answer for', async () => {
+    const fake = new FakeFetch([
+      {
+        body: {
+          data: { p0: { pullRequest: { updatedAt: '2026-09-28T12:27:00Z' } }, p1: null, p2: { pullRequest: null } },
+          errors: [{ message: 'Could not resolve to a Repository', path: ['p1'] }],
+        },
+      },
+    ]);
+    const client = new GitHubClient(fakeTokens, fake.fn);
+
+    const updated = await client.prUpdatedAts(refs);
+
+    expect([...updated]).toEqual([['acme/app#42', '2026-09-28T12:27:00.000Z']]);
+    expect(fake.requests).toHaveLength(1);
+    expect(buildUpdatedAtQuery(refs)).toContain('p1: repository(owner: "acme", name: "secret") { pullRequest(number: 1) { updatedAt } }');
   });
 });
 

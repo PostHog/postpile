@@ -103,6 +103,15 @@ export function buildPrBatchQuery(refs: PrRef[]): string {
   return `query {\n${lines.join('\n')}\n}\n${FRAGMENTS}`;
 }
 
+/** One aliased lookup per PR (p0, p1, ...) for updatedAt alone: the freshness check. */
+export function buildUpdatedAtQuery(refs: PrRef[]): string {
+  const lines = refs.map((ref, index) => {
+    const [owner, name] = ref.repo.split('/');
+    return `  ${batchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { updatedAt } }`;
+  });
+  return `query {\n${lines.join('\n')}\n}`;
+}
+
 export function branchAlias(index: number): string {
   return `b${index}`;
 }

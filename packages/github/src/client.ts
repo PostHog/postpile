@@ -1,14 +1,15 @@
-import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
+import { prKey, type IsoTime, type NotificationThread, type Pr, type PrKey, type PrRef, type Viewer } from '@postpile/core';
 import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem } from './http.ts';
-import { toBranchPr, toPr } from './normalize.ts';
+import { isoTime, toBranchPr, toPr } from './normalize.ts';
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { listTeamMembers } from './teams.ts';
-import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
-import type { RawBatchResponse, RawBranchResponse, RawViewerTeams } from './raw.ts';
+import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, buildUpdatedAtQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
+import type { RawBatchResponse, RawBranchResponse, RawUpdatedAtResponse, RawViewerTeams } from './raw.ts';
 import {
   BRANCH_BATCH_SIZE,
   PR_BATCH_SIZE,
+  UPDATED_AT_BATCH_SIZE,
   type BranchLookup,
   type BranchPr,
   type GitHubReader,
@@ -108,6 +109,27 @@ export class GitHubClient implements GitHubReader {
 
   getThread(threadId: string): Promise<NotificationThread | null> {
     return getThread(this.http, threadId);
+  }
+
+  /** A repo the token cannot see nulls its alias next to an error; the rest still counts. */
+  private async updatedAtBatch(batch: PrRef[]): Promise<[PrKey, IsoTime][]> {
+    const response = await this.http.graphql<RawUpdatedAtResponse>(buildUpdatedAtQuery(batch));
+    if (!response.data) {
+      throw graphqlFailure('updatedAt query', response.errors);
+    }
+    const found: [PrKey, IsoTime][] = [];
+    batch.forEach((ref, index) => {
+      const updatedAt = response.data?.[batchAlias(index)]?.pullRequest?.updatedAt;
+      if (updatedAt) {
+        found.push([prKey(ref), isoTime(updatedAt)]);
+      }
+    });
+    return found;
+  }
+
+  async prUpdatedAts(refs: PrRef[]): Promise<Map<PrKey, IsoTime>> {
+    const batches = await inParallel(chunk(refs, UPDATED_AT_BATCH_SIZE), (batch) => this.updatedAtBatch(batch));
+    return new Map(batches.flat());
   }
 
   async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {

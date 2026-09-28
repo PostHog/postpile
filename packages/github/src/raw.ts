@@ -163,3 +163,6 @@ export interface RawViewerTeams {
     };
   };
 }
+
+/** The freshness check: updatedAt per aliased PR, null where the token cannot see the repo or the PR is gone. */
+export type RawUpdatedAtResponse = Record<string, { pullRequest: { updatedAt: string } | null } | null>;
