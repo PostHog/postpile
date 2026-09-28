@@ -1,7 +1,7 @@
 import { isBot, isMachineComment } from './bots.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { ruleLoudness } from './loudness.ts';
-import { isOwnTeam, mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
+import { isViewerSubject, mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
 export interface DeriveEventsOptions {
@@ -210,10 +210,8 @@ function commitEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): Ra
 }
 
 function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
-  const isViewer = (subject: string) => sameLogin(subject, viewer.login) || isOwnTeam(subject, viewer.teams);
-  const requestedInTimeline = pr.timeline.some(
-    (item) => item.kind === 'review_requested' && item.subject !== null && isViewer(item.subject),
-  );
+  const isViewer = (subject: string | null) => isViewerSubject(subject, viewer);
+  const requestedInTimeline = pr.timeline.some((item) => item.kind === 'review_requested' && isViewer(item.subject));
   return requestedInTimeline || pr.reviewerUsers.some(isViewer) || pr.reviewerTeams.some(isViewer);
 }
 

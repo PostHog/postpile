@@ -1,6 +1,6 @@
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
-import { isOwnTeam, sameLogin } from './mentions.ts';
+import { isViewerSubject, sameLogin } from './mentions.ts';
 import type { EventDisplayState, EventKind, IsoTime, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
 export interface LoudnessInput {
@@ -35,13 +35,6 @@ const reviewKinds: EventKind[] = ['review_approved', 'review_changes_requested',
 
 function decide(loudness: Loudness, reason: string): LoudnessDecision {
   return { loudness, reason };
-}
-
-function isViewerSubject(subject: string | null | undefined, viewer: Viewer): boolean {
-  if (!subject) {
-    return false;
-  }
-  return sameLogin(subject, viewer.login) || isOwnTeam(subject, viewer.teams);
 }
 
 function isViewersPr(input: LoudnessInput): boolean {

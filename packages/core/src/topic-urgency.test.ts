@@ -38,8 +38,9 @@ describe('topicUrgency', () => {
     expect(topicUrgency([tile({ state: 'unread', yourMove: true, mergeApproved: true })]).needsYou).toBe(true);
   });
 
-  it('ignores your move on done tiles', () => {
+  it('ignores your move on done and snoozed tiles', () => {
     expect(topicUrgency([tile({ state: 'done', yourMove: true })])).toMatchObject({ yourMoveTiles: 0, needsYou: false });
+    expect(topicUrgency([tile({ state: 'snoozed', yourMove: true })])).toMatchObject({ yourMoveTiles: 0, needsYou: false });
   });
 });
 

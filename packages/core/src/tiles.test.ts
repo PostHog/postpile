@@ -85,6 +85,13 @@ describe('isPrDone', () => {
     expect(isPrDone(pr, handled, teamViewer)).toBe(true);
   });
 
+  it('is not done after your approval while a later question to you is unanswered', () => {
+    const pr = makePr({ author: 'ada', reviews: [makeReview({ author: viewer.login, submittedAt: at(20) })] });
+    const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30) });
+    expect(isPrDone(pr, null, teamViewer, [question])).toBe(false);
+    expect(isPrDone(pr, null, teamViewer)).toBe(true);
+  });
+
   it('stays done when someone pushed after the approval', () => {
     const pr = makePr({ headOid: 'h3' });
     expect(isPrDone(pr, makeUserState({ approvedAt: at(1), approvedCommitOid: 'h2' }))).toBe(true);

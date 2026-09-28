@@ -23,6 +23,11 @@ export type ReviewRequest = 'you' | 'team_for_you' | 'team' | 'team_taken' | nul
  * approval) or on github.com (their newest approve-or-request-changes
  * review is an approval). Approvals do not follow the head: a push after
  * approval does not undo it (decided 2026-09-28).
+ *
+ * The stored approval only bridges the gap until GitHub shows the viewer's
+ * review on the approved commit. From then on GitHub's newest verdict
+ * decides, so a later change request or a dismissal (which keeps the
+ * original submittedAt) wins over the local timestamp.
  */
 export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
   const decisive = viewerLogin === undefined
@@ -32,7 +37,9 @@ export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewer
         .sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
   const newest = decisive[decisive.length - 1];
   const approvedInApp = userState?.approvedAt ?? null;
-  if (approvedInApp !== null && (!newest || approvedInApp >= newest.submittedAt)) {
+  const approvedCommit = userState?.approvedCommitOid ?? null;
+  const onGitHub = approvedCommit !== null && decisive.some((review) => review.commitOid === approvedCommit);
+  if (approvedInApp !== null && !onGitHub && (!newest || approvedInApp >= newest.submittedAt)) {
     return true;
   }
   return newest?.state === 'APPROVED';

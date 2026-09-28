@@ -1,3 +1,4 @@
+import type { Viewer } from './types.ts';
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -37,4 +38,12 @@ export function isOwnTeam(slug: string, teams: string[]): boolean {
 
 export function sameLogin(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
+}
+
+/** A review request or similar subject (login or "org/team-slug") that is the viewer or one of their teams. */
+export function isViewerSubject(subject: string | null | undefined, viewer: Viewer): boolean {
+  if (!subject) {
+    return false;
+  }
+  return sameLogin(subject, viewer.login) || isOwnTeam(subject, viewer.teams);
 }

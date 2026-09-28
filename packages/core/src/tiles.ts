@@ -82,8 +82,9 @@ export function setIdFromTileId(tileId: string): string | null {
 
 /**
  * A pinged PR is done only when nothing is asked of the viewer (2026-09-28):
- * merged or closed, or approved by them (on any commit; a later push stays
- * quiet unless someone pings again or the agent raises it), or handled
+ * merged or closed, or approved by them while whose turn is not theirs (on
+ * any commit; a later push stays quiet, a later question or mention to them
+ * is their move), or handled
  * (marked read) while whose turn is not theirs and no review is still
  * pending of them or their team. Marking read a PR that still waits on the
  * viewer's review makes it read, not done. Without a viewer, handled is
@@ -94,7 +95,8 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer |
     return true;
   }
   if (isApprovedByViewer(pr, userState, viewer?.login)) {
-    return true;
+    // A later question or mention to the viewer still keeps it out of done.
+    return viewer === null || prWhoseTurn({ pr, events, userState, viewer }).kind !== 'you';
   }
   if (!userState?.handledAt) {
     return false;

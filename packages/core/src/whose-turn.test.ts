@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeUserState, singleTile, viewer } from './fixtures.ts';
+import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeTimelineItem, makeUserState, singleTile, viewer } from './fixtures.ts';
 import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
 import { isMergeApprovedMove, whoseTurn, type WhoseTurn } from './whose-turn.ts';
 
@@ -25,10 +25,18 @@ function single(pr: Pr, events: PrEvent[] = [], userStates: UserPrState[] = []):
 
 describe('whoseTurn: your move', () => {
   it('asks for a review requested of you, naming who asked', () => {
-    const pr = makePr({ author: 'rowan', reviewerUsers: [me] });
-    const requested = makeEvent({ kind: 'review_requested', actor: 'rowan' });
-    expect(single(pr, [requested])).toEqual({ kind: 'you', who: null, what: 'Review, rowan asked', prKey: pr.key });
-    expect(single(pr).what).toBe('Review');
+    const pr = makePr({ author: 'rowan', reviewerUsers: [me], timeline: [makeTimelineItem({ actor: 'rowan', subject: me })] });
+    expect(single(pr)).toEqual({ kind: 'you', who: null, what: 'Review, rowan asked', prKey: pr.key });
+    expect(single({ ...pr, timeline: [] }).what).toBe('Review');
+  });
+
+  it('names who asked you, not whoever requested someone else later', () => {
+    const timeline = [
+      makeTimelineItem({ id: 't1', actor: 'rowan', subject: me, at: at(1) }),
+      makeTimelineItem({ id: 't2', actor: 'ada', subject: 'sol', at: at(2) }),
+    ];
+    const pr = makePr({ author: 'rowan', reviewerUsers: [me, 'sol'], timeline });
+    expect(single(pr).what).toBe('Review, rowan asked');
   });
 
   it('asks for a team review only while no one else reviewed', () => {
@@ -266,7 +274,7 @@ describe('whoseTurn: drafts', () => {
   });
 
   it('turns back to a review once the draft is ready', () => {
-    const requested = makeEvent({ kind: 'review_requested', actor: 'rowan' });
-    expect(single({ ...draft, isDraft: false }, [requested])).toMatchObject({ kind: 'you', what: 'Review, rowan asked' });
+    const timeline = [makeTimelineItem({ actor: 'rowan', subject: me })];
+    expect(single({ ...draft, isDraft: false, timeline })).toMatchObject({ kind: 'you', what: 'Review, rowan asked' });
   });
 });

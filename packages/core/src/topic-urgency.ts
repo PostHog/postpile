@@ -21,12 +21,12 @@ export interface TopicUrgency {
   unreadTiles: number;
   /** Unread tiles with at least one open PR. These light up the topic. */
   urgentUnreadTiles: number;
-  /** Live (not done) tiles where it is the viewer's move, merging an approved PR included. */
+  /** Live (not done, not snoozed) tiles where it is the viewer's move, merging an approved PR included. */
   yourMoveTiles: number;
   /**
    * An unread tile is still open, or it is the viewer's move on a live tile
-   * and that move is more than merging their own approved PR. Quiet tiles
-   * never count.
+   * and that move is more than merging their own approved PR. Quiet and
+   * snoozed tiles never count as a move.
    */
   needsYou: boolean;
 }
@@ -38,7 +38,7 @@ export function isUrgentUnread(tile: UrgencyTile): boolean {
 export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
   const unreadTiles = tiles.filter((tile) => tile.state === 'unread').length;
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
-  const yourMove = tiles.filter((tile) => tile.state !== 'done' && tile.yourMove);
+  const yourMove = tiles.filter((tile) => tile.state !== 'done' && tile.state !== 'snoozed' && tile.yourMove);
   const urgentMoves = yourMove.filter((tile) => !tile.mergeApproved && !tile.quiet).length;
   return { unreadTiles, urgentUnreadTiles, yourMoveTiles: yourMove.length, needsYou: urgentUnreadTiles > 0 || urgentMoves > 0 };
 }

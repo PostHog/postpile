@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeComment, makeEvent, makePr, makeReview, viewer } from './fixtures.ts';
+import { at, makeComment, makeEvent, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
 import { prTier, type PrTierInput } from './pr-tier.ts';
 import type { Viewer } from './types.ts';
 
@@ -7,7 +7,7 @@ const me = viewer.login;
 const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
 
 function tier(overrides: Partial<PrTierInput>): string {
-  return prTier({ pr: makePr(), events: [], viewer: withTeam, reason: null, ...overrides });
+  return prTier({ pr: makePr(), events: [], viewer: withTeam, userState: null, reason: null, ...overrides });
 }
 
 const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30) });
@@ -34,6 +34,12 @@ describe('prTier', () => {
     expect(tier({ pr: makePr({ author: 'lyra' }), viewer })).toBe('rest');
     const reviewed = makePr({ author: 'lyra', reviewerUsers: [me], reviews: [makeReview({ author: me, state: 'COMMENTED' })] });
     expect(tier({ pr: reviewed })).toBe('team');
+  });
+
+  it('counts an in-app approval as reviewed before GitHub shows it', () => {
+    const pr = makePr({ author: 'ada', reviewerUsers: [me], headOid: 'c1' });
+    expect(tier({ pr })).toBe('to_review');
+    expect(tier({ pr, userState: makeUserState({ prKey: pr.key, approvedAt: at(30), approvedCommitOid: 'c1' }) })).toBe('rest');
   });
 
   it('puts a personal request on a teammate’s PR in To review', () => {

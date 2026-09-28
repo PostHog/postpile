@@ -370,7 +370,8 @@ export class FakeEngine implements EngineService {
   /** Same tier rule as the engine; the sample has no threads, so a pinged member's reason stands in. */
   private tierOf(pr: Pr, member: TileMember | undefined): PrTier {
     const reason = member?.provenance.kind === 'pinged' ? member.provenance.reason : null;
-    return prTier({ pr, events: this.eventsOf(pr.key), viewer: this.viewer(), reason });
+    const userState = this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null;
+    return prTier({ pr, events: this.eventsOf(pr.key), viewer: this.viewer(), userState, reason });
   }
 
   /**

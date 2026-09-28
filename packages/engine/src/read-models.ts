@@ -144,7 +144,7 @@ export class ReadModels {
       return 'rest';
     }
     const reason = board.threads.get(pr.key)?.reason ?? null;
-    return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, reason });
+    return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, userState: board.userStates.get(pr.key) ?? null, reason });
   }
 
   private prSummaries(

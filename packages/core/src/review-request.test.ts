@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { makePr, makeReview, viewer } from './fixtures.ts';
-import { isPersonalRequest, reviewPending, reviewRequest, teamRequestTakenBy } from './review-request.ts';
+import { at, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
+import { isApprovedByViewer, isPersonalRequest, reviewPending, reviewRequest, teamRequestTakenBy } from './review-request.ts';
 import type { Viewer } from './types.ts';
 
 const me = viewer.login;
@@ -60,5 +60,27 @@ describe('reviewPending', () => {
     expect(reviewPending(makePr({ author: 'ada', reviewerUsers: [me], state: 'MERGED' }), withTeam)).toBe(false);
     const taken = makePr({ author: 'ada', reviewerTeams: team, reviews: [makeReview({ author: 'rowan' })] });
     expect(reviewPending(taken, withTeam)).toBe(false);
+  });
+});
+
+describe('isApprovedByViewer', () => {
+  const pr = makePr({ author: 'ada', headOid: 'c1' });
+  const inApp = makeUserState({ prKey: pr.key, approvedAt: at(30), approvedCommitOid: 'c1' });
+
+  it('trusts the in-app approval until GitHub shows the review', () => {
+    expect(isApprovedByViewer(pr, inApp, me)).toBe(true);
+  });
+
+  it('lets a dismissal win once GitHub shows the review, even with the old submittedAt', () => {
+    const dismissed = { ...pr, reviews: [makeReview({ author: me, state: 'DISMISSED', commitOid: 'c1', submittedAt: at(20) })] };
+    expect(isApprovedByViewer(dismissed, inApp, me)).toBe(false);
+  });
+
+  it('lets a newer change request win once GitHub shows the approval', () => {
+    const reviews = [
+      makeReview({ id: 'r1', author: me, state: 'APPROVED', commitOid: 'c1', submittedAt: at(20) }),
+      makeReview({ id: 'r2', author: me, state: 'CHANGES_REQUESTED', commitOid: 'c2', submittedAt: at(25) }),
+    ];
+    expect(isApprovedByViewer({ ...pr, reviews }, inApp, me)).toBe(false);
   });
 });

@@ -5,7 +5,7 @@ import { changesAnswered, type ChangesAnswer } from './changes-answered.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
-import { isOwnTeam, sameLogin } from './mentions.ts';
+import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
 import { isApprovedByViewer, isPersonalRequest, reviewRequest, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
 
@@ -122,9 +122,11 @@ function headReview(ctx: PrContext): Review | null {
   return onHead[onHead.length - 1] ?? null;
 }
 
-/** Who asked the viewer (or their team) for a review, from the newest request event. */
+/** Who asked the viewer (or their team) for a review: the newest human request aimed at them in the timeline. */
 function requester(ctx: PrContext): string | null {
-  const requests = ctx.events.filter((e) => e.kind === 'review_requested' && !e.isBot).sort((a, b) => (a.at < b.at ? -1 : 1));
+  const requests = ctx.pr.timeline
+    .filter((item) => item.kind === 'review_requested' && isViewerSubject(item.subject, ctx.viewer) && !isBot(item.actor))
+    .sort((a, b) => (a.at < b.at ? -1 : 1));
   return requests[requests.length - 1]?.actor ?? null;
 }
 

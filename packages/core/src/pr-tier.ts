@@ -4,7 +4,7 @@
 import { changesAnswered } from './changes-answered.ts';
 import { sameLogin } from './mentions.ts';
 import { isPersonalRequest, isTeammate, reviewedHead, reviewRequest } from './review-request.ts';
-import type { EventKind, NotificationReason, Pr, PrEvent, Viewer } from './types.ts';
+import type { EventKind, NotificationReason, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';
 
 /**
@@ -29,6 +29,8 @@ export interface PrTierInput {
   pr: Pr;
   events: PrEvent[];
   viewer: Viewer;
+  /** The stored in-app approval counts as a review of the head, like everywhere else. */
+  userState: UserPrState | null;
   /** The notification thread's reason, when there is a thread. */
   reason: NotificationReason | null;
 }
@@ -61,7 +63,7 @@ export function prTier(input: PrTierInput): PrTier {
     return 'mine';
   }
   // A draft is not up for review: it never lands in To review.
-  const request = pr.isDraft || reviewedHead(pr, viewer) ? null : reviewRequest(pr, viewer);
+  const request = pr.isDraft || reviewedHead(pr, viewer, input.userState) ? null : reviewRequest(pr, viewer);
   // A personal request, or a team request on a teammate's PR, is owed even to a teammate.
   if (isPersonalRequest(request)) {
     return 'to_review';

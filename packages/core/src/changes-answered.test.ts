@@ -63,7 +63,7 @@ function turn(pr: Pr): WhoseTurn {
 }
 
 function tier(pr: Pr): string {
-  return prTier({ pr, events: deriveEvents(pr, viewer, null), viewer, reason: 'comment' });
+  return prTier({ pr, events: deriveEvents(pr, viewer, null), viewer, userState: null, reason: 'comment' });
 }
 
 describe('addressed your changes: the #4521 timeline', () => {
@@ -77,7 +77,7 @@ describe('addressed your changes: the #4521 timeline', () => {
   it('files the PR under To review, even when the author is a teammate', () => {
     expect(tier(pr)).toBe('to_review');
     const teammate = { ...viewer, teamMembers: ['bob'] };
-    expect(prTier({ pr, events: deriveEvents(pr, teammate, null), viewer: teammate, reason: 'comment' })).toBe('to_review');
+    expect(prTier({ pr, events: deriveEvents(pr, teammate, null), viewer: teammate, userState: null, reason: 'comment' })).toBe('to_review');
   });
 
   it('shows the tile as for you, whatever the notification reason', () => {
