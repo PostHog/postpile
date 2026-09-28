@@ -1,6 +1,7 @@
 import type { AppConfig } from '@postpile/core';
 import { createEngine, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
+import { fakeToolProblems } from './fake/fake-tools.ts';
 
 export function isFake(): boolean {
   return process.env.POSTPILE_FAKE === '1';
@@ -22,12 +23,14 @@ export interface EngineFromEnvOptions {
 /**
  * Set POSTPILE_FAKE=1 to run on the Depot sample data: no GitHub, no agent,
  * no database. POSTPILE_FAKE_SETUP=1 on top starts it with no instructions
- * and the setup flow showing. Otherwise throws DataDirLockedError while another process
+ * and the setup flow showing. POSTPILE_FAKE_MISSING simulates missing tools
+ * (comma separated: gh, gh-auth, gh-token, gh-offline, claude, claude-auth,
+ * claude-limit). Otherwise throws DataDirLockedError while another process
  * holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
   if (isFake()) {
-    return new FakeEngine({ forceSetup: process.env.POSTPILE_FAKE_SETUP === '1' });
+    return new FakeEngine({ forceSetup: process.env.POSTPILE_FAKE_SETUP === '1', missingTools: fakeToolProblems(process.env.POSTPILE_FAKE_MISSING) });
   }
   if (options.migrateLegacy ?? true) {
     // A no-op once done, and in dev.

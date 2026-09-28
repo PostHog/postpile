@@ -77,6 +77,9 @@ export function formatConsolidation(report: ConsolidationReport): string {
   if (report.skipped === 'not_due') {
     return 'consolidation not due (24h since the last run and a new dossier version needed)';
   }
+  if (report.skipped === 'agent_off') {
+    return 'consolidation skipped: agent features are off (claude missing, logged out or at its usage limit)';
+  }
   const lines = [
     `topic proposals ${report.topicProposalsFiled}, rule proposals ${report.ruleProposalsFiled}, facts merged ${report.factsMerged}, topics retired ${report.topicsRetired}`,
     `agent: ${formatCallStats(report.agentCallStats)}`,

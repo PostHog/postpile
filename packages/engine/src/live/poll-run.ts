@@ -1,4 +1,4 @@
-import type { AgentCallStats, Viewer } from '@postpile/core';
+import { splitAgentOffErrors, type AgentCallStats, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { reviveRetiredTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';
@@ -60,10 +60,13 @@ export class PollRun {
     const stats = callLog.begin(`poll:${startedAt}`);
     try {
       reviveRetiredTopics(store, inbox.newEventIds, startedAt);
-      try {
-        await this.assignTopics(inbox.viewer, stats, errors);
-      } catch (error) {
-        errors.push(`topics: ${errorText(error)}`);
+      // Without the agent new PRs wait in Unsorted for a sync with it; the rules still ping.
+      if (this.deps.agentOff() === null) {
+        try {
+          await this.assignTopics(inbox.viewer, stats, errors);
+        } catch (error) {
+          errors.push(`topics: ${errorText(error)}`);
+        }
       }
       // The first look at an empty store is the whole inbox; none of it is news.
       if (inbox.firstLook) {
@@ -75,7 +78,8 @@ export class PollRun {
         prsUpdated: inbox.fetchedPrKeys.length,
         decisions: decided.decisions,
         pings: decided.pings,
-        errors: [...errors, ...decided.errors],
+        // The decider falls back to rules while the agent is off; that is not worth a log line every cycle.
+        errors: splitAgentOffErrors([...errors, ...decided.errors]).errors,
       };
     } finally {
       callLog.end();

@@ -12,4 +12,6 @@ export interface RunDeps {
   callLog: AgentCallLog;
   facts: FactWriter;
   now: () => Date;
+  /** The claude headline while the agent is off, else null. Runs skip their agent jobs then. */
+  agentOff: () => string | null;
 }

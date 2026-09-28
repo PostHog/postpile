@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import { extendedPath } from '@postpile/core';
 import fixPath from 'fix-path';
 import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
@@ -14,13 +15,12 @@ import { welcomeOnce } from './welcome.ts';
 const REPO_URL = 'https://github.com/PostHog/postpile';
 
 // A GUI launch (Finder, Dock, the packaged app) gets launchd's minimal PATH.
-// gh and claude live in /opt/homebrew/bin and ~/.local/bin, so take PATH
-// from the login shell, and add the usual install folders in case the shell
-// setup does not export them.
+// gh and claude live in Homebrew, ~/.local/bin (the Claude Code installer)
+// or ~/.claude/local, so take PATH from the login shell, and add those
+// folders in case the shell setup does not export them. The tool status
+// (GET /api/tools) looks programs up on this same PATH.
 fixPath();
-const toolFolders = ['/opt/homebrew/bin', '/usr/local/bin', join(homedir(), '.local/bin')];
-const pathParts = (process.env.PATH ?? '').split(delimiter).filter(Boolean);
-process.env.PATH = [...pathParts, ...toolFolders.filter((folder) => !pathParts.includes(folder))].join(delimiter);
+process.env.PATH = extendedPath(process.env.PATH ?? '', homedir(), delimiter);
 
 applyLegacyEnv();
 // A dev run (pnpm desktop, not the packaged app) gets its own database in

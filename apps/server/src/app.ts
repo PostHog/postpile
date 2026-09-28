@@ -294,6 +294,9 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
 
   // Setup flow. Checks and the sweep only read GitHub; refine is one agent call and writes
   // nothing; accept writes instructions.md (a new version), quiet repos, scope and the done flag.
+  // gh and claude status with the fix commands; the check is local and reads nothing from GitHub.
+  app.get('/api/tools', async (c) => c.json(await engine.tools()));
+  app.post('/api/tools/check', async (c) => c.json(await engine.checkTools()));
   app.get('/api/setup', async (c) => c.json(await engine.setupStatus()));
   app.get('/api/setup/checks', async (c) => c.json(await engine.setupChecks()));
   // The sweep can take tens of seconds: POST starts it and answers at once, GET is polled.

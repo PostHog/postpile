@@ -89,7 +89,12 @@ export class GitHubHttp {
       headers['content-type'] = 'application/json';
       init.body = JSON.stringify(options.body);
     }
-    return this.fetchFn(url, init);
+    const response = await this.fetchFn(url, init);
+    if (response.status === 401) {
+      // Expired or revoked: read the token from gh again next time, so a fresh `gh auth login` is picked up without a restart.
+      this.tokens.forget?.();
+    }
+    return response;
   }
 
   /** Like request, but throws GitHubError unless the status is 2xx. */

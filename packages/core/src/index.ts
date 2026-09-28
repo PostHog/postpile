@@ -54,3 +54,4 @@ export * from './tile-view.ts';
 export * from './instructions-sections.ts';
 export * from './setup.ts';
 export * from './setup-draft.ts';
+export * from './tools.ts';
