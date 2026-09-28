@@ -1,4 +1,4 @@
-import type { ActionResult } from '@code-manager/core';
+import type { ActionResult } from '@postpile/core';
 import type { PendingBatch } from '../mark-read-queue.ts';
 
 export function ok(message: string, undoToken: string | null = null): ActionResult {

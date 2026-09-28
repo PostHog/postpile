@@ -1,4 +1,4 @@
-import type { WorkContextInputStats, WorkContextSweepResult, WorkContextView } from '@code-manager/core';
+import type { WorkContextInputStats, WorkContextSweepResult, WorkContextView } from '@postpile/core';
 
 function statsLines(stats: WorkContextInputStats): string[] {
   const lines = [

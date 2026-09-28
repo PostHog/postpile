@@ -1,4 +1,4 @@
-import type { AgentCallStats, Viewer } from '@code-manager/core';
+import type { AgentCallStats, Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { reviveRetiredTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';

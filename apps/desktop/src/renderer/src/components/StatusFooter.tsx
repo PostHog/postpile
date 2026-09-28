@@ -1,4 +1,4 @@
-import type { LivePollStatus, TopicDetail, TopicListItem } from '@code-manager/core';
+import type { LivePollStatus, TopicDetail, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { callStatsDetail, callStatsLabel } from '../lib/agent-stats.ts';
 import { liveLabel } from '../lib/live.ts';

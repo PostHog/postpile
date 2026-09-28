@@ -8,8 +8,8 @@ import {
   type NewActionLogEntry,
   type NotificationThread,
   type PrKey,
-} from '@code-manager/core';
-import { UNDO_WINDOW_MS } from '@code-manager/engine';
+} from '@postpile/core';
+import { UNDO_WINDOW_MS } from '@postpile/engine';
 
 const SAMPLE_DETAIL = 'sample data: nothing left the process';
 

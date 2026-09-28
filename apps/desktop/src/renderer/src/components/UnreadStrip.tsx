@@ -1,4 +1,4 @@
-import type { TileView } from '@code-manager/core';
+import type { TileView } from '@postpile/core';
 import { eventGlyph, splitActor } from '../lib/events.ts';
 import { ageLabel } from '../lib/time.ts';
 import { newestUnreadReason, prNumber } from '../lib/tiles.ts';

@@ -10,8 +10,8 @@ import {
   type MemoryTarget,
   type PrEvent,
   type PrKey,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { verifyWorldFor } from './fact-world.ts';
 
 /**

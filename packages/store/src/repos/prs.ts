@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Pr, PrKey } from '@code-manager/core';
+import type { Pr, PrKey } from '@postpile/core';
 import { all, one, placeholders, run } from '../sql.ts';
 
 export class PrRepo {

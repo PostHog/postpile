@@ -1,5 +1,5 @@
-import type { InstructionsVersion } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { InstructionsVersion } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { readInstructions, writeInstructionsAtomically } from './file.ts';
 
 export interface CurrentInstructions {

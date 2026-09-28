@@ -17,8 +17,8 @@ import {
   type GlanceBatchInput,
   type GlanceBatchItem,
   type GlanceBatchResult,
-} from '@code-manager/agent';
-import { emptyDossier, type Glance, type ReconcileAction } from '@code-manager/core';
+} from '@postpile/agent';
+import { emptyDossier, type Glance, type ReconcileAction } from '@postpile/core';
 
 type Answer<I, O> = (input: I) => O;
 

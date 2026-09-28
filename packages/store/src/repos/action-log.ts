@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ActionLogEntry, ActionOrigin, ActionOutcome, LoggedAction, NewActionLogEntry } from '@code-manager/core';
+import type { ActionLogEntry, ActionOrigin, ActionOutcome, LoggedAction, NewActionLogEntry } from '@postpile/core';
 import { all, insertReturningId } from '../sql.ts';
 
 interface ActionLogRow {

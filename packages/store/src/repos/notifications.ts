@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { prKey, type NotificationReason, type NotificationThread, type PrKey } from '@code-manager/core';
+import { prKey, type NotificationReason, type NotificationThread, type PrKey } from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, fromBool, one, placeholders, run, toBool } from '../sql.ts';
 

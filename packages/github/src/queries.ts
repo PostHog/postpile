@@ -1,4 +1,4 @@
-import type { PrRef } from '@code-manager/core';
+import type { PrRef } from '@postpile/core';
 import type { BranchLookup } from './reader.ts';
 
 // Limits per PR. Picked so 12 aliased PRs stay well inside GitHub's node

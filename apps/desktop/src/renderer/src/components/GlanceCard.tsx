@@ -1,4 +1,4 @@
-import type { PrDetail, PrSummary, TileView } from '@code-manager/core';
+import type { PrDetail, PrSummary, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { glanceGapText } from '../lib/glance.ts';
 import { whyTitle } from '../lib/why.ts';

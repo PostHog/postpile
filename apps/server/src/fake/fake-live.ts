@@ -1,5 +1,5 @@
-import { pingTemplate, type PingDecision, type PrEvent, type Tile } from '@code-manager/core';
-import type { PollCycle } from '@code-manager/engine';
+import { pingTemplate, type PingDecision, type PrEvent, type Tile } from '@postpile/core';
+import type { PollCycle } from '@postpile/engine';
 import type { SampleData } from './sample-data.ts';
 
 /** How often the fake poll finds something new, so the ping flow can be watched. */

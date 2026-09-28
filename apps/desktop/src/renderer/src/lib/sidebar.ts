@@ -1,4 +1,4 @@
-import type { TopicListItem, TopicRelation } from '@code-manager/core';
+import type { TopicListItem, TopicRelation } from '@postpile/core';
 
 export interface AreaGroup {
   area: string;

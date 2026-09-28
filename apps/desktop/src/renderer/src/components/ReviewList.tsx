@@ -1,4 +1,4 @@
-import type { Pr } from '@code-manager/core';
+import type { Pr } from '@postpile/core';
 import type { EventGlyph } from '../lib/events.ts';
 import { reviewRows, type ReviewStatus } from '../lib/pr.ts';
 import { isTeam } from '../lib/people.ts';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DossierView } from '@code-manager/core';
-import { at, makeDossierVersion, makeFact, makeFactRef } from '@code-manager/core/fixtures';
+import type { DossierView } from '@postpile/core';
+import { at, makeDossierVersion, makeFact, makeFactRef } from '@postpile/core/fixtures';
 import { claimStaleReason, fixedText, refLabel, sinceLastLooked } from './memory.ts';
 
 function view(overrides: Partial<DossierView> = {}): DossierView {

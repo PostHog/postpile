@@ -1,4 +1,4 @@
-import type { GlanceGap } from '@code-manager/core';
+import type { GlanceGap } from '@postpile/core';
 
 export interface GlanceGapText {
   /** Short, for the verdict pill. */

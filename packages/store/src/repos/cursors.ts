@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Cursor, CursorKind } from '@code-manager/core';
+import type { Cursor, CursorKind } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface CursorRow {

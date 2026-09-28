@@ -1,6 +1,6 @@
-import type { IsoTime, Viewer } from '@code-manager/core';
-import type { GitHubReader } from '@code-manager/github';
-import type { Store } from '@code-manager/store';
+import type { IsoTime, Viewer } from '@postpile/core';
+import type { GitHubReader } from '@postpile/github';
+import type { Store } from '@postpile/store';
 
 const META_KEY = 'team_members';
 

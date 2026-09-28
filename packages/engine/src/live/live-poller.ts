@@ -1,5 +1,5 @@
-import { OFF_POLL_STATUS, type LivePollStatus, type Timers } from '@code-manager/core';
-import { GitHubError } from '@code-manager/github';
+import { OFF_POLL_STATUS, type LivePollStatus, type Timers } from '@postpile/core';
+import { GitHubError } from '@postpile/github';
 import { errorText } from '../errors.ts';
 import type { LivePollOptions, PollCycle } from './poll-cycle.ts';
 import { PingThrottle } from './ping-throttle.ts';

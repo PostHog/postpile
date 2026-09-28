@@ -1,4 +1,4 @@
-import type { Store } from '@code-manager/store';
+import type { Store } from '@postpile/store';
 import { prKeyOfEvent } from '../ids.ts';
 
 /**

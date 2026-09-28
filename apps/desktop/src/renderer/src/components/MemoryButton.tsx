@@ -1,4 +1,4 @@
-import type { MemoryCorrection } from '@code-manager/core';
+import type { MemoryCorrection } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 
 /** The small "Forget" link next to a "what you care about" line. Other lines get "Recheck" instead. */

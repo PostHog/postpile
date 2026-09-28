@@ -2,15 +2,15 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { app, BrowserWindow, shell } from 'electron';
 import fixPath from 'fix-path';
-import type { EngineService } from '@code-manager/engine';
-import { appConfigFromEnv, engineFromEnv, pollSecondsFromEnv, startServer, type RunningServer } from '@code-manager/server';
+import type { EngineService } from '@postpile/engine';
+import { appConfigFromEnv, engineFromEnv, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { MacNotifier } from './mac-notifier.ts';
 
 // A GUI launch gets launchd's minimal PATH. gh and claude live in
 // /opt/homebrew/bin and ~/.local/bin, so take PATH from the login shell.
 fixPath();
 
-// Otherwise userData lands under the npm package name, "@code-manager/desktop".
+// Otherwise userData lands under the npm package name, "@postpile/desktop".
 app.setName('code-manager');
 
 let engine: EngineService | null = null;

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { GitHubWritesStatus } from '@code-manager/core';
+import type { GitHubWritesStatus } from '@postpile/core';
 import { request } from './client.ts';
 import { queryKeys } from './keys.ts';
 

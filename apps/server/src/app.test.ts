@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { AppConfig } from '@code-manager/core';
-import type { EngineService } from '@code-manager/engine';
+import type { AppConfig } from '@postpile/core';
+import type { EngineService } from '@postpile/engine';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
-import { OFF_POLL_STATUS } from '@code-manager/core';
+import { OFF_POLL_STATUS } from '@postpile/core';
 
 const CONFIG: AppConfig = { fake: false, syncCallCap: 30 };
 

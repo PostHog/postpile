@@ -1,4 +1,4 @@
-import type { WorkContextInputStats, WorkContextSource, WorkContextView } from '@code-manager/core';
+import type { WorkContextInputStats, WorkContextSource, WorkContextView } from '@postpile/core';
 import { ageLabel } from './time.ts';
 
 const KIND_LABELS: Record<WorkContextSource['kind'], string> = {

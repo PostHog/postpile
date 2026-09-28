@@ -1,4 +1,4 @@
-import { EVENTS_PER_PING_ITEM, type AgentService, type PingDecisionAnswer, type PingDecisionItem } from '@code-manager/agent';
+import { EVENTS_PER_PING_ITEM, type AgentService, type PingDecisionAnswer, type PingDecisionItem } from '@postpile/agent';
 import {
   dossierBrief,
   pingRule,
@@ -14,8 +14,8 @@ import {
   type PrKey,
   type Tile,
   type Viewer,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { errorText } from '../errors.ts';
 import type { PromptContextSource } from '../prompt-context.ts';

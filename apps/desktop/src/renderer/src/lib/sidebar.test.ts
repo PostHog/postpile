@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Topic, TopicListItem, TopicPlacement } from '@code-manager/core';
+import type { Topic, TopicListItem, TopicPlacement } from '@postpile/core';
 import { sidebarGroups } from './sidebar.ts';
 
 function topic(id: string): Topic {

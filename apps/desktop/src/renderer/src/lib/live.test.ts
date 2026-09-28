@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OFF_POLL_STATUS, type LivePollStatus } from '@code-manager/core';
+import { OFF_POLL_STATUS, type LivePollStatus } from '@postpile/core';
 import { liveLabel } from './live.ts';
 
 const now = new Date('2026-09-28T10:00:00Z');

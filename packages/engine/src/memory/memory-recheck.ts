@@ -1,4 +1,4 @@
-import { EVENTS_PER_PR_IN_RECHECK, PRS_IN_RECHECK, type AgentService } from '@code-manager/agent';
+import { EVENTS_PER_PR_IN_RECHECK, PRS_IN_RECHECK, type AgentService } from '@postpile/agent';
 import {
   findDossierLine,
   type Fact,
@@ -7,8 +7,8 @@ import {
   type MemorySources,
   type Pr,
   type PrKey,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { loadViewer } from '../viewer-meta.ts';
 import type { MemorySourcesReads } from './memory-sources-reads.ts';

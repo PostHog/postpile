@@ -1,4 +1,4 @@
-import type { PrKey } from '@code-manager/core';
+import type { PrKey } from '@postpile/core';
 
 // The desktop preload provides the API location and token. As a plain web page
 // (later) the query string or the default dev server is used instead.

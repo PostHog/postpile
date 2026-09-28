@@ -1,4 +1,4 @@
-import type { EventDisplayState, EventView } from '@code-manager/core';
+import type { EventDisplayState, EventView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { eventGlyph, splitActor } from '../lib/events.ts';
 import { ageLabel } from '../lib/time.ts';

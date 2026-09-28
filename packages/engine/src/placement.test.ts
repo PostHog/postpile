@@ -1,5 +1,5 @@
-import { emptyDossier } from '@code-manager/core';
-import { makeThreadFor } from '@code-manager/core/fixtures';
+import { emptyDossier } from '@postpile/core';
+import { makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { MAX_NEW_AREAS_PER_SYNC } from './digest/dossiers.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';

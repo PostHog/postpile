@@ -1,5 +1,5 @@
-import { setGroupingInputHash, type SetProposal } from '@code-manager/agent';
-import type { PrSet, Topic } from '@code-manager/core';
+import { setGroupingInputHash, type SetProposal } from '@postpile/agent';
+import type { PrSet, Topic } from '@postpile/core';
 import { newSetId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import type { DigestDeps } from './deps.ts';

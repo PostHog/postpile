@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Glance, PrKey, Verdict } from '@code-manager/core';
+import type { Glance, PrKey, Verdict } from '@postpile/core';
 import { all, one, placeholders, run } from '../sql.ts';
 
 interface GlanceRow {

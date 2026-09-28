@@ -1,4 +1,4 @@
-import type { MemoryTarget } from '@code-manager/core';
+import type { MemoryTarget } from '@postpile/core';
 import { useMemorySources } from '../api/sources.ts';
 import { checkLabel, type CheckTone } from '../lib/sources.ts';
 import { ageLabel } from '../lib/time.ts';

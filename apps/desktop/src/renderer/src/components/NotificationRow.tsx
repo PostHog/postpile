@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { GitHubWritesStatus, NotificationDebugRow } from '@code-manager/core';
+import type { GitHubWritesStatus, NotificationDebugRow } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { actionLine, landingLabel, noTileReason, threadRef, type ActionTone } from '../lib/notifications.ts';
 import { ageLabel } from '../lib/time.ts';

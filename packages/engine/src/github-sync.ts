@@ -8,9 +8,9 @@ import {
   type PrKey,
   type PrRef,
   type Viewer,
-} from '@code-manager/core';
-import type { GitHubReader } from '@code-manager/github';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { GitHubReader } from '@postpile/github';
+import type { Store } from '@postpile/store';
 import { errorText } from './errors.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { StackLayerFinder } from './stack-layers.ts';

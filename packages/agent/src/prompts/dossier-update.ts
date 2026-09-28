@@ -1,5 +1,5 @@
-import { DOSSIER_LIMITS } from '@code-manager/core';
-import type { Fact, PrEvent } from '@code-manager/core';
+import { DOSSIER_LIMITS } from '@postpile/core';
+import type { Fact, PrEvent } from '@postpile/core';
 import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { InstructionsProposal, LastingPointProposal, TileView } from '@code-manager/core';
+import type { InstructionsProposal, LastingPointProposal, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useChat } from '../api/chat.ts';
 import { Button } from './Button.tsx';

@@ -1,6 +1,6 @@
-import { UNDO_WINDOW_MS } from '@code-manager/core';
-import { makeThreadFor } from '@code-manager/core/fixtures';
-import { Store } from '@code-manager/store';
+import { UNDO_WINDOW_MS } from '@postpile/core';
+import { makeThreadFor } from '@postpile/core/fixtures';
+import { Store } from '@postpile/store';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
 import { makeHarness, type Harness, type HarnessOptions } from './testing/fakes.ts';

@@ -1,5 +1,5 @@
-import { emptyDossier, type Dossier, type Pr } from '@code-manager/core';
-import { at, makeComment, makeFact, makeFactRef, makeThreadFor, viewer } from '@code-manager/core/fixtures';
+import { emptyDossier, type Dossier, type Pr } from '@postpile/core';
+import { at, makeComment, makeFact, makeFactRef, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';

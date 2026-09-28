@@ -1,4 +1,4 @@
-import { clipText, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction } from '@code-manager/core';
+import { clipText, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction } from '@postpile/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';

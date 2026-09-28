@@ -36,9 +36,9 @@ import {
   type TopicListItem,
   type Viewer,
   type ViewerView,
-} from '@code-manager/core';
-import type { AgentService } from '@code-manager/agent';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { AgentService } from '@postpile/agent';
+import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
 import { debugNotificationRows } from './debug-notifications.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';

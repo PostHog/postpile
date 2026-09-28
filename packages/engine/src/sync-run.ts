@@ -1,4 +1,4 @@
-import { ALL_AGENT_JOBS, type SyncOptions, type SyncReport } from '@code-manager/core';
+import { ALL_AGENT_JOBS, type SyncOptions, type SyncReport } from '@postpile/core';
 import { AgentBudget } from './budget.ts';
 import { reviveRetiredTopics } from './consolidation/revive.ts';
 import type { DigestTally } from './digest/deps.ts';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { InstructionsProposal } from '@code-manager/core';
+import type { InstructionsProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { Button } from './Button.tsx';
 import { DiffView } from './DiffView.tsx';

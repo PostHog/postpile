@@ -1,5 +1,5 @@
 {
-  "name": "code-manager",
+  "name": "postpile",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -18,10 +18,10 @@
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
-    "build": "npm run build -w @code-manager/desktop",
+    "build": "npm run build -w @postpile/desktop",
     "cli": "tsx apps/cli/src/main.ts",
-    "server": "npm start -w @code-manager/server",
-    "desktop": "npm run dev -w @code-manager/desktop"
+    "server": "npm start -w @postpile/server",
+    "desktop": "npm run dev -w @postpile/desktop"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",

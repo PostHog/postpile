@@ -1,4 +1,4 @@
-import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@code-manager/core';
+import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@postpile/core';
 
 export interface NotificationConditions {
   etag: string | null;

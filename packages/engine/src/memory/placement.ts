@@ -1,5 +1,5 @@
-import { topicPlacement, type DossierVersion, type RelationOverride, type Topic, type TopicPlacement } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import { topicPlacement, type DossierVersion, type RelationOverride, type Topic, type TopicPlacement } from '@postpile/core';
+import type { Store } from '@postpile/store';
 
 /** Meta key of the relation the user set with "Wrong" (RelationOverride JSON). */
 export function relationOverrideKey(topicId: string): string {

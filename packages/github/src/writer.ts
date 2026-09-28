@@ -1,4 +1,4 @@
-import type { PrRef } from '@code-manager/core';
+import type { PrRef } from '@postpile/core';
 
 /**
  * Every mutating GitHub call, kept apart from GitHubReader so tests and

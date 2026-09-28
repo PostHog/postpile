@@ -6,7 +6,7 @@ import {
   type AreaChoice,
   type DossierUpdateInput,
   type DossierUpdateResult,
-} from '@code-manager/agent';
+} from '@postpile/agent';
 import {
   isEmptyDelta,
   joinedMembers,
@@ -20,7 +20,7 @@ import {
   type FactCandidate,
   type PrKey,
   type Topic,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { verifyWorldFor } from '../memory/fact-world.ts';

@@ -1,4 +1,4 @@
-import type { DossierView } from '@code-manager/core';
+import type { DossierView } from '@postpile/core';
 import { fixedText, sinceLastLooked } from '../lib/memory.ts';
 import { changePath, lineTarget } from '../lib/sources.ts';
 import { ageLabel } from '../lib/time.ts';

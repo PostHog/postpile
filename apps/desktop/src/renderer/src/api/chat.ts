@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ChatMessage } from '@code-manager/core';
+import type { ChatMessage } from '@postpile/core';
 import { request, tilePath } from './client.ts';
 import { queryKeys } from './keys.ts';
 

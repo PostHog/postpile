@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { emptyDossier, type Topic } from '@code-manager/core';
-import { at, makeDossierVersion, makeEvent, makeFact, makeFactRef } from '@code-manager/core/fixtures';
+import { emptyDossier, type Topic } from '@postpile/core';
+import { at, makeDossierVersion, makeEvent, makeFact, makeFactRef } from '@postpile/core/fixtures';
 import { Store } from './index.ts';
 
 let store: Store;

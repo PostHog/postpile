@@ -1,4 +1,4 @@
-import { SWEEP_CHECK_MS, sweepDue, type SweepHistory, type Timers, type WorkContextSweepResult } from '@code-manager/core';
+import { SWEEP_CHECK_MS, sweepDue, type SweepHistory, type Timers, type WorkContextSweepResult } from '@postpile/core';
 
 export interface SweepTarget {
   history(): SweepHistory;

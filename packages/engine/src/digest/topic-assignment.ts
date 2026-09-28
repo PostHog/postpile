@@ -1,5 +1,5 @@
-import type { TopicAssignment, TopicChoice } from '@code-manager/agent';
-import { dossierBrief, newTopic, type Pr, type Topic } from '@code-manager/core';
+import type { TopicAssignment, TopicChoice } from '@postpile/agent';
+import { dossierBrief, newTopic, type Pr, type Topic } from '@postpile/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { PrSet, Topic } from '@code-manager/core';
-import { at, makeEvent, makePr, makeThreadFor } from '@code-manager/core/fixtures';
+import type { PrSet, Topic } from '@postpile/core';
+import { at, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { Store } from './index.ts';
 
 let store: Store;

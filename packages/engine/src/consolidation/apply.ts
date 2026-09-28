@@ -1,6 +1,6 @@
-import type { AreaMerge, ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@code-manager/agent';
-import type { TopicProposal } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { AreaMerge, ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@postpile/agent';
+import type { TopicProposal } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { newProposalId, newRuleProposalId } from '../ids.ts';
 import type { FactWriter } from '../memory/fact-writer.ts';
 import type { RetireGate } from './retire-gate.ts';

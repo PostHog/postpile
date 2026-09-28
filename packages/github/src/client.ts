@@ -1,4 +1,4 @@
-import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
+import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
 import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem } from './http.ts';
 import { toBranchPr, toPr } from './normalize.ts';
 import { getThread, listNotifications } from './notifications.ts';

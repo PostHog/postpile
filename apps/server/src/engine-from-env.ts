@@ -1,5 +1,5 @@
-import type { AppConfig } from '@code-manager/core';
-import { createEngine, type EngineService } from '@code-manager/engine';
+import type { AppConfig } from '@postpile/core';
+import { createEngine, type EngineService } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 
 function isFake(): boolean {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { WorkContextInputStats, WorkContextVersion } from '@code-manager/core';
-import { at } from '@code-manager/core/fixtures';
+import type { WorkContextInputStats, WorkContextVersion } from '@postpile/core';
+import { at } from '@postpile/core/fixtures';
 import { Store, WORK_CONTEXT_VERSIONS_KEPT } from './index.ts';
 
 let store: Store;

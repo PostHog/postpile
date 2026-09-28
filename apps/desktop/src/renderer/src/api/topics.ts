@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { TopicDetail, TopicListItem } from '@code-manager/core';
+import type { TopicDetail, TopicListItem } from '@postpile/core';
 import { request } from './client.ts';
 import { queryKeys } from './keys.ts';
 

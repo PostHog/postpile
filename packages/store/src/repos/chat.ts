@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ChatMessage, ChatRole } from '@code-manager/core';
+import type { ChatMessage, ChatRole } from '@postpile/core';
 import { all, insertReturningId, one } from '../sql.ts';
 
 export type NewChatMessage = Omit<ChatMessage, 'id'>;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PrSet, PrSummary, TileView } from '@code-manager/core';
-import { at } from '@code-manager/core/fixtures';
+import type { PrSet, PrSummary, TileView } from '@postpile/core';
+import { at } from '@postpile/core/fixtures';
 import { countPrs, kindLabel, leadPr, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {

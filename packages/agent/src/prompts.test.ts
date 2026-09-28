@@ -6,7 +6,7 @@ import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
 import { contextBlock, githubData } from './prompts/shared.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
-import type { Pr, Provenance } from '@code-manager/core';
+import type { Pr, Provenance } from '@postpile/core';
 import type { PromptContext } from './service.ts';
 import { emptyContext, fullContext, makeComment, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
 

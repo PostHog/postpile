@@ -1,4 +1,4 @@
-import type { PrEvent } from '@code-manager/core';
+import type { PrEvent } from '@postpile/core';
 import type { PingDecisionInput, PingDecisionItem } from '../service.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, workContextBlock } from './shared.ts';
 

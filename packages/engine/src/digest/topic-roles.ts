@@ -1,4 +1,4 @@
-import { topicDriver, userRoleFor, type DossierVersion, type NotificationReason, type Pr } from '@code-manager/core';
+import { topicDriver, userRoleFor, type DossierVersion, type NotificationReason, type Pr } from '@postpile/core';
 import type { DigestDeps } from './deps.ts';
 
 /** The dossier knows who drives the initiative; without one, the most frequent author does. */

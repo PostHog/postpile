@@ -10,8 +10,8 @@ import {
   type PendingProposals,
   type PrKey,
   type RelationOverride,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { UNSORTED_TOPIC_ID } from '../board.ts';
 import { newFactId } from '../ids.ts';
 import { relationOverrideKey } from '../memory/placement.ts';

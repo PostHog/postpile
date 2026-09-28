@@ -1,7 +1,7 @@
-import { ClaudeCliRunner, RunnerAgentService } from '@code-manager/agent';
-import { systemTimers, UNDO_WINDOW_MS } from '@code-manager/core';
-import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@code-manager/github';
-import { Store } from '@code-manager/store';
+import { ClaudeCliRunner, RunnerAgentService } from '@postpile/agent';
+import { systemTimers, UNDO_WINDOW_MS } from '@postpile/core';
+import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@postpile/github';
+import { Store } from '@postpile/store';
 import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';

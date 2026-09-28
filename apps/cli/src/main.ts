@@ -2,12 +2,12 @@
 // Dev CLI, the way to exercise the engine without a UI:
 //   npm run cli -- topics
 //   CODE_MANAGER_FAKE=1 npm run cli -- topics   (Depot sample data)
-import { engineFromEnv } from '@code-manager/server';
+import { engineFromEnv } from '@postpile/server';
 import { parseArgs, usage, type Command } from './args.ts';
 import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
-import type { EngineService } from '@code-manager/engine';
+import type { EngineService } from '@postpile/engine';
 
 async function runCommand(engine: EngineService, command: Command): Promise<string> {
   switch (command.name) {

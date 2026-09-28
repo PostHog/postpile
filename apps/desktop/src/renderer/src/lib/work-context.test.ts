@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkContextInputStats, WorkContextView } from '@code-manager/core';
+import type { WorkContextInputStats, WorkContextView } from '@postpile/core';
 import { inputLine, sourceLabel, sweepStatus } from './work-context.ts';
 
 const stats: WorkContextInputStats = {

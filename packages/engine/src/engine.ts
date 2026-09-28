@@ -1,4 +1,4 @@
-import type { AgentService } from '@code-manager/agent';
+import type { AgentService } from '@postpile/agent';
 import type {
   ActionLogEntry,
   ActionResult,
@@ -37,10 +37,10 @@ import type {
   WorkContextSweepResult,
   WorkContextView,
   WorkThreadForget,
-} from '@code-manager/core';
-import { OFF_POLL_STATUS, systemTimers } from '@code-manager/core';
-import type { GitHubReader } from '@code-manager/github';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import { OFF_POLL_STATUS, systemTimers } from '@postpile/core';
+import type { GitHubReader } from '@postpile/github';
+import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';

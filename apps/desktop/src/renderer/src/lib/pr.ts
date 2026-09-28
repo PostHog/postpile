@@ -1,4 +1,4 @@
-import type { Checks, Pr, PrStatus, Review } from '@code-manager/core';
+import type { Checks, Pr, PrStatus, Review } from '@postpile/core';
 
 const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 

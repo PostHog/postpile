@@ -7,7 +7,7 @@ import type {
   InstructionsSaveResult,
   InstructionsVersion,
   InstructionsView,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { SampleClock } from './sample-builders.ts';
 
 /** The general chat's tile id, as in the real engine. */

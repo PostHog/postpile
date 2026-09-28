@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
-import type { AppConfig } from '@code-manager/core';
-import type { EngineService } from '@code-manager/engine';
+import type { AppConfig } from '@postpile/core';
+import type { EngineService } from '@postpile/engine';
 import { createApp } from './app.ts';
 
 export interface ServerOptions {

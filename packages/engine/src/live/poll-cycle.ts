@@ -1,4 +1,4 @@
-import type { MacNotification, Ping, PingDecision } from '@code-manager/core';
+import type { MacNotification, Ping, PingDecision } from '@postpile/core';
 
 /**
  * One fast-poll cycle, as the engine reports it to the scheduler. Rate

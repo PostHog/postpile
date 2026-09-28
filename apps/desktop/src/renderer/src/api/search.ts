@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { SearchResult } from '@code-manager/core';
+import type { SearchResult } from '@postpile/core';
 import { useDebounced } from '../lib/use-debounced.ts';
 import { request } from './client.ts';
 import { queryKeys } from './keys.ts';

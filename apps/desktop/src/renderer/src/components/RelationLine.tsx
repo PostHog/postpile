@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TopicPlacement, TopicRelation } from '@code-manager/core';
+import type { TopicPlacement, TopicRelation } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { relationLabel } from '../lib/sidebar.ts';
 import { RelationBadge } from './pills.tsx';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { DossierStatus, DossierView, TopicDetail, TopicGroup, TopicListItem, TopicProposal, UserRole } from '@code-manager/core';
+import type { DossierStatus, DossierView, TopicDetail, TopicGroup, TopicListItem, TopicProposal, UserRole } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';

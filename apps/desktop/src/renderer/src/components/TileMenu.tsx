@@ -1,4 +1,4 @@
-import type { TileView, TopicListItem } from '@code-manager/core';
+import type { TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { prNumber } from '../lib/tiles.ts';
 import { Menu, type MenuItem } from './Menu.tsx';

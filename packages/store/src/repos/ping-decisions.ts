@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PingDecision, PingDecisionSource } from '@code-manager/core';
+import type { PingDecision, PingDecisionSource } from '@postpile/core';
 import { all, fromBool, run, toBool } from '../sql.ts';
 
 interface PingDecisionRow {

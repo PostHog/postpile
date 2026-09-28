@@ -3,7 +3,7 @@
 // node access, no way to send ipc. The main process passes the API values as extra command line arguments,
 // which a sandboxed preload can still read.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { PingTarget } from '@code-manager/core';
+import type { PingTarget } from '@postpile/core';
 
 function argValue(name: string): string {
   const prefix = `--${name}=`;

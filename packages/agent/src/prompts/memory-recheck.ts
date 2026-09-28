@@ -1,4 +1,4 @@
-import type { MemorySource, PrEvent } from '@code-manager/core';
+import type { MemorySource, PrEvent } from '@postpile/core';
 import type { MemoryRecheckInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, shortDetail, viewerLine } from './shared.ts';

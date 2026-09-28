@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Review } from '@code-manager/core';
-import { at, makePr } from '@code-manager/core/fixtures';
+import type { Review } from '@postpile/core';
+import { at, makePr } from '@postpile/core/fixtures';
 import { checkCounts, mergeStatus, reviewRows, statusParts } from './pr.ts';
 
 function review(author: string, state: Review['state'], minutes: number): Review {

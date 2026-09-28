@@ -1,6 +1,6 @@
-import type { AgentService, ContextSweepTopic } from '@code-manager/agent';
-import { dossierBrief, type SweepHistory, type WorkContextSweepResult } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { AgentService, ContextSweepTopic } from '@postpile/agent';
+import { dossierBrief, type SweepHistory, type WorkContextSweepResult } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { errorText } from '../errors.ts';
 import type { InstructionsHistory } from '../instructions/history.ts';
 import { WorkContextCollector, type CollectBudget } from './collector.ts';

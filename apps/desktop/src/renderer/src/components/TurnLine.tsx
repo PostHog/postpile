@@ -1,4 +1,4 @@
-import type { WhoseTurn } from '@code-manager/core';
+import type { WhoseTurn } from '@postpile/core';
 import { turnTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
 

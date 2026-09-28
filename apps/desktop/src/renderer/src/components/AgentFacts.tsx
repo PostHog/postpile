@@ -1,4 +1,4 @@
-import type { FactView } from '@code-manager/core';
+import type { FactView } from '@postpile/core';
 import { MemoryLine } from './MemoryLine.tsx';
 
 /** "What the agent knows": facts about the PR or citing it, with sources. Stale ones are greyed. */

@@ -1,4 +1,4 @@
-import type { PrSummary } from '@code-manager/core';
+import type { PrSummary } from '@postpile/core';
 import { prNumber } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph } from './icons.tsx';

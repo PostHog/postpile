@@ -11,8 +11,8 @@ import {
   type FixedClaim,
   type Pr,
   type PrKey,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { factViews } from './fact-world.ts';
 
 /** Enough recent topic feedback to find every correction made since the latest version. */

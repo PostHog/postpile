@@ -1,4 +1,4 @@
-import type { AgentJob } from '@code-manager/core';
+import type { AgentJob } from '@postpile/core';
 import type { DigestDeps } from './deps.ts';
 import { DossierUpdater } from './dossiers.ts';
 import { EventBatchClassifier } from './event-batches.ts';

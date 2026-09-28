@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionResult, ConsolidateOptions, ConsolidationReport, FactQuery, FactView, PendingProposals } from '@code-manager/core';
+import type { ActionResult, ConsolidateOptions, ConsolidationReport, FactQuery, FactView, PendingProposals } from '@postpile/core';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { FakeEngine } from './fake/fake-engine.ts';
 

@@ -1,5 +1,5 @@
-import { isPinged, setIdFromTileId, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@code-manager/core';
-import type { NewFeedback, Store } from '@code-manager/store';
+import { isPinged, setIdFromTileId, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@postpile/core';
+import type { NewFeedback, Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
 import type { ReadMarker } from './read-marker.ts';

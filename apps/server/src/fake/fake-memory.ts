@@ -17,7 +17,7 @@ import type {
   TopicPlacement,
   TopicRelation,
   TopicStatusLine,
-} from '@code-manager/core';
+} from '@postpile/core';
 import {
   describeFactRef,
   describeLineSources,
@@ -30,7 +30,7 @@ import {
   parseFixedClaimNote,
   topicChangesSince,
   topicPlacement,
-} from '@code-manager/core';
+} from '@postpile/core';
 import type { SampleData } from './sample-data.ts';
 import { buildSampleMemory, type SampleMemory } from './sample-memory.ts';
 

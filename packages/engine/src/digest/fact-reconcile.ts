@@ -1,4 +1,4 @@
-import { preReconcile, type AmbiguousCandidate, type EntityRef, type FactCandidate, type ReconcileAction } from '@code-manager/core';
+import { preReconcile, type AmbiguousCandidate, type EntityRef, type FactCandidate, type ReconcileAction } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import type { DigestDeps } from './deps.ts';

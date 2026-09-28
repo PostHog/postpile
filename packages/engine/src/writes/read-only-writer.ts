@@ -1,5 +1,5 @@
-import type { PrRef } from '@code-manager/core';
-import type { GitHubWriter } from '@code-manager/github';
+import type { PrRef } from '@postpile/core';
+import type { GitHubWriter } from '@postpile/github';
 
 /**
  * What WriteSwitch hands out while GitHub writes are off: the footer lock is

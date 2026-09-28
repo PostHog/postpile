@@ -1,4 +1,4 @@
-import type { EventKind, UnreadKind } from '@code-manager/core';
+import type { EventKind, UnreadKind } from '@postpile/core';
 
 /**
  * The small glyph set for events, grouped: talking to you (at, question,

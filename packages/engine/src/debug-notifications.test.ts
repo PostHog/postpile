@@ -1,5 +1,5 @@
-import { makeThreadFor, viewer } from '@code-manager/core/fixtures';
-import type { NotificationThread } from '@code-manager/core';
+import { makeThreadFor, viewer } from '@postpile/core/fixtures';
+import type { NotificationThread } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
 import { makeHarness } from './testing/fakes.ts';

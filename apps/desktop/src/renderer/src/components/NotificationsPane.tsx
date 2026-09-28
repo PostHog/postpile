@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { NotificationReason } from '@code-manager/core';
+import type { NotificationReason } from '@postpile/core';
 import { useDebugNotifications } from '../api/debug.ts';
 import { filterNotifications, NO_NOTIFICATION_FILTER, reasonsIn, type NotificationFilter } from '../lib/notifications.ts';
 import { NotificationRow, type TilePick } from './NotificationRow.tsx';

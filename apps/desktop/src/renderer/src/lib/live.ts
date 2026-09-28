@@ -1,4 +1,4 @@
-import type { LivePollStatus } from '@code-manager/core';
+import type { LivePollStatus } from '@postpile/core';
 
 export interface LiveLabel {
   text: string;

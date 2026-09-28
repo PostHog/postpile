@@ -1,6 +1,6 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
-import { prKey } from '@code-manager/core';
+import { prKey } from '@postpile/core';
 import type {
   CheckRollup,
   ReviewDecision,
@@ -19,7 +19,7 @@ import type {
   Topic,
   UserRole,
   Verdict,
-} from '@code-manager/core';
+} from '@postpile/core';
 
 export const SAMPLE_REPO = 'PostHog/posthog';
 export const SAMPLE_VIEWER = 'you';

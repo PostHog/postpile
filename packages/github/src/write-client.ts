@@ -1,4 +1,4 @@
-import type { PrRef } from '@code-manager/core';
+import type { PrRef } from '@postpile/core';
 import { GitHubHttp, type FetchFn } from './http.ts';
 import type { TokenSource } from './token.ts';
 import type { GitHubWriter } from './writer.ts';

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { InstructionsOrigin, InstructionsVersion } from '@code-manager/core';
+import type { InstructionsOrigin, InstructionsVersion } from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, one, run } from '../sql.ts';
 

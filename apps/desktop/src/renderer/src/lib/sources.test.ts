@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DossierView } from '@code-manager/core';
-import { at, makeDossierVersion } from '@code-manager/core/fixtures';
+import type { DossierView } from '@postpile/core';
+import { at, makeDossierVersion } from '@postpile/core/fixtures';
 import { changePath, checkLabel, targetKey, targetQuery } from './sources.ts';
 
 describe('checkLabel', () => {

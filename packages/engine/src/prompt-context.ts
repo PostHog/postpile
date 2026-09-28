@@ -1,5 +1,5 @@
-import type { PromptContext } from '@code-manager/agent';
-import type { Store } from '@code-manager/store';
+import type { PromptContext } from '@postpile/agent';
+import type { Store } from '@postpile/store';
 import type { InstructionsHistory } from './instructions/history.ts';
 
 /** How many corrections per topic go back into prompts. */

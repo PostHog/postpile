@@ -1,4 +1,4 @@
-import type { GitHubWritesStatus } from '@code-manager/core';
+import type { GitHubWritesStatus } from '@postpile/core';
 
 /** Actions that end up as a GitHub write, now or after the undo window. */
 export type GithubWrite = 'approve' | 'comment' | 'markRead' | 'notMine';

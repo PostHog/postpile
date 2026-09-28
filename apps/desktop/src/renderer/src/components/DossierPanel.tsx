@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { DossierCare, DossierView } from '@code-manager/core';
+import type { DossierCare, DossierView } from '@postpile/core';
 import { claimStaleReason, fixedText } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { prNumber } from '../lib/tiles.ts';

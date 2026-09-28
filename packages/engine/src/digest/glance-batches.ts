@@ -1,4 +1,4 @@
-import { GLANCE_BATCH_SIZE, planGlanceBatches, type GlanceBatch, type GlanceGap, type PrKey } from '@code-manager/core';
+import { GLANCE_BATCH_SIZE, planGlanceBatches, type GlanceBatch, type GlanceGap, type PrKey } from '@postpile/core';
 import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { GlanceInputs, type GlanceTarget } from '../glance-inputs.ts';

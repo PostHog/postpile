@@ -1,7 +1,7 @@
 // The "Move CI to Depot" sample from the design rounds, as domain objects.
 // Used by FakeEngine so the server, CLI and desktop app run without GitHub or
 // the agent.
-import type { Glance, Pr, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@code-manager/core';
+import type { Glance, Pr, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
 import {
   pinged,
   pulledIn,

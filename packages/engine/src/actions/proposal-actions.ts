@@ -1,5 +1,5 @@
-import { newTopic, type ActionResult, type TopicProposal } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import { newTopic, type ActionResult, type TopicProposal } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { newTopicId } from '../ids.ts';
 import { failed, ok } from './results.ts';
 

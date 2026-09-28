@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { AssignedBy, PrKey, TopicMembership } from '@code-manager/core';
+import type { AssignedBy, PrKey, TopicMembership } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface MembershipRow {

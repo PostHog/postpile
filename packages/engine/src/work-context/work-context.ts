@@ -5,8 +5,8 @@ import {
   type ActionResult,
   type WorkContextView,
   type WorkThreadForget,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { forgetNote, forgottenTitles } from './forgotten.ts';
 import type { WorkContextSweeper } from './sweeper.ts';
 

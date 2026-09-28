@@ -1,5 +1,5 @@
-import type { Pr } from '@code-manager/core';
-import { at, makePr, makeTimelineItem, viewer } from '@code-manager/core/fixtures';
+import type { Pr } from '@postpile/core';
+import { at, makePr, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 
 /** An open PR where alice asked the viewer for a review: one loud event. */
 export function reviewRequestedPr(number: number, overrides: Partial<Pr> = {}): Pr {

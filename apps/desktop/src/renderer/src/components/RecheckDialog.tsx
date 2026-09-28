@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { MemoryCorrection, MemoryRecheckRequest, MemoryRecheckResult } from '@code-manager/core';
+import type { MemoryCorrection, MemoryRecheckRequest, MemoryRecheckResult } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { Button } from './Button.tsx';
 import { DiffView } from './DiffView.tsx';

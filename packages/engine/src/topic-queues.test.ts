@@ -1,4 +1,4 @@
-import { at, makeComment, makePr, makeReview, viewer } from '@code-manager/core/fixtures';
+import { at, makeComment, makePr, makeReview, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';

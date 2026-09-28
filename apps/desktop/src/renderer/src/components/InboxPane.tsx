@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { PendingProposals, RuleProposal, TopicListItem, TopicProposal } from '@code-manager/core';
+import type { PendingProposals, RuleProposal, TopicListItem, TopicProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { proposalText } from '../lib/proposals.ts';
 import { ageLabel } from '../lib/time.ts';

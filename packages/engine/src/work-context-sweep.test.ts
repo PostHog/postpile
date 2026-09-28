@@ -1,5 +1,5 @@
-import { FakeTimers, makeThreadFor } from '@code-manager/core/fixtures';
-import { SWEEP_CHECK_MS, type SweepHistory, type WorkContextSweepResult } from '@code-manager/core';
+import { FakeTimers, makeThreadFor } from '@postpile/core/fixtures';
+import { SWEEP_CHECK_MS, type SweepHistory, type WorkContextSweepResult } from '@postpile/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeFakeClaudeDir, userLine, type FakeClaudeDir } from './testing/claude-dir.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';

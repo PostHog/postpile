@@ -1,4 +1,4 @@
-import { at, makeThreadFor, viewer } from '@code-manager/core/fixtures';
+import { at, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
 import { makeHarness } from './testing/fakes.ts';

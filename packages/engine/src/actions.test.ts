@@ -1,5 +1,5 @@
-import { UNDO_WINDOW_MS, type Pr, type Topic } from '@code-manager/core';
-import { at, makeThreadFor } from '@code-manager/core/fixtures';
+import { UNDO_WINDOW_MS, type Pr, type Topic } from '@postpile/core';
+import { at, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';

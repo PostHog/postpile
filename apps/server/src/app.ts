@@ -8,8 +8,8 @@ import {
   DEBUG_NOTIFICATIONS_MAX_LIMIT,
   prKey,
   type AppConfig,
-} from '@code-manager/core';
-import type { EngineService } from '@code-manager/engine';
+} from '@postpile/core';
+import type { EngineService } from '@postpile/engine';
 
 /** Every /api request must carry the server's token in this header. */
 export const TOKEN_HEADER = 'x-code-manager-token';

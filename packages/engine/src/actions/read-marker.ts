@@ -1,5 +1,5 @@
-import { threadPrKey, type NotificationThread, type PrKey } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import { threadPrKey, type NotificationThread, type PrKey } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import type { BatchOrigin, MarkReadQueue, PendingBatch, QueuedThread } from '../mark-read-queue.ts';
 import type { ActionLog } from '../writes/action-log.ts';
 import { WRITES_OFF_DETAIL } from '../writes/github-writes.ts';

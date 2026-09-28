@@ -1,4 +1,4 @@
-import type { AgentCallKind, AgentCallStats } from '@code-manager/core';
+import type { AgentCallKind, AgentCallStats } from '@postpile/core';
 
 function cost(stats: AgentCallStats): number | null {
   let total: number | null = null;

@@ -1,4 +1,4 @@
-import type { MemorySource } from '@code-manager/core';
+import type { MemorySource } from '@postpile/core';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Avatar } from './Avatar.tsx';

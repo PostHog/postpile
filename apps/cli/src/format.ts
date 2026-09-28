@@ -1,5 +1,5 @@
-import type { PrDetail, SyncReport, TopicDetail, TopicListItem } from '@code-manager/core';
-import type { PollCycle } from '@code-manager/engine';
+import type { PrDetail, SyncReport, TopicDetail, TopicListItem } from '@postpile/core';
+import type { PollCycle } from '@postpile/engine';
 import { formatCallStats, formatDossier, formatFactCounts, formatFacts } from './format-memory.ts';
 
 export function formatSync(report: SyncReport): string {

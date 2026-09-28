@@ -1,4 +1,4 @@
-import type { DossierChange, DossierIssue, DossierStatus, DossierView, FactRef, StaleReason } from '@code-manager/core';
+import type { DossierChange, DossierIssue, DossierStatus, DossierView, FactRef, StaleReason } from '@postpile/core';
 import { prNumber } from './tiles.ts';
 
 const STATUS_LABELS: Record<DossierStatus, string> = {

@@ -1,4 +1,4 @@
-import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@code-manager/agent';
+import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@postpile/agent';
 import {
   isPinged,
   TILE_STATE_ORDER,
@@ -7,8 +7,8 @@ import {
   type PrKey,
   type Topic,
   type Viewer,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import type { Board } from './board.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 

@@ -7,7 +7,7 @@ import {
   type NotificationLanding,
   type NotificationThread,
   type PrKey,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { UNSORTED_TOPIC_ID, type Board } from './board.ts';
 
 /** Where the thread's PR shows up: the tile in the PR's own topic (Unsorted included), else why not. */

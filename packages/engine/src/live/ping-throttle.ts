@@ -1,4 +1,4 @@
-import type { MacNotification, Ping, PingTarget } from '@code-manager/core';
+import type { MacNotification, Ping, PingTarget } from '@postpile/core';
 
 /** At most one notification per tile in this window. */
 export const PING_TILE_WINDOW_MS = 2 * 60 * 1000;

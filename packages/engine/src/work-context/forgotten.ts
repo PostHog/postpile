@@ -1,4 +1,4 @@
-import type { Store } from '@code-manager/store';
+import type { Store } from '@postpile/store';
 
 /** Forgotten threads handed to a sweep, newest first. Older ones have long dropped out of the digest. */
 export const FORGOTTEN_IN_SWEEP = 50;

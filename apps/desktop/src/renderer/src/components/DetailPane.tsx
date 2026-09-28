@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { TileView } from '@code-manager/core';
+import type { TileView } from '@postpile/core';
 import { usePr } from '../api/pr.ts';
 import { ActionBar } from './ActionBar.tsx';
 import { AskComposer } from './AskComposer.tsx';

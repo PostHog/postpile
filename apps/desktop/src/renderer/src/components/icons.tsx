@@ -1,6 +1,6 @@
 // Line icons from the "Crisp native" mockup. They draw with currentColor, so
 // color them with text-* utilities.
-import type { TileKind } from '@code-manager/core';
+import type { TileKind } from '@postpile/core';
 import type { EventGlyph } from '../lib/events.ts';
 
 interface IconProps {

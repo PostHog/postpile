@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { InstructionsVersionView } from '@code-manager/core';
+import type { InstructionsVersionView } from '@postpile/core';
 import { diffCounts, lineDiff } from '../lib/diff.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';

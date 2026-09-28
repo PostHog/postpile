@@ -1,5 +1,5 @@
 {
-  "name": "@code-manager/engine",
+  "name": "@postpile/engine",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@code-manager/core": "*",
-    "@code-manager/store": "*",
-    "@code-manager/github": "*",
-    "@code-manager/agent": "*"
+    "@postpile/core": "*",
+    "@postpile/store": "*",
+    "@postpile/github": "*",
+    "@postpile/agent": "*"
   }
 }

@@ -6,8 +6,8 @@ import {
   type PrKey,
   type ReconcileAction,
   type VerifyOutcome,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { newFactId } from '../ids.ts';
 import { verifyWorldFor } from './fact-world.ts';
 

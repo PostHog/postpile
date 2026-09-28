@@ -1,4 +1,4 @@
-import type { PrEvent } from '@code-manager/core';
+import type { PrEvent } from '@postpile/core';
 import type { EventBatchInput } from '../service.ts';
 import { contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine } from './shared.ts';
 

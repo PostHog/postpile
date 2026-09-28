@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Pr } from '@code-manager/core';
+import type { Pr } from '@postpile/core';
 import { checkCounts, lastPushAt, mergeStatus } from '../lib/pr.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';

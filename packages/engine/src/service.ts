@@ -35,7 +35,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
   ViewerView,
-} from '@code-manager/core';
+} from '@postpile/core';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 
 /**

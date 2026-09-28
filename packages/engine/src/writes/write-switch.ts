@@ -1,6 +1,6 @@
-import type { GitHubWritesStatus } from '@code-manager/core';
-import type { GitHubWriter } from '@code-manager/github';
-import type { Store } from '@code-manager/store';
+import type { GitHubWritesStatus } from '@postpile/core';
+import type { GitHubWriter } from '@postpile/github';
+import type { Store } from '@postpile/store';
 import { ReadOnlyWriter } from './read-only-writer.ts';
 
 /** Meta key holding the user's choice: "on", anything else (or nothing) is off. */

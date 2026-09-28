@@ -1,4 +1,4 @@
-import type { ViewerView } from '@code-manager/core';
+import type { ViewerView } from '@postpile/core';
 import { QUEUE_FILTERS, type QueueFilter } from '../lib/queues.ts';
 import { Avatar } from './Avatar.tsx';
 

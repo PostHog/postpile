@@ -8,7 +8,7 @@ import type {
   FactChangeCounts,
   FactView,
   TopicChanges,
-} from '@code-manager/core';
+} from '@postpile/core';
 
 /** The order a sync spends its budget in, then the rest. */
 const KIND_ORDER: AgentCallKind[] = [

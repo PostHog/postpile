@@ -1,5 +1,5 @@
-import type { EventBatchInput } from '@code-manager/agent';
-import type { PrEvent, PrKey } from '@code-manager/core';
+import type { EventBatchInput } from '@postpile/agent';
+import type { PrEvent, PrKey } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import type { DigestDeps } from './deps.ts';

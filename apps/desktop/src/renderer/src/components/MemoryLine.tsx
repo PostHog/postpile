@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { FactRef, MemoryCorrection, MemoryTarget, StaleReason } from '@code-manager/core';
+import type { FactRef, MemoryCorrection, MemoryTarget, StaleReason } from '@postpile/core';
 import { staleLabel } from '../lib/memory.ts';
 import { MemoryButton } from './MemoryButton.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';

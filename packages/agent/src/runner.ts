@@ -1,4 +1,4 @@
-import type { AgentCallKind } from '@code-manager/core';
+import type { AgentCallKind } from '@postpile/core';
 
 /** What a call is for. Used for cache keys, logging, cost accounting and picking a model. */
 export type AgentPurpose = AgentCallKind;

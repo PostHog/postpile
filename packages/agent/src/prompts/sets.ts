@@ -1,4 +1,4 @@
-import type { PrSet } from '@code-manager/core';
+import type { PrSet } from '@postpile/core';
 import type { SetGroupingInput } from '../service.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine } from './shared.ts';
 

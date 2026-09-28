@@ -1,8 +1,8 @@
 // The engine over the real RunnerAgentService: prompts, zod parsing and
 // short-id mapping from the agent package, answers from a FakeRunner.
-import { FakeRunner, RunnerAgentService } from '@code-manager/agent';
-import { FakeTimers, makeThreadFor } from '@code-manager/core/fixtures';
-import { Store } from '@code-manager/store';
+import { FakeRunner, RunnerAgentService } from '@postpile/agent';
+import { FakeTimers, makeThreadFor } from '@postpile/core/fixtures';
+import { Store } from '@postpile/store';
 import { describe, expect, it } from 'vitest';
 import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';

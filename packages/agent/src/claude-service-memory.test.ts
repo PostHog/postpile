@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AmbiguousCandidate, FactCandidate } from '@code-manager/core';
+import type { AmbiguousCandidate, FactCandidate } from '@postpile/core';
 import { RunnerAgentService } from './claude-service.ts';
 import { FakeRunner } from './fake-runner.ts';
 import { dossierInputHash, glanceItemInputHash } from './hashes.ts';

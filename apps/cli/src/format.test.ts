@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FakeEngine } from '@code-manager/server';
+import { FakeEngine } from '@postpile/server';
 import { formatPoll, formatPr, formatTopic, formatTopics } from './format.ts';
 
 describe('format over the fake engine', () => {

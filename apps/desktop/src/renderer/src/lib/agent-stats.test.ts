@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentCallCount, AgentCallStats } from '@code-manager/core';
+import type { AgentCallCount, AgentCallStats } from '@postpile/core';
 import { callStatsDetail, callStatsLabel, capNote } from './agent-stats.ts';
 
 function count(overrides: Partial<AgentCallCount>): AgentCallCount {

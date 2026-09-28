@@ -1,4 +1,4 @@
-import type { PrSet, TilePerson, TileView, TopicListItem } from '@code-manager/core';
+import type { PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { ageLabel } from '../lib/time.ts';
 import { kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';

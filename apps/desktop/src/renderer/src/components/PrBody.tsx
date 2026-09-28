@@ -1,4 +1,4 @@
-import type { PrDetail, PrSummary, TileView } from '@code-manager/core';
+import type { PrDetail, PrSummary, TileView } from '@postpile/core';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';

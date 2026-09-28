@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GitHubWritesStatus } from '@code-manager/core';
+import type { GitHubWritesStatus } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { Button } from './Button.tsx';
 import { LockIcon, UnlockIcon } from './icons.tsx';

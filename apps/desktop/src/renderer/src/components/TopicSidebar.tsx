@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@code-manager/core';
+import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
 import { statusLabel } from '../lib/memory.ts';
 import { queueLayout, unreadLook, visibleFaces, type QueueFilter } from '../lib/queues.ts';
 import { type SearchFilter } from '../lib/search.ts';

@@ -1,4 +1,4 @@
-import type { PrSet, PrSummary, TileView, UnreadReason } from '@code-manager/core';
+import type { PrSet, PrSummary, TileView, UnreadReason } from '@postpile/core';
 import { newest } from './time.ts';
 
 /** "PostHog/posthog#41902" -> "41902". */

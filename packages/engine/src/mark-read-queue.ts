@@ -7,8 +7,8 @@ import {
   type IsoTime,
   type PrKey,
   type Timers,
-} from '@code-manager/core';
-import type { GitHubReader } from '@code-manager/github';
+} from '@postpile/core';
+import type { GitHubReader } from '@postpile/github';
 import { errorText } from './errors.ts';
 import type { GitHubWrites } from './writes/github-writes.ts';
 

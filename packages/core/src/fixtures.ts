@@ -1,4 +1,4 @@
-// Builders for tests in any package: `import { makePr } from '@code-manager/core/fixtures'`.
+// Builders for tests in any package: `import { makePr } from '@postpile/core/fixtures'`.
 // Not exported from the main index, so app code cannot pick them up by accident.
 
 import type { Timers } from './deferred-queue.ts';

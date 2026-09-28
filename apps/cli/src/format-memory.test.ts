@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { emptyAgentCallStats, emptyDossier, recordAgentCall, type DossierView } from '@code-manager/core';
-import { makeFact } from '@code-manager/core/fixtures';
+import { emptyAgentCallStats, emptyDossier, recordAgentCall, type DossierView } from '@postpile/core';
+import { makeFact } from '@postpile/core/fixtures';
 import { formatCallStats, formatDossier, formatFacts } from './format-memory.ts';
 
 describe('memory formatting', () => {

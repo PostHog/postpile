@@ -1,5 +1,5 @@
-import { emptyDossier } from '@code-manager/core';
-import { at, makeComment, makeDossierVersion, makeFact, makeFactRef } from '@code-manager/core/fixtures';
+import { emptyDossier } from '@postpile/core';
+import { at, makeComment, makeDossierVersion, makeFact, makeFactRef } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';

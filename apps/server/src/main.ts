@@ -1,6 +1,6 @@
 // Standalone server for development and the future web app:
-//   npm start -w @code-manager/server
-//   CODE_MANAGER_FAKE=1 npm start -w @code-manager/server   (sample data)
+//   npm start -w @postpile/server
+//   CODE_MANAGER_FAKE=1 npm start -w @postpile/server   (sample data)
 //   GitHub writes are off until the footer lock is opened; CODE_MANAGER_READ_ONLY=1 keeps them off
 import { randomBytes } from 'node:crypto';
 import { appConfigFromEnv, engineFromEnv } from './engine-from-env.ts';

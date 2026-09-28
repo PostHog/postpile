@@ -1,4 +1,4 @@
-import type { NotificationReason, NotificationThread } from '@code-manager/core';
+import type { NotificationReason, NotificationThread } from '@postpile/core';
 import { isoTime, isoTimeOrNull } from './normalize.ts';
 import { errorFromResponse, type GitHubHttp } from './http.ts';
 import type { RawNotification } from './raw.ts';

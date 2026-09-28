@@ -1,6 +1,6 @@
-import type { MacNotification, Ping } from '@code-manager/core';
-import { FakeTimers } from '@code-manager/core/fixtures';
-import { GitHubError } from '@code-manager/github';
+import type { MacNotification, Ping } from '@postpile/core';
+import { FakeTimers } from '@postpile/core/fixtures';
+import { GitHubError } from '@postpile/github';
 import { describe, expect, it } from 'vitest';
 import { LivePoller } from './live-poller.ts';
 import type { PollCycle } from './poll-cycle.ts';

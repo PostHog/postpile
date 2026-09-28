@@ -1,4 +1,4 @@
-import type { Provenance, TilePersonRole, WhoseTurn, WhyCode } from '@code-manager/core';
+import type { Provenance, TilePersonRole, WhoseTurn, WhyCode } from '@postpile/core';
 
 /**
  * you: aimed at the viewer (honey). team: at one of their teams (sea).

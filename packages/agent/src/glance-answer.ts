@@ -1,4 +1,4 @@
-import type { Glance, IsoTime, PrKey } from '@code-manager/core';
+import type { Glance, IsoTime, PrKey } from '@postpile/core';
 import type { z } from 'zod';
 import type { glanceBatchOutput } from './schemas.ts';
 import { glanceBatchItemOutput } from './schemas.ts';

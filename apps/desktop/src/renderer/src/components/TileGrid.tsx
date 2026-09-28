@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TileView, TopicDetail, TopicListItem } from '@code-manager/core';
+import type { TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';

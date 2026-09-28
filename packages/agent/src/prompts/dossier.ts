@@ -1,4 +1,4 @@
-import type { CheckRollup, DossierCare, DossierQuestion, DossierVersion, Pr, PrKey } from '@code-manager/core';
+import type { CheckRollup, DossierCare, DossierQuestion, DossierVersion, Pr, PrKey } from '@postpile/core';
 
 const ciWords: Record<CheckRollup, string> = {
   SUCCESS: 'CI passing',

@@ -1,4 +1,4 @@
-import type { ActionOrigin, GitHubWritesChange, GitHubWritesStatus, LoggedAction, PrKey, PrRef } from '@code-manager/core';
+import type { ActionOrigin, GitHubWritesChange, GitHubWritesStatus, LoggedAction, PrKey, PrRef } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import type { ActionLog } from './action-log.ts';
 import type { WriteSwitch } from './write-switch.ts';

@@ -1,4 +1,4 @@
-import { makeFact, makeFactRef, viewer } from '@code-manager/core/fixtures';
+import { makeFact, makeFactRef, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';

@@ -1,4 +1,4 @@
-import type { PrSet } from '@code-manager/core';
+import type { PrSet } from '@postpile/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
 import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';

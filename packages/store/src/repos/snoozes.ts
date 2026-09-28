@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Snooze, SnoozeCondition } from '@code-manager/core';
+import type { Snooze, SnoozeCondition } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface SnoozeRow {

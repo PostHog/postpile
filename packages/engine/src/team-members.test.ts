@@ -1,4 +1,4 @@
-import { makeThreadFor, viewer } from '@code-manager/core/fixtures';
+import { makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { loadViewer } from './viewer-meta.ts';
 import { makeHarness } from './testing/fakes.ts';

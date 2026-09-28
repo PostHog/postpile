@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TopicProposal } from '@code-manager/core';
-import { at } from '@code-manager/core/fixtures';
+import type { TopicProposal } from '@postpile/core';
+import { at } from '@postpile/core/fixtures';
 import { proposalText } from './proposals.ts';
 
 const names: Record<string, string> = { a: 'Frontend build', b: 'Move CI to Depot' };

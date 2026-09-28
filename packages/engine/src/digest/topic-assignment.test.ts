@@ -1,4 +1,4 @@
-import { makeThreadFor } from '@code-manager/core/fixtures';
+import { makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PrKey, ProposalStatus, TopicProposal, TopicProposalKind } from '@code-manager/core';
+import type { PrKey, ProposalStatus, TopicProposal, TopicProposalKind } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface ProposalRow {

@@ -1,6 +1,6 @@
-import type { AgentService } from '@code-manager/agent';
-import type { FactChangeCounts, Viewer } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { AgentService } from '@postpile/agent';
+import type { FactChangeCounts, Viewer } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import type { AgentBudget } from '../budget.ts';
 import type { FactWriter } from '../memory/fact-writer.ts';
 import type { PromptContextSource } from '../prompt-context.ts';

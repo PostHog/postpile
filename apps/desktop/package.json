@@ -1,5 +1,5 @@
 {
-  "name": "@code-manager/desktop",
+  "name": "@postpile/desktop",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
-    "@code-manager/core": "*",
-    "@code-manager/engine": "*",
-    "@code-manager/server": "*",
+    "@postpile/core": "*",
+    "@postpile/engine": "*",
+    "@postpile/server": "*",
     "@tanstack/react-query": "^5.104.0",
     "fix-path": "^5.0.0",
     "react": "^19.3.0",

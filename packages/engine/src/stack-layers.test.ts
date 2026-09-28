@@ -1,5 +1,5 @@
-import type { Pr } from '@code-manager/core';
-import { makeComment, makePr, makeThreadFor } from '@code-manager/core/fixtures';
+import type { Pr } from '@postpile/core';
+import { makeComment, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';

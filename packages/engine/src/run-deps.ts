@@ -1,5 +1,5 @@
-import type { AgentService } from '@code-manager/agent';
-import type { Store } from '@code-manager/store';
+import type { AgentService } from '@postpile/agent';
+import type { Store } from '@postpile/store';
 import type { AgentCallLog } from './agent-call-log.ts';
 import type { FactWriter } from './memory/fact-writer.ts';
 import type { PromptContextSource } from './prompt-context.ts';

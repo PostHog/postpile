@@ -1,4 +1,4 @@
-import type { Ping } from '@code-manager/core';
+import type { Ping } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { PING_TILE_WINDOW_MS, PingThrottle } from './ping-throttle.ts';
 

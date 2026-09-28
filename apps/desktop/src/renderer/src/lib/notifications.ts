@@ -1,4 +1,4 @@
-import type { ActionLogEntry, ActionOrigin, NotificationDebugRow, NotificationLanding, NotificationReason } from '@code-manager/core';
+import type { ActionLogEntry, ActionOrigin, NotificationDebugRow, NotificationLanding, NotificationReason } from '@postpile/core';
 import { ageLabel } from './time.ts';
 
 export interface NotificationFilter {

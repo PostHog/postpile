@@ -1,4 +1,4 @@
-import type { ReconcileAction } from '@code-manager/core';
+import type { ReconcileAction } from '@postpile/core';
 import type { z } from 'zod';
 import type { factReconcileOutput } from './schemas.ts';
 import type { FactReconcileInput } from './service.ts';

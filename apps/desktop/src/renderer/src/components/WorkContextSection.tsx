@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { WorkContextThreadView } from '@code-manager/core';
+import type { WorkContextThreadView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useWorkContext } from '../api/work-context.ts';
 import { useNow } from '../lib/use-now.ts';

@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import type { ContextSweepItem } from '@code-manager/agent';
-import type { IsoTime, WorkContextDrop, WorkContextInputStats, WorkContextSourceKind } from '@code-manager/core';
+import type { ContextSweepItem } from '@postpile/agent';
+import type { IsoTime, WorkContextDrop, WorkContextInputStats, WorkContextSourceKind } from '@postpile/core';
 import { maskSecrets } from './secrets.ts';
 import { readSessionSignals, type SessionSignals } from './session-reader.ts';
 

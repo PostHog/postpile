@@ -1,4 +1,4 @@
-import { INSTRUCTIONS_MAX_CHARS } from '@code-manager/agent';
+import { INSTRUCTIONS_MAX_CHARS } from '@postpile/agent';
 import type {
   ChatMessage,
   InstructionsChatReply,
@@ -6,8 +6,8 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import type { InstructionsHistory } from '../instructions/history.ts';
 import type { InstructionsProposer } from '../instructions/proposer.ts';
 

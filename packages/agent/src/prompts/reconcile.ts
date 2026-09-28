@@ -1,4 +1,4 @@
-import type { AmbiguousCandidate } from '@code-manager/core';
+import type { AmbiguousCandidate } from '@postpile/core';
 import type { FactReconcileInput } from '../service.ts';
 import { contextBlock, entityText, jsonOnly } from './shared.ts';
 

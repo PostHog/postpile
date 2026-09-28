@@ -1,5 +1,5 @@
-import type { ActionOrigin, ActionOutcome, LoggedAction, PrKey } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { ActionOrigin, ActionOutcome, LoggedAction, PrKey } from '@postpile/core';
+import type { Store } from '@postpile/store';
 
 export interface ActionLogInput {
   action: LoggedAction;

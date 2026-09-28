@@ -1,4 +1,4 @@
-import type { TopicProposal } from '@code-manager/core';
+import type { TopicProposal } from '@postpile/core';
 
 /** One line for a topic proposal. topicName looks up names for renames and merges. */
 export function proposalText(proposal: TopicProposal, topicName: (topicId: string) => string): string {

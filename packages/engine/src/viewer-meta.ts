@@ -1,5 +1,5 @@
-import type { Viewer } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { Viewer } from '@postpile/core';
+import type { Store } from '@postpile/store';
 
 const VIEWER_KEY = 'viewer';
 

@@ -1,7 +1,7 @@
 // Fakes for engine tests. Nothing here touches GitHub or the claude CLI.
-import { FakeRunner } from '@code-manager/agent';
-import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
-import { FakeTimers, viewer as fixtureViewer } from '@code-manager/core/fixtures';
+import { FakeRunner } from '@postpile/agent';
+import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
+import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
   BranchPr,
@@ -10,8 +10,8 @@ import type {
   NotificationConditions,
   NotificationsResult,
   TeamMembersResult,
-} from '@code-manager/github';
-import { Store } from '@code-manager/store';
+} from '@postpile/github';
+import { Store } from '@postpile/store';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';

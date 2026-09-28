@@ -1,5 +1,5 @@
-import { isBot } from '@code-manager/core';
-import type { Pr } from '@code-manager/core';
+import { isBot } from '@postpile/core';
+import type { Pr } from '@postpile/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
 import { humanComments } from './prompts/shared.ts';

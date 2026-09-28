@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SearchResult, Topic, TopicListItem } from '@code-manager/core';
+import type { SearchResult, Topic, TopicListItem } from '@postpile/core';
 import { filterTopics, searchFilter, sidebarOrder, visibleTopic } from './search.ts';
 
 function item(id: string, unreadTiles: number): TopicListItem {

@@ -1,6 +1,6 @@
-import type { AgentService } from '@code-manager/agent';
-import type { ActionResult, Pr, PrKey } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { AgentService } from '@postpile/agent';
+import type { ActionResult, Pr, PrKey } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { errorText } from '../errors.ts';
 import { loadViewer } from '../viewer-meta.ts';

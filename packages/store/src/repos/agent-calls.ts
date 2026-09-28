@@ -5,7 +5,7 @@ import {
   type AgentCallKind,
   type AgentCallRecord,
   type AgentCallStats,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { all, fromBool, one, run, toBool } from '../sql.ts';
 
 interface AgentCallRow {

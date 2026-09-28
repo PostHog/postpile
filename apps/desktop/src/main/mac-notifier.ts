@@ -1,5 +1,5 @@
 import { Notification } from 'electron';
-import type { MacNotification, PingTarget } from '@code-manager/core';
+import type { MacNotification, PingTarget } from '@postpile/core';
 
 /**
  * Notifications keep their click handler only while referenced; a GC'd

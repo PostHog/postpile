@@ -1,4 +1,4 @@
-import { recordAgentCall, type AgentCallKind, type AgentCallStats } from '@code-manager/core';
+import { recordAgentCall, type AgentCallKind, type AgentCallStats } from '@postpile/core';
 
 /**
  * Caps agent calls per run. take() is synchronous, so parallel calls cannot

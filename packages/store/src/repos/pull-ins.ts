@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PrKey, PullIn } from '@code-manager/core';
+import type { PrKey, PullIn } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface PullInRow {

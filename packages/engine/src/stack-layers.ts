@@ -1,5 +1,5 @@
-import { MERGED_LAYER_DAYS, prKey, type IsoTime, type Pr, type PrKey, type PrRef, type PullIn } from '@code-manager/core';
-import type { BranchLookup, BranchPr, GitHubReader } from '@code-manager/github';
+import { MERGED_LAYER_DAYS, prKey, type IsoTime, type Pr, type PrKey, type PrRef, type PullIn } from '@postpile/core';
+import type { BranchLookup, BranchPr, GitHubReader } from '@postpile/github';
 
 /** Layers walked each way from a pinged PR. Deeper stacks are rare and would cost a query per layer. */
 export const STACK_DEPTH = 6;

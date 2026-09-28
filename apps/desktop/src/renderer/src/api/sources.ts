@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { MemorySources, MemoryTarget } from '@code-manager/core';
+import type { MemorySources, MemoryTarget } from '@postpile/core';
 import { targetKey, targetQuery } from '../lib/sources.ts';
 import { request } from './client.ts';
 import { queryKeys } from './keys.ts';

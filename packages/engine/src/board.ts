@@ -16,8 +16,8 @@ import {
   type Topic,
   type TopicMembership,
   type UserPrState,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { loadViewer } from './viewer-meta.ts';
 
 /** PRs the agent has not placed yet. Not stored: it is whatever has no membership. */

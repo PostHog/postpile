@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@code-manager/core';
+import type { ChatMessage } from '@postpile/core';
 import type { ChatInput } from '../service.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail, workContextBlock } from './shared.ts';
 

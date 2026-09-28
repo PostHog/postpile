@@ -31,7 +31,7 @@ import type {
   WhyCode,
   WorkContextDigest,
   WorkContextSourceKind,
-} from '@code-manager/core';
+} from '@postpile/core';
 
 /**
  * The memory that goes into every prompt: general instructions from

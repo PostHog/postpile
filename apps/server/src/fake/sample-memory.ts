@@ -16,7 +16,7 @@ import type {
   RuleProposal,
   UserRef,
   UserRefKind,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { SAMPLE_REPO, SampleClock, sampleKey } from './sample-builders.ts';
 
 export interface SampleMemory {

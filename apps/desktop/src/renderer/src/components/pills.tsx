@@ -1,5 +1,5 @@
 // Small status chips used across panes: verdict, why it's here, PR status.
-import type { GlanceGap, PrStatus, Provenance, TopicRelation, Verdict, WhyCode } from '@code-manager/core';
+import type { GlanceGap, PrStatus, Provenance, TopicRelation, Verdict, WhyCode } from '@postpile/core';
 import { glanceGapText } from '../lib/glance.ts';
 import { statusParts, type StatusTone } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';

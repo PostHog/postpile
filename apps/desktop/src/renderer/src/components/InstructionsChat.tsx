@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { InstructionsProposal } from '@code-manager/core';
+import type { InstructionsProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useInstructionsChat } from '../api/instructions.ts';
 import { Button } from './Button.tsx';

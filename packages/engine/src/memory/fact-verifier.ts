@@ -1,5 +1,5 @@
-import { verifyFact, type FactChangeCounts, type PrKey } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import { verifyFact, type FactChangeCounts, type PrKey } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import type { FactWriter } from './fact-writer.ts';
 import { verifyWorldFor } from './fact-world.ts';
 

@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { at, makeThreadFor } from '@code-manager/core/fixtures';
+import { at, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { contextHashKey } from './digest/dossiers.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';

@@ -1,5 +1,5 @@
-import { isPinged, threadPrKey, type ActionResult, type PrKey, type SnoozeCondition, type Tile } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import { isPinged, threadPrKey, type ActionResult, type PrKey, type SnoozeCondition, type Tile } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import type { ActionLog } from '../writes/action-log.ts';
 import type { ReadMarker } from './read-marker.ts';

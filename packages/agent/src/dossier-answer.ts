@@ -1,4 +1,4 @@
-import { clampDossier, parsePrKey } from '@code-manager/core';
+import { clampDossier, parsePrKey } from '@postpile/core';
 import type {
   Dossier,
   DossierCare,
@@ -11,7 +11,7 @@ import type {
   FactCandidate,
   IsoTime,
   LineSources,
-} from '@code-manager/core';
+} from '@postpile/core';
 import type { z } from 'zod';
 import type { DossierRefs } from './dossier-refs.ts';
 import type { dossierUpdateOutput } from './schemas.ts';

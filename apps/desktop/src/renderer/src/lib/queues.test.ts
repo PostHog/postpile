@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PrSummary, PrTier, TileView, Topic, TopicListItem } from '@code-manager/core';
-import { at } from '@code-manager/core/fixtures';
+import type { PrSummary, PrTier, TileView, Topic, TopicListItem } from '@postpile/core';
+import { at } from '@postpile/core/fixtures';
 import {
   applyQueueFilter,
   filterCounts,

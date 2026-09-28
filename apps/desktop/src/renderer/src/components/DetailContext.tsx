@@ -1,4 +1,4 @@
-import type { TileView } from '@code-manager/core';
+import type { TileView } from '@postpile/core';
 import { kindLabel, prNumber } from '../lib/tiles.ts';
 import { KindIcon } from './icons.tsx';
 import { StatusPill, WhyBadge } from './pills.tsx';

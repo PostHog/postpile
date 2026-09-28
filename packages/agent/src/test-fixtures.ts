@@ -1,4 +1,4 @@
-import type { Comment, Dossier, DossierVersion, Fact, Feedback, Pr, PrEvent, Topic, TopicDelta, Viewer } from '@code-manager/core';
+import type { Comment, Dossier, DossierVersion, Fact, Feedback, Pr, PrEvent, Topic, TopicDelta, Viewer } from '@postpile/core';
 import type { PromptContext } from './service.ts';
 
 // Builders for tests. Not a .test.ts file, so vitest does not run it on its own.

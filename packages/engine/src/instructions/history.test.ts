@@ -1,7 +1,7 @@
 import { lstatSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store } from '@code-manager/store';
+import { Store } from '@postpile/store';
 import { describe, expect, it } from 'vitest';
 import { InstructionsHistory } from './history.ts';
 

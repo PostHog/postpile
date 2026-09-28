@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionLogEntry, NotificationDebugRow, NotificationLanding, NotificationThread } from '@code-manager/core';
+import type { ActionLogEntry, NotificationDebugRow, NotificationLanding, NotificationThread } from '@postpile/core';
 import { actionLine, filterNotifications, landingLabel, NO_NOTIFICATION_FILTER, noTileReason, reasonsIn, threadRef } from './notifications.ts';
 
 function row(thread: Partial<NotificationThread>, landing: NotificationLanding = { kind: 'not_pr' }): NotificationDebugRow {

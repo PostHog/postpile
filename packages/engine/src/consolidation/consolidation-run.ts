@@ -1,4 +1,4 @@
-import type { ConsolidateOptions, ConsolidationReport } from '@code-manager/core';
+import type { ConsolidateOptions, ConsolidationReport } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { errorText } from '../errors.ts';
 import type { RunDeps } from '../run-deps.ts';

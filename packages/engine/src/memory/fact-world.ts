@@ -1,5 +1,5 @@
-import { verifyFact, type Fact, type FactView, type PrKey, type VerifyWorld } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import { verifyFact, type Fact, type FactView, type PrKey, type VerifyWorld } from '@postpile/core';
+import type { Store } from '@postpile/store';
 
 /** Every PR a fact is about or cites. */
 export function prKeysOfFact(fact: Fact): PrKey[] {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { TileView } from '@code-manager/core';
+import type { TileView } from '@postpile/core';
 import { useActions } from './api/actions.tsx';
 import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';

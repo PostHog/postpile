@@ -1,4 +1,4 @@
-import type { SnoozeCondition } from '@code-manager/core';
+import type { SnoozeCondition } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { Button, type ButtonSize } from './Button.tsx';
 import { Menu } from './Menu.tsx';

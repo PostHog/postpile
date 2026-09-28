@@ -10,7 +10,7 @@ import type {
   FactSource,
   PrKey,
   StaleReason,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, placeholders, run, type SqlValue } from '../sql.ts';
 

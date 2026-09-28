@@ -1,4 +1,4 @@
-import type { SearchResult, TopicListItem } from '@code-manager/core';
+import type { SearchResult, TopicListItem } from '@postpile/core';
 import { queueLayout } from './queues.ts';
 import { sidebarGroups } from './sidebar.ts';
 

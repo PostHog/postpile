@@ -14,7 +14,7 @@ import type {
   SearchResult,
   TopicDetail,
   TopicListItem,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { FakeEngine } from './fake/fake-engine.ts';
 

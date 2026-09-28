@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at } from '@code-manager/core/fixtures';
+import { at } from '@postpile/core/fixtures';
 import { ageLabel, newest } from './time.ts';
 
 describe('time helpers', () => {

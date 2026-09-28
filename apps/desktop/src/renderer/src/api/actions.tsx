@@ -23,7 +23,7 @@ import type {
   SyncReport,
   WorkContextSweepResult,
   WorkThreadForget,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { useAppConfig } from './config.ts';

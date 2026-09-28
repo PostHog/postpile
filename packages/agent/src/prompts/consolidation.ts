@@ -1,5 +1,5 @@
-import { dossierBrief } from '@code-manager/core';
-import type { Fact, Feedback, RuleProposal, TopicProposal } from '@code-manager/core';
+import { dossierBrief } from '@postpile/core';
+import type { Fact, Feedback, RuleProposal, TopicProposal } from '@postpile/core';
 import type { ConsolidationInput, ConsolidationTopic } from '../service.ts';
 import { clip, contextBlock, entityText, jsonOnly } from './shared.ts';
 

@@ -1,4 +1,4 @@
-import { ALL_AGENT_JOBS, type AgentJob, type ConsolidateOptions, type SyncOptions } from '@code-manager/core';
+import { ALL_AGENT_JOBS, type AgentJob, type ConsolidateOptions, type SyncOptions } from '@postpile/core';
 
 export type Command =
   | { name: 'sync'; options: SyncOptions }
@@ -10,7 +10,7 @@ export type Command =
   | { name: 'pr'; prKey: string }
   | { name: 'help' };
 
-export const usage = `usage: code-manager <command>
+export const usage = `usage: postpile <command>
 
   sync [flags]         fetch notifications, digest, derive tiles
     --limit <n>          enrich at most n PRs (newest first); the rest follow on later syncs

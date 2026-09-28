@@ -1,4 +1,4 @@
-import type { PrSummary, PrTier, TileView, TopicListItem, TopicPerson } from '@code-manager/core';
+import type { PrSummary, PrTier, TileView, TopicListItem, TopicPerson } from '@postpile/core';
 
 /** Queue tiers in section order, same as core's PR_TIER_ORDER (the renderer imports types only). */
 export const TIER_ORDER: PrTier[] = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];

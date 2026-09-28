@@ -1,5 +1,5 @@
-import type { Dossier, Pr } from '@code-manager/core';
-import { at, makeCandidate, makeComment, makeFact, makeFactRef, makeThreadFor } from '@code-manager/core/fixtures';
+import type { Dossier, Pr } from '@postpile/core';
+import { at, makeCandidate, makeComment, makeFact, makeFactRef, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';

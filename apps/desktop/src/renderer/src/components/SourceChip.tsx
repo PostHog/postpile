@@ -1,4 +1,4 @@
-import type { FactRef } from '@code-manager/core';
+import type { FactRef } from '@postpile/core';
 import { refLabel } from '../lib/memory.ts';
 
 const chip = 'flex h-[17px] shrink-0 items-center rounded border border-hairline bg-surface px-1.5 font-mono text-[10px] text-muted';

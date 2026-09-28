@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { LoggedEvent, PrKey } from '@code-manager/core';
+import type { LoggedEvent, PrKey } from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, one, placeholders, run } from '../sql.ts';
 import { toEvent, type EventRow } from './events.ts';

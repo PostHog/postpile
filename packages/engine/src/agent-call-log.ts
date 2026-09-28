@@ -1,6 +1,6 @@
-import type { AgentCallObserver, ObservedCall } from '@code-manager/agent';
-import { emptyAgentCallStats, recordAgentCall, type AgentCallStats } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { AgentCallObserver, ObservedCall } from '@postpile/agent';
+import { emptyAgentCallStats, recordAgentCall, type AgentCallStats } from '@postpile/core';
+import type { Store } from '@postpile/store';
 
 /** Run id for calls made outside a sync or consolidation: chat, drafts and instructions proposals. */
 export const ACTION_RUN_ID = 'action';

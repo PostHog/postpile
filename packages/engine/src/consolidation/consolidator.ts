@@ -1,4 +1,4 @@
-import type { AgentService, AreaChoice, ConsolidationInput, ConsolidationTopic } from '@code-manager/agent';
+import type { AgentService, AreaChoice, ConsolidationInput, ConsolidationTopic } from '@postpile/agent';
 import {
   PREDICATE_RULES,
   type ConsolidateOptions,
@@ -7,8 +7,8 @@ import {
   type EntityRef,
   type Fact,
   type Topic,
-} from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+} from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import type { AgentBudget } from '../budget.ts';
 import { errorText } from '../errors.ts';

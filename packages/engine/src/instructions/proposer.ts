@@ -1,6 +1,6 @@
-import type { AgentService } from '@code-manager/agent';
-import type { ChatMessage, InstructionsProposalReply } from '@code-manager/core';
-import type { Store } from '@code-manager/store';
+import type { AgentService } from '@postpile/agent';
+import type { ChatMessage, InstructionsProposalReply } from '@postpile/core';
+import type { Store } from '@postpile/store';
 import { contextHashKey } from '../digest/dossiers.ts';
 import type { InstructionsHistory } from './history.ts';
 

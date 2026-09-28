@@ -1,5 +1,5 @@
-import { FakeTimers, makePr, makeThreadFor } from '@code-manager/core/fixtures';
-import { Store } from '@code-manager/store';
+import { FakeTimers, makePr, makeThreadFor } from '@postpile/core/fixtures';
+import { Store } from '@postpile/store';
 import { describe, expect, it } from 'vitest';
 import { MarkReadQueue } from './mark-read-queue.ts';
 import { FakeReader, FakeWriter, makeWrites } from './testing/fakes.ts';

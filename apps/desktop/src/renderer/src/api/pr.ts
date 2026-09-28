@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { PrDetail } from '@code-manager/core';
+import type { PrDetail } from '@postpile/core';
 import { prPath, request } from './client.ts';
 import { queryKeys } from './keys.ts';
 

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Dossier, DossierFlag, DossierVersion } from '@code-manager/core';
+import type { Dossier, DossierFlag, DossierVersion } from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, one, placeholders, run } from '../sql.ts';
 

@@ -1,5 +1,5 @@
-import { isBot, isMachineComment } from '@code-manager/core';
-import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@code-manager/core';
+import { isBot, isMachineComment } from '@postpile/core';
+import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
 /** Trims a body to keep prompts bounded without losing the point. */

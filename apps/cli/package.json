@@ -1,5 +1,5 @@
 {
-  "name": "@code-manager/cli",
+  "name": "@postpile/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,11 +8,11 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
-    "@code-manager/core": "*",
-    "@code-manager/engine": "*",
-    "@code-manager/server": "*"
+    "@postpile/core": "*",
+    "@postpile/engine": "*",
+    "@postpile/server": "*"
   },
   "bin": {
-    "code-manager": "./src/main.ts"
+    "postpile": "./src/main.ts"
   }
 }

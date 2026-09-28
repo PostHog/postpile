@@ -1,4 +1,4 @@
-import type { DossierView, MemoryCheck, MemoryTarget } from '@code-manager/core';
+import type { DossierView, MemoryCheck, MemoryTarget } from '@postpile/core';
 import { staleLabel } from './memory.ts';
 
 export type CheckTone = 'ok' | 'warn' | 'muted';

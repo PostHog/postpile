@@ -6,7 +6,7 @@ import type {
   WorkContextThread,
   WorkContextView,
   WorkThreadForget,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { SampleClock } from './sample-builders.ts';
 
 const STATS: WorkContextInputStats = {

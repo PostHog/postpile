@@ -14,7 +14,7 @@ import {
   type ReviewThread,
   type TimelineItem,
   type TimelineItemKind,
-} from '@code-manager/core';
+} from '@postpile/core';
 import type { BranchPr } from './reader.ts';
 import type {
   RawActor,

@@ -1,4 +1,4 @@
-import type { PrDetail, TileView } from '@code-manager/core';
+import type { PrDetail, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { isBotLogin } from '../lib/people.ts';
 import { ageLabel } from '../lib/time.ts';

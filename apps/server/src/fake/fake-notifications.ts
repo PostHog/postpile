@@ -1,4 +1,4 @@
-import type { NotificationThread, PrEvent } from '@code-manager/core';
+import type { NotificationThread, PrEvent } from '@postpile/core';
 import { SAMPLE_REPO } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 

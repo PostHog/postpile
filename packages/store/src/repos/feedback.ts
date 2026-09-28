@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Feedback, FeedbackKind } from '@code-manager/core';
+import type { Feedback, FeedbackKind } from '@postpile/core';
 import { all, insertReturningId, run } from '../sql.ts';
 
 export type NewFeedback = Omit<Feedback, 'id'>;

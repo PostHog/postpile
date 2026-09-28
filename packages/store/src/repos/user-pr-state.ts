@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PrKey, UserPrState } from '@code-manager/core';
+import type { PrKey, UserPrState } from '@postpile/core';
 import { all, one, placeholders, run } from '../sql.ts';
 
 interface UserPrStateRow {

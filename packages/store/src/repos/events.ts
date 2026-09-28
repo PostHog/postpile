@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { EventKind, Loudness, LoudnessOverride, PrEvent, PrKey } from '@code-manager/core';
+import type { EventKind, Loudness, LoudnessOverride, PrEvent, PrKey } from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, fromBool, placeholders, run, toBool } from '../sql.ts';
 

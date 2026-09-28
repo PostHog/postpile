@@ -1,5 +1,5 @@
-import type { Pr, Topic } from '@code-manager/core';
-import { at, makeThreadFor } from '@code-manager/core/fixtures';
+import type { Pr, Topic } from '@postpile/core';
+import { at, makeThreadFor } from '@postpile/core/fixtures';
 import type { Harness } from './fakes.ts';
 
 export function makeTopic(id: string, overrides: Partial<Topic> = {}): Topic {

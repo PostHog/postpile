@@ -11,7 +11,7 @@ import type {
   PrEvent,
   PrKey,
   UserRef,
-} from '@code-manager/core';
+} from '@postpile/core';
 import { feedbackLabel } from './prompts/shared.ts';
 import type { DossierUpdateInput } from './service.ts';
 

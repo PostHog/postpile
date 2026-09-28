@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { WorkContextVersion } from '@code-manager/core';
+import type { WorkContextVersion } from '@postpile/core';
 import { one, run } from '../sql.ts';
 
 /** Versions kept; older ones are pruned on every save. */
