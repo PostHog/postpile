@@ -7,7 +7,8 @@ Read this file first. Details live elsewhere:
 - `DESIGN.md`: the spec. Product model, engine memory, tile faces, sidebar, writes, and every rule with its reasoning.
 - `NEXT.md`: status. Done, stubbed, open decisions, later, decided, how to run.
 - `apps/desktop/CLAUDE.md`: renderer rules (Tailwind tokens, react-query hooks, components).
-- `README.md`: what the app is, install, privacy, setup and env vars.
+- `README.md`: what the app is, install, privacy. Written in the product-docs style: facts, no hype, pitch only at the top, and it leads with "internal DevEx tool, not a PostHog product".
+- `docs/development.md`: build from source, dev mode, env vars, layout.
 - `RELEASING.md`: how a release goes out (tag, workflow, Homebrew cask). `CHANGELOG.md`: add user-visible changes under the unreleased version.
 
 ## What the app is for (focus)
@@ -52,7 +53,7 @@ The full dated list is under "Decided" in `NEXT.md`. Add to it when the user dec
   - Never mark anything read on GitHub from a dev session.
   - Real GitHub reads are fine.
 - **Stop what you start:** kill processes by PID, never with broad `pkill` patterns.
-- **Checks before every commit:** typecheck and tests green (commands in `README.md`).
+- **Checks before every commit:** typecheck and tests green (commands in `docs/development.md`).
 - **Git:**
   - Stage with explicit paths, never `git add -A` or `git add .`.
   - Never run `reset`, `stash`, `checkout` or `restore` on shared work, never amend, don't push without asking.
