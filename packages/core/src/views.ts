@@ -355,9 +355,10 @@ export type MemoryRecheckResult =
 export interface AppConfig {
   fake: boolean;
   /**
-   * Agent-call cap for syncs the app starts (on launch and "Sync now") when
-   * the request names none. POSTPILE_MAX_AGENT_CALLS, default 30. Work
-   * over the cap waits for the next sync. The CLI keeps its own flags.
+   * Agent-call cap for syncs and consolidations when the request names
+   * none (launch, "Sync now", /api/consolidate, and the CLI without
+   * --max-agent-calls). POSTPILE_MAX_AGENT_CALLS, default 150. Work over the
+   * cap waits for the next run.
    */
   syncCallCap: number;
   /**

@@ -2,8 +2,8 @@
 // Dev CLI, the way to exercise the engine without a UI:
 //   pnpm cli topics
 //   POSTPILE_FAKE=1 pnpm cli topics   (Depot sample data)
-import { engineFromEnv } from '@postpile/server';
-import { parseInvocation, usage, type Command } from './args.ts';
+import { engineFromEnv, syncCallCapFromEnv } from '@postpile/server';
+import { parseInvocation, usage, withCallCap, type Command } from './args.ts';
 import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
   // Refuses (DataDirLockedError, exit 1) while the app or a server holds the database, unless --read-only.
   const engine = engineFromEnv({ lockKind: 'cli', withoutLock: readOnly });
   try {
-    console.log(await runCommand(engine, command));
+    console.log(await runCommand(engine, withCallCap(command, syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS))));
     // The CLI never holds a mark-read in an undo window, but flush in case an action queued one.
     await engine.flushPendingWrites();
   } finally {

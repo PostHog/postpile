@@ -87,7 +87,7 @@ describe('engine memory routes', () => {
     await request('/api/consolidate', { method: 'POST' });
     await request('/api/consolidate', { method: 'POST', body: JSON.stringify({ onlyIfDue: true, maxAgentCalls: 2 }) });
 
-    expect(recorded.consolidateOptions).toEqual([{}, { onlyIfDue: true, maxAgentCalls: 2 }]);
+    expect(recorded.consolidateOptions).toEqual([{ maxAgentCalls: 30 }, { onlyIfDue: true, maxAgentCalls: 2 }]);
   });
 
   it('accepts the dossiers job on sync and rejects the old summaries job', async () => {

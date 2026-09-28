@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArgs, parseInvocation } from './args.ts';
+import { parseArgs, parseInvocation, withCallCap } from './args.ts';
 
 describe('parseArgs', () => {
   it('parses commands and falls back to help', () => {
@@ -47,5 +47,15 @@ describe('parseInvocation', () => {
     expect(parseInvocation(['pr', 'a/b#1'])).toMatchObject({ readOnly: false, error: null });
     expect(parseInvocation(['sync', '--read-only']).error).toBe('--read-only only works with topics, topic and pr, not sync');
     expect(parseInvocation(['poll', '--read-only']).error).toMatch(/not poll/);
+  });
+});
+
+describe('withCallCap', () => {
+  it('caps sync and consolidate without a flag, keeps an explicit cap', () => {
+    expect(withCallCap(parseArgs(['sync']), 7)).toEqual({ name: 'sync', options: { maxAgentCalls: 7 } });
+    expect(withCallCap(parseArgs(['sync', '--no-agent']), 7)).toEqual({ name: 'sync', options: { maxAgentCalls: 0 } });
+    expect(withCallCap(parseArgs(['consolidate']), 7)).toEqual({ name: 'consolidate', options: { maxAgentCalls: 7 } });
+    expect(withCallCap(parseArgs(['consolidate', '--max-agent-calls', '3']), 7)).toEqual({ name: 'consolidate', options: { maxAgentCalls: 3 } });
+    expect(withCallCap(parseArgs(['topics']), 7)).toEqual({ name: 'topics' });
   });
 });

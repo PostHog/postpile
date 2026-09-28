@@ -152,6 +152,26 @@ describe('server app', () => {
     expect(seen).toEqual([{ maxAgentCalls: 30 }, { maxAgentCalls: 5 }, { maxAgentCalls: 0 }]);
   });
 
+  it('applies the app call cap to a consolidation without one', async () => {
+    const seen: unknown[] = [];
+    const consolidate = async (options: unknown) => {
+      seen.push(options);
+      return {} as never;
+    };
+    const app = createApp(fakeEngine({ consolidate }), 'secret', CONFIG);
+    const post = (body?: unknown) =>
+      app.request('/api/consolidate', {
+        method: 'POST',
+        headers: { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+
+    await post();
+    await post({ maxAgentCalls: 2 });
+
+    expect(seen).toEqual([{ maxAgentCalls: 30 }, { maxAgentCalls: 2 }]);
+  });
+
   it('reads the call cap from the environment', () => {
     expect(syncCallCapFromEnv(undefined)).toBe(150);
     expect(syncCallCapFromEnv('12')).toBe(12);

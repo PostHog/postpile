@@ -15,7 +15,7 @@ export const usage = `usage: postpile <command>
   sync [flags]         fetch notifications, digest, derive tiles
     --limit <n>          enrich at most n PRs (newest first); the rest follow on later syncs
     --no-agent           no agent calls at all
-    --max-agent-calls <n>
+    --max-agent-calls <n>  default POSTPILE_MAX_AGENT_CALLS, else 150
     --agent-jobs <list>  comma separated: ${ALL_AGENT_JOBS.join(',')}
   consolidate [flags]  propose topic merges/splits/renames and rules, retire finished topics
     --if-due             only when 24h passed and a dossier changed since the last run
@@ -139,4 +139,19 @@ export function parseInvocation(argv: string[]): Invocation {
   const command = parseArgs(argv.filter((arg) => arg !== '--read-only'));
   const error = readOnly && !READ_COMMANDS.includes(command.name) ? `--read-only only works with topics, topic and pr, not ${command.name}` : null;
   return { command, readOnly, error };
+}
+
+/**
+ * sync and consolidate without --max-agent-calls get the app's cap
+ * (POSTPILE_MAX_AGENT_CALLS, else its default), so a plain CLI run is never
+ * uncapped. Other commands pass through.
+ */
+export function withCallCap(command: Command, cap: number): Command {
+  if (command.name === 'sync') {
+    return { name: 'sync', options: { ...command.options, maxAgentCalls: command.options.maxAgentCalls ?? cap } };
+  }
+  if (command.name === 'consolidate') {
+    return { name: 'consolidate', options: { ...command.options, maxAgentCalls: command.options.maxAgentCalls ?? cap } };
+  }
+  return command;
 }

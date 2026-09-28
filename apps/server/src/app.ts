@@ -180,7 +180,11 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   });
   // The fast notification poll, for the status footer. "off" unless the host started it (the desktop app).
   app.get('/api/live', async (c) => c.json(await engine.livePollStatus()));
-  app.post('/api/consolidate', async (c) => c.json(await engine.consolidate(consolidateBody.parse(await optionalJson(c)))));
+  // Consolidation runs agent calls too: same cap when the request names none.
+  app.post('/api/consolidate', async (c) => {
+    const options = consolidateBody.parse(await optionalJson(c));
+    return c.json(await engine.consolidate({ ...options, maxAgentCalls: options.maxAgentCalls ?? config.syncCallCap }));
+  });
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
