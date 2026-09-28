@@ -1,4 +1,4 @@
-import type { IsoTime, Pr, PrRef, PrState, Stack } from './types.ts';
+import type { IsoTime, Pr, PrKey, PrRef, PrState, Stack, TopicMembership } from './types.ts';
 
 /**
  * What the stack rules need of a PR. A full snapshot has it, and so does a
@@ -144,4 +144,32 @@ export function buildStacks(prs: Pr[]): Stack[] {
     stacks.push(...stacksInRepo(repo, byRepo.get(repo) ?? []));
   }
   return stacks;
+}
+
+/** The stack of each PR that is a layer of one. */
+export function stackByPrKey(stacks: Stack[]): Map<PrKey, Stack> {
+  const result = new Map<PrKey, Stack>();
+  for (const stack of stacks) {
+    for (const key of stack.prKeys) {
+      result.set(key, stack);
+    }
+  }
+  return result;
+}
+
+/**
+ * The one topic a stack shows in. Layers can end up with different topics
+ * (assigned before they were known to be one stack, or moved one by one);
+ * the newest membership among them wins, since it is the latest decision.
+ * Null when no layer has a topic yet.
+ */
+export function stackTopicId(stack: Stack, memberships: Map<PrKey, TopicMembership>): string | null {
+  let newest: TopicMembership | null = null;
+  for (const key of stack.prKeys) {
+    const membership = memberships.get(key);
+    if (membership && (newest === null || membership.createdAt > newest.createdAt)) {
+      newest = membership;
+    }
+  }
+  return newest?.topicId ?? null;
 }

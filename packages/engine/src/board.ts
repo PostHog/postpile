@@ -2,6 +2,8 @@ import {
   applyBaseline,
   buildStacks,
   buildTopicTiles,
+  stackByPrKey,
+  stackTopicId,
   deriveTileState,
   newTopic,
   prKey,
@@ -51,6 +53,9 @@ function threadsByPrKey(threads: NotificationThread[]): Map<PrKey, NotificationT
  */
 export class Board {
   readonly stacks: Stack[];
+  /** The one topic each stack shows in, by stack id. */
+  readonly stackTopicIds: Map<string, string>;
+  private readonly stackOf: Map<PrKey, Stack>;
   private readonly tileCache = new Map<string, Tile[]>();
 
   private constructor(
@@ -67,6 +72,46 @@ export class Board {
     readonly found: Map<PrKey, FoundPr>,
   ) {
     this.stacks = buildStacks([...prs.values()]);
+    this.stackOf = stackByPrKey(this.stacks);
+    this.stackTopicIds = this.placeStacks();
+  }
+
+  private isTracked(key: PrKey): boolean {
+    return this.threads.has(key) || this.found.has(key);
+  }
+
+  /** A stack shows where its newest layer membership says, or in Unsorted while a tracked layer waits for a topic. */
+  private placeStacks(): Map<string, string> {
+    const result = new Map<string, string>();
+    for (const stack of this.stacks) {
+      const topicId = stackTopicId(stack, this.memberships);
+      if (topicId !== null) {
+        result.set(stack.id, topicId);
+      } else if (stack.prKeys.some((key) => this.isTracked(key))) {
+        result.set(stack.id, UNSORTED_TOPIC_ID);
+      }
+    }
+    return result;
+  }
+
+  /** The topic the stack of this PR shows in, or null when it is no stack layer. */
+  stackTopicIdOf(key: PrKey): string | null {
+    const stack = this.stackOf.get(key);
+    return stack ? (this.stackTopicIds.get(stack.id) ?? null) : null;
+  }
+
+  /** Every layer of the stack this PR is in, bottom first; just the PR when it is in none. */
+  stackKeysOf(key: PrKey): PrKey[] {
+    return this.stackOf.get(key)?.prKeys ?? [key];
+  }
+
+  /**
+   * The PRs that change topic together with this one: every layer of its
+   * stack that is tracked or has a topic. Pulled-in layers have no topic of
+   * their own and follow the stack anyway.
+   */
+  movesWith(key: PrKey): PrKey[] {
+    return this.stackKeysOf(key).filter((layer) => layer === key || this.memberships.has(layer) || this.isTracked(layer));
   }
 
   /**
@@ -96,9 +141,11 @@ export class Board {
     );
   }
 
-  /** PRs with a notification thread, or found by the sync, that have no topic yet. */
+  /** PRs with a notification thread, or found by the sync, that have no topic yet and no stack showing in a topic. */
   private unsortedKeys(): PrKey[] {
-    return [...this.prs.keys()].filter((key) => !this.memberships.has(key) && (this.threads.has(key) || this.found.has(key)));
+    return [...this.prs.keys()].filter(
+      (key) => !this.memberships.has(key) && this.isTracked(key) && (this.stackTopicIdOf(key) ?? UNSORTED_TOPIC_ID) === UNSORTED_TOPIC_ID,
+    );
   }
 
   private memberKeys(topicId: string): PrKey[] {
@@ -135,6 +182,7 @@ export class Board {
       prs: this.prs,
       threads: this.threads,
       stacks: this.stacks,
+      stackTopicIds: this.stackTopicIds,
       sets,
       events: this.events,
       pullInReasons: new Map([...this.pullIns.values()].map((pullIn) => [pullIn.prKey, pullIn.reason])),
@@ -148,7 +196,7 @@ export class Board {
     return this.topics().flatMap((topic) => this.tilesForTopic(topic.id));
   }
 
-  /** A stack tile shows up in every topic owning one of its PRs; the first one found is returned. */
+  /** A stack shows in one topic only, so a tile id is found once. */
   findTile(tileId: string): Tile | null {
     return this.allTiles().find((tile) => tile.id === tileId) ?? null;
   }
@@ -165,8 +213,15 @@ export class Board {
     });
   }
 
-  /** A pulled-in stack layer has no topic of its own and shows in the topic of the pinged PR it hangs off. */
+  /**
+   * A stack layer is in the topic its stack shows in. A pulled-in layer
+   * outside any stack left shows in the topic of the pinged PR it hangs off.
+   */
   topicIdOf(key: PrKey): string | null {
+    const stackTopic = this.stackTopicIdOf(key);
+    if (stackTopic !== null) {
+      return stackTopic;
+    }
     const membership = this.memberships.get(key);
     if (membership) {
       return membership.topicId;

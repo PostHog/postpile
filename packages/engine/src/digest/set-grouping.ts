@@ -1,5 +1,5 @@
 import { setGroupingInputHash, type SetProposal } from '@postpile/agent';
-import type { PrSet, Topic } from '@postpile/core';
+import { buildStacks, stackByPrKey, type PrKey, type PrSet, type PrSetMember, type Stack, type Topic } from '@postpile/core';
 import { newSetId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import type { DigestDeps } from './deps.ts';
@@ -32,16 +32,38 @@ function rejectedPairs(sets: PrSet[]): Set<string> {
   return pairs;
 }
 
-/** Drops every member the user already said is not related to another member of the proposal. */
-function withoutRejected(proposal: SetProposal, rejected: Set<string>): SetProposal['members'] {
-  const keys = proposal.members.map((m) => m.prKey);
-  return proposal.members.filter((member) => !keys.some((other) => rejected.has(pairKey(member.prKey, other))));
+/**
+ * Lone PRs and whole stacks, in proposal order. A member that is a stack
+ * layer brings its whole stack along, in stack order, so a set never tears
+ * a layer out of its stack.
+ */
+function unitsOf(members: PrSetMember[], stackOf: Map<PrKey, Stack>): PrSetMember[][] {
+  const units: PrSetMember[][] = [];
+  const seen = new Set<PrKey>();
+  for (const member of members) {
+    if (seen.has(member.prKey)) {
+      continue;
+    }
+    const keys = stackOf.get(member.prKey)?.prKeys ?? [member.prKey];
+    keys.forEach((key) => seen.add(key));
+    units.push(keys.map((key) => (key === member.prKey ? member : { prKey: key, reason: 'layer of the same stack' })));
+  }
+  return units;
+}
+
+/** Drops every unit (a PR, or a whole stack) the user already said is not related to another unit of the proposal. */
+function withoutRejected(units: PrSetMember[][], rejected: Set<string>): PrSetMember[][] {
+  return units.filter((unit, index) => {
+    const others = units.filter((_, otherIndex) => otherIndex !== index).flat();
+    return !unit.some((member) => others.some((other) => rejected.has(pairKey(member.prKey, other.prKey))));
+  });
 }
 
 /**
  * Asks the agent to group related open PRs of a topic into sets. Runs only
- * when the topic's PRs, dissolved sets or feedback changed. A set the agent
- * keeps (same title) keeps its id, so its tile id, snooze and chat survive.
+ * when the topic's PRs, dissolved sets or feedback changed. A stack is one
+ * unit: a set holds it whole or not at all. A set the agent keeps (same
+ * title) keeps its id, so its tile id, snooze and chat survive.
  */
 export class SetGrouper {
   constructor(private readonly deps: DigestDeps) {}
@@ -52,13 +74,16 @@ export class SetGrouper {
     const active = existing.filter((s) => s.status === 'active');
     const dissolved = new Set(existing.filter((s) => s.status === 'dissolved').map((s) => memberSignature(s.members.map((m) => m.prKey))));
     const rejected = rejectedPairs(existing);
+    const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
     const kept = new Set<string>();
 
     store.transaction(() => {
       for (const proposal of proposals) {
         // The prompt says to respect the user's corrections; enforce it.
-        const members = withoutRejected(proposal, rejected);
-        if (members.length < 2 || dissolved.has(memberSignature(members.map((m) => m.prKey)))) {
+        const units = withoutRejected(unitsOf(proposal.members, stackOf), rejected);
+        const members = units.flat();
+        // Two units at least: a set of one stack and nothing else is just that stack.
+        if (units.length < 2 || dissolved.has(memberSignature(members.map((m) => m.prKey)))) {
           continue;
         }
         const previous = active.find((s) => s.title.trim().toLowerCase() === proposal.title.trim().toLowerCase());

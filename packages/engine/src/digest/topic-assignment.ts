@@ -1,5 +1,5 @@
 import type { TopicAssignment, TopicChoice } from '@postpile/agent';
-import { dossierBrief, newTopic, type Pr, type Topic } from '@postpile/core';
+import { buildStacks, dossierBrief, newTopic, stackByPrKey, stackTopicId, type PrKey, type Topic } from '@postpile/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
@@ -17,6 +17,16 @@ const RETIRED_OFFER_MS = 30 * 24 * 60 * 60 * 1000;
  */
 export const MAX_NEW_TOPICS_PER_SYNC = 5;
 
+/** How the PRs waiting for a topic split up, treating each stack as one unit. */
+interface StackSplit {
+  /** Layers whose stack already shows in a topic: they join it without an agent call. */
+  join: { prKey: PrKey; topicId: string }[];
+  /** PRs to ask the agent about: lone PRs and the lowest waiting layer of each stack. */
+  ask: PrKey[];
+  /** The other waiting layers of a stack, by the layer asked about; they follow its answer. */
+  followers: Map<PrKey, PrKey[]>;
+}
+
 /** Meta key: when a PR was left in Unsorted by topic assignment. */
 export function deferredKey(prKey: string): string {
   return `topic_deferred:${prKey}`;
@@ -28,9 +38,11 @@ export function deferredKey(prKey: string): string {
  * New topics are created right away (otherwise a first sync would leave
  * everything unsorted); existing topics are never renamed or merged here.
  * Recently retired topics are offered too; a PR joining one brings it back.
+ * A stack is one unit: its layers always get the same topic.
  */
 export class TopicAssigner {
   private created = 0;
+  private followers = new Map<PrKey, PrKey[]>();
 
   constructor(private readonly deps: DigestDeps) {}
 
@@ -49,13 +61,56 @@ export class TopicAssigner {
     return deferredAt >= consolidatedAt;
   }
 
-  private unassignedPrs(): Pr[] {
+  /** Pinged or found PRs without a topic; a pulled-in stack layer gets no topic of its own. */
+  private unassignedKeys(): PrKey[] {
     const { store } = this.deps;
-    const keys = store.memberships.listUnassignedPrKeys().filter((key) => !this.isDeferred(key));
-    // Pinged or found; a pulled-in stack layer gets no topic of its own.
+    const keys = store.memberships.listUnassignedPrKeys();
     const threads = store.notifications.getByPrKeys(keys);
     const found = store.foundPrs.listAll();
-    return [...store.prs.getMany(keys.filter((key) => threads.has(key) || found.has(key))).values()];
+    return keys.filter((key) => threads.has(key) || found.has(key));
+  }
+
+  /**
+   * A stack moves as one, so the agent never splits one across topics: a
+   * layer whose stack already shows in a topic joins it, and of a stack
+   * without a topic only the lowest waiting layer is asked about.
+   */
+  private splitByStack(keys: PrKey[]): StackSplit {
+    const { store } = this.deps;
+    const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
+    const memberships = new Map(store.memberships.listAll().map((m) => [m.prKey, m]));
+    const split: StackSplit = { join: [], ask: [], followers: new Map() };
+    const askedFor = new Map<string, PrKey>();
+    for (const key of keys) {
+      const stack = stackOf.get(key);
+      if (!stack) {
+        split.ask.push(key);
+        continue;
+      }
+      const topicId = stackTopicId(stack, memberships);
+      if (topicId !== null) {
+        split.join.push({ prKey: key, topicId });
+        continue;
+      }
+      const asked = askedFor.get(stack.id);
+      if (asked === undefined) {
+        askedFor.set(stack.id, key);
+        split.ask.push(key);
+      } else {
+        split.followers.set(asked, [...(split.followers.get(asked) ?? []), key]);
+      }
+    }
+    return split;
+  }
+
+  private joinStacks(join: StackSplit['join']): void {
+    const { store } = this.deps;
+    const at = this.deps.now().toISOString();
+    store.transaction(() => {
+      for (const { prKey, topicId } of join) {
+        store.memberships.assign({ prKey, topicId, assignedBy: 'agent', reason: 'joins its stack', createdAt: at });
+      }
+    });
   }
 
   /** Active topics plus topics retired in the last 30 days. */
@@ -114,27 +169,29 @@ export class TopicAssigner {
     const at = this.deps.now().toISOString();
     store.transaction(() => {
       for (const assignment of assignments) {
+        // The rest of a stack follows the layer the agent was asked about.
+        const keys = [assignment.prKey, ...(this.followers.get(assignment.prKey) ?? [])];
         const topicId = this.topicIdFor(assignment);
         if (topicId === null) {
-          store.meta.set(deferredKey(assignment.prKey), at);
+          keys.forEach((key) => store.meta.set(deferredKey(key), at));
           continue;
         }
         if (store.topics.get(topicId)?.status === 'retired') {
           store.topics.setStatus(topicId, 'active', at);
         }
-        store.memberships.assign({
-          prKey: assignment.prKey,
-          topicId,
-          assignedBy: 'agent',
-          reason: assignment.reason,
-          createdAt: at,
-        });
+        for (const prKey of keys) {
+          store.memberships.assign({ prKey, topicId, assignedBy: 'agent', reason: assignment.reason, createdAt: at });
+        }
       }
     });
   }
 
   async run(): Promise<void> {
-    for (const batch of chunk(this.unassignedPrs(), ASSIGNMENT_BATCH_SIZE)) {
+    const split = this.splitByStack(this.unassignedKeys());
+    this.joinStacks(split.join);
+    this.followers = split.followers;
+    const asked = [...this.deps.store.prs.getMany(split.ask.filter((key) => !this.isDeferred(key))).values()];
+    for (const batch of chunk(asked, ASSIGNMENT_BATCH_SIZE)) {
       if (!this.deps.budget.take('topic_assignment')) {
         break;
       }

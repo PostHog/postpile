@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { at, makePr } from './fixtures.ts';
-import { buildStacks } from './stacks.ts';
+import { buildStacks, stackTopicId } from './stacks.ts';
+import type { TopicMembership } from './types.ts';
 
 describe('buildStacks', () => {
   it('chains PRs whose base is another PR head, bottom first', () => {
@@ -93,5 +94,22 @@ describe('buildStacks', () => {
   it('survives a base/head cycle', () => {
     const prs = [makePr({ number: 1, baseRef: 'b2', headRef: 'b1' }), makePr({ number: 2, baseRef: 'b1', headRef: 'b2' })];
     expect(buildStacks(prs)).toEqual([]);
+  });
+});
+
+describe('stackTopicId', () => {
+  const stack = { id: 'stack:a#1', repo: 'a', prKeys: ['a#1', 'a#2', 'a#3'] };
+
+  function membership(prKey: string, topicId: string, minutes: number): [string, TopicMembership] {
+    return [prKey, { prKey, topicId, assignedBy: 'agent', reason: '', createdAt: at(minutes) }];
+  }
+
+  it('picks the topic of the newest layer membership', () => {
+    const memberships = new Map([membership('a#1', 'depot', 0), membership('a#3', 'billing', 10)]);
+    expect(stackTopicId(stack, memberships)).toBe('billing');
+  });
+
+  it('is null while no layer has a topic', () => {
+    expect(stackTopicId(stack, new Map())).toBeNull();
   });
 });

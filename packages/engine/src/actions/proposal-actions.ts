@@ -1,5 +1,6 @@
 import { newTopic, type ActionResult, type TopicProposal } from '@postpile/core';
 import type { Store } from '@postpile/store';
+import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
 import { failed, ok } from './results.ts';
 
@@ -10,12 +11,18 @@ export class ProposalActions {
     private readonly now: () => Date,
   ) {}
 
-  /** new_topic and split both end up here: a new topic with the proposal's PRs moved into it. */
+  /**
+   * new_topic and split both end up here: a new topic with the proposal's
+   * PRs moved into it. A stack layer brings its whole stack, so a split
+   * never tears a stack apart.
+   */
   private createTopic(proposal: TopicProposal, at: string): void {
     const name = proposal.name ?? 'New topic';
     const topic = newTopic(newTopicId(name), name, at);
     this.store.topics.create(topic);
-    for (const prKey of proposal.prKeys) {
+    const board = Board.load(this.store, at);
+    const prKeys = new Set(proposal.prKeys.flatMap((key) => board.movesWith(key)));
+    for (const prKey of prKeys) {
       this.store.memberships.assign({ prKey, topicId: topic.id, assignedBy: 'user', reason: proposal.reason, createdAt: at });
     }
   }
