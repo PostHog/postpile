@@ -7,6 +7,7 @@ import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profil
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { FileLog, logDirFromEnv } from './file-log.ts';
 import { MacNotifier } from './mac-notifier.ts';
+import { OpenedPrs } from './opened-prs.ts';
 import { welcomeOnce } from './welcome.ts';
 
 // A GUI launch (Finder, Dock, the packaged app) gets launchd's minimal PATH.
@@ -64,10 +65,25 @@ let server: RunningServer | null = null;
 let mainWindow: BrowserWindow | null = null;
 // Set by Cmd+Q (before-quit). Until then, closing the window only hides it on macOS.
 let quitting = false;
+// PRs opened on github.com from the app; refreshed when the window gets focus back.
+const openedPrs = new OpenedPrs();
 
 function openExternalLink(url: string): void {
   if (url.startsWith('https://')) {
+    openedPrs.remember(url, Date.now());
     void shell.openExternal(url);
+  }
+}
+
+/**
+ * Back from the browser: one poll cycle plus a direct look at the PRs the
+ * user opened from here in the last 30 minutes, so an approve, merge or
+ * comment made on github.com shows on the tile right away.
+ */
+function refreshOpenedPrs(): void {
+  const keys = openedPrs.active(Date.now());
+  if (keys.length > 0 && engine) {
+    engine.refreshOnFocus(keys).catch((error: unknown) => console.error('refresh on focus failed:', error));
   }
 }
 
@@ -129,6 +145,7 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
     },
   });
   window.once('ready-to-show', () => window.show());
+  window.on('focus', refreshOpenedPrs);
   // Links (e.g. "GitHub") open in the browser; the app window never navigates away.
   window.webContents.setWindowOpenHandler(({ url }) => {
     openExternalLink(url);
