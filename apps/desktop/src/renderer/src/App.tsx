@@ -126,7 +126,7 @@ export function App() {
     latestGo.current = go;
   });
   useEffect(() => {
-    return window.codeManager?.onOpenPing?.((target) => {
+    return window.postpile?.onOpenPing?.((target) => {
       if (target.topicId !== null) {
         latestGo.current({ pane: 'topic', topicId: target.topicId, tileId: target.tileId, prKey: target.prKey });
       }

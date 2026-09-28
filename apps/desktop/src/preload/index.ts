@@ -11,23 +11,23 @@ function argValue(name: string): string {
   return arg ? arg.slice(prefix.length) : '';
 }
 
-contextBridge.exposeInMainWorld('codeManager', {
-  apiUrl: argValue('code-manager-api'),
-  token: argValue('code-manager-token'),
+contextBridge.exposeInMainWorld('postpile', {
+  apiUrl: argValue('postpile-api'),
+  token: argValue('postpile-token'),
   /** Calls back with "back" or "forward" on a trackpad swipe; returns the unsubscribe. */
   onSwipe(callback: (direction: 'back' | 'forward') => void): () => void {
     const listener = (_event: IpcRendererEvent, direction: 'back' | 'forward') => callback(direction);
-    ipcRenderer.on('code-manager:swipe', listener);
+    ipcRenderer.on('postpile:swipe', listener);
     return () => {
-      ipcRenderer.removeListener('code-manager:swipe', listener);
+      ipcRenderer.removeListener('postpile:swipe', listener);
     };
   },
   /** Calls back with the tile to open when the user clicks a Mac notification; returns the unsubscribe. */
   onOpenPing(callback: (target: PingTarget) => void): () => void {
     const listener = (_event: IpcRendererEvent, target: PingTarget) => callback(target);
-    ipcRenderer.on('code-manager:open-ping', listener);
+    ipcRenderer.on('postpile:open-ping', listener);
     return () => {
-      ipcRenderer.removeListener('code-manager:open-ping', listener);
+      ipcRenderer.removeListener('postpile:open-ping', listener);
     };
   },
 });

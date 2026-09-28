@@ -84,7 +84,7 @@ export function useNavShortcuts(back: () => void, forward: () => void): void {
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('mouseup', onMouse);
-    const stopSwipe = window.codeManager?.onSwipe?.((direction) => (direction === 'back' ? goBack() : goForward()));
+    const stopSwipe = window.postpile?.onSwipe?.((direction) => (direction === 'back' ? goBack() : goForward()));
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('mouseup', onMouse);

@@ -49,17 +49,6 @@ export function KindIcon(props: IconProps & { kind: TileKind }) {
   return <PrIcon size={props.size} className={props.className} />;
 }
 
-export function LogoIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-      <rect x="1.5" y="5.5" width="11" height="11" rx="3" fill="none" stroke="var(--faint)" strokeWidth="1.4" />
-      <rect x="4.5" y="3.5" width="11" height="11" rx="3" fill="var(--bg-surface)" stroke="var(--muted)" strokeWidth="1.4" />
-      <rect x="7.5" y="1.5" width="11" height="11" rx="3" fill="var(--accent)" />
-      <circle cx="15.2" cy="4.6" r="1.6" fill="var(--bg-surface)" />
-    </svg>
-  );
-}
-
 export function SyncIcon(props: IconProps) {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className={props.className} aria-hidden="true">

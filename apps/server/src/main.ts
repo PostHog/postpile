@@ -14,8 +14,8 @@ const port = Number(process.env.PORT || 4870);
 const token = process.env.POSTPILE_TOKEN || randomBytes(24).toString('hex');
 const engine = engineFromEnv();
 const server = await startServer({ engine, port, token, config: appConfigFromEnv() });
-console.log(`code-manager API on ${server.url}`);
-console.log(`token: ${token}  (send it as x-code-manager-token, or open the UI with ?token=${token})`);
+console.log(`PostPile API on ${server.url}`);
+console.log(`token: ${token}  (send it as x-postpile-token, or open the UI with ?token=${token})`);
 
 async function shutdown(): Promise<void> {
   await engine.flushPendingWrites().catch((error: unknown) => console.error(error));

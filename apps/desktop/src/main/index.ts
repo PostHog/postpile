@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, nativeImage, shell } from 'electron';
 import fixPath from 'fix-path';
 import { applyLegacyEnv, migrateLegacyData, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
@@ -18,7 +18,13 @@ if (!isFake()) {
 }
 
 // Otherwise userData lands under the npm package name, "@postpile/desktop".
-app.setName('code-manager');
+// Also the name in the menu bar and the About box.
+app.setName('PostPile');
+app.setAppUserModelId('com.postpile.app');
+app.setAboutPanelOptions({ applicationName: 'PostPile' });
+
+// apps/desktop/build, next to out/. Only there in a dev checkout; no packaging yet.
+const iconFile = join(import.meta.dirname, '../../build/icon.png');
 
 let engine: EngineService | null = null;
 let server: RunningServer | null = null;
@@ -49,7 +55,9 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
     height: 900,
     minWidth: 1100,
     minHeight: 640,
-    title: 'code-manager',
+    title: 'PostPile',
+    // Linux and Windows; macOS takes the Dock icon instead.
+    icon: iconFile,
     // The renderer draws its own 52px title bar and leaves 88px on the left
     // for the traffic lights; this centres them in that bar.
     titleBarStyle: 'hiddenInset',
@@ -58,7 +66,7 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       // Read by the preload script, see src/preload/index.ts.
-      additionalArguments: [`--code-manager-api=${apiUrl}`, `--code-manager-token=${token}`],
+      additionalArguments: [`--postpile-api=${apiUrl}`, `--postpile-token=${token}`],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -79,7 +87,7 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
   // gesture does not reach it.
   window.on('swipe', (_event, direction) => {
     if (direction === 'left' || direction === 'right') {
-      window.webContents.send('code-manager:swipe', direction === 'left' ? 'back' : 'forward');
+      window.webContents.send('postpile:swipe', direction === 'left' ? 'back' : 'forward');
     }
   });
   // Like other macOS apps: the red button hides the window and the app keeps
@@ -100,6 +108,10 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
 }
 
 async function start(): Promise<void> {
+  // A dev run is the Electron binary, which shows the Electron icon in the Dock.
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    app.dock?.setIcon(nativeImage.createFromPath(iconFile));
+  }
   // The token keeps other local processes and web pages from driving the API.
   const token = randomBytes(24).toString('hex');
   // POSTPILE_FAKE=1 runs on sample data, see engineFromEnv.
@@ -113,7 +125,7 @@ async function start(): Promise<void> {
     onClick: (target) => {
       showWindow();
       if (target) {
-        mainWindow?.webContents.send('code-manager:open-ping', target);
+        mainWindow?.webContents.send('postpile:open-ping', target);
       }
     },
   });

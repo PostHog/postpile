@@ -12,7 +12,7 @@ import {
 import type { EngineService } from '@postpile/engine';
 
 /** Every /api request must carry the server's token in this header. */
-export const TOKEN_HEADER = 'x-code-manager-token';
+export const TOKEN_HEADER = 'x-postpile-token';
 
 const snoozeCondition = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('someone_replies') }),

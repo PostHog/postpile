@@ -3,7 +3,8 @@ import { useActions } from '../api/actions.tsx';
 import { capNote } from '../lib/agent-stats.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
-import { BackIcon, ForwardIcon, LogoIcon, SyncIcon } from './icons.tsx';
+import logoUrl from '../assets/logo-64.png';
+import { BackIcon, ForwardIcon, SyncIcon } from './icons.tsx';
 
 function SyncStatus() {
   const actions = useActions();
@@ -76,9 +77,9 @@ export function TitleBar(props: TitleBarProps) {
           </NavButton>
         </span>
         <span className="flex items-center gap-2">
-          <LogoIcon />
+          <img src={logoUrl} alt="" width={20} height={20} className="shrink-0" draggable={false} />
           {/* The name gives way below 1280px so the centered search keeps its width. */}
-          <span className="text-[13.5px] font-semibold tracking-[-0.01em] max-xl:hidden">Code Manager</span>
+          <span className="text-[13.5px] font-semibold tracking-[-0.01em] max-xl:hidden">PostPile</span>
         </span>
         {actions.config?.fake && (
           <>

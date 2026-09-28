@@ -1,4 +1,4 @@
-/* code-manager design tokens, "Crisp native, refined".
+/* PostPile design tokens, "Crisp native, refined".
    Every color, radius, shadow and font the renderer uses is defined here once.
    app.css maps them onto Tailwind names in its @theme block; components use
    those names (bg-surface, text-muted, border-hairline, ...), never raw hex. */

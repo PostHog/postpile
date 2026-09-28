@@ -3,12 +3,12 @@ import type { PrKey } from '@postpile/core';
 // The desktop preload provides the API location and token. As a plain web page
 // (later) the query string or the default dev server is used instead.
 const params = new URLSearchParams(window.location.search);
-const baseUrl = window.codeManager?.apiUrl || params.get('api') || 'http://127.0.0.1:4870';
-const token = window.codeManager?.token || params.get('token') || '';
+const baseUrl = window.postpile?.apiUrl || params.get('api') || 'http://127.0.0.1:4870';
+const token = window.postpile?.token || params.get('token') || '';
 
 /** One JSON request against the local API. Non-2xx answers throw with the server's error text. */
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { 'x-code-manager-token': token };
+  const headers: Record<string, string> = { 'x-postpile-token': token };
   if (body !== undefined) {
     headers['content-type'] = 'application/json';
   }
