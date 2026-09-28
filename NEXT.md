@@ -10,13 +10,13 @@ now".
   stay out of the Done fold (`isPrDone` + `reviewPending`), team requests
   on a teammate's PR count like personal ones (`reviewRequest` in core
   `review-request.ts`); engine and FakeEngine share the rule.
-- Addressed your changes (2026-09-28, from PostHog/posthog#4521): after
+- Addressed your changes (2026-09-28, from a real PR): after
   the viewer's changes request, an author push or reply hands the move back
   without a re-request. Whose turn "paul addressed your changes:
   re-review", tier To review, "For you", loud and ping-worthy
   (`changesAnswered` in core). Fake sample #41960 in Dev env.
-- Live poll keeps up with GitHub between full syncs (2026-09-28, from the
-  PostHog/example-infra#4242 and #106828 findings):
+- Live poll keeps up with GitHub between full syncs (2026-09-28, from two
+  real PRs that stayed OPEN in the app after a merge on github.com):
   - read-threads watch every cycle (`?all=true&since=<cursor>`, own ETag,
     304 while nothing moved, every 200 logged with the tally), so merges,
     closes and the user's own actions on read threads show within a cycle
@@ -228,7 +228,7 @@ now".
   tile `tier`) and `GET /api/viewer`. Fake data gained own PRs, a team
   mention, a bot bump and a merged PR with news.
 - Work context sweep (DESIGN.md "Work context sweep"): a daily agent-written
-  digest of what Julian is working on, from `~/.claude` (CLAUDE.md and its
+  digest of what the user is working on, from `~/.claude` (CLAUDE.md and its
   @-includes, every project's memory files, light signals from sessions of
   the last 7 days; secrets masked, ~60k chars budget, drops logged). One opus
   `context_sweep` call (`POSTPILE_SWEEP_MODEL`), versions in
@@ -239,9 +239,9 @@ now".
   and chat, outside every input hash. "What you're working on" at the bottom
   of "Your instructions": summary, threads with topic links, Why?, Forget
   (with Undo), Refresh, last error. One real run against a DB copy: 60k chars
-  in, 12 threads, $0.40, 43s; personal sessions (taxes, shopping) left out.
+  in, 12 threads, $0.40, 43s; personal sessions left out.
   Project folders on the skip list (`POSTPILE_SWEEP_SKIP`, default taxes,
-  garden, hobby, my-blog-com) are never read; the count is in the input
+  garden, hobby, personal, private) are never read; the count is in the input
   stats and the list shows read-only under the digest.
 - Default agent-call cap for app syncs raised from 30 to 150
   (`POSTPILE_MAX_AGENT_CALLS`).
@@ -555,14 +555,13 @@ the app meanwhile.
 - Live progress in the title bar while syncing: `syncing · agent 34/82 ·
   2m` from `GET /api/sync/progress`. The total is what the sync planned so
   far and grows (glances are planned as dossiers land).
-- Glance "missing or invalid in the answer" (acme/digest#30,
+- Glance "missing or invalid in the answer" (two real PRs, one of them
   posthog#107116): replaying posthog#107116 alone against Sonnet gave a
   misspelled verdict (`LOOKS_SASAFE`, `LOOKS_SASE`) in 4 of 6 runs, once
   with the other fields cut to "placeholder", once as broken JSON. The
   strict enum dropped the entry on both attempts. Verdicts are now repaired
   when unambiguous, and error lines say why a PR is missing.
-  acme/digest#30 (2026-09-28, replayed with its stored input on a DB
-  copy): Sonnet wrote `LOOKS_SASAFE`, then "Wait, let me correct a typo in
+  The other PR (2026-09-28, replayed with its stored input): Sonnet wrote `LOOKS_SASAFE`, then "Wait, let me correct a typo in
   the verdict field." and a second JSON object. The parser cut from the
   first `{` to the last `}` across both. It now takes the last complete
   JSON value that fits the schema (`jsonCandidates`).
@@ -718,7 +717,9 @@ the app meanwhile.
 - **Sweep skip list** (2026-09-28): private projects are kept out by a
   skip list before anything leaves the machine, not only by the prompt.
   `~/.claude/projects` folders matching `taxes`, `garden`, `hobby`,
-  `my-blog-com` (or `POSTPILE_SWEEP_SKIP`) are never read.
+  `personal`, `private` (or `POSTPILE_SWEEP_SKIP`) are never read.
+  Defaults made generic for the public repo (2026-09-28); a personal
+  list goes in `POSTPILE_SWEEP_SKIP`.
 
 - **Pending writes, not local reads** (2026-09-28): a mark-read while
   locked changes nothing in the app; it waits as a pending write until the
@@ -822,7 +823,7 @@ Env switches:
 - `POSTPILE_CLAUDE_DIR`: the Claude Code folder the work context sweep
   reads, default `~/.claude`. `POSTPILE_SWEEP_MODEL`: its model, default
   `opus`. `POSTPILE_SWEEP_SKIP`: comma-separated project folders the sweep
-  never reads (default `taxes,garden,hobby,my-blog-com`; empty = none).
+  never reads (default `taxes,garden,hobby,personal,private`; empty = none).
 - `POSTPILE_DB`, `POSTPILE_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/PostPile/db.sqlite`) and the
   instructions file (default `~/.config/postpile/instructions.md`).

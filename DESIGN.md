@@ -638,7 +638,7 @@ stored and before a dossier goes into a glance prompt
   answer never becomes "looks safe" by accident. The prompt asks for
   exactly N entries with the verdict spelled as given; the retry prompt
   adds that the first answer was unusable.
-- Self-corrected answers (2026-09-28): for acme/digest#30 Sonnet
+- Self-corrected answers (2026-09-28): for one real PR Sonnet
   writes `LOOKS_SASAFE`, then "Wait, let me correct a typo in the verdict
   field." and a second, fixed JSON object. `parseAgentJson` collects every
   complete top-level JSON value (`jsonCandidates`, brackets inside strings
@@ -1030,7 +1030,7 @@ authors.
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
 4. On someone else's PR:
-   - you: addressed your changes (2026-09-28, PostHog/posthog#4521).
+   - you: addressed your changes (2026-09-28).
      Your newest verdict review (approve, request changes, dismissed) asks
      for changes, and since your last word (that review, or a later comment
      or re-review) the author pushed (any human commit or force push but
@@ -1280,7 +1280,7 @@ local; nothing goes to GitHub.
   on a tie, `mainRepoOf`) gets a small neutral repo label; a set mixing
   repos gets it on each PR row from another repo instead
   (`tileRepoLabels`, `TileView.repoLabel`, `PrSummary.repoLabel`). The
-  label is the short name (`example-infra`, `example-tools`) when the org is one
+  label is the short name (`infra`, `docs`) when the org is one
   of the viewer's team orgs (`viewerOrgs`, falling back to the base repo's
   org), else `owner/name`.
 - **Menu rows**: each repo with its topic count (PR count in the tooltip),
@@ -1533,7 +1533,7 @@ standalone server never starts it.
   `poll_watch_since`, `poll_watch_etag`). The unread list never shows a
   thread that stays read, and GitHub does not make a thread unread for the
   user's own merge, close, comment or review, so those were invisible until
-  the next full sync (PostHog/example-infra#4242, merged on github.com, OPEN in
+  the next full sync (seen on a real PR: merged on github.com, OPEN in
   the app for minutes). The cursor starts at the last full sync's start,
   and moves only on a 200, to the newest thread update less a minute
   (`nextWatchSince`, server times), so between changes URL and ETag stay
@@ -1657,7 +1657,7 @@ from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
 - **Skip list first**: `projects/*` folders on the skip list are never
   opened, neither memory nor sessions, so private projects never leave the
   machine (`work-context/skip-list.ts`). Defaults: `taxes`, `garden`,
-  `hobby`, `my-blog-com`; `POSTPILE_SWEEP_SKIP` (comma separated) replaces
+  `hobby`, `personal`, `private`; `POSTPILE_SWEEP_SKIP` (comma separated) replaces
   them, set to empty it skips nothing. Matching never touches the disk:
   decoding a folder like `-Users-me-workspace-taxes` on disk used to
   stat paths under `~/Pictures`, cloud drives and `/Volumes`, and macOS asked
