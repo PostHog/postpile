@@ -22,6 +22,7 @@ import { PrSetRepo } from './repos/sets.ts';
 import { SnoozeRepo } from './repos/snoozes.ts';
 import { TopicRepo } from './repos/topics.ts';
 import { UserPrStateRepo } from './repos/user-pr-state.ts';
+import { WorkContextRepo } from './repos/work-context.ts';
 
 /** One open database plus every repository on it. */
 export class Store {
@@ -47,6 +48,7 @@ export class Store {
   readonly instructions: InstructionsRepo;
   readonly pullIns: PullInRepo;
   readonly pingDecisions: PingDecisionRepo;
+  readonly workContext: WorkContextRepo;
 
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
@@ -71,6 +73,7 @@ export class Store {
     this.instructions = new InstructionsRepo(db);
     this.pullIns = new PullInRepo(db);
     this.pingDecisions = new PingDecisionRepo(db);
+    this.workContext = new WorkContextRepo(db);
   }
 
   static open(path: string): Store {

@@ -6,6 +6,7 @@ export { NotificationRepo } from './repos/notifications.ts';
 export { PrRepo } from './repos/prs.ts';
 export { PullInRepo } from './repos/pull-ins.ts';
 export { PingDecisionRepo } from './repos/ping-decisions.ts';
+export { WorkContextRepo, WORK_CONTEXT_VERSIONS_KEPT } from './repos/work-context.ts';
 export { EventRepo } from './repos/events.ts';
 export { UserPrStateRepo } from './repos/user-pr-state.ts';
 export { TopicRepo } from './repos/topics.ts';
