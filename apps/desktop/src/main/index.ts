@@ -70,6 +70,9 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 18, y: 18 },
     backgroundColor: '#f7f8fa',
+    // Shown on ready-to-show (first paint), so the window never appears as an
+    // empty frame with only the traffic lights for the ~80 ms before React paints.
+    show: false,
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       // Read by the preload script, see src/preload/index.ts.
@@ -79,6 +82,7 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
       nodeIntegration: false,
     },
   });
+  window.once('ready-to-show', () => window.show());
   // Links (e.g. "GitHub") open in the browser; the app window never navigates away.
   window.webContents.setWindowOpenHandler(({ url }) => {
     openExternalLink(url);
