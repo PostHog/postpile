@@ -384,7 +384,9 @@ export type AgentCallKind =
   | 'chat'
   | 'instructions_change'
   /** "Recheck" on one memory line, asked by the user. */
-  | 'memory_recheck';
+  | 'memory_recheck'
+  /** Should new activity from the fast poll ping the Mac? One call per poll cycle. */
+  | 'ping_decision';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {

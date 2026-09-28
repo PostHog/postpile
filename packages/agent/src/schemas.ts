@@ -50,6 +50,18 @@ export const memoryRecheckOutput = z.object({
   why: text.min(1),
 });
 
+export const pingDecisionOutput = z.object({
+  decisions: z.array(
+    z.object({
+      id: text,
+      ping: z.boolean(),
+      title: text.default(''),
+      body: text.default(''),
+      reason: text.default(''),
+    }),
+  ),
+});
+
 export const instructionsChangeOutput = z.object({
   reply: text.default(''),
   change: z.object({ text: text.min(1), summary: text.min(1) }).nullable(),

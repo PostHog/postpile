@@ -11,6 +11,7 @@ export { modelFor } from './models.ts';
 export type * from './service.ts';
 export {
   CHAT_TURNS_IN_DOSSIER_PROMPT,
+  EVENTS_PER_PING_ITEM,
   EVENTS_PER_PR_IN_RECHECK,
   FACTS_IN_DOSSIER_PROMPT,
   PRS_IN_RECHECK,
