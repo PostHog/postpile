@@ -2,39 +2,23 @@
 
 How a PostPile release goes out: a `v*` tag builds the app on GitHub Actions, attaches the zip to a GitHub release, and renders the Homebrew cask into [PostHog/homebrew-tap](https://github.com/PostHog/homebrew-tap).
 
-The first part is one-time setup for the public repo. The second part is the checklist for every release.
+## Repo setup
 
-## One-time setup (first public push)
+Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or a rotated key can be set up the same way.
 
-1. **Decide the history.** The private history has personal paths, a private repo's PR numbers and similar breadcrumbs in old commits and messages (nothing secret). The recommendation is one fresh squashed commit for the first public push:
+- **History.** The private history was rewritten with `git filter-repo --replace-text` (personal paths, private repo names, real people) and re-signed. All commits and their dates were kept.
+- **Repo.** `PostHog/postpile`, public, default branch `main`. The description says "Internal DevEx tool" so the repo does not read like a new PostHog product.
+- **Homebrew tap token.** The PostHog GitHub App behind `GH_APP_HOMEBREW_TAP_RELEASER_*` already writes to the tap for phrocs and other PostHog tools. Its secrets are environment secrets per repo, not org secrets, so every repo that publishes to the tap needs its own copy:
+  - Repo settings › Environments: `homebrew-tap`, with a deployment tag rule `v*` (no branches), so only release tags can use the token.
+  - In that environment, `GH_APP_HOMEBREW_TAP_RELEASER_APP_ID` holds the app's numeric App ID (from the app's settings page), and `GH_APP_HOMEBREW_TAP_RELEASER_PRIVATE_KEY` holds the app's private key. The key is in 1Password as `releaser-homebrew-tap.<date>.private-key`:
 
-   ```
-   git checkout --orphan public-main main
-   git commit -m "feat: PostPile 0.1.0-alpha.0"   # the tree of main as one commit
-   ```
+    ```
+    op document get <item id> | gh secret set GH_APP_HOMEBREW_TAP_RELEASER_PRIVATE_KEY -R PostHog/postpile --env homebrew-tap
+    gh secret set GH_APP_HOMEBREW_TAP_RELEASER_APP_ID -R PostHog/postpile --env homebrew-tap --body <app id>
+    ```
 
-   Keep the private history in the old local repo (or a private archive repo). To keep history instead, run `git filter-repo --replace-text` over it first; the audit notes list what to replace.
-
-2. **Create the repo** `PostHog/postpile`, public, default branch `main`, no template files (the repo already has README, LICENSE, SECURITY.md). Description: "Internal DevEx tool: a macOS app that turns GitHub PR notifications into a short list of what needs you". The "internal" word keeps it from reading like a new PostHog product.
-
-3. **Push:**
-
-   ```
-   git remote add origin git@github.com:PostHog/postpile.git
-   git push -u origin public-main:main     # or main:main when keeping history
-   ```
-
-4. **Repo settings:**
-   - Branch protection or a ruleset on `main`: require the `check` job from CI and a PR.
-   - Actions › General: allow the actions the workflows use (pinned by SHA: `actions/*`, `pnpm/action-setup`, `planetscale/ghcommit-action`), if the org restricts actions.
-   - Security: turn on secret scanning and Dependabot alerts.
-
-5. **Homebrew tap token.** The org-level GitHub App `GH_APP_HOMEBREW_TAP_RELEASER` already writes to the tap for phrocs and other PostHog tools.
-   - Org settings › Secrets and variables › Actions: add `PostHog/postpile` to the selected repositories of `GH_APP_HOMEBREW_TAP_RELEASER_APP_ID` and `GH_APP_HOMEBREW_TAP_RELEASER_PRIVATE_KEY`.
-   - Repo settings › Environments: create `homebrew-tap`, with a deployment tag rule `v*` (no branches), so only release tags can use the token.
-   - The app needs no change; the token is scoped to `PostHog/homebrew-tap`.
-
-6. **Tap README.** Open a PR on PostHog/homebrew-tap that lists the `postpile` cask (a drafted patch exists from the release prep). The tap has no `Casks/` folder yet; the first release workflow run creates `Casks/postpile.rb`.
+  - The app needs no change. The token is scoped to `PostHog/homebrew-tap`.
+- **Still open:** a ruleset on `main` that requires the CI `check` job, and secret scanning plus Dependabot alerts under Security.
 
 ## Every release
 
