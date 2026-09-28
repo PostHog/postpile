@@ -86,7 +86,7 @@ describe('glanceBatchPrompt, per PR', () => {
   it('notes commits pushed after the user reviewed', () => {
     const pr = makePr({
       headOid: 'new',
-      reviews: [{ id: 'r', author: 'viewer', state: 'APPROVED', body: '', submittedAt: '2026-09-01T00:00:00Z', commitOid: 'old' }],
+      reviews: [{ id: 'r', author: viewer.login, state: 'APPROVED', body: '', submittedAt: '2026-09-01T00:00:00Z', commitOid: 'old' }],
     });
     const prompt = oneGlancePrompt(pr, { kind: 'pinged', reason: 'author' });
     expect(prompt).toContain("The user's own last review: approved, commits were pushed since");

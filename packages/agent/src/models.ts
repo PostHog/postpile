@@ -8,7 +8,7 @@ import type { AgentPurpose } from './runner.ts';
 const GLANCE_MODEL = 'sonnet';
 const DEFAULT_MODEL = 'sonnet';
 // The daily work context sweep reads a lot of loose notes and has to judge
-// what is work and what is private; Julian is on a subscription, so it gets
+// what is work and what is private; the user is on a subscription, so it gets
 // the strongest model. POSTPILE_SWEEP_MODEL overrides it.
 const SWEEP_MODEL = 'opus';
 

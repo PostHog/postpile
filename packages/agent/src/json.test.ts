@@ -48,7 +48,7 @@ describe('parseAgentJson', () => {
   });
 
   it('takes the corrected answer when the model answers twice', () => {
-    // The shape of a real Sonnet answer (glance for acme/digest#30): a typo, a note, then the fix.
+    // The shape of a real Sonnet answer: a typo, a note, then the fix.
     const text = '{"a": 1, "note": "typo {"}\n\nWait, let me correct a typo in the verdict field.\n\n{"a": 2}';
     expect(parseAgentJson(text, schema)).toEqual({ a: 2 });
   });

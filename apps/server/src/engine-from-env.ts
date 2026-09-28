@@ -52,7 +52,7 @@ export function appConfigFromEnv(): AppConfig {
   };
 }
 
-/** How often the desktop app polls GitHub notifications, as Julian asked for. */
+/** How often the desktop app polls GitHub notifications. */
 export const DEFAULT_POLL_SECONDS = 10;
 
 /** POSTPILE_POLL_SECONDS: whole seconds >= 0 (0 turns the poll off); the default otherwise. */

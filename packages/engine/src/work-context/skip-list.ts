@@ -12,7 +12,7 @@
 // the tokens after it may still belong to the same project folder name.
 
 /** Default skip list: personal projects. POSTPILE_SWEEP_SKIP replaces it. */
-export const DEFAULT_SWEEP_SKIP = ['taxes', 'garden', 'hobby', 'my-blog-com'];
+export const DEFAULT_SWEEP_SKIP = ['taxes', 'garden', 'hobby', 'personal', 'private'];
 
 /** POSTPILE_SWEEP_SKIP (comma separated) when set, even to '' (skip nothing); the defaults otherwise. */
 export function sweepSkipFromEnv(value: string | undefined): string[] {

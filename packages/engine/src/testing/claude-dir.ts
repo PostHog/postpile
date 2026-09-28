@@ -60,7 +60,7 @@ export function userLine(text: unknown, at: string, extra: Record<string, unknow
     origin: { kind: 'human' },
     promptSource: 'typed',
     timestamp: at,
-    cwd: '/Users/me/workspace/posthog',
+    cwd: '/Users/me/workspace/app',
     entrypoint: 'cli',
     ...extra,
   };

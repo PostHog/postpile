@@ -10,9 +10,9 @@ import { whoseTurn, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
 
-// PostHog/posthog#4521 as it was on 2026-09-25: viewer requested changes
-// on the 18th; Bob pushed three commits, answered in the review threads and
-// left a comment, and never pressed "re-request review".
+// A PR where the viewer requested changes: the author pushed three commits,
+// answered in the review threads and left a comment, and never pressed
+// "re-request review".
 const changesRequested = makeReview({
   id: 'r-changes',
   author: me,
@@ -22,7 +22,7 @@ const changesRequested = makeReview({
   commitOid: 'c0',
 });
 const threadStart = makeComment({ id: 'tc1', author: me, body: 'This leaks', createdAt: '2026-09-18T10:00:00.000Z' });
-const threadReply = makeComment({ id: 'tc2', author: 'bob', body: 'Fixed in the next commit', createdAt: '2026-09-25T12:51:00.000Z' });
+const threadReply = makeComment({ id: 'tc2', author: 'bob', body: 'done, see the new commit', createdAt: '2026-09-25T12:51:00.000Z' });
 const thread = makeThread('th1', [threadStart, threadReply]);
 // PR comments carry the thread id, as the reader stores them.
 const [threadStartInline, threadReplyInline] = thread.comments as [typeof threadStart, typeof threadReply];
@@ -49,7 +49,7 @@ function prWith(overrides: Partial<Pr> = {}): Pr {
   });
 }
 
-/** Only the review and the first commit: Bob has not done anything since. */
+/** Only the review and the first commit: bob has not done anything since. */
 const untouched = prWith({ headOid: 'c0', reviews: [changesRequested], commits: [commits[0]!], threads: [makeThread('th1', [threadStart])], comments: [threadStartInline] });
 
 function turn(pr: Pr): WhoseTurn {

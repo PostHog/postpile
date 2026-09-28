@@ -36,7 +36,7 @@ describe('workContextPromptText', () => {
   const version: Pick<WorkContextVersion, 'digest' | 'createdAt'> = {
     createdAt: '2026-09-28T07:00:00.000Z',
     digest: {
-      summary: 'Julian drives the Depot CI move.',
+      summary: 'Alice drives the Depot CI move.',
       threads: [
         { title: 'Depot rollout', detail: 'Rolling out to posthog.', topicIds: ['t1', 'gone'], sources: [] },
         { title: 'Runner image bump', detail: 'Waiting on review.', topicIds: [], sources: [] },
@@ -48,7 +48,7 @@ describe('workContextPromptText', () => {
   it('is compact: date, summary, one line per thread with topic names', () => {
     expect(workContextPromptText(version, new Map([['t1', 'Move CI to Depot']]), new Set())).toBe(
       [
-        'As of 2026-09-28: Julian drives the Depot CI move.',
+        'As of 2026-09-28: Alice drives the Depot CI move.',
         'Threads:',
         '- Depot rollout: Rolling out to posthog. (topics: Move CI to Depot)',
         '- Runner image bump: Waiting on review.',

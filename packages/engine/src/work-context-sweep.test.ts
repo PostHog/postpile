@@ -16,8 +16,8 @@ let h: Harness;
 beforeEach(() => {
   fake = makeFakeClaudeDir();
   fake.write('.claude/CLAUDE.md', 'I work on DevEx at PostHog.');
-  fake.write('.claude/projects/-Users-me-workspace-posthog/memory/MEMORY.md', '- [Depot](depot.md) moving CI to Depot');
-  fake.session('-Users-me-workspace-posthog', 'a', [userLine('roll the Depot runners out to posthog', '2026-09-01T10:00:00.000Z')]);
+  fake.write('.claude/projects/-Users-me-workspace-app/memory/MEMORY.md', '- [Depot](depot.md) moving CI to Depot');
+  fake.session('-Users-me-workspace-app', 'a', [userLine('roll the Depot runners out to posthog', '2026-09-01T10:00:00.000Z')]);
   h = makeHarness({ claudeDir: fake.claudeDir });
   h.store.topics.create(makeTopic('depot', { name: 'Move CI to Depot', summary: 'CI runners move to Depot.' }));
 });
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 function answer(threads: unknown[] = [{ title: 'Depot rollout', detail: 'Runners to posthog.', topicIds: ['depot'], sources: ['s1', 'm1'] }]): void {
-  h.runner.answer('context_sweep', { summary: 'Julian drives the Depot CI move.', threads });
+  h.runner.answer('context_sweep', { summary: 'Alice drives the Depot CI move.', threads });
 }
 
 describe('Engine.sweepWorkContext', () => {

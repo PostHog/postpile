@@ -16,7 +16,7 @@ import type { ObservedCall } from './runner.ts';
 import type { ContextSweepInput, DossierUpdateInput, GlanceBatchInput, PromptContext } from './service.ts';
 import { fullContext, makeDelta, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
 
-const DIGEST = 'As of 2026-09-28: Julian drives the Depot CI move.\nThreads:\n- Depot runners: rolling out to all repos (topics: Move CI to Depot)';
+const DIGEST = 'As of 2026-09-28: Alice drives the Depot CI move.\nThreads:\n- Depot runners: rolling out to all repos (topics: Move CI to Depot)';
 const withDigest: PromptContext = { ...fullContext, workContext: DIGEST };
 const HEADING = 'What the user is working on (from their local Claude Code notes; may be stale)';
 
@@ -82,7 +82,7 @@ describe('work context in prompts', () => {
   for (const [name, prompt] of Object.entries(promptsWith(withDigest))) {
     it(`${name} carries the digest after the user's own instructions`, () => {
       expect(prompt).toContain(HEADING);
-      expect(prompt).toContain('Julian drives the Depot CI move.');
+      expect(prompt).toContain('Alice drives the Depot CI move.');
       expect(prompt.indexOf('I care about CI cost')).toBeLessThan(prompt.indexOf(HEADING));
     });
   }
@@ -162,7 +162,7 @@ describe('sweepContext', () => {
     const calls: ObservedCall[] = [];
     const service = new RunnerAgentService(runner, { observer: { onCall: (call) => calls.push(call) } });
     runner.answer('context_sweep', {
-      summary: 'Julian drives the Depot CI move.',
+      summary: 'Alice drives the Depot CI move.',
       threads: [
         { title: 'Depot rollout', detail: 'Rolling out to posthog.', topicIds: ['topic-1', 'topic-x'], sources: ['s1', 'm1', 'zz', 's1'] },
         { title: 'kitchen renovation', detail: 'Should never come back.', topicIds: [], sources: [] },
@@ -173,7 +173,7 @@ describe('sweepContext', () => {
     const result = await service.sweepContext(sweepInput());
 
     expect(result.digest).toEqual({
-      summary: 'Julian drives the Depot CI move.',
+      summary: 'Alice drives the Depot CI move.',
       threads: [
         {
           title: 'Depot rollout',

@@ -24,7 +24,7 @@ const STATS: WorkContextInputStats = {
   droppedCount: 3,
   dropped: [
     { kind: 'session', ref: 'web · 2026-09-21 16:46', reason: 'started by a program (SDK)' },
-    { kind: 'session', ref: 'example-infra · 2026-09-25 10:56 · "Runner image bump ⑂"', reason: 'same prompts as a newer session (fork)' },
+    { kind: 'session', ref: 'infra · 2026-09-25 10:56 · "Runner image bump ⑂"', reason: 'same prompts as a newer session (fork)' },
     { kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-web/memory/old-notes.md', reason: 'over budget' },
   ],
   skippedProjects: 2,
@@ -34,7 +34,7 @@ const STATS: WorkContextInputStats = {
 const SUMMARY =
   'Moving the monorepo CI to Depot is the main thread: backend and frontend jobs run there, Turbo caching and e2e are next. ' +
   'Shard splitting for the test suite is being reworked alongside. ' +
-  'Waiting on reviews for the release workflow and the ingestion runners RFC. ' +
+  'Waiting on reviews for the release workflow and the ingestion CI runners RFC. ' +
   'Cares most about CI cost, cache keys and anything that loosens CI limits.';
 
 function sampleThreads(topics: Topic[]): WorkContextThread[] {
@@ -46,7 +46,7 @@ function sampleThreads(topics: Topic[]): WorkContextThread[] {
       detail: 'Backend and frontend jobs are on Depot; Turbo remote cache and Playwright shards are in review. Release workflow has no PR yet.',
       topicIds: ids('Move CI to Depot', 'Frontend build'),
       sources: [
-        { kind: 'session', ref: 'posthog · 2026-09-27 10:01 · "Depot runner pool"' },
+        { kind: 'session', ref: 'app · 2026-09-27 10:01 · "runner pool sizing"' },
         { kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-posthog/memory/depot.md' },
       ],
     },

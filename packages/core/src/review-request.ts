@@ -22,7 +22,7 @@ export type ReviewRequest = 'you' | 'team_for_you' | 'team' | 'team_taken' | nul
  * The viewer approved the PR, on any commit: from the app (the stored
  * approval) or on github.com (their newest approve-or-request-changes
  * review is an approval). Approvals do not follow the head: a push after
- * approval does not undo it (Julian, 2026-09-28).
+ * approval does not undo it (decided 2026-09-28).
  */
 export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
   const decisive = viewerLogin === undefined

@@ -424,7 +424,7 @@ describe('RunnerAgentService.glanceBatch', () => {
   });
 
   it('reads the corrected second answer when Sonnet fixes its own typo', async () => {
-    // Real answer for acme/digest#30, replayed from a copy of the database.
+    // The shape of a real Sonnet answer: a typo, a note, then the fix.
     const { runner, service } = setup();
     const entry = JSON.stringify({ glances: [{ prKey: 'acme/app#1', ...glanceEntry, verdict: 'LOOKS_SASAFE' }] });
     const fixed = JSON.stringify({ glances: [{ prKey: 'acme/app#1', ...glanceEntry, verdict: 'LOOKS_SAFE' }] });

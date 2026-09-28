@@ -66,8 +66,8 @@ describe('listNotifications', () => {
   });
 
   it('hands over the shorter list and new ETag when a thread was read elsewhere', async () => {
-    // Seen on real data (2026-09-28, PostHog/example-infra#4242): after a read on github.com the conditional
-    // inbox read came back 200 with a new ETag and without the thread, not 304. The engine logs which
+    // Seen in practice: after a read on github.com the conditional inbox read
+    // came back 200 with a new ETag and without the thread, not 304. The engine logs which
     // way each "read elsewhere" was noticed, so a 304 that hides a read would show up in main.log.
     const [kept] = loadFixture('notifications-page1.json') as unknown[];
     const fake = new FakeFetch([{ body: [kept], headers: { etag: 'W/"after-read"', 'last-modified': 'Sun, 28 Sep 2026 12:16:10 GMT' } }]);

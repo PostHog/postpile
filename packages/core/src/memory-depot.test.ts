@@ -25,7 +25,7 @@ const aliceApproved: Fact = makeFact({
   subject: { kind: 'pr', key: approvedPr.key },
   predicate: 'status',
   object: null,
-  text: `Julian approved ${approvedPr.key}`,
+  text: `Alice approved ${approvedPr.key}`,
   refs: [makeFactRef({ kind: 'review', prKey: approvedPr.key, sourceId: 'r1', at: at(5), headOid: 'c1' })],
   validFrom: at(5),
 });
@@ -37,7 +37,7 @@ const pushedAfterApproval: Pr = {
 };
 
 describe('Depot memory examples', () => {
-  it('"Julian approved #41902" holds while the head is unchanged', () => {
+  it('"Alice approved #41902" holds while the head is unchanged', () => {
     expect(verifyFact(aliceApproved, world([approvedPr]))).toEqual({ kind: 'ok' });
   });
 
@@ -50,7 +50,7 @@ describe('Depot memory examples', () => {
       subject: { kind: 'pr', key: approvedPr.key },
       predicate: 'status',
       object: null,
-      text: `new commits on ${approvedPr.key} after Julian's approval`,
+      text: `new commits on ${approvedPr.key} after Alice's approval`,
       refs: [makeFactRef({ kind: 'commit', prKey: approvedPr.key, sourceId: 'c2', at: at(20), headOid: 'c2' })],
       validFrom: at(20),
     });

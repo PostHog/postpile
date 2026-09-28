@@ -23,7 +23,7 @@ describe('formatSweep', () => {
           version: 2,
           createdAt: '2026-09-28T07:00:00.000Z',
           model: 'opus',
-          summary: 'Julian drives the Depot move.',
+          summary: 'Alice drives the Depot move.',
           lastSeenAt: null,
           inputStats: stats,
           threads: [
@@ -53,7 +53,7 @@ describe('formatSweep', () => {
         '',
         "What you're working on (v2, 2026-09-28T07:00:00.000Z, opus)",
         '',
-        'Julian drives the Depot move.',
+        'Alice drives the Depot move.',
         '',
         '- Depot rollout: Runners to posthog.',
         '    topics: Move CI to Depot',

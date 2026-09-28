@@ -269,14 +269,14 @@ describe('FactRepo', () => {
 });
 
 describe('Depot: a push on #41902 after approval', () => {
-  it('closes "Julian approved #41902" with the new status as its successor', () => {
+  it('closes "Alice approved #41902" with the new status as its successor', () => {
     const key = 'PostHog/posthog#41902';
     const approved = makeFact({
       id: 'approved',
       subject: { kind: 'pr', key },
       predicate: 'status',
       object: null,
-      text: `Julian approved ${key}`,
+      text: `Alice approved ${key}`,
       refs: [makeFactRef({ kind: 'review', prKey: key, sourceId: 'r1', at: at(5), headOid: 'c1' })],
       validFrom: at(5),
       recordedAt: at(6),
@@ -289,7 +289,7 @@ describe('Depot: a push on #41902 after approval', () => {
       subject: { kind: 'pr', key },
       predicate: 'status',
       object: null,
-      text: `new commits on ${key} after Julian's approval`,
+      text: `new commits on ${key} after Alice's approval`,
       refs: [makeFactRef({ kind: 'commit', prKey: key, sourceId: 'c2', at: at(20), headOid: 'c2' })],
       validFrom: at(20),
       recordedAt: at(22),

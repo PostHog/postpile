@@ -50,7 +50,7 @@ function busySession(): unknown[] {
 
 describe('WorkContextCollector', () => {
   it('reads CLAUDE.md and follows @-includes under ~/.claude and its dotfiles only', async () => {
-    fake.write('dotfiles/claude/CLAUDE.md', '# Julian\nI work on DevEx.\n@RTK.md\n@~/secret-notes.md\nmail jane@example.com\n```\n@example.md\n```\n');
+    fake.write('dotfiles/claude/CLAUDE.md', '# Jane\nI work on DevEx.\n@RTK.md\n@~/secret-notes.md\nmail jane@example.com\n```\n@example.md\n```\n');
     fake.write('dotfiles/claude/RTK.md', 'RTK is a CLI proxy.\n@nested.md');
     fake.write('dotfiles/claude/nested.md', 'Nested include.');
     fake.write('dotfiles/claude/example.md', 'Never read: inside a code fence.');
@@ -69,25 +69,25 @@ describe('WorkContextCollector', () => {
   });
 
   it('takes memory indexes first, with the project folder in the ref', async () => {
-    fake.write('.claude/projects/-Users-me-workspace-posthog/memory/MEMORY.md', '- [Depot](depot.md) CI move', OLD);
-    fake.write('.claude/projects/-Users-me-workspace-posthog/memory/depot.md', 'Depot move notes', RECENT);
-    fake.write('.claude/projects/-Users-me-workspace-posthog/memory/old.md', 'Old notes', OLD);
+    fake.write('.claude/projects/-Users-me-workspace-app/memory/MEMORY.md', '- [Depot](depot.md) CI move', OLD);
+    fake.write('.claude/projects/-Users-me-workspace-app/memory/depot.md', 'Depot move notes', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-app/memory/old.md', 'Old notes', OLD);
     fake.write('.claude/projects/-Users-me-workspace-hobby/memory/notes.txt', 'not markdown', RECENT);
 
     const { items, stats } = await collector().collect();
 
     expect(items.map((item) => item.ref)).toEqual([
-      '~/.claude/projects/-Users-me-workspace-posthog/memory/MEMORY.md',
-      '~/.claude/projects/-Users-me-workspace-posthog/memory/depot.md',
-      '~/.claude/projects/-Users-me-workspace-posthog/memory/old.md',
+      '~/.claude/projects/-Users-me-workspace-app/memory/MEMORY.md',
+      '~/.claude/projects/-Users-me-workspace-app/memory/depot.md',
+      '~/.claude/projects/-Users-me-workspace-app/memory/old.md',
     ]);
     expect(stats.memoryFiles).toBe(3);
   });
 
   it('keeps only light signals from recent sessions and skips tool results, noise and pasted blobs', async () => {
-    fake.session('-Users-me-workspace-posthog', 'a', busySession(), RECENT);
-    fake.session('-Users-me-workspace-posthog', 'old', [userLine('last month', '2026-09-10T10:00:00.000Z')], OLD);
-    fake.session('-Users-me-workspace-posthog', 'sdk', [userLine('prompt from a program', '2026-09-27T09:00:00.000Z', { entrypoint: 'sdk-cli' })], RECENT);
+    fake.session('-Users-me-workspace-app', 'a', busySession(), RECENT);
+    fake.session('-Users-me-workspace-app', 'old', [userLine('last month', '2026-09-10T10:00:00.000Z')], OLD);
+    fake.session('-Users-me-workspace-app', 'sdk', [userLine('prompt from a program', '2026-09-27T09:00:00.000Z', { entrypoint: 'sdk-cli' })], RECENT);
 
     const { items, stats, lastSeenAt } = await collector().collect();
 
@@ -95,7 +95,7 @@ describe('WorkContextCollector', () => {
     const session = items[0]!;
     expect(session.id).toBe('s1');
     expect(session.kind).toBe('session');
-    expect(session.ref).toMatch(/^posthog · 2026-09-2\d \d\d:\d\d · "Depot runner pool"$/);
+    expect(session.ref).toMatch(/^app · 2026-09-2\d \d\d:\d\d · "Depot runner pool"$/);
     const prompts = session.text.split('\n').filter((line) => line.startsWith('- '));
     expect(prompts).toHaveLength(3);
     expect(prompts[0]).toBe('- Move the Depot runners to the new pool, then check CI cost');
@@ -112,9 +112,9 @@ describe('WorkContextCollector', () => {
   });
 
   it('keeps the newest of forked sessions that repeat the same prompts', async () => {
-    const lines = [userLine('drive the runner image bump', '2026-09-25T10:00:00.000Z')];
-    fake.session('-Users-me-workspace-example-infra', 'parent', lines, RECENT);
-    fake.session('-Users-me-workspace-example-infra', 'fork', [...lines, userLine('later', '2026-09-26T10:00:00.000Z', { isMeta: true })], RECENT);
+    const lines = [userLine('drive the runner image upgrade', '2026-09-25T10:00:00.000Z')];
+    fake.session('-Users-me-workspace-infra', 'parent', lines, RECENT);
+    fake.session('-Users-me-workspace-infra', 'fork', [...lines, userLine('later', '2026-09-26T10:00:00.000Z', { isMeta: true })], RECENT);
 
     const { items, stats } = await collector().collect();
 
@@ -124,7 +124,7 @@ describe('WorkContextCollector', () => {
 
   it('cuts to the budget, newest sessions first, and logs what it dropped', async () => {
     for (let day = 20; day <= 27; day++) {
-      fake.session('-Users-me-workspace-posthog', `s${day}`, [userLine(`work on day ${day} ${'x'.repeat(200)}`, `2026-09-${day}T10:00:00.000Z`)], RECENT);
+      fake.session('-Users-me-workspace-app', `s${day}`, [userLine(`work on day ${day} ${'x'.repeat(200)}`, `2026-09-${day}T10:00:00.000Z`)], RECENT);
     }
     fake.write('.claude/projects/p/memory/MEMORY.md', 'm'.repeat(2000), RECENT);
     const logs: string[] = [];
@@ -140,11 +140,11 @@ describe('WorkContextCollector', () => {
   });
 
   it('never reads project folders on the skip list, memory or sessions, and counts them', async () => {
-    fake.write('.claude/projects/-Users-me-workspace-posthog/memory/MEMORY.md', 'posthog work', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-app/memory/MEMORY.md', 'app work', RECENT);
     fake.write('.claude/projects/-Users-me-workspace-taxes/memory/MEMORY.md', 'PRIVATE money notes', RECENT);
-    fake.write('.claude/projects/-Users-me-workspace-my-blog-com/memory/MEMORY.md', 'PRIVATE site notes', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-personal-site/memory/MEMORY.md', 'PRIVATE site notes', RECENT);
     fake.session('-Users-me-workspace-garden-nas', 'h', [userLine('PRIVATE nas prompt', '2026-09-27T10:00:00.000Z')], RECENT);
-    fake.session('-Users-me-workspace-posthog', 'p', [userLine('posthog prompt', '2026-09-27T10:00:00.000Z')], RECENT);
+    fake.session('-Users-me-workspace-app', 'p', [userLine('app prompt', '2026-09-27T10:00:00.000Z')], RECENT);
     const logs: string[] = [];
 
     const { items, stats } = await new WorkContextCollector({
@@ -175,7 +175,7 @@ describe('sweep skip list', () => {
     expect(list.skips('-Users-me-workspace-taxes')).toBe(true);
     expect(list.skips('-Users-me-workspace-hobby')).toBe(true);
     expect(list.skips('-Users-me-workspace-my-blog-com')).toBe(true);
-    expect(list.skips('-Users-me-workspace-posthog')).toBe(false);
+    expect(list.skips('-Users-me-workspace-app')).toBe(false);
     expect(list.skips('-Users-me-workspace-ghatchup')).toBe(false);
     expect(list.skips('-Users-me')).toBe(false);
   });
@@ -199,12 +199,12 @@ describe('sweep skip list', () => {
     // Without the disk the folder cannot be split into path segments, and
     // over-skipping only loses context.
     const list = new SweepSkipList(['hobby', 'taxes']);
-    expect(list.skips('-Users-me-workspace-posthog-hobby-x')).toBe(true);
+    expect(list.skips('-Users-me-workspace-app-hobby-x')).toBe(true);
     expect(list.skips('-Users-me-taxes-archive-2024')).toBe(true);
   });
 
   it('takes POSTPILE_SWEEP_SKIP over the defaults, empty means skip nothing', () => {
-    expect(sweepSkipFromEnv(undefined)).toEqual(['taxes', 'garden', 'hobby', 'my-blog-com']);
+    expect(sweepSkipFromEnv(undefined)).toEqual(['taxes', 'garden', 'hobby', 'personal', 'private']);
     expect(sweepSkipFromEnv(' taxes , taxes,,')).toEqual(['taxes', 'taxes']);
     expect(sweepSkipFromEnv('')).toEqual([]);
     expect(new SweepSkipList([]).skips('-Users-me-workspace-taxes')).toBe(false);
