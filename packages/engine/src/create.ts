@@ -58,7 +58,8 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const tokens = new GhCliTokenSource();
   let store: Store;
   try {
-    store = Store.open(paths.databaseFile);
+    // Without the lock the app may be writing: open read-only, no migrations, no WAL pragma.
+    store = options.withoutLock ? Store.openReadOnly(paths.databaseFile) : Store.open(paths.databaseFile);
   } catch (error) {
     lock?.release();
     throw error;

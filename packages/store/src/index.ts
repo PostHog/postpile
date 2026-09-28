@@ -1,5 +1,5 @@
-export { openDatabase, inTransaction } from './database.ts';
-export { runMigrations, currentVersion } from './migrate.ts';
+export { openDatabase, openDatabaseReadOnly, inTransaction } from './database.ts';
+export { runMigrations, currentVersion, LATEST_VERSION } from './migrate.ts';
 export { Store } from './store.ts';
 export { MetaRepo } from './repos/meta.ts';
 export { NotificationRepo } from './repos/notifications.ts';

@@ -22,6 +22,9 @@ interface Migration {
 // Append new migrations here, in order. Never edit one that has shipped.
 const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr];
 
+/** The schema version this build writes and expects. */
+export const LATEST_VERSION = migrations[migrations.length - 1]!.version;
+
 export function currentVersion(db: DatabaseSync): number {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
   const row = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as { version: number | null };

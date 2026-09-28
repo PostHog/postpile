@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { inTransaction, openDatabase } from './database.ts';
+import { inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
 import { ActionLogRepo } from './repos/action-log.ts';
 import { AgentCallRepo } from './repos/agent-calls.ts';
 import { ChatRepo } from './repos/chat.ts';
@@ -88,6 +88,11 @@ export class Store {
 
   static open(path: string): Store {
     return new Store(openDatabase(path));
+  }
+
+  /** An existing database, read-only and without migrations (see openDatabaseReadOnly). */
+  static openReadOnly(path: string): Store {
+    return new Store(openDatabaseReadOnly(path));
   }
 
   /** Runs fn in one transaction across repositories. fn must be synchronous. */
