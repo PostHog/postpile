@@ -49,6 +49,11 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     proposeInstructions: notImplemented,
     saveInstructions: notImplemented,
     consolidate: notImplemented,
+    getWorkContext: notImplemented,
+    sweepWorkContext: notImplemented,
+    forgetWorkThread: notImplemented,
+    startWorkContextSchedule: notImplemented,
+    stopWorkContextSchedule: notImplemented,
     flushPendingWrites: notImplemented,
     close: notImplemented,
     ...overrides,
@@ -56,6 +61,28 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
 }
 
 describe('server app', () => {
+  it('serves the work context, runs a sweep and forwards Forget', async () => {
+    const forgets: unknown[] = [];
+    const app = createApp(
+      fakeEngine({
+        getWorkContext: async () => ({ current: null, lastError: null, running: false }),
+        sweepWorkContext: async () => ({ ok: true, message: 'v1', version: 1, stats: null }),
+        forgetWorkThread: async (input) => {
+          forgets.push(input);
+          return { ok: true, message: 'Forgot', undoToken: 'memory:workctx:1' };
+        },
+      }),
+      'secret',
+      CONFIG,
+    );
+    const headers = { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' };
+    expect(await (await app.request('/api/work-context', { headers })).json()).toEqual({ current: null, lastError: null, running: false });
+    expect(await (await app.request('/api/work-context/sweep', { method: 'POST', headers })).json()).toMatchObject({ ok: true, version: 1 });
+    const forget = await app.request('/api/work-context/forget', { method: 'POST', headers, body: JSON.stringify({ version: 1, index: 2 }) });
+    expect(await forget.json()).toMatchObject({ ok: true });
+    expect(forgets).toEqual([{ version: 1, index: 2 }]);
+  });
+
   it('lists topics and enforces the token', async () => {
     const app = createApp(fakeEngine({ listTopics: async () => [] }), 'secret', CONFIG);
     expect((await app.request('/api/topics')).status).toBe(401);
@@ -108,11 +135,11 @@ describe('server app', () => {
   });
 
   it('reads the call cap from the environment', () => {
-    expect(syncCallCapFromEnv(undefined)).toBe(30);
+    expect(syncCallCapFromEnv(undefined)).toBe(150);
     expect(syncCallCapFromEnv('12')).toBe(12);
     expect(syncCallCapFromEnv('0')).toBe(0);
-    expect(syncCallCapFromEnv('lots')).toBe(30);
-    expect(syncCallCapFromEnv('-3')).toBe(30);
+    expect(syncCallCapFromEnv('lots')).toBe(150);
+    expect(syncCallCapFromEnv('-3')).toBe(150);
   });
 
   it('reads the poll interval from the environment, 0 turns it off', () => {

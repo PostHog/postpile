@@ -1,0 +1,131 @@
+import type {
+  ActionResult,
+  Topic,
+  WorkContextInputStats,
+  WorkContextSweepResult,
+  WorkContextThread,
+  WorkContextView,
+  WorkThreadForget,
+} from '@code-manager/core';
+import { SampleClock } from './sample-builders.ts';
+
+const STATS: WorkContextInputStats = {
+  budgetChars: 60_000,
+  sentChars: 41_230,
+  claudeMdFiles: 2,
+  memoryFiles: 18,
+  sessions: 26,
+  sessionFilesScanned: 61,
+  maskedSecrets: 1,
+  droppedCount: 3,
+  dropped: [
+    { kind: 'session', ref: 'web · 2026-09-21 16:46', reason: 'started by a program (SDK)' },
+    { kind: 'session', ref: 'example-infra · 2026-09-25 10:56 · "Runner image bump ⑂"', reason: 'same prompts as a newer session (fork)' },
+    { kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-web/memory/old-notes.md', reason: 'over budget' },
+  ],
+};
+
+const SUMMARY =
+  'Moving the monorepo CI to Depot is the main thread: backend and frontend jobs run there, Turbo caching and e2e are next. ' +
+  'Shard splitting for the test suite is being reworked alongside. ' +
+  'Waiting on reviews for the release workflow and the ingestion runners RFC. ' +
+  'Cares most about CI cost, cache keys and anything that loosens CI limits.';
+
+function sampleThreads(topics: Topic[]): WorkContextThread[] {
+  const id = (name: string) => topics.find((topic) => topic.name === name)?.id;
+  const ids = (...names: string[]) => names.map(id).filter((value): value is string => value !== undefined);
+  return [
+    {
+      title: 'Depot CI rollout',
+      detail: 'Backend and frontend jobs are on Depot; Turbo remote cache and Playwright shards are in review. Release workflow has no PR yet.',
+      topicIds: ids('Move CI to Depot', 'Frontend build'),
+      sources: [
+        { kind: 'session', ref: 'posthog · 2026-09-27 10:01 · "Depot runner pool"' },
+        { kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-posthog/memory/depot.md' },
+      ],
+    },
+    {
+      title: 'Test shard splitting',
+      detail: 'Reworking how the backend suite splits into shards; one shard grew too big and slowed the run.',
+      topicIds: ids('CI & tests'),
+      sources: [{ kind: 'session', ref: 'ci-tools · 2026-09-24 09:04 · "test splitting"' }],
+    },
+    {
+      title: 'Ingestion runners RFC',
+      detail: 'Waiting on the ingestion team to answer the runner sizing questions before approving.',
+      topicIds: ids('Ingestion CI runners RFC'),
+      sources: [{ kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-posthog/memory/MEMORY.md' }],
+    },
+    {
+      title: 'How reviews should read',
+      detail: 'Short, neutral PR descriptions and conventional commits; devex wording in titles.',
+      topicIds: [],
+      sources: [{ kind: 'claude_md', ref: '~/.claude/CLAUDE.md' }],
+    },
+  ];
+}
+
+/**
+ * "What you're working on" for FakeEngine: one sample digest linked to the
+ * sample topics. Refresh takes a moment and stamps a new version; Forget
+ * marks the thread like the real engine does. Nothing reads ~/.claude.
+ */
+export class FakeWorkContext {
+  private version = 3;
+  private createdAt: string;
+  private readonly forgotten = new Set<number>();
+  private running = false;
+
+  constructor(
+    private readonly topics: Topic[],
+    private readonly now: () => Date,
+    private readonly refreshDelayMs: number,
+  ) {
+    this.createdAt = new SampleClock(now()).hoursAgo(3);
+  }
+
+  view(): WorkContextView {
+    const names = new Map(this.topics.map((topic) => [topic.id, topic.name]));
+    return {
+      current: {
+        version: this.version,
+        createdAt: this.createdAt,
+        model: 'opus (sample)',
+        summary: SUMMARY,
+        lastSeenAt: this.createdAt,
+        inputStats: STATS,
+        threads: sampleThreads(this.topics).map((thread, index) => ({
+          index,
+          title: thread.title,
+          detail: thread.detail,
+          topics: thread.topicIds.map((id) => ({ id, name: names.get(id) ?? id })),
+          sources: thread.sources,
+          forgotten: this.forgotten.has(index),
+        })),
+      },
+      lastError: null,
+      running: this.running,
+    };
+  }
+
+  async sweep(): Promise<WorkContextSweepResult> {
+    this.running = true;
+    await new Promise((resolve) => setTimeout(resolve, this.refreshDelayMs));
+    this.running = false;
+    this.version += 1;
+    this.createdAt = this.now().toISOString();
+    return { ok: true, message: `Work context v${this.version} (sample data)`, version: this.version, stats: STATS };
+  }
+
+  forget(input: WorkThreadForget): { result: ActionResult; undo: () => void } | null {
+    const thread = sampleThreads(this.topics)[input.index];
+    if (input.version !== this.version || !thread) {
+      return null;
+    }
+    this.forgotten.add(input.index);
+    return {
+      result: { ok: true, message: `Forgot "${thread.title}". The next sweep leaves it out.`, undoToken: null },
+      undo: () => this.forgotten.delete(input.index),
+    };
+  }
+}

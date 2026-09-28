@@ -16,6 +16,9 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  WorkContextSweepResult,
+  WorkContextView,
+  WorkThreadForget,
   LivePollStatus,
   Loudness,
   MemoryCorrection,
@@ -65,6 +68,7 @@ import {
 } from '@code-manager/core';
 import { LivePoller, UNDO_WINDOW_MS, type EngineService, type LivePollOptions, type PollCycle } from '@code-manager/engine';
 import { FakeInstructions } from './fake-instructions.ts';
+import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { sampleThreads } from './fake-notifications.ts';
@@ -81,6 +85,8 @@ export interface FakeEngineOptions {
   now?: () => Date;
   /** How long a canned recheck "thinks". Tests pass 0. */
   recheckDelayMs?: number;
+  /** How long a work context Refresh "thinks". Tests pass 0. */
+  sweepDelayMs?: number;
 }
 
 const FAKE_FEEDBACK_KINDS: Record<MemoryCorrectionKind, FeedbackKind> = {
@@ -146,6 +152,7 @@ export class FakeEngine implements EngineService {
   private readonly memory: FakeMemory;
   private readonly instructions: FakeInstructions;
   private readonly live: FakeLivePoll;
+  private readonly workContext: FakeWorkContext;
   private livePoller: LivePoller | null = null;
   private readonly now: () => Date;
   private readonly snoozes = new Map<string, SnoozeCondition>();
@@ -166,6 +173,7 @@ export class FakeEngine implements EngineService {
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
     this.live = new FakeLivePoll(this.data, this.now);
+    this.workContext = new FakeWorkContext(this.data.topics, this.now, options.sweepDelayMs ?? 2000);
     this.instructions = new FakeInstructions({
       now: this.now,
       newId: () => this.newId(),
@@ -825,6 +833,27 @@ export class FakeEngine implements EngineService {
   async saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {
     return this.instructions.save(decision);
   }
+
+  async getWorkContext(): Promise<WorkContextView> {
+    return this.workContext.view();
+  }
+
+  sweepWorkContext(): Promise<WorkContextSweepResult> {
+    return this.workContext.sweep();
+  }
+
+  async forgetWorkThread(input: WorkThreadForget): Promise<ActionResult> {
+    const forgotten = this.workContext.forget(input);
+    if (!forgotten) {
+      return fail('That thread is gone; the digest changed meanwhile.');
+    }
+    return { ...forgotten.result, undoToken: this.memoryUndo(forgotten.undo) };
+  }
+
+  /** The fake has no daily schedule; Refresh is enough for UI work. */
+  startWorkContextSchedule(): void {}
+
+  stopWorkContextSchedule(): void {}
 
   async consolidate(): Promise<ConsolidationReport> {
     return this.memory.consolidate();

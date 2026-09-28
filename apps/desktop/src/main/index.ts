@@ -115,11 +115,14 @@ async function start(): Promise<void> {
     intervalSeconds: pollSecondsFromEnv(process.env.CODE_MANAGER_POLL_SECONDS),
     onNotify: (notifications) => notifier.show(notifications),
   });
+  // "What you're working on": checked now and every 30 minutes, runs once a day from 06:00.
+  engine.startWorkContextSchedule();
 }
 
 async function shutdown(): Promise<void> {
   try {
     engine?.stopLivePoll();
+    engine?.stopWorkContextSchedule();
     // Queued mark-reads are sent, not dropped: the user meant to clear them.
     await engine?.flushPendingWrites();
     await engine?.close();

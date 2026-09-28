@@ -151,6 +151,8 @@ export interface HarnessOptions {
   /** Clock for the engine; tests move it forward by changing what it returns. */
   now?: () => Date;
   pingDecisionsPerDay?: number;
+  /** Fake ~/.claude for the work context sweep. Defaults to a path that does not exist. */
+  claudeDir?: string;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -177,6 +179,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     now,
     timers,
     pingDecisionsPerDay: options.pingDecisionsPerDay,
+    claudeDir: options.claudeDir ?? '/nonexistent/claude',
   });
   return { engine, store, reader, writer, runner, agent, timers };
 }

@@ -10,9 +10,11 @@ export const FEEDBACK_IN_PROMPTS = 10;
  * every call so an edit takes effect on the next sync without a restart.
  */
 export class PromptContextSource {
+  /** workContext gives the digest text for prompts ('' when none); tests may leave it out. */
   constructor(
     private readonly store: Store,
     private readonly history: InstructionsHistory,
+    private readonly workContext: () => string = () => '',
   ) {}
 
   /** Accepted global rules from consolidation. Accepted topic rules live in the topic's tailoring instead. */
@@ -29,6 +31,7 @@ export class PromptContextSource {
         tailoring: '',
         recentFeedback: this.store.feedback.recent(FEEDBACK_IN_PROMPTS),
         standingRules: this.standingRules(),
+        workContext: this.workContext(),
       };
     }
     const topic = this.store.topics.get(topicId);
@@ -38,6 +41,7 @@ export class PromptContextSource {
       tailoring: topic?.tailoring ?? '',
       recentFeedback: this.store.feedback.recentForTopic(topicId, FEEDBACK_IN_PROMPTS),
       standingRules: this.standingRules(),
+      workContext: this.workContext(),
     };
   }
 }

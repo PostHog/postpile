@@ -4,6 +4,7 @@ export type Command =
   | { name: 'sync'; options: SyncOptions }
   | { name: 'consolidate'; options: ConsolidateOptions }
   | { name: 'poll' }
+  | { name: 'sweep' }
   | { name: 'topics' }
   | { name: 'topic'; topicId: string }
   | { name: 'pr'; prKey: string }
@@ -20,6 +21,7 @@ export const usage = `usage: code-manager <command>
     --if-due             only when 24h passed and a dossier changed since the last run
     --max-agent-calls <n>
   poll                 one fast-poll cycle: inbox check, changed PRs, ping decisions (no Mac notification)
+  sweep                write "what you're working on" from ~/.claude (CODE_MANAGER_CLAUDE_DIR), one agent call
   topics               list topics with unread counts
   topic <id>           show a topic: dossier, changes since seen, tiles
   pr <owner/repo#n>    show one PR: glance, facts and events
@@ -105,7 +107,7 @@ export function parseArgs(argv: string[]): Command {
     const options = parseConsolidateFlags(argv.slice(1));
     return options ? { name, options } : { name: 'help' };
   }
-  if ((name === 'topics' || name === 'poll') && arg === undefined) {
+  if ((name === 'topics' || name === 'poll' || name === 'sweep') && arg === undefined) {
     return { name };
   }
   if (name === 'topic' && arg && rest.length === 0) {

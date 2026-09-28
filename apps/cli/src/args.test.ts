@@ -6,6 +6,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['topics'])).toEqual({ name: 'topics' });
     expect(parseArgs(['poll'])).toEqual({ name: 'poll' });
     expect(parseArgs(['poll', '--now'])).toEqual({ name: 'help' });
+    expect(parseArgs(['sweep'])).toEqual({ name: 'sweep' });
     expect(parseArgs(['pr', 'PostHog/posthog#1'])).toEqual({ name: 'pr', prKey: 'PostHog/posthog#1' });
     expect(parseArgs(['topic'])).toEqual({ name: 'help' });
     expect(parseArgs([])).toEqual({ name: 'help' });
