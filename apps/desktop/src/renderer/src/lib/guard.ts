@@ -26,7 +26,7 @@ const LOCAL_WHEN_OFF: Record<GithubWrite, boolean> = {
 };
 
 /** How to open the lock, or why it cannot be opened. */
-export function unlockHint(writes: GitHubWritesStatus): string {
+function unlockHint(writes: GitHubWritesStatus): string {
   return writes.forcedOffReason ?? 'Open the lock in the footer to allow GitHub writes.';
 }
 

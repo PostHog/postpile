@@ -8,7 +8,7 @@ interface IconProps {
   className?: string;
 }
 
-export function PrIcon(props: IconProps & { strokeWidth?: number }) {
+function PrIcon(props: IconProps & { strokeWidth?: number }) {
   const size = props.size ?? 13;
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth ?? 1.4} className={props.className} aria-hidden="true">
@@ -20,7 +20,7 @@ export function PrIcon(props: IconProps & { strokeWidth?: number }) {
   );
 }
 
-export function StackIcon(props: IconProps) {
+function StackIcon(props: IconProps) {
   const size = props.size ?? 13;
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={props.className} aria-hidden="true">
@@ -30,7 +30,7 @@ export function StackIcon(props: IconProps) {
   );
 }
 
-export function SetIcon(props: IconProps) {
+function SetIcon(props: IconProps) {
   const size = props.size ?? 13;
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="2 1.6" className={props.className} aria-hidden="true">

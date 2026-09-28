@@ -1,7 +1,7 @@
 import type { PrSummary, PrTier, TileView, TopicListItem } from '@postpile/core';
 
 /** Queue tiers in section order, same as core's PR_TIER_ORDER (the renderer imports types only). */
-export const TIER_ORDER: PrTier[] = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
+const TIER_ORDER: PrTier[] = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
 
 /** The sidebar's filter buttons. */
 export type QueueFilter = 'mine' | 'team' | 'reply' | 'review';
@@ -31,7 +31,7 @@ export function tileMatchesFilter(view: TileView, filter: QueueFilter): boolean 
 }
 
 /** How many of the topic's PRs the filter matches. */
-export function topicFilterCount(item: TopicListItem, filter: QueueFilter): number {
+function topicFilterCount(item: TopicListItem, filter: QueueFilter): number {
   const { queues } = item;
   if (filter === 'mine') {
     return queues.byYou;

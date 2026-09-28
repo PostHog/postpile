@@ -15,7 +15,7 @@ export interface SidebarGroups {
 }
 
 /** Topics without a placement yet (no dossier, Unsorted) go with the team's, under this area. */
-export const NO_AREA = 'Other';
+const NO_AREA = 'Other';
 
 const RELATION_LABELS: Record<TopicRelation, string> = { team: 'team', routed: 'routed', fyi: 'FYI' };
 

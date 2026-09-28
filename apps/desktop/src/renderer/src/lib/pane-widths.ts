@@ -14,12 +14,12 @@ export interface PaneWidths {
 export const DEFAULT_PANE_WIDTHS: PaneWidths = { sidebar: null, tiles: null };
 
 /** The default column sizes, used while a pane has no dragged width. */
-export const DEFAULT_COLUMNS: Record<ResizablePane, string> = {
+const DEFAULT_COLUMNS: Record<ResizablePane, string> = {
   sidebar: 'clamp(248px,22vw,330px)',
   tiles: 'clamp(420px,33vw,480px)',
 };
 
-export const PANE_LIMITS: Record<ResizablePane, { min: number; max: number }> = {
+const PANE_LIMITS: Record<ResizablePane, { min: number; max: number }> = {
   sidebar: { min: 200, max: 440 },
   tiles: { min: 340, max: 720 },
 };

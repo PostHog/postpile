@@ -1,7 +1,7 @@
 import type { PendingWriteView } from '@postpile/core';
 
 /** How many pending writes the lock popover lists before "+N more". */
-export const PENDING_LIST_MAX = 5;
+const PENDING_LIST_MAX = 5;
 
 /** The first few pending writes for the lock popover, and how many are left out. */
 export function pendingList(pending: PendingWriteView[], max: number = PENDING_LIST_MAX): { shown: PendingWriteView[]; more: number } {

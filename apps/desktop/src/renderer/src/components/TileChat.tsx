@@ -11,11 +11,16 @@ import { InstructionsProposalCard } from './InstructionsProposalCard.tsx';
  * proposed change to their instructions, shown as a diff) or "Just this once".
  * The agent never picks the scope.
  */
-export function TileChat(props: { view: TileView; initialDraft?: string; onClose: () => void }) {
+/**
+ * The draft lives in DetailPane, so "Tell the agent what's wrong" can fill it
+ * while the chat is open, without remounting it (which would drop the
+ * lasting-point card).
+ */
+export function TileChat(props: { view: TileView; draft: string; onDraftChange: (draft: string) => void; onClose: () => void }) {
   const actions = useActions();
   const tileId = props.view.tile.id;
   const chat = useChat(tileId, true);
-  const [draft, setDraft] = useState(props.initialDraft ?? '');
+  const { draft, onDraftChange: setDraft } = props;
   const [point, setPoint] = useState<LastingPointProposal | null>(null);
   const [instructions, setInstructions] = useState<InstructionsProposal | null>(null);
   const sending = actions.isBusy(`chat:${tileId}`);
@@ -119,7 +124,7 @@ export function TileChat(props: { view: TileView; initialDraft?: string; onClose
           placeholder="Tell the agent…"
           aria-label="Message to the agent"
           // Opened from "Tell the agent what's wrong": the user finishes the quoted draft.
-          autoFocus={Boolean(props.initialDraft)}
+          autoFocus={draft !== ''}
         />
         <Button type="submit" variant="primary" disabled={sending || draft.trim() === ''}>
           Send

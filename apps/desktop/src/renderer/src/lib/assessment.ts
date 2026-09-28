@@ -23,7 +23,7 @@ export interface Assessment {
 }
 
 /** At most this many marked lines per box. */
-export const LINES_PER_BOX = 3;
+const LINES_PER_BOX = 3;
 
 const TITLES: Record<Verdict, string> = { LOOK_CLOSER: 'LOOK CLOSER', LOOKS_SAFE: 'LOOKS SAFE', NOT_YOURS: 'NOT YOURS' };
 

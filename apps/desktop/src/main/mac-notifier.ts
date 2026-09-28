@@ -40,41 +40,17 @@ export class MacNotifier {
     }
   }
 
-  /** What a single notification did: shown, or why not. */
-  private showOne(title: string, body: string, target: PingTarget | null): 'shown' | 'off' | 'unsupported' {
+  /** Shows the notifications; answers shown, or why not (off, unsupported). */
+  show(items: MacNotification[]): 'shown' | 'off' | 'unsupported' {
     if (!this.options.enabled) {
       return 'off';
-    }
-    if (!Notification.isSupported()) {
-      return 'unsupported';
-    }
-    this.show([{ title, body, target, count: 1 }]);
-    return 'shown';
-  }
-
-  /**
-   * The first-launch welcome: a calm first notification, so macOS asks for
-   * the permission now and not in the middle of a real ping.
-   */
-  showWelcome(): 'shown' | 'off' | 'unsupported' {
-    return this.showOne('PostPile', 'PostPile will ping you here when something needs you.', null);
-  }
-
-  /** "Send test notification" from the status footer. */
-  showTest(): 'shown' | 'off' | 'unsupported' {
-    return this.showOne('PostPile test notification', 'This is how a ping looks. Clicking one opens its tile.', null);
-  }
-
-  show(items: MacNotification[]): void {
-    if (!this.options.enabled) {
-      return;
     }
     if (!Notification.isSupported()) {
       if (!this.warnedUnsupported) {
         this.warnedUnsupported = true;
         console.warn('mac notifications: not supported here, pings only show as unread tiles');
       }
-      return;
+      return 'unsupported';
     }
     for (const item of items) {
       const notification = new Notification({ title: item.title, body: item.body, silent: false });
@@ -90,5 +66,19 @@ export class MacNotifier {
       });
       notification.show();
     }
+    return 'shown';
+  }
+
+  /**
+   * The first-launch welcome: a calm first notification, so macOS asks for
+   * the permission now and not in the middle of a real ping.
+   */
+  showWelcome(): 'shown' | 'off' | 'unsupported' {
+    return this.show([{ title: 'PostPile', body: 'PostPile will ping you here when something needs you.', target: null, count: 1 }]);
+  }
+
+  /** "Send test notification" from the status footer. */
+  showTest(): 'shown' | 'off' | 'unsupported' {
+    return this.show([{ title: 'PostPile test notification', body: 'This is how a ping looks. Clicking one opens its tile.', target: null, count: 1 }]);
   }
 }

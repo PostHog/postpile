@@ -24,7 +24,7 @@ export interface NavHistory {
 /** Entries kept at most; the oldest drop off first. */
 export const MAX_ENTRIES = 100;
 
-export const START_ENTRY: NavEntry = { pane: 'topic', topicId: null, tileId: null, prKey: null };
+const START_ENTRY: NavEntry = { pane: 'topic', topicId: null, tileId: null, prKey: null };
 
 export function startHistory(): NavHistory {
   return { entries: [START_ENTRY], index: 0 };
