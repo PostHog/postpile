@@ -37,7 +37,9 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`useGitHubWrites`, the footer lock), `repos.ts` (`useRepos`, the
   title bar repo menu), `cleanup.ts` (`useInboxCleanup`), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
-  refetches everything else when a poll cycle stored news).
+  refetches everything else when a poll cycle stored news), `sync.ts`
+  (`useLastSyncReport`, the stored last sync, which `useActions().lastSync`
+  falls back to before this window's first sync).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -255,6 +257,15 @@ history entry, and clearing the filter brings the pick back.
   Main takes the database lock (`engineFromEnv({ lockKind })`) and shows a
   Quit dialog when another process holds it; `requestSingleInstanceLock`
   focuses the first window on a second launch.
+- Logs: main and the in-process server log to
+  `~/Library/Logs/PostPile/main.log` (`PostPile-dev` for dev runs,
+  `POSTPILE_LOG_DIR` overrides), console output plus uncaught errors,
+  rotated at 5 MB, 3 files (`main/file-log.ts`). Help › Reveal Logs shows it
+  in Finder. The sync logs its start, a summary and each error.
+- The last sync report (errors, timing) is stored in meta
+  `last_sync_report` and shows in the footer's "last sync" and the title
+  bar's sync status tooltips (`lib/sync-report.ts`) and in the notifications
+  debug pane. Title bar elements with a `title` are no-drag, so tooltips work.
 - Sync runs once on app start and then only on "Sync now".
   `POSTPILE_SYNC_ON_START=0` (`AppConfig.syncOnStart`) skips the start sync. The main process
   runs the live poll (`engine.startLivePoll`) and shows Mac notifications

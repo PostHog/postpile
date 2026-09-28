@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useActions } from '../api/actions.tsx';
 import { capNote } from '../lib/agent-stats.ts';
+import { syncReportDetail } from '../lib/sync-report.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import logoUrl from '../assets/logo-64.png';
@@ -12,6 +13,7 @@ function SyncStatus() {
   const report = actions.lastSync;
   let dot = 'bg-dot-quiet';
   let text = 'not synced yet';
+  let detail: string | null = null;
   if (actions.syncing) {
     dot = 'bg-accent';
     text = 'syncing…';
@@ -20,6 +22,7 @@ function SyncStatus() {
     const age = ageLabel(report.finishedAt, now);
     const when = age === 'now' ? 'just now' : `${age} ago`;
     text = `synced ${when} · ${report.prsFetched} PRs fetched · ${report.newEvents} new events`;
+    detail = syncReportDetail(report);
     const capped = capNote(report.agentCallStats);
     if (capped) {
       dot = 'bg-closer';
@@ -27,7 +30,7 @@ function SyncStatus() {
     }
   }
   return (
-    <span className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted" title={text}>
+    <span className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted" title={detail ?? text}>
       <span className={`size-1.5 shrink-0 rounded-full ${dot}`} />
       <span className="truncate">{text}</span>
     </span>

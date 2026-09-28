@@ -228,6 +228,13 @@ now".
   topics, dossiers, glances and queues like pinged, never unread on their
   own, whose turn still lifts the topic; pinged once a thread appears.
   Migration 014. Fake data has two found PRs in CI & tests.
+- Packaged app diagnosable: main.log under `~/Library/Logs/PostPile`
+  (rotated, Help › Reveal Logs), the last sync report stored in meta and
+  shown in the footer / title bar tooltips and the notifications debug pane.
+  The first packaged start sync on real data died at the PR batch fetch (after
+  the inbox, before found PRs, nothing stored) with no trace; the exact GitHub
+  error is unknown. A failed batch now only costs its own PRs. Reproduced on
+  DB copies with the dist binary (408 PRs, launchd-like PATH): no error.
 - Notification permission at a calm moment: a welcome Mac notification on
   the first launch (flag in userData) triggers the macOS prompt; "test ping"
   next to the lock in the footer sends a test one. Dev runs register as

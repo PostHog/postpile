@@ -30,6 +30,7 @@ import type {
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { useAppConfig } from './config.ts';
+import { useLastSyncReport } from './sync.ts';
 import { useGitHubWrites } from './writes.ts';
 import { prPath, request, tilePath } from './client.ts';
 import { queryKeys } from './keys.ts';
@@ -151,6 +152,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const [pendingUndos, setPendingUndos] = useState<PendingUndo[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<SyncReport | null>(null);
+  // Before this window's first sync: the one the engine stored, e.g. a start sync that failed.
+  const storedLastSync = useLastSyncReport().data ?? null;
 
   // Notices fade on their own; problems stay a little longer.
   useEffect(() => {
@@ -410,7 +413,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     notice,
     dismissNotice: () => setNotice(null),
     syncing,
-    lastSync,
+    lastSync: lastSync ?? storedLastSync,
     // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
     pendingMarkReads: pendingUndos.filter((entry) => !entry.token.startsWith(MEMORY_UNDO_PREFIX)).length,
     isBusy: (key) => busy.includes(key),

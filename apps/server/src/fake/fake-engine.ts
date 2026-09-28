@@ -190,6 +190,7 @@ export class FakeEngine implements EngineService {
   private readonly instructions: FakeInstructions;
   private readonly live: FakeLivePoll;
   private readonly workContext: FakeWorkContext;
+  private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
   private readonly now: () => Date;
   private readonly snoozes = new Map<string, SnoozeCondition>();
@@ -438,9 +439,13 @@ export class FakeEngine implements EngineService {
   // EngineService: reads
   // -------------------------------------------------------------------------
 
+  async lastSyncReport(): Promise<SyncReport | null> {
+    return this.lastSync;
+  }
+
   async sync(): Promise<SyncReport> {
     const startedAt = this.timestamp();
-    return {
+    this.lastSync = {
       startedAt,
       finishedAt: this.timestamp(),
       notificationsNotModified: true,
@@ -456,6 +461,7 @@ export class FakeEngine implements EngineService {
       facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
     };
+    return this.lastSync;
   }
 
   /** Each PR of the tiles once, with the tile member it came from (for the tier's reason). */

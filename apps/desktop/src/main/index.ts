@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron';
 import fixPath from 'fix-path';
 import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
+import { FileLog, logDirFromEnv } from './file-log.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { welcomeOnce } from './welcome.ts';
 
@@ -24,6 +25,12 @@ applyLegacyEnv();
 if (!app.isPackaged && process.env.POSTPILE_PROFILE === undefined) {
   process.env.POSTPILE_PROFILE = 'dev';
 }
+const fileLog = new FileLog(logDirFromEnv(profileFromEnv(process.env) === 'dev'));
+fileLog.captureConsole();
+fileLog.captureUnhandled();
+console.log(
+  `PostPile ${app.getVersion()} starting: pid ${process.pid}, ${app.isPackaged ? 'packaged' : 'dev run'}, profile ${profileFromEnv(process.env)}, PATH ${process.env.PATH}`,
+);
 // Before Electron touches userData: it is the same folder as the database, and
 // the one-time move from the code-manager folder wants the new one absent.
 // The move only targets the real folder and never runs in dev.
@@ -62,6 +69,26 @@ function openExternalLink(url: string): void {
   if (url.startsWith('https://')) {
     void shell.openExternal(url);
   }
+}
+
+/**
+ * The standard macOS menus, plus Help › Reveal Logs, which shows main.log in
+ * Finder. Kept close to Electron's default menu so the usual shortcuts
+ * (copy, paste, reload, zoom) keep working.
+ */
+function setAppMenu(): void {
+  const menu = Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [{ label: 'Reveal Logs', click: () => shell.showItemInFolder(fileLog.file) }],
+    },
+  ]);
+  Menu.setApplicationMenu(menu);
 }
 
 function showWindow(): void {
@@ -138,6 +165,7 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
 }
 
 async function start(): Promise<void> {
+  setAppMenu();
   // A dev run is the Electron binary, which shows the Electron icon in the Dock.
   if (process.platform === 'darwin' && !app.isPackaged) {
     app.dock?.setIcon(nativeImage.createFromPath(iconFile));
@@ -162,7 +190,9 @@ async function start(): Promise<void> {
     }
     throw error;
   }
-  server = await startServer({ engine, port: 0, token, config: appConfigFromEnv() });
+  const config = appConfigFromEnv();
+  server = await startServer({ engine, port: 0, token, config });
+  console.log(`server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}`);
   mainWindow = await openWindow(server.url, token);
   // A click opens the tile: show the window, then let the renderer navigate.
   const notifier = new MacNotifier({
@@ -207,6 +237,7 @@ app.on('before-quit', (event) => {
     return;
   }
   quitting = true;
+  console.log('quitting: flushing pending writes and closing the database');
   event.preventDefault();
   // Everything is flushed and closed by now, so exit directly. A second
   // app.quit() here never reached will-quit when the quit came from SIGTERM.
@@ -214,8 +245,14 @@ app.on('before-quit', (event) => {
 });
 
 // kill <pid> (SIGTERM) or Ctrl+C in a terminal: the same flush-and-quit as Cmd+Q.
-process.on('SIGTERM', () => app.quit());
-process.on('SIGINT', () => app.quit());
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received');
+  app.quit();
+});
+process.on('SIGINT', () => {
+  console.log('SIGINT received');
+  app.quit();
+});
 
 // Dock icon click with the window hidden.
 app.on('activate', () => showWindow());

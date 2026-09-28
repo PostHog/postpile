@@ -1,7 +1,8 @@
 import type { LivePollStatus, TopicDetail, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { callStatsDetail, callStatsLabel } from '../lib/agent-stats.ts';
+import { callStatsLabel } from '../lib/agent-stats.ts';
 import { liveLabel } from '../lib/live.ts';
+import { syncReportDetail } from '../lib/sync-report.ts';
 import { useNow } from '../lib/use-now.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { WritesLock } from './WritesLock.tsx';
@@ -38,8 +39,9 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
         {live.text}
       </span>
       {actions.lastSync && (
-        <span title={callStatsDetail(actions.lastSync.agentCallStats) || 'No agent calls in the last sync'}>
+        <span title={syncReportDetail(actions.lastSync)} className={actions.lastSync.errors.length > 0 ? 'text-unread-ink' : ''}>
           last sync: {callStatsLabel(actions.lastSync.agentCallStats)}
+          {actions.lastSync.errors.length > 0 && ` · ${actions.lastSync.errors.length} ${actions.lastSync.errors.length === 1 ? 'error' : 'errors'}`}
         </span>
       )}
       <span className="ml-auto">

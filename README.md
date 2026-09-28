@@ -71,6 +71,10 @@ the app, then Open (once), or clear the quarantine flag:
 xattr -dr com.apple.quarantine PostPile.app
 ```
 
+Logs go to `~/Library/Logs/PostPile/main.log` (dev runs:
+`~/Library/Logs/PostPile-dev`), rotated at 5 MB; Help › Reveal Logs opens
+the folder. `POSTPILE_LOG_DIR` points them elsewhere.
+
 `gh` and `claude` must be installed and logged in. A Finder launch gets a
 minimal PATH, so the app reads PATH from the login shell and also looks in
 `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`.

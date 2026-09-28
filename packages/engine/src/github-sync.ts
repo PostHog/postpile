@@ -370,7 +370,7 @@ export class GitHubSync {
     this.store.foundPrs.replaceAll(refs.map((found) => ({ prKey: prKey(found.ref), via: found.via, reason: found.reason, foundAt: at })));
     const storedAt = this.store.prs.updatedAtByKey();
     const moved = refs.filter((found) => !alreadyFetched.has(prKey(found.ref)) && storedAt.get(prKey(found.ref)) !== found.updatedAt);
-    const prs = moved.length > 0 ? [...(await this.reader.fetchPrs(moved.map((found) => found.ref))).values()] : [];
+    const prs = [...(await this.fetchPartial(moved.map((found) => found.ref), errors, 'found PRs')).values()];
     for (const pr of prs) {
       this.storePr(pr, viewer);
     }
@@ -390,14 +390,28 @@ export class GitHubSync {
     return [...this.store.prs.getMany(keys.filter((key) => !skip.has(key))).values()];
   }
 
-  /** Fetches the PRs and writes snapshots and events. Returns the ids of new events on pinged PRs. */
-  private async fetchAndStore(candidates: Candidate[], viewer: Viewer): Promise<{ fetched: Map<PrKey, Pr>; newEventIds: string[] }> {
-    const fetched = candidates.length > 0 ? await this.reader.fetchPrs(candidates.map((c) => c.ref)) : new Map<PrKey, Pr>();
+  /** Writes snapshots and events. Returns the ids of new events on pinged PRs. */
+  private storeAll(fetched: Map<PrKey, Pr>, viewer: Viewer): string[] {
     const newEventIds: string[] = [];
     for (const pr of fetched.values()) {
       newEventIds.push(...this.storePr(pr, viewer));
     }
-    return { fetched, newEventIds };
+    return newEventIds;
+  }
+
+  /**
+   * The full sync's fetch: a failed batch (GitHub's "Something went wrong"
+   * timeout on a heavy query, a 502) lands in `errors` and its PRs stay
+   * candidates for the next sync; the other batches still store. One bad
+   * batch used to throw away the whole sync.
+   */
+  private async fetchPartial(refs: PrRef[], errors: string[], what: string): Promise<Map<PrKey, Pr>> {
+    if (refs.length === 0) {
+      return new Map();
+    }
+    const result = await this.reader.fetchPrsPartial(refs);
+    errors.push(...result.errors.map((error) => `${what}: ${error}`));
+    return result.prs;
   }
 
   /**
@@ -421,7 +435,9 @@ export class GitHubSync {
       viewer = await this.reader.viewer();
       saveViewer(this.store, viewer);
     }
-    const { fetched, newEventIds } = await this.fetchAndStore(this.candidates().slice(0, maxPrs), viewer);
+    const refs = this.candidates().slice(0, maxPrs).map((candidate) => candidate.ref);
+    const fetched = refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, Pr>();
+    const newEventIds = this.storeAll(fetched, viewer);
     this.rememberPolled([...fetched.keys()]);
     const readOnGitHub = this.takeReadOnGitHub();
     return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds, readOnGitHub };
@@ -435,11 +451,12 @@ export class GitHubSync {
 
     const candidates = this.candidates();
     const picked = candidates.slice(0, maxPrs);
-    const { fetched, newEventIds } = await this.fetchAndStore(picked, viewer);
+    // A failed batch, found-PRs query or stack lookup should not cost the rest of the sync; the next sync tries again.
+    const errors: string[] = [];
+    const fetched = await this.fetchPartial(picked.map((candidate) => candidate.ref), errors, 'PRs');
+    const newEventIds = this.storeAll(fetched, viewer);
     // The poll fetched these already; they still get their stacks walked and facts verified here.
     const polled = this.takePolled(fetched);
-    // A failed stack lookup should not cost the rest of the sync; the next sync tries again.
-    const errors: string[] = [];
     const found = await this.syncFound(viewer, fetched, errors);
     let pulledIn: Pr[] = [];
     try {

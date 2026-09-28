@@ -24,6 +24,36 @@ describe('Engine.sync without the agent', () => {
     expect(h.writer.calls).toEqual([]);
   });
 
+  it('keeps the last report, errors and timing included, so it survives a restart', async () => {
+    const h = makeHarness();
+    expect(await h.engine.lastSyncReport()).toBeNull();
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(await h.engine.lastSyncReport()).toEqual(report);
+    expect(JSON.parse(h.store.meta.get('last_sync_report') ?? 'null')).toMatchObject({ prsFetched: 1, startedAt: report.startedAt, finishedAt: report.finishedAt });
+  });
+
+  it('keeps going when a PR batch fails: the rest store, the error is reported, the next sync retries', async () => {
+    const h = makeHarness();
+    const good = reviewRequestedPr(1, { reviewerUsers: [viewer.login] });
+    const bad = reviewRequestedPr(2, { reviewerUsers: [viewer.login] });
+    h.reader.addPr(good, makeThreadFor(good));
+    h.reader.addPr(bad, makeThreadFor(bad));
+    h.reader.failingPrs.add(bad.key);
+
+    const first = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(first).toMatchObject({ prsFetched: 1, newEvents: 1 });
+    expect(first.errors).toEqual([`PRs: 1 PRs from ${bad.key}: GitHub PR batch query failed: Something went wrong`]);
+
+    h.reader.failingPrs.clear();
+    const second = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(second).toMatchObject({ prsFetched: 1, errors: [] });
+  });
+
   it('fetches at most maxPrs and picks up the rest after a 304', async () => {
     const h = makeHarness();
     for (const n of [1, 2, 3]) {

@@ -53,6 +53,8 @@ export interface EngineService {
    * On demand only. A sync while one is running joins the running one.
    */
   sync(options?: SyncOptions): Promise<SyncReport>;
+  /** The report of the last finished sync, errors and timing included (meta last_sync_report). Null before the first one. */
+  lastSyncReport(): Promise<SyncReport | null>;
 
   /**
    * One fast-poll cycle: conditional inbox read, and on a change a light

@@ -5,6 +5,7 @@ import { reviveRetiredTopics } from './consolidation/revive.ts';
 import type { DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
 import { errorText } from './errors.ts';
+import { saveLastSyncReport, syncReportLogLines } from './last-sync-report.ts';
 import type { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { FactVerifier } from './memory/fact-verifier.ts';
@@ -37,6 +38,7 @@ export class SyncRun {
     private readonly deps: RunDeps,
     private readonly github: GitHubSync,
     private readonly markReadQueue: MarkReadQueue,
+    private readonly log: (line: string) => void = (line) => console.log(line),
   ) {}
 
   async run(options: SyncOptions): Promise<SyncReport> {
@@ -47,6 +49,7 @@ export class SyncRun {
     const report = emptyReport(startedAt, tally, errors);
     report.agentCallStats = callLog.begin(`sync:${startedAt}`);
     noteSyncStart(store, startedAt);
+    this.log(`sync: started (max agent calls ${options.maxAgentCalls ?? 'unlimited'})`);
     try {
       const fetched = await this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY);
       report.notificationsNotModified = fetched.notModified;
@@ -76,6 +79,8 @@ export class SyncRun {
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
     } catch (error) {
       errors.push(`sync: ${errorText(error)}`);
+      // The stack only goes to the log; the report keeps the message.
+      this.log(`sync: failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     } finally {
       callLog.end();
     }
@@ -84,6 +89,14 @@ export class SyncRun {
     report.agentCalls = report.agentCallStats.total;
     report.dossiersUpdated = tally.dossiersUpdated;
     report.finishedAt = now().toISOString();
+    for (const line of syncReportLogLines(report)) {
+      this.log(line);
+    }
+    try {
+      saveLastSyncReport(store, report);
+    } catch (error) {
+      this.log(`sync: could not store the report: ${errorText(error)}`);
+    }
     return report;
   }
 }

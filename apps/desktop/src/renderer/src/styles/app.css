@@ -153,13 +153,15 @@ body {
   overflow: hidden;
 }
 
-/* The title bar drags the window; its controls must not. */
+/* The title bar drags the window; its controls must not. A drag region
+   also swallows hovers, so anything with a tooltip opts out too. */
 .drag-region {
   -webkit-app-region: drag;
 }
 
 .drag-region button,
 .drag-region a,
-.drag-region input {
+.drag-region input,
+.drag-region [title] {
   -webkit-app-region: no-drag;
 }

@@ -3,6 +3,7 @@ export const queryKeys = {
   config: ['config'] as const,
   githubWrites: ['github-writes'] as const,
   live: ['live'] as const,
+  lastSync: ['last-sync'] as const,
   topics: ['topics'] as const,
   viewer: ['viewer'] as const,
   repos: ['repos'] as const,

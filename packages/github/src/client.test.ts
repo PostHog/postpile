@@ -134,6 +134,17 @@ describe('fetchPrs', () => {
     const fake = new FakeFetch([{ body: { data: null, errors: [{ message: 'Something went wrong' }] } }]);
     await expect(new GitHubClient(fakeTokens, fake.fn).fetchPrs(refs)).rejects.toThrow(/Something went wrong/);
   });
+
+  it('fetchPrsPartial lists a failed batch and keeps the others', async () => {
+    const many = Array.from({ length: PR_BATCH_SIZE + 1 }, (_, i) => ({ repo: 'acme/app', number: i + 1 }));
+    const fake = new FakeFetch([
+      { body: { data: null, errors: [{ message: 'Something went wrong' }] } },
+      { body: { data: { pr0: { pullRequest: null } } } },
+    ]);
+    const result = await new GitHubClient(fakeTokens, fake.fn).fetchPrsPartial(many);
+    expect(result.errors).toEqual([`${PR_BATCH_SIZE} PRs from acme/app#1: GitHub PR batch query failed: Something went wrong`]);
+    expect(result.prs.size).toBe(0);
+  });
 });
 
 describe('viewer', () => {

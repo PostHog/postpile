@@ -71,6 +71,7 @@ import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
 import { loadRepoSettings, saveRepoSettings } from './repo-settings.ts';
 import type { EngineService } from './service.ts';
+import { loadLastSyncReport } from './last-sync-report.ts';
 import { SyncRun } from './sync-run.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
@@ -100,6 +101,8 @@ export interface EngineDeps {
   dataLock?: { release(): void } | null;
   /** Local Claude Code folder the work context sweep reads. Defaults to POSTPILE_CLAUDE_DIR, else ~/.claude. */
   claudeDir?: string;
+  /** Sync start, summary and errors. Defaults to console.log, which the desktop app writes to its log file. */
+  syncLog?: (line: string) => void;
 }
 
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
@@ -148,7 +151,7 @@ export class Engine implements EngineService {
     this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
     const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites);
-    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue);
+    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);
     const decider = new PingDecider({
       store,
@@ -235,6 +238,10 @@ export class Engine implements EngineService {
 
   async livePollStatus(): Promise<LivePollStatus> {
     return this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
+  }
+
+  async lastSyncReport(): Promise<SyncReport | null> {
+    return loadLastSyncReport(this.deps.store);
   }
 
   async listTopics(): Promise<TopicListItem[]> {

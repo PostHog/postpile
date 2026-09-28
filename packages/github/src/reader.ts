@@ -1,6 +1,12 @@
 import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@postpile/core';
 import type { FoundRef } from './found.ts';
 
+export interface PartialPrs {
+  prs: Map<PrKey, Pr>;
+  /** One line per failed batch. */
+  errors: string[];
+}
+
 export interface NotificationConditions {
   etag: string | null;
   lastModified: string | null;
@@ -81,6 +87,13 @@ export interface GitHubReader {
 
   /** Batched GraphQL enrichment, PR_BATCH_SIZE PRs aliased per query. Missing PRs are left out. */
   fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>>;
+
+  /**
+   * Like fetchPrs, but a failed batch (GitHub's "Something went wrong"
+   * timeout on a heavy query, a 502) only loses its own PRs: its error is
+   * listed and the other batches still count.
+   */
+  fetchPrsPartial(refs: PrRef[]): Promise<PartialPrs>;
 
   /**
    * Open and merged same-repo PRs per lookup (a few newest each), answers in

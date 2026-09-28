@@ -14,6 +14,7 @@ function notImplemented(): never {
 function fakeEngine(overrides: Partial<EngineService>): EngineService {
   return {
     sync: notImplemented,
+    lastSyncReport: notImplemented,
     pollOnce: notImplemented,
     startLivePoll: notImplemented,
     stopLivePoll: notImplemented,

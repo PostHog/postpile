@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { NotificationReason } from '@postpile/core';
+import { useActions } from '../api/actions.tsx';
 import { useDebugNotifications } from '../api/debug.ts';
+import { syncReportDetail } from '../lib/sync-report.ts';
 import { filterNotifications, NO_NOTIFICATION_FILTER, reasonsIn, type NotificationFilter } from '../lib/notifications.ts';
 import { NotificationRow, type TilePick } from './NotificationRow.tsx';
 
@@ -15,6 +17,23 @@ const CONTROL = 'h-7 rounded-control border border-control bg-surface px-2 text-
  * logged action on it. Opening a row never marks anything read; the row's
  * "Mark read" button is the only action here.
  */
+/** The stored last sync report, errors included, as plain lines. */
+function LastSyncBlock() {
+  const report = useActions().lastSync;
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h2 className="text-[13px] font-semibold">Last sync</h2>
+      {report ? (
+        <pre className={`rounded-tile border border-hairline bg-surface px-3 py-2 font-mono text-[11px] whitespace-pre-wrap ${report.errors.length > 0 ? 'text-unread-ink' : 'text-ink-2'}`}>
+          {syncReportDetail(report)}
+        </pre>
+      ) : (
+        <p className="text-xs text-muted">No sync stored yet.</p>
+      )}
+    </section>
+  );
+}
+
 export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void }) {
   const notifications = useDebugNotifications(LIMIT);
   const [filter, setFilter] = useState<NotificationFilter>(NO_NOTIFICATION_FILTER);
@@ -29,6 +48,7 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
           tile. "Mark read" goes through the same queue, undo and footer lock as a tile. GitHub has no mark-unread, so nothing brings a read thread back.
         </p>
       </div>
+      <LastSyncBlock />
       <div className="flex flex-wrap items-center gap-2.5">
         <select
           aria-label="Reason"

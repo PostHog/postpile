@@ -22,7 +22,7 @@ function runnerEngine(): { engine: Engine; runner: FakeRunner; reader: FakeReade
   const writes = makeWrites(store, writer, now);
   const pendingWrites = new PendingWrites(store, writes, now);
   const markReadQueue = new MarkReadQueue(writes, reader, new FakeTimers(), undefined, () => {}, (batch) => pendingWrites.park(batch));
-  const engine = new Engine({ store, reader, writes, agent, callLog, markReadQueue, pendingWrites, instructionsFile: '/nonexistent', now });
+  const engine = new Engine({ store, reader, writes, agent, callLog, markReadQueue, pendingWrites, instructionsFile: '/nonexistent', now, syncLog: () => {} });
   return { engine, runner, reader, store };
 }
 

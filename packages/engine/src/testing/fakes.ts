@@ -6,6 +6,7 @@ import type {
   BranchLookup,
   BranchPr,
   GitHubReader,
+  PartialPrs,
   GitHubWriter,
   NotificationConditions,
   NotificationsResult,
@@ -43,6 +44,8 @@ export class FakeReader implements GitHubReader {
   teamCalls: [string, string | null][] = [];
   /** Set to make teamMembers throw, like a network error. */
   teamError: Error | null = null;
+  /** PRs whose batch fails in fetchPrsPartial, like GitHub's "Something went wrong" timeout. */
+  failingPrs = new Set<PrKey>();
 
   constructor(private readonly who: Viewer = fixtureViewer) {}
 
@@ -140,6 +143,13 @@ export class FakeReader implements GitHubReader {
       }
     }
     return result;
+  }
+
+  async fetchPrsPartial(refs: PrRef[]): Promise<PartialPrs> {
+    const failing = refs.filter((ref) => this.failingPrs.has(`${ref.repo}#${ref.number}`));
+    const prs = await this.fetchPrs(refs.filter((ref) => !failing.includes(ref)));
+    const errors = failing.map((ref) => `1 PRs from ${ref.repo}#${ref.number}: GitHub PR batch query failed: Something went wrong`);
+    return { prs, errors };
   }
 
   async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {
@@ -254,6 +264,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     timers,
     pingDecisionsPerDay: options.pingDecisionsPerDay,
     claudeDir: options.claudeDir ?? '/nonexistent/claude',
+    syncLog: () => {},
   });
   return { engine, store, reader, writer, writes, runner, agent, timers };
 }

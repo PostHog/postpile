@@ -7,6 +7,7 @@ export {
   type GitHubReader,
   type NotificationConditions,
   type NotificationsResult,
+  type PartialPrs,
   type TeamMembersResult,
   type ThreadsSinceResult,
 } from './reader.ts';

@@ -14,6 +14,7 @@ import {
   type GitHubReader,
   type NotificationConditions,
   type NotificationsResult,
+  type PartialPrs,
   type TeamMembersResult,
   type ThreadsSinceResult,
 } from './reader.ts';
@@ -112,6 +113,18 @@ export class GitHubClient implements GitHubReader {
   async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {
     const batches = await inParallel(chunk(refs, PR_BATCH_SIZE), (batch) => this.fetchBatch(batch));
     return new Map(batches.flat().map((pr) => [pr.key, pr]));
+  }
+
+  async fetchPrsPartial(refs: PrRef[]): Promise<PartialPrs> {
+    const errors: string[] = [];
+    const fetchOrNote = (batch: PrRef[]): Promise<Pr[]> =>
+      this.fetchBatch(batch).catch((error: unknown) => {
+        const first = batch[0] ? `${batch[0].repo}#${batch[0].number}` : '?';
+        errors.push(`${batch.length} PRs from ${first}: ${error instanceof Error ? error.message : String(error)}`);
+        return [];
+      });
+    const batches = await inParallel(chunk(refs, PR_BATCH_SIZE), fetchOrNote);
+    return { prs: new Map(batches.flat().map((pr) => [pr.key, pr])), errors };
   }
 
   /**

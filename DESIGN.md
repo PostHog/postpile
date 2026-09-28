@@ -642,6 +642,17 @@ dossier save, not here.
   `--max-agent-calls` caps sync and consolidation.
 - Calls are only counted by the observer (`AgentCallLog`); the budget only
   records skips. Chat and draft calls get run id `action`.
+- Every finished sync stores its `SyncReport` in meta `last_sync_report`
+  (`EngineService.lastSyncReport`, `GET /api/sync/last`) and logs a start
+  line, a summary and one line per error (the desktop app writes these to
+  `~/Library/Logs/PostPile/main.log`). A failed start sync used to leave only
+  `last_sync_started_at` behind.
+- A failed PR batch in the full sync (GitHub's "Something went wrong"
+  timeout on a heavy aliased query, a 502, a secondary rate limit) no longer
+  throws the sync away: `fetchPrsPartial` keeps the other batches, the error
+  goes to `SyncReport.errors`, and the failed PRs stay candidates for the
+  next sync or poll. Same for the found-PRs fetch. The live poll still
+  throws, so its backoff sees rate limits.
 
 ### EngineService and HTTP additions
 
