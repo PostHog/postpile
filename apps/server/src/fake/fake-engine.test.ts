@@ -342,8 +342,9 @@ describe('FakeEngine sync progress', () => {
 
     const syncing = engine.sync();
     expect(engine.sync()).toBe(syncing);
-    await vi.waitFor(async () => expect((await engine.syncProgress())?.agentCallsPlanned).toBe(3));
-    await vi.waitFor(async () => expect((await engine.syncProgress())?.agentCallsPlanned).toBe(4));
+    // Each phase lasts one 20ms step; poll faster than waitFor's 50ms default so none is missed.
+    await vi.waitFor(async () => expect((await engine.syncProgress())?.agentCallsPlanned).toBe(3), { interval: 2 });
+    await vi.waitFor(async () => expect((await engine.syncProgress())?.agentCallsPlanned).toBe(4), { interval: 2 });
     const report = await syncing;
 
     expect(report.agentCalls).toBe(4);
