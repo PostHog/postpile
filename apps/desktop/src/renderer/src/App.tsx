@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { TileView } from '@code-manager/core';
 import { useActions } from './api/actions.tsx';
+import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
 import { useSearch } from './api/search.ts';
 import { useTopic, useTopics } from './api/topics.ts';
@@ -51,6 +52,7 @@ export function App() {
   const actions = useActions();
   const topics = useTopics();
   const proposals = useProposals();
+  const live = useLivePoll();
 
   const [query, setQuery] = useState('');
   // "Tell the agent what's wrong" from a memory line opens the selected tile's chat with a draft.
@@ -107,6 +109,20 @@ export function App() {
       void actions.sync();
     }
   }, [actions]);
+
+  // A click on a Mac notification opens its tile, as a normal navigation. The
+  // listener is added once and calls the latest go() through this ref.
+  const latestGo = useRef(go);
+  useEffect(() => {
+    latestGo.current = go;
+  });
+  useEffect(() => {
+    return window.codeManager?.onOpenPing?.((target) => {
+      if (target.topicId !== null) {
+        latestGo.current({ pane: 'topic', topicId: target.topicId, tileId: target.tileId, prKey: target.prKey });
+      }
+    });
+  }, []);
 
   let main = <EmptyMain text="Loading…" />;
   if (pane === 'inbox') {
@@ -176,7 +192,7 @@ export function App() {
             chatRequest={chatRequest}
           />
         </div>
-        <StatusFooter topics={items} detail={topic.data} />
+        <StatusFooter topics={items} detail={topic.data} live={live.data} />
         <Toast />
       </div>
     </TellAgentContext>

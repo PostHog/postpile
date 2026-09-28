@@ -1,6 +1,8 @@
-import type { TopicDetail, TopicListItem } from '@code-manager/core';
+import type { LivePollStatus, TopicDetail, TopicListItem } from '@code-manager/core';
 import { useActions } from '../api/actions.tsx';
 import { callStatsDetail, callStatsLabel } from '../lib/agent-stats.ts';
+import { liveLabel } from '../lib/live.ts';
+import { useNow } from '../lib/use-now.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { LockIcon } from './icons.tsx';
 
@@ -14,9 +16,11 @@ function writesLabel(fake: boolean | undefined, writesAllowed: boolean | undefin
   return writesAllowed ? 'GitHub writes on' : 'GitHub writes blocked';
 }
 
-/** 26px strip: unread count, PR counts for the open topic, write mode, agent calls of the last sync, mark-read queue. */
-export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined }) {
+/** 26px strip: unread count, PR counts for the open topic, write mode, live poll, agent calls of the last sync, mark-read queue. */
+export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
+  const now = useNow(1000);
+  const live = liveLabel(props.live, now);
   const unread = props.topics.reduce((sum, item) => sum + item.unreadTiles, 0);
   const counts = props.detail ? countPrs(props.detail.tiles) : null;
   const blocked = actions.config !== undefined && !actions.config.writesAllowed;
@@ -37,6 +41,9 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
       >
         {blocked && <LockIcon />}
         {writesLabel(actions.config?.fake, actions.config?.writesAllowed)}
+      </span>
+      <span className={live.warn ? 'text-closer' : ''} title={live.title}>
+        {live.text}
       </span>
       {actions.lastSync && (
         <span title={callStatsDetail(actions.lastSync.agentCallStats) || 'No agent calls in the last sync'}>
