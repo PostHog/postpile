@@ -60,6 +60,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string }) {
           stale={null}
           corrected={view.correctedClaims.includes(statusText)}
           fixedTo={fixedText(view, statusText)}
+          canRecheck
           why={lineTarget(topicId, view, 'status')}
         >
           <span className={`mr-2 inline-flex h-[19px] items-center rounded-full px-2 text-[10.5px] font-semibold ${STATUS_TONES[dossier.status]}`}>
@@ -72,7 +73,8 @@ function DossierSummary(props: { dossier: DossierView; topicId: string }) {
             correction={{ kind: 'wrong', factId: null, topicId, text: dossier.goal }}
             stale={null}
             corrected={view.correctedClaims.includes(dossier.goal)}
-          fixedTo={fixedText(view, dossier.goal)}
+            fixedTo={fixedText(view, dossier.goal)}
+            canRecheck
             why={lineTarget(topicId, view, 'goal')}
           >
             <span className="text-muted">Goal:</span> {dossier.goal}

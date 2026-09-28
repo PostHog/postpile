@@ -89,7 +89,11 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   undo window (tokens starting with `memory:` are not mark-reads). When a
   window ends the provider refetches, so a locked mark-read shows up as
   pending.
-- Memory lines get "Recheck" (and "Forget" on a care). Recheck opens
+- Big memory lines get "Recheck" (and "Forget" on a care): `MemoryLine`
+  takes `canRecheck` (dossier status, goal, open questions, people, cares;
+  facts with `FactView.recheckable`), never change lines or activity. The
+  action bar's "Recheck" opens `RecheckDialog` for the whole glance
+  (`prKey` set, no Accept, only Tell the agent / Close). Recheck opens
   `RecheckDialog`: `recheckMemory` runs one agent call and writes nothing;
   the user then accepts the outcome through `correctMemory` (holds ->
   `confirm`, fix -> `fix` with `fixedText`, drop -> `wrong`) or picks "Tell

@@ -13,6 +13,14 @@ import type { PromptContextSource } from '../prompt-context.ts';
 import { loadViewer } from '../viewer-meta.ts';
 import type { MemorySourcesReads } from './memory-sources-reads.ts';
 
+/** What kind of memory the claim is, for the prompt. */
+function recordedIn(request: MemoryRecheckRequest, fact: Fact | null): string {
+  if (request.prKey) {
+    return `Glance: the agent's whole assessment of ${request.prKey} (verdict, what it means for the user, what it does, risk, what others said)`;
+  }
+  return fact ? 'Fact' : 'Dossier';
+}
+
 /** Rechecks the user can ask for per rolling 24 hours. Each is one sonnet call. */
 export const RECHECKS_PER_DAY = 40;
 
@@ -38,8 +46,12 @@ export class MemoryRechecker {
     return this.store.agentCalls.countSince('memory_recheck', since) >= RECHECKS_PER_DAY;
   }
 
-  /** The PRs the line cites; without any, the topic's most recently updated ones. */
+  /** The PRs the line cites (or the PR a glance is about); without any, the topic's most recently updated ones. */
   private prsFor(request: MemoryRecheckRequest, fact: Fact | null, topicId: string | null): Pr[] {
+    if (request.prKey) {
+      const pr = this.store.prs.get(request.prKey);
+      return pr ? [pr] : [];
+    }
     let keys: PrKey[] = fact ? fact.refs.map((ref) => ref.prKey) : [];
     const target = request.target;
     if (target?.kind === 'dossier_line') {
@@ -77,7 +89,11 @@ export class MemoryRechecker {
         message: `Already ${RECHECKS_PER_DAY} rechecks in the last 24 hours, the daily cap. Tell the agent in the chat instead.`,
       };
     }
-    const topicId = fact?.topicId ?? request.topicId;
+    if (request.prKey && !this.store.prs.get(request.prKey)) {
+      return { status: 'unavailable', reason: 'not_found', message: `${request.prKey} is not in the store.` };
+    }
+    const glanceTopicId = request.prKey ? (this.store.memberships.get(request.prKey)?.topicId ?? null) : null;
+    const topicId = fact?.topicId ?? request.topicId ?? glanceTopicId;
     const topic = topicId ? this.store.topics.get(topicId) : null;
     const sources = this.sourcesFor(request);
     const prs = this.prsFor(request, fact, topic?.id ?? null);
@@ -90,7 +106,7 @@ export class MemoryRechecker {
     try {
       const answer = await this.agent.recheckMemory({
         claim: request.text,
-        recordedIn: sources?.recordedIn ?? (fact ? 'Fact' : 'Dossier'),
+        recordedIn: sources?.recordedIn ?? recordedIn(request, fact),
         topic,
         dossier: topic ? this.store.dossiers.latest(topic.id) : null,
         sources: sources?.sources ?? [],

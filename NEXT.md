@@ -302,6 +302,10 @@ now".
   - Activity list: meaningful events only (`activityList` in core), pushes
     collapsed per burst, new-since-you-looked first and set apart, capped at
     12 with "Show all N", bot/CI noise folded into one expandable line.
+  - Recheck only on big claims: dossier-level lines and facts with a big
+    predicate (`isBigClaim`: drives, owns, decided, blocked_by, user_cares);
+    none on change lines, activity or trivial facts. "Recheck this
+    assessment" on the whole glance (`MemoryRecheckRequest.prKey`).
 
 ## Stubbed or thin
 

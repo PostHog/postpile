@@ -21,6 +21,8 @@ export interface FactView {
   fact: Fact;
   /** Null when the fact passed verification just now. */
   stale: StaleReason | null;
+  /** A big claim (`isBigClaim`): role, decision, blocker, care. Only these get "Recheck". */
+  recheckable: boolean;
 }
 
 /** What moved in a topic since the user last marked it seen. */

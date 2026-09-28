@@ -132,6 +132,24 @@ describe('recheckMemory', () => {
     expect(h.store.facts.get('f1')?.invalidAt).toBeNull();
   });
 
+  it('rechecks a whole glance against its PR, events and topic dossier', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    const other = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [pr, other]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.runner.answer('memory_recheck', { outcome: 'fix', text: 'Look closer: CI fails.', why: 'CI turned red.' });
+
+    const result = await h.engine.recheckMemory({ factId: null, topicId: null, text: 'Looks safe. Small change.', target: null, prKey: pr.key });
+
+    expect(result).toMatchObject({ status: 'answered', outcome: 'fix' });
+    const prompt = h.runner.promptsFor('memory_recheck')[0] ?? '';
+    expect(prompt).toContain(`Glance: the agent's whole assessment of ${pr.key}`);
+    expect(prompt).toContain(pr.key);
+    expect(prompt).not.toContain(other.key);
+    expect(await h.engine.recheckMemory({ factId: null, topicId: null, text: 'x', target: null, prKey: 'PostHog/posthog#999' })).toMatchObject({ reason: 'not_found' });
+  });
+
   it('says so when the agent fails, the fact is gone, or the daily cap is reached', async () => {
     const h = makeHarness();
     saveViewer(h.store, viewer);

@@ -56,7 +56,7 @@ describe('memory formatting', () => {
   });
 
   it('prints facts with their staleness', () => {
-    const lines = formatFacts([{ fact: makeFact(), stale: 'head_moved' }]);
+    const lines = formatFacts([{ fact: makeFact(), stale: 'head_moved', recheckable: false }]);
     expect(lines).toEqual(['facts:', '  alice works on PostHog/posthog#1  (works_on, since 2026-09-01, stale: head_moved)']);
   });
 });

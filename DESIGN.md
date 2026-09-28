@@ -726,6 +726,24 @@ until the user accepts in the dialog, through `correctMemory`:
 - Every outcome and errors (failed call, cap, gone fact) also offer "Tell
   the agent what's wrong": the tile chat opens with the line quoted.
 
+**Recheck only on big claims** (2026-09-28, Recheck on every line was noise).
+Every line keeps "Why?"; Recheck (and Forget) only show on:
+
+- Dossier-level claims: status, goal, open questions, people's roles, what
+  you care about (Forget stays on cares). Not the PR timeline and not the
+  "since you last looked" change lines, which retell events.
+- Facts whose predicate is big (`isBigClaim` in core `big-claims.ts`,
+  shipped as `FactView.recheckable`): `drives`, `owns` (person roles),
+  `decided` (decisions), `blocked_by` (risks), `user_cares`. Trivial and
+  never rechecked: `reviews` (reviewer assigned), `works_on`, `part_of`,
+  `depends_on` (stack relations), `status` (CI and the like), `note`.
+- The PR's glance as a whole: "Recheck" in the detail pane's action bar
+  ("Recheck this assessment") sends the joined glance as the claim with
+  `MemoryRecheckRequest.prKey`; the engine reads it against that PR, its
+  newest events and its topic's dossier (`recordedIn`: "Glance: ..."). A
+  glance is not memory, so the dialog has no Accept: it shows the outcome,
+  offers "Tell the agent what's wrong" and Close.
+
 Every correction returns an undo token (`memory:` prefix) valid for
 `UNDO_WINDOW_MS`: undo deletes the feedback row (the only non-append
 write on `feedback`), reopens a closed fact, closes a fix's replacement,

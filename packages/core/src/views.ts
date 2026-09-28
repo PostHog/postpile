@@ -292,6 +292,11 @@ export interface MemoryRecheckRequest {
   text: string;
   /** Where the line's sources are; null for lines without a "Why?" target. */
   target: MemoryTarget | null;
+  /**
+   * Set for "Recheck this assessment": the claim is the PR's glance as a
+   * whole, checked against that PR, its events and its topic's dossier.
+   */
+  prKey?: PrKey | null;
 }
 
 export type MemoryRecheckOutcome = 'holds' | 'fix' | 'drop';

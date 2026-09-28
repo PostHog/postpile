@@ -19,6 +19,7 @@ import type {
   TopicStatusLine,
 } from '@postpile/core';
 import {
+  isBigClaim,
   seenSinceBaseline,
   describeFactRef,
   describeLineSources,
@@ -42,7 +43,7 @@ function isActive(fact: Fact): boolean {
 }
 
 function toView(fact: Fact): FactView {
-  return { fact, stale: fact.staleReason };
+  return { fact, stale: fact.staleReason, recheckable: isBigClaim(fact.predicate) };
 }
 
 function touchesEntity(fact: Fact, kind: string, key: string): boolean {

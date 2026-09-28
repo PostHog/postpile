@@ -57,6 +57,14 @@ export function RecheckDialog(props: RecheckDialogProps) {
   }, [onClose]);
 
   const correction: MemoryCorrection = { kind: 'wrong', factId: request.factId, topicId: request.topicId, text: request.text };
+  // A glance is not a memory line: nothing to accept into memory. The outcome
+  // informs; to act on it, the user tells the agent (or the next sync rewrites it).
+  const assessment = Boolean(request.prKey);
+  const closeButton = (
+    <Button variant="primary" onClick={onClose}>
+      Close
+    </Button>
+  );
   const busy = actions.isBusy(`correct:${request.factId ?? request.text}`);
 
   async function accept(decision: MemoryCorrection) {
@@ -95,9 +103,13 @@ export function RecheckDialog(props: RecheckDialogProps) {
     buttons = (
       <>
         {tellButton}
-        <Button variant="primary" disabled={busy} onClick={() => void accept({ ...correction, kind: 'confirm' })} title="Keep it and stop asking about it">
-          Accept
-        </Button>
+        {assessment ? (
+          closeButton
+        ) : (
+          <Button variant="primary" disabled={busy} onClick={() => void accept({ ...correction, kind: 'confirm' })} title="Keep it and stop asking about it">
+            Accept
+          </Button>
+        )}
       </>
     );
   } else if (result?.outcome === 'fix') {
@@ -110,9 +122,13 @@ export function RecheckDialog(props: RecheckDialogProps) {
     buttons = (
       <>
         {tellButton}
-        <Button variant="primary" disabled={busy} onClick={() => void accept({ ...correction, kind: 'fix', fixedText: result.text })}>
-          Accept fix
-        </Button>
+        {assessment ? (
+          closeButton
+        ) : (
+          <Button variant="primary" disabled={busy} onClick={() => void accept({ ...correction, kind: 'fix', fixedText: result.text })}>
+            Accept fix
+          </Button>
+        )}
       </>
     );
   } else if (result?.outcome === 'drop') {
@@ -120,9 +136,13 @@ export function RecheckDialog(props: RecheckDialogProps) {
     buttons = (
       <>
         {tellButton}
-        <Button variant="primary" disabled={busy} onClick={() => void accept(correction)} title="Forget this line">
-          Accept
-        </Button>
+        {assessment ? (
+          closeButton
+        ) : (
+          <Button variant="primary" disabled={busy} onClick={() => void accept(correction)} title="Forget this line">
+            Accept
+          </Button>
+        )}
       </>
     );
   }
@@ -131,7 +151,7 @@ export function RecheckDialog(props: RecheckDialogProps) {
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/20" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Recheck" className="flex w-[460px] max-w-[calc(100vw-32px)] flex-col gap-3.5 rounded-tile bg-surface p-5 shadow-menu">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold tracking-[0.04em] text-muted">RECHECK</span>
+          <span className="text-[11px] font-semibold tracking-[0.04em] text-muted">{assessment ? 'RECHECK THIS ASSESSMENT' : 'RECHECK'}</span>
           <button type="button" aria-label="Close" onClick={onClose} className="ml-auto text-faint hover:text-ink">
             ✕
           </button>

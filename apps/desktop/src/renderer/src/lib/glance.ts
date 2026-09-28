@@ -1,4 +1,4 @@
-import type { GlanceGap } from '@postpile/core';
+import type { Glance, GlanceGap, Verdict } from '@postpile/core';
 
 export interface GlanceGapText {
   /** Short, for the verdict pill. */
@@ -16,4 +16,12 @@ export function glanceGapText(gap: GlanceGap | null): GlanceGapText {
     return { pill: 'Glance failed', card: `The agent gave no usable glance (${gap.detail}). The next sync tries again.` };
   }
   return { pill: 'No glance yet', card: 'No glance yet. The next sync with the agent writes one.' };
+}
+
+const VERDICT_WORDS: Record<Verdict, string> = { LOOKS_SAFE: 'Looks safe', LOOK_CLOSER: 'Look closer', NOT_YOURS: 'Not yours' };
+
+/** The whole glance as one claim, for "Recheck this assessment". */
+export function glanceClaim(glance: Glance): string {
+  const parts = [`${VERDICT_WORDS[glance.verdict]}.`, glance.forYou, glance.does && `Does: ${glance.does}`, glance.risk && `Risk: ${glance.risk}`, glance.othersSaid && `Others: ${glance.othersSaid}`];
+  return parts.filter((part) => part).join(' ');
 }

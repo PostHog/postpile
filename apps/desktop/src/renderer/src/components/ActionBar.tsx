@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { PrDetail, PrPrimaryAction, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { isBotLogin } from '../lib/people.ts';
@@ -5,8 +6,10 @@ import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { ChatIcon } from './icons.tsx';
+import { RecheckDialog } from './RecheckDialog.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { markReadNote } from '../lib/guard.ts';
+import { glanceClaim } from '../lib/glance.ts';
 
 interface ActionBarProps {
   detail: PrDetail;
@@ -43,6 +46,8 @@ export function ActionBar(props: ActionBarProps) {
   const { pr } = props.detail;
   const tileId = props.view.tile.id;
   const primary = primaryActionOf(props);
+  const [recheckOpen, setRecheckOpen] = useState(false);
+  const glance = props.detail.glance;
   const markReadTitle = props.view.pendingWrite
     ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
     : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks the whole tile read; GitHub follows after 6s');
@@ -83,6 +88,17 @@ export function ActionBar(props: ActionBarProps) {
       )}
       {primary !== 'mark_read' && markRead('secondary')}
       <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" up />
+      {glance && (
+        <Button size="md" title="Recheck this assessment: the agent reads the whole glance against the PR, its activity and the topic dossier" onClick={() => setRecheckOpen(true)}>
+          Recheck
+        </Button>
+      )}
+      {recheckOpen && glance && (
+        <RecheckDialog
+          request={{ factId: null, topicId: props.detail.topicId, text: glanceClaim(glance), target: null, prKey: pr.key }}
+          onClose={() => setRecheckOpen(false)}
+        />
+      )}
       <button
         type="button"
         aria-label="Chat about this tile"

@@ -1,7 +1,7 @@
 import type { FactView } from '@postpile/core';
 import { MemoryLine } from './MemoryLine.tsx';
 
-/** "What the agent knows": facts about the PR or citing it, with sources. Stale ones are greyed. */
+/** "What the agent knows": facts about the PR or citing it, with sources. Stale ones are greyed; only big claims get Recheck. */
 export function AgentFacts(props: { facts: FactView[] }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -14,6 +14,7 @@ export function AgentFacts(props: { facts: FactView[] }) {
           stale={view.stale}
           corrected={false}
           refs={view.fact.refs}
+          canRecheck={view.recheckable}
           why={{ kind: 'fact', factId: view.fact.id }}
         >
           {view.fact.text}

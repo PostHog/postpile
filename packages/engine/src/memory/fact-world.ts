@@ -1,4 +1,4 @@
-import { verifyFact, type Fact, type FactView, type PrKey, type VerifyWorld } from '@postpile/core';
+import { isBigClaim, verifyFact, type Fact, type FactView, type PrKey, type VerifyWorld } from '@postpile/core';
 import type { Store } from '@postpile/store';
 
 /** Every PR a fact is about or cites. */
@@ -28,6 +28,6 @@ export function factViews(store: Store, facts: Fact[], now: string): FactView[] 
   return facts.map((fact) => {
     const outcome = verifyFact(fact, world);
     const stale = outcome.kind === 'ok' ? fact.staleReason : outcome.reason;
-    return { fact, stale };
+    return { fact, stale, recheckable: isBigClaim(fact.predicate) };
   });
 }

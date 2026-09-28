@@ -53,6 +53,7 @@ const memoryRecheckBody = z.object({
   topicId: z.string().nullable().default(null),
   text: z.string().min(1),
   target: memoryTargetBody.nullable().default(null),
+  prKey: z.string().nullable().default(null),
 });
 
 /** "PostHog/posthog". */

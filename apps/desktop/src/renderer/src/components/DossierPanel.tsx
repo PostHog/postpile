@@ -40,6 +40,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             corrected={corrected(question.text)}
             fixedTo={fixedText(view, question.text)}
             refs={question.refs}
+            canRecheck
             why={why(`openQuestions[${index}]`)}
           >
             {question.text}
@@ -74,6 +75,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             stale={null}
             corrected={corrected(care.text)}
             fixedTo={fixedText(view, care.text)}
+            canRecheck
             canForget
             why={why(`userCares[${index}]`)}
           >
@@ -87,7 +89,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
         {dossier.people.map((person) => {
           const text = `@${person.login} ${person.role}: ${person.note}`;
           return (
-            <MemoryLine key={person.login} correction={wrong(text)} stale={null} corrected={corrected(text)} fixedTo={fixedText(view, text)}>
+            <MemoryLine key={person.login} correction={wrong(text)} stale={null} corrected={corrected(text)} fixedTo={fixedText(view, text)} canRecheck>
               <span className="font-medium text-ink">@{person.login}</span> <span className="text-muted">{person.role}</span>
               {person.note && ` · ${person.note}`}
             </MemoryLine>

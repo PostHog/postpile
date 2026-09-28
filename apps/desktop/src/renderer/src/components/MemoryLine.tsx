@@ -16,6 +16,9 @@ interface MemoryLineProps {
   /** The user accepted a recheck's fix; shown instead until the next sync rewrites the dossier. */
   fixedTo?: string | null;
   refs?: FactRef[];
+  /** A big claim (dossier-level, or a fact `recheckable` says is big). Everything else gets no Recheck. */
+  canRecheck?: boolean;
+  /** Only "what you care about" lines, which are also rechecked. */
   canForget?: boolean;
   /** What "Why?" explains. Lines without one get no "Why?". */
   why?: MemoryTarget;
@@ -25,6 +28,7 @@ interface MemoryLineProps {
  * One thing the agent remembers: the text with its sources and a stale,
  * "marked wrong" or "fixed" badge after it, and Why? / Recheck / Forget on
  * hover. Why? opens the sources panel under the line, Recheck the dialog.
+ * Recheck and Forget only show on big claims (`canRecheck`, `canForget`).
  */
 export function MemoryLine(props: MemoryLineProps) {
   const [whyOpen, setWhyOpen] = useState(false);
@@ -64,7 +68,7 @@ export function MemoryLine(props: MemoryLineProps) {
               Why?
             </button>
           )}
-          {!settled && (
+          {!settled && props.canRecheck && (
             <button
               type="button"
               title="Ask the agent to check this against GitHub. You decide what happens after."
@@ -74,7 +78,7 @@ export function MemoryLine(props: MemoryLineProps) {
               Recheck
             </button>
           )}
-          {!settled && props.canForget && <MemoryButton correction={{ ...props.correction, kind: 'forget' }} />}
+          {!settled && props.canRecheck && props.canForget && <MemoryButton correction={{ ...props.correction, kind: 'forget' }} />}
         </span>
       </div>
       {whyOpen && props.why && <WhyPanel target={props.why} onClose={() => setWhyOpen(false)} />}
