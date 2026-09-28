@@ -134,6 +134,8 @@ export interface Actions {
   refreshWorkContext(): Promise<void>;
   /** "Forget" on a digest thread. Local only; the toast offers Undo. */
   forgetWorkThread(input: WorkThreadForget): Promise<boolean>;
+  /** Saves the sweep's skip list to the user's config.json. */
+  saveSweepSkip(patterns: string[]): Promise<boolean>;
 }
 
 const ActionsContext = createContext<Actions | null>(null);
@@ -482,6 +484,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     refreshWorkContext,
     forgetWorkThread: (input) =>
       run(`forget:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/forget', input)),
+    saveSweepSkip: (patterns) => run('workContext:skip', null, () => request('PUT', '/api/work-context/skip-list', { patterns })),
   };
 
   return <ActionsContext.Provider value={actions}>{props.children}</ActionsContext.Provider>;

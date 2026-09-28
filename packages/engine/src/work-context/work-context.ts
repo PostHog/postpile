@@ -52,8 +52,10 @@ export class WorkContextMemory {
     const running = this.sweeper.isRunning();
     // An error older than the newest version was fixed by that version.
     const lastError = error && (!latest || error.at >= latest.createdAt) ? error : null;
+    const skip = this.sweeper.skipSettings();
+    const skipFields = { skipPatterns: skip.patterns, skipSource: skip.source, skipConfigFile: skip.configFile };
     if (!latest) {
-      return { current: null, lastError, running, skipPatterns: this.sweeper.skipPatterns };
+      return { current: null, lastError, running, ...skipFields };
     }
     const names = this.topicNames();
     const forgotten = forgottenTitles(this.store);
@@ -79,7 +81,7 @@ export class WorkContextMemory {
       },
       lastError,
       running,
-      skipPatterns: this.sweeper.skipPatterns,
+      ...skipFields,
     };
   }
 

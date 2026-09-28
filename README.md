@@ -60,7 +60,7 @@ PostPile runs on your Mac only. There is no PostPile server and no telemetry.
 
 - **GitHub**: the app calls the GitHub API with the token from `gh auth token`. It reads your notifications and the PRs they point to. It writes (approve, comment, mark read) only after you unlock writes.
 - **Anthropic**: agent calls run through the `claude` CLI on your machine, so PR titles, bodies, comments and review threads go to Anthropic under your Claude account's terms. GitHub text is treated as untrusted input: it is fenced in prompts, and calls that read it run without tools.
-- **Work context sweep**: once a day the app reads your Claude Code folder (`~/.claude`: `CLAUDE.md` and its includes, each project's memory files, and light signals from the last 7 days of sessions), masks secrets, and asks Claude for a short digest of what you are working on. The digest helps rank and phrase things. Project folders on the skip list are never opened. The default list is `taxes`, `garden`, `hobby`, `personal`, `private`; `POSTPILE_SWEEP_SKIP` (comma separated) replaces it. The digest shows under Your instructions, with its sources, and you can forget it.
+- **Work context sweep**: once a day the app reads your Claude Code folder (`~/.claude`: `CLAUDE.md` and its includes, each project's memory files, and light signals from the last 7 days of sessions), masks secrets, and asks Claude for a short digest of what you are working on. The digest helps rank and phrase things. Project folders on the skip list are never opened. The default list is `taxes`, `garden`, `hobby`, `personal`, `private`. Your own list is edited under the digest and saved to `~/.config/postpile/config.json` as `{ "sweepSkip": ["taxes", "side-project"] }`; `POSTPILE_SWEEP_SKIP` (comma separated) wins over both. The digest shows under Your instructions, with its sources, and you can forget it.
 - **Local data**: the database lives in `~/Library/Application Support/PostPile`, logs in `~/Library/Logs/PostPile`, and your instructions for the agent in `~/.config/postpile/instructions.md`.
 
 ## Build from source
@@ -128,7 +128,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`, `POSTPILE_SWEEP_MODEL`, `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs
 - `POSTPILE_CLAUDE_BIN`: the `claude` binary to run
 - `POSTPILE_CLAUDE_DIR`: the folder the work context sweep reads, default `~/.claude`
-- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads (default `taxes,garden,hobby,personal,private`; empty means none)
+- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `taxes,garden,hobby,personal,private`; empty means none
 - `POSTPILE_LOG_DIR`: where logs go
 
 Renamed from code-manager on 2026-09-28. On first start the app moves the old `code-manager` data and config folders over. `CODE_MANAGER_*` env vars still work for now, with a deprecation line.

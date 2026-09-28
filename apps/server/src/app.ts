@@ -272,6 +272,11 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     const body = z.object({ version: z.number().int().positive(), index: z.number().int().min(0) }).parse(await c.req.json());
     return c.json(await engine.forgetWorkThread(body));
   });
+  // The sweep's skip list, saved to the user's config.json.
+  app.put('/api/work-context/skip-list', async (c) => {
+    const body = z.object({ patterns: z.array(z.string().max(200)).max(100) }).parse(await c.req.json());
+    return c.json(await engine.setSweepSkip(body.patterns));
+  });
 
   app.get('/api/facts', async (c) => {
     const { since, ...query } = factQuery.parse(c.req.query());

@@ -224,6 +224,8 @@ export interface EngineService {
   sweepWorkContext(): Promise<WorkContextSweepResult>;
   /** Forget on a digest thread: logged as feedback, dropped by the next sweep. Undo token for UNDO_WINDOW_MS. */
   forgetWorkThread(input: WorkThreadForget): Promise<ActionResult>;
+  /** Saves the sweep's skip list to the user's config.json; read again on every sweep. */
+  setSweepSkip(patterns: string[]): Promise<ActionResult>;
   /** The daily sweep on a timer (desktop app): at start, then every 30 minutes if due. A second call is ignored. */
   startWorkContextSchedule(): void;
   stopWorkContextSchedule(): void;

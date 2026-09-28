@@ -14,6 +14,7 @@ import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
 import { PendingWrites } from './writes/pending-writes.ts';
+import { UserConfigFile } from './user-config.ts';
 import { WriteSwitch } from './writes/write-switch.ts';
 
 export interface CreateEngineOptions {
@@ -94,5 +95,6 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
     dataLock: lock,
+    userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
   });
 }

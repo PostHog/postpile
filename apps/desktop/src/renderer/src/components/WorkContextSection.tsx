@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import type { WorkContextThreadView } from '@postpile/core';
+import type { WorkContextThreadView, WorkContextView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useWorkContext } from '../api/work-context.ts';
 import { useNow } from '../lib/use-now.ts';
-import { inputLine, skipLine, sourceLabel, sweepStatus } from '../lib/work-context.ts';
+import { inputLine, parseSkipText, skipNote, skipText, sourceLabel, sweepStatus } from '../lib/work-context.ts';
 import { Button } from './Button.tsx';
 
 function ThreadRow(props: { thread: WorkContextThreadView; version: number; onOpenTopic: (topicId: string) => void }) {
@@ -68,6 +68,53 @@ function ThreadRow(props: { thread: WorkContextThreadView; version: number; onOp
 }
 
 /**
+ * The skip list as one comma separated input. Saved to the user's
+ * config.json, so it holds for the packaged app too (no shell env there).
+ * Read-only while POSTPILE_SWEEP_SKIP overrides it.
+ */
+function SkipListEditor(props: { view: WorkContextView }) {
+  const actions = useActions();
+  const saved = skipText(props.view.skipPatterns);
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = draft ?? saved;
+  const fromEnv = props.view.skipSource === 'env';
+  const canSave = !fromEnv && props.view.skipConfigFile !== null && text !== saved && !actions.isBusy('workContext:skip');
+
+  async function save() {
+    if (await actions.saveSweepSkip(parseSkipText(text))) {
+      setDraft(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <label htmlFor="sweep-skip" className="shrink-0 text-[11.5px] text-muted">
+          Never read
+        </label>
+        <input
+          id="sweep-skip"
+          className="h-7 min-w-0 flex-1 rounded-control border border-control bg-surface px-2 font-mono text-[11px] text-ink outline-none select-text focus:border-accent disabled:opacity-60"
+          value={text}
+          disabled={fromEnv}
+          placeholder="taxes, garden, side-project"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && canSave) {
+              void save();
+            }
+          }}
+        />
+        <Button disabled={!canSave} onClick={() => void save()}>
+          Save
+        </Button>
+      </div>
+      <p className="text-[10.5px] text-faint">{skipNote(props.view)}</p>
+    </div>
+  );
+}
+
+/**
  * "What you're working on": a digest the agent writes once a day from the
  * user's local Claude Code notes. Shown below the instructions and kept
  * apart from them: the user steers it only with Forget and Refresh.
@@ -115,11 +162,7 @@ export function WorkContextSection(props: { onOpenTopic: (topicId: string) => vo
           </p>
         </>
       )}
-      {view && (
-        <p className="font-mono text-[10.5px] text-faint" title="Folders under ~/.claude/projects the sweep never opens, so private projects never leave the machine. Read-only here.">
-          {skipLine(view.skipPatterns)}
-        </p>
-      )}
+      {view && <SkipListEditor view={view} />}
       {view && <p className="text-[11px] text-muted">{sweepStatus({ ...view, running }, now)}</p>}
     </section>
   );

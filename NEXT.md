@@ -240,9 +240,11 @@ now".
   of "Your instructions": summary, threads with topic links, Why?, Forget
   (with Undo), Refresh, last error. One real run against a DB copy: 60k chars
   in, 12 threads, $0.40, 43s; personal sessions left out.
-  Project folders on the skip list (`POSTPILE_SWEEP_SKIP`, default taxes,
-  garden, hobby, personal, private) are never read; the count is in the input
-  stats and the list shows read-only under the digest.
+  Project folders on the skip list are never read; the count is in the
+  input stats. The list is edited under the digest and saved to
+  `~/.config/postpile/config.json` (`sweepSkip`), read on every sweep;
+  `POSTPILE_SWEEP_SKIP` wins over it, the defaults (taxes, garden, hobby,
+  personal, private) come last.
 - Default agent-call cap for app syncs raised from 30 to 150
   (`POSTPILE_MAX_AGENT_CALLS`).
 - App bundle: `pnpm dist` makes an ad-hoc signed `PostPile.app` (arm64,
@@ -724,7 +726,9 @@ the app meanwhile.
   `~/.claude/projects` folders matching `taxes`, `garden`, `hobby`,
   `personal`, `private` (or `POSTPILE_SWEEP_SKIP`) are never read.
   Defaults made generic for the public repo (2026-09-28); a personal
-  list goes in `POSTPILE_SWEEP_SKIP`.
+  list goes in `sweepSkip` of `~/.config/postpile/config.json` (editable in
+  the app, works for the packaged app from Finder), or `POSTPILE_SWEEP_SKIP`,
+  which wins.
 
 - **Pending writes, not local reads** (2026-09-28): a mark-read while
   locked changes nothing in the app; it waits as a pending write until the
@@ -823,12 +827,15 @@ Env switches:
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the
   footer lock cannot be opened. Use this for smoke runs against the real
   account.
-- `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs the app starts
-  (launch and "Sync now"), default 150 (was 30). The CLI uses `--max-agent-calls`.
+- `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
+  without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
+  CLI without `--max-agent-calls`), default 150 (was 30).
 - `POSTPILE_CLAUDE_DIR`: the Claude Code folder the work context sweep
   reads, default `~/.claude`. `POSTPILE_SWEEP_MODEL`: its model, default
   `opus`. `POSTPILE_SWEEP_SKIP`: comma-separated project folders the sweep
-  never reads (default `taxes,garden,hobby,personal,private`; empty = none).
+  never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`
+  (dev: `postpile-dev`), then the default `taxes,garden,hobby,personal,private`;
+  empty = none.
 - `POSTPILE_DB`, `POSTPILE_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/PostPile/db.sqlite`) and the
   instructions file (default `~/.config/postpile/instructions.md`).

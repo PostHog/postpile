@@ -1667,8 +1667,13 @@ from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
 - **Skip list first**: `projects/*` folders on the skip list are never
   opened, neither memory nor sessions, so private projects never leave the
   machine (`work-context/skip-list.ts`). Defaults: `taxes`, `garden`,
-  `hobby`, `personal`, `private`; `POSTPILE_SWEEP_SKIP` (comma separated) replaces
-  them, set to empty it skips nothing. Matching never touches the disk:
+  `hobby`, `personal`, `private`. The user's own list lives in `sweepSkip` of
+  `~/.config/postpile/config.json` (dev: `~/.config/postpile-dev/`), edited
+  as one comma-separated input under the digest and read again on every
+  sweep, so it holds for the packaged app launched from Finder (no shell
+  env there). Precedence: `POSTPILE_SWEEP_SKIP` (comma separated, empty
+  skips nothing), then the config file, then the defaults. While the env
+  var is set the input is read-only and says so. Matching never touches the disk:
   decoding a folder like `-Users-me-workspace-taxes` on disk used to
   stat paths under `~/Pictures`, cloud drives and `/Volumes`, and macOS asked
   for privacy permissions at launch. A folder is skipped when the pattern's

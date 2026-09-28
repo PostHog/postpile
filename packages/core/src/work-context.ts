@@ -179,10 +179,18 @@ export interface WorkContextView {
   running: boolean;
   /**
    * Project folders under ~/.claude/projects the sweep never reads, matched
-   * against the project's folder name (POSTPILE_SWEEP_SKIP, else the defaults).
+   * against the project's folder name: POSTPILE_SWEEP_SKIP, else sweepSkip
+   * in the user's config.json, else the defaults.
    */
   skipPatterns: string[];
+  /** Where skipPatterns come from. With 'env' an edit to the config file has no effect until the variable is gone. */
+  skipSource?: SweepSkipSource;
+  /** The config file the skip list is saved to; null when this engine has none (sample data, tests). */
+  skipConfigFile?: string | null;
 }
+
+/** Where the sweep's skip list comes from: POSTPILE_SWEEP_SKIP, the user's config.json, or the defaults. */
+export type SweepSkipSource = 'env' | 'config' | 'default';
 
 export interface WorkContextSweepResult {
   ok: boolean;

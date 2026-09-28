@@ -1,11 +1,12 @@
 import type { AgentService, ContextSweepTopic } from '@postpile/agent';
-import { dossierBrief, type SweepHistory, type WorkContextSweepResult } from '@postpile/core';
+import { dossierBrief, type ActionResult, type SweepHistory, type SweepSkipSource, type WorkContextSweepResult } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { errorText } from '../errors.ts';
 import type { InstructionsHistory } from '../instructions/history.ts';
 import { WorkContextCollector, type CollectBudget } from './collector.ts';
 import { forgottenThreads } from './forgotten.ts';
-import { SweepSkipList, sweepSkipFromEnv } from './skip-list.ts';
+import type { UserConfigFile } from '../user-config.ts';
+import { resolveSweepSkip, SweepSkipList } from './skip-list.ts';
 
 /** Meta key: the last failed sweep as JSON {message, at}. Cleared by the next success. */
 export const SWEEP_ERROR_KEY = 'work_context_last_error';
@@ -24,9 +25,18 @@ export interface WorkContextSweeperDeps {
   /** Only tests pass these. */
   home?: string;
   budget?: CollectBudget;
-  /** Project folders never read. Defaults to POSTPILE_SWEEP_SKIP, else DEFAULT_SWEEP_SKIP. */
-  skipPatterns?: string[];
+  /** The user's config.json, read on every sweep for the skip list. Null or missing: none (tests, sample data). */
+  config?: UserConfigFile | null;
+  /** Read for POSTPILE_SWEEP_SKIP. Defaults to process.env. */
+  env?: NodeJS.ProcessEnv;
   log?: (message: string) => void;
+}
+
+/** The skip list in use and where it comes from. */
+export interface SweepSkipSettings {
+  patterns: string[];
+  source: SweepSkipSource;
+  configFile: string | null;
 }
 
 /**
@@ -38,11 +48,31 @@ export interface WorkContextSweeperDeps {
 export class WorkContextSweeper {
   private running: Promise<WorkContextSweepResult> | null = null;
   private readonly log: (message: string) => void;
-  readonly skipPatterns: string[];
 
   constructor(private readonly deps: WorkContextSweeperDeps) {
     this.log = deps.log ?? ((message) => console.log(message));
-    this.skipPatterns = deps.skipPatterns ?? sweepSkipFromEnv(process.env.POSTPILE_SWEEP_SKIP);
+  }
+
+  /** Read fresh each time: POSTPILE_SWEEP_SKIP, else the config file, else the defaults. */
+  skipSettings(): SweepSkipSettings {
+    const config = this.deps.config ?? null;
+    const resolved = resolveSweepSkip((this.deps.env ?? process.env).POSTPILE_SWEEP_SKIP, config?.read().sweepSkip);
+    return { ...resolved, configFile: config?.path ?? null };
+  }
+
+  /** Saves the skip list to the config file; the next sweep uses it. */
+  saveSkipPatterns(patterns: string[]): ActionResult {
+    const config = this.deps.config ?? null;
+    if (!config) {
+      return { ok: false, message: 'No config file here: the skip list cannot be saved.', undoToken: null };
+    }
+    try {
+      config.setSweepSkip(patterns);
+    } catch (error) {
+      return { ok: false, message: `Could not save ${config.path}: ${errorText(error)}`, undoToken: null };
+    }
+    const overridden = this.skipSettings().source === 'env' ? ' POSTPILE_SWEEP_SKIP is set and still wins until it is unset.' : '';
+    return { ok: true, message: `Skip list saved to ${config.path}.${overridden}`, undoToken: null };
   }
 
   isRunning(): boolean {
@@ -88,7 +118,7 @@ export class WorkContextSweeper {
       now: now(),
       home: this.deps.home,
       budget: this.deps.budget,
-      skipList: new SweepSkipList(this.skipPatterns),
+      skipList: new SweepSkipList(this.skipSettings().patterns),
       log: this.log,
     });
     let stats: WorkContextSweepResult['stats'] = null;

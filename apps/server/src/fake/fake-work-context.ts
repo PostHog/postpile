@@ -81,6 +81,9 @@ export class FakeWorkContext {
   private createdAt: string;
   private readonly forgotten = new Set<number>();
   private running = false;
+  /** Saved skip list; sample data has no config file, so it lives in memory. */
+  private skipPatterns: string[] = SAMPLE_SKIP;
+  private skipSource: 'config' | 'default' = 'default';
 
   constructor(
     private readonly topics: Topic[],
@@ -111,8 +114,16 @@ export class FakeWorkContext {
       },
       lastError: null,
       running: this.running,
-      skipPatterns: SAMPLE_SKIP,
+      skipPatterns: this.skipPatterns,
+      skipSource: this.skipSource,
+      skipConfigFile: '~/.config/postpile/config.json (sample data: kept in memory)',
     };
+  }
+
+  setSkip(patterns: string[]): ActionResult {
+    this.skipPatterns = patterns.map((pattern) => pattern.trim()).filter((pattern) => pattern !== '');
+    this.skipSource = 'config';
+    return { ok: true, message: 'Skip list saved (sample data: in memory only).', undoToken: null };
   }
 
   async sweep(): Promise<WorkContextSweepResult> {

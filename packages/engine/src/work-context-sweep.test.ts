@@ -1,6 +1,10 @@
 import { FakeTimers, makeThreadFor } from '@postpile/core/fixtures';
 import { SWEEP_CHECK_MS, type SweepHistory, type WorkContextSweepResult } from '@postpile/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { UserConfigFile } from './user-config.ts';
 import { makeFakeClaudeDir, userLine, type FakeClaudeDir } from './testing/claude-dir.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -29,6 +33,53 @@ afterEach(() => {
 function answer(threads: unknown[] = [{ title: 'Depot rollout', detail: 'Runners to posthog.', topicIds: ['depot'], sources: ['s1', 'm1'] }]): void {
   h.runner.answer('context_sweep', { summary: 'Alice drives the Depot CI move.', threads });
 }
+
+describe('the sweep skip list in config.json', () => {
+  let configDir: string;
+
+  beforeEach(() => {
+    configDir = mkdtempSync(join(tmpdir(), 'postpile-config-'));
+    vi.stubEnv('POSTPILE_SWEEP_SKIP', undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('is saved to the file, shown in the view and used by the next sweep', async () => {
+    const config = new UserConfigFile(join(configDir, 'config.json'));
+    const withConfig = makeHarness({ claudeDir: fake.claudeDir, userConfig: config });
+    withConfig.runner.answer('context_sweep', { summary: 'x', threads: [] });
+    expect((await withConfig.engine.getWorkContext()).skipSource).toBe('default');
+
+    const saved = await withConfig.engine.setSweepSkip(['taxes', 'app']);
+
+    expect(saved.ok).toBe(true);
+    expect(JSON.parse(readFileSync(config.path, 'utf8'))).toEqual({ sweepSkip: ['taxes', 'app'] });
+    const view = await withConfig.engine.getWorkContext();
+    expect(view).toMatchObject({ skipPatterns: ['taxes', 'app'], skipSource: 'config', skipConfigFile: config.path });
+    await withConfig.engine.sweepWorkContext();
+    const prompt = withConfig.runner.promptsFor('context_sweep')[0] ?? '';
+    expect(prompt).not.toContain('roll the Depot runners out to posthog');
+    expect(withConfig.store.workContext.latest()?.inputStats).toMatchObject({ skippedProjects: 1, skipPatterns: ['taxes', 'app'] });
+  });
+
+  it('loses to POSTPILE_SWEEP_SKIP, and says so when saving', async () => {
+    vi.stubEnv('POSTPILE_SWEEP_SKIP', 'taxes');
+    const config = new UserConfigFile(join(configDir, 'config.json'));
+    const withConfig = makeHarness({ claudeDir: fake.claudeDir, userConfig: config });
+
+    const saved = await withConfig.engine.setSweepSkip(['app']);
+
+    expect(saved.message).toContain('POSTPILE_SWEEP_SKIP is set and still wins');
+    expect(await withConfig.engine.getWorkContext()).toMatchObject({ skipPatterns: ['taxes'], skipSource: 'env' });
+  });
+
+  it('cannot be saved without a config file', async () => {
+    expect((await h.engine.setSweepSkip(['app'])).ok).toBe(false);
+  });
+});
 
 describe('Engine.sweepWorkContext', () => {
   it('sends the collected material, instructions and topics, and stores a version with sources and stats', async () => {

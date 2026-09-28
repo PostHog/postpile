@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkContextInputStats, WorkContextView } from '@postpile/core';
-import { inputLine, skipLine, sourceLabel, sweepStatus } from './work-context.ts';
+import { inputLine, parseSkipText, skipNote, skipText, sourceLabel, sweepStatus } from './work-context.ts';
 
 const stats: WorkContextInputStats = {
   budgetChars: 60000,
@@ -37,9 +37,17 @@ describe('work context labels', () => {
     expect(inputLine({ ...stats, skippedProjects: 2 })).toMatch(/; 2 private projects skipped$/);
   });
 
-  it('shows the skip list', () => {
-    expect(skipLine(['taxes', 'hobby'])).toMatch(/projects named taxes, hobby/);
-    expect(skipLine([])).toMatch(/every project folder is read/);
+  it('edits the skip list as comma separated text', () => {
+    expect(skipText(['taxes', 'hobby'])).toBe('taxes, hobby');
+    expect(parseSkipText(' taxes ,, side-project ,')).toEqual(['taxes', 'side-project']);
+    expect(parseSkipText('')).toEqual([]);
+  });
+
+  it('says where the skip list comes from', () => {
+    const file = '~/.config/postpile/config.json';
+    expect(skipNote({ skipPatterns: [], skipSource: 'config', skipConfigFile: file })).toBe(`Empty: every project folder is read. Saved in ${file}.`);
+    expect(skipNote({ skipPatterns: ['a'], skipSource: 'default', skipConfigFile: file })).toMatch(/These are the defaults; saving writes your own list\.$/);
+    expect(skipNote({ skipPatterns: ['a'], skipSource: 'env', skipConfigFile: file })).toMatch(/Set by POSTPILE_SWEEP_SKIP, which wins/);
   });
 
   it('says when it was written, that it runs, or that the last refresh failed', () => {

@@ -78,6 +78,7 @@ import { SyncRun } from './sync-run.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
 import { WorkContextSweeper } from './work-context/sweeper.ts';
+import type { UserConfigFile } from './user-config.ts';
 import { WorkContextMemory } from './work-context/work-context.ts';
 import type { GitHubWrites } from './writes/github-writes.ts';
 import type { PendingWrites } from './writes/pending-writes.ts';
@@ -103,6 +104,8 @@ export interface EngineDeps {
   dataLock?: { release(): void } | null;
   /** Local Claude Code folder the work context sweep reads. Defaults to POSTPILE_CLAUDE_DIR, else ~/.claude. */
   claudeDir?: string;
+  /** The user's config.json (sweep skip list). Null or missing: none, e.g. in tests. */
+  userConfig?: UserConfigFile | null;
   /** Sync start, summary and errors. Defaults to console.log, which the desktop app writes to its log file. */
   syncLog?: (line: string) => void;
 }
@@ -138,7 +141,14 @@ export class Engine implements EngineService {
     const { store, now } = deps;
     const history = new InstructionsHistory(store, deps.instructionsFile, now);
     const proposer = new InstructionsProposer(store, deps.agent, history);
-    this.sweeper = new WorkContextSweeper({ store, agent: deps.agent, history, claudeDir: deps.claudeDir ?? claudeDirFromEnv(), now });
+    this.sweeper = new WorkContextSweeper({
+      store,
+      agent: deps.agent,
+      history,
+      claudeDir: deps.claudeDir ?? claudeDirFromEnv(),
+      now,
+      config: deps.userConfig ?? null,
+    });
     this.workContext = new WorkContextMemory(store, this.sweeper, now);
     this.sweepSchedule = new WorkContextSchedule(this.sweeper, deps.timers ?? systemTimers, now);
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
@@ -508,6 +518,10 @@ export class Engine implements EngineService {
 
   async forgetWorkThread(input: WorkThreadForget): Promise<ActionResult> {
     return this.workContext.forget(input);
+  }
+
+  async setSweepSkip(patterns: string[]): Promise<ActionResult> {
+    return this.sweeper.saveSkipPatterns(patterns);
   }
 
   startWorkContextSchedule(): void {

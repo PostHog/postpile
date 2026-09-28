@@ -1240,6 +1240,10 @@ export class FakeEngine implements EngineService {
     return { ...forgotten.result, undoToken: this.memoryUndo(forgotten.undo) };
   }
 
+  async setSweepSkip(patterns: string[]): Promise<ActionResult> {
+    return this.workContext.setSkip(patterns);
+  }
+
   /** The fake has no daily schedule; Refresh is enough for UI work. */
   startWorkContextSchedule(): void {}
 

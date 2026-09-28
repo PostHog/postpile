@@ -20,12 +20,31 @@ export function inputLine(stats: WorkContextInputStats): string {
   return `Read ${k(stats.sentChars)} of ${k(stats.budgetChars)} chars: ${stats.claudeMdFiles} CLAUDE.md, ${stats.memoryFiles} memory files, ${stats.sessions} sessions${dropped}${skipped}`;
 }
 
-/** The skip list, read-only: project folders the sweep never reads. */
-export function skipLine(patterns: string[]): string {
-  if (patterns.length === 0) {
-    return 'Skip list empty: every project folder is read (POSTPILE_SWEEP_SKIP is set to nothing).';
+/** The skip list as the input shows it. */
+export function skipText(patterns: string[]): string {
+  return patterns.join(', ');
+}
+
+/** The input's text as a skip list: comma separated, trimmed, empties dropped. */
+export function parseSkipText(text: string): string[] {
+  return text
+    .split(',')
+    .map((pattern) => pattern.trim())
+    .filter((pattern) => pattern !== '');
+}
+
+/** Under the skip list input: what it does and where it comes from. */
+export function skipNote(view: Pick<WorkContextView, 'skipPatterns' | 'skipSource' | 'skipConfigFile'>): string {
+  const what =
+    view.skipPatterns.length === 0
+      ? 'Empty: every project folder is read.'
+      : 'Project folders with one of these names (as a whole word run) are never read, memory and sessions both.';
+  if (view.skipSource === 'env') {
+    return `${what} Set by POSTPILE_SWEEP_SKIP, which wins over the saved list until it is unset.`;
   }
-  return `Never read (memory and sessions): projects named ${patterns.join(', ')} or starting with it. Change with POSTPILE_SWEEP_SKIP.`;
+  const where = view.skipConfigFile ? `Saved in ${view.skipConfigFile}.` : '';
+  const defaults = view.skipSource === 'default' ? ' These are the defaults; saving writes your own list.' : '';
+  return `${what} ${where}${defaults}`.trim();
 }
 
 /** The footer line: running, failed, or when the digest was written. */

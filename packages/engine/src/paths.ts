@@ -6,6 +6,8 @@ export interface AppPaths {
   /** General instructions, included in every prompt. Absent file means none. */
   instructionsFile: string;
   databaseFile: string;
+  /** The user's settings (config.json). Missing: the engine uses none (tests). */
+  configFile?: string;
 }
 
 export interface PathEnv {
@@ -21,6 +23,7 @@ export interface DataDirs {
 }
 
 export const DATABASE_FILE_NAME = 'db.sqlite';
+export const USER_CONFIG_FILE_NAME = 'config.json';
 
 /**
  * Which data a process uses. dev: a separate folder (PostPile-dev,
@@ -93,6 +96,7 @@ export function defaultPaths(pathEnv: PathEnv = systemPathEnv()): AppPaths {
   return {
     instructionsFile: pathEnv.env.POSTPILE_INSTRUCTIONS || join(dirs.configDir, 'instructions.md'),
     databaseFile: pathEnv.env.POSTPILE_DB || join(dataDir, DATABASE_FILE_NAME),
+    configFile: join(dirs.configDir, USER_CONFIG_FILE_NAME),
   };
 }
 

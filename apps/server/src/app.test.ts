@@ -70,6 +70,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     getWorkContext: notImplemented,
     sweepWorkContext: notImplemented,
     forgetWorkThread: notImplemented,
+    setSweepSkip: notImplemented,
     startWorkContextSchedule: notImplemented,
     stopWorkContextSchedule: notImplemented,
     flushPendingWrites: notImplemented,
@@ -99,6 +100,26 @@ describe('server app', () => {
     const forget = await app.request('/api/work-context/forget', { method: 'POST', headers, body: JSON.stringify({ version: 1, index: 2 }) });
     expect(await forget.json()).toMatchObject({ ok: true });
     expect(forgets).toEqual([{ version: 1, index: 2 }]);
+  });
+
+  it('saves the sweep skip list', async () => {
+    const saved: string[][] = [];
+    const app = createApp(
+      fakeEngine({
+        setSweepSkip: async (patterns) => {
+          saved.push(patterns);
+          return { ok: true, message: 'saved', undoToken: null };
+        },
+      }),
+      'secret',
+      CONFIG,
+    );
+    const headers = { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' };
+    const res = await app.request('/api/work-context/skip-list', { method: 'PUT', headers, body: JSON.stringify({ patterns: ['taxes', 'side-project'] }) });
+    expect(await res.json()).toMatchObject({ ok: true });
+    expect(saved).toEqual([['taxes', 'side-project']]);
+    const bad = await app.request('/api/work-context/skip-list', { method: 'PUT', headers, body: JSON.stringify({ patterns: 'taxes' }) });
+    expect(bad.status).toBe(400);
   });
 
   it('lists topics and enforces the token', async () => {

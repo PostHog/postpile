@@ -14,6 +14,7 @@ import type {
   ThreadsSinceResult,
   FoundRef,
 } from '@postpile/github';
+import type { UserConfigFile } from '../user-config.ts';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
 import { AgentCallLog } from '../agent-call-log.ts';
@@ -250,6 +251,8 @@ export interface HarnessOptions {
   claudeDir?: string;
   /** Gets the sync's log lines (start, summary, errors). */
   syncLog?: (line: string) => void;
+  /** The user's config.json; none by default, so tests never read a real one. */
+  userConfig?: UserConfigFile;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -291,6 +294,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     pingDecisionsPerDay: options.pingDecisionsPerDay,
     claudeDir: options.claudeDir ?? '/nonexistent/claude',
     syncLog: options.syncLog ?? (() => {}),
+    userConfig: options.userConfig ?? null,
   });
   return { engine, store, reader, writer, writes, runner, agent, timers };
 }
