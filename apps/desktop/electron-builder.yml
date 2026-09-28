@@ -2,7 +2,9 @@
 # Everything the app runs is bundled into out/ by electron-vite (main,
 # preload, renderer, workspace packages, hono, fix-path), so the desktop
 # package has no runtime dependencies and no node_modules go into the app.
-# Unsigned on purpose: no Developer ID, no notarization.
+# Ad-hoc signed (identity "-"): no Developer ID, no notarization. An
+# unsigned or half-signed bundle has an invalid signature, and macOS drops
+# notifications from such apps without a word.
 appId: com.postpile.app
 productName: PostPile
 electronVersion: 44.4.5
@@ -19,7 +21,10 @@ asar: true
 mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools
-  identity: null
+  identity: "-"
+  # Hardened runtime with an ad-hoc signature needs library validation
+  # turned off by entitlement; without notarization it buys nothing.
+  hardenedRuntime: false
   notarize: false
   target:
     - target: dir

@@ -49,7 +49,7 @@ reads; sync, poll and sweep refuse.
 pnpm dist
 ```
 
-Builds with electron-vite, then electron-builder makes an unsigned macOS app
+Builds with electron-vite, then electron-builder makes an ad-hoc signed macOS app
 (Apple silicon):
 
 - `apps/desktop/dist/mac-arm64/PostPile.app`
@@ -60,7 +60,11 @@ the server are bundled into the app, so it runs without tsx or node_modules.
 The server runs in-process on a random localhost port, the data lives in
 `~/Library/Application Support/PostPile` (`pnpm desktop` uses `PostPile-dev`).
 
-It is not signed or notarized, so macOS refuses the first open. Right-click
+It is ad-hoc signed as `com.postpile.app` (no Developer ID, not notarized).
+The signature has to be valid: macOS drops notifications from an app whose
+signature is broken. Check with
+`codesign --verify --deep --strict apps/desktop/dist/mac-arm64/PostPile.app`.
+Without notarization macOS refuses the first open. Right-click
 the app, then Open (once), or clear the quarantine flag:
 
 ```

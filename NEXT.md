@@ -214,7 +214,7 @@ now".
   stats and the list shows read-only under the digest.
 - Default agent-call cap for app syncs raised from 30 to 150
   (`POSTPILE_MAX_AGENT_CALLS`).
-- App bundle: `pnpm dist` makes an unsigned `PostPile.app` (arm64,
+- App bundle: `pnpm dist` makes an ad-hoc signed `PostPile.app` (arm64,
   dir + zip) in `apps/desktop/dist/`, everything bundled, no tsx or
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
@@ -337,7 +337,8 @@ now".
   is written on their next dossier update.
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
   consolidation can only propose splits over timeline PRs.
-- The app bundle (`pnpm dist`) is unsigned and arm64 only; no Homebrew
+- The app bundle (`pnpm dist`) is ad-hoc signed (no Developer ID, not
+  notarized) and arm64 only; no Homebrew
   tap, no auto-update, no release pipeline. x64 would be one more arch in
   `electron-builder.yml` (another Electron download, not tried). The
   packaged app was started once in fake mode; a real-data run from Finder
