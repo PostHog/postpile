@@ -209,6 +209,9 @@ now".
   of "Your instructions": summary, threads with topic links, Why?, Forget
   (with Undo), Refresh, last error. One real run against a DB copy: 60k chars
   in, 12 threads, $0.40, 43s; personal sessions (taxes, shopping) left out.
+  Project folders on the skip list (`POSTPILE_SWEEP_SKIP`, default taxes,
+  garden, hobby, my-blog-com) are never read; the count is in the input
+  stats and the list shows read-only under the digest.
 - Default agent-call cap for app syncs raised from 30 to 150
   (`POSTPILE_MAX_AGENT_CALLS`).
 - Tests (vitest) and typecheck green across all workspaces.
@@ -384,10 +387,7 @@ now".
   the "N your move" chip; bring it back next to the faces? (4) Tier counts
   include pulled-in stack layers the user was not pinged for.
 
-- **Work context sweep**: private projects (taxes, home automation,
-  personal sites) go to the model and only the prompt keeps them out of the
-  digest (the real run did). Keep that, or skip project folders by a list
-  before anything leaves the machine? Budget split (sessions 30k, memory
+- **Work context sweep**: budget split (sessions 30k, memory
   24k) means most posthog memory files never make it, only their MEMORY.md
   index; fine? Which prompts get the digest (now: topics, dossiers, glances,
   pings, chat)?
@@ -414,6 +414,11 @@ now".
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Sweep skip list** (2026-09-28): private projects are kept out by a
+  skip list before anything leaves the machine, not only by the prompt.
+  `~/.claude/projects` folders matching `taxes`, `garden`, `hobby`,
+  `my-blog-com` (or `POSTPILE_SWEEP_SKIP`) are never read.
 
 - **Pending writes, not local reads** (2026-09-28): a mark-read while
   locked changes nothing in the app; it waits as a pending write until the
@@ -516,7 +521,8 @@ Env switches:
   (launch and "Sync now"), default 150 (was 30). The CLI uses `--max-agent-calls`.
 - `POSTPILE_CLAUDE_DIR`: the Claude Code folder the work context sweep
   reads, default `~/.claude`. `POSTPILE_SWEEP_MODEL`: its model, default
-  `opus`.
+  `opus`. `POSTPILE_SWEEP_SKIP`: comma-separated project folders the sweep
+  never reads (default `taxes,garden,hobby,my-blog-com`; empty = none).
 - `POSTPILE_DB`, `POSTPILE_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/PostPile/db.sqlite`) and the
   instructions file (default `~/.config/postpile/instructions.md`).

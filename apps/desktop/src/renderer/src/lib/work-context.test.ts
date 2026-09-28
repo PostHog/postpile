@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkContextInputStats, WorkContextView } from '@postpile/core';
-import { inputLine, sourceLabel, sweepStatus } from './work-context.ts';
+import { inputLine, skipLine, sourceLabel, sweepStatus } from './work-context.ts';
 
 const stats: WorkContextInputStats = {
   budgetChars: 60000,
@@ -19,6 +19,7 @@ function view(overrides: Partial<WorkContextView> = {}): WorkContextView {
     current: { version: 4, createdAt: '2026-09-28T07:00:00.000Z', model: 'opus', summary: 's', lastSeenAt: null, threads: [], inputStats: stats },
     lastError: null,
     running: false,
+    skipPatterns: ['taxes'],
     ...overrides,
   };
 }
@@ -33,6 +34,12 @@ describe('work context labels', () => {
 
   it('sums up the input', () => {
     expect(inputLine(stats)).toBe('Read 41k of 60k chars: 2 CLAUDE.md, 18 memory files, 26 sessions; 3 left out');
+    expect(inputLine({ ...stats, skippedProjects: 2 })).toMatch(/; 2 private projects skipped$/);
+  });
+
+  it('shows the skip list', () => {
+    expect(skipLine(['taxes', 'hobby'])).toMatch(/projects named taxes, hobby/);
+    expect(skipLine([])).toMatch(/every project folder is read/);
   });
 
   it('says when it was written, that it runs, or that the last refresh failed', () => {

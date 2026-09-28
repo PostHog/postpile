@@ -1157,7 +1157,20 @@ from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
   against the including file's folder and its symlink target's folder, only
   under `~/.claude` or the folder the symlink points into (the dotfiles). Lines
   in code fences do not count. Depth 3.
-- Every `projects/*/memory/*.md`, ref = path incl. the project folder.
+- **Skip list first**: `projects/*` folders on the skip list are never
+  opened, neither memory nor sessions, so private projects never leave the
+  machine (`work-context/skip-list.ts`). Defaults: `taxes`, `garden`,
+  `hobby`, `my-blog-com`; `POSTPILE_SWEEP_SKIP` (comma separated) replaces
+  them, set to empty it skips nothing. A folder like
+  `-Users-me-workspace-taxes` is decoded on disk (the encoding turns
+  `/`, `.` and `_` into `-`, so the longest run of tokens that exists as a
+  folder wins at each level; the rest is the last segment once nothing
+  exists). It matches when the project's last path segment equals or starts
+  with a pattern (case and punctuation ignored), or the folder name ends in
+  `-<pattern>`. The count lands in `inputStats.skippedProjects` (names stay
+  out), the log says "skipped N project folders", and the UI shows the list
+  read-only under the digest (`WorkContextView.skipPatterns`).
+- Every other `projects/*/memory/*.md`, ref = path incl. the project folder.
   MEMORY.md indexes first, then files changed in the last 7 days, then the
   rest, newest first. 2,500 chars per index, 1,200 per file.
 - Sessions: `projects/*/*.jsonl` modified in the last 7 days, streamed line by

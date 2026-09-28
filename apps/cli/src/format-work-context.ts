@@ -5,6 +5,9 @@ function statsLines(stats: WorkContextInputStats): string[] {
     `input ${stats.sentChars} of ${stats.budgetChars} chars: ${stats.claudeMdFiles} CLAUDE.md, ${stats.memoryFiles} memory files, ` +
       `${stats.sessions} sessions (of ${stats.sessionFilesScanned} session files), ${stats.maskedSecrets} secrets masked`,
   ];
+  if (stats.skipPatterns !== undefined) {
+    lines.push(`skipped ${stats.skippedProjects ?? 0} project folders (skip list: ${stats.skipPatterns.join(', ') || 'empty'})`);
+  }
   if (stats.droppedCount > 0) {
     lines.push(`dropped ${stats.droppedCount}:`);
     lines.push(...stats.dropped.map((drop) => `  ${drop.kind} ${drop.ref}: ${drop.reason}`));

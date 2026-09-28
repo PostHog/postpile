@@ -53,7 +53,7 @@ export class WorkContextMemory {
     // An error older than the newest version was fixed by that version.
     const lastError = error && (!latest || error.at >= latest.createdAt) ? error : null;
     if (!latest) {
-      return { current: null, lastError, running };
+      return { current: null, lastError, running, skipPatterns: this.sweeper.skipPatterns };
     }
     const names = this.topicNames();
     const forgotten = forgottenTitles(this.store);
@@ -79,6 +79,7 @@ export class WorkContextMemory {
       },
       lastError,
       running,
+      skipPatterns: this.sweeper.skipPatterns,
     };
   }
 

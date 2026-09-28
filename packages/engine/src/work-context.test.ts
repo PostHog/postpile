@@ -3,6 +3,7 @@ import { makeFakeClaudeDir, userLine, type FakeClaudeDir } from './testing/claud
 import { claudeDirFromEnv, WorkContextCollector, type CollectBudget } from './work-context/collector.ts';
 import { maskSecrets, MASK } from './work-context/secrets.ts';
 import { isPastedBlob } from './work-context/session-reader.ts';
+import { DEFAULT_SWEEP_SKIP, projectFolderName, sweepSkipFromEnv, SweepSkipList } from './work-context/skip-list.ts';
 
 const NOW = new Date('2026-09-28T09:00:00Z');
 const RECENT = new Date('2026-09-27T12:00:00Z');
@@ -138,9 +139,64 @@ describe('WorkContextCollector', () => {
     expect(logs).toEqual(['work context: dropped 5 (session: over budget)', 'work context: dropped 1 (memory: over budget)']);
   });
 
+  it('never reads project folders on the skip list, memory or sessions, and counts them', async () => {
+    fake.write('.claude/projects/-Users-me-workspace-posthog/memory/MEMORY.md', 'posthog work', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-taxes/memory/MEMORY.md', 'PRIVATE money notes', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-my-blog-com/memory/MEMORY.md', 'PRIVATE site notes', RECENT);
+    fake.session('-Users-me-workspace-garden-nas', 'h', [userLine('PRIVATE nas prompt', '2026-09-27T10:00:00.000Z')], RECENT);
+    fake.session('-Users-me-workspace-posthog', 'p', [userLine('posthog prompt', '2026-09-27T10:00:00.000Z')], RECENT);
+    const logs: string[] = [];
+
+    const { items, stats } = await new WorkContextCollector({
+      claudeDir: fake.claudeDir,
+      home: fake.home,
+      now: NOW,
+      budget: BIG,
+      skipList: new SweepSkipList(DEFAULT_SWEEP_SKIP, (path) => ['/Users', '/Users/me', '/Users/me/workspace'].includes(path)),
+      log: (message) => logs.push(message),
+    }).collect();
+
+    expect(items.map((item) => item.text).join('\n')).not.toContain('PRIVATE');
+    expect(items).toHaveLength(2);
+    expect(stats).toMatchObject({ skippedProjects: 3, skipPatterns: DEFAULT_SWEEP_SKIP, sessionFilesScanned: 1 });
+    expect(JSON.stringify(stats.dropped)).not.toContain('workspace-taxes');
+    expect(logs).toContain('work context: skipped 3 project folders (skip list)');
+  });
+
   it('works on an empty or missing folder', async () => {
     const empty = new WorkContextCollector({ claudeDir: '/nonexistent/claude', now: NOW });
     expect(await empty.collect()).toMatchObject({ items: [], lastSeenAt: null, stats: { sentChars: 0, droppedCount: 0 } });
+  });
+});
+
+describe('sweep skip list', () => {
+  it('matches the project folder name: equal or starting with the pattern, by path segment', () => {
+    const list = new SweepSkipList(['taxes', 'hobby', 'my-blog-com'], () => false);
+    expect(list.skips('-Users-me-workspace-taxes')).toBe(true);
+    expect(list.skips('-Users-me-workspace-hobby')).toBe(true);
+    expect(list.skips('-Users-me-workspace-my-blog-com')).toBe(true);
+    expect(list.skips('-Users-me-workspace-posthog')).toBe(false);
+    expect(list.skips('-Users-me-workspace-ghatchup')).toBe(false);
+    expect(list.skips('-Users-me')).toBe(false);
+  });
+
+  it('decodes the folder on disk, so dashes in names and parents stay apart', () => {
+    const dirs = new Set(['/Users', '/Users/me', '/Users/me/workspace', '/Users/me/workspace/taxes-tools', '/Users/me/workspace/hobby-notes']);
+    const isDir = (path: string) => dirs.has(path);
+    expect(projectFolderName('-Users-me-workspace-taxes-tools', isDir)).toBe('taxes-tools');
+    expect(projectFolderName('-Users-me-workspace-gone-project', isDir)).toBe('gone-project');
+    const list = new SweepSkipList(['taxes', 'hobby'], isDir);
+    expect(list.skips('-Users-me-workspace-taxes-tools')).toBe(true);
+    expect(list.skips('-Users-me-workspace-hobby-notes')).toBe(true);
+    // "hobby" must not match a parent folder or the middle of a name.
+    expect(list.skips('-Users-me-workspace-posthog-hobby-x')).toBe(false);
+  });
+
+  it('takes POSTPILE_SWEEP_SKIP over the defaults, empty means skip nothing', () => {
+    expect(sweepSkipFromEnv(undefined)).toEqual(['taxes', 'garden', 'hobby', 'my-blog-com']);
+    expect(sweepSkipFromEnv(' taxes , taxes,,')).toEqual(['taxes', 'taxes']);
+    expect(sweepSkipFromEnv('')).toEqual([]);
+    expect(new SweepSkipList([]).skips('-Users-me-workspace-taxes')).toBe(false);
   });
 });
 

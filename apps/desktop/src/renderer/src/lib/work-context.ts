@@ -16,7 +16,16 @@ export function sourceLabel(source: WorkContextSource): string {
 export function inputLine(stats: WorkContextInputStats): string {
   const k = (chars: number) => `${Math.round(chars / 1000)}k`;
   const dropped = stats.droppedCount > 0 ? `; ${stats.droppedCount} left out` : '';
-  return `Read ${k(stats.sentChars)} of ${k(stats.budgetChars)} chars: ${stats.claudeMdFiles} CLAUDE.md, ${stats.memoryFiles} memory files, ${stats.sessions} sessions${dropped}`;
+  const skipped = stats.skippedProjects ? `; ${stats.skippedProjects} private ${stats.skippedProjects === 1 ? 'project' : 'projects'} skipped` : '';
+  return `Read ${k(stats.sentChars)} of ${k(stats.budgetChars)} chars: ${stats.claudeMdFiles} CLAUDE.md, ${stats.memoryFiles} memory files, ${stats.sessions} sessions${dropped}${skipped}`;
+}
+
+/** The skip list, read-only: project folders the sweep never reads. */
+export function skipLine(patterns: string[]): string {
+  if (patterns.length === 0) {
+    return 'Skip list empty: every project folder is read (POSTPILE_SWEEP_SKIP is set to nothing).';
+  }
+  return `Never read (memory and sessions): projects named ${patterns.join(', ')} or starting with it. Change with POSTPILE_SWEEP_SKIP.`;
 }
 
 /** The footer line: running, failed, or when the digest was written. */

@@ -49,6 +49,10 @@ export interface WorkContextInputStats {
   droppedCount: number;
   /** The first few drops; droppedCount has the full number. */
   dropped: WorkContextDrop[];
+  /** ~/.claude/projects folders the skip list kept out (never read). Missing on versions from before the skip list. */
+  skippedProjects?: number;
+  /** The skip list used for this sweep. */
+  skipPatterns?: string[];
 }
 
 /** One stored sweep result. */
@@ -173,6 +177,11 @@ export interface WorkContextView {
   /** The last sweep failed after the newest success. The previous version stays in use. */
   lastError: { message: string; at: IsoTime } | null;
   running: boolean;
+  /**
+   * Project folders under ~/.claude/projects the sweep never reads, matched
+   * against the project's folder name (POSTPILE_SWEEP_SKIP, else the defaults).
+   */
+  skipPatterns: string[];
 }
 
 export interface WorkContextSweepResult {

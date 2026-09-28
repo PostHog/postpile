@@ -3,7 +3,7 @@ import type { WorkContextThreadView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useWorkContext } from '../api/work-context.ts';
 import { useNow } from '../lib/use-now.ts';
-import { inputLine, sourceLabel, sweepStatus } from '../lib/work-context.ts';
+import { inputLine, skipLine, sourceLabel, sweepStatus } from '../lib/work-context.ts';
 import { Button } from './Button.tsx';
 
 function ThreadRow(props: { thread: WorkContextThreadView; version: number; onOpenTopic: (topicId: string) => void }) {
@@ -114,6 +114,11 @@ export function WorkContextSection(props: { onOpenTopic: (topicId: string) => vo
             {inputLine(current.inputStats)}
           </p>
         </>
+      )}
+      {view && (
+        <p className="font-mono text-[10.5px] text-faint" title="Folders under ~/.claude/projects the sweep never opens, so private projects never leave the machine. Read-only here.">
+          {skipLine(view.skipPatterns)}
+        </p>
       )}
       {view && <p className="text-[11px] text-muted">{sweepStatus({ ...view, running }, now)}</p>}
     </section>

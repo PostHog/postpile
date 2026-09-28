@@ -72,7 +72,7 @@ describe('server app', () => {
     const forgets: unknown[] = [];
     const app = createApp(
       fakeEngine({
-        getWorkContext: async () => ({ current: null, lastError: null, running: false }),
+        getWorkContext: async () => ({ current: null, lastError: null, running: false, skipPatterns: [] }),
         sweepWorkContext: async () => ({ ok: true, message: 'v1', version: 1, stats: null }),
         forgetWorkThread: async (input) => {
           forgets.push(input);
@@ -83,7 +83,7 @@ describe('server app', () => {
       CONFIG,
     );
     const headers = { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' };
-    expect(await (await app.request('/api/work-context', { headers })).json()).toEqual({ current: null, lastError: null, running: false });
+    expect(await (await app.request('/api/work-context', { headers })).json()).toEqual({ current: null, lastError: null, running: false, skipPatterns: [] });
     expect(await (await app.request('/api/work-context/sweep', { method: 'POST', headers })).json()).toMatchObject({ ok: true, version: 1 });
     const forget = await app.request('/api/work-context/forget', { method: 'POST', headers, body: JSON.stringify({ version: 1, index: 2 }) });
     expect(await forget.json()).toMatchObject({ ok: true });

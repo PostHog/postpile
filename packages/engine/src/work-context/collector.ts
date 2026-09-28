@@ -5,12 +5,14 @@ import type { ContextSweepItem } from '@postpile/agent';
 import type { IsoTime, WorkContextDrop, WorkContextInputStats, WorkContextSourceKind } from '@postpile/core';
 import { maskSecrets } from './secrets.ts';
 import { readSessionSignals, type SessionSignals } from './session-reader.ts';
+import { SweepSkipList } from './skip-list.ts';
 
 // Collects the sweep's input from the local Claude Code folder, deterministic
 // and without the agent: the global CLAUDE.md and the files it @-includes,
 // every project's memory files, and light signals from sessions of the last
-// days. Everything is masked for secrets and cut to a character budget; what
-// does not fit is dropped and counted.
+// days. Project folders on the skip list are never read. Everything is
+// masked for secrets and cut to a character budget; what does not fit is
+// dropped and counted.
 
 /** Character budget per section. Unused room carries over to the next section. */
 export interface CollectBudget {
@@ -46,6 +48,8 @@ export interface CollectorOptions {
   home?: string;
   budget?: CollectBudget;
   sessionDays?: number;
+  /** ~/.claude/projects folders never read (memory and sessions). Defaults to skipping nothing. */
+  skipList?: SweepSkipList;
   log?: (message: string) => void;
 }
 
@@ -138,6 +142,9 @@ export class WorkContextCollector {
   private readonly sessionDays: number;
   private readonly log: (message: string) => void;
   private readonly drops: WorkContextDrop[] = [];
+  private readonly skipList: SweepSkipList;
+  /** Project folders the skip list kept out; names stay out of the stats on purpose. */
+  private readonly skippedProjects = new Set<string>();
   private maskedSecrets = 0;
 
   constructor(private readonly options: CollectorOptions) {
@@ -145,6 +152,18 @@ export class WorkContextCollector {
     this.budget = options.budget ?? DEFAULT_COLLECT_BUDGET;
     this.sessionDays = options.sessionDays ?? SESSION_DAYS;
     this.log = options.log ?? (() => {});
+    this.skipList = options.skipList ?? new SweepSkipList([]);
+  }
+
+  /** The project folders to read, without the skipped ones. */
+  private projectFolders(projectsDir: string): string[] {
+    return listDir(projectsDir).filter((folder) => {
+      if (this.skipList.skips(folder)) {
+        this.skippedProjects.add(folder);
+        return false;
+      }
+      return true;
+    });
   }
 
   /** "~/.claude/..." instead of the full home path. */
@@ -224,7 +243,7 @@ export class WorkContextCollector {
     const projectsDir = join(this.options.claudeDir, 'projects');
     const recentSince = this.options.now.getTime() - this.sessionDays * DAY_MS;
     const files: { path: string; group: number; mtime: number; index: boolean }[] = [];
-    for (const project of listDir(projectsDir)) {
+    for (const project of this.projectFolders(projectsDir)) {
       const memoryDir = join(projectsDir, project, 'memory');
       for (const name of listDir(memoryDir)) {
         if (!name.endsWith('.md')) {
@@ -250,7 +269,7 @@ export class WorkContextCollector {
     const projectsDir = join(this.options.claudeDir, 'projects');
     const since = this.options.now.getTime() - this.sessionDays * DAY_MS;
     const files: { path: string; sessionId: string; projectDir: string }[] = [];
-    for (const projectDir of listDir(projectsDir)) {
+    for (const projectDir of this.projectFolders(projectsDir)) {
       for (const name of listDir(join(projectsDir, projectDir))) {
         const path = join(projectsDir, projectDir, name);
         if (name.endsWith('.jsonl') && mtimeMs(path) >= since) {
@@ -353,8 +372,13 @@ export class WorkContextCollector {
       maskedSecrets: this.maskedSecrets,
       droppedCount: this.drops.length,
       dropped: this.drops.slice(0, DROPS_LISTED),
+      skippedProjects: this.skippedProjects.size,
+      skipPatterns: this.skipList.rawPatterns,
     };
     this.logDrops();
+    if (this.skippedProjects.size > 0) {
+      this.log(`work context: skipped ${this.skippedProjects.size} project folders (skip list)`);
+    }
     const lastSeenAt = sessions.map((session) => session.endedAt).filter((at): at is string => at !== null).sort().at(-1) ?? null;
     return { items, stats, lastSeenAt };
   }

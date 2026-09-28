@@ -5,6 +5,7 @@ import { errorText } from '../errors.ts';
 import type { InstructionsHistory } from '../instructions/history.ts';
 import { WorkContextCollector, type CollectBudget } from './collector.ts';
 import { forgottenThreads } from './forgotten.ts';
+import { SweepSkipList, sweepSkipFromEnv } from './skip-list.ts';
 
 /** Meta key: the last failed sweep as JSON {message, at}. Cleared by the next success. */
 export const SWEEP_ERROR_KEY = 'work_context_last_error';
@@ -23,6 +24,8 @@ export interface WorkContextSweeperDeps {
   /** Only tests pass these. */
   home?: string;
   budget?: CollectBudget;
+  /** Project folders never read. Defaults to POSTPILE_SWEEP_SKIP, else DEFAULT_SWEEP_SKIP. */
+  skipPatterns?: string[];
   log?: (message: string) => void;
 }
 
@@ -35,9 +38,11 @@ export interface WorkContextSweeperDeps {
 export class WorkContextSweeper {
   private running: Promise<WorkContextSweepResult> | null = null;
   private readonly log: (message: string) => void;
+  readonly skipPatterns: string[];
 
   constructor(private readonly deps: WorkContextSweeperDeps) {
     this.log = deps.log ?? ((message) => console.log(message));
+    this.skipPatterns = deps.skipPatterns ?? sweepSkipFromEnv(process.env.POSTPILE_SWEEP_SKIP);
   }
 
   isRunning(): boolean {
@@ -83,6 +88,7 @@ export class WorkContextSweeper {
       now: now(),
       home: this.deps.home,
       budget: this.deps.budget,
+      skipList: new SweepSkipList(this.skipPatterns),
       log: this.log,
     });
     let stats: WorkContextSweepResult['stats'] = null;

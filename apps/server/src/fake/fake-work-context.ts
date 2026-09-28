@@ -7,7 +7,11 @@ import type {
   WorkContextView,
   WorkThreadForget,
 } from '@postpile/core';
+import { DEFAULT_SWEEP_SKIP } from '@postpile/engine';
 import { SampleClock } from './sample-builders.ts';
+
+/** The real defaults, so fake mode shows what a real sweep skips. */
+const SAMPLE_SKIP = DEFAULT_SWEEP_SKIP;
 
 const STATS: WorkContextInputStats = {
   budgetChars: 60_000,
@@ -23,6 +27,8 @@ const STATS: WorkContextInputStats = {
     { kind: 'session', ref: 'example-infra · 2026-09-25 10:56 · "Runner image bump ⑂"', reason: 'same prompts as a newer session (fork)' },
     { kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-web/memory/old-notes.md', reason: 'over budget' },
   ],
+  skippedProjects: 2,
+  skipPatterns: SAMPLE_SKIP,
 };
 
 const SUMMARY =
@@ -105,6 +111,7 @@ export class FakeWorkContext {
       },
       lastError: null,
       running: this.running,
+      skipPatterns: SAMPLE_SKIP,
     };
   }
 
