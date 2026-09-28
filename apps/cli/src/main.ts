@@ -7,9 +7,26 @@ import { parseInvocation, usage, withCallCap, type Command } from './args.ts';
 import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
+import { formatSetupDraft } from './format-setup.ts';
 import { applyLegacyEnv, type EngineService } from '@postpile/engine';
 
 applyLegacyEnv();
+
+const SETUP_POLL_MS = 500;
+
+/** The setup checks, then the sweep and its draft once the job finished. Writes the viewer like a sync, never instructions. */
+async function setupDraft(engine: EngineService): Promise<string> {
+  const checks = await engine.setupChecks();
+  if (!checks.canContinue) {
+    return formatSetupDraft(checks, null);
+  }
+  let sweep = await engine.startSetupSweep();
+  while (sweep.running) {
+    await new Promise((resolve) => setTimeout(resolve, SETUP_POLL_MS));
+    sweep = (await engine.setupSweep()) ?? sweep;
+  }
+  return formatSetupDraft(checks, sweep);
+}
 
 async function runCommand(engine: EngineService, command: Command): Promise<string> {
   switch (command.name) {
@@ -23,6 +40,8 @@ async function runCommand(engine: EngineService, command: Command): Promise<stri
       const result = await engine.sweepWorkContext();
       return formatSweep(result, await engine.getWorkContext());
     }
+    case 'setup-draft':
+      return setupDraft(engine);
     case 'topics':
       return formatTopics(await engine.listTopics());
     case 'topic': {
