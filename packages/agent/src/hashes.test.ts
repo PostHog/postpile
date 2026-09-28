@@ -39,6 +39,12 @@ describe('glanceItemInputHash', () => {
     expect(glanceHash(makePr({ checks: { rollup: 'FAILURE', contexts: [] } }))).toBe(base);
   });
 
+  it('ignores bot review comments but changes on an agent approval', () => {
+    const botComment = { id: 'rb', author: 'reviewbot[bot]', state: 'COMMENTED', body: 'nit', submittedAt: '2026-09-01T00:00:00Z', commitOid: null } as const;
+    expect(glanceHash(makePr({ reviews: [botComment] }))).toBe(base);
+    expect(glanceHash(makePr({ reviews: [{ ...botComment, state: 'APPROVED' }] }))).not.toBe(base);
+  });
+
   it('changes on a new push, a human comment, instructions or tailoring', () => {
     expect(glanceHash(makePr({ headOid: 'def' }))).not.toBe(base);
     expect(glanceHash(makePr({ comments: [makeComment()] }))).not.toBe(base);

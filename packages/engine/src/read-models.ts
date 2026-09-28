@@ -1,5 +1,7 @@
 import {
   activityList,
+  agentOnlyApprovers,
+  standingApprovals,
   viewerApproval,
   buildPrSummary,
   buildTileView,
@@ -353,6 +355,7 @@ export class ReadModels {
       glanceGap: this.glanceGap(key, glance !== null),
       userState: board.userStates.get(key) ?? null,
       viewerApproval: viewerApproval(pr, board.userStates.get(key) ?? null, loadViewer(this.store)?.login),
+      agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
       topicId: board.topicIdOf(key),
       tileIds: [...tileIds],
       facts: this.memory.prFacts(key),

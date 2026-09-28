@@ -8,6 +8,11 @@ const AVATAR_TONES = [
 
 const BOT_TONE = 'bg-avatar-grey text-avatar-grey-ink';
 
+/**
+ * A GitHub App account ("name[bot]"): grey initials, no public avatar URL.
+ * Whether a login is automation in general is core's `isBot` (also user
+ * accounts on its list); views carry that as data, e.g. `agentApprovers`.
+ */
 export function isBotLogin(login: string): boolean {
   return login.endsWith('[bot]');
 }

@@ -52,7 +52,7 @@ export function PrBody(props: PrBodyProps) {
       </div>
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
       {props.actions}
-      <PrFacts pr={pr} />
+      <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
       <ReviewList pr={pr} />
       <AgentFacts facts={props.detail.facts} />
       <ActivityTimeline activity={props.detail.activity} />

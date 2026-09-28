@@ -26,7 +26,7 @@ const glanceEntry = {
 describe('RunnerAgentService models', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('glances on sonnet unless POSTPILE_GLANCE_MODEL says otherwise', async () => {
+  it('glances on Sonnet 5.5 unless POSTPILE_GLANCE_MODEL says otherwise', async () => {
     const input: GlanceBatchInput = {
       topic: null,
       dossier: null,
@@ -38,7 +38,7 @@ describe('RunnerAgentService models', () => {
     const first = setup();
     first.runner.answer('glance_batch', { glances: [glanceEntry] });
     await first.service.glanceBatch(input);
-    expect(first.runner.requests[0]?.model).toBe('sonnet');
+    expect(first.runner.requests[0]?.model).toBe('claude-sonnet-5-5');
 
     vi.stubEnv('POSTPILE_GLANCE_MODEL', 'claude-haiku-4-5');
     const second = setup();
@@ -68,7 +68,7 @@ describe('RunnerAgentService.assignTopics', () => {
       { prKey: 'acme/app#1', kind: 'existing', topicId: 't1', reason: 'CI work' },
       { prKey: 'acme/app#2', kind: 'new', name: 'Billing rewrite', reason: 'new work' },
     ]);
-    expect(runner.requests[0]?.model).toBe('sonnet');
+    expect(runner.requests[0]?.model).toBe('claude-sonnet-5-5');
   });
 
   it('does not call the model without PRs', async () => {

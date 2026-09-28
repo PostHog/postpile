@@ -54,6 +54,10 @@ so stay under the word limits:
 - othersSaid: which humans weighed in and whether any concern is still open, max 25 words;
   "nobody yet" if no human commented.
 
+"Approved by" marks each approver as a person or an agent (an AI review agent or other
+automation account). Both are real approvals on GitHub. Who looked is a fact you may use in the
+verdict, forYou or risk, for example whether a person has reviewed a change in the user's areas.
+
 Judge each PR on its own facts; do not copy one PR's verdict to the next. Be concrete and
 skeptical; say "unclear" rather than invent.
 Give exactly ${input.items.length} ${input.items.length === 1 ? 'entry' : 'entries'}, one per pull request above, also for the user's own

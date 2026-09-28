@@ -72,7 +72,7 @@ describe('RunnerAgentService.decidePings', () => {
       { id: 't2', ping: false, title: '@bob mentioned you · posthog#1', body: 'Title\nbob: ...', reason: 'just a thank-you' },
     ]);
     expect(runner.requests).toHaveLength(1);
-    expect(runner.requests[0]?.model).toBe('sonnet');
+    expect(runner.requests[0]?.model).toBe('claude-sonnet-5-5');
     expect(calls).toMatchObject([{ purpose: 'ping_decision', ok: true }]);
   });
 

@@ -68,8 +68,29 @@ export function reviewRows(pr: Pr): ReviewRow[] {
   return [...requested, ...reviewed, ...teams];
 }
 
-/** What stands between the PR and a merge, in a few words. */
-export function mergeStatus(pr: Pr): string {
+/**
+ * The approval in words. `agentApprovers` is core's `agentOnlyApprovers`:
+ * "approved by reviewbot (agent)" or "approved by reviewbot and lintbot
+ * (agents)" when only agents approved, else plain "approved".
+ */
+export function approvedText(agentApprovers: string[]): string {
+  if (agentApprovers.length === 0) {
+    return 'approved';
+  }
+  if (agentApprovers.length === 1) {
+    return `approved by ${agentApprovers[0]} (agent)`;
+  }
+  const names = `${agentApprovers.slice(0, -1).join(', ')} and ${agentApprovers[agentApprovers.length - 1]}`;
+  return `approved by ${names} (agents)`;
+}
+
+/** Sentence case for tooltips: "approved by ..." -> "Approved by ...". */
+export function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** What stands between the PR and a merge, in a few words. `agentApprovers` as in `approvedText`. */
+export function mergeStatus(pr: Pr, agentApprovers: string[]): string {
   if (pr.state === 'MERGED') {
     return pr.mergedBy ? `merged by ${pr.mergedBy}` : 'merged';
   }
@@ -80,7 +101,7 @@ export function mergeStatus(pr: Pr): string {
     return 'draft';
   }
   if (pr.reviewDecision === 'APPROVED') {
-    return 'approved';
+    return approvedText(agentApprovers);
   }
   if (pr.reviewDecision === 'CHANGES_REQUESTED') {
     return 'changes requested';
@@ -127,11 +148,26 @@ const CHECK_PARTS: Record<NonNullable<PrStatus['checks']>, StatusPart> = {
   pending: { text: 'ci …', tone: 'neutral', title: 'Checks running' },
 };
 
+/**
+ * The review segment. Only agents approved: says so in words, same calm
+ * tone as any approval, and names them in the tooltip.
+ */
+function reviewPart(review: NonNullable<PrStatus['review']>, agentApprovers: string[]): StatusPart {
+  if (review !== 'approved' || agentApprovers.length === 0) {
+    return REVIEW_PARTS[review];
+  }
+  return {
+    text: agentApprovers.length === 1 ? 'approved by agent' : 'approved by agents',
+    tone: 'good',
+    title: capitalize(approvedText(agentApprovers)),
+  };
+}
+
 /** The segments of the status pill, leaving out parts that do not apply. */
 export function statusParts(status: PrStatus): StatusPart[] {
   const parts = [LIFECYCLE_PARTS[status.lifecycle]];
   if (status.review) {
-    parts.push(REVIEW_PARTS[status.review]);
+    parts.push(reviewPart(status.review, status.agentApprovers));
   }
   if (status.checks) {
     parts.push(CHECK_PARTS[status.checks]);

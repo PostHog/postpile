@@ -199,6 +199,12 @@ export interface PrDetail {
   userState: UserPrState | null;
   /** The viewer's standing approval (`viewerApproval`): app record or GitHub, any commit. Null when none. */
   viewerApproval: ViewerApproval | null;
+  /**
+   * Agent names ("reviewbot") when only agents approved, also on drafts;
+   * empty once a person approved (`agentOnlyApprovers`). The detail says
+   * "approved by reviewbot (agent)" with it.
+   */
+  agentApprovers: string[];
   topicId: string | null;
   /** Ids of every tile this PR appears in. */
   tileIds: string[];

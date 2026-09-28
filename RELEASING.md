@@ -15,7 +15,7 @@ The first part is one-time setup for the public repo. The second part is the che
 
    Keep the private history in the old local repo (or a private archive repo). To keep history instead, run `git filter-repo --replace-text` over it first; the audit notes list what to replace.
 
-2. **Create the repo** `PostHog/postpile`, public, default branch `main`, no template files (the repo already has README, LICENSE, SECURITY.md).
+2. **Create the repo** `PostHog/postpile`, public, default branch `main`, no template files (the repo already has README, LICENSE, SECURITY.md). Description: "Internal DevEx tool: a macOS app that turns GitHub PR notifications into a short list of what needs you". The "internal" word keeps it from reading like a new PostHog product.
 
 3. **Push:**
 

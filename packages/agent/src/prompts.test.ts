@@ -111,6 +111,24 @@ describe('glanceBatchPrompt, per PR', () => {
   });
 });
 
+describe('glanceBatchPrompt, who approved', () => {
+  function approval(author: string) {
+    return { id: author, author, state: 'APPROVED', body: '', submittedAt: '2026-09-01T00:00:00Z', commitOid: null } as const;
+  }
+
+  it('marks each approver as person or agent, the user left out', () => {
+    const pr = makePr({ author: 'bob', reviews: [approval('alice'), approval('reviewbot[bot]'), approval(viewer.login)] });
+    const prompt = oneGlancePrompt(pr, { kind: 'pinged', reason: 'review_requested' });
+    expect(prompt).toContain('Approved by: @alice (person), @reviewbot[bot] (agent)');
+  });
+
+  it('says an agent approval is a real approval, without an approved-by line when nobody approved', () => {
+    const prompt = oneGlancePrompt(makePr({ author: 'bob' }), { kind: 'pinged', reason: 'review_requested' });
+    expect(prompt).not.toContain('Approved by: @');
+    expect(prompt).toContain('Both are real approvals on GitHub.');
+  });
+});
+
 describe('glanceBatchPrompt, answer shape', () => {
   it('asks for one entry per PR, and says so again on the retry', () => {
     const pr = makePr();

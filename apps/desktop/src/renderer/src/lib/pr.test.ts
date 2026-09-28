@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Review } from '@postpile/core';
 import { at, makePr } from '@postpile/core/fixtures';
-import { checkCounts, mergeStatus, reviewRows, statusParts } from './pr.ts';
+import { approvedText, checkCounts, mergeStatus, reviewRows, statusParts } from './pr.ts';
 
 function review(author: string, state: Review['state'], minutes: number): Review {
   return { id: `${author}-${minutes}`, author, state, body: '', submittedAt: at(minutes), commitOid: null };
@@ -41,23 +41,42 @@ describe('pr helpers', () => {
   });
 
   it('describes the merge status', () => {
-    expect(mergeStatus(makePr({ state: 'MERGED', mergedBy: 'rowan' }))).toBe('merged by rowan');
-    expect(mergeStatus(makePr())).toBe('needs review');
+    expect(mergeStatus(makePr({ state: 'MERGED', mergedBy: 'rowan' }), [])).toBe('merged by rowan');
+    expect(mergeStatus(makePr(), [])).toBe('needs review');
+  });
+
+  it('says who approved when only an agent did', () => {
+    const approved = makePr({ reviewDecision: 'APPROVED' });
+    expect(mergeStatus(approved, ['reviewbot'])).toBe('approved by reviewbot (agent)');
+    expect(mergeStatus(approved, [])).toBe('approved');
+  });
+
+  it('names agents in words', () => {
+    expect(approvedText([])).toBe('approved');
+    expect(approvedText(['reviewbot'])).toBe('approved by reviewbot (agent)');
+    expect(approvedText(['reviewbot', 'lintbot', 'docbot'])).toBe('approved by reviewbot, lintbot and docbot (agents)');
   });
 });
 
 describe('statusParts', () => {
   it('lists lifecycle, review and checks and leaves out what does not apply', () => {
-    expect(statusParts({ lifecycle: 'open', review: 'approved', checks: 'fail' }).map((part) => [part.text, part.tone])).toEqual([
+    expect(statusParts({ lifecycle: 'open', review: 'approved', checks: 'fail', agentApprovers: [] }).map((part) => [part.text, part.tone])).toEqual([
       ['open', 'good'],
       ['approved', 'good'],
       ['ci ✗', 'bad'],
     ]);
-    expect(statusParts({ lifecycle: 'merged', review: null, checks: null }).map((part) => part.text)).toEqual(['merged']);
-    expect(statusParts({ lifecycle: 'queued', review: 'changes', checks: 'pending' }).map((part) => part.tone)).toEqual([
+    expect(statusParts({ lifecycle: 'merged', review: null, checks: null, agentApprovers: [] }).map((part) => part.text)).toEqual(['merged']);
+    expect(statusParts({ lifecycle: 'queued', review: 'changes', checks: 'pending', agentApprovers: [] }).map((part) => part.tone)).toEqual([
       'queued',
       'bad',
       'neutral',
     ]);
+  });
+
+  it('says "approved by agent" in the same calm tone when only agents approved', () => {
+    const [, review] = statusParts({ lifecycle: 'open', review: 'approved', checks: null, agentApprovers: ['reviewbot'] });
+    expect(review).toEqual({ text: 'approved by agent', tone: 'good', title: 'Approved by reviewbot (agent)' });
+    const [, two] = statusParts({ lifecycle: 'open', review: 'approved', checks: null, agentApprovers: ['reviewbot', 'lintbot'] });
+    expect(two?.text).toBe('approved by agents');
   });
 });

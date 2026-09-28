@@ -1,4 +1,4 @@
-import { isBot } from '@postpile/core';
+import { isBot, standingApprovals } from '@postpile/core';
 import type { Pr } from '@postpile/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
@@ -17,9 +17,15 @@ export const DOSSIER_PROMPT_VERSION = 'd2';
 // answer depends on, not every byte of the prompt: a bot comment or a CI
 // re-run must not regenerate a glance, so those are left out on purpose.
 
-/** What a glance depends on: code, description, review state and human discussion. */
+/**
+ * What a glance depends on: code, description, review state and human
+ * discussion. Agent approvals are in the prompt ("Approved by"), so they
+ * count too; the key is only added when there are some, so hashes of PRs
+ * without them stayed the same when it came in.
+ */
 function prGlanceSnapshot(pr: Pr): unknown {
-  return {
+  const agentApprovals = standingApprovals(pr).agents;
+  const snapshot = {
     key: pr.key,
     title: pr.title,
     body: pr.body,
@@ -32,6 +38,7 @@ function prGlanceSnapshot(pr: Pr): unknown {
     reviews: pr.reviews.filter((r) => !isBot(r.author)).map((r) => [r.id, r.state]),
     comments: humanComments(pr).map((c) => c.id),
   };
+  return agentApprovals.length > 0 ? { ...snapshot, agentApprovals } : snapshot;
 }
 
 /**

@@ -3,6 +3,7 @@
 // ActionBar stays dumb.
 import type { Pr, PrLifecycle, Review, ViewerApproval } from '@postpile/core';
 import type { EventGlyph } from './events.ts';
+import { approvedText, capitalize } from './pr.ts';
 
 export interface ApproveButtonInput {
   isDraft: boolean;
@@ -39,7 +40,8 @@ function othersApproved(input: ApproveButtonInput): boolean {
  * - "Approve draft", outlined, on a draft. Draft wins over "as well": that
  *   the PR is not ready yet is the bigger caveat, and the review glyph in
  *   front of the label already shows the other approvals.
- * - "Approve as well" when others approved and the viewer never did.
+ * - "Approve as well" when others approved and the viewer never did. An
+ *   agent's approval counts here too, like on GitHub.
  * - Else "Approve".
  */
 export function approveButton(input: ApproveButtonInput): ApproveButtonLook {
@@ -83,11 +85,15 @@ const REVIEW_GLYPHS: Record<Pr['reviewDecision'], StateGlyph | null> = {
  * What the viewer approves into: the lifecycle glyph, then the review state
  * when the repo has a review rule. Unlike the status pill, drafts keep their
  * review glyph here, so "Approve draft" still shows existing approvals.
+ * `agentApprovers` (`PrDetail.agentApprovers`) names the agents in the
+ * tooltip when only agents approved.
  */
-export function approveStateGlyphs(lifecycle: PrLifecycle, reviewDecision: Pr['reviewDecision']): StateGlyph[] {
+export function approveStateGlyphs(lifecycle: PrLifecycle, reviewDecision: Pr['reviewDecision'], agentApprovers: string[]): StateGlyph[] {
   const glyphs = [LIFECYCLE_GLYPHS[lifecycle]];
   const review = REVIEW_GLYPHS[reviewDecision];
-  if (review) {
+  if (review && reviewDecision === 'APPROVED' && agentApprovers.length > 0) {
+    glyphs.push({ glyph: review.glyph, title: capitalize(approvedText(agentApprovers)) });
+  } else if (review) {
     glyphs.push(review);
   }
   return glyphs;

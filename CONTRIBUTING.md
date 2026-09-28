@@ -7,7 +7,7 @@ Read [AGENTS.md](AGENTS.md) before you change anything. It holds the rules for t
 The short version:
 
 - Node 24 and pnpm. `pnpm install`, then `pnpm typecheck` and `pnpm test` must be green before every commit.
-- Build and check UI on sample data: `POSTPILE_FAKE=1` (see the README).
+- Build and check UI on sample data: `POSTPILE_FAKE=1` (see [docs/development.md](docs/development.md)).
 - Develop with `POSTPILE_READ_ONLY=1`, `POSTPILE_SYNC_ON_START=0` and `POSTPILE_MAX_AGENT_CALLS=0` unless the change needs real calls. Never mark things read on GitHub from a dev session.
 - Pure logic goes in `packages/core`, with tests. Boring, readable code over clever code.
 - Conventional commits (`feat:`, `fix:`, `docs:`, ...) with a body that says why.
