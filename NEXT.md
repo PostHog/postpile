@@ -6,6 +6,10 @@ now".
 
 ## Done
 
+- Done and team-request rules (2026-09-28): read-but-review-pending PRs
+  stay out of the Done fold (`isPrDone` + `reviewPending`), team requests
+  on a teammate's PR count like personal ones (`reviewRequest` in core
+  `review-request.ts`); engine and FakeEngine share the rule.
 - Addressed your changes (2026-09-28, from PostHog/posthog#4521): after
   the viewer's changes request, an author push or reply hands the move back
   without a re-request. Whose turn "paul addressed your changes:
@@ -674,6 +678,20 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Done means nothing is asked of you** (2026-09-28): a tile is done only
+  when merged/closed, approved by you, or marked read with whose turn not
+  yours and no review pending of you or your team. Mark read on a PR that
+  still waits on your review makes it read but keeps it in the tile list
+  and To review, never in the Done fold.
+
+- **Team request on a teammate's PR counts like a personal one**
+  (2026-09-28): "For you", whose turn "Review for team-devex: lyra's PR",
+  To review before routed team requests, pings like a personal request.
+  Covered once another teammate approves or requests changes (a comment
+  alone does not). Personal requests on a teammate's PR move from Team's
+  PRs to To review as well. Team requests on PRs from outside the team
+  keep the sea chip.
 
 - **Approved once stays done** (2026-09-28): Approved once stays done;
   pushes after approval are quiet unless re-pinged or the agent raises

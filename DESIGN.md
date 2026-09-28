@@ -69,7 +69,13 @@ a classification.
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
 - `snoozed`: a snooze is active and its condition is not met yet.
-- `done`: every pinged member is done (approved / handled / merged / closed) and nothing loud is unseen.
+- `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
+  nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed, or approved by
+  them, or handled (marked read) while whose turn is not "you" and no review is pending of
+  them (`reviewPending`: a personal request, a team request on a teammate's PR, or a routed
+  team request no teammate picked up, head not reviewed by them). Marking read a PR that
+  still waits on their review makes it read (no strip, no coral) but leaves it open in the
+  normal tile list with its turn footer, and in To review; it never lands in the Done fold.
   An approval counts on any commit (2026-09-28): a PR the user approved stays done after later
   pushes. `commits_after_approval` events are quiet by the rules; the tile comes back only
   through the normal loud events (re-review requested, mention, question, changes requested,
@@ -151,7 +157,9 @@ github.com while the app was closed turns calm on the next start.
 Action details:
 
 - mark read: every member's events seen, pinged members handled (tile turns
-  done until something loud happens), thread mark-read queued. Undo reverts both.
+  done until something loud happens, unless a review or another move is still
+  the user's, then it stays open and read), thread mark-read queued. Undo
+  reverts both.
 - approve: GitHub approval right away, pinned with `commit_id` to the synced
   head (the commit the glance and the user saw), then the same mark-read for
   that PR. The undo token only brings back the unread state, never the approval.
@@ -971,7 +979,10 @@ the tile shows the most aimed one (order RV, @, AS, RT, @T, AU, CM, FW, ST).
 **For whom** (`forWhom`, `tileForWhom` in `for-whom.ts`; 2026-09-28, mockup
 ForWhom2 part 1 variant B). The codes still decide; the UI shows words, not
 codes. RV, @, AS -> "For you" (honey chip, 4px honey band down the tile's
-left edge). RT, @T -> "For <team slug>" ("For team-devex", sea chip and
+left edge). A team request on a PR a teammate wrote (`Viewer.teamMembers`)
+is "For you" too, whatever the code, while no other teammate approved or
+requested changes (a comment alone does not cover it; 2026-09-28,
+`reviewRequest` = `team_for_you` in `review-request.ts`). RT, @T -> "For <team slug>" ("For team-devex", sea chip and
 band), the slug from the pending team request, else the timeline request,
 else a team mention. AU, and any PR the viewer wrote even with a CODEOWNERS
 team request on it -> "Your PR" (neutral chip, neutral grey band). CM, FW,
@@ -1034,9 +1045,13 @@ authors.
      approve-or-request-changes review on github.com is an approval): the
      author "to merge". A push after your approval is never your move
      (no "Re-check", dropped 2026-09-28).
-   - you: a review is requested of you, or of your team while nobody but
-     the author reviewed yet, and you have not reviewed the head ("Review,
-     rowan asked", "Review for team-devex").
+   - you: a review is requested of you, or of your team, and you have not
+     reviewed the head ("Review, rowan asked", "Review for team-devex"). A
+     team request on a teammate's PR counts like a personal one
+     ("Review for team-devex: lyra's PR") until another teammate approves
+     or requests changes; a teammate's comment alone does not cover it
+     (2026-09-28). A team request on a PR from outside the team (routed)
+     is yours only while no teammate reviewed at all.
    - them: you commented or
      requested changes on the head: the author "to address 2 threads" (open
      threads you started), "to address your changes" or "to reply".
@@ -1116,6 +1131,13 @@ the sync.
 check as whose-turn), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
+A personal request and a team request on a teammate's PR (see whose turn)
+are `to_review` and checked before `team` (2026-09-28): a review owed to a
+teammate is a review, not "Team's PRs". A teammate's PR whose team request
+another teammate covered stays `team`; routed team requests stay
+`to_review` after the authorship checks. Inside To review the topic column
+puts "For you" tiles (personal and teammate team requests) before routed
+team requests (`tilesInTierOrder` in the renderer).
 Addressed your changes (see whose turn) is `to_review` and checked right
 after needs_reply, before `team`: a re-review is owed even to a teammate,
 and the author's own thread replies do not push it into needs_reply.
@@ -1926,7 +1948,8 @@ preflight and does not know the token, so CORS stays open.
   - loud but not addressed (approval or comment on your own PR, merged without your review):
     ping or not [not; they stay unread tiles and never reach the agent]
   - team review requests (RT) and team mentions: addressed [yes; the prompt tells the agent it
-    is the team, not the user in person]
+    is the team, not the user in person, except a team request on a teammate's PR, which counts
+    like a personal one (whose turn "Review for team-devex: lyra's PR", 2026-09-28)]
   - events older than 30 minutes never ping (catch-up after sleep or a failed poll) [yes]
   - a poll whose PR fetch failed leaves those PRs to the full sync; the next poll gets a 304
     and does not retry them [yes, keeps the 304 path free]
