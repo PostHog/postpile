@@ -1,4 +1,4 @@
-import { clipText, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction } from '@postpile/core';
+import { clipText, mapSetupDraft, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction } from '@postpile/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
@@ -19,6 +19,7 @@ import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
+import { setupDraftPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
 import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
@@ -35,6 +36,8 @@ import {
   memoryRecheckOutput,
   pingDecisionOutput,
   setGroupingOutput,
+  setupDraftOutput,
+  setupRefineOutput,
   topicAssignmentOutput,
 } from './schemas.ts';
 import type {
@@ -62,6 +65,9 @@ import type {
   PingDecisionInput,
   SetGroupingInput,
   SetProposal,
+  SetupDraftInput,
+  SetupDraftResult,
+  SetupRefineInput,
   TopicAssignment,
   TopicAssignmentInput,
 } from './service.ts';
@@ -84,6 +90,9 @@ const timeouts: Record<AgentPurpose, number> = {
   ping_decision: 60_000,
   // Opus over up to ~60k chars of notes; nobody waits on it.
   context_sweep: 300_000,
+  // Opus over about 100 PR lines; the user watches the sweep's progress lines meanwhile.
+  setup_draft: 300_000,
+  setup_refine: 180_000,
 };
 
 /** Bounds for the work context digest, so a runaway answer cannot bloat every prompt. */
@@ -375,6 +384,18 @@ export class RunnerAgentService implements AgentService {
       digest: { summary: clipText(value.summary, SWEEP_SUMMARY_MAX), threads, lastSeenAt: input.lastSeenAt },
       model,
     };
+  }
+
+  async draftSetup(input: SetupDraftInput): Promise<SetupDraftResult> {
+    const { value, model } = await this.ask('setup_draft', setupDraftPrompt(input), setupDraftOutput);
+    return { draft: mapSetupDraft({ answer: value, sources: input.sources, repos: input.repos, model }), reply: '' };
+  }
+
+  /** Claims matching input.userLines come back marked fromUser, so "Why?" says they are the user's own words. */
+  async refineSetup(input: SetupRefineInput): Promise<SetupDraftResult> {
+    const { value, model } = await this.ask('setup_refine', setupRefinePrompt(input), setupRefineOutput);
+    const draft = mapSetupDraft({ answer: value, sources: input.sources, repos: input.repos, model, userLines: new Set(input.userLines) });
+    return { draft, reply: clipText(value.reply, RECHECK_WHY_MAX) };
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

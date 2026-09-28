@@ -5,8 +5,11 @@
 import type { ActionResult } from './views.ts';
 import type { ChatMessage, IsoTime } from './types.ts';
 
-/** chat: an accepted proposal. outside: the file changed on disk (hand edit, or the first time the app saw it). */
-export type InstructionsOrigin = 'chat' | 'outside';
+/**
+ * chat: an accepted proposal. outside: the file changed on disk (hand edit,
+ * or the first time the app saw it). setup: accepted in the setup flow.
+ */
+export type InstructionsOrigin = 'chat' | 'outside' | 'setup';
 
 export interface InstructionsVersion {
   /** 1, 2, 3, ... */
@@ -14,7 +17,7 @@ export interface InstructionsVersion {
   text: string;
   summary: string;
   origin: InstructionsOrigin;
-  /** The user's chat message the change came from. Null for outside edits. */
+  /** The user's chat message the change came from. Null for outside edits and setup. */
   sourceChatMessageId: number | null;
   createdAt: IsoTime;
 }

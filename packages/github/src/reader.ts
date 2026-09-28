@@ -1,4 +1,4 @@
-import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@postpile/core';
+import type { ActivityPr, IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@postpile/core';
 import type { FoundRef } from './found.ts';
 
 export interface PartialPrs {
@@ -112,6 +112,19 @@ export interface GitHubReader {
    * a stack ends, not a layer.
    */
   findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]>;
+
+  /**
+   * Setup sweep: the viewer's PRs since `since` (YYYY-MM-DD) in one GraphQL
+   * request: written by them, reviewed by them, and open review requests.
+   * Titles and top-level folders only, about 100 at most.
+   */
+  recentActivity(since: string): Promise<ActivityPr[]>;
+
+  /** One file's text from a repo's default branch. Null when it is missing or the repo is not visible. */
+  readRepoFile(repo: string, path: string): Promise<string | null>;
+
+  /** Setup check: null when the token can read notifications, else why not. Marks nothing read. */
+  probeNotifications(): Promise<string | null>;
 }
 
 /** PRs aliased per GraphQL query. 12 kept ghatchup well inside the node limit. */

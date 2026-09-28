@@ -120,6 +120,20 @@ const proposeInstructionsBody = z.object({
   sourceChatMessageId: z.number().int().positive(),
 });
 
+const setupSection = z.object({ heading: z.string().max(200), body: z.string().max(20_000) });
+
+const setupRefineBody = z.object({
+  sections: z.array(setupSection).max(20),
+  message: z.string().min(1).max(4000),
+});
+
+const setupAcceptBody = z.object({
+  sections: z.array(setupSection).max(20),
+  quietRepos: z.array(repoName).max(50).default([]),
+  mainRepo: repoName.nullable().default(null),
+  baseVersion: z.number().int().positive().nullable(),
+});
+
 /** Parses a JSON body that may be missing entirely. */
 async function optionalJson(c: { req: { text(): Promise<string> } }): Promise<unknown> {
   const text = await c.req.text();
@@ -277,6 +291,17 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     const body = z.object({ patterns: z.array(z.string().max(200)).max(100) }).parse(await c.req.json());
     return c.json(await engine.setSweepSkip(body.patterns));
   });
+
+  // Setup flow. Checks and the sweep only read GitHub; refine is one agent call and writes
+  // nothing; accept writes instructions.md (a new version), quiet repos, scope and the done flag.
+  app.get('/api/setup', async (c) => c.json(await engine.setupStatus()));
+  app.get('/api/setup/checks', async (c) => c.json(await engine.setupChecks()));
+  // The sweep can take tens of seconds: POST starts it and answers at once, GET is polled.
+  app.post('/api/setup/sweep', async (c) => c.json(await engine.startSetupSweep()));
+  app.get('/api/setup/sweep', async (c) => c.json(await engine.setupSweep()));
+  app.post('/api/setup/refine', async (c) => c.json(await engine.refineSetup(setupRefineBody.parse(await c.req.json()))));
+  app.post('/api/setup/accept', async (c) => c.json(await engine.acceptSetup(setupAcceptBody.parse(await c.req.json()))));
+  app.post('/api/setup/skip', async (c) => c.json(await engine.skipSetup()));
 
   app.get('/api/facts', async (c) => {
     const { since, ...query } = factQuery.parse(c.req.query());

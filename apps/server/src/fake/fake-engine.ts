@@ -46,6 +46,13 @@ import type {
   Snooze,
   SnoozeCondition,
   SyncReport,
+  SetupAcceptRequest,
+  SetupAcceptResult,
+  SetupChecksView,
+  SetupRefineRequest,
+  SetupRefineResult,
+  SetupStatus,
+  SetupSweepView,
   Tile,
   TileRepoLabels,
   TileState,
@@ -107,6 +114,7 @@ import {
 } from '@postpile/core';
 import { LivePoller, type EngineService, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeInstructions } from './fake-instructions.ts';
+import { FakeSetup } from './fake-setup.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
@@ -130,6 +138,10 @@ export interface FakeEngineOptions {
   syncStepMs?: number;
   /** How long a work context Refresh "thinks". Tests pass 0. */
   sweepDelayMs?: number;
+  /** POSTPILE_FAKE_SETUP=1: no instructions yet, and the setup flow shows until accepted or skipped. */
+  forceSetup?: boolean;
+  /** Base delay of the canned setup checks, sweep lines and refine. Tests pass 0. */
+  setupStepMs?: number;
 }
 
 /** One step of the fake sync: what runs, calls it plans, calls that come back by its end. */
@@ -204,6 +216,7 @@ export class FakeEngine implements EngineService {
   private readonly instructions: FakeInstructions;
   private readonly live: FakeLivePoll;
   private readonly workContext: FakeWorkContext;
+  private readonly setup: FakeSetup;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
   private readonly now: () => Date;
@@ -248,7 +261,21 @@ export class FakeEngine implements EngineService {
     newId: () => this.newId(),
     dossiersToRefresh: () => this.memory.topicsWithDossier(),
     findTileMessage: (id) => [...this.chats.values()].flat().find((message) => message.id === id),
+    empty: options.forceSetup ?? false,
   });
+    this.setup = new FakeSetup({
+      instructions: this.instructions,
+      viewer: () => this.viewer(),
+      setQuiet: (repo) => {
+        this.repoSettings = withQuietRepo(this.repoSettings, repo, true);
+      },
+      setScope: (repo) => {
+        this.repoSettings = { ...this.repoSettings, scope: normalizeRepoScope(repo) };
+      },
+      now: this.now,
+      forced: options.forceSetup ?? false,
+      stepMs: options.setupStepMs ?? 700,
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -1222,6 +1249,38 @@ export class FakeEngine implements EngineService {
     if (prKeys.length > 0) {
       await this.livePoller?.runCycle();
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Setup flow (canned, see FakeSetup)
+  // -------------------------------------------------------------------------
+
+  async setupStatus(): Promise<SetupStatus> {
+    return this.setup.status();
+  }
+
+  setupChecks(): Promise<SetupChecksView> {
+    return this.setup.checks();
+  }
+
+  async startSetupSweep(): Promise<SetupSweepView> {
+    return this.setup.startSweep();
+  }
+
+  async setupSweep(): Promise<SetupSweepView | null> {
+    return this.setup.sweepView();
+  }
+
+  refineSetup(request: SetupRefineRequest): Promise<SetupRefineResult> {
+    return this.setup.refine(request);
+  }
+
+  async acceptSetup(request: SetupAcceptRequest): Promise<SetupAcceptResult> {
+    return this.setup.accept(request);
+  }
+
+  async skipSetup(): Promise<ActionResult> {
+    return this.setup.skip();
   }
 
   async flushPendingWrites(): Promise<void> {

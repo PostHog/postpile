@@ -31,6 +31,13 @@ import type {
   PrKey,
   RepoOverview,
   SearchResult,
+  SetupAcceptRequest,
+  SetupAcceptResult,
+  SetupChecksView,
+  SetupRefineRequest,
+  SetupRefineResult,
+  SetupStatus,
+  SetupSweepView,
   SnoozeCondition,
   SyncOptions,
   SyncReport,
@@ -74,7 +81,11 @@ import { ReadModels } from './read-models.ts';
 import { loadRepoSettings, saveRepoSettings } from './repo-settings.ts';
 import type { EngineService } from './service.ts';
 import { loadLastSyncReport } from './last-sync-report.ts';
+import { SetupChecks, systemCommands, type CommandRunner } from './setup/setup-checks.ts';
+import { SetupFlow } from './setup/setup-flow.ts';
+import { SetupSweep } from './setup/setup-sweep.ts';
 import { SyncRun } from './sync-run.ts';
+import { TeamMembers } from './team-members.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
 import { WorkContextSweeper } from './work-context/sweeper.ts';
@@ -108,6 +119,8 @@ export interface EngineDeps {
   userConfig?: UserConfigFile | null;
   /** Sync start, summary and errors. Defaults to console.log, which the desktop app writes to its log file. */
   syncLog?: (line: string) => void;
+  /** Runs gh and claude for the setup checks. Defaults to the real programs; tests pass a fake. */
+  setupCommands?: CommandRunner;
 }
 
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
@@ -129,6 +142,7 @@ export class Engine implements EngineService {
   private readonly workContext: WorkContextMemory;
   private readonly sweepSchedule: WorkContextSchedule;
   private readonly cleanup: InboxCleanup;
+  private readonly setup: SetupFlow;
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
@@ -178,6 +192,24 @@ export class Engine implements EngineService {
     });
     this.pollRun = new PollRun(runDeps, github, decider);
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
+    const setupSweep = new SetupSweep({
+      store,
+      reader: deps.reader,
+      agent: deps.agent,
+      teamMembers: new TeamMembers(store, deps.reader, now),
+      history,
+      digest: () => this.workContextDigest(),
+      now,
+    });
+    const setupChecks = new SetupChecks(deps.reader, deps.setupCommands ?? systemCommands);
+    this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
+  }
+
+  /** The newest work context digest as the setup sweep reads it: prompt text, version and date. */
+  private workContextDigest(): { version: number; createdAt: string; text: string } | null {
+    const latest = this.deps.store.workContext.latest();
+    const text = this.workContext.promptText();
+    return latest && text !== '' ? { version: latest.version, createdAt: latest.createdAt, text } : null;
   }
 
   /**
@@ -530,6 +562,34 @@ export class Engine implements EngineService {
 
   stopWorkContextSchedule(): void {
     this.sweepSchedule.stop();
+  }
+
+  async setupStatus(): Promise<SetupStatus> {
+    return this.setup.status();
+  }
+
+  setupChecks(): Promise<SetupChecksView> {
+    return this.setup.runChecks();
+  }
+
+  async startSetupSweep(): Promise<SetupSweepView> {
+    return this.setup.startSweep();
+  }
+
+  async setupSweep(): Promise<SetupSweepView | null> {
+    return this.setup.sweepView();
+  }
+
+  refineSetup(request: SetupRefineRequest): Promise<SetupRefineResult> {
+    return this.setup.refine(request);
+  }
+
+  async acceptSetup(request: SetupAcceptRequest): Promise<SetupAcceptResult> {
+    return this.setup.accept(request);
+  }
+
+  async skipSetup(): Promise<ActionResult> {
+    return this.setup.skip();
   }
 
   flushPendingWrites(): Promise<void> {

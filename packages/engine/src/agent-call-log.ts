@@ -2,14 +2,14 @@ import type { AgentCallObserver, ObservedCall } from '@postpile/agent';
 import { emptyAgentCallStats, recordAgentCall, type AgentCallStats } from '@postpile/core';
 import type { Store } from '@postpile/store';
 
-/** Run id for calls made outside a sync or consolidation: chat, drafts and instructions proposals. */
+/** Run id for calls made outside a sync or consolidation: chat, drafts, instructions proposals and the setup draft. */
 export const ACTION_RUN_ID = 'action';
 
 /** Run id for the daily work context sweep, which runs beside syncs and never counts toward one. */
 export const SWEEP_RUN_ID = 'sweep';
 
 /** Calls the user asks for directly; they never count toward a sync or consolidation. */
-const ACTION_KINDS = new Set<ObservedCall['purpose']>(['chat', 'draft_comment', 'instructions_change', 'memory_recheck']);
+const ACTION_KINDS = new Set<ObservedCall['purpose']>(['chat', 'draft_comment', 'instructions_change', 'memory_recheck', 'setup_draft', 'setup_refine']);
 
 interface ActiveRun {
   id: string;

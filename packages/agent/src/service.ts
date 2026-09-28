@@ -22,6 +22,11 @@ import type {
   ReconcileAction,
   RelationSignals,
   RuleProposal,
+  SetupDraft,
+  SetupMaterial,
+  SetupRepoCount,
+  SetupSectionEdit,
+  SetupSource,
   Tile,
   Topic,
   TopicDelta,
@@ -443,6 +448,38 @@ export interface ContextSweepResult {
 }
 
 /**
+ * The setup flow's draft of instructions.md. GitHub text in the material is
+ * untrusted and fenced; the digest and the current instructions are the
+ * user's own. Toolless, like every call that reads GitHub text.
+ */
+export interface SetupDraftInput {
+  material: SetupMaterial;
+  /** setupSources(material): the ids the answer may cite. */
+  sources: SetupSource[];
+  /** rankActivityRepos(material.prs): the only repos a suggestion may name. */
+  repos: SetupRepoCount[];
+  /** instructions.md as it is now; '' on a first run. */
+  current: string;
+}
+
+/** "Tell the agent what's off" on the setup draft. */
+export interface SetupRefineInput extends SetupDraftInput {
+  /** The draft as the user left it (their edits included). */
+  draft: SetupSectionEdit[];
+  message: string;
+  /** Their earlier refine messages, oldest first. */
+  earlierMessages: string[];
+  /** Lines the user wrote themselves (userWrittenLines, claimKey form); they come back marked fromUser. */
+  userLines: string[];
+}
+
+export interface SetupDraftResult {
+  draft: SetupDraft;
+  /** The refine's one-line reply; '' for a first draft. */
+  reply: string;
+}
+
+/**
  * Every digesting job the agent does. Implementations build the prompt,
  * call the AgentRunner and parse the answer. Caching by input hash is the
  * engine's job: it compares the *InputHash methods with what is stored and
@@ -471,4 +508,8 @@ export interface AgentService {
   decidePings(input: PingDecisionInput): Promise<PingDecisionAnswer[]>;
   /** The daily digest of local Claude Code notes. Unknown topic ids and source ids are dropped, forgotten threads too. */
   sweepContext(input: ContextSweepInput): Promise<ContextSweepResult>;
+  /** Setup: a first draft of instructions.md. Unknown source ids and repos are dropped. */
+  draftSetup(input: SetupDraftInput): Promise<SetupDraftResult>;
+  /** Setup: the draft changed as the user asked. Lines the user wrote come back marked fromUser. */
+  refineSetup(input: SetupRefineInput): Promise<SetupDraftResult>;
 }

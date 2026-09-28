@@ -21,12 +21,13 @@ export interface EngineFromEnvOptions {
 
 /**
  * Set POSTPILE_FAKE=1 to run on the Depot sample data: no GitHub, no agent,
- * no database. Otherwise throws DataDirLockedError while another process
+ * no database. POSTPILE_FAKE_SETUP=1 on top starts it with no instructions
+ * and the setup flow showing. Otherwise throws DataDirLockedError while another process
  * holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
   if (isFake()) {
-    return new FakeEngine();
+    return new FakeEngine({ forceSetup: process.env.POSTPILE_FAKE_SETUP === '1' });
   }
   if (options.migrateLegacy ?? true) {
     // A no-op once done, and in dev.

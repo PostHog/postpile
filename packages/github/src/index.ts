@@ -18,3 +18,4 @@ export { GhCliTokenSource, type TokenSource } from './token.ts';
 export { GitHubError, type FetchFn } from './http.ts';
 export { GitHubClient } from './client.ts';
 export { GitHubWriteClient } from './write-client.ts';
+export { activityPrs, buildActivityQuery, ACTIVITY_SEARCH_SIZES } from './setup-reads.ts';

@@ -31,6 +31,13 @@ import type {
   PrKey,
   RepoOverview,
   SearchResult,
+  SetupAcceptRequest,
+  SetupAcceptResult,
+  SetupChecksView,
+  SetupRefineRequest,
+  SetupRefineResult,
+  SetupStatus,
+  SetupSweepView,
   SnoozeCondition,
   SyncOptions,
   SyncReport,
@@ -229,6 +236,29 @@ export interface EngineService {
   /** The daily sweep on a timer (desktop app): at start, then every 30 minutes if due. A second call is ignored. */
   startWorkContextSchedule(): void;
   stopWorkContextSchedule(): void;
+
+  /** Setup flow: whether it shows on start (first run: no instructions, never accepted or skipped) and the stored flag. */
+  setupStatus(): Promise<SetupStatus>;
+  /** Setup step 1: gh installed and logged in, notifications readable, claude found. Read only, run fresh each time. */
+  setupChecks(): Promise<SetupChecksView>;
+  /**
+   * Setup step 2: starts the sweep job (viewer and teams, 30 days of PRs,
+   * CODEOWNERS, the digest, one setup_draft call) and returns at once; a
+   * start while one runs joins it. Poll setupSweep for the progress lines.
+   */
+  startSetupSweep(): Promise<SetupSweepView>;
+  /** The running or last sweep with its draft; null before the first one in this process. */
+  setupSweep(): Promise<SetupSweepView | null>;
+  /** "Tell the agent what's off": one setup_refine call over the sweep's material. Writes nothing. */
+  refineSetup(request: SetupRefineRequest): Promise<SetupRefineResult>;
+  /**
+   * Accept: writes instructions.md as a new version (origin setup), sets the
+   * quiet repos and the repo scope, stores the done flag. Refused when the
+   * file changed since the draft was reviewed. Local only; the caller syncs next.
+   */
+  acceptSetup(request: SetupAcceptRequest): Promise<SetupAcceptResult>;
+  /** "Skip for now": stores the skipped flag, so the flow no longer shows on start. */
+  skipSetup(): Promise<ActionResult>;
 
   /** Sends every queued mark-read now (locked ones become pending writes). Call on quit: the user meant to clear them. */
   flushPendingWrites(): Promise<void>;

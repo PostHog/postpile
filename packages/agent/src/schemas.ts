@@ -102,6 +102,25 @@ export const contextSweepOutput = z.object({
   lastSeenAt: text.nullable().optional(),
 });
 
+const setupRepoPick = z.object({ repo: text.min(1), why: text.default(''), sources: z.array(text).default([]) });
+
+/** The setup draft. Source ids ("p3", "o1", "d1", "t2") and repos are checked by mapSetupDraft. */
+export const setupDraftOutput = z.object({
+  summary: text.default(''),
+  sections: z
+    .array(
+      z.object({
+        heading: text.min(1),
+        claims: z.array(z.object({ text: text, sources: z.array(text).default([]) })).default([]),
+      }),
+    )
+    .default([]),
+  quietRepos: z.array(setupRepoPick).default([]),
+  mainRepo: setupRepoPick.nullable().default(null),
+});
+
+export const setupRefineOutput = setupDraftOutput.extend({ reply: text.default('') });
+
 export const instructionsChangeOutput = z.object({
   reply: text.default(''),
   change: z.object({ text: text.min(1), summary: text.min(1) }).nullable(),

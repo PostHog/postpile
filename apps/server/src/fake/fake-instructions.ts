@@ -36,6 +36,8 @@ export interface FakeInstructionsDeps {
   dossiersToRefresh: () => number;
   /** Tile chat messages live in FakeEngine; proposals from tile chat point at them. */
   findTileMessage: (id: number) => ChatMessage | undefined;
+  /** Start with no instructions at all, like a first run (POSTPILE_FAKE_SETUP=1). */
+  empty?: boolean;
 }
 
 /**
@@ -48,6 +50,9 @@ export class FakeInstructions {
   private readonly chat: ChatMessage[] = [];
 
   constructor(private readonly deps: FakeInstructionsDeps) {
+    if (deps.empty) {
+      return;
+    }
     const clock = new SampleClock(deps.now());
     const request = this.addMessage('user', MERGE_REQUEST, clock.hoursAgo(200));
     this.addMessage('agent', 'Proposed: Tell me about merges without my review', clock.hoursAgo(200));
@@ -58,8 +63,9 @@ export class FakeInstructions {
     );
   }
 
-  private latest(): InstructionsVersion {
-    return this.versions.at(-1)!;
+  /** Null only while there are no versions (a first run). */
+  private latest(): InstructionsVersion | null {
+    return this.versions.at(-1) ?? null;
   }
 
   private addMessage(role: ChatMessage['role'], text: string, createdAt = this.deps.now().toISOString()): ChatMessage {
@@ -76,10 +82,11 @@ export class FakeInstructions {
   private proposalFrom(message: ChatMessage): InstructionsProposal {
     const latest = this.latest();
     const line = message.text.trim().replace(/^[-*]\s*/, '');
+    const baseText = latest?.text ?? '';
     return {
-      baseVersion: latest.version,
-      baseText: latest.text,
-      text: `${latest.text.trimEnd()}\n- ${line}\n`,
+      baseVersion: latest?.version ?? null,
+      baseText,
+      text: `${baseText.trimEnd()}\n- ${line}\n`.trimStart(),
       summary: `Added: ${line.length > 80 ? `${line.slice(0, 79)}…` : line}`,
       sourceChatMessageId: message.id,
       dossiersToRefresh: this.deps.dossiersToRefresh(),
@@ -89,8 +96,8 @@ export class FakeInstructions {
   view(): InstructionsView {
     const latest = this.latest();
     return {
-      text: latest.text,
-      version: latest.version,
+      text: latest?.text ?? '',
+      version: latest?.version ?? null,
       path: null,
       versions: [...this.versions].reverse().map((version) => ({
         ...version,
@@ -134,15 +141,22 @@ export class FakeInstructions {
     if (text === '') {
       return refused('Empty instructions are not saved from here. Edit the file by hand to clear it.');
     }
-    if (proposal.baseVersion !== this.latest().version) {
+    if (proposal.baseVersion !== (this.latest()?.version ?? null)) {
       const rebased = this.proposalFrom(source);
       return { ok: false, message: 'Your instructions changed since this was proposed. Here is the change again on top of them.', undoToken: null, savedVersion: null, rebased };
     }
-    const version = this.latest().version + 1;
+    const version = (this.latest()?.version ?? 0) + 1;
     const summary = text === proposal.text.trim() ? proposal.summary : `${proposal.summary} (edited)`;
     this.versions.push({ version, text: `${text}\n`, summary, origin: 'chat', sourceChatMessageId: source.id, createdAt: this.deps.now().toISOString() });
     const refresh = this.deps.dossiersToRefresh();
     const message = `Saved as version ${version}. Will refresh ${refresh} topic ${refresh === 1 ? 'dossier' : 'dossiers'} on next sync.`;
     return { ok: true, message, undoToken: null, savedVersion: version, rebased: null };
+  }
+
+  /** Setup's accept: a new version with origin setup. Returns its number. */
+  saveFromSetup(text: string, summary: string): number {
+    const version = (this.latest()?.version ?? 0) + 1;
+    this.versions.push({ version, text, summary, origin: 'setup', sourceChatMessageId: null, createdAt: this.deps.now().toISOString() });
+    return version;
   }
 }

@@ -45,4 +45,10 @@ export class InstructionsHistory {
     writeInstructionsAtomically(this.file, text);
     return this.store.instructions.add({ text, summary, origin: 'chat', sourceChatMessageId, createdAt: this.now().toISOString() });
   }
+
+  /** Writes the file and stores a setup version. The caller has checked the version the draft was reviewed against. */
+  saveFromSetup(text: string, summary: string): InstructionsVersion {
+    writeInstructionsAtomically(this.file, text);
+    return this.store.instructions.add({ text, summary, origin: 'setup', sourceChatMessageId: null, createdAt: this.now().toISOString() });
+  }
 }

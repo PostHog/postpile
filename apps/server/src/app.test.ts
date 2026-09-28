@@ -14,6 +14,13 @@ function notImplemented(): never {
 function fakeEngine(overrides: Partial<EngineService>): EngineService {
   return {
     sync: notImplemented,
+    setupStatus: notImplemented,
+    setupChecks: notImplemented,
+    startSetupSweep: notImplemented,
+    setupSweep: notImplemented,
+    refineSetup: notImplemented,
+    acceptSetup: notImplemented,
+    skipSetup: notImplemented,
     lastSyncReport: notImplemented,
     syncProgress: notImplemented,
     pollOnce: notImplemented,

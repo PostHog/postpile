@@ -388,7 +388,11 @@ export type AgentCallKind =
   /** Should new activity from the fast poll ping the Mac? One call per poll cycle. */
   | 'ping_decision'
   /** The daily "what you're working on" digest from local Claude Code data. */
-  | 'context_sweep';
+  | 'context_sweep'
+  /** The setup flow's draft of instructions.md from the user's GitHub activity. */
+  | 'setup_draft'
+  /** "Tell the agent what's off" on the setup draft. */
+  | 'setup_refine';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {

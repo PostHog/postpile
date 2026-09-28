@@ -1,8 +1,9 @@
-import { prKey, type IsoTime, type NotificationThread, type Pr, type PrKey, type PrRef, type Viewer } from '@postpile/core';
+import { prKey, type ActivityPr, type IsoTime, type NotificationThread, type Pr, type PrKey, type PrRef, type Viewer } from '@postpile/core';
 import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem } from './http.ts';
 import { isoTime, toBranchPr, toPr } from './normalize.ts';
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
+import { activityPrs, buildActivityQuery, probeNotifications, readRepoFile, type RawActivityResponse } from './setup-reads.ts';
 import { listTeamMembers } from './teams.ts';
 import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, buildUpdatedAtQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
 import type { RawBatchResponse, RawBranchResponse, RawUpdatedAtResponse, RawViewerTeams } from './raw.ts';
@@ -203,5 +204,22 @@ export class GitHubClient implements GitHubReader {
       }
     });
     return prs;
+  }
+
+  /** An alias the token cannot answer is null next to an error; the others still count. */
+  async recentActivity(since: string): Promise<ActivityPr[]> {
+    const response = await this.http.graphql<RawActivityResponse>(buildActivityQuery(since));
+    if (!response.data) {
+      throw graphqlFailure('activity query', response.errors);
+    }
+    return activityPrs(response.data);
+  }
+
+  readRepoFile(repo: string, path: string): Promise<string | null> {
+    return readRepoFile(this.http, repo, path);
+  }
+
+  probeNotifications(): Promise<string | null> {
+    return probeNotifications(this.http);
   }
 }

@@ -1,6 +1,6 @@
 // Fakes for engine tests. Nothing here touches GitHub or the claude CLI.
 import { FakeRunner } from '@postpile/agent';
-import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
+import type { ActivityPr, NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
@@ -15,6 +15,7 @@ import type {
   FoundRef,
 } from '@postpile/github';
 import type { UserConfigFile } from '../user-config.ts';
+import type { CommandResult, CommandRunner } from '../setup/setup-checks.ts';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
 import { AgentCallLog } from '../agent-call-log.ts';
@@ -189,6 +190,31 @@ export class FakeReader implements GitHubReader {
         .map(toBranchPr);
     });
   }
+
+  /** What recentActivity answers (setup sweep). */
+  activity: ActivityPr[] = [];
+  /** Every recentActivity call's `since`. */
+  activityCalls: string[] = [];
+  /** File texts by "owner/name:path" for readRepoFile. */
+  files = new Map<string, string>();
+  /** Every readRepoFile call as "owner/name:path". */
+  fileCalls: string[] = [];
+  /** What probeNotifications answers: null means the token can read notifications. */
+  notificationsProblem: string | null = null;
+
+  async recentActivity(since: string): Promise<ActivityPr[]> {
+    this.activityCalls.push(since);
+    return this.activity;
+  }
+
+  async readRepoFile(repo: string, path: string): Promise<string | null> {
+    this.fileCalls.push(`${repo}:${path}`);
+    return this.files.get(`${repo}:${path}`) ?? null;
+  }
+
+  async probeNotifications(): Promise<string | null> {
+    return this.notificationsProblem;
+  }
 }
 
 export class FakeWriter implements GitHubWriter {
@@ -216,6 +242,30 @@ export class FakeWriter implements GitHubWriter {
   }
 }
 
+/**
+ * gh and claude for the setup checks, without running anything: every
+ * program answers ok with "<name> version 1.0" unless listed in `missing`
+ * or `failing`. Calls are recorded as "gh auth token".
+ */
+export class FakeCommands {
+  readonly calls: string[] = [];
+  readonly missing = new Set<string>();
+  /** "gh auth token" style command lines that fail. */
+  readonly failing = new Set<string>();
+
+  readonly run: CommandRunner = async (command, args): Promise<CommandResult> => {
+    const line = [command, ...args].join(' ');
+    this.calls.push(line);
+    if (this.missing.has(command)) {
+      return { ok: false, missing: true, stdout: '', stderr: '' };
+    }
+    if (this.failing.has(line)) {
+      return { ok: false, missing: false, stdout: '', stderr: 'not logged in' };
+    }
+    return { ok: true, missing: false, stdout: args.includes('token') ? 'gho_test\n' : `${command} version 1.0\n`, stderr: '' };
+  };
+}
+
 export const NOW = new Date('2026-09-02T12:00:00Z');
 
 /** GitHubWrites over a fake writer, on unless told otherwise. */
@@ -234,6 +284,7 @@ export interface Harness {
   runner: FakeRunner;
   agent: FakeAgent;
   timers: FakeTimers;
+  commands: FakeCommands;
 }
 
 export interface HarnessOptions {
@@ -280,6 +331,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   );
   const callLog = new AgentCallLog(store, now);
   const agent = new FakeAgent(runner, callLog);
+  const commands = new FakeCommands();
   const engine = new Engine({
     store,
     reader,
@@ -295,6 +347,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     claudeDir: options.claudeDir ?? '/nonexistent/claude',
     syncLog: options.syncLog ?? (() => {}),
     userConfig: options.userConfig ?? null,
+    setupCommands: commands.run,
   });
-  return { engine, store, reader, writer, writes, runner, agent, timers };
+  return { engine, store, reader, writer, writes, runner, agent, timers, commands };
 }
