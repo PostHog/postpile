@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { NotificationDebugRow, NotificationLanding, NotificationThread } from '@code-manager/core';
-import { filterNotifications, landingLabel, NO_NOTIFICATION_FILTER, noTileReason, reasonsIn, threadRef } from './notifications.ts';
+import type { ActionLogEntry, NotificationDebugRow, NotificationLanding, NotificationThread } from '@code-manager/core';
+import { actionLine, filterNotifications, landingLabel, NO_NOTIFICATION_FILTER, noTileReason, reasonsIn, threadRef } from './notifications.ts';
 
 function row(thread: Partial<NotificationThread>, landing: NotificationLanding = { kind: 'not_pr' }): NotificationDebugRow {
   return {
@@ -19,8 +19,28 @@ function row(thread: Partial<NotificationThread>, landing: NotificationLanding =
     prKey: null,
     landing,
     recentEvents: [],
+    lastAction: null,
+    decidedBy: null,
   };
 }
+
+function entry(overrides: Partial<ActionLogEntry>): ActionLogEntry {
+  return {
+    id: 1,
+    at: '2026-09-27T10:00:00Z',
+    action: 'mark_read',
+    origin: 'tile',
+    outcome: 'queued',
+    threadId: 't',
+    prKey: null,
+    tileId: null,
+    batch: 'b1',
+    detail: '',
+    ...overrides,
+  };
+}
+
+const NOW = new Date('2026-09-27T10:03:00Z');
 
 const TILE: NotificationLanding = {
   kind: 'tile',
@@ -53,5 +73,30 @@ describe('notification debug helpers', () => {
     expect(filterNotifications(rows, { ...NO_NOTIFICATION_FILTER, reason: 'mention' }).map((r) => r.thread.id)).toEqual(['a', 'c']);
     expect(filterNotifications(rows, { ...NO_NOTIFICATION_FILTER, unreadOnly: true }).map((r) => r.thread.id)).toEqual(['a']);
     expect(filterNotifications(rows, { ...NO_NOTIFICATION_FILTER, text: 'depot cache' }).map((r) => r.thread.id)).toEqual(['a']);
+  });
+
+  it('says what led to a read state, from the action log', () => {
+    const sent = entry({ id: 2, origin: 'queue', outcome: 'github' });
+    expect(actionLine({ ...row({ unread: false }), lastAction: sent, decidedBy: entry({}) }, NOW)?.text).toBe(
+      'marked read by the deferred queue, queued by you in a tile · 3m ago',
+    );
+    expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'local', detail: 'GitHub writes are off' }) }, NOW)?.text).toBe(
+      'stayed local: read-only · marked read by you in a tile · 3m ago',
+    );
+    expect(actionLine({ ...row({}), lastAction: entry({ action: 'bring_back', origin: 'debug', outcome: 'local' }) }, NOW)?.tone).toBe('local');
+    expect(actionLine(row({ unread: false }), NOW)?.text).toBe('read on github.com or another client');
+    expect(actionLine(row({ unread: true }), NOW)).toBeNull();
+    const noticed = entry({ origin: 'sync', outcome: 'observed' });
+    expect(actionLine({ ...row({ unread: false }), lastAction: noticed }, NOW)?.text).toMatch(/^read on github.com or another client · noticed by sync/);
+  });
+
+  it('filters to threads the app marked read', () => {
+    const rows = [
+      { ...row({ id: 'a', unread: false }), lastAction: entry({ origin: 'queue', outcome: 'github' }) },
+      { ...row({ id: 'b', unread: false }), lastAction: entry({ origin: 'sync', outcome: 'observed' }) },
+      { ...row({ id: 'c' }), lastAction: entry({ outcome: 'local' }) },
+      row({ id: 'd', unread: false }),
+    ];
+    expect(filterNotifications(rows, { ...NO_NOTIFICATION_FILTER, readByApp: true }).map((r) => r.thread.id)).toEqual(['a', 'c']);
   });
 });

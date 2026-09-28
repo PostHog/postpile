@@ -12,6 +12,7 @@ import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { TileMenu } from './TileMenu.tsx';
 import { TurnLine } from './TurnLine.tsx';
 import { UnreadStrip } from './UnreadStrip.tsx';
+import { markReadNote } from '../lib/guard.ts';
 
 interface TileProps {
   view: TileView;
@@ -114,7 +115,7 @@ export function Tile(props: TileProps) {
           ) : (
             <Button
               variant="primary"
-              title={actions.blockedReason('markRead') ?? 'Marks every PR here read; GitHub follows after 6s'}
+              title={actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks every PR here read; GitHub follows after 6s'}
               disabled={actions.isBusy(`markRead:${tile.id}`)}
               onClick={() => void actions.markRead(tile.id)}
             >

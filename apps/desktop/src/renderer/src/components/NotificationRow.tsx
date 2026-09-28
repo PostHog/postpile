@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { NotificationDebugRow } from '@code-manager/core';
-import { landingLabel, noTileReason, threadRef } from '../lib/notifications.ts';
+import type { GitHubWritesStatus, NotificationDebugRow } from '@code-manager/core';
+import { useActions } from '../api/actions.tsx';
+import { actionLine, landingLabel, noTileReason, threadRef, type ActionTone } from '../lib/notifications.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { ChevronIcon } from './icons.tsx';
@@ -9,6 +10,65 @@ export interface TilePick {
   topicId: string;
   tileId: string;
   prKey: string | null;
+}
+
+const TONE: Record<ActionTone, string> = {
+  app: 'text-accent',
+  local: 'text-ink-2',
+  problem: 'text-unread-ink',
+  outside: 'text-faint',
+};
+
+const BRING_BACK_TITLE =
+  'GitHub has no API to mark a notification unread. This only resets the app: the tile turns unread again ("brought back by you") until you mark it read. Nothing changes on GitHub.';
+
+/** Hover text for "Mark read", or why it is disabled. */
+function markReadTitle(row: NotificationDebugRow, writes: GitHubWritesStatus | undefined): { title: string; disabled: boolean } {
+  const hasPr = row.landing.kind !== 'not_pr' && row.landing.kind !== 'pr_not_synced';
+  if (!writes) {
+    return { title: 'Waiting for the GitHub writes state.', disabled: true };
+  }
+  if (!row.thread.unread) {
+    return { title: 'Already read on GitHub.', disabled: true };
+  }
+  if (!writes.enabled && !hasPr) {
+    return { title: 'GitHub writes are off and this thread has no tile, so there is nothing to mark.', disabled: true };
+  }
+  if (!writes.enabled) {
+    return { title: 'GitHub writes are off: marks the PR read in the app only; the thread stays unread on GitHub. Logged.', disabled: false };
+  }
+  return { title: 'Marks the thread read on GitHub after the 6s undo window (and its PR read here). Logged.', disabled: false };
+}
+
+/** Mark read (through the queue, lock and log) and bring back (app state only). */
+function RowActions(props: { row: NotificationDebugRow }) {
+  const actions = useActions();
+  const { row } = props;
+  const markRead = markReadTitle(row, actions.writes);
+  const canBringBack = row.prKey !== null && row.landing.kind !== 'pr_not_synced';
+  const button = 'rounded px-1.5 py-0.5 text-[11px] text-ink-2 hover:bg-subtle hover:text-ink disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent';
+  return (
+    <div className="flex w-[142px] shrink-0 items-center justify-end gap-0.5 pr-1">
+      <button
+        type="button"
+        className={button}
+        disabled={markRead.disabled || actions.isBusy(`markThread:${row.thread.id}`)}
+        title={markRead.title}
+        onClick={() => void actions.markThreadRead(row.thread.id)}
+      >
+        Mark read
+      </button>
+      <button
+        type="button"
+        className={button}
+        disabled={!canBringBack || actions.isBusy(`bringBack:${row.prKey ?? ''}`)}
+        title={canBringBack ? BRING_BACK_TITLE : 'Only a synced PR has a tile to bring back.'}
+        onClick={() => row.prKey && void actions.bringBack(row.prKey)}
+      >
+        Bring back
+      </button>
+    </div>
+  );
 }
 
 /** The PR's newest stored events, under an expanded row. */
@@ -47,6 +107,7 @@ export function NotificationRow(props: { row: NotificationDebugRow; onOpenTile: 
   const { row } = props;
   const { thread, landing } = row;
   const why = noTileReason(landing);
+  const line = actionLine(row, now);
 
   function open() {
     if (landing.kind === 'tile') {
@@ -80,6 +141,11 @@ export function NotificationRow(props: { row: NotificationDebugRow; onOpenTile: 
             <span className="truncate text-[12.5px] text-ink" title={thread.title}>
               {thread.title}
             </span>
+            {line && (
+              <span className={`truncate text-[11px] ${TONE[line.tone]}`} title={line.title}>
+                {line.text}
+              </span>
+            )}
           </span>
           <span className="truncate font-mono text-[10.5px] text-ink-2">{thread.reason}</span>
           <span className={`truncate text-[11.5px] ${landing.kind === 'tile' ? 'text-accent' : 'text-muted'}`} title={landingLabel(landing)}>
@@ -90,6 +156,7 @@ export function NotificationRow(props: { row: NotificationDebugRow; onOpenTile: 
             {ageLabel(thread.updatedAt, now)}
           </span>
         </button>
+        <RowActions row={row} />
         <button
           type="button"
           aria-expanded={expanded}
