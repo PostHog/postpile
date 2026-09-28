@@ -3,7 +3,7 @@ import { makeFakeClaudeDir, userLine, type FakeClaudeDir } from './testing/claud
 import { claudeDirFromEnv, WorkContextCollector, type CollectBudget } from './work-context/collector.ts';
 import { maskSecrets, MASK } from './work-context/secrets.ts';
 import { isPastedBlob } from './work-context/session-reader.ts';
-import { DEFAULT_SWEEP_SKIP, projectFolderName, sweepSkipFromEnv, SweepSkipList } from './work-context/skip-list.ts';
+import { DEFAULT_SWEEP_SKIP, sweepSkipFromEnv, SweepSkipList } from './work-context/skip-list.ts';
 
 const NOW = new Date('2026-09-28T09:00:00Z');
 const RECENT = new Date('2026-09-27T12:00:00Z');
@@ -152,7 +152,7 @@ describe('WorkContextCollector', () => {
       home: fake.home,
       now: NOW,
       budget: BIG,
-      skipList: new SweepSkipList(DEFAULT_SWEEP_SKIP, (path) => ['/Users', '/Users/me', '/Users/me/workspace'].includes(path)),
+      skipList: new SweepSkipList(DEFAULT_SWEEP_SKIP),
       log: (message) => logs.push(message),
     }).collect();
 
@@ -170,8 +170,8 @@ describe('WorkContextCollector', () => {
 });
 
 describe('sweep skip list', () => {
-  it('matches the project folder name: equal or starting with the pattern, by path segment', () => {
-    const list = new SweepSkipList(['taxes', 'hobby', 'my-blog-com'], () => false);
+  it('matches the pattern as a run of whole tokens in the folder name', () => {
+    const list = new SweepSkipList(['taxes', 'hobby', 'my-blog-com']);
     expect(list.skips('-Users-me-workspace-taxes')).toBe(true);
     expect(list.skips('-Users-me-workspace-hobby')).toBe(true);
     expect(list.skips('-Users-me-workspace-my-blog-com')).toBe(true);
@@ -180,16 +180,27 @@ describe('sweep skip list', () => {
     expect(list.skips('-Users-me')).toBe(false);
   });
 
-  it('decodes the folder on disk, so dashes in names and parents stay apart', () => {
-    const dirs = new Set(['/Users', '/Users/me', '/Users/me/workspace', '/Users/me/workspace/taxes-tools', '/Users/me/workspace/hobby-notes']);
-    const isDir = (path: string) => dirs.has(path);
-    expect(projectFolderName('-Users-me-workspace-taxes-tools', isDir)).toBe('taxes-tools');
-    expect(projectFolderName('-Users-me-workspace-gone-project', isDir)).toBe('gone-project');
-    const list = new SweepSkipList(['taxes', 'hobby'], isDir);
+  it('matches names that go on after the pattern, and punctuation or case never count', () => {
+    const list = new SweepSkipList(['Taxes', 'hobby', 'my-blog.com']);
     expect(list.skips('-Users-me-workspace-taxes-tools')).toBe(true);
     expect(list.skips('-Users-me-workspace-hobby-notes')).toBe(true);
-    // "hobby" must not match a parent folder or the middle of a name.
-    expect(list.skips('-Users-me-workspace-posthog-hobby-x')).toBe(false);
+    expect(list.skips('-Users-me-workspace-my-blog-com-v2')).toBe(true);
+  });
+
+  it('needs whole tokens: a pattern never matches part of a token', () => {
+    const list = new SweepSkipList(['hobby', 'my-blog-com']);
+    expect(list.skips('-Users-me-workspace-hass')).toBe(false);
+    expect(list.skips('-Users-me-workspace-sha-tools')).toBe(false);
+    expect(list.skips('-Users-me-workspace-my-blog')).toBe(false);
+    expect(list.skips('-Users-me-workspace-my-blog-org')).toBe(false);
+  });
+
+  it('errs on the side of skipping when the pattern sits in a parent folder or mid-name', () => {
+    // Without the disk the folder cannot be split into path segments, and
+    // over-skipping only loses context.
+    const list = new SweepSkipList(['hobby', 'taxes']);
+    expect(list.skips('-Users-me-workspace-posthog-hobby-x')).toBe(true);
+    expect(list.skips('-Users-me-taxes-archive-2024')).toBe(true);
   });
 
   it('takes POSTPILE_SWEEP_SKIP over the defaults, empty means skip nothing', () => {

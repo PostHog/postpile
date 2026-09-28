@@ -187,12 +187,18 @@ export class WorkContextCollector {
    * Includes resolve against the including file's folder, then against the
    * folder of its symlink target (~/.claude/CLAUDE.md usually points into a
    * dotfiles repo). Only files under ~/.claude or that dotfiles folder count.
+   * The path is checked against those folders before the disk is touched:
+   * an include like @~/Pictures/x or @/Volumes/x must never be looked up,
+   * since macOS asks for a privacy permission on the first stat there.
    */
   private resolveInclude(target: string, from: string, roots: string[]): string | null {
     const base = target.startsWith('~/') ? join(this.home, target.slice(2)) : target;
     const folders = [dirname(from), dirname(safeRealpath(from) ?? from)];
     for (const folder of folders) {
       const candidate = isAbsolute(base) ? base : resolve(folder, base);
+      if (!roots.some((root) => isInside(candidate, root))) {
+        continue;
+      }
       const real = existsSync(candidate) ? safeRealpath(candidate) : null;
       if (real && statSync(real).isFile() && roots.some((root) => isInside(real, root))) {
         return candidate;
@@ -207,7 +213,7 @@ export class WorkContextCollector {
     if (!mainReal) {
       return [];
     }
-    const roots = [safeRealpath(this.options.claudeDir) ?? this.options.claudeDir, dirname(mainReal)];
+    const roots = [this.options.claudeDir, safeRealpath(this.options.claudeDir) ?? this.options.claudeDir, dirname(mainReal)];
     const seen = new Set<string>();
     const found: Candidate[] = [];
     const visit = (path: string, depth: number): void => {

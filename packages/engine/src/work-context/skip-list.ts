@@ -1,11 +1,15 @@
-import { existsSync, statSync } from 'node:fs';
-import { join, sep } from 'node:path';
-
 // Private projects never leave the machine: the work context collector
 // skips ~/.claude/projects folders (memory and sessions) whose project
 // matches the skip list. Folders are the project path with every
 // non-alphanumeric character turned into "-", e.g.
 // -Users-me-workspace-taxes for /Users/me/workspace/taxes.
+//
+// The encoding is lossy ("-" can be "/", ".", "_" or a dash in a name), and
+// decoding it on disk would stat paths all over the machine (~/Pictures,
+// cloud drives, /Volumes), which makes macOS ask for privacy permissions.
+// So matching works on the folder name's tokens only and errs on the side of
+// skipping: a pattern matches wherever its tokens show up as a run, since
+// the tokens after it may still belong to the same project folder name.
 
 /** Default skip list: personal projects. POSTPILE_SWEEP_SKIP replaces it. */
 export const DEFAULT_SWEEP_SKIP = ['taxes', 'garden', 'hobby', 'my-blog-com'];
@@ -21,68 +25,41 @@ export function sweepSkipFromEnv(value: string | undefined): string[] {
     .filter((pattern) => pattern !== '');
 }
 
-/** Lowercase, every run of non-alphanumerics as one "-", the way Claude Code names project folders. */
-function normalize(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+/** Lowercase tokens split on every run of non-alphanumerics, the way Claude Code names project folders. */
+function tokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token !== '');
 }
 
-function isDirectory(path: string): boolean {
-  try {
-    return existsSync(path) && statSync(path).isDirectory();
-  } catch {
-    return false;
+/** Whether `run` appears as consecutive whole tokens anywhere in `all`. */
+function containsRun(all: string[], run: string[]): boolean {
+  for (let start = 0; start + run.length <= all.length; start += 1) {
+    if (run.every((token, offset) => all[start + offset] === token)) {
+      return true;
+    }
   }
+  return false;
 }
 
 /**
- * The project's folder name (last path segment) from a ~/.claude/projects
- * folder name. The encoding is lossy ("-" can be "/" or a dash in a name),
- * so the path is walked on disk: at each level the longest run of tokens
- * that exists as a folder wins. Once nothing exists (a deleted project, or a
- * name with dots), the rest of the tokens is the last segment.
- */
-export function projectFolderName(folder: string, isDir: (path: string) => boolean = isDirectory): string {
-  const tokens = folder.replace(/^-+/, '').split('-');
-  let path: string = sep;
-  let start = 0;
-  while (start < tokens.length) {
-    let next = -1;
-    for (let end = tokens.length; end > start; end -= 1) {
-      if (isDir(join(path, tokens.slice(start, end).join('-')))) {
-        next = end;
-        break;
-      }
-    }
-    if (next < 0 || next === tokens.length) {
-      return tokens.slice(start).join('-');
-    }
-    path = join(path, tokens.slice(start, next).join('-'));
-    start = next;
-  }
-  return tokens.at(-1) ?? folder;
-}
-
-/**
- * Whether a ~/.claude/projects folder is on the skip list: its project's
- * last path segment equals or starts with a pattern. Case and punctuation
- * do not count ("my-blog-com" matches my-blog.com).
+ * Whether a ~/.claude/projects folder is on the skip list: the pattern's
+ * tokens appear as a consecutive run of whole tokens in the folder name.
+ * Case and punctuation do not count ("my-blog-com" matches my-blog.com),
+ * but tokens must match whole ("hobby" does not match "hass"). A match in a
+ * parent folder or in the middle of a name also skips: over-skipping only
+ * loses context, under-skipping leaks a private project.
  */
 export class SweepSkipList {
-  private readonly patterns: string[];
+  private readonly patterns: string[][];
 
-  constructor(
-    readonly rawPatterns: string[],
-    private readonly isDir: (path: string) => boolean = isDirectory,
-  ) {
-    this.patterns = rawPatterns.map(normalize).filter((pattern) => pattern !== '' && pattern !== '-');
+  constructor(readonly rawPatterns: string[]) {
+    this.patterns = rawPatterns.map(tokens).filter((pattern) => pattern.length > 0);
   }
 
   skips(folder: string): boolean {
-    if (this.patterns.length === 0) {
-      return false;
-    }
-    const last = normalize(projectFolderName(folder, this.isDir));
-    const encoded = normalize(folder);
-    return this.patterns.some((pattern) => last === pattern || last.startsWith(pattern) || encoded.endsWith(`-${pattern}`));
+    const folderTokens = tokens(folder);
+    return this.patterns.some((pattern) => containsRun(folderTokens, pattern));
   }
 }

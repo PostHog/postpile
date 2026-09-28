@@ -1304,19 +1304,22 @@ from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
 
 - `CLAUDE.md` plus the files it @-includes (`@RTK.md`, `@~/x.md`), resolved
   against the including file's folder and its symlink target's folder, only
-  under `~/.claude` or the folder the symlink points into (the dotfiles). Lines
-  in code fences do not count. Depth 3.
+  under `~/.claude` or the folder the symlink points into (the dotfiles),
+  checked on the path before any disk lookup (no stat outside those folders).
+  Lines in code fences do not count. Depth 3.
 - **Skip list first**: `projects/*` folders on the skip list are never
   opened, neither memory nor sessions, so private projects never leave the
   machine (`work-context/skip-list.ts`). Defaults: `taxes`, `garden`,
   `hobby`, `my-blog-com`; `POSTPILE_SWEEP_SKIP` (comma separated) replaces
-  them, set to empty it skips nothing. A folder like
-  `-Users-me-workspace-taxes` is decoded on disk (the encoding turns
-  `/`, `.` and `_` into `-`, so the longest run of tokens that exists as a
-  folder wins at each level; the rest is the last segment once nothing
-  exists). It matches when the project's last path segment equals or starts
-  with a pattern (case and punctuation ignored), or the folder name ends in
-  `-<pattern>`. The count lands in `inputStats.skippedProjects` (names stay
+  them, set to empty it skips nothing. Matching never touches the disk:
+  decoding a folder like `-Users-me-workspace-taxes` on disk used to
+  stat paths under `~/Pictures`, cloud drives and `/Volumes`, and macOS asked
+  for privacy permissions at launch. A folder is skipped when the pattern's
+  tokens (lowercased, split on non-alphanumerics) appear as a run of whole
+  tokens anywhere in the folder name. The encoding is lossy (`/`, `.`, `_`
+  and `-` all become `-`), so a match in a parent folder or mid-name skips
+  too: over-skipping only loses context, under-skipping leaks. `hobby` still
+  never matches `hass`. The count lands in `inputStats.skippedProjects` (names stay
   out), the log says "skipped N project folders", and the UI shows the list
   read-only under the digest (`WorkContextView.skipPatterns`).
 - Every other `projects/*/memory/*.md`, ref = path incl. the project folder.
