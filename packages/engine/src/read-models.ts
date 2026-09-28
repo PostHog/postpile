@@ -261,7 +261,12 @@ export class ReadModels {
 
   /** Debug view: the newest `limit` stored notification threads and where each landed. */
   debugNotifications(limit: number): NotificationDebugRow[] {
-    return debugNotificationRows(this.board(), this.store.notifications.list().slice(0, limit));
+    const actions = {
+      byThread: this.store.actionLog.latestByThread(),
+      byPrKey: this.store.actionLog.latestByPrKey(),
+      firstOfBatch: this.store.actionLog.firstOfBatches(),
+    };
+    return debugNotificationRows(this.board(), this.store.notifications.list().slice(0, limit), actions);
   }
 
   /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */

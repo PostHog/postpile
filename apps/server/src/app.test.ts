@@ -5,7 +5,7 @@ import { createApp, TOKEN_HEADER } from './app.ts';
 import { pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
 import { OFF_POLL_STATUS } from '@code-manager/core';
 
-const CONFIG: AppConfig = { fake: false, writesAllowed: false, syncCallCap: 30 };
+const CONFIG: AppConfig = { fake: false, syncCallCap: 30 };
 
 function notImplemented(): never {
   throw new Error('not implemented');
@@ -24,6 +24,11 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     search: notImplemented,
     getPr: notImplemented,
     debugNotifications: notImplemented,
+    actionLog: notImplemented,
+    githubWrites: notImplemented,
+    setGitHubWrites: notImplemented,
+    markThreadRead: notImplemented,
+    bringBack: notImplemented,
     getChat: notImplemented,
     approve: notImplemented,
     markRead: notImplemented,
@@ -84,7 +89,7 @@ describe('server app', () => {
     const app = createApp(fakeEngine({}), 'secret', CONFIG);
     expect((await app.request('/api/config')).status).toBe(401);
     const res = await app.request('/api/config', { headers: { [TOKEN_HEADER]: 'secret' } });
-    expect(await res.json()).toEqual({ fake: false, writesAllowed: false, syncCallCap: 30 });
+    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30 });
   });
 
   it('applies the app call cap to a sync without one, and keeps an explicit cap', async () => {

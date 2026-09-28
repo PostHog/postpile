@@ -1,4 +1,4 @@
-import type { EventKind } from '@code-manager/core';
+import type { EventKind, UnreadKind } from '@code-manager/core';
 
 /**
  * The small glyph set for events, grouped: talking to you (at, question,
@@ -50,8 +50,9 @@ const GLYPHS: Record<EventKind, EventGlyph> = {
   bot_comment: 'bot',
 };
 
-export function eventGlyph(kind: EventKind): EventGlyph {
-  return GLYPHS[kind];
+/** A bring-back has no event behind it; it gets the "look at this" eye. */
+export function eventGlyph(kind: UnreadKind): EventGlyph {
+  return kind === 'brought_back' ? 'eye' : GLYPHS[kind];
 }
 
 /** Summaries start with the actor ("rowan pushed ..."); split it off so it can be drawn bold. */

@@ -6,6 +6,7 @@ import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { ChatIcon } from './icons.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
+import { markReadNote } from '../lib/guard.ts';
 
 interface ActionBarProps {
   detail: PrDetail;
@@ -53,7 +54,7 @@ export function ActionBar(props: ActionBarProps) {
       )}
       <Button
         size="md"
-        title={actions.blockedReason('markRead') ?? 'Marks the whole tile read; GitHub follows after 6s'}
+        title={actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks the whole tile read; GitHub follows after 6s'}
         onClick={() => void actions.markRead(tileId)}
       >
         Mark read

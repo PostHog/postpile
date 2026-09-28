@@ -1,14 +1,17 @@
-import type { NotificationDebugRow, NotificationLanding, NotificationReason } from '@code-manager/core';
+import type { ActionLogEntry, ActionOrigin, NotificationDebugRow, NotificationLanding, NotificationReason } from '@code-manager/core';
+import { ageLabel } from './time.ts';
 
 export interface NotificationFilter {
   /** Null shows every reason. */
   reason: NotificationReason | null;
   unreadOnly: boolean;
+  /** Only threads the app itself marked read last (on GitHub, or in the app while read-only). */
+  readByApp: boolean;
   /** Matched against repo#number, title, topic and tile title, case-insensitive. */
   text: string;
 }
 
-export const NO_NOTIFICATION_FILTER: NotificationFilter = { reason: null, unreadOnly: false, text: '' };
+export const NO_NOTIFICATION_FILTER: NotificationFilter = { reason: null, unreadOnly: false, readByApp: false, text: '' };
 
 /** "PostHog/posthog#41902", or just the repo for subjects without a number. */
 export function threadRef(row: NotificationDebugRow): string {
@@ -60,6 +63,12 @@ function haystack(row: NotificationDebugRow): string {
   return [threadRef(row), row.thread.title, row.thread.subjectType, landingLabel(row.landing)].join(' ').toLowerCase();
 }
 
+/** The app's own mark-read is the newest thing that happened to the thread. */
+export function readByApp(row: NotificationDebugRow): boolean {
+  const last = row.lastAction;
+  return last !== null && last.action === 'mark_read' && (last.outcome === 'github' || last.outcome === 'local' || last.outcome === 'queued');
+}
+
 /** Rows that pass every filter; keeps the server's order (newest first). */
 export function filterNotifications(rows: NotificationDebugRow[], filter: NotificationFilter): NotificationDebugRow[] {
   const terms = filter.text.toLowerCase().split(/\s+/).filter(Boolean);
@@ -67,6 +76,104 @@ export function filterNotifications(rows: NotificationDebugRow[], filter: Notifi
     (row) =>
       (filter.reason === null || row.thread.reason === filter.reason) &&
       (!filter.unreadOnly || row.thread.unread) &&
+      (!filter.readByApp || readByApp(row)) &&
       terms.every((term) => haystack(row).includes(term)),
   );
+}
+
+const WHO: Record<ActionOrigin, string> = {
+  tile: 'you in a tile',
+  debug: 'you in this view',
+  queue: 'the deferred queue',
+  quit: 'the queue on quit',
+  sync: 'sync',
+  poll: 'the live poll',
+  footer: 'you',
+};
+
+/**
+ * - app: the app reached GitHub
+ * - local: only the app's own state changed
+ * - problem: not sent, or failed
+ * - outside: read on github.com or another client
+ */
+export type ActionTone = 'app' | 'local' | 'problem' | 'outside';
+
+export interface ActionLine {
+  text: string;
+  tone: ActionTone;
+  /** Longer text for the tooltip: the log detail and the time. */
+  title: string;
+}
+
+function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { text: string; tone: ActionTone } {
+  const who = WHO[last.origin];
+  switch (last.outcome) {
+    case 'github':
+      return { text: `marked read by ${who}${decidedBy ? `, queued by ${WHO[decidedBy.origin]}` : ''}`, tone: 'app' };
+    case 'queued':
+      return { text: `queued by ${who}, reaches GitHub after the undo window`, tone: 'local' };
+    case 'local':
+      if (last.detail === 'no unread GitHub thread') {
+        return { text: `marked read in the app by ${who}`, tone: 'local' };
+      }
+      return { text: `stayed local: read-only · marked read by ${decidedBy ? WHO[decidedBy.origin] : who}`, tone: 'local' };
+    case 'skipped':
+      return { text: `left unread by ${who}: ${last.detail}`, tone: 'problem' };
+    case 'failed':
+      return { text: `mark-read failed (${who})`, tone: 'problem' };
+    case 'observed':
+      if (last.origin === 'sync' || last.origin === 'poll') {
+        return { text: `read on github.com or another client · noticed by ${who}`, tone: 'outside' };
+      }
+      return { text: 'already read on GitHub when the queue got to it', tone: 'outside' };
+  }
+}
+
+function writeText(verb: string, last: ActionLogEntry): { text: string; tone: ActionTone } {
+  if (last.outcome === 'github') {
+    return { text: `${verb} by ${WHO[last.origin]}`, tone: 'app' };
+  }
+  if (last.outcome === 'failed') {
+    return { text: `${verb}: failed`, tone: 'problem' };
+  }
+  return { text: `${verb}: not sent, GitHub writes were off`, tone: 'problem' };
+}
+
+function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { text: string; tone: ActionTone } {
+  switch (last.action) {
+    case 'mark_read':
+      return markReadText(last, decidedBy);
+    case 'undo_mark_read':
+      return { text: `mark-read undone by ${WHO[last.origin]}`, tone: 'local' };
+    case 'bring_back':
+      return { text: `brought back by ${WHO[last.origin]}`, tone: 'local' };
+    case 'approve':
+      return writeText('approved', last);
+    case 'comment':
+      return writeText('commented', last);
+    case 'writes_on':
+    case 'writes_off':
+      return { text: last.action === 'writes_on' ? 'GitHub writes turned on' : 'GitHub writes turned off', tone: 'local' };
+  }
+}
+
+/**
+ * What led to the row's read state, from the action log: "marked read by
+ * the deferred queue, queued by you in a tile · 3m ago". A read thread the
+ * app never touched reads as read somewhere else. Null for an unread thread
+ * with nothing logged.
+ */
+export function actionLine(row: NotificationDebugRow, now: Date): ActionLine | null {
+  const last = row.lastAction;
+  if (last === null) {
+    if (row.thread.unread) {
+      return null;
+    }
+    return { text: 'read on github.com or another client', tone: 'outside', title: 'The app has no log entry for this thread.' };
+  }
+  const { text, tone } = entryText(last, row.decidedBy);
+  const age = ageLabel(last.at, now);
+  const title = [last.detail, `${last.action} · ${last.origin} · ${last.outcome} · ${last.at}`].filter(Boolean).join('\n');
+  return { text: age === 'now' ? `${text} · just now` : `${text} · ${age} ago`, tone, title };
 }

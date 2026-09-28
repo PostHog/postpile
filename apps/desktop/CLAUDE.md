@@ -33,7 +33,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
   (`useMemorySources`, only enabled while a "Why?" panel is open), `debug.ts`
-  (`useDebugNotifications`, the notifications debug pane), `live.ts`
+  (`useDebugNotifications`, the notifications debug pane), `writes.ts`
+  (`useGitHubWrites`, the footer lock), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
@@ -52,12 +53,25 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   Components never call `request()` for a mutation.
 - **GitHub writes are guarded.** approve, send comment, mark read and "not
   mine" (it queues a mark-read) pass through `writeBlockedReason` in
-  `lib/guard.ts`. They are blocked, with a clear toast, unless the server says
-  `writesAllowed` (`CODE_MANAGER_ALLOW_WRITES=1`, or fake mode where nothing
-  reaches GitHub). Writes are also blocked until the config has loaded. Don't
-  bypass the guard, and put a new GitHub-writing action on the `GithubWrite`
-  list.
+  `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
+  /api/github-writes`, changes at runtime). With the lock closed
+  (read-only, the default) approve and comment are blocked with a clear
+  toast; mark read and "not mine" still run and stay in the app (the toast
+  says "here only", buttons carry `markReadNote`). Everything is blocked
+  until the writes state has loaded. Don't bypass the guard, and put a new
+  GitHub-writing action on the `GithubWrite` list.
+- **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
+  asks in a small popover ("Mark-read and approvals will reach GitHub");
+  closing it is instant. With `CODE_MANAGER_READ_ONLY=1` it is disabled and
+  its title says why. The server keeps the choice; the renderer never
+  stores it.
 - Buttons for guarded actions carry the blocked reason as their `title`.
+- The notifications debug pane has "Mark read" (thread level, same queue,
+  undo, lock and action log as a tile) and "Bring back" (app state only:
+  GitHub has no mark-unread). Each row shows its last action log entry
+  (`actionLine` in `lib/notifications.ts`); a read thread without one reads
+  as "read on github.com or another client". Keep the tooltips honest about
+  what reaches GitHub.
 - After an action the provider invalidates every query except the config.
   Mark-read and memory correction results carry an undo token; the toast
   offers Undo for the 6s window and the footer counts pending mark-reads
@@ -118,7 +132,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`),
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
-  `StatusFooter`, `Toast`, `SearchField` (title bar filter).
+  `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `WhyBadge`,
   `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),

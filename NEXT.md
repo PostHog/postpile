@@ -39,10 +39,24 @@ now".
   hidden-inset title bar, three panes (see "Three-pane balance" in
   DESIGN.md), status footer,
   toast with Undo. Rules for the renderer are in `apps/desktop/CLAUDE.md`.
-- GitHub writes from the UI (approve, comment, mark read, "not mine") are
-  blocked unless the app runs with `CODE_MANAGER_ALLOW_WRITES=1`; the server
-  reports this at `GET /api/config`. Fake mode allows them (nothing leaves the
-  process).
+- GitHub writes lock (DESIGN.md "GitHub writes: lock, action log, bring
+  back"): the lock in the status footer switches GitHub writes on and off at
+  runtime (`WriteSwitch`, `GET/POST /api/github-writes`), kept in meta,
+  read-only on first run, confirm popover to open, instant to close,
+  disabled with the reason under `CODE_MANAGER_READ_ONLY=1`. Locked: approve
+  and comment blocked, mark read and "not mine" stay in the app; batches
+  queued while locked never reach GitHub. `CODE_MANAGER_ALLOW_WRITES` is
+  gone.
+- Action log (`action_log`, migration 008): every GitHub write, local
+  mark-read, undo, bring-back and lock flip, with origin (tile, debug, queue,
+  quit, sync, poll, footer) and outcome (queued, github, local, skipped,
+  failed, observed). Written by `GitHubWrites`, the only door to the writer,
+  plus ReadMarker and the sync's "left the inbox" mirror.
+- Notifications debug view: "Mark read" per thread (same queue, undo, lock
+  and log), "Bring back" (app only: `brought_back_at`, tile unread with
+  "brought back by you"), last logged action per row, filter "Read by this
+  app". GitHub's capabilities (no mark-unread, no Saved API) are in
+  DESIGN.md with doc links.
 - Review fixes, highlights:
   - API token is always required, so web pages cannot fire approve or mark-read
     at the local server.
@@ -188,8 +202,14 @@ now".
   the UI yet: a "handled quietly" list (shown disabled), keyboard
   navigation between tiles, dark mode, one-press approve from a tile (Approve lives in the
   detail pane, next to the glance).
-- The write guard is a UI guard. The server itself still accepts writes from
-  any caller with the token; `CODE_MANAGER_READ_ONLY=1` is the hard stop.
+- The footer lock is enforced in the engine (`GitHubWrites`), not only in the
+  UI; `CODE_MANAGER_READ_ONLY=1` stays the hard stop (no write client at all).
+  Any caller with the token can still open the lock through the API.
+- The lock in fake mode is not persisted (starts locked on every start).
+- Bring back does not touch GitHub and cannot: the GitHub thread keeps its
+  read flag. mark done, subscribe / unsubscribe have no writer methods yet.
+- Mark-reads while locked log one `local` row per PR without an unread
+  thread too (pulled-in stack layers), which makes the log a bit chatty.
 - Fake mode (`CODE_MANAGER_FAKE=1`) runs `FakeEngine`, a second
   EngineService with its own copies of the tile/loudness/undo rules. It can
   drift from the real engine. See decisions below.
@@ -211,6 +231,7 @@ now".
   call) makes "Sync now" wait for it.
 - The mark-read undo queue is in memory. Quit flushes it; a crash drops
   pending mark-reads (local state already says read, GitHub stays unread).
+  The action log then shows them as `queued` with no send row.
 - Nothing files `new_topic` proposals: new topics are created directly.
 - Desktop does not run `consolidate({onlyIfDue})` when idle yet. Quitting
   the app while on a topic does not mark it seen.
@@ -338,6 +359,16 @@ now".
   (~$0.04 each, a normal day ~10-40) and the 30-minute freshness window are
   guesses.
 
+- **GitHub writes lock**: `CODE_MANAGER_ALLOW_WRITES` was dropped instead of
+  kept as "start unlocked"; the lock is the one switch. Locked mark-reads
+  still change the app (tile done, GitHub unread) instead of being blocked.
+  Opening the lock does not send batches queued while locked. Keep all
+  three? Should the lock also be persisted in fake mode?
+- **Bring back**: app state only, no re-subscribe (it does not change read
+  state on GitHub). Should it also clear the PR's seen events (all old
+  reasons come back) instead of one "brought back by you" reason? Should
+  it live on tiles too, not only in the debug view?
+
 ## Decided
 
 - **Instructions scope** (2026-09-27): Julian picks the scope of a lasting
@@ -389,13 +420,25 @@ npm run server        # standalone API on 127.0.0.1:4870, prints its token
 
 The desktop app syncs once on start, then only on "Sync now". Between syncs it
 polls notifications every 10s and pings the Mac for addressed activity. Without
-`CODE_MANAGER_ALLOW_WRITES=1` it shows GitHub-writing actions but blocks them
-with a message:
+GitHub writes stay off until the lock in the status footer is opened (the
+choice is kept in the database); locked, approve and comment are blocked and
+mark-reads stay in the app:
 
 ```
-CODE_MANAGER_ALLOW_WRITES=1 npm run desktop   # approve, comment, mark read for real
 npm run build                                 # electron-vite bundle into apps/desktop/out
 ```
+
+UI check in fake mode as a plain web page (no Electron):
+
+```
+CODE_MANAGER_FAKE=1 CODE_MANAGER_TOKEN=devtok PORT=4877 npm run server
+(cd apps/desktop/out/renderer && python3 -m http.server 5177)
+open 'http://127.0.0.1:5177/index.html?api=http://127.0.0.1:4877&token=devtok'
+```
+
+The renderer syncs on load. Against a real database that means real GitHub
+reads and agent calls; use a DB copy with `CODE_MANAGER_READ_ONLY=1
+CODE_MANAGER_MAX_AGENT_CALLS=0`.
 
 Fake mode (sample "Move CI to Depot" data, no GitHub, no agent, no database):
 
@@ -407,10 +450,9 @@ CODE_MANAGER_FAKE=1 npm run server
 
 Env switches:
 
-- `CODE_MANAGER_READ_ONLY=1`: real reads, every GitHub write refused. Use this
-  for smoke runs against the real account.
-- `CODE_MANAGER_ALLOW_WRITES=1`: lets the UI send GitHub writes. Off by
-  default.
+- `CODE_MANAGER_READ_ONLY=1`: real reads, every GitHub write refused, the
+  footer lock cannot be opened. Use this for smoke runs against the real
+  account.
 - `CODE_MANAGER_MAX_AGENT_CALLS`: agent-call cap for syncs the app starts
   (launch and "Sync now"), default 30. The CLI uses `--max-agent-calls`.
 - `CODE_MANAGER_DB`, `CODE_MANAGER_INSTRUCTIONS`: override the database

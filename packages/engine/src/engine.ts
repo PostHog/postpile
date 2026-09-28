@@ -1,5 +1,6 @@
 import type { AgentService } from '@code-manager/agent';
 import type {
+  ActionLogEntry,
   ActionResult,
   ChatMessage,
   ChatReply,
@@ -8,6 +9,8 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  GitHubWritesChange,
+  GitHubWritesStatus,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposalReply,
@@ -33,7 +36,7 @@ import type {
   Timers,
 } from '@code-manager/core';
 import { OFF_POLL_STATUS, systemTimers } from '@code-manager/core';
-import type { GitHubReader, GitHubWriter } from '@code-manager/github';
+import type { GitHubReader } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
@@ -60,11 +63,13 @@ import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
 import type { EngineService } from './service.ts';
 import { SyncRun } from './sync-run.ts';
+import type { GitHubWrites } from './writes/github-writes.ts';
 
 export interface EngineDeps {
   store: Store;
   reader: GitHubReader;
-  writer: GitHubWriter;
+  /** The only way to GitHub writes: asks the footer lock and logs every call. The queue must use the same one. */
+  writes: GitHubWrites;
   agent: AgentService;
   /** Must be the observer the agent service reports its calls to; the run stats come from it. */
   callLog: AgentCallLog;
@@ -103,9 +108,10 @@ export class Engine implements EngineService {
     const proposer = new InstructionsProposer(store, deps.agent, history);
     const contexts = new PromptContextSource(store, history);
     this.reads = new ReadModels(store, deps.agent, contexts, now);
-    const readMarker = new ReadMarker(store, deps.markReadQueue, now);
-    this.tiles = new TileActions(store, readMarker, now);
-    this.prActions = new PrActions(store, deps.writer, deps.agent, contexts, readMarker, now);
+    const log = deps.writes.log;
+    const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
+    this.tiles = new TileActions(store, readMarker, log, now);
+    this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now);
     this.feedback = new FeedbackActions(store, readMarker, now);
     this.chats = new ChatActions(store, deps.agent, contexts, now);
     this.proposals = new ProposalActions(store, now);
@@ -114,7 +120,7 @@ export class Engine implements EngineService {
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
-    const github = new GitHubSync(store, deps.reader, contexts, now);
+    const github = new GitHubSync(store, deps.reader, contexts, now, log);
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue);
     this.consolidationRun = new ConsolidationRun(runDeps);
     const decider = new PingDecider({
@@ -218,6 +224,18 @@ export class Engine implements EngineService {
     return this.reads.debugNotifications(limit);
   }
 
+  async actionLog(limit: number): Promise<ActionLogEntry[]> {
+    return this.deps.store.actionLog.listRecent(limit);
+  }
+
+  async githubWrites(): Promise<GitHubWritesStatus> {
+    return this.deps.writes.status();
+  }
+
+  async setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange> {
+    return this.deps.writes.set(enabled);
+  }
+
   async getChat(tileId: string): Promise<ChatMessage[]> {
     return this.chats.getChat(tileId);
   }
@@ -228,6 +246,14 @@ export class Engine implements EngineService {
 
   async markRead(tileId: string): Promise<ActionResult> {
     return this.tiles.markRead(tileId);
+  }
+
+  async markThreadRead(threadId: string): Promise<ActionResult> {
+    return this.tiles.markThreadRead(threadId);
+  }
+
+  async bringBack(prKey: PrKey): Promise<ActionResult> {
+    return this.tiles.bringBack(prKey);
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

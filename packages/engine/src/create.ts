@@ -1,18 +1,23 @@
 import { ClaudeCliRunner, RunnerAgentService } from '@code-manager/agent';
 import { systemTimers, UNDO_WINDOW_MS } from '@code-manager/core';
-import { GhCliTokenSource, GitHubClient, GitHubWriteClient, type GitHubWriter, type TokenSource } from '@code-manager/github';
+import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@code-manager/github';
 import { Store } from '@code-manager/store';
 import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
 import { defaultPaths, type AppPaths } from './paths.ts';
-import { ReadOnlyWriter } from './read-only-writer.ts';
 import type { EngineService } from './service.ts';
+import { ActionLog } from './writes/action-log.ts';
+import { GitHubWrites } from './writes/github-writes.ts';
+import { WriteSwitch } from './writes/write-switch.ts';
 
 export interface CreateEngineOptions {
   paths?: AppPaths;
-  /** No GitHub writes at all. Defaults to CODE_MANAGER_READ_ONLY=1. */
+  /**
+   * No GitHub writes at all, whatever the footer lock says: the real write
+   * client is never built. Defaults to CODE_MANAGER_READ_ONLY=1.
+   */
   readOnly?: boolean;
   /** Daily cap on ping decisions. Defaults to CODE_MANAGER_PING_CAP, else PING_DECISIONS_PER_DAY. */
   pingDecisionsPerDay?: number;
@@ -24,10 +29,6 @@ export function pingCapFromEnv(value: string | undefined): number {
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : PING_DECISIONS_PER_DAY;
 }
 
-function makeWriter(tokens: TokenSource, readOnly: boolean): GitHubWriter {
-  return readOnly ? new ReadOnlyWriter() : new GitHubWriteClient(tokens);
-}
-
 /** Wires the real dependencies. Tests build Engine directly with fakes instead. */
 export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const paths = options.paths ?? defaultPaths();
@@ -35,19 +36,21 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const tokens = new GhCliTokenSource();
   const store = Store.open(paths.databaseFile);
   const reader = new GitHubClient(tokens);
-  const writer = makeWriter(tokens, readOnly);
+  const now = (): Date => new Date();
+  // Off until the user opens the footer lock; the choice is kept in meta.
+  const writeSwitch = new WriteSwitch(store, readOnly ? null : new GitHubWriteClient(tokens));
+  const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const markThreadReadLocally = (threadId: string, readAt: string): void => {
     store.notifications.markRead(threadId, readAt);
   };
-  const now = (): Date => new Date();
   const callLog = new AgentCallLog(store, now);
   return new Engine({
     store,
     reader,
-    writer,
+    writes,
     agent: new RunnerAgentService(new ClaudeCliRunner(), { observer: callLog }),
     callLog,
-    markReadQueue: new MarkReadQueue(writer, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
+    markReadQueue: new MarkReadQueue(writes, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
     instructionsFile: paths.instructionsFile,
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.CODE_MANAGER_PING_CAP),

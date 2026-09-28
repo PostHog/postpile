@@ -3,7 +3,8 @@ import type { NewFeedback, Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
 import type { ReadMarker } from './read-marker.ts';
-import { failed, ok } from './results.ts';
+import { failed, ok, readMessage } from './results.ts';
+import type { PendingBatch } from '../mark-read-queue.ts';
 
 /**
  * User corrections. Each one is logged (the newest go back into prompts) and
@@ -26,16 +27,17 @@ export class FeedbackActions {
 
   /**
    * "Not mine" acts like mark read: events seen, pinged PRs handled, the GitHub
-   * notification read after the undo window. Returns the undo token. The
+   * notification read after the undo window. Returns the batch (token = undo token). The
    * agent learns from the logged note.
    */
-  private notMine(tile: Tile, key: PrKey | null): string {
+  private notMine(tile: Tile, key: PrKey | null): PendingBatch {
+    const origin = { origin: 'tile' as const, tileId: tile.id };
     if (key) {
-      return this.readMarker.markRead([key], [key]);
+      return this.readMarker.markRead([key], [key], origin);
     }
     const keys = tile.members.map((m) => m.prKey);
     const pinged = tile.members.filter((m) => isPinged(m.provenance)).map((m) => m.prKey);
-    return this.readMarker.markRead(keys, pinged);
+    return this.readMarker.markRead(keys, pinged, origin);
   }
 
   /** "Wrong topic": move it when the user said where, otherwise let the next sync re-sort it. */
@@ -79,7 +81,8 @@ export class FeedbackActions {
         this.log({ kind: input.kind, topicId, tileId: input.tileId, prKey: about, setId, eventId: null, note: input.note });
       }
       if (input.kind === 'not_mine') {
-        return ok('Noted: not yours', this.notMine(tile, key));
+        const batch = this.notMine(tile, key);
+        return ok(readMessage('Noted: not yours, marked read', batch), batch.token);
       }
       if (input.kind === 'not_related') {
         if (!setId || !key) {

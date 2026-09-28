@@ -2,6 +2,7 @@ import type { TileView, TopicListItem } from '@code-manager/core';
 import { useActions } from '../api/actions.tsx';
 import { prNumber } from '../lib/tiles.ts';
 import { Menu, type MenuItem } from './Menu.tsx';
+import { markReadNote } from '../lib/guard.ts';
 
 interface TileMenuProps {
   view: TileView;
@@ -23,7 +24,7 @@ export function TileMenu(props: TileMenuProps) {
   const items: MenuItem[] = [
     {
       label: 'Not mine',
-      title: actions.blockedReason('notMine') ?? 'Clears the tile and marks the GitHub notification read after 6s',
+      title: actions.blockedReason('notMine') ?? markReadNote(actions.writes) ?? 'Clears the tile and marks the GitHub notification read after 6s',
       onSelect: () => void actions.feedback({ kind: 'not_mine', tileId: tile.id, prKey: null, targetTopicId: null, note: '' }),
     },
     { label: `Wrong topic: re-sort ${which}on next sync`, onSelect: () => wrongTopic(null) },

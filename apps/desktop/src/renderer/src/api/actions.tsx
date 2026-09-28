@@ -8,6 +8,8 @@ import type {
   AppConfig,
   ChatReply,
   FeedbackInput,
+  GitHubWritesChange,
+  GitHubWritesStatus,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposal,
@@ -23,6 +25,7 @@ import type {
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { useAppConfig } from './config.ts';
+import { useGitHubWrites } from './writes.ts';
 import { prPath, request, tilePath } from './client.ts';
 import { queryKeys } from './keys.ts';
 
@@ -49,6 +52,8 @@ interface PendingUndo {
 
 export interface Actions {
   config: AppConfig | undefined;
+  /** The footer lock. Undefined until loaded; GitHub writes stay blocked until then. */
+  writes: GitHubWritesStatus | undefined;
   notice: Notice | null;
   dismissNotice(): void;
   syncing: boolean;
@@ -59,6 +64,12 @@ export interface Actions {
   blockedReason(action: GithubWrite): string | null;
 
   sync(): Promise<void>;
+  /** The footer lock. Turning on is confirmed in the footer first; the server refuses it when the env forces read-only. */
+  setGitHubWrites(enabled: boolean): Promise<void>;
+  /** "Mark read" on a thread in the notifications debug view. Same queue, undo and lock as a tile. */
+  markThreadRead(threadId: string): Promise<void>;
+  /** "Bring back" in the debug view: local only, the tile turns unread again. */
+  bringBack(prKey: PrKey): Promise<void>;
   approve(prKey: PrKey): Promise<void>;
   markRead(tileId: string): Promise<void>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
@@ -105,6 +116,7 @@ function errorText(error: unknown): string {
 export function ActionsProvider(props: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const config = useAppConfig().data;
+  const writes = useGitHubWrites().data;
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState<string[]>([]);
   const [pendingUndos, setPendingUndos] = useState<PendingUndo[]>([]);
@@ -143,7 +155,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
 
   /** Blocked GitHub writes show why and never reach the API. */
   function isBlocked(write: GithubWrite | null): boolean {
-    const reason = write ? writeBlockedReason(write, config) : null;
+    const reason = write ? writeBlockedReason(write, writes) : null;
     if (reason) {
       show('blocked', reason);
     }
@@ -194,6 +206,16 @@ export function ActionsProvider(props: { children: ReactNode }) {
       show('error', `Sync failed: ${errorText(error)}`);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function setGitHubWrites(enabled: boolean): Promise<void> {
+    try {
+      const change = await withBusy('github-writes', () => request<GitHubWritesChange>('POST', '/api/github-writes', { enabled }));
+      show(change.ok ? 'ok' : 'blocked', change.message);
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not switch GitHub writes: ${errorText(error)}`);
     }
   }
 
@@ -289,6 +311,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
 
   const actions: Actions = {
     config,
+    writes,
     notice,
     dismissNotice: () => setNotice(null),
     syncing,
@@ -296,9 +319,16 @@ export function ActionsProvider(props: { children: ReactNode }) {
     // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
     pendingMarkReads: pendingUndos.filter((entry) => !entry.token.startsWith(MEMORY_UNDO_PREFIX)).length,
     isBusy: (key) => busy.includes(key),
-    blockedReason: (write) => writeBlockedReason(write, config),
+    blockedReason: (write) => writeBlockedReason(write, writes),
 
     sync,
+    setGitHubWrites,
+    markThreadRead: async (threadId) => {
+      await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
+    },
+    bringBack: async (prKey) => {
+      await run(`bringBack:${prKey}`, null, () => request('POST', `${prPath(prKey)}/bring-back`));
+    },
     approve: async (prKey) => {
       await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`));
     },

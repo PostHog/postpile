@@ -1,5 +1,6 @@
 // Read models for the debug view of the raw GitHub notification stream.
 
+import type { ActionLogEntry } from './github-writes.ts';
 import type { EventKind, IsoTime, Loudness, NotificationThread, PrKey, TileStateKind } from './types.ts';
 
 /** Rows the debug endpoint returns when the request names no limit, and at most. */
@@ -54,4 +55,11 @@ export interface NotificationDebugRow {
   landing: NotificationLanding;
   /** Up to DEBUG_EVENTS_PER_PR stored events of the PR, newest first. Empty for non-PR threads. */
   recentEvents: DebugEventLine[];
+  /**
+   * The newest action log entry for the thread or its PR. Null when the app
+   * never acted on it: a read thread then was read on github.com or another client.
+   */
+  lastAction: ActionLogEntry | null;
+  /** When lastAction is a queue send: the entry of the click that queued it (same batch). */
+  decidedBy: ActionLogEntry | null;
 }
