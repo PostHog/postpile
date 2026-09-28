@@ -71,7 +71,8 @@ a classification.
 - `snoozed`: a snooze is active and its condition is not met yet.
 - `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed, or approved by
-  them, or handled (marked read) while whose turn is not "you" and no review is pending of
+  them while whose turn is not "you" (a later question or mention after the approval keeps
+  it out of Done), or handled (marked read) while whose turn is not "you" and no review is pending of
   them (`reviewPending`: a personal request, a team request on a teammate's PR, or a routed
   team request no teammate picked up, head not reviewed by them). Marking read a PR that
   still waits on their review makes it read (no strip, no coral) but leaves it open in the
@@ -1018,6 +1019,10 @@ authors.
 2. you: a human mentioned you, your team, replied to you or asked you a
    question, and you have not commented or reviewed since ("Answer ada's
    question"; with a pending review of yours: "Review, lyra mentioned you").
+   A team mention asks only until it is read (2026-09-28): once its event is
+   seen (mark-read in the app, or read on GitHub) it no longer makes it your
+   move, so it no longer keeps the tile off Done or the topic in needs-you.
+   Personal asks (mention, question, reply) stay until answered.
 3. On your own PR:
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
@@ -1043,10 +1048,15 @@ authors.
      Once you re-review or comment it is off again until the author moves.
    - them: you approved, on any commit (the app's record, or your newest
      approve-or-request-changes review on github.com is an approval): the
-     author "to merge". A push after your approval is never your move
+     author "to merge". The app's record only bridges the gap until GitHub
+     shows your review on the approved commit; from then on your newest
+     verdict on GitHub decides, so a dismissal or a later change request
+     wins (2026-09-28). A push after your approval is never your move
      (no "Re-check", dropped 2026-09-28).
    - you: a review is requested of you, or of your team, and you have not
-     reviewed the head ("Review, rowan asked", "Review for team-devex"). A
+     reviewed the head ("Review, rowan asked", "Review for team-devex"). The
+     name is who requested you or your team in the timeline, not whoever
+     made the newest request on the PR. A
      team request on a teammate's PR counts like a personal one
      ("Review for team-devex: lyra's PR") until another teammate approves
      or requests changes; a teammate's comment alone does not cover it
@@ -1213,8 +1223,8 @@ avatars and filters", QueuesB2).
   tile as context.
 - **Rows**: name, face stack, one count bubble, then a one-line summary
   with a honey "N your move" chip at its end, right under the bubble
-  (`yourMoveTiles`: live tiles where whose-turn says it's your move,
-  merging your approved PR included). At 1100px row one has no room for the
+  (`yourMoveTiles`: live tiles, not done and not snoozed, where whose-turn
+  says it's your move, merging your approved PR included). At 1100px row one has no room for the
   chip, so the summary truncates first and the chip stays.
 - **No counts on section headers** (2026-09-28, later the same day):
   Julian read the PR counts on headers and rows as unread counts, and how
@@ -1239,7 +1249,7 @@ avatars and filters", QueuesB2).
   strangers said nothing about whether it concerns you).
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
-  tile and that move is more than "Merge, it is approved" on your own PR
+  (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
   (`isMergeApprovedMove`). That move still shows on the tile footer and in
   the chip count, it just doesn't make the topic urgent. Only then is its unread bubble coral and does it rank as
   `needs_you`. When every unread tile is merged or closed the row shows a

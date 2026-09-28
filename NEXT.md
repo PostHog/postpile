@@ -678,6 +678,11 @@ the app meanwhile.
 
 ## Decided
 
+- **Team mentions ask only until read** (2026-09-28): an unanswered
+  team_mention is "your move" until the tile is read. After a mark-read (or
+  a read on GitHub) it no longer keeps the tile off Done or the topic in
+  needs-you. Personal asks are unchanged: they hold until answered.
+
 - **Done means nothing is asked of you** (2026-09-28): a tile is done only
   when merged/closed, approved by you, or marked read with whose turn not
   yours and no review pending of you or your team. Mark read on a PR that

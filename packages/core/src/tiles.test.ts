@@ -92,6 +92,16 @@ describe('isPrDone', () => {
     expect(isPrDone(pr, null, teamViewer)).toBe(true);
   });
 
+  it('lets a team mention keep a PR out of done only until it is read', () => {
+    const pr = makePr({ author: 'ada' });
+    const unseen = makeEvent({ kind: 'team_mention', actor: 'ada', at: at(30) });
+    expect(isPrDone(pr, handled, teamViewer, [unseen])).toBe(false);
+    expect(isPrDone(pr, handled, teamViewer, [{ ...unseen, seenAt: at(40) }])).toBe(true);
+    // A personal ask still holds after mark-read.
+    const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30), seenAt: at(40) });
+    expect(isPrDone(pr, handled, teamViewer, [question])).toBe(false);
+  });
+
   it('stays done when someone pushed after the approval', () => {
     const pr = makePr({ headOid: 'h3' });
     expect(isPrDone(pr, makeUserState({ approvedAt: at(1), approvedCommitOid: 'h2' }))).toBe(true);

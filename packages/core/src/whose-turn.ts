@@ -88,11 +88,17 @@ function spokeSince(pr: Pr, viewer: Viewer, since: string): boolean {
 /**
  * The newest human event of `kinds` aimed at the viewer that they have not
  * answered since (no comment or review after it). Also used by `prTier`.
+ * A team mention only asks until it is read: once seen (mark-read in the
+ * app or read on GitHub) it no longer counts (decided 2026-09-28). Personal
+ * asks count until answered.
  */
 export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: EventKind[] = ASK_KINDS): PrEvent | null {
   let newest: PrEvent | null = null;
   for (const event of events) {
     if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
+      continue;
+    }
+    if (event.kind === 'team_mention' && event.seenAt !== null) {
       continue;
     }
     if (spokeSince(pr, viewer, event.at)) {
