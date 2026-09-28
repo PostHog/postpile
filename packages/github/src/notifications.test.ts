@@ -142,3 +142,33 @@ describe('getThread', () => {
     ]);
   });
 });
+
+describe('listThreadsSince', () => {
+  it('asks for read and unread threads since a time and walks the pages', async () => {
+    const next = 'https://api.github.com/notifications?all=true&since=x&page=2';
+    const fake = new FakeFetch([
+      { body: loadFixture('notifications-page1.json'), headers: { etag: 'W/"all"', link: `<${next}>; rel="next"` } },
+      { body: loadFixture('notifications-page2.json') },
+    ]);
+    const client = new GitHubClient(fakeTokens, fake.fn);
+
+    const result = await client.listThreadsSince('2026-09-19T10:00:00.000Z', null);
+
+    if (result.notModified) throw new Error('expected threads');
+    expect(result.etag).toBe('W/"all"');
+    expect(result.threads).toHaveLength(4);
+    expect(fake.requests.map((r) => r.url)).toEqual([
+      'https://api.github.com/notifications?all=true&since=2026-09-19T10%3A00%3A00.000Z&per_page=50',
+      next,
+    ]);
+  });
+
+  it('sends the ETag and reports 304 as notModified', async () => {
+    const fake = new FakeFetch([{ status: 304 }]);
+    const client = new GitHubClient(fakeTokens, fake.fn);
+
+    expect(await client.listThreadsSince('2026-09-19T10:00:00.000Z', 'W/"all"')).toEqual({ notModified: true });
+    expect(fake.requests[0]?.headers['if-none-match']).toBe('W/"all"');
+    expect(fake.requests[0]?.method ?? 'GET').toBe('GET');
+  });
+});

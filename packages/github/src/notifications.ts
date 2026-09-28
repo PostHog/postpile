@@ -1,8 +1,8 @@
-import type { NotificationReason, NotificationThread } from '@postpile/core';
+import type { IsoTime, NotificationReason, NotificationThread } from '@postpile/core';
 import { isoTime, isoTimeOrNull } from './normalize.ts';
 import { errorFromResponse, type GitHubHttp } from './http.ts';
 import type { RawNotification } from './raw.ts';
-import type { NotificationConditions, NotificationsResult } from './reader.ts';
+import type { NotificationConditions, NotificationsResult, ThreadsSinceResult } from './reader.ts';
 
 const FIRST_PAGE = 'notifications?all=false&per_page=50';
 
@@ -93,36 +93,48 @@ export function pollIntervalOf(response: Response): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+/** The first page's answer plus every thread across pages, or null after a 304. */
+interface WalkedPages {
+  first: Response;
+  threads: NotificationThread[] | null;
+}
+
 /**
- * Walks every page of the unread inbox. Only the first page is conditional:
- * once it comes back 200 the inbox has moved and later pages must be read in full.
+ * Walks every page from `firstPage`. Only the first page is conditional:
+ * once it comes back 200 the list has moved and later pages must be read in full.
  */
-export async function listNotifications(
-  http: GitHubHttp,
-  conditions: NotificationConditions,
-): Promise<NotificationsResult> {
-  const first = await http.request('GET', FIRST_PAGE, { headers: conditionalHeaders(conditions) });
-  const pollIntervalSeconds = pollIntervalOf(first);
+async function walkPages(http: GitHubHttp, firstPage: string, conditions: NotificationConditions, label: string): Promise<WalkedPages> {
+  const first = await http.request('GET', firstPage, { headers: conditionalHeaders(conditions) });
   if (first.status === 304) {
-    return { notModified: true, pollIntervalSeconds };
+    return { first, threads: null };
   }
   if (!first.ok) {
-    throw await errorFromResponse('GET notifications', first);
+    throw await errorFromResponse(label, first);
   }
-
   const threads: NotificationThread[] = [];
   let response = first;
   for (let page = 1; ; page++) {
     const items = (await response.json()) as RawNotification[];
     threads.push(...items.map(toThread));
-
     const next = nextPageUrl(response.headers.get('link'));
     if (!next || page >= MAX_PAGES) {
       break;
     }
     response = await http.requestOk('GET', next);
   }
+  return { first, threads };
+}
 
+/** Walks every page of the unread inbox. */
+export async function listNotifications(
+  http: GitHubHttp,
+  conditions: NotificationConditions,
+): Promise<NotificationsResult> {
+  const { first, threads } = await walkPages(http, FIRST_PAGE, conditions, 'GET notifications');
+  const pollIntervalSeconds = pollIntervalOf(first);
+  if (threads === null) {
+    return { notModified: true, pollIntervalSeconds };
+  }
   return {
     notModified: false,
     threads,
@@ -130,4 +142,19 @@ export async function listNotifications(
     lastModified: first.headers.get('last-modified'),
     pollIntervalSeconds,
   };
+}
+
+/**
+ * Read and unread threads updated since `since` (all=true), every page.
+ * Finds threads read on github.com, including ones the app never saw
+ * unread. The first page sends the previous ETag, which only matches while
+ * `since` stays the same.
+ */
+export async function listThreadsSince(http: GitHubHttp, since: IsoTime, etag: string | null): Promise<ThreadsSinceResult> {
+  const firstPage = `notifications?all=true&since=${encodeURIComponent(since)}&per_page=50`;
+  const { first, threads } = await walkPages(http, firstPage, { etag, lastModified: null }, 'GET notifications (all)');
+  if (threads === null) {
+    return { notModified: true };
+  }
+  return { notModified: false, threads, etag: first.headers.get('etag') };
 }

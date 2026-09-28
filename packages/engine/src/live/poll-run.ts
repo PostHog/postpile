@@ -5,6 +5,7 @@ import { TopicAssigner } from '../digest/topic-assignment.ts';
 import { errorText } from '../errors.ts';
 import type { GitHubSync } from '../github-sync.ts';
 import { emptyFactCounts } from '../memory/fact-writer.ts';
+import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { RunDeps } from '../run-deps.ts';
 import type { PingDecider } from './ping-decider.ts';
 import type { PollCycle } from './poll-cycle.ts';
@@ -49,6 +50,8 @@ export class PollRun {
     const { store, now, callLog } = this.deps;
     const inbox = await this.github.poll(POLL_MAX_PRS);
     const done = { kind: 'done' as const, notModified: inbox.notModified, githubPollIntervalSeconds: inbox.pollIntervalSeconds };
+    // A thread read on github.com usually brings no PR to fetch, only read times.
+    advanceSeenFromGitHub(store, inbox.readOnGitHub, now().toISOString());
     if (inbox.notModified || !inbox.viewer || inbox.fetchedPrKeys.length === 0) {
       return { ...done, prsUpdated: 0, decisions: [], pings: [], errors: [] };
     }

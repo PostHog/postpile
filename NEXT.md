@@ -219,6 +219,14 @@ now".
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
+- GitHub read time reconciliation (DESIGN.md "Reconciling with GitHub's
+  read time"): events before a thread's `last_read_at` count as seen on
+  every sync and poll, not only a PR's first fetch; threads cleared on
+  github.com while the app was closed turn calm on the next start and move
+  "since you last looked" forward. The sync also reads
+  `/notifications?all=true&since=<last sync>` (ETag, poll only when the
+  inbox moved), so PRs handled entirely on GitHub get their events logged
+  as seen and reach topics and dossiers. Nothing is marked read on GitHub.
 - Repo scope and quiet repos (DESIGN.md "Repo scope and quiet repos"): a
   repo menu in the title bar ("All repos" or some, with PR counts) narrows
   topics, queues, tiles and search in the engine read models, so it
@@ -407,6 +415,14 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   would shave a little off sync.
 
 ## Needs Julian's decisions
+
+- **Read list**: PRs handled entirely on github.com now become tiles
+  (calm, all events seen) and go through topic assignment and dossiers,
+  which costs agent calls; the first run looks back 3 days. GitHub's
+  `since` filters by `updated_at`, so a plain read without new activity is
+  only found when the thread leaves the inbox; its read time then comes
+  from one thread lookup (20 per sync, the sync time beyond that). Keep the
+  3 days? Should read-only PRs stay out of the tiles (memory only)?
 
 - **Repo scope / quiet repos**: the scope applies to the whole app
   (sidebar, tiles, footer counts, search) but not to the live poll, Mac

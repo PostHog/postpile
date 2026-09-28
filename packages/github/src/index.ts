@@ -8,6 +8,7 @@ export {
   type NotificationConditions,
   type NotificationsResult,
   type TeamMembersResult,
+  type ThreadsSinceResult,
 } from './reader.ts';
 export type { GitHubWriter } from './writer.ts';
 export { GhCliTokenSource, type TokenSource } from './token.ts';

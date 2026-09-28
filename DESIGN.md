@@ -82,14 +82,46 @@ report.
 **Sync** (the full one) is on demand: "Sync now" and on app start. On top of it
 the desktop app runs a fast notification poll with Mac pings, see "Live poll and
 Mac pings".
-Only unread PR threads whose activity is newer than the stored snapshot's fetch
-time get enriched (a thread's `updated_at` runs ahead of the PR's own, so
+PR threads whose activity is newer than the stored snapshot's fetch time get
+enriched, unread ones first, read ones too (see "Reconciling with GitHub's
+read time") (a thread's `updated_at` runs ahead of the PR's own, so
 comparing against the PR would refetch everything). `SyncOptions` exist for
 cheap runs: `maxPrs` (newest first, the rest follow on later syncs even after a
 304), `maxAgentCalls`, `agentJobs`.
 
-On first sight of a PR, events older than the thread's `last_read_at` are
-marked seen: the user already read them on github.com.
+**Reconciling with GitHub's read time.** Every event on a thread from before
+that thread's `last_read_at` counts as seen, stamped with that time, whenever
+the app learns it (core `eventsReadOnGitHub`), not only on a PR's first
+fetch: after every change of the stored threads (`reconcileReadTimes` in
+`GitHubSync`) and when a PR snapshot is stored. So a tile cleared on
+github.com while the app was closed turns calm on the next start.
+
+- **Read list**: besides the unread inbox, the sync asks
+  `GET /notifications?all=true&since=<start of the last full sync>` (all
+  pages, own ETag, meta `read_threads_since` / `read_threads_etag`; the
+  first run looks back 3 days). The full sync always asks and then moves
+  `since` to its own start; the live poll asks only when the inbox moved,
+  with the same `since`, so it mostly gets a 304. Read threads the app never
+  saw unread are stored too, and their PRs are fetched like unread ones: a
+  PR handled entirely on github.com still gets its events logged (as seen),
+  lands in Unsorted / a topic and feeds dossiers and facts.
+- **Left the inbox**: a stored unread thread missing from the inbox (or
+  that the read list says is read) takes its `last_read_at` from the read
+  list, else from one `GET /notifications/threads/:id` (at most 20 per
+  sync), else the sync time. It is logged `observed` and a pending write for
+  it is cleared, as before (9180771).
+- **Since you last looked**: after the sync's digest (and after a poll), the
+  seen cursor of every topic whose PRs just turned seen this way moves up to
+  the last logged event before the first unseen one (core `seenBoundary`).
+  A topic that is fully caught up also takes the current dossier version and
+  the time, like `markTopicSeen`; a topic never marked seen only gets a
+  cursor once caught up.
+- Never marks anything read on GitHub. Locked mark-reads stay pending until
+  GitHub itself reports the thread read.
+- Caveats: GitHub's `since` filters by the thread's `updated_at`, which a
+  plain read does not move, so a thread read without new activity is only
+  found through "left the inbox". Commit events use the commit time, so an
+  old commit pushed after the read counts as read.
 
 Action details:
 
@@ -1075,9 +1107,10 @@ may carry `local` for a read-only mark-read from before pending writes. Rows at 
 `notifications.markRead`, `markSeen`): nothing writes to GitHub on its own.
 Locally, the full sync and the live poll mark a stored thread read when it
 drops out of the inbox (read on github.com or another client); those rows
-are logged as `observed` with origin `sync` / `poll`. The first sync of a PR
-also marks events older than the thread's `last_read_at` seen (event state,
-not logged). Glances, consolidation, dossiers and ping decisions never mark
+are logged as `observed` with origin `sync` / `poll`. Every sync and poll
+that changes the threads also marks events older than their thread's
+`last_read_at` seen (event state, not logged) and may move a topic's seen
+cursor ("Reconciling with GitHub's read time"). Glances, consolidation, dossiers and ping decisions never mark
 anything read. There is no CLI write and no "mark all read".
 
 **Debug view rows.** Each row carries `lastAction` (the newest log entry for

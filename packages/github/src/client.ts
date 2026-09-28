@@ -1,7 +1,7 @@
-import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
+import type { IsoTime, NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
 import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem } from './http.ts';
 import { toBranchPr, toPr } from './normalize.ts';
-import { getThread, listNotifications } from './notifications.ts';
+import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { listTeamMembers } from './teams.ts';
 import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
 import type { RawBatchResponse, RawBranchResponse, RawViewerTeams } from './raw.ts';
@@ -14,6 +14,7 @@ import {
   type NotificationConditions,
   type NotificationsResult,
   type TeamMembersResult,
+  type ThreadsSinceResult,
 } from './reader.ts';
 import type { TokenSource } from './token.ts';
 
@@ -97,6 +98,10 @@ export class GitHubClient implements GitHubReader {
 
   listNotifications(conditions: NotificationConditions): Promise<NotificationsResult> {
     return listNotifications(this.http, conditions);
+  }
+
+  listThreadsSince(since: IsoTime, etag: string | null): Promise<ThreadsSinceResult> {
+    return listThreadsSince(this.http, since, etag);
   }
 
   getThread(threadId: string): Promise<NotificationThread | null> {

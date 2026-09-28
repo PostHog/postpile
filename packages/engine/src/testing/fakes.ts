@@ -10,6 +10,7 @@ import type {
   NotificationConditions,
   NotificationsResult,
   TeamMembersResult,
+  ThreadsSinceResult,
 } from '@postpile/github';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
@@ -86,6 +87,21 @@ export class FakeReader implements GitHubReader {
       return { notModified: true, pollIntervalSeconds };
     }
     return { notModified: false, threads: this.threads, etag: this.etag, lastModified: null, pollIntervalSeconds };
+  }
+
+  /** Threads the read-list call answers (read and unread); defaults to `threads`. */
+  readList: NotificationThread[] | null = null;
+  readListEtag = 'read-etag-1';
+  /** Every listThreadsSince call as [since, etag sent]. */
+  readListCalls: [string, string | null][] = [];
+
+  async listThreadsSince(since: string, etag: string | null): Promise<ThreadsSinceResult> {
+    this.readListCalls.push([since, etag]);
+    if (etag === this.readListEtag) {
+      return { notModified: true };
+    }
+    const threads = (this.readList ?? this.threads).filter((thread) => thread.updatedAt >= since);
+    return { notModified: false, threads, etag: this.readListEtag };
   }
 
   async getThread(threadId: string): Promise<NotificationThread | null> {

@@ -19,6 +19,9 @@ export type NotificationsResult =
       pollIntervalSeconds: number | null;
     };
 
+/** GET /notifications?all=true&since=: read and unread threads updated since then. */
+export type ThreadsSinceResult = { notModified: true } | { notModified: false; threads: NotificationThread[]; etag: string | null };
+
 export type TeamMembersResult = { notModified: true } | { notModified: false; logins: string[]; etag: string | null };
 
 /**
@@ -57,6 +60,13 @@ export interface GitHubReader {
    * Last-Modified so an unchanged inbox returns 304 and costs nothing.
    */
   listNotifications(conditions: NotificationConditions): Promise<NotificationsResult>;
+
+  /**
+   * Read and unread threads updated since `since` (all=true), all pages.
+   * Sends the previous ETag, which only matches for the same `since`.
+   * Never marks anything read.
+   */
+  listThreadsSince(since: IsoTime, etag: string | null): Promise<ThreadsSinceResult>;
 
   /** One thread by id, read or unread. Null when GitHub answers 404. */
   getThread(threadId: string): Promise<NotificationThread | null>;

@@ -8,6 +8,7 @@ import type { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { FactVerifier } from './memory/fact-verifier.ts';
 import { emptyFactCounts } from './memory/fact-writer.ts';
+import { advanceSeenFromGitHub } from './memory/seen-from-github.ts';
 import type { RunDeps } from './run-deps.ts';
 
 function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): SyncReport {
@@ -67,6 +68,8 @@ export class SyncRun {
         now,
       });
       await digester.run(options.agentJobs ?? ALL_AGENT_JOBS);
+      // After the digest, so dossier changes about events already read on GitHub count as seen too.
+      advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
     } catch (error) {
       errors.push(`sync: ${errorText(error)}`);
     } finally {
