@@ -11,7 +11,7 @@ It reads what GitHub pings you about and uses Claude to group the pull requests 
 Each pull request, stack, or set shows as a tile that answers four questions: for whom, why now, what state, and whose move.
 You work from that list and the GitHub inbox stays in sync.
 
-<!-- TODO: screenshot of the three-pane window (topics, tiles, detail), taken on sample data (POSTPILE_FAKE=1). Save as docs/screenshot.png and link it here. -->
+![PostPile on sample data: topics on the left, the tiles of one topic in the middle, and the selected pull request with the agent's glance on the right](docs/screenshot.png)
 
 ## The problem
 

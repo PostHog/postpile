@@ -2,7 +2,7 @@
 
 Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
 
-## 0.1.0-alpha.0 (unreleased)
+## 0.1.0-alpha.0 (2026-09-28)
 
 First public build. macOS arm64 only, ad-hoc signed, not notarized.
 
