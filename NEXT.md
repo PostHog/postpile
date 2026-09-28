@@ -142,6 +142,16 @@ now".
   status pill per PR with open threads, a whose-turn footer (you / them /
   none, rules in core `whoseTurn`), people stack in the header. Same
   badges, pills and glyphs in the detail pane. Primary buttons are ink.
+- Live poll and Mac pings (DESIGN.md "Live poll and Mac pings"): the desktop
+  app polls `GET /notifications` every 10s (ETag, 304 = free), backs off on
+  rate limits (Retry-After / reset / doubling) and errors, shows state in the
+  footer; on a change it syncs just the moved PRs (events, loudness, topic for
+  new PRs, tiles refresh). Rules first, then one Sonnet `ping_decision` call
+  per cycle for addressed activity (veto or rephrase), template fallback, daily
+  cap 200, every decision in `ping_decision` (migration 007). Native
+  notifications grouped per tile (2 min) and as a summary above 3; a click
+  opens the tile. Closing the window hides it, Cmd+Q quits. Fake mode pings a
+  sample question every ~45s. CLI `poll` runs one cycle.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -155,7 +165,22 @@ now".
 - Fake mode (`CODE_MANAGER_FAKE=1`) runs `FakeEngine`, a second
   EngineService with its own copies of the tile/loudness/undo rules. It can
   drift from the real engine. See decisions below.
-- Sync is on demand only (Sync now, app start). No polling, no live updates.
+- The full sync is on demand only (Sync now, app start); the live poll only
+  syncs PRs whose threads moved and leaves dossiers, glances and sets to it.
+- Live poll, not tried by hand yet: clicking a real macOS notification (click
+  -> focus -> tile), the first-run permission prompt and a denied permission,
+  the hide-on-close / Cmd+Q flow, and a real rate-limit backoff. Electron
+  cannot read the notification permission, so a denial is silent (tiles still
+  turn unread). One real `ping_decision` call ran against a DB copy (2 items,
+  $0.04, 4.4s) and `cli poll` against the real inbox (read-only copy).
+- No settings UI: "Mac notifications" on/off is `CODE_MANAGER_MAC_NOTIFICATIONS=0`
+  and the interval is `CODE_MANAGER_POLL_SECONDS`; quiet hours are not built.
+- The ping throttle and the poll's backoff live in memory; a restart forgets
+  the 2-minute window.
+- A poll whose PR fetch fails after the inbox answered 200 leaves those PRs to
+  the full sync (the next poll gets a 304); their pings are lost.
+- A running poll cycle (up to one topic assignment and one ping decision
+  call) makes "Sync now" wait for it.
 - The mark-read undo queue is in memory. Quit flushes it; a crash drops
   pending mark-reads (local state already says read, GitHub stays unread).
 - Nothing files `new_topic` proposals: new topics are created directly.
@@ -266,6 +291,13 @@ now".
   memory numbers (10 feedback entries per prompt, when sets regroup), snooze
   wake-up on any loud human event, the extra loudness rules, repo name.
 
+- **Live poll**: poll at 10s and only show GitHub's X-Poll-Interval (60s), or
+  obey it? Should loud-but-not-addressed activity (approval or comment on your
+  own PR) ping? Team review requests and team mentions ping today (the agent
+  is told it is the team); keep that? Cap of 200 ping decisions a day
+  (~$0.04 each, a normal day ~10-40) and the 30-minute freshness window are
+  guesses.
+
 ## Decided
 
 - **Instructions scope** (2026-09-27): Julian picks the scope of a lasting
@@ -298,6 +330,7 @@ npm run cli -- topics
 npm run cli -- topic <id>                     # with the dossier and changes since seen
 npm run cli -- pr owner/repo#123              # with facts
 npm run cli -- consolidate [--if-due] [--max-agent-calls n]
+npm run cli -- poll                           # one live-poll cycle, prints ping decisions
 ```
 
 Smoke run on a throwaway database, read-only:
@@ -314,7 +347,8 @@ npm run desktop       # Electron dev mode, server in-process on a random port + 
 npm run server        # standalone API on 127.0.0.1:4870, prints its token
 ```
 
-The desktop app syncs once on start, then only on "Sync now". Without
+The desktop app syncs once on start, then only on "Sync now". Between syncs it
+polls notifications every 10s and pings the Mac for addressed activity. Without
 `CODE_MANAGER_ALLOW_WRITES=1` it shows GitHub-writing actions but blocks them
 with a message:
 
@@ -343,5 +377,9 @@ Env switches:
   (default `~/Library/Application Support/code-manager/db.sqlite`) and the
   instructions file (default `~/.config/code-manager/instructions.md`).
 - `CODE_MANAGER_TOKEN`: fixed token for the standalone server.
+- `CODE_MANAGER_POLL_SECONDS`: live poll interval in the desktop app, default
+  10, 0 turns it off. `CODE_MANAGER_PING_CAP`: ping decision calls per 24h,
+  default 200 (then rules only). `CODE_MANAGER_MAC_NOTIFICATIONS=0`: no Mac
+  notifications, the poll still refreshes tiles.
 - `CODE_MANAGER_MODEL`, `CODE_MANAGER_GLANCE_MODEL`,
   `CODE_MANAGER_AGENT_CONCURRENCY`: agent knobs.

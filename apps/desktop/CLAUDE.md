@@ -31,7 +31,9 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
-  (`useMemorySources`, only enabled while a "Why?" panel is open).
+  (`useMemorySources`, only enabled while a "Why?" panel is open), `live.ts`
+  (`useLivePoll`: the fast poll status every 5s; called once in App, it
+  refetches everything else when a poll cycle stored news).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@code-manager/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -163,7 +165,9 @@ The picks live in a back / forward history (`lib/history.ts`, hook in
 `lib/use-nav-history.ts`): every user pick goes through `go()` in `App.tsx`,
 which pushes an entry unless it shows what is already on screen. Cmd+[ / ],
 the mouse side buttons and the trackpad swipe (main process 'swipe' -> preload
-`onSwipe`) move through it. Anything new that navigates should call `go()`.
+`onSwipe`) move through it. A click on a Mac notification arrives as preload
+`onOpenPing` and goes through `go()` too. Anything new that navigates should
+call `go()`.
 
 The title bar search filters, it has no result list: `GET /api/search`
 (matcher `searchTopics` in core) returns matching topics and tiles, the
@@ -176,6 +180,9 @@ history entry, and clearing the filter brings the pick back.
 - `titleBarStyle: 'hiddenInset'`: the renderer draws the 52px title bar and
   keeps 88px free on the left for the traffic lights. Interactive elements in
   the bar must stay clickable (`.drag-region` sets them to no-drag).
-- The preload hands over only the API URL and token. As a plain web page the
+- The preload hands over only the API URL and token, plus the swipe and
+  notification-click listeners. As a plain web page the
   renderer takes `?api=…&token=…` instead.
-- Sync runs once on app start and then only on "Sync now".
+- Sync runs once on app start and then only on "Sync now". The main process
+  runs the live poll (`engine.startLivePoll`) and shows Mac notifications
+  (`main/mac-notifier.ts`); closing the window hides it on macOS, Cmd+Q quits.
