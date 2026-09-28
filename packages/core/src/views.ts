@@ -222,6 +222,33 @@ export interface SyncOptions {
   agentJobs?: AgentJob[];
 }
 
+/**
+ * Steps of a sync, for timings and live progress. After topics they overlap
+ * (see DESIGN.md › Sync flow › Scheduling), so each timing is the wall time
+ * from that step's start to its end, not a slice of the total.
+ */
+export type SyncPhase = 'fetch' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
+
+/** In the order a sync starts them. */
+export const SYNC_PHASES: SyncPhase[] = ['fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
+
+/** Milliseconds per phase that ran. */
+export type SyncPhaseTimings = Partial<Record<SyncPhase, number>>;
+
+/** A sync in flight, for the title bar ("syncing · agent 34/82 · 2m"). */
+export interface SyncProgress {
+  startedAt: IsoTime;
+  /** Phases started and not finished, in sync order. */
+  running: SyncPhase[];
+  /** Agent calls answered or failed so far. */
+  agentCallsDone: number;
+  /**
+   * Agent calls the sync has taken budget for so far. Grows while it runs:
+   * glances are only planned once their topic's dossier landed.
+   */
+  agentCallsPlanned: number;
+}
+
 export interface SyncReport {
   startedAt: IsoTime;
   finishedAt: IsoTime;
@@ -242,6 +269,8 @@ export interface SyncReport {
   dossiersUpdated: number;
   facts: FactChangeCounts;
   errors: string[];
+  /** Missing on reports stored before phase timings existed. */
+  phaseMs?: SyncPhaseTimings;
 }
 
 export interface ActionResult {

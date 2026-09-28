@@ -39,7 +39,9 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news), `sync.ts`
   (`useLastSyncReport`, the stored last sync, which `useActions().lastSync`
-  falls back to before this window's first sync).
+  falls back to before this window's first sync; `useSyncProgress`, polled
+  every second only while a sync runs, for the title bar's
+  `syncing · agent 34/82 · 2m`, text from `lib/sync-progress.ts`).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small

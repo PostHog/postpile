@@ -1,6 +1,6 @@
 import type { Dossier, Pr } from '@postpile/core';
 import { at, makeCandidate, makeComment, makeFact, makeFactRef, makeThreadFor } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -154,6 +154,45 @@ describe('the call cap', () => {
   });
 });
 
+describe('scheduling', () => {
+  it("starts a topic's glances when its own dossier lands, not after every dossier", async () => {
+    const h = makeHarness();
+    const depot = reviewRequestedPr(1);
+    const billing = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [depot]);
+    topicWithPrs(h, 'billing', [billing]);
+    const release = h.agent.holdDossier('billing');
+
+    const syncing = h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
+    await vi.waitFor(() => expect(h.agent.glanceInputs).toHaveLength(1));
+    expect(h.agent.glanceInputs[0]?.topic?.id).toBe('depot');
+    release();
+    await syncing;
+
+    expect(h.agent.glanceInputs.map((input) => [input.topic?.id, input.dossier?.version])).toEqual([
+      ['depot', 1],
+      ['billing', 1],
+    ]);
+  });
+
+  it('reports calls done and planned so far while a sync runs, and nothing after', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    topicWithPrs(h, 'billing', [reviewRequestedPr(2)]);
+    const release = h.agent.holdDossier('billing');
+    expect(await h.engine.syncProgress()).toBeNull();
+
+    const syncing = h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
+    await vi.waitFor(() => expect(h.agent.glanceInputs).toHaveLength(1));
+    // Both dossiers and depot's glance are planned; billing's glance is not yet.
+    expect(await h.engine.syncProgress()).toMatchObject({ running: ['dossiers', 'glances'], agentCallsDone: 2, agentCallsPlanned: 3 });
+    release();
+    await syncing;
+
+    expect(await h.engine.syncProgress()).toBeNull();
+  });
+});
+
 describe('batched glances', () => {
   it('puts PRs the answer left out into one retry batch', async () => {
     const h = makeHarness();
@@ -186,6 +225,23 @@ describe('batched glances', () => {
 
     expect(report.errors).toEqual([`glance ${pr.key}: missing or invalid in the answer`]);
     expect(h.store.glances.get(pr.key)).toBeNull();
+  });
+
+  it("puts the answer's reason for a missing PR in the error line", async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    const badVerdict = (input: { items: { pr: Pr }[] }) => ({
+      glances: [],
+      missing: input.items.map((i) => i.pr.key),
+      missingWhy: { [pr.key]: 'answered with verdict "SHIP_IT", not one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS' },
+      model: FAKE_MODEL,
+    });
+    h.agent.answerGlances(badVerdict).answerGlances(badVerdict);
+
+    const report = await h.engine.sync({ agentJobs: ['glances'] });
+
+    expect(report.errors).toEqual([`glance ${pr.key}: answered with verdict "SHIP_IT", not one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS`]);
   });
 
   it('leaves claims that fail verification out of the glance prompt', async () => {

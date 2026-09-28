@@ -69,6 +69,7 @@ export class FakeAgent extends RunnerAgentService {
   private readonly reconcileAnswers: Answer<FactReconcileInput, ReconcileAction[]>[] = [];
   private readonly eventAnswers: Answer<EventBatchInput, EventOverrideProposal[]>[] = [];
   private readonly consolidationAnswers: Answer<ConsolidationInput, ConsolidationResult>[] = [];
+  private readonly dossierHolds = new Map<string, Promise<void>>();
 
   constructor(
     runner: FakeRunner,
@@ -80,6 +81,13 @@ export class FakeAgent extends RunnerAgentService {
   answerDossier(answer: Answer<DossierUpdateInput, Partial<DossierUpdateResult>>): this {
     this.dossierAnswers.push((input) => ({ ...defaultDossier(input), ...answer(input) }));
     return this;
+  }
+
+  /** Keeps this topic's next dossier update waiting until the returned release() runs. */
+  holdDossier(topicId: string): () => void {
+    let release = () => {};
+    this.dossierHolds.set(topicId, new Promise((resolve) => (release = resolve)));
+    return () => release();
   }
 
   answerGlances(answer: Answer<GlanceBatchInput, GlanceBatchResult>): this {
@@ -161,6 +169,9 @@ export class FakeAgent extends RunnerAgentService {
 
   override async updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult> {
     this.dossierInputs.push(input);
+    const hold = this.dossierHolds.get(input.topic.id);
+    this.dossierHolds.delete(input.topic.id);
+    await hold;
     const result = this.answer('dossier_update', this.dossierAnswers, input, defaultDossier, { topicId: input.topic.id, attempt: 1 });
     return { ...result, inputHash: this.dossierHash(input) };
   }

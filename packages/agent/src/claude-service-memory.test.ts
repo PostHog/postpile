@@ -402,6 +402,27 @@ describe('RunnerAgentService.glanceBatch', () => {
     expect(calls).toMatchObject([{ purpose: 'glance_batch', ok: true, topicId: 'topic-1', attempt: 1 }]);
   });
 
+  it('repairs a misspelled verdict and says why the rest is missing', async () => {
+    // Real answers for PostHog/posthog#107116, reproducible on the same PR: "LOOKS_SASAFE", "LOOKS_SASE".
+    const { runner, service } = setup();
+    runner.answer('glance_batch', {
+      glances: [
+        { prKey: 'acme/app#1', ...glanceEntry, verdict: 'LOOKS_SASAFE' },
+        { prKey: 'ACME/app #2', ...glanceEntry, verdict: 'SHIP_IT' },
+      ],
+    });
+    const input = glanceInput();
+
+    const result = await service.glanceBatch(input);
+
+    expect(result.glances.map((glance) => [glance.prKey, glance.verdict])).toEqual([['acme/app#1', 'LOOKS_SAFE']]);
+    expect(result.missing).toEqual(['acme/app#2', 'acme/app#3']);
+    expect(result.missingWhy).toEqual({
+      'acme/app#2': 'answered with verdict "SHIP_IT", not one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS',
+      'acme/app#3': 'left out of the answer',
+    });
+  });
+
   it('fills pullInReason from provenance and labels the retry attempt', async () => {
     const { runner, service, calls } = setup();
     runner.answer('glance_batch', { glances: [{ prKey: 'acme/app#2', ...glanceEntry }] });
@@ -418,6 +439,7 @@ describe('RunnerAgentService.glanceBatch', () => {
     const result = await service.glanceBatch(glanceInput());
     expect(result.glances).toEqual([]);
     expect(result.missing).toEqual(['acme/app#1', 'acme/app#2', 'acme/app#3']);
+    expect(result.missingWhy?.['acme/app#1']).toBe('the whole answer was unusable (agent answer is not valid JSON)');
     expect(calls[0]?.ok).toBe(false);
   });
 

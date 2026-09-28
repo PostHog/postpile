@@ -26,6 +26,8 @@ import type {
   WorkContextView,
   WorkThreadForget,
   LivePollStatus,
+  SyncPhase,
+  SyncProgress,
   Loudness,
   MemoryCorrection,
   MemoryCorrectionKind,
@@ -133,9 +135,31 @@ export interface FakeEngineOptions {
   now?: () => Date;
   /** How long a canned recheck "thinks". Tests pass 0. */
   recheckDelayMs?: number;
+  /** How long each step of a fake sync takes, so the title bar progress moves. Tests pass 0. */
+  syncStepMs?: number;
   /** How long a work context Refresh "thinks". Tests pass 0. */
   sweepDelayMs?: number;
 }
+
+/** One step of the fake sync: what runs, calls it plans, calls that come back by its end. */
+interface FakeSyncStep {
+  running: SyncPhase[];
+  plan: number;
+  done: number;
+}
+
+/**
+ * Walks like a real sync (DESIGN.md › Sync flow › Scheduling): the glance is
+ * planned only once a dossier landed, so the total grows mid-run. Adds up to
+ * the 4 calls in sampleSyncStats.
+ */
+const FAKE_SYNC_STEPS: FakeSyncStep[] = [
+  { running: ['fetch'], plan: 0, done: 0 },
+  { running: ['dossiers', 'events'], plan: 3, done: 1 },
+  { running: ['dossiers', 'events'], plan: 0, done: 1 },
+  { running: ['dossiers', 'glances'], plan: 1, done: 1 },
+  { running: ['glances'], plan: 0, done: 1 },
+];
 
 const FAKE_FEEDBACK_KINDS: Record<MemoryCorrectionKind, FeedbackKind> = {
   wrong: 'memory_wrong',
@@ -211,6 +235,9 @@ export class FakeEngine implements EngineService {
   private readonly writes: FakeWrites;
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
   private readonly recheckDelayMs: number;
+  private readonly syncStepMs: number;
+  private syncing: Promise<SyncReport> | null = null;
+  private progress: SyncProgress | null = null;
   private recheckCount = 0;
   // The repo menu's choices; in memory like the lock, gone on restart.
   private repoSettings: RepoSettings = DEFAULT_REPO_SETTINGS;
@@ -225,6 +252,7 @@ export class FakeEngine implements EngineService {
   constructor(options: FakeEngineOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
+    this.syncStepMs = options.syncStepMs ?? 800;
     this.data = buildSampleData(this.now());
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
@@ -483,8 +511,31 @@ export class FakeEngine implements EngineService {
     return this.lastSync;
   }
 
-  async sync(): Promise<SyncReport> {
+  async syncProgress(): Promise<SyncProgress | null> {
+    return this.progress ? { ...this.progress, running: [...this.progress.running] } : null;
+  }
+
+  /** Like the engine: a sync while one runs joins it. */
+  sync(): Promise<SyncReport> {
+    if (!this.syncing) {
+      this.syncing = this.runFakeSync().finally(() => {
+        this.syncing = null;
+        this.progress = null;
+      });
+    }
+    return this.syncing;
+  }
+
+  private async runFakeSync(): Promise<SyncReport> {
     const startedAt = this.timestamp();
+    const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0 };
+    this.progress = progress;
+    for (const step of FAKE_SYNC_STEPS) {
+      progress.running = step.running;
+      progress.agentCallsPlanned += step.plan;
+      await new Promise((resolve) => setTimeout(resolve, this.syncStepMs));
+      progress.agentCallsDone += step.done;
+    }
     this.lastSync = {
       startedAt,
       finishedAt: this.timestamp(),
@@ -500,6 +551,7 @@ export class FakeEngine implements EngineService {
       dossiersUpdated: 2,
       facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
+      phaseMs: { fetch: 2100, topics: 0, dossiers: 38000, facts: 0, sets: 0, glances: 47000, events: 6000 },
     };
     return this.lastSync;
   }

@@ -15,28 +15,68 @@ export interface GlanceStamp {
 export interface MappedGlances {
   glances: Glance[];
   missing: PrKey[];
+  /** Why each missing PR is missing, for the sync's error line. */
+  missingWhy: Partial<Record<PrKey, string>>;
+}
+
+/**
+ * The batch key an answered prKey means. Exact first; else ignoring case
+ * and spaces ("posthog/posthog #12"), when that still points at one PR.
+ */
+function batchKeyFor(answered: unknown, keys: PrKey[]): PrKey | null {
+  if (typeof answered !== 'string') {
+    return null;
+  }
+  const trimmed = answered.trim();
+  if (keys.includes(trimmed)) {
+    return trimmed;
+  }
+  const loose = (key: string) => key.toLowerCase().replace(/\s+/g, '');
+  const matches = keys.filter((key) => loose(key) === loose(trimmed));
+  return matches.length === 1 ? (matches[0] ?? null) : null;
+}
+
+/** "verdict \"LOOKS_SASAFE\" is not one of the three" or "invalid forYou, does", for the error line. */
+function entryProblem(entry: Record<string, unknown>, fields: string[]): string {
+  const verdict = entry.verdict;
+  if (fields.includes('verdict') && typeof verdict === 'string') {
+    const rest = fields.filter((field) => field !== 'verdict');
+    const more = rest.length > 0 ? `, and invalid ${rest.join(', ')}` : '';
+    return `answered with verdict "${verdict.slice(0, 40)}", not one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS${more}`;
+  }
+  return `answered with missing or invalid ${fields.join(', ')}`;
 }
 
 /**
  * Checks every entry on its own, so one bad entry costs one PR, not the
  * batch. Entries for PRs not in the batch and repeats are dropped; whatever
- * the batch asked for and did not get validly is missing.
+ * the batch asked for and did not get validly is missing, with the reason.
  */
 export function mapGlanceAnswer(answer: GlanceBatchAnswer, input: GlanceBatchInput, stamp: GlanceStamp): MappedGlances {
   const items = new Map(input.items.map((item) => [item.pr.key, item]));
+  const keys = [...items.keys()];
   const done = new Map<PrKey, Glance>();
+  const problems = new Map<PrKey, string>();
   for (const entry of answer.glances) {
-    const parsed = glanceBatchItemOutput.safeParse(entry);
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const key = batchKeyFor(record.prKey, keys);
+    const item = key === null ? undefined : items.get(key);
+    if (key === null || !item || done.has(key)) {
+      continue;
+    }
+    const parsed = glanceBatchItemOutput.safeParse(record);
     if (!parsed.success) {
+      const fields = [...new Set(parsed.error.issues.map((issue) => String(issue.path[0] ?? 'entry')))];
+      problems.set(key, entryProblem(record, fields));
       continue;
     }
     const value = parsed.data;
-    const item = items.get(value.prKey);
-    if (!item || done.has(value.prKey)) {
-      continue;
-    }
-    done.set(value.prKey, {
-      prKey: value.prKey,
+    problems.delete(key);
+    done.set(key, {
+      prKey: key,
       verdict: value.verdict,
       forYou: value.forYou,
       does: value.does,
@@ -49,6 +89,10 @@ export function mapGlanceAnswer(answer: GlanceBatchAnswer, input: GlanceBatchInp
       createdAt: stamp.createdAt,
     });
   }
-  const missing = input.items.map((item) => item.pr.key).filter((key) => !done.has(key));
-  return { glances: [...done.values()], missing };
+  const missing = keys.filter((key) => !done.has(key));
+  const missingWhy: Partial<Record<PrKey, string>> = {};
+  for (const key of missing) {
+    missingWhy[key] = problems.get(key) ?? 'left out of the answer';
+  }
+  return { glances: [...done.values()], missing, missingWhy };
 }

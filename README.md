@@ -104,7 +104,7 @@ with a deprecation line; switch to `POSTPILE_*`.
 - Mac notifications: the first launch shows one welcome notification so macOS asks for the permission; "test ping" in the status footer sends a test. Dev runs (`pnpm desktop`) show up as "Electron" in System Settings › Notifications, the packaged app as "PostPile".
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the footer lock cannot be opened
 - GitHub writes (approve, comment, mark read) are off until the lock in the status footer is opened; the choice is kept in the database
-- `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`, `POSTPILE_AGENT_CONCURRENCY`: agent knobs
+- `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`, `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs
 - `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the work context sweep never reads (default `taxes,garden,hobby,my-blog-com`)
 
 ## Layout

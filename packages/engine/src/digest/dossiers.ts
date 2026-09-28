@@ -39,10 +39,18 @@ export interface TopicCandidates {
   candidates: FactCandidate[];
 }
 
-export interface DossierRunResult {
-  candidates: TopicCandidates[];
+/**
+ * Dossier updates in flight. start() takes the budget for every update before
+ * it returns, so skippedByBudget is complete right away and later jobs spend
+ * only what the dossiers left.
+ */
+export interface DossierRun {
   /** Topics whose update the budget skipped. Their glances wait too, or they would be paid for twice. */
   skippedByBudget: Set<string>;
+  /** Settles once this topic's update is stored or failed; right away for a topic without one. Never rejects. */
+  settled(topicId: string | null): Promise<void>;
+  /** Every update settled, with the fact candidates they produced. */
+  done: Promise<TopicCandidates[]>;
 }
 
 /** Meta key of the context hash a topic's dossier was last written under. */
@@ -215,7 +223,7 @@ export class DossierUpdater {
     tally.dossiersUpdated += 1;
   }
 
-  private async update(topic: Topic, run: DossierRunResult): Promise<void> {
+  private async update(topic: Topic, candidates: TopicCandidates[], skippedByBudget: Set<string>): Promise<void> {
     const { agent, budget } = this.deps;
     // Everything up to the agent call is synchronous, so budget.take runs in topic order.
     const input = this.input(topic);
@@ -223,23 +231,32 @@ export class DossierUpdater {
       return;
     }
     if (!budget.take('dossier_update')) {
-      run.skippedByBudget.add(topic.id);
+      skippedByBudget.add(topic.id);
       return;
     }
     try {
       const result = await agent.updateDossier(input);
       this.save(input, result);
       if (result.facts.length > 0) {
-        run.candidates.push({ topicId: topic.id, candidates: result.facts });
+        candidates.push({ topicId: topic.id, candidates: result.facts });
       }
     } catch (error) {
       this.deps.errors.push(`dossier ${topic.id}: ${errorText(error)}`);
     }
   }
 
-  async run(): Promise<DossierRunResult> {
-    const run: DossierRunResult = { candidates: [], skippedByBudget: new Set() };
-    await Promise.all(this.topicsInOrder().map((topic) => this.update(topic, run)));
-    return run;
+  /** Starts every update side by side (the runner's limiter caps how many run at once). */
+  start(): DossierRun {
+    const candidates: TopicCandidates[] = [];
+    const skippedByBudget = new Set<string>();
+    const updates = new Map<string, Promise<void>>();
+    for (const topic of this.topicsInOrder()) {
+      updates.set(topic.id, this.update(topic, candidates, skippedByBudget));
+    }
+    return {
+      skippedByBudget,
+      settled: (topicId) => (topicId === null ? Promise.resolve() : (updates.get(topicId) ?? Promise.resolve())),
+      done: Promise.all(updates.values()).then(() => candidates),
+    };
   }
 }

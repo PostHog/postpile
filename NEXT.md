@@ -485,6 +485,37 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   statement per call (~7k per full sync event write); a statement cache
   would shave a little off sync.
 
+## Sync speed (pass of 2026-09-28)
+
+Trigger: a real sync took 307s for 82 agent calls, with no sign of life in
+the app meanwhile.
+
+- Agent concurrency default 4 -> 8 (`POSTPILE_AGENT_CONCURRENCY`). Most of
+  the 307s was calls queued behind the limiter.
+- The digest no longer runs job after job (DESIGN.md › Sync flow ›
+  Scheduling): after topic assignment, dossiers, sets and event
+  classification start together, each topic's glances (and their retry)
+  start as soon as its own dossier lands, fact reconcile batches run side by
+  side. Before, sets waited for every dossier, glances for every set,
+  retries for every glance, events for every retry.
+- Per-phase timings (`phaseMs`) in the last sync report, the `sync: done`
+  log line and the sync tooltip, so the next slow sync says where the time
+  went.
+- Live progress in the title bar while syncing: `syncing · agent 34/82 ·
+  2m` from `GET /api/sync/progress`. The total is what the sync planned so
+  far and grows (glances are planned as dossiers land).
+- Glance "missing or invalid in the answer" (acme/digest#30,
+  posthog#107116): replaying posthog#107116 alone against Sonnet gave a
+  misspelled verdict (`LOOKS_SASAFE`, `LOOKS_SASE`) in 4 of 6 runs, once
+  with the other fields cut to "placeholder", once as broken JSON. The
+  strict enum dropped the entry on both attempts. Verdicts are now repaired
+  when unambiguous, and error lines say why a PR is missing. acme/digest#30
+  answered fine in the replay (no topic dossier or instructions there), so
+  its cause is not confirmed; the next error line will name it.
+- Open: measure the next real sync. The per-kind durations in
+  `agent_call` include the time queued in the limiter, so they read longer
+  than the model took.
+
 ## Needs Julian's decisions
 
 - **Found PRs**: one request per sync, first page of each alias only (own
@@ -730,4 +761,4 @@ Env switches:
   default 200 (then rules only). `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac
   notifications, the poll still refreshes tiles.
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
-  `POSTPILE_AGENT_CONCURRENCY`: agent knobs.
+  `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.

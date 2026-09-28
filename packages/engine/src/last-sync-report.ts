@@ -1,5 +1,6 @@
 import type { SyncReport } from '@postpile/core';
 import type { Store } from '@postpile/store';
+import { phaseTimingsText } from './phase-clock.ts';
 
 export const LAST_SYNC_REPORT_KEY = 'last_sync_report';
 
@@ -19,5 +20,6 @@ export function syncReportLogLines(report: SyncReport): string[] {
   const summary =
     `sync: done in ${seconds}s, threads ${report.threads}, PRs fetched ${report.prsFetched}, found ${report.prsFound}, ` +
     `pulled in ${report.prsPulledIn}, new events ${report.newEvents}, agent calls ${report.agentCalls}, errors ${report.errors.length}`;
-  return [summary, ...report.errors.map((error) => `sync error: ${error}`)];
+  const phases = phaseTimingsText(report.phaseMs ?? {});
+  return [phases === '' ? summary : `${summary}; phases ${phases}`, ...report.errors.map((error) => `sync error: ${error}`)];
 }

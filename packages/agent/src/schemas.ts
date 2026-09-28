@@ -6,8 +6,32 @@ import { z } from 'zod';
 const text = z.string().trim();
 const loudness = z.enum(['loud', 'quiet', 'muted']);
 
+/**
+ * Reads a verdict the model spelled wrong. Seen on real PRs, reproducibly
+ * for the same PR: "LOOKS_SASAFE", "LOOKS_SASE". Only unambiguous spellings
+ * are repaired, and anything that mentions closer wins over safe, so a
+ * garbled answer can never turn a "look closer" into "looks safe".
+ * Everything else is returned as it came and fails the enum.
+ */
+export function repairVerdict(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const letters = value.toUpperCase().replace(/[^A-Z]/g, '');
+  if (letters.includes('CLOSE')) {
+    return 'LOOK_CLOSER';
+  }
+  if (letters.startsWith('NOTY') || letters.includes('YOURS')) {
+    return 'NOT_YOURS';
+  }
+  if (letters.startsWith('LOOKSS')) {
+    return 'LOOKS_SAFE';
+  }
+  return value;
+}
+
 const glanceOutput = z.object({
-  verdict: z.enum(['LOOKS_SAFE', 'LOOK_CLOSER', 'NOT_YOURS']),
+  verdict: z.preprocess(repairVerdict, z.enum(['LOOKS_SAFE', 'LOOK_CLOSER', 'NOT_YOURS'])),
   forYou: text,
   does: text,
   risk: text,

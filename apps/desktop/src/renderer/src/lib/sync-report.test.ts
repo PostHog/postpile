@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SyncReport } from '@postpile/core';
-import { durationLabel, syncReportDetail } from './sync-report.ts';
+import { durationLabel, phaseTimingsLine, syncReportDetail } from './sync-report.ts';
 
 function report(overrides: Partial<SyncReport>): SyncReport {
   return {
@@ -55,5 +55,14 @@ describe('syncReportDetail', () => {
     expect(detail).toContain('(inbox unchanged)');
     expect(detail).toContain('No agent calls');
     expect(detail).not.toContain('Errors');
+  });
+});
+
+describe('phaseTimingsLine', () => {
+  it('lists phases in sync order and shows up in the detail', () => {
+    const phaseMs = { glances: 95_000, fetch: 12_340, topics: 8_000 };
+    expect(phaseTimingsLine(phaseMs)).toBe('fetch 12.3s · topics 8.0s · glances 95.0s');
+    expect(phaseTimingsLine(undefined)).toBe('');
+    expect(syncReportDetail(report({ phaseMs }))).toContain('Phases (overlapping): fetch 12.3s · topics 8.0s · glances 95.0s');
   });
 });

@@ -70,11 +70,14 @@ export class FactReconciler {
 
   async run(topics: TopicCandidates[]): Promise<void> {
     const pending = topics.flatMap((topic) => this.settleDeterministic(topic));
+    const granted: PendingItem[][] = [];
     for (const batch of chunk(pending, RECONCILE_BATCH_SIZE)) {
       if (!this.deps.budget.take('fact_reconcile')) {
         break;
       }
-      await this.askAgent(batch);
+      granted.push(batch);
     }
+    // Batches share no candidates, so they can run side by side.
+    await Promise.all(granted.map((batch) => this.askAgent(batch)));
   }
 }

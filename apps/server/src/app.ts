@@ -172,6 +172,8 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   // The bodies are optional. A sync without maxAgentCalls gets the app's cap, so
   // opening the app never starts an uncapped (and costly) first sync.
   app.get('/api/sync/last', async (c) => c.json(await engine.lastSyncReport()));
+  // The sync in flight, for the title bar ("syncing · agent 34/82 · 2m"); null between syncs.
+  app.get('/api/sync/progress', async (c) => c.json(await engine.syncProgress()));
   app.post('/api/sync', async (c) => {
     const options = syncBody.parse(await optionalJson(c));
     return c.json(await engine.sync({ ...options, maxAgentCalls: options.maxAgentCalls ?? config.syncCallCap }));

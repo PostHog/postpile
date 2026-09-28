@@ -52,11 +52,17 @@ export function parseClaudeOutput(stdout: string): { text: string; costUsd: numb
 export interface ClaudeCliRunnerOptions {
   /** Path or name of the claude binary. Default: POSTPILE_CLAUDE_BIN or "claude" on PATH. */
   binary?: string;
-  /** Max claude processes at once. Default: POSTPILE_AGENT_CONCURRENCY or 4. */
+  /** Max claude processes at once. Default: POSTPILE_AGENT_CONCURRENCY or 8. */
   maxConcurrent?: number;
 }
 
-const DEFAULT_MAX_CONCURRENT = 4;
+/**
+ * The user is on a Claude subscription, where a sync's 80-odd calls are
+ * limited by wall time, not cost. At 4, most of a 5-minute sync sat queued
+ * behind the limiter. POSTPILE_AGENT_CONCURRENCY lowers it if the account
+ * starts hitting rate limits.
+ */
+const DEFAULT_MAX_CONCURRENT = 8;
 
 function defaultMaxConcurrent(): number {
   const fromEnv = Number(process.env.POSTPILE_AGENT_CONCURRENCY);

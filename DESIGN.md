@@ -367,11 +367,34 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    without an override logged after the topic's classify cursor. Driven by
    the event log, not by this sync's new ids, so capped batches are not
    lost.
-10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts.
+10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts,
+    and `phaseMs`: wall time per phase (`fetch`, `topics`, `dossiers`,
+    `facts`, `sets`, `glances`, `events`; `PhaseClock`). Phases overlap
+    after topics, so they do not add up to the total; glances include the
+    wait for their dossiers. The log's summary line ends with them
+    (`; phases fetch 12.3s, topics 8.1s, ...`), the sync tooltip shows them.
 
-With a call cap (`--max-agent-calls`) the budget is spent in that order:
-topic assignment (everything needs it), dossiers, fact reconcile, sets,
-glances, events. Consolidation is
+**Scheduling** (`Digester`). The numbers above are data dependencies, not
+a queue. Topic assignment runs alone first (its batches one after another,
+a batch can create a topic the next one needs). After that every job runs
+side by side and waits only for the output it reads:
+
+- dossier updates all start at once;
+- a topic's glances start when that topic's own dossier update settled (the
+  glance hash carries the dossier version), then its retry batch right
+  after, not after every other topic;
+- fact reconcile (batches side by side) and the driver/role refresh wait
+  for all dossiers;
+- sets and event classification read no dossier, so they start right away.
+
+How many calls run at once is the runner's job: `ClaudeCliRunner`'s
+limiter, `POSTPILE_AGENT_CONCURRENCY`, default 8 (was 4; on a subscription
+wall time is the cost, and at 4 most of a 5-minute sync sat in the queue).
+
+With a call cap (`--max-agent-calls`) the budget is spent in the order jobs
+ask for it (`budget.take` is synchronous, so parallel jobs cannot overshoot
+it): topic assignment, dossiers, sets, events, then glances as their
+dossiers land, then fact reconcile. Consolidation is
 not part of `sync()` and never overlaps with it (each waits for the other,
 so every call lands in the right run's stats); see below.
 
@@ -583,10 +606,20 @@ stored and before a dossier goes into a glance prompt
   The outer object is parsed with `glanceBatchOutput`; each entry on its own
   with `glanceBatchItemOutput`. Entries for PRs not in the batch or
   duplicated are dropped. `GlanceBatchResult.missing` = asked for but absent
-  or invalid.
-- Missing PRs of all first-round batches of a topic go into one retry batch
+  or invalid, with `missingWhy` per PR ("left out of the answer", "answered
+  with verdict \"SHIP_IT\", ...", "the whole answer was unusable (...)").
+  An answered prKey matches its batch key ignoring case and spaces when
+  that still points at one PR.
+- Misspelled verdicts are repaired (`repairVerdict`): Sonnet reproducibly
+  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one real PR (PostHog/posthog#107116),
+  which the strict enum rejected on both attempts. Only unambiguous
+  spellings are read, and anything mentioning "close" wins, so a garbled
+  answer never becomes "looks safe" by accident. The prompt asks for
+  exactly N entries with the verdict spelled as given; the retry prompt
+  adds that the first answer was unusable.
+- Missing PRs of a topic's first-round batches go into one retry batch
   (`retryBatch`, attempt 2). Still missing after that: one error line per PR
-  in the report; the unchanged hash retries it next sync. A batch whose outer
+  in the report with its `missingWhy`; the unchanged hash retries it next sync. A batch whose outer
   JSON does not parse counts all its PRs as missing; so does a runner failure
   (timeout, process error), which the engine catches per batch.
 - `glanceItemInputHash` per PR: v1 snapshot fields, provenance, topic name,
@@ -647,6 +680,15 @@ dossier save, not here.
   line, a summary and one line per error (the desktop app writes these to
   `~/Library/Logs/PostPile/main.log`). A failed start sync used to leave only
   `last_sync_started_at` behind.
+- While a sync runs, `EngineService.syncProgress` (`GET /api/sync/progress`,
+  null between syncs) gives `SyncProgress`: running phases, agent calls done
+  (the run's `agentCallStats.total`) and planned (what `AgentBudget` granted
+  so far). Planned grows mid-run, since glances are planned only once their
+  topic's dossier landed; every granted call is a real call, so done reaches
+  planned at the end. The title bar polls it every second while this window
+  waits on a sync and shows `syncing · agent 34/82 · 2m` (`fetching GitHub`
+  before any call is planned; tooltip lists the running phases). FakeEngine
+  walks five canned steps (`syncStepMs`, 800 ms each) so the fake UI shows it.
 - A failed PR batch in the full sync (GitHub's "Something went wrong"
   timeout on a heavy aliased query, a 502, a secondary rate limit) no longer
   throws the sync away: `fetchPrsPartial` keeps the other batches, the error

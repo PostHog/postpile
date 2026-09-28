@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 
 describe('FakeEngine', () => {
@@ -319,5 +319,21 @@ describe('FakeEngine found PRs', () => {
     expect(review).toMatchObject({ state: { kind: 'open' }, why: 'RV', turn: { kind: 'you' } });
     expect(review?.prs[0]?.provenance).toEqual({ kind: 'found', via: 'review_requested', reason: 'review requested from you' });
     expect(byKey.get('PostHog/posthog#41950')?.why).toBe('AU');
+  });
+});
+
+describe('FakeEngine sync progress', () => {
+  it('reports progress while the fake sync runs, the total growing, and null after', async () => {
+    const engine = new FakeEngine({ syncStepMs: 20 });
+    expect(await engine.syncProgress()).toBeNull();
+
+    const syncing = engine.sync();
+    expect(engine.sync()).toBe(syncing);
+    await vi.waitFor(async () => expect((await engine.syncProgress())?.agentCallsPlanned).toBe(3));
+    await vi.waitFor(async () => expect((await engine.syncProgress())?.agentCallsPlanned).toBe(4));
+    const report = await syncing;
+
+    expect(report.agentCalls).toBe(4);
+    expect(await engine.syncProgress()).toBeNull();
   });
 });

@@ -93,6 +93,18 @@ describe('glanceBatchPrompt, per PR', () => {
   });
 });
 
+describe('glanceBatchPrompt, answer shape', () => {
+  it('asks for one entry per PR, and says so again on the retry', () => {
+    const pr = makePr();
+    const first = oneGlancePrompt(pr, { kind: 'pinged', reason: 'author' });
+    expect(first).toContain('Give exactly 1 entry, one per pull request above');
+    expect(first).not.toContain('A first answer for these pull requests could not be used');
+
+    const retry = glanceBatchPrompt({ topic: null, dossier: null, items: [{ pr, provenance: { kind: 'pinged', reason: 'author' } }], viewer, context: emptyContext, attempt: 2 });
+    expect(retry).toContain('A first answer for these pull requests could not be used');
+  });
+});
+
 describe('setGroupingPrompt', () => {
   it('marks dissolved sets so they are not proposed again', () => {
     const prompt = setGroupingPrompt({
