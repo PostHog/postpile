@@ -6,6 +6,11 @@ now".
 
 ## Done
 
+- Addressed your changes (2026-09-28, from PostHog/posthog#4521): after
+  the viewer's changes request, an author push or reply hands the move back
+  without a re-request. Whose turn "paul addressed your changes:
+  re-review", tier To review, "For you", loud and ping-worthy
+  (`changesAnswered` in core). Fake sample #41960 in Dev env.
 - Live poll keeps up with GitHub between full syncs (2026-09-28, from the
   PostHog/example-infra#4242 and #106828 findings):
   - read-threads watch every cycle (`?all=true&since=<cursor>`, own ETag,

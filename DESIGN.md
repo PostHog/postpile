@@ -56,7 +56,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 | loudness | effect | examples |
 |---|---|---|
-| loud | tile becomes unread | mention, review requested, question to the user, merged without the user's review (when instructions care), a push after the user approved when the agent raises it |
+| loud | tile becomes unread | mention, review requested, question to the user, merged without the user's review (when instructions care), a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
 | quiet | dot, no state change | bots, CI, deploys, merge queue, pushes after the user approved (by default) |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading |
@@ -975,8 +975,9 @@ left edge). RT, @T -> "For <team slug>" ("For team-devex", sea chip and
 band), the slug from the pending team request, else the timeline request,
 else a team mention. AU, and any PR the viewer wrote even with a CODEOWNERS
 team request on it -> "Your PR" (neutral chip, neutral grey band). CM, FW,
-ST -> no chip, no band. A tile takes the most aimed of its PRs (you, team,
-own). PR rows in multi-PR tiles (and the detail pane's PR list) show the
+ST -> no chip, no band. A PR whose author addressed your changes (see
+whose turn) is "For you" whatever its code. A tile takes the most aimed of
+its PRs (you, team, own). PR rows in multi-PR tiles (and the detail pane's PR list) show the
 same words as a small chip without a band. The chip's tooltip keeps the
 long why-here reason. The table below is still the rule behind it.
 
@@ -1018,6 +1019,17 @@ authors.
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
 4. On someone else's PR:
+   - you: addressed your changes (2026-09-28, PostHog/posthog#4521).
+     Your newest verdict review (approve, request changes, dismissed) asks
+     for changes, and since your last word (that review, or a later comment
+     or re-review) the author pushed (any human commit or force push but
+     yours; a commit author can be a git name) or replied (comment, review
+     or thread reply by the author). No re-request needed: many authors
+     never press it. "paul addressed your changes: re-review", or "paul
+     replied to your review" without a push. `changesAnswered` in
+     `changes-answered.ts`. It goes before rule 2 when the open ask is the
+     author's own thread reply; an ask from anyone else still goes first.
+     Once you re-review or comment it is off again until the author moves.
    - them: you approved, on any commit (the app's record, or your newest
      approve-or-request-changes review on github.com is an approval): the
      author "to merge". A push after your approval is never your move
@@ -1041,7 +1053,8 @@ it won't merge soon. Rules in core:
   draft also for review threads waiting on you ("Address 2 comments on your
   draft") or a standing change request. Never Review, Fix CI or Merge.
 - tier: a draft never lands in To review (`prTier`); needs_reply still
-  works for personal asks.
+  works for personal asks. "Addressed your changes" does not apply to a
+  draft: only the author's reply in your thread counts, as a personal ask.
 - loudness: a review request naming you on a draft is quiet (commits after
   your approval are quiet everywhere), so neither makes the tile unread or the
   topic urgent. Mark-ready (`ready_for_review`) is loud when a review of you
@@ -1103,6 +1116,9 @@ the sync.
 check as whose-turn), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
+Addressed your changes (see whose turn) is `to_review` and checked right
+after needs_reply, before `team`: a re-review is owed even to a teammate,
+and the author's own thread replies do not push it into needs_reply.
 Pure and tested; the sidebar's queue sections are built on it.
 
 ### Three-pane balance
@@ -1549,7 +1565,9 @@ beyond what the full sync already does for threads that left the inbox).
   `not_addressed` (loud, but not aimed at the user in person: a comment or
   approval on their PR, merged without their review) or `addressed` (mention,
   team mention, question, reply, and on an open PR: review request, a push
-  after approval the agent raised, changes requested on their own PR). Agent and user
+  after approval the agent raised, changes requested on their own PR, and
+  on a non-draft PR the author's push or comment after the user's changes
+  request, headline "@paul addressed your changes"). Agent and user
   overrides count.
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
