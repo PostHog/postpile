@@ -5,6 +5,7 @@ export { MetaRepo } from './repos/meta.ts';
 export { NotificationRepo } from './repos/notifications.ts';
 export { PrRepo } from './repos/prs.ts';
 export { PullInRepo } from './repos/pull-ins.ts';
+export { PingDecisionRepo } from './repos/ping-decisions.ts';
 export { EventRepo } from './repos/events.ts';
 export { UserPrStateRepo } from './repos/user-pr-state.ts';
 export { TopicRepo } from './repos/topics.ts';

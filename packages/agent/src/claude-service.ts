@@ -1,4 +1,4 @@
-import { clipText, type ReconcileAction } from '@code-manager/core';
+import { clipText, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction } from '@code-manager/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
@@ -14,6 +14,7 @@ import { INSTRUCTIONS_MAX_CHARS, INSTRUCTIONS_SUMMARY_MAX, instructionsChangePro
 import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
 import { memoryRecheckPrompt } from './prompts/memory-recheck.ts';
+import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
@@ -30,6 +31,7 @@ import {
   glanceBatchOutput,
   instructionsChangeOutput,
   memoryRecheckOutput,
+  pingDecisionOutput,
   setGroupingOutput,
   topicAssignmentOutput,
 } from './schemas.ts';
@@ -52,6 +54,8 @@ import type {
   InstructionsChangeReply,
   MemoryRecheckAnswer,
   MemoryRecheckInput,
+  PingDecisionAnswer,
+  PingDecisionInput,
   SetGroupingInput,
   SetProposal,
   TopicAssignment,
@@ -71,6 +75,8 @@ const timeouts: Record<AgentPurpose, number> = {
   chat: 120_000,
   instructions_change: 120_000,
   memory_recheck: 120_000,
+  // A ping that arrives minutes late is worth little; the rules take over after this.
+  ping_decision: 60_000,
 };
 
 /** Keeps a corrected line about as short as a dossier line or fact. */
@@ -295,6 +301,36 @@ export class RunnerAgentService implements AgentService {
       return { outcome: 'fix', text: fixed, why };
     }
     return { outcome: value.outcome === 'drop' ? 'drop' : 'holds', text: input.claim, why };
+  }
+
+  /**
+   * Answers for ids that were not asked, or asked twice, are dropped. An
+   * empty title or body keeps the template text, so a veto-only answer still
+   * reads well if it said ping.
+   */
+  async decidePings(input: PingDecisionInput): Promise<PingDecisionAnswer[]> {
+    if (input.items.length === 0) {
+      return [];
+    }
+    const { value } = await this.ask('ping_decision', pingDecisionPrompt(input), pingDecisionOutput);
+    const byId = new Map(input.items.map((item) => [item.id, item]));
+    const answered = new Set<string>();
+    const result: PingDecisionAnswer[] = [];
+    for (const decision of value.decisions) {
+      const item = byId.get(decision.id);
+      if (!item || answered.has(decision.id)) {
+        continue;
+      }
+      answered.add(decision.id);
+      result.push({
+        id: decision.id,
+        ping: decision.ping,
+        title: clipText(decision.title || item.template.title, PING_TITLE_MAX),
+        body: clipText(decision.body || item.template.body, PING_BODY_MAX),
+        reason: clipText(decision.reason || (decision.ping ? 'agent agreed' : 'agent vetoed'), RECHECK_WHY_MAX),
+      });
+    }
+    return result;
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

@@ -36,3 +36,12 @@ export function appConfigFromEnv(): AppConfig {
     syncCallCap: syncCallCapFromEnv(process.env.CODE_MANAGER_MAX_AGENT_CALLS),
   };
 }
+
+/** How often the desktop app polls GitHub notifications, as Julian asked for. */
+export const DEFAULT_POLL_SECONDS = 10;
+
+/** CODE_MANAGER_POLL_SECONDS: whole seconds >= 0 (0 turns the poll off); the default otherwise. */
+export function pollSecondsFromEnv(value: string | undefined): number {
+  const parsed = Number(value);
+  return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_POLL_SECONDS;
+}

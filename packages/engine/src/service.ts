@@ -12,6 +12,7 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  LivePollStatus,
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
@@ -28,6 +29,7 @@ import type {
   TopicDetail,
   TopicListItem,
 } from '@code-manager/core';
+import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 
 /**
  * The whole app behind one interface. apps/server exposes it over HTTP and
@@ -40,6 +42,18 @@ export interface EngineService {
    * On demand only. A sync while one is running joins the running one.
    */
   sync(options?: SyncOptions): Promise<SyncReport>;
+
+  /**
+   * One fast-poll cycle: conditional inbox read, and on a change a light
+   * incremental sync of the PRs that moved plus ping decisions. Blocked while
+   * a full sync or consolidation runs. Throws on rate limits and errors.
+   */
+  pollOnce(): Promise<PollCycle>;
+  /** Starts polling on a timer (the desktop app while it runs). A second call is ignored. */
+  startLivePoll(options: LivePollOptions): void;
+  stopLivePoll(): void;
+  /** For the status footer. `off` when the poll was never started. */
+  livePollStatus(): Promise<LivePollStatus>;
 
   listTopics(): Promise<TopicListItem[]>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */

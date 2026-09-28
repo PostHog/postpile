@@ -440,3 +440,16 @@ describe('Store.transaction', () => {
     expect(store.meta.get('a')).toBe('1');
   });
 });
+
+describe('PingDecisionRepo', () => {
+  it('stores decisions and lists them newest first', () => {
+    const base = { threadId: 't1', prKey: 'PostHog/posthog#1', title: 'T', body: 'B', at: at(1) };
+    store.pingDecisions.add({ ...base, ping: true, source: 'agent', reason: 'asked for your review' });
+    store.pingDecisions.add({ ...base, ping: false, source: 'rules', reason: 'bot activity', at: at(2) });
+
+    expect(store.pingDecisions.listRecent(10)).toEqual([
+      { ...base, ping: false, source: 'rules', reason: 'bot activity', at: at(2) },
+      { ...base, ping: true, source: 'agent', reason: 'asked for your review' },
+    ]);
+  });
+});

@@ -36,3 +36,4 @@ export * from './memory-sources.ts';
 export * from './instructions-views.ts';
 export * from './topic-relation.ts';
 export * from './search.ts';
+export * from './pings.ts';

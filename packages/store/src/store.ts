@@ -15,6 +15,7 @@ import { MetaRepo } from './repos/meta.ts';
 import { NotificationRepo } from './repos/notifications.ts';
 import { TopicProposalRepo } from './repos/proposals.ts';
 import { PrRepo } from './repos/prs.ts';
+import { PingDecisionRepo } from './repos/ping-decisions.ts';
 import { PullInRepo } from './repos/pull-ins.ts';
 import { RuleProposalRepo } from './repos/rule-proposals.ts';
 import { PrSetRepo } from './repos/sets.ts';
@@ -45,6 +46,7 @@ export class Store {
   readonly agentCalls: AgentCallRepo;
   readonly instructions: InstructionsRepo;
   readonly pullIns: PullInRepo;
+  readonly pingDecisions: PingDecisionRepo;
 
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
@@ -68,6 +70,7 @@ export class Store {
     this.agentCalls = new AgentCallRepo(db);
     this.instructions = new InstructionsRepo(db);
     this.pullIns = new PullInRepo(db);
+    this.pingDecisions = new PingDecisionRepo(db);
   }
 
   static open(path: string): Store {

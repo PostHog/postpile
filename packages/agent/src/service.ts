@@ -27,6 +27,8 @@ import type {
   TopicDelta,
   TopicProposal,
   Viewer,
+  WhoseTurn,
+  WhyCode,
 } from '@code-manager/core';
 
 /**
@@ -337,6 +339,54 @@ export interface MemoryRecheckAnswer {
   why: string;
 }
 
+/** New events per PR a ping decision sees; a burst of CI noise must not crowd out the mention. */
+export const EVENTS_PER_PING_ITEM = 8;
+
+/** What the deterministic rules said about one PR's new activity. */
+export interface PingRuleView {
+  loudness: Loudness;
+  reason: string;
+  whoseTurn: WhoseTurn;
+  why: WhyCode;
+}
+
+/**
+ * One PR thread with new activity the rules would ping for. The agent may
+ * veto the ping or write a better title and body; `template` is what the
+ * notification says without it.
+ */
+export interface PingDecisionItem {
+  /** The notification thread id; answers are matched on it. */
+  id: string;
+  pr: Pr;
+  topicName: string | null;
+  /** The topic's tailoring, when it has any. The general instructions are in `context`. */
+  tailoring: string;
+  /** dossierBrief of the topic's latest dossier; '' without one. */
+  dossierBrief: string;
+  glance: Glance | null;
+  /** The new events, newest first, at most EVENTS_PER_PING_ITEM. */
+  events: PrEvent[];
+  rule: PingRuleView;
+  template: { title: string; body: string };
+}
+
+/** All new ping-worthy items of one poll cycle, in one call. */
+export interface PingDecisionInput {
+  items: PingDecisionItem[];
+  viewer: Viewer;
+  /** General context (no topic): instructions, recent feedback, standing rules. */
+  context: PromptContext;
+}
+
+export interface PingDecisionAnswer {
+  id: string;
+  ping: boolean;
+  title: string;
+  body: string;
+  reason: string;
+}
+
 /**
  * Every digesting job the agent does. Implementations build the prompt,
  * call the AgentRunner and parse the answer. Caching by input hash is the
@@ -362,4 +412,6 @@ export interface AgentService {
   consolidate(input: ConsolidationInput): Promise<ConsolidationResult>;
   /** One line, asked by the user. A fix that changes nothing reads as holds. */
   recheckMemory(input: MemoryRecheckInput): Promise<MemoryRecheckAnswer>;
+  /** Ping or not, per item. Items the answer skipped or invented are left out; the engine falls back to rules for them. */
+  decidePings(input: PingDecisionInput): Promise<PingDecisionAnswer[]>;
 }

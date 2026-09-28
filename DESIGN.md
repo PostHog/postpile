@@ -76,7 +76,9 @@ the thread stays unread, and the next sync fetches the new activity. Local
 failures (one failed thread never stops the rest) show up in the next sync
 report.
 
-**Sync** is on demand: "Sync now" and on app start. No live updates for now.
+**Sync** (the full one) is on demand: "Sync now" and on app start. On top of it
+the desktop app runs a fast notification poll with Mac pings, see "Live poll and
+Mac pings".
 Only unread PR threads whose activity is newer than the stored snapshot's fetch
 time get enriched (a thread's `updated_at` runs ahead of the PR's own, so
 comparing against the PR would refetch everything). `SyncOptions` exist for
@@ -880,6 +882,91 @@ A click jumps to the tile through `go()`, so Back returns to the list;
 without a tile the row says why inline. The chevron shows the PR's five
 newest stored events. Nothing in it marks anything read.
 
+## Live poll and Mac pings
+
+Near-real-time pings on the Mac, only when they matter. Runs while the desktop
+app runs (window open or hidden); the CLI has `poll` for one cycle, the
+standalone server never starts it.
+
+**Poll** (`LivePoller` in engine `live/`, started by the desktop main process):
+
+- `GET /notifications` every `CODE_MANAGER_POLL_SECONDS` (default 10, 0 turns
+  it off) with the stored ETag / Last-Modified, shared with the full sync. A
+  304 costs no rate limit and does nothing else.
+- GitHub's `X-Poll-Interval` (usually 60) is read, logged when it changes and
+  shown in the footer tooltip, but not obeyed: Julian asked for 10s, and 304s
+  are free. One cycle at a time; the next is scheduled when the last one ends.
+  The first cycle waits one interval so the app's start sync goes first.
+- Backoff: a rate limit (429, or 403 with Retry-After / no requests left / a
+  "rate limit" message, or a GraphQL `RATE_LIMITED` error; `GitHubError.rateLimited`)
+  waits Retry-After or until X-RateLimit-Reset, else doubles from 60s to 15
+  min. Other errors double from the interval up to 5 min. The footer shows
+  "backing off, retry in Ns" (state `backoff`).
+- Overlap: `Engine.pollOnce()` answers `blocked` while a full sync or a
+  consolidation runs (footer: "paused: full sync running"); sync and
+  consolidation wait for a running poll cycle, so agent calls land in the
+  right run (`poll:<time>` in `agent_call`).
+
+**Incremental sync** (`PollRun`), only after a 200: the PRs whose unread
+threads moved since their last fetch, newest first, at most 24 (two GraphQL
+batches; the rest wait for the next change or the full sync). Snapshots,
+events with rule loudness and the event log are written exactly as in the
+full sync (`GitHubSync.poll`), retired topics revive, and PRs new to the app
+get a topic (one `topic_assignment` call at most). Tiles are derived on read,
+so they update by themselves; the renderer refetches when `changeCount` in
+`GET /api/live` moves. Dossiers, glances, sets, stack layers and the event
+second opinion stay with the full sync, which still finds the new events
+through the event log and walks stacks and verifies facts for the PRs the
+poll fetched (meta `poll_fetched_since_sync`). Never marks anything read (on GitHub or locally,
+beyond what the full sync already does for threads that left the inbox).
+
+**Decision** (`PingDecider`), one per PR thread with new events, rules first:
+
+- Only unseen events from this poll and at most 30 minutes old
+  (`PING_FRESH_MS`) count; the first look at an empty store is a baseline and
+  decides nothing.
+- `pingRule` in core classes the events: `bot` (bot-only), `muted`, `quiet`,
+  `not_addressed` (loud, but not aimed at the user in person: a comment or
+  approval on their PR, merged without their review) or `addressed` (mention,
+  team mention, question, reply, and on an open PR: review request, commits
+  after approval, changes requested on their own PR). Agent and user
+  overrides count.
+- Everything but `addressed` is decided by the rules: no ping, no agent.
+- `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
+  instructions, topic tailoring, dossier brief, glance, the new events (fenced
+  as `<github_data>`), rule loudness and reason, whose turn and the why-here
+  code. Answer per item (zod): `{ id, ping, title, body, reason }`. The agent
+  may veto or rephrase, never add.
+- Fallback when the call fails, skips an item, or the daily cap is spent
+  (`CODE_MANAGER_PING_CAP`, default 200 calls per rolling 24h): ping with
+  `pingTemplate` text ("@bob asked you something · posthog#41850").
+- Every decision lands in `ping_decision` (migration 007): thread, PR, ping
+  yes/no, source rules / agent / fallback, title, body, reason, time.
+
+**Mac notifications** (desktop main, `MacNotifier`):
+
+- `PingThrottle`: at most one notification per tile per 2 minutes; more than
+  3 in one cycle become one summary ("4 PRs need you", first titles listed,
+  a click opens the first).
+- Native `Notification` with sound. A click shows and focuses the window and
+  sends `code-manager:open-ping` with `{topicId, tileId, prKey}`; the renderer
+  navigates through `go()`, so it is a normal history entry.
+- Closing the window hides it on macOS and the app keeps polling; Cmd+Q quits
+  (flushes mark-reads as before). Dock click shows the window again.
+- macOS asks for permission on the first notification. Electron cannot read
+  that permission, so a denial only means nothing shows up; tiles still turn
+  unread. `CODE_MANAGER_MAC_NOTIFICATIONS=0` turns notifications off (the poll
+  still runs). A settings toggle and quiet hours are not built yet.
+
+**Fake mode**: `FakeLivePoll` adds a sample question to the next open pinged
+tile every ~45s and pings for it with a fake rules decision, through the same
+`LivePoller` and throttle.
+
+**Cost**: a `ping_decision` call measured about $0.04 and 4-5s (2 items, real
+instructions). One call per poll cycle with addressed news, so a normal day is
+roughly 10-40 calls, $0.40-1.50; the cap bounds it at 200 calls (about $8).
+Poll topic assignments add a few calls a day for PRs new to the app.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.
@@ -891,7 +978,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins, 007 ping decisions), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query, PRs by branch for stack completion) and `GitHubWriter` (mark thread read,
@@ -937,6 +1024,7 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/undo` `{undoToken}` | `undo()` |
 | `POST /api/feedback` | `giveFeedback()` |
 | `POST /api/events/:id/unmute` | `unmuteEvent()` |
+| `GET /api/live` | `livePollStatus()` (fast poll state, backoff, X-Poll-Interval, `changeCount`) |
 
 ### Build and tooling decisions
 
@@ -969,7 +1057,9 @@ preflight and does not know the token, so CORS stays open.
   through `toISOString()` (GitHub omits milliseconds, the app writes them).
 - **Env switches**: `CODE_MANAGER_FAKE=1` runs server/CLI/desktop on the in-memory Depot sample
   data (`FakeEngine`, for UI work). `CODE_MANAGER_READ_ONLY=1` swaps the GitHub writer for one
-  that refuses every write (smoke runs against a real account).
+  that refuses every write (smoke runs against a real account). `CODE_MANAGER_POLL_SECONDS`
+  (default 10, 0 off), `CODE_MANAGER_PING_CAP` (default 200 per 24h) and
+  `CODE_MANAGER_MAC_NOTIFICATIONS=0` tune the live poll.
 - **Test builders** live at `@code-manager/core/fixtures` (incl. `FakeTimers`); engine tests use
   fake reader/writer and the agent's `FakeRunner`.
 
@@ -1020,6 +1110,16 @@ preflight and does not know the token, so CORS stays open.
   - dossier history: keep the newest 50 versions per topic, pruned on save [50]
   - glance batches with 18 PRs per call [yes; moved from haiku to sonnet after a side-by-side run]
   - dossier driver overrides "most frequent author" for the topic driver [yes]
+- **Live poll and Mac pings** (current choices in brackets):
+  - obey GitHub's X-Poll-Interval (60s) or poll faster [10s as asked; 304s are free, the value
+    is shown in the footer tooltip]
+  - loud but not addressed (approval or comment on your own PR, merged without your review):
+    ping or not [not; they stay unread tiles and never reach the agent]
+  - team review requests (RT) and team mentions: addressed [yes; the prompt tells the agent it
+    is the team, not the user in person]
+  - events older than 30 minutes never ping (catch-up after sleep or a failed poll) [yes]
+  - a poll whose PR fetch failed leaves those PRs to the full sync; the next poll gets a 304
+    and does not retry them [yes, keeps the 304 path free]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
   snooze started ends it, so a mention is never hidden. Confirm.
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and

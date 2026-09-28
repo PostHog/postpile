@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakeEngine } from '@code-manager/server';
-import { formatPr, formatTopic, formatTopics } from './format.ts';
+import { formatPoll, formatPr, formatTopic, formatTopics } from './format.ts';
 
 describe('format over the fake engine', () => {
   it('prints topics, a topic and a PR as plain text', async () => {
@@ -16,5 +16,16 @@ describe('format over the fake engine', () => {
 
     const pr = await engine.getPr('PostHog/posthog#41921');
     expect(formatPr(pr!)).toContain('LOOKS_SAFE: Landing it apart from #41902');
+  });
+
+  it('prints a poll cycle with its ping decisions', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now });
+    expect(formatPoll(await engine.pollOnce())).toBe('notifications unchanged (304)\nGitHub X-Poll-Interval: 60s');
+    now = new Date(now.getTime() + 45_000);
+    const text = formatPoll(await engine.pollOnce());
+    expect(text).toContain('PRs updated 1');
+    expect(text).toMatch(/PING PostHog\/posthog#\d+ \(rules\): fake decision/);
+    expect(formatPoll({ kind: 'blocked', reason: 'full sync running' })).toBe('poll blocked: full sync running');
   });
 });

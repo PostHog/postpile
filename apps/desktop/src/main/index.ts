@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { app, BrowserWindow, shell } from 'electron';
 import fixPath from 'fix-path';
 import type { EngineService } from '@code-manager/engine';
-import { appConfigFromEnv, engineFromEnv, startServer, type RunningServer } from '@code-manager/server';
+import { appConfigFromEnv, engineFromEnv, pollSecondsFromEnv, startServer, type RunningServer } from '@code-manager/server';
+import { MacNotifier } from './mac-notifier.ts';
 
 // A GUI launch gets launchd's minimal PATH. gh and claude live in
 // /opt/homebrew/bin and ~/.local/bin, so take PATH from the login shell.
@@ -14,6 +15,9 @@ app.setName('code-manager');
 
 let engine: EngineService | null = null;
 let server: RunningServer | null = null;
+let mainWindow: BrowserWindow | null = null;
+// Set by Cmd+Q (before-quit). Until then, closing the window only hides it on macOS.
+let quitting = false;
 
 function openExternalLink(url: string): void {
   if (url.startsWith('https://')) {
@@ -21,7 +25,18 @@ function openExternalLink(url: string): void {
   }
 }
 
-async function openWindow(apiUrl: string, token: string): Promise<void> {
+function showWindow(): void {
+  if (!mainWindow) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow> {
   const window = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -60,12 +75,21 @@ async function openWindow(apiUrl: string, token: string): Promise<void> {
       window.webContents.send('code-manager:swipe', direction === 'left' ? 'back' : 'forward');
     }
   });
+  // Like other macOS apps: the red button hides the window and the app keeps
+  // running (and polling) in the dock; Cmd+Q quits.
+  window.on('close', (event) => {
+    if (process.platform === 'darwin' && !quitting) {
+      event.preventDefault();
+      window.hide();
+    }
+  });
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (devUrl) {
     await window.loadURL(devUrl);
   } else {
     await window.loadFile(join(import.meta.dirname, '../renderer/index.html'));
   }
+  return window;
 }
 
 async function start(): Promise<void> {
@@ -75,11 +99,27 @@ async function start(): Promise<void> {
   // CODE_MANAGER_ALLOW_WRITES=1 unblocks GitHub writes in the UI, see appConfigFromEnv.
   engine = engineFromEnv();
   server = await startServer({ engine, port: 0, token, config: appConfigFromEnv() });
-  await openWindow(server.url, token);
+  mainWindow = await openWindow(server.url, token);
+  // A click opens the tile: show the window, then let the renderer navigate.
+  const notifier = new MacNotifier({
+    enabled: process.env.CODE_MANAGER_MAC_NOTIFICATIONS !== '0',
+    onClick: (target) => {
+      showWindow();
+      if (target) {
+        mainWindow?.webContents.send('code-manager:open-ping', target);
+      }
+    },
+  });
+  // The fast notification poll runs as long as the app does, window open or not.
+  engine.startLivePoll({
+    intervalSeconds: pollSecondsFromEnv(process.env.CODE_MANAGER_POLL_SECONDS),
+    onNotify: (notifications) => notifier.show(notifications),
+  });
 }
 
 async function shutdown(): Promise<void> {
   try {
+    engine?.stopLivePoll();
     // Queued mark-reads are sent, not dropped: the user meant to clear them.
     await engine?.flushPendingWrites();
     await engine?.close();
@@ -88,8 +128,6 @@ async function shutdown(): Promise<void> {
   }
   await server?.close();
 }
-
-let quitting = false;
 
 app.on('before-quit', (event) => {
   if (quitting) {
@@ -100,7 +138,14 @@ app.on('before-quit', (event) => {
   void shutdown().finally(() => app.quit());
 });
 
-app.on('window-all-closed', () => app.quit());
+// Dock icon click with the window hidden.
+app.on('activate', () => showWindow());
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
 
 app.whenReady().then(start).catch((error: unknown) => {
   console.error('startup failed:', error);

@@ -1,5 +1,5 @@
 import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
-import { GitHubError, GitHubHttp, type FetchFn } from './http.ts';
+import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem } from './http.ts';
 import { toBranchPr, toPr } from './normalize.ts';
 import { getThread, listNotifications } from './notifications.ts';
 import { listTeamMembers } from './teams.ts';
@@ -45,6 +45,16 @@ async function inParallel<T, R>(batches: T[], fn: (batch: T) => Promise<R>): Pro
   return results;
 }
 
+/**
+ * A GraphQL answer without data. GitHub reports its GraphQL rate limit as a
+ * 200 with an error of type RATE_LIMITED, so that one is marked as a limit.
+ */
+function graphqlFailure(what: string, errors: GraphQLErrorItem[]): GitHubError {
+  const first = errors[0];
+  const rateLimited = first?.type === 'RATE_LIMITED';
+  return new GitHubError(`GitHub ${what} failed: ${first?.message ?? 'no data'}`, 200, { rateLimited, retryAfterSeconds: null });
+}
+
 /** Real reader over REST (notifications) and GraphQL (viewer, PRs). */
 export class GitHubClient implements GitHubReader {
   private readonly http: GitHubHttp;
@@ -56,7 +66,7 @@ export class GitHubClient implements GitHubReader {
   async viewer(): Promise<Viewer> {
     const who = await this.http.graphql<{ viewer: { login: string } }>(VIEWER_LOGIN_QUERY);
     if (!who.data) {
-      throw new GitHubError(`GitHub viewer query failed: ${who.errors[0]?.message ?? 'no data'}`, 200);
+      throw graphqlFailure('viewer query', who.errors);
     }
     const login = who.data.viewer.login;
     return { login, teams: await this.viewerTeams(login) };
@@ -106,8 +116,7 @@ export class GitHubClient implements GitHubReader {
   private async findBranchBatch(batch: BranchLookup[]): Promise<BranchPr[][]> {
     const response = await this.http.graphql<RawBranchResponse>(buildBranchQuery(batch));
     if (!response.data) {
-      const message = response.errors[0]?.message ?? 'no data';
-      throw new GitHubError(`GitHub branch query failed: ${message}`, 200);
+      throw graphqlFailure('branch query', response.errors);
     }
     return batch.map((lookup, index) => {
       const repo = response.data?.[branchAlias(index)];
@@ -133,8 +142,7 @@ export class GitHubClient implements GitHubReader {
   private async fetchBatch(batch: PrRef[]): Promise<Pr[]> {
     const response = await this.http.graphql<RawBatchResponse>(buildPrBatchQuery(batch));
     if (!response.data) {
-      const message = response.errors[0]?.message ?? 'no data';
-      throw new GitHubError(`GitHub PR batch query failed: ${message}`, 200);
+      throw graphqlFailure('PR batch query', response.errors);
     }
     const prs: Pr[] = [];
     batch.forEach((ref, index) => {
