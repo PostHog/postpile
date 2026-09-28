@@ -56,8 +56,8 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 | loudness | effect | examples |
 |---|---|---|
-| loud | tile becomes unread | mention, review requested, question to the user, new commits after the user approved, merged without the user's review (when instructions care) |
-| quiet | dot, no state change | bots, CI, deploys, merge queue |
+| loud | tile becomes unread | mention, review requested, question to the user, merged without the user's review (when instructions care), a push after the user approved when the agent raises it |
+| quiet | dot, no state change | bots, CI, deploys, merge queue, pushes after the user approved (by default) |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading |
 
@@ -70,6 +70,10 @@ a classification.
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
 - `snoozed`: a snooze is active and its condition is not met yet.
 - `done`: every pinged member is done (approved / handled / merged / closed) and nothing loud is unseen.
+  An approval counts on any commit (2026-09-28): a PR the user approved stays done after later
+  pushes. `commits_after_approval` events are quiet by the rules; the tile comes back only
+  through the normal loud events (re-review requested, mention, question, changes requested,
+  merged without review) or when the agent raises the push (see Sync flow › events).
 - `open`: everything else.
 
 **Glance** per pinged PR (pulled-in stack layers get none): verdict
@@ -368,7 +372,12 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    below.
 9. **events** (`event_classification`, v2: one call per topic, up to 20 PRs
    per call, `classifyEventBatch`): second opinion on loud, unseen events
-   without an override logged after the topic's classify cursor. Driven by
+   without an override logged after the topic's classify cursor, plus
+   unseen `commits_after_approval` events (quiet by rule). For those the
+   prompt shows the PR's files and says plain follow-up pushes are
+   normally not worth the user's attention; the agent raises one to loud,
+   with a one-line reason, only for a substantial change in CI, build or
+   devex areas they approved, or new files well beyond what was reviewed. Driven by
    the event log, not by this sync's new ids, so capped batches are not
    lost.
 10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts,
@@ -621,6 +630,12 @@ stored and before a dossier goes into a glance prompt
   answer never becomes "looks safe" by accident. The prompt asks for
   exactly N entries with the verdict spelled as given; the retry prompt
   adds that the first answer was unusable.
+- Self-corrected answers (2026-09-28): for acme/digest#30 Sonnet
+  writes `LOOKS_SASAFE`, then "Wait, let me correct a typo in the verdict
+  field." and a second, fixed JSON object. `parseAgentJson` collects every
+  complete top-level JSON value (`jsonCandidates`, brackets inside strings
+  ignored) and takes the last one that parses and fits the schema; the
+  outermost-brackets reading is the fallback. Applies to every agent call.
 - Missing PRs of a topic's first-round batches go into one retry batch
   (`retryBatch`, attempt 2). Still missing after that: one error line per PR
   in the report with its `missingWhy`; the unchanged hash retries it next sync. A batch whose outer
@@ -1003,13 +1018,14 @@ authors.
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
 4. On someone else's PR:
-   - you: commits landed after your approval and you have not reviewed the
-     new head ("Re-check 2 commits"). The app's approval record wins, a
-     github.com approval of an older head counts too.
+   - them: you approved, on any commit (the app's record, or your newest
+     approve-or-request-changes review on github.com is an approval): the
+     author "to merge". A push after your approval is never your move
+     (no "Re-check", dropped 2026-09-28).
    - you: a review is requested of you, or of your team while nobody but
      the author reviewed yet, and you have not reviewed the head ("Review,
      rowan asked", "Review for team-devex").
-   - them: you approved the head: the author "to merge". You commented or
+   - them: you commented or
      requested changes on the head: the author "to address 2 threads" (open
      threads you started), "to address your changes" or "to reply".
    - them: a team request someone else picked up: the author "to merge" when
@@ -1023,12 +1039,11 @@ it won't merge soon. Rules in core:
   question, mention or reply you have not answered ("Reply to ada on
   draft", `PERSONAL_ASK_KINDS`; a team mention is not enough). On your own
   draft also for review threads waiting on you ("Address 2 comments on your
-  draft") or a standing change request. Never Review, Re-check, Fix CI or
-  Merge.
+  draft") or a standing change request. Never Review, Fix CI or Merge.
 - tier: a draft never lands in To review (`prTier`); needs_reply still
   works for personal asks.
-- loudness: a review request naming you on a draft and commits after your
-  approval on a draft are quiet, so neither makes the tile unread or the
+- loudness: a review request naming you on a draft is quiet (commits after
+  your approval are quiet everywhere), so neither makes the tile unread or the
   topic urgent. Mark-ready (`ready_for_review`) is loud when a review of you
   or your team is pending or was asked ("ready for your review"), which
   brings the PR back as reviewable.
@@ -1043,9 +1058,9 @@ approve his own PRs). The rules above already route own PRs to rule 3 before
 any review ask; on top of that:
 
 - The detail pane's primary button comes from core (`prPrimaryAction`,
-  `PrSummary.primaryAction`): Approve (or a disabled "Approved ✓" while your
-  approval covers the head; a push re-enables it) only on an open PR someone
-  else wrote. On your own PR, or a merged or closed one: Mark read while the
+  `PrSummary.primaryAction`): Approve only on an open PR someone else wrote;
+  `approved` once you approved on any commit, where the button stays usable
+  but calm (re-approving is harmless, it never nags). On your own PR, or a merged or closed one: Mark read while the
   tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
 - Tiles whose tracked PRs are all yours carry a neutral "Your PR" marker
   (the own/ink look of the AU badge, in words) next to the kind label.
@@ -1457,9 +1472,50 @@ standalone server never starts it.
 - Overlap: `Engine.pollOnce()` answers `blocked` while a full sync or a
   consolidation runs (footer: "paused: full sync running"); sync and
   consolidation wait for a running poll cycle, so agent calls land in the
-  right run (`poll:<time>` in `agent_call`).
+  right run (`poll:<time>` in `agent_call`). When a full sync ends, the
+  poll runs one cycle right away (2026-09-28): a sync takes a minute or
+  more, and a read or merge on github.com during it used to wait for the
+  next cycle after it. Chosen over letting the poll read threads during
+  a sync: no concurrent writes to the thread table and the shared ETag,
+  one line of code, and the delay shrinks to the sync's own length.
+- Read-threads watch (2026-09-28): every cycle also asks
+  `GET /notifications?all=true&since=<cursor>` with its own ETag (meta
+  `poll_watch_since`, `poll_watch_etag`). The unread list never shows a
+  thread that stays read, and GitHub does not make a thread unread for the
+  user's own merge, close, comment or review, so those were invisible until
+  the next full sync (PostHog/example-infra#4242, merged on github.com, OPEN in
+  the app for minutes). The cursor starts at the last full sync's start,
+  and moves only on a 200, to the newest thread update less a minute
+  (`nextWatchSince`, server times), so between changes URL and ETag stay
+  the same and GitHub answers 304. Updated threads, read or unread, go
+  through the same incremental fetch. Read threads stay read; their new
+  events count as seen when before `last_read_at` or done by the viewer
+  (`ownEventsOnReadThread`). Each 200 is logged with the running tally
+  ("200 on 3 of 412 polls since start").
+- Freshness check (2026-09-28): threads do not move for everything (an
+  approve sent from the app, quiet PRs), and PR snapshots stayed a day old.
+  One `prUpdatedAts` GraphQL query (100 aliases per query, `updatedAt`
+  only) covers every open PR a tile shows (pinged, found, pulled in) plus
+  those merged or closed in the last day; PRs with a newer `updatedAt` get
+  the full fetch. Every full sync runs it, the poll at most once a minute
+  (`FRESHNESS_POLL_EVERY_MS`). The sync always logs the counts, the poll
+  when something moved.
+- After a write: approve and comment fetch that PR again before they
+  answer, so the renderer's refresh after the action already shows the new
+  review state.
+- Focus refresh (2026-09-28): the main process remembers PR links opened
+  from the app (`OpenedPrs`, 30 minutes). When the window gets focus back,
+  `refreshOnFocus` runs one cycle now that also looks those threads up
+  directly (`GET /notifications/threads/{id}`) and fetches the ones without
+  a thread.
+- "Read elsewhere" log: every thread noticed as read on github.com logs
+  how: it left the unread list (the list answered 200) or the read list
+  says read while the unread list answered 304. The action log from real
+  use (2026-09-28) had only the first kind: GitHub's inbox ETag moves when
+  a thread is read elsewhere. A 304 case in main.log would say otherwise.
 
-**Incremental sync** (`PollRun`), only after a 200: the PRs whose unread
+**Incremental sync** (`PollRun`), only after a 200 of either list, a
+focus refresh or a moved PR from the freshness check: the PRs whose
 threads moved since their last fetch, newest first, at most 24 (two GraphQL
 batches; the rest wait for the next change or the full sync). Snapshots,
 events with rule loudness and the event log are written exactly as in the
@@ -1480,8 +1536,8 @@ beyond what the full sync already does for threads that left the inbox).
 - `pingRule` in core classes the events: `bot` (bot-only), `muted`, `quiet`,
   `not_addressed` (loud, but not aimed at the user in person: a comment or
   approval on their PR, merged without their review) or `addressed` (mention,
-  team mention, question, reply, and on an open PR: review request, commits
-  after approval, changes requested on their own PR). Agent and user
+  team mention, question, reply, and on an open PR: review request, a push
+  after approval the agent raised, changes requested on their own PR). Agent and user
   overrides count.
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
@@ -1848,7 +1904,7 @@ preflight and does not know the token, so CORS stays open.
   snooze started ends it, so a mention is never hidden. Confirm.
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
-  spoke on the PR after it; loud events on pulled-in PRs also make a tile unread; every commit
-  after the user's approval is its own loud event (a busy PR lists many reasons).
+  spoke on the PR after it; loud events on pulled-in PRs also make a tile unread. Commits after
+  the user's approval are quiet unless the agent raises one (decided 2026-09-28).
 - **Repo name**: decided 2026-09-28, the app is PostPile (formerly the working title
   `code-manager`). Renaming the repo folder is still open.

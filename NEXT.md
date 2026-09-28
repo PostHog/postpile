@@ -6,6 +6,28 @@ now".
 
 ## Done
 
+- Live poll keeps up with GitHub between full syncs (2026-09-28, from the
+  PostHog/example-infra#4242 and #106828 findings):
+  - read-threads watch every cycle (`?all=true&since=<cursor>`, own ETag,
+    304 while nothing moved, every 200 logged with the tally), so merges,
+    closes and the user's own actions on read threads show within a cycle
+  - freshness check: one `updatedAt` GraphQL query over every PR a tile
+    shows, each full sync and once a minute from the poll; moved PRs get
+    the full fetch
+  - approve and comment refetch the PR before answering
+  - one poll cycle right after every full sync (the poll was blocked for
+    the whole sync)
+  - focus refresh for PRs opened on github.com from the app (30 minutes):
+    direct thread lookups plus one cycle when the window gets focus
+  - "read elsewhere" lines in main.log say whether the unread list
+    answered 200 or 304; real data so far: always 200
+  - open: a mark-read that reaches GitHub does not refetch the PR (nothing
+    on the PR changes; the thread is already read locally)
+- Approvals stand on any commit (2026-09-28): approved PRs stay done,
+  `commits_after_approval` is quiet by rule and goes to event
+  classification, which raises only pushes that change what was approved
+  (with the PR's files in the prompt). No more "Re-check N commits".
+
 - Engine works end to end: notifications (ETag), batched GraphQL PR fetch,
   events with rule loudness, topics, sets, stacks, derived tile state, event
   overrides by the agent. All state in SQLite (`node:sqlite`, no native
@@ -525,9 +547,12 @@ the app meanwhile.
   misspelled verdict (`LOOKS_SASAFE`, `LOOKS_SASE`) in 4 of 6 runs, once
   with the other fields cut to "placeholder", once as broken JSON. The
   strict enum dropped the entry on both attempts. Verdicts are now repaired
-  when unambiguous, and error lines say why a PR is missing. acme/digest#30
-  answered fine in the replay (no topic dossier or instructions there), so
-  its cause is not confirmed; the next error line will name it.
+  when unambiguous, and error lines say why a PR is missing.
+  acme/digest#30 (2026-09-28, replayed with its stored input on a DB
+  copy): Sonnet wrote `LOOKS_SASAFE`, then "Wait, let me correct a typo in
+  the verdict field." and a second JSON object. The parser cut from the
+  first `{` to the last `}` across both. It now takes the last complete
+  JSON value that fits the schema (`jsonCandidates`).
 - Open: measure the next real sync. The per-kind durations in
   `agent_call` include the time queued in the limiter, so they read longer
   than the model took.
@@ -640,6 +665,11 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Approved once stays done** (2026-09-28): Approved once stays done;
+  pushes after approval are quiet unless re-pinged or the agent raises
+  them. The approve button stays usable after a push (approving again is
+  harmless) but never nags.
 
 - **Assessment boxes** (2026-09-28): the detail pane shows the glance as
   a box titled with the verdict plus a risk box, marked short lines, and
