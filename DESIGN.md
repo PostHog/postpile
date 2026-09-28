@@ -1111,7 +1111,8 @@ are logged as `observed` with origin `sync` / `poll`. Every sync and poll
 that changes the threads also marks events older than their thread's
 `last_read_at` seen (event state, not logged) and may move a topic's seen
 cursor ("Reconciling with GitHub's read time"). Glances, consolidation, dossiers and ping decisions never mark
-anything read. There is no CLI write and no "mark all read".
+anything read. There is no CLI write. The only "mark all read" is the inbox
+cleanup, a deliberate choice in its dialog ("Inbox cleanup and start fresh").
 
 **Debug view rows.** Each row carries `lastAction` (the newest log entry for
 the thread or its PR) and `decidedBy` (for a queue send, the click that
@@ -1134,6 +1135,47 @@ as "brought back in the app (removed feature)".
 Fake mode runs the same flows on `FakeWrites`: the lock (off at start, not
 persisted), the log, queue sends after 6s that only flip the sample thread's
 "GitHub" unread flag, pending writes (in memory) with send and discard.
+
+## Inbox cleanup and start fresh
+
+Old unread threads pile up on GitHub (a first run on a busy account, a
+vacation). Rules in core `inbox-cleanup.ts`, engine `InboxCleanup`
+(`actions/inbox-cleanup.ts`), `GET /api/inbox-cleanup`.
+
+- **Counts**: stored threads unread on GitHub with `updated_at` older than
+  14 and 30 days (`unreadOlderThan`), leaving out threads before the
+  start-fresh baseline.
+- **Where**: with a count > 0 the sidebar footer shows a quiet line "N
+  unread older than 14 days · Clean up". On the first run, or when a full
+  sync starts 5+ days after the previous one (meta `last_sync_started_at`;
+  an older store falls back to its newest PR fetch), the cleanup is
+  prominent (meta `inbox_cleanup_prominent`): a banner at the top of the
+  middle column instead of the line, until the user picks anything in the
+  dialog. The server sends `look` (`banner` / `line` / `none`).
+- **Dialog** (`InboxCleanupDialog`):
+  - "Mark everything older than 14 / 30 days read on GitHub": one
+    `PUT /notifications` with `last_read_at` = the cutoff
+    ([docs](https://docs.github.com/en/rest/activity/notifications#mark-notifications-as-read)),
+    through `GitHubWrites.markAllReadBefore`, logged `mark_all_read_before`
+    (origin `cleanup`). Locked, it becomes one pending write
+    (`pending_write.kind = 'mark_all_read_before'`, `read_before`,
+    migration 013), listed in the lock popover with the unread count it
+    covers; Send / Discard work like for mark-reads (origin `footer`).
+    GitHub may answer 202 and finish later, so the engine runs one poll
+    cycle right after; threads leaving the inbox then go through the normal
+    reconciliation (their read time from the read list or a thread lookup).
+    Nothing changes in the app before GitHub reports it.
+  - "Leave GitHub alone, start fresh here": meta `start_fresh_baseline` =
+    now. Events before it read as seen (`applyBaseline`, applied in
+    `Board.load` and FakeEngine, not stored, so clearing brings GitHub's
+    state back), "since you last looked" never starts before it
+    (`seenSinceBaseline`, and `countSince(..., notBefore)`), and threads
+    before it leave the counts. Nothing is written to GitHub. The dialog
+    shows "Started fresh on <date> · Clear it".
+  - "Not now": hides line and banner for 7 days (meta
+    `inbox_cleanup_hidden_until`).
+- **Fake mode**: three old unread sample threads (16, 22, 45 days), the
+  banner on every start, pending and send handled by `FakeWrites`.
 
 ## Live poll and Mac pings
 
@@ -1366,6 +1408,10 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/sync` | `sync()` |
 | `GET /api/topics` | `listTopics()` |
 | `GET /api/topics/:id` | `getTopic()` |
+| `GET /api/inbox-cleanup` | `inboxCleanup()` (old unread counts, look, baseline, pending cutoff) |
+| `POST /api/inbox-cleanup/mark-read` `{olderThanDays: 14\|30}` | `cleanUpInbox()` (GitHub write, pending while locked) |
+| `POST`/`DELETE /api/inbox-cleanup/start-fresh` | `startFresh()` / `clearStartFresh()` |
+| `POST /api/inbox-cleanup/not-now` | `hideInboxCleanup()` (7 days) |
 | `GET /api/repos` | `listRepos()` (repo menu: counts, scope, quiet) |
 | `POST /api/repos/scope` `{repos}` | `setRepoScope()` (null or [] = all) |
 | `POST /api/repos/quiet` `{repo, quiet}` | `setRepoQuiet()` |

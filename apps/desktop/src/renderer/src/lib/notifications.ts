@@ -101,6 +101,7 @@ const WHO: Record<ActionOrigin, string> = {
   sync: 'sync',
   poll: 'the live poll',
   footer: 'you from the lock',
+  cleanup: 'you in the inbox cleanup',
 };
 
 /**
@@ -177,6 +178,8 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
   switch (last.action) {
     case 'mark_read':
       return markReadText(last, decidedBy);
+    case 'mark_all_read_before':
+      return writeText('inbox cleanup (everything older marked read)', last);
     case 'undo_mark_read':
       return { text: `mark-read undone by ${WHO[last.origin]}`, tone: 'local' };
     case 'bring_back':

@@ -6,6 +6,7 @@ export const queryKeys = {
   topics: ['topics'] as const,
   viewer: ['viewer'] as const,
   repos: ['repos'] as const,
+  inboxCleanup: ['inbox-cleanup'] as const,
   topic: (topicId: string) => ['topic', topicId] as const,
   search: (query: string) => ['search', query] as const,
   pr: (prKey: string) => ['pr', prKey] as const,

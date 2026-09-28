@@ -8,6 +8,7 @@ import { useSearch } from './api/search.ts';
 import { useTopic, useTopics } from './api/topics.ts';
 import { useViewer } from './api/viewer.ts';
 import { DetailPane } from './components/DetailPane.tsx';
+import { InboxCleanup } from './components/InboxCleanup.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { NotificationsPane } from './components/NotificationsPane.tsx';
@@ -152,7 +153,14 @@ export function App() {
   } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
   } else if (!topics.isPending && items.length === 0) {
-    main = <EmptyMain text={actions.syncing ? 'Syncing your GitHub notifications…' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'} />;
+    main = (
+      <MainPane>
+        <InboxCleanup place="banner" />
+        <p className="m-auto max-w-sm text-center text-xs leading-relaxed text-muted">
+          {actions.syncing ? 'Syncing your GitHub notifications…' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'}
+        </p>
+      </MainPane>
+    );
   } else if (filter && !activeItem) {
     main = <EmptyMain text={`Nothing matches “${query.trim()}”. Esc clears the filter.`} />;
   } else if (queueFilter && !activeItem) {
@@ -162,6 +170,7 @@ export function App() {
   } else if (activeItem && topic.data) {
     main = (
       <MainPane>
+        <InboxCleanup place="banner" />
         <TopicHeader detail={topic.data} group={activeItem.group} topics={items} />
         <TileGrid
           detail={topic.data}

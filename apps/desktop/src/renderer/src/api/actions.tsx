@@ -7,6 +7,7 @@ import type {
   ActionResult,
   AppConfig,
   ChatReply,
+  CleanupAge,
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
@@ -96,6 +97,16 @@ export interface Actions {
   setRepoScope(repos: string[] | null): Promise<void>;
   /** "Let it go stale" on a repo, or waking it up again. Local, not a GitHub write. */
   setRepoQuiet(repo: string, quiet: boolean): Promise<void>;
+  /**
+   * "Mark everything older than N days read on GitHub". A GitHub write: with
+   * the lock closed it becomes one pending write. Returns whether it went through.
+   */
+  cleanUpInbox(age: CleanupAge): Promise<boolean>;
+  /** "Leave GitHub alone, start fresh here". Local. */
+  startFresh(): Promise<boolean>;
+  clearStartFresh(): Promise<boolean>;
+  /** "Not now": hides the cleanup for a week. Local. */
+  hideInboxCleanup(): Promise<boolean>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
@@ -427,6 +438,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
     recheckMemory,
     setRepoScope,
     setRepoQuiet,
+    cleanUpInbox: (age) => run('cleanup', 'cleanup', () => request('POST', '/api/inbox-cleanup/mark-read', { olderThanDays: age })),
+    startFresh: () => run('cleanup', null, () => request('POST', '/api/inbox-cleanup/start-fresh')),
+    clearStartFresh: () => run('cleanup', null, () => request('DELETE', '/api/inbox-cleanup/start-fresh')),
+    hideInboxCleanup: () => run('cleanup', null, () => request('POST', '/api/inbox-cleanup/not-now')),
     markTopicSeen,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),

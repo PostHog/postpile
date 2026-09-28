@@ -219,6 +219,14 @@ now".
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
+- Inbox cleanup and start fresh (DESIGN.md "Inbox cleanup and start
+  fresh"): counts of threads unread on GitHub older than 14 / 30 days, a
+  quiet sidebar line or, on the first run and after 5+ days without a sync,
+  a banner. The dialog marks everything older than 14 / 30 days read on
+  GitHub with one PUT through the writes lock (pending while locked, action
+  `mark_all_read_before`, origin `cleanup`, one poll right after), starts
+  fresh with a local baseline (clearable), or hides for 7 days. Migration
+  013. Fake data has three old unread threads.
 - GitHub read time reconciliation (DESIGN.md "Reconciling with GitHub's
   read time"): events before a thread's `last_read_at` count as seen on
   every sync and poll, not only a PR's first fetch; threads cleared on
@@ -415,6 +423,13 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   would shave a little off sync.
 
 ## Needs Julian's decisions
+
+- **Inbox cleanup**: the cleanup goes out right away (no 6s undo window),
+  since the dialog is the confirmation. "Not now" hides the line too, not
+  only the banner. An existing database shows the banner once on its first
+  sync after this change only if its newest PR fetch is 5+ days old. Start
+  fresh counts events before the baseline as seen when reading, so after
+  clearing it old unread tiles come back; OK?
 
 - **Read list**: PRs handled entirely on github.com now become tiles
   (calm, all events seen) and go through topic assignment and dossiers,

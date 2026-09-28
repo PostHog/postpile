@@ -35,7 +35,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`useMemorySources`, only enabled while a "Why?" panel is open), `debug.ts`
   (`useDebugNotifications`, the notifications debug pane), `writes.ts`
   (`useGitHubWrites`, the footer lock), `repos.ts` (`useRepos`, the
-  title bar repo menu), `live.ts`
+  title bar repo menu), `cleanup.ts` (`useInboxCleanup`), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
@@ -62,7 +62,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `markReadNote`, the tile shows `PendingWritePill` from `pills.tsx`, its
   Mark read button is disabled). Never show a locked mark-read as done. Everything is blocked
   until the writes state has loaded. Don't bypass the guard, and put a new
-  GitHub-writing action on the `GithubWrite` list.
+  GitHub-writing action on the `GithubWrite` list. The inbox cleanup
+  (`cleanUpInbox`, "mark everything older than N days read") is on it as
+  `cleanup` and behaves like mark read: locked, it becomes one pending
+  write. Start fresh and "Not now" are local.
 - **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
   asks in a small popover ("Mark-read and approvals will reach GitHub")
   that also lists the pending writes (`lib/pending.ts`) with "Send N to
@@ -146,7 +149,9 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
-  `RepoScopeMenu` (title bar repo scope + "Let it go stale").
+  `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
+  `InboxCleanup` (sidebar footer line or middle-column banner, as the
+  server's `look` says) + `InboxCleanupDialog`.
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `WhyBadge`,
   `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),

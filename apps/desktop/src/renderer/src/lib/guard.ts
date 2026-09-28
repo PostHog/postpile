@@ -1,17 +1,18 @@
 import type { GitHubWritesStatus } from '@postpile/core';
 
 /** Actions that end up as a GitHub write, now or after the undo window. */
-export type GithubWrite = 'approve' | 'comment' | 'markRead' | 'notMine';
+export type GithubWrite = 'approve' | 'comment' | 'markRead' | 'notMine' | 'cleanup';
 
 const WHAT: Record<GithubWrite, string> = {
   approve: 'Approving',
   comment: 'Sending a comment',
   markRead: 'Marking read',
   notMine: '"Not mine"',
+  cleanup: 'The inbox cleanup',
 };
 
 /**
- * Mark-reads still run with GitHub writes locked: they change nothing in the
+ * Mark-reads (and the inbox cleanup, one mark-read of everything older) still run with GitHub writes locked: they change nothing in the
  * app and wait as pending writes until the user unlocks and sends them (or
  * discards them). Approve and comment have no pending queue, so they are
  * blocked while the lock is closed.
@@ -21,6 +22,7 @@ const LOCAL_WHEN_OFF: Record<GithubWrite, boolean> = {
   comment: false,
   markRead: true,
   notMine: true,
+  cleanup: true,
 };
 
 /** How to open the lock, or why it cannot be opened. */

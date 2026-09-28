@@ -3,7 +3,7 @@ import type { PendingWriteView } from '@postpile/core';
 import { pendingHeadline, pendingList } from './pending.ts';
 
 function write(id: number, error: string | null = null): PendingWriteView {
-  return { id, createdAt: '2026-09-28T10:00:00Z', origin: 'tile', title: `PR ${id}`, prKeys: [`o/r#${id}`], tileId: null, threadCount: 1, error };
+  return { id, kind: 'mark_read', createdAt: '2026-09-28T10:00:00Z', origin: 'tile', title: `PR ${id}`, prKeys: [`o/r#${id}`], tileId: null, threadCount: 1, error };
 }
 
 describe('pending writes in the lock popover', () => {

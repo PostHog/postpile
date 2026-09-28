@@ -7,6 +7,7 @@ import { sidebarGroups } from '../lib/sidebar.ts';
 import { Avatar } from './Avatar.tsx';
 import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
+import { InboxCleanup } from './InboxCleanup.tsx';
 
 /**
  * The "what's going on" snippet under the name: the dossier summary, else its
@@ -276,6 +277,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
         </div>
       )}
       <div className="mt-auto flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
+        <InboxCleanup place="line" />
         <button
           type="button"
           onClick={props.onOpenInstructions}
