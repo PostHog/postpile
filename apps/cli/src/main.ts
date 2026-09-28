@@ -3,7 +3,7 @@
 //   pnpm cli topics
 //   POSTPILE_FAKE=1 pnpm cli topics   (Depot sample data)
 import { engineFromEnv } from '@postpile/server';
-import { parseArgs, usage, type Command } from './args.ts';
+import { parseInvocation, usage, type Command } from './args.ts';
 import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
@@ -39,12 +39,16 @@ async function runCommand(engine: EngineService, command: Command): Promise<stri
 }
 
 async function main(): Promise<void> {
-  const command = parseArgs(process.argv.slice(2));
+  const { command, readOnly, error } = parseInvocation(process.argv.slice(2));
+  if (error) {
+    throw new Error(error);
+  }
   if (command.name === 'help') {
     console.log(usage);
     return;
   }
-  const engine = engineFromEnv();
+  // Refuses (DataDirLockedError, exit 1) while the app or a server holds the database, unless --read-only.
+  const engine = engineFromEnv({ lockKind: 'cli', withoutLock: readOnly });
   try {
     console.log(await runCommand(engine, command));
     // The CLI never holds a mark-read in an undo window, but flush in case an action queued one.

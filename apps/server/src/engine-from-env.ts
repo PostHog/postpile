@@ -1,17 +1,28 @@
 import type { AppConfig } from '@postpile/core';
-import { createEngine, type EngineService } from '@postpile/engine';
+import { createEngine, defaultPaths, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 
 export function isFake(): boolean {
   return process.env.POSTPILE_FAKE === '1';
 }
 
-/** Set POSTPILE_FAKE=1 to run on the Depot sample data: no GitHub, no agent, no database. */
-export function engineFromEnv(): EngineService {
+export interface EngineFromEnvOptions {
+  /** Who takes the database lock: the server by default. */
+  lockKind?: LockKind;
+  /** The CLI's --read-only: read the database while another process holds it, no GitHub writes. */
+  withoutLock?: boolean;
+}
+
+/**
+ * Set POSTPILE_FAKE=1 to run on the Depot sample data: no GitHub, no agent,
+ * no database. Otherwise throws DataDirLockedError while another process
+ * holds the database.
+ */
+export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
   if (isFake()) {
     return new FakeEngine();
   }
-  return createEngine();
+  return createEngine({ lockKind: options.lockKind ?? 'server', withoutLock: options.withoutLock });
 }
 
 /**
@@ -36,6 +47,8 @@ export function appConfigFromEnv(): AppConfig {
     fake: isFake(),
     syncCallCap: syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS),
     syncOnStart: process.env.POSTPILE_SYNC_ON_START !== '0',
+    profile: profileFromEnv(process.env),
+    databasePath: isFake() ? null : defaultPaths().databaseFile,
   };
 }
 

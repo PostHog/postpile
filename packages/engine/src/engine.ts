@@ -96,6 +96,8 @@ export interface EngineDeps {
   timers?: Timers;
   /** Daily cap on ping_decision calls. Defaults to PING_DECISIONS_PER_DAY. */
   pingDecisionsPerDay?: number;
+  /** The database folder's lock; released on close. Null in tests and read-only CLI access. */
+  dataLock?: { release(): void } | null;
   /** Local Claude Code folder the work context sweep reads. Defaults to POSTPILE_CLAUDE_DIR, else ~/.claude. */
   claudeDir?: string;
 }
@@ -469,5 +471,6 @@ export class Engine implements EngineService {
     await this.syncing?.catch(() => {});
     await this.consolidating?.catch(() => {});
     this.deps.store.close();
+    this.deps.dataLock?.release();
   }
 }

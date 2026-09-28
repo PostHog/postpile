@@ -4,11 +4,12 @@ import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@postpile/git
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from './actions/local-change.ts';
 import { AgentCallLog } from './agent-call-log.ts';
+import { DataDirLock, type LockKind } from './data-lock.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
 import { migrateLegacyData } from './legacy-data.ts';
-import { defaultPaths, type AppPaths } from './paths.ts';
+import { defaultPaths, seedDevInstructions, type AppPaths } from './paths.ts';
 import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
@@ -24,6 +25,14 @@ export interface CreateEngineOptions {
   readOnly?: boolean;
   /** Daily cap on ping decisions. Defaults to POSTPILE_PING_CAP, else PING_DECISIONS_PER_DAY. */
   pingDecisionsPerDay?: number;
+  /** Who takes the database folder's lock (postpile.lock). Defaults to server. */
+  lockKind?: LockKind;
+  /**
+   * Read the database without taking the lock, e.g. the CLI's read commands
+   * while the app runs. Forces readOnly: no GitHub writes. Callers must not
+   * sync or write through it.
+   */
+  withoutLock?: boolean;
 }
 
 /** POSTPILE_PING_CAP when it is a whole number >= 0, else the default. */
@@ -35,13 +44,25 @@ export function pingCapFromEnv(value: string | undefined): number {
 /** Wires the real dependencies. Tests build Engine directly with fakes instead. */
 export function createEngine(options: CreateEngineOptions = {}): EngineService {
   if (!options.paths) {
-    // One-time move from the code-manager folders; a no-op once done.
+    // One-time move from the code-manager folders into the real location; a no-op once done, and in dev.
     migrateLegacyData();
+    const seeded = seedDevInstructions();
+    if (seeded) {
+      console.log(`PostPile dev profile: copied your instructions to ${seeded}`);
+    }
   }
   const paths = options.paths ?? defaultPaths();
-  const readOnly = options.readOnly ?? process.env.POSTPILE_READ_ONLY === '1';
+  const readOnly = options.withoutLock === true || (options.readOnly ?? process.env.POSTPILE_READ_ONLY === '1');
+  // Before the store opens: a second process on the same database refuses here.
+  const lock = options.withoutLock ? null : DataDirLock.acquire(paths.databaseFile, options.lockKind ?? 'server');
   const tokens = new GhCliTokenSource();
-  const store = Store.open(paths.databaseFile);
+  let store: Store;
+  try {
+    store = Store.open(paths.databaseFile);
+  } catch (error) {
+    lock?.release();
+    throw error;
+  }
   const reader = new GitHubClient(tokens);
   const now = (): Date => new Date();
   // Off until the user opens the footer lock; the choice is kept in meta.
@@ -71,5 +92,6 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     instructionsFile: paths.instructionsFile,
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
+    dataLock: lock,
   });
 }

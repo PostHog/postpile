@@ -247,6 +247,12 @@ history entry, and clearing the filter brings the pick back.
   runtime packages bundled by electron-vite (the desktop package has only
   devDependencies, and no node_modules go into the app). Don't read files
   from `build/` at runtime in a packaged app; it is not shipped.
+- Dev vs packaged: unpackaged (`pnpm desktop`) sets `POSTPILE_PROFILE=dev`
+  and userData to the dev data folder before anything else, so it never opens
+  the real database; the title bar shows a DEV badge from `AppConfig.profile`.
+  Main takes the database lock (`engineFromEnv({ lockKind })`) and shows a
+  Quit dialog when another process holds it; `requestSingleInstanceLock`
+  focuses the first window on a second launch.
 - Sync runs once on app start and then only on "Sync now".
   `POSTPILE_SYNC_ON_START=0` (`AppConfig.syncOnStart`) skips the start sync. The main process
   runs the live poll (`engine.startLivePoll`) and shows Mac notifications

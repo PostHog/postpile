@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArgs } from './args.ts';
+import { parseArgs, parseInvocation } from './args.ts';
 
 describe('parseArgs', () => {
   it('parses commands and falls back to help', () => {
@@ -38,5 +38,14 @@ describe('parseArgs', () => {
     expect(parseArgs(['sync', '--agent-jobs', 'nope'])).toEqual({ name: 'help' });
     expect(parseArgs(['sync', '--agent-jobs', 'summaries'])).toEqual({ name: 'help' });
     expect(parseArgs(['sync', '--what'])).toEqual({ name: 'help' });
+  });
+});
+
+describe('parseInvocation', () => {
+  it('takes --read-only for read commands only', () => {
+    expect(parseInvocation(['topics', '--read-only'])).toEqual({ command: { name: 'topics' }, readOnly: true, error: null });
+    expect(parseInvocation(['pr', 'a/b#1'])).toMatchObject({ readOnly: false, error: null });
+    expect(parseInvocation(['sync', '--read-only']).error).toBe('--read-only only works with topics, topic and pr, not sync');
+    expect(parseInvocation(['poll', '--read-only']).error).toMatch(/not poll/);
   });
 });

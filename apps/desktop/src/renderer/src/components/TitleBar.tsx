@@ -83,6 +83,14 @@ export function TitleBar(props: TitleBarProps) {
           {/* The name gives way below 1280px so the centered search keeps its width. */}
           <span className="text-[13.5px] font-semibold tracking-[-0.01em] max-xl:hidden">PostPile</span>
         </span>
+        {actions.config?.profile === 'dev' && (
+          <span
+            className="flex h-[20px] shrink-0 items-center rounded-[5px] bg-ink px-1.5 font-mono text-[10px] font-semibold tracking-wide text-on-ink"
+            title={`Dev profile: a separate database, not the real one.\n${actions.config.databasePath ?? 'sample data, no database'}`}
+          >
+            DEV
+          </span>
+        )}
         {actions.config?.fake && (
           <>
             <span className="h-[18px] w-px bg-frame" />

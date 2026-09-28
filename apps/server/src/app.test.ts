@@ -5,7 +5,7 @@ import { createApp, TOKEN_HEADER } from './app.ts';
 import { appConfigFromEnv, pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
 import { OFF_POLL_STATUS } from '@postpile/core';
 
-const CONFIG: AppConfig = { fake: false, syncCallCap: 30, syncOnStart: true };
+const CONFIG: AppConfig = { fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null };
 
 function notImplemented(): never {
   throw new Error('not implemented');
@@ -125,7 +125,7 @@ describe('server app', () => {
     const app = createApp(fakeEngine({}), 'secret', CONFIG);
     expect((await app.request('/api/config')).status).toBe(401);
     const res = await app.request('/api/config', { headers: { [TOKEN_HEADER]: 'secret' } });
-    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30, syncOnStart: true });
+    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null });
   });
 
   it('applies the app call cap to a sync without one, and keeps an explicit cap', async () => {

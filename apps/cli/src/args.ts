@@ -26,7 +26,10 @@ export const usage = `usage: postpile <command>
   topic <id>           show a topic: dossier, changes since seen, tiles
   pr <owner/repo#n>    show one PR: glance, facts and events
 
-POSTPILE_FAKE=1 runs on built-in sample data (no GitHub, no agent).`;
+  --read-only          (topics, topic, pr) read the database while the app holds it; no GitHub writes
+
+POSTPILE_FAKE=1 runs on built-in sample data (no GitHub, no agent).
+From the repo (pnpm cli) the dev database is used; POSTPILE_PROFILE=default pnpm cli ... reads the real one.`;
 
 function positiveInt(value: string | undefined, allowZero: boolean): number | null {
   const number = Number(value);
@@ -117,4 +120,23 @@ export function parseArgs(argv: string[]): Command {
     return { name, prKey: arg };
   }
   return { name: 'help' };
+}
+
+/** Commands that only read the store, so they may run next to the app with --read-only. */
+const READ_COMMANDS: Command['name'][] = ['topics', 'topic', 'pr', 'help'];
+
+export interface Invocation {
+  command: Command;
+  /** --read-only: no database lock, no GitHub writes. */
+  readOnly: boolean;
+  /** Set when the flags do not fit together. */
+  error: string | null;
+}
+
+/** parseArgs plus the global --read-only flag, which only read commands take. */
+export function parseInvocation(argv: string[]): Invocation {
+  const readOnly = argv.includes('--read-only');
+  const command = parseArgs(argv.filter((arg) => arg !== '--read-only'));
+  const error = readOnly && !READ_COMMANDS.includes(command.name) ? `--read-only only works with topics, topic and pr, not ${command.name}` : null;
+  return { command, readOnly, error };
 }

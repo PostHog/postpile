@@ -32,6 +32,17 @@ pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
 pnpm desktop                # Electron dev mode
 ```
 
+Dev runs use their own database: `pnpm desktop` (unpackaged Electron),
+`pnpm cli` and `pnpm server` run with `POSTPILE_PROFILE=dev`, which keeps
+data in `~/Library/Application Support/PostPile-dev` and instructions in
+`~/.config/postpile-dev` (seeded once with a copy of the real
+`instructions.md`). The title bar shows a DEV badge. To read the real
+database from the repo on purpose: `POSTPILE_PROFILE=default pnpm cli ...`.
+
+Only one process opens a database at a time (`postpile.lock` next to it).
+While the app runs, `pnpm cli topics --read-only` (also `topic`, `pr`) still
+reads; sync, poll and sweep refuse.
+
 ## App bundle
 
 ```
@@ -47,7 +58,7 @@ Builds with electron-vite, then electron-builder makes an unsigned macOS app
 `dist/` is gitignored. Main, preload, renderer, the workspace packages and
 the server are bundled into the app, so it runs without tsx or node_modules.
 The server runs in-process on a random localhost port, the data lives in
-`~/Library/Application Support/PostPile` as with `pnpm desktop`.
+`~/Library/Application Support/PostPile` (`pnpm desktop` uses `PostPile-dev`).
 
 It is not signed or notarized, so macOS refuses the first open. Right-click
 the app, then Open (once), or clear the quarantine flag:
@@ -81,6 +92,7 @@ when the database is in use). `CODE_MANAGER_*` env vars still work for now,
 with a deprecation line; switch to `POSTPILE_*`.
 
 - `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
+- `POSTPILE_PROFILE=dev`: the dev database and config folders (see above); `POSTPILE_DATA_DIR` moves the data folder
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the footer lock cannot be opened
 - GitHub writes (approve, comment, mark read) are off until the lock in the status footer is opened; the choice is kept in the database
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`, `POSTPILE_AGENT_CONCURRENCY`: agent knobs

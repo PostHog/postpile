@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { DATABASE_FILE_NAME, dataDirs, legacyDataDirs, systemPathEnv, type PathEnv } from './paths.ts';
+import { DATABASE_FILE_NAME, legacyDataDirs, profileFromEnv, realDataDirs, systemPathEnv, type PathEnv } from './paths.ts';
 
 // One-time move of the data from the code-manager folders to the PostPile
 // ones (renamed 2026-09-28). Safe to call on every start: once the new
@@ -179,13 +179,17 @@ function outcomeLine(label: string, move: LegacyDirMove, outcome: MigrationOutco
  * runs against a scratch database never touch the real folders.
  */
 export function migrateLegacyData(pathEnv: PathEnv = systemPathEnv(), log: (line: string) => void = console.log): void {
+  // Only the real (packaged) location ever takes the old data; dev runs leave it alone.
+  if (profileFromEnv(pathEnv.env) === 'dev') {
+    return;
+  }
   const oldDirs = legacyDataDirs(pathEnv);
-  const newDirs = dataDirs(pathEnv);
+  const newDirs = realDataDirs(pathEnv);
   const moves: Array<{ label: string; move: LegacyDirMove; overridden: boolean }> = [
     {
       label: 'data',
       move: { from: oldDirs.dataDir, to: newDirs.dataDir, marker: DATABASE_FILE_NAME, databaseName: DATABASE_FILE_NAME },
-      overridden: Boolean(pathEnv.env.POSTPILE_DB),
+      overridden: Boolean(pathEnv.env.POSTPILE_DB || pathEnv.env.POSTPILE_DATA_DIR),
     },
     {
       label: 'config',

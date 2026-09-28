@@ -9,7 +9,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
     "build": "pnpm --filter @postpile/desktop build",
-    "cli": "tsx apps/cli/src/main.ts",
+    "cli": "POSTPILE_PROFILE=${POSTPILE_PROFILE:-dev} tsx apps/cli/src/main.ts",
     "server": "pnpm --filter @postpile/server start",
     "desktop": "pnpm --filter @postpile/desktop dev",
     "dist": "pnpm build && pnpm --filter @postpile/desktop dist"

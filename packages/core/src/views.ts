@@ -305,6 +305,14 @@ export interface AppConfig {
    * GitHub or agent traffic.
    */
   syncOnStart: boolean;
+  /**
+   * default: the real database. dev: a separate one (PostPile-dev), for
+   * `pnpm desktop` and the repo's scripts (POSTPILE_PROFILE=dev). The
+   * title bar shows a DEV badge.
+   */
+  profile: 'default' | 'dev';
+  /** The database this process opened, for the DEV badge's tooltip. Null in fake mode. */
+  databasePath: string | null;
 }
 
 /**

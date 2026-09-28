@@ -1470,7 +1470,7 @@ preflight and does not know the token, so CORS stays open.
   reads. Database at `~/Library/Application Support/PostPile/db.sqlite` on macOS
   (`$XDG_DATA_HOME/postpile/db.sqlite` elsewhere), instructions at
   `~/.config/postpile/instructions.md`. `POSTPILE_DB` and `POSTPILE_INSTRUCTIONS`
-  override. The CLI and the desktop app share one database; WAL lets them run side by side.
+  override, and `POSTPILE_DATA_DIR` moves the whole data folder.
   Until 2026-09-28 these folders were named `code-manager`: `migrateLegacyData`
   (`packages/engine/src/legacy-data.ts`) moves them on start when no other process holds the
   database, else copies and leaves a README note. `applyLegacyEnv` (`paths.ts`) still maps
@@ -1487,6 +1487,24 @@ preflight and does not know the token, so CORS stays open.
   fake reader/writer and the agent's `FakeRunner`.
 
 ### Safety while building
+
+- **Dev profile**: `POSTPILE_PROFILE=dev` uses `~/Library/Application Support/PostPile-dev`
+  (`$XDG_DATA_HOME/postpile-dev`) and `~/.config/postpile-dev`. The unpackaged desktop app
+  (`pnpm desktop`, `app.isPackaged` false) sets it itself; the repo's `pnpm cli` and
+  `pnpm server` scripts default to it (`POSTPILE_PROFILE=${POSTPILE_PROFILE:-dev}`). The
+  packaged `PostPile.app` runs as `default` on the real folders. `POSTPILE_PROFILE=default`,
+  `POSTPILE_DATA_DIR` and `POSTPILE_DB` still point anywhere on purpose. The first dev run copies
+  the real `instructions.md` into the new dev config folder (a copy, never a link, once). The
+  code-manager move never runs in dev and only targets the real folder. The title bar shows a
+  DEV badge (`AppConfig.profile`) with the database path in its tooltip.
+- **Database lock**: whoever opens a database takes `<data folder>/postpile.lock` (pid, kind
+  `packaged` / `dev` / `cli` / `server`, start time, database; `DataDirLock`, O_EXCL create).
+  A second process refuses with "PostPile is already running with this database (pid N,
+  kind, ...)": the desktop app shows a dialog with Quit, the CLI and the server exit 1. A lock
+  whose pid is dead is stale and taken over. Released on close and on process exit. The CLI's
+  read commands take `--read-only` (no lock, no GitHub writes); sync, poll, sweep and
+  consolidate refuse it. The desktop app also asks `app.requestSingleInstanceLock()`, so a
+  second launch of the same app (same userData) only focuses the first window.
 
 - No GitHub write calls in tests or smoke runs. Tests use fakes; `GitHubWriteClient` is only
   constructed by `createEngine`, and not at all with `POSTPILE_READ_ONLY=1`. A fresh

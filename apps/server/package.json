@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "start": "tsx src/main.ts"
+    "start": "POSTPILE_PROFILE=${POSTPILE_PROFILE:-dev} tsx src/main.ts"
   },
   "dependencies": {
     "@postpile/core": "workspace:*",

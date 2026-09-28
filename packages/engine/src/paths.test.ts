@@ -1,5 +1,9 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { applyLegacyEnv, defaultPaths } from './paths.ts';
+import { migrateLegacyData } from './legacy-data.ts';
+import { applyLegacyEnv, defaultPaths, profileFromEnv, seedDevInstructions } from './paths.ts';
 
 describe('defaultPaths', () => {
   it('uses Application Support on macOS', () => {
@@ -26,6 +30,56 @@ describe('defaultPaths', () => {
     });
     expect(paths.databaseFile).toBe('/tmp/x.sqlite');
     expect(paths.instructionsFile).toBe('/tmp/i.md');
+  });
+});
+
+describe('dev profile', () => {
+  const dev = { POSTPILE_PROFILE: 'dev' };
+
+  it('uses separate dev folders', () => {
+    const paths = defaultPaths({ env: dev, platform: 'darwin', home: '/Users/me' });
+    expect(paths.databaseFile).toBe('/Users/me/Library/Application Support/PostPile-dev/db.sqlite');
+    expect(paths.instructionsFile).toBe('/Users/me/.config/postpile-dev/instructions.md');
+    expect(profileFromEnv(dev)).toBe('dev');
+    expect(profileFromEnv({})).toBe('default');
+  });
+
+  it('lets POSTPILE_DATA_DIR and POSTPILE_DB override it', () => {
+    expect(defaultPaths({ env: { ...dev, POSTPILE_DATA_DIR: '/d' }, platform: 'darwin', home: '/Users/me' }).databaseFile).toBe('/d/db.sqlite');
+    expect(defaultPaths({ env: { ...dev, POSTPILE_DATA_DIR: '/d', POSTPILE_DB: '/x.sqlite' }, platform: 'darwin', home: '/Users/me' }).databaseFile).toBe('/x.sqlite');
+  });
+
+  it('copies the real instructions once, when the dev config folder is new', () => {
+    const home = mkdtempSync(join(tmpdir(), 'postpile-home-'));
+    try {
+      mkdirSync(join(home, '.config', 'postpile'), { recursive: true });
+      writeFileSync(join(home, '.config', 'postpile', 'instructions.md'), 'real rules');
+      const pathEnv = { env: dev, platform: 'darwin' as const, home };
+      const devFile = join(home, '.config', 'postpile-dev', 'instructions.md');
+
+      expect(seedDevInstructions(pathEnv)).toBe(devFile);
+      expect(readFileSync(devFile, 'utf8')).toBe('real rules');
+      writeFileSync(devFile, 'dev edit');
+      expect(seedDevInstructions(pathEnv)).toBeNull();
+      expect(readFileSync(devFile, 'utf8')).toBe('dev edit');
+      expect(seedDevInstructions({ ...pathEnv, env: {} })).toBeNull();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('never runs the code-manager move in dev', () => {
+    const home = mkdtempSync(join(tmpdir(), 'postpile-home-'));
+    try {
+      const old = join(home, 'Library', 'Application Support', 'code-manager');
+      mkdirSync(old, { recursive: true });
+      writeFileSync(join(old, 'db.sqlite'), '');
+      migrateLegacyData({ env: { POSTPILE_PROFILE: 'dev' }, platform: 'darwin', home }, () => {});
+      expect(existsSync(join(old, 'db.sqlite'))).toBe(true);
+      expect(existsSync(join(home, 'Library', 'Application Support', 'PostPile-dev'))).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
 

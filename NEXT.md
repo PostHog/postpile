@@ -219,6 +219,14 @@ now".
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
+- Dev runs away from the real database (DESIGN.md "Safety while
+  building"): `POSTPILE_PROFILE=dev` (set by the unpackaged desktop app,
+  defaulted by `pnpm cli` / `pnpm server`) uses PostPile-dev and
+  postpile-dev, seeded once with a copy of instructions.md; DEV badge in
+  the title bar; `POSTPILE_DATA_DIR`. A `postpile.lock` per data folder
+  refuses a second process (desktop dialog with Quit, CLI/server exit 1),
+  stale locks are taken over, `cli topics|topic|pr --read-only` reads next
+  to the app. Single-instance lock in the desktop app.
 - Inbox cleanup and start fresh (DESIGN.md "Inbox cleanup and start
   fresh"): counts of threads unread on GitHub older than 14 / 30 days, a
   quiet sidebar line or, on the first run and after 5+ days without a sync,
@@ -423,6 +431,13 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   would shave a little off sync.
 
 ## Needs Julian's decisions
+
+- **Dev profile**: `pnpm cli` now reads the dev database by default, so
+  real smoke runs need `POSTPILE_PROFILE=default` (or `POSTPILE_DB`). The
+  dev profile is chosen by a script env default, not by detecting the
+  checkout; a plain `tsx apps/cli/src/main.ts` still uses the real folders.
+  The lock lives next to the database file, so `POSTPILE_DB` elsewhere gets
+  its own lock. Keep?
 
 - **Inbox cleanup**: the cleanup goes out right away (no 6s undo window),
   since the dialog is the confirmation. "Not now" hides the line too, not

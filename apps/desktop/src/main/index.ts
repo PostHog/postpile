@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { app, BrowserWindow, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
 import fixPath from 'fix-path';
-import { applyLegacyEnv, migrateLegacyData, type EngineService } from '@postpile/engine';
+import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { MacNotifier } from './mac-notifier.ts';
 
@@ -17,8 +17,15 @@ const pathParts = (process.env.PATH ?? '').split(delimiter).filter(Boolean);
 process.env.PATH = [...pathParts, ...toolFolders.filter((folder) => !pathParts.includes(folder))].join(delimiter);
 
 applyLegacyEnv();
+// A dev run (pnpm desktop, not the packaged app) gets its own database in
+// PostPile-dev, so it never touches the real one. POSTPILE_PROFILE,
+// POSTPILE_DATA_DIR and POSTPILE_DB still win when set.
+if (!app.isPackaged && process.env.POSTPILE_PROFILE === undefined) {
+  process.env.POSTPILE_PROFILE = 'dev';
+}
 // Before Electron touches userData: it is the same folder as the database, and
 // the one-time move from the code-manager folder wants the new one absent.
+// The move only targets the real folder and never runs in dev.
 if (!isFake()) {
   migrateLegacyData();
 }
@@ -28,6 +35,17 @@ if (!isFake()) {
 app.setName('PostPile');
 app.setAppUserModelId('com.postpile.app');
 app.setAboutPanelOptions({ applicationName: 'PostPile' });
+if (profileFromEnv(process.env) === 'dev') {
+  app.setPath('userData', process.env.POSTPILE_DATA_DIR || dataDirs().dataDir);
+}
+
+// A second launch of the same app (same userData) only focuses the first
+// window. A dev run and the packaged app have different userData; the
+// database lock keeps those two apart when they share a database.
+const firstInstance = app.requestSingleInstanceLock();
+if (!firstInstance) {
+  app.quit();
+}
 
 // apps/desktop/build, next to out/. Only there in a dev checkout; the packaged
 // app takes its icon from build/icon.icns through electron-builder.
@@ -127,7 +145,22 @@ async function start(): Promise<void> {
   const token = randomBytes(24).toString('hex');
   // POSTPILE_FAKE=1 runs on sample data, see engineFromEnv.
   // GitHub writes stay off until the footer lock is opened (kept in the store); POSTPILE_READ_ONLY=1 forces off.
-  engine = engineFromEnv();
+  try {
+    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev' });
+  } catch (error) {
+    if (error instanceof DataDirLockedError) {
+      const holder = error.holder;
+      dialog.showMessageBoxSync({
+        type: 'warning',
+        message: `PostPile is already running with this database (pid ${holder.pid}, ${holder.kind})`,
+        detail: `Started ${holder.startedAt}.\n${holder.databaseFile}\n\nQuit that one first, or wait until it is done.`,
+        buttons: ['Quit'],
+      });
+      app.exit(1);
+      return;
+    }
+    throw error;
+  }
   server = await startServer({ engine, port: 0, token, config: appConfigFromEnv() });
   mainWindow = await openWindow(server.url, token);
   // A click opens the tile: show the window, then let the renderer navigate.
@@ -180,13 +213,16 @@ process.on('SIGINT', () => app.quit());
 // Dock icon click with the window hidden.
 app.on('activate', () => showWindow());
 
+// Another launch of this app: show the window we have.
+app.on('second-instance', () => showWindow());
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-app.whenReady().then(start).catch((error: unknown) => {
+app.whenReady().then(() => (firstInstance ? start() : undefined)).catch((error: unknown) => {
   console.error('startup failed:', error);
   app.quit();
 });

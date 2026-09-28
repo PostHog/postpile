@@ -1,7 +1,8 @@
 export type { EngineService } from './service.ts';
 export { Engine, type EngineDeps } from './engine.ts';
 export { MarkReadQueue, UNDO_WINDOW_MS, type PendingBatch, type Timers } from './mark-read-queue.ts';
-export { applyLegacyEnv, dataDirs, defaultPaths, type AppPaths } from './paths.ts';
+export { applyLegacyEnv, dataDirs, defaultPaths, profileFromEnv, realDataDirs, seedDevInstructions, type AppPaths, type Profile } from './paths.ts';
+export { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, type LockInfo, type LockKind } from './data-lock.ts';
 export { migrateLegacyData } from './legacy-data.ts';
 export { UNSORTED_TOPIC_ID } from './board.ts';
 export { ReadOnlyWriter } from './writes/read-only-writer.ts';

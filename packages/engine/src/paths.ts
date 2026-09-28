@@ -1,5 +1,6 @@
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export interface AppPaths {
   /** General instructions, included in every prompt. Absent file means none. */
@@ -21,6 +22,18 @@ export interface DataDirs {
 
 export const DATABASE_FILE_NAME = 'db.sqlite';
 
+/**
+ * Which data a process uses. dev: a separate folder (PostPile-dev,
+ * postpile-dev), so dev runs never touch the real database. Set by
+ * POSTPILE_PROFILE=dev, which the repo's dev scripts default to and the
+ * unpackaged desktop app sets itself. The packaged app runs as default.
+ */
+export type Profile = 'default' | 'dev';
+
+export function profileFromEnv(env: NodeJS.ProcessEnv): Profile {
+  return env.POSTPILE_PROFILE === 'dev' ? 'dev' : 'default';
+}
+
 export function systemPathEnv(): PathEnv {
   return { env: process.env, platform: process.platform, home: homedir() };
 }
@@ -38,12 +51,23 @@ function configDirFor(folder: string, { env, home }: PathEnv): string {
   return join(configHome, folder);
 }
 
-/** Where PostPile keeps its data by default. */
-export function dataDirs(pathEnv: PathEnv = systemPathEnv()): DataDirs {
+/** Where the packaged app keeps its data: the real database, whatever the profile. */
+export function realDataDirs(pathEnv: PathEnv = systemPathEnv()): DataDirs {
   return {
     dataDir: dataDirFor({ mac: 'PostPile', xdg: 'postpile' }, pathEnv),
     configDir: configDirFor('postpile', pathEnv),
   };
+}
+
+/** Where this process keeps its data by default: the real folders, or the dev ones under POSTPILE_PROFILE=dev. */
+export function dataDirs(pathEnv: PathEnv = systemPathEnv()): DataDirs {
+  if (profileFromEnv(pathEnv.env) === 'dev') {
+    return {
+      dataDir: dataDirFor({ mac: 'PostPile-dev', xdg: 'postpile-dev' }, pathEnv),
+      configDir: configDirFor('postpile-dev', pathEnv),
+    };
+  }
+  return realDataDirs(pathEnv);
 }
 
 /**
@@ -58,16 +82,40 @@ export function legacyDataDirs(pathEnv: PathEnv = systemPathEnv()): DataDirs {
 }
 
 /**
- * The CLI and the desktop app use the same locations so both see the same
- * data. POSTPILE_DB overrides the database path, POSTPILE_INSTRUCTIONS
- * the instructions file.
+ * The CLI and the desktop app use the same locations for the same profile,
+ * so both see the same data. POSTPILE_DATA_DIR overrides the data folder,
+ * POSTPILE_DB the database file itself, POSTPILE_INSTRUCTIONS the
+ * instructions file.
  */
 export function defaultPaths(pathEnv: PathEnv = systemPathEnv()): AppPaths {
   const dirs = dataDirs(pathEnv);
+  const dataDir = pathEnv.env.POSTPILE_DATA_DIR || dirs.dataDir;
   return {
     instructionsFile: pathEnv.env.POSTPILE_INSTRUCTIONS || join(dirs.configDir, 'instructions.md'),
-    databaseFile: pathEnv.env.POSTPILE_DB || join(dirs.dataDir, DATABASE_FILE_NAME),
+    databaseFile: pathEnv.env.POSTPILE_DB || join(dataDir, DATABASE_FILE_NAME),
   };
+}
+
+/**
+ * The first dev run gets a copy of the real instructions.md, once: only
+ * when the dev config folder does not exist yet. A copy, never a link, so
+ * dev edits stay in dev. Returns the file it seeded, or null.
+ */
+export function seedDevInstructions(pathEnv: PathEnv = systemPathEnv()): string | null {
+  if (profileFromEnv(pathEnv.env) !== 'dev' || pathEnv.env.POSTPILE_INSTRUCTIONS) {
+    return null;
+  }
+  const devFile = defaultPaths(pathEnv).instructionsFile;
+  if (existsSync(dirname(devFile))) {
+    return null;
+  }
+  mkdirSync(dirname(devFile), { recursive: true });
+  const realFile = join(realDataDirs(pathEnv).configDir, 'instructions.md');
+  if (!existsSync(realFile)) {
+    return null;
+  }
+  copyFileSync(realFile, devFile);
+  return devFile;
 }
 
 const LEGACY_ENV_PREFIX = 'CODE_MANAGER_';

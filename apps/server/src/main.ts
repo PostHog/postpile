@@ -3,7 +3,7 @@
 //   POSTPILE_FAKE=1 pnpm --filter @postpile/server start   (sample data)
 //   GitHub writes are off until the footer lock is opened; POSTPILE_READ_ONLY=1 keeps them off
 import { randomBytes } from 'node:crypto';
-import { applyLegacyEnv } from '@postpile/engine';
+import { applyLegacyEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv } from './engine-from-env.ts';
 import { startServer } from './start.ts';
 
@@ -12,7 +12,14 @@ applyLegacyEnv();
 const port = Number(process.env.PORT || 4870);
 // A fresh token per run unless one is given, so web pages cannot drive the API.
 const token = process.env.POSTPILE_TOKEN || randomBytes(24).toString('hex');
-const engine = engineFromEnv();
+let engine: EngineService;
+try {
+  engine = engineFromEnv({ lockKind: 'server' });
+} catch (error) {
+  // DataDirLockedError: another PostPile process has this database.
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 const server = await startServer({ engine, port, token, config: appConfigFromEnv() });
 console.log(`PostPile API on ${server.url}`);
 console.log(`token: ${token}  (send it as x-postpile-token, or open the UI with ?token=${token})`);
