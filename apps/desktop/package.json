@@ -9,19 +9,19 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "dist": "electron-builder --mac --config electron-builder.yml",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
-  "dependencies": {
+  "devDependencies": {
     "@postpile/core": "*",
     "@postpile/engine": "*",
     "@postpile/server": "*",
+    "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.0",
+    "electron-builder": "^26.15.3",
     "fix-path": "^5.0.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
+    "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3"
   }
 }

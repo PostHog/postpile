@@ -1262,7 +1262,16 @@ core  <- store, github, agent  <- engine  <- server, cli
 - **apps/server**: Hono + `@hono/node-server`, binds 127.0.0.1 only.
 - **apps/desktop**: Electron via electron-vite. Main starts the server in-process on a random
   port with a random token and loads the renderer with `?api=...&token=...`. PATH is taken from
-  the login shell (`fix-path`) so `gh` and `claude` resolve on a GUI launch.
+  the login shell (`fix-path`), plus `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`,
+  so `gh` and `claude` resolve on a GUI launch. Quit (Cmd+Q, SIGTERM, SIGINT) flushes the
+  mark-read queue, closes the engine and the server, then `app.exit(0)`.
+  **App bundle** (`npm run dist`): electron-vite bundles main (workspace packages, hono,
+  fix-path included), preload and renderer into `out/`; electron-builder
+  (`apps/desktop/electron-builder.yml`) packs only `out/**` and `package.json` into an asar,
+  no node_modules (the desktop package has devDependencies only). macOS, arm64, `dir` + `zip`,
+  appId `com.postpile.app`, unsigned (`identity: null`, no notarization), icon
+  `build/icon.icns`, output `apps/desktop/dist/`. About 290 MB unpacked, 130 MB zipped
+  (Electron itself is most of it).
 - **apps/cli**: `sync`, `consolidate`, `topics`, `topic <id>` (with the dossier), `pr <owner/repo#n>`
   (with facts), plain text.
 

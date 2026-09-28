@@ -214,6 +214,10 @@ now".
   stats and the list shows read-only under the digest.
 - Default agent-call cap for app syncs raised from 30 to 150
   (`POSTPILE_MAX_AGENT_CALLS`).
+- App bundle: `npm run dist` makes an unsigned `PostPile.app` (arm64,
+  dir + zip) in `apps/desktop/dist/`, everything bundled, no tsx or
+  node_modules at runtime. Started in fake mode: window loads, the server
+  answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -279,8 +283,11 @@ now".
   is written on their next dossier update.
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
   consolidation can only propose splits over timeline PRs.
-- No packaged/signed macOS build yet; `npm run build` only bundles for
-  electron-vite.
+- The app bundle (`npm run dist`) is unsigned and arm64 only; no Homebrew
+  tap, no auto-update, no release pipeline. x64 would be one more arch in
+  `electron-builder.yml` (another Electron download, not tried). The
+  packaged app was started once in fake mode; a real-data run from Finder
+  (PATH from the login shell, gh / claude found) is not tried yet.
 - Search matches title, number, author, repo, head branch, topic name and
   area only (no PR body, comments or labels) and does not highlight the
   matched text. Filter state and history are not kept across restarts.

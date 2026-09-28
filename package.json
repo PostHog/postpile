@@ -21,7 +21,8 @@
     "build": "npm run build -w @postpile/desktop",
     "cli": "tsx apps/cli/src/main.ts",
     "server": "npm start -w @postpile/server",
-    "desktop": "npm run dev -w @postpile/desktop"
+    "desktop": "npm run dev -w @postpile/desktop",
+    "dist": "npm run build && npm run dist -w @postpile/desktop"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
@@ -46,6 +47,7 @@
   "allowScripts": {
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true,
-    "fsevents": false
+    "fsevents": false,
+    "electron-winstaller": false
   }
 }

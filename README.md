@@ -31,6 +31,43 @@ npm run server                 # HTTP API on 127.0.0.1:4870, prints its token
 npm run desktop                # Electron dev mode
 ```
 
+## App bundle
+
+```
+npm run dist
+```
+
+Builds with electron-vite, then electron-builder makes an unsigned macOS app
+(Apple silicon):
+
+- `apps/desktop/dist/mac-arm64/PostPile.app`
+- `apps/desktop/dist/PostPile-<version>-mac-arm64.zip`
+
+`dist/` is gitignored. Main, preload, renderer, the workspace packages and
+the server are bundled into the app, so it runs without tsx or node_modules.
+The server runs in-process on a random localhost port, the data lives in
+`~/Library/Application Support/PostPile` as with `npm run desktop`.
+
+It is not signed or notarized, so macOS refuses the first open. Right-click
+the app, then Open (once), or clear the quarantine flag:
+
+```
+xattr -dr com.apple.quarantine PostPile.app
+```
+
+`gh` and `claude` must be installed and logged in. A Finder launch gets a
+minimal PATH, so the app reads PATH from the login shell and also looks in
+`/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`.
+
+To try it on sample data without syncing, run the binary directly (`open`
+does not pass env vars):
+
+```
+POSTPILE_FAKE=1 POSTPILE_POLL_SECONDS=0 apps/desktop/dist/mac-arm64/PostPile.app/Contents/MacOS/PostPile
+```
+
+## Config
+
 General instructions for every prompt go in
 `~/.config/postpile/instructions.md` (honours `XDG_CONFIG_HOME`, or set
 `POSTPILE_INSTRUCTIONS`). The database lives at

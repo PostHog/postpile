@@ -1,14 +1,20 @@
 import { randomBytes } from 'node:crypto';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import { app, BrowserWindow, nativeImage, shell } from 'electron';
 import fixPath from 'fix-path';
 import { applyLegacyEnv, migrateLegacyData, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { MacNotifier } from './mac-notifier.ts';
 
-// A GUI launch gets launchd's minimal PATH. gh and claude live in
-// /opt/homebrew/bin and ~/.local/bin, so take PATH from the login shell.
+// A GUI launch (Finder, Dock, the packaged app) gets launchd's minimal PATH.
+// gh and claude live in /opt/homebrew/bin and ~/.local/bin, so take PATH
+// from the login shell, and add the usual install folders in case the shell
+// setup does not export them.
 fixPath();
+const toolFolders = ['/opt/homebrew/bin', '/usr/local/bin', join(homedir(), '.local/bin')];
+const pathParts = (process.env.PATH ?? '').split(delimiter).filter(Boolean);
+process.env.PATH = [...pathParts, ...toolFolders.filter((folder) => !pathParts.includes(folder))].join(delimiter);
 
 applyLegacyEnv();
 // Before Electron touches userData: it is the same folder as the database, and
@@ -23,7 +29,8 @@ app.setName('PostPile');
 app.setAppUserModelId('com.postpile.app');
 app.setAboutPanelOptions({ applicationName: 'PostPile' });
 
-// apps/desktop/build, next to out/. Only there in a dev checkout; no packaging yet.
+// apps/desktop/build, next to out/. Only there in a dev checkout; the packaged
+// app takes its icon from build/icon.icns through electron-builder.
 const iconFile = join(import.meta.dirname, '../../build/icon.png');
 
 let engine: EngineService | null = null;
@@ -157,8 +164,14 @@ app.on('before-quit', (event) => {
   }
   quitting = true;
   event.preventDefault();
-  void shutdown().finally(() => app.quit());
+  // Everything is flushed and closed by now, so exit directly. A second
+  // app.quit() here never reached will-quit when the quit came from SIGTERM.
+  void shutdown().finally(() => app.exit(0));
 });
+
+// kill <pid> (SIGTERM) or Ctrl+C in a terminal: the same flush-and-quit as Cmd+Q.
+process.on('SIGTERM', () => app.quit());
+process.on('SIGINT', () => app.quit());
 
 // Dock icon click with the window hidden.
 app.on('activate', () => showWindow());
