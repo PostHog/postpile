@@ -949,6 +949,17 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
 - **Middle column**: one tile wide, tiles never sit side by side, so the
   selected tile's notch always points at the detail pane.
 - **Detail pane**: takes the remaining width.
+- **Detail pane activity** (`activityList` in core `activity.ts`, shipped
+  as `PrDetail.activity`; 2026-09-28, the full event list was too long and
+  noisy). Shown by default: human comments and reviews, mentions, review
+  requests (and removals) naming you or your team, human pushes collapsed
+  per burst (consecutive pushes by one person: "rowan pushed 3 commits",
+  "... after your approval"), and lifecycle (ready, draft, merged, closed,
+  reopened). New-since-you-looked lines (an unseen loud event) come first in
+  a coral-edged "New since you looked" block, then "Earlier". About 12 lines
+  (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
+  agent-muted events and review requests between others fold into one "N
+  bot/CI events" line that expands (Unmute lives there).
 - **Resizable**: the two edges (sidebar | tiles, tiles | detail) are draggable
   (`PaneDivider`, pointer capture, a 12px invisible hit area, col-resize
   cursor). Limits: sidebar 200-440px, tile column 340-720px, and a drag never

@@ -299,6 +299,9 @@ now".
     on <reviewer or team>" as the turn, a "Your PR" marker, "FYI, nothing to
     do" on news that asks nothing, and a prompt note so glances don't advise
     approving. Approve also re-enables after a push past your approval.
+  - Activity list: meaningful events only (`activityList` in core), pushes
+    collapsed per burst, new-since-you-looked first and set apart, capped at
+    12 with "Show all N", bot/CI noise folded into one expandable line.
 
 ## Stubbed or thin
 

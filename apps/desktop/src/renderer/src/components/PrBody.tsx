@@ -26,7 +26,7 @@ function branchLine(props: PrBodyProps): string {
 
 /** The scrolling part of the detail pane for one PR. */
 export function PrBody(props: PrBodyProps) {
-  const { pr, events } = props.detail;
+  const { pr } = props.detail;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-[22px] py-[18px]">
       <div className="flex items-center gap-2">
@@ -51,7 +51,7 @@ export function PrBody(props: PrBodyProps) {
       <PrFacts pr={pr} />
       <ReviewList pr={pr} />
       <AgentFacts facts={props.detail.facts} />
-      <ActivityTimeline events={events} />
+      <ActivityTimeline activity={props.detail.activity} />
     </div>
   );
 }

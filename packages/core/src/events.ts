@@ -240,13 +240,29 @@ function timelineKind(item: TimelineItem, pr: Pr, viewer: Viewer): EventKind {
   }
 }
 
+const REVIEW_REQUEST_TEXT = [' requested a review from ', ' removed the review request for '];
+
+/**
+ * Who a review request (or its removal) names, read back from the summary
+ * `timelineSummary` wrote: a login or "org/team-slug". Null for other events.
+ */
+export function reviewRequestSubject(summary: string): string | null {
+  for (const text of REVIEW_REQUEST_TEXT) {
+    const index = summary.indexOf(text);
+    if (index >= 0) {
+      return summary.slice(index + text.length).trim() || null;
+    }
+  }
+  return null;
+}
+
 function timelineSummary(item: TimelineItem): string {
   const subject = item.subject ?? 'someone';
   switch (item.kind) {
     case 'review_requested':
-      return `${item.actor} requested a review from ${subject}`;
+      return `${item.actor}${REVIEW_REQUEST_TEXT[0]}${subject}`;
     case 'review_request_removed':
-      return `${item.actor} removed the review request for ${subject}`;
+      return `${item.actor}${REVIEW_REQUEST_TEXT[1]}${subject}`;
     case 'head_ref_force_pushed':
       return `${item.actor} force-pushed`;
     case 'added_to_merge_queue':

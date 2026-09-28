@@ -10,6 +10,7 @@ export * from './mentions.ts';
 export * from './provenance.ts';
 export * from './loudness.ts';
 export * from './events.ts';
+export * from './activity.ts';
 export * from './stacks.ts';
 export * from './snooze.ts';
 export * from './tiles.ts';

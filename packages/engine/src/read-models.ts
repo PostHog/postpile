@@ -1,4 +1,5 @@
 import {
+  activityList,
   compareTopicUrgency,
   displayState,
   isMergeApprovedMove,
@@ -363,9 +364,11 @@ export class ReadModels {
         .filter((tile) => tile.members.some((m) => m.prKey === key))
         .map((tile) => tile.id),
     );
+    const events = (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) }));
     return {
       pr,
-      events: (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) })),
+      events,
+      activity: activityList(events, loadViewer(this.store)),
       glance,
       glanceStale: this.staleGlances(board, [key]).has(key),
       glanceGap: this.glanceGap(key, glance !== null),

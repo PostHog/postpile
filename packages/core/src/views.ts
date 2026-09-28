@@ -20,6 +20,7 @@ import type {
   UserPrState,
   Verdict,
 } from './types.ts';
+import type { ActivityList } from './activity.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
@@ -180,7 +181,10 @@ export interface EventView {
 
 export interface PrDetail {
   pr: Pr;
+  /** Every event, unfiltered (search, debug, chat context). */
   events: EventView[];
+  /** The detail pane's list (`activityList`): meaningful events, new first, noise folded. */
+  activity: ActivityList;
   glance: Glance | null;
   /** True when the glance was made for an older state of the PR or of the instructions. */
   glanceStale: boolean;

@@ -277,7 +277,7 @@ function buildPrs(clock: SampleClock): Pr[] {
 function buildEvents(clock: SampleClock): PrEvent[] {
   return [
     ...sampleEvents(clock, 41902, [
-      { kind: 'review_requested', actor: 'rowan', text: 'requested your review', hoursAgo: 5, rule: 'loud', seen: true },
+      { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 5, rule: 'loud', seen: true },
       { kind: 'deploy', actor: 'deploy-bot', text: 'deployed a preview', hoursAgo: 1, rule: 'quiet', isBot: true },
       { kind: 'mention', actor: 'lyra', text: 'mentioned you: "does the warm-up need a flag?"', hoursAgo: 0.3, rule: 'loud' },
     ]),
@@ -288,7 +288,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'merged', actor: 'jude', text: 'merged it', hoursAgo: 14, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 41911, [
-      { kind: 'review_requested', actor: 'rowan', text: 'requested your review', hoursAgo: 6, rule: 'loud', seen: true },
+      { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 6, rule: 'loud', seen: true },
       { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 4, rule: 'quiet', seen: true },
       { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Bump Playwright shard count to 6" after your approval', hoursAgo: 0.25, rule: 'loud' },
       { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Pin the Depot runner image" after your approval', hoursAgo: 0.15, rule: 'loud' },
@@ -344,7 +344,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 41955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
-      { kind: 'review_requested', actor: 'nell', text: 'requested your review', hoursAgo: 26, rule: 'loud' },
+      { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 26, rule: 'loud' },
     ]),
   ];
 }

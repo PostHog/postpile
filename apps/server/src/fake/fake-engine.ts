@@ -58,6 +58,7 @@ import type {
   ViewerView,
 } from '@postpile/core';
 import {
+  activityList,
   compareTopicUrgency,
   actionTrail,
   applyBaseline,
@@ -705,6 +706,7 @@ export class FakeEngine implements EngineService {
     return {
       pr,
       events,
+      activity: activityList(events, this.viewer()),
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: false,
       glanceGap: this.glanceGapOf(prKey),
