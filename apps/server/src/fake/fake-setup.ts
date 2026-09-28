@@ -195,7 +195,7 @@ export class FakeSetup {
 
   private draft(): SetupDraft {
     const sources = setupSources(this.material);
-    return mapSetupDraft({ answer: SAMPLE_ANSWER, sources, repos: rankActivityRepos(this.material.prs), model: 'opus (sample)' });
+    return mapSetupDraft({ answer: SAMPLE_ANSWER, sources, repos: rankActivityRepos(this.material.prs), model: 'opus' });
   }
 
   private async walk(job: NonNullable<FakeSetup['sweep']>): Promise<void> {

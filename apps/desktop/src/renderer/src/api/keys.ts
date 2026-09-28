@@ -17,6 +17,9 @@ export const queryKeys = {
   instructions: ['instructions'] as const,
   instructionsChat: ['instructions-chat'] as const,
   workContext: ['work-context'] as const,
+  setupStatus: ['setup-status'] as const,
+  setupChecks: ['setup-checks'] as const,
+  setupSweep: ['setup-sweep'] as const,
   debugNotifications: (limit: number) => ['debug-notifications', limit] as const,
   memorySources: (targetKey: string) => ['memory-sources', targetKey] as const,
 };

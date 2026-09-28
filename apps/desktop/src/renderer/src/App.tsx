@@ -5,6 +5,7 @@ import { useAppConfig } from './api/config.ts';
 import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
 import { useSearch } from './api/search.ts';
+import { useSetupStatus } from './api/setup.ts';
 import { useTopic, useTopics } from './api/topics.ts';
 import { useViewer } from './api/viewer.ts';
 import { DetailPane } from './components/DetailPane.tsx';
@@ -15,6 +16,8 @@ import { NotificationsPane } from './components/NotificationsPane.tsx';
 import { PaneDivider } from './components/PaneDivider.tsx';
 import { RepoScopeMenu } from './components/RepoScopeMenu.tsx';
 import { SearchField } from './components/SearchField.tsx';
+import { SetupFlow } from './components/SetupFlow.tsx';
+import { SetupSidebar } from './components/SetupSidebar.tsx';
 import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { TileGrid } from './components/TileGrid.tsx';
@@ -23,6 +26,7 @@ import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
 import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
+import type { SetupStepKey } from './lib/setup.ts';
 import { applyQueueFilter, filterCounts, firstGridTile, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
@@ -64,6 +68,7 @@ export function App() {
   const live = useLivePoll();
   const viewer = useViewer();
   const config = useAppConfig();
+  const setupStatus = useSetupStatus();
   const panes = usePaneWidths(viewer.data?.login ?? null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +78,29 @@ export function App() {
   // "Tell the agent what's wrong" from a memory line opens the selected tile's chat with a draft.
   const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
   const search = useSearch(query);
+  // The setup flow takes the middle and right panes on a first run (the server says
+  // it is needed) or after "Run setup again". Once open it stays open until the user
+  // finishes or closes it, even though Accept makes the server stop asking for it.
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupRerun, setSetupRerun] = useState(false);
+  const [setupStep, setSetupStep] = useState<SetupStepKey>('checks');
+  const setupNeeded = setupStatus.data?.needed === true;
+  useEffect(() => {
+    if (setupNeeded) {
+      setSetupOpen(true);
+    }
+  }, [setupNeeded]);
+  const showSetup = setupOpen || setupNeeded;
+  const openSetup = () => {
+    setSetupRerun(true);
+    setSetupStep('checks');
+    setSetupOpen(true);
+  };
+  const closeSetup = () => {
+    setSetupOpen(false);
+    setSetupRerun(false);
+    setSetupStep('checks');
+  };
 
   const items = topics.data ?? [];
   // Navigation is a back / forward history; the current entry is what the user picked.
@@ -133,19 +161,21 @@ export function App() {
   }, [pickedTopicId, actions]);
 
   // Sync once on app start (unless POSTPILE_SYNC_ON_START=0); after that
-  // only on "Sync now". The ref keeps React's dev double-mount from starting
-  // a second one.
+  // only on "Sync now". A first run skips it: setup's Accept runs the first
+  // sync, once the instructions exist. The ref keeps React's dev double-mount
+  // from starting a second one.
   const syncOnStart = config.data?.syncOnStart;
+  const setupLoaded = setupStatus.data !== undefined || setupStatus.isError;
   const syncedOnStart = useRef(false);
   useEffect(() => {
-    if (syncOnStart === undefined || syncedOnStart.current) {
+    if (syncOnStart === undefined || !setupLoaded || syncedOnStart.current) {
       return;
     }
     syncedOnStart.current = true;
-    if (syncOnStart) {
+    if (syncOnStart && !setupNeeded) {
       void actions.sync();
     }
-  }, [actions, syncOnStart]);
+  }, [actions, syncOnStart, setupLoaded, setupNeeded]);
 
   // A click on a Mac notification opens its tile, as a normal navigation. The
   // listener is added once and calls the latest go() through this ref.
@@ -165,7 +195,7 @@ export function App() {
   if (pane === 'inbox') {
     main = <InboxPane proposals={proposals.data} topics={items} error={proposals.error?.message ?? null} />;
   } else if (pane === 'instructions') {
-    main = <InstructionsPane onOpenTopic={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })} />;
+    main = <InstructionsPane onOpenTopic={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })} onRunSetup={openSetup} />;
   } else if (pane === 'notifications') {
     // A jump goes through go(), so back returns to this list.
     main = <NotificationsPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
@@ -242,6 +272,9 @@ export function App() {
             dividers resize the sidebar and the tile column (kept per viewer), so the
             columns are an inline style: they are render-time values. */}
         <div ref={gridRef} className="relative grid min-h-0 flex-1" style={{ gridTemplateColumns: columns.template }}>
+          {showSetup ? (
+            <SetupSidebar step={setupStep} />
+          ) : (
           <TopicSidebar
             topics={items}
             activeTopicId={shownTopicId}
@@ -263,9 +296,29 @@ export function App() {
             filterCounts={filterCounts(items)}
             viewer={viewer.data}
           />
-          {main}
+          )}
+          {showSetup && (
+            <SetupFlow
+              rerun={setupRerun}
+              step={setupStep}
+              onStep={setSetupStep}
+              onDone={() => {
+                closeSetup();
+                go({ pane: 'topic', topicId: null, tileId: null, prKey: null });
+              }}
+              onClose={closeSetup}
+              onSkipped={() => {
+                closeSetup();
+                // The start sync waited for setup; skipping it means sync now, as a normal start would.
+                if (syncOnStart) {
+                  void actions.sync();
+                }
+              }}
+            />
+          )}
+          {!showSetup && main}
           {/* The notifications list is wide and has no tile of its own; it takes the detail pane's column too. */}
-          {pane !== 'notifications' && (
+          {!showSetup && pane !== 'notifications' && (
             <DetailPane
               key={selected.view?.tile.id ?? 'none'}
               view={selected.view}
@@ -276,7 +329,7 @@ export function App() {
           )}
           <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />
           {/* The notifications list spans both right columns, so there is no tile edge to drag. */}
-          {pane !== 'notifications' && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
+          {!showSetup && pane !== 'notifications' && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
         </div>
         <StatusFooter topics={items} detail={topic.data} live={live.data} />
         <Toast />

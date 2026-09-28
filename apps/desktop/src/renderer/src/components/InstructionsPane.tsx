@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { useInstructions } from '../api/instructions.ts';
+import { useSetupStatus } from '../api/setup.ts';
+import { Button } from './Button.tsx';
 import { InstructionsChat } from './InstructionsChat.tsx';
 import { InstructionsFileLine } from './InstructionsFileLine.tsx';
 import { InstructionsText } from './InstructionsText.tsx';
@@ -24,19 +26,42 @@ function Section(props: { title: string; meta?: string; children: ReactNode }) {
  * came from. The agent never changes this text without an Accept. Below it,
  * set apart, the agent-written "What you're working on".
  */
-export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void }) {
+/** After "Skip for now": a quiet reminder that setup can still write a first draft. */
+function SkippedSetupBanner(props: { onRunSetup: () => void }) {
+  return (
+    <div className="flex max-w-[680px] items-center gap-3 rounded-tile border border-honey bg-honey-soft px-3.5 py-2.5 text-xs text-honey-ink">
+      <span>You skipped setup. It drafts these instructions from your recent GitHub activity; you review before anything is saved.</span>
+      <Button className="ml-auto" onClick={props.onRunSetup}>
+        Run setup
+      </Button>
+    </div>
+  );
+}
+
+export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void; onRunSetup: () => void }) {
   const instructions = useInstructions();
+  const setup = useSetupStatus();
   const data = instructions.data;
   return (
     <main className="flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Your instructions</h1>
+        <div className="flex max-w-[680px] items-center gap-3">
+          <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Your instructions</h1>
+          <Button
+            className="ml-auto"
+            onClick={props.onRunSetup}
+            title="The agent drafts your instructions from your recent GitHub activity, CODEOWNERS and work context. Shown as a diff; nothing changes until you accept."
+          >
+            Run setup again
+          </Button>
+        </div>
         <p className="max-w-[680px] text-[13px] text-ink-2">
           What the agent knows about you and how you work, in your words. It goes into every prompt, above anything the agent learned. The agent only
           proposes changes; nothing changes until you accept.
         </p>
         {data && <InstructionsFileLine path={data.path} />}
       </div>
+      {setup.data?.flag === 'skipped' && <SkippedSetupBanner onRunSetup={props.onRunSetup} />}
       {instructions.error && <p className="text-xs text-unread-ink">Could not load your instructions: {instructions.error.message}</p>}
       <Section title="Change something">
         <InstructionsChat />

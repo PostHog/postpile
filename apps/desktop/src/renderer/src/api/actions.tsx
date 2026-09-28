@@ -22,6 +22,11 @@ import type {
   PendingWritesResult,
   PrKey,
   RepoOverview,
+  SetupAcceptRequest,
+  SetupAcceptResult,
+  SetupRefineRequest,
+  SetupRefineResult,
+  SetupSweepView,
   SnoozeCondition,
   SyncReport,
   WorkContextSweepResult,
@@ -136,6 +141,14 @@ export interface Actions {
   forgetWorkThread(input: WorkThreadForget): Promise<boolean>;
   /** Saves the sweep's skip list to the user's config.json. */
   saveSweepSkip(patterns: string[]): Promise<boolean>;
+  /** Setup step 2: starts the sweep job (reads GitHub, one agent call); useSetupSweep polls it. */
+  startSetupSweep(): Promise<void>;
+  /** "Tell the agent what's off": one agent call, nothing written. Null when the request itself failed. */
+  refineSetup(body: SetupRefineRequest): Promise<SetupRefineResult | null>;
+  /** Setup's Accept: writes instructions.md as a new version, quiet repos, scope and the done flag. Local, not a GitHub write. */
+  acceptSetup(body: SetupAcceptRequest): Promise<SetupAcceptResult | null>;
+  /** "Skip for now": stores the skipped flag. Local. */
+  skipSetup(): Promise<boolean>;
 }
 
 const ActionsContext = createContext<Actions | null>(null);
@@ -416,6 +429,41 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function startSetupSweep(): Promise<void> {
+    try {
+      const view = await withBusy('setup:sweep', () => request<SetupSweepView>('POST', '/api/setup/sweep'));
+      queryClient.setQueryData(queryKeys.setupSweep, view);
+    } catch (error) {
+      show('error', `Could not start the sweep: ${errorText(error)}`);
+    }
+  }
+
+  async function refineSetup(body: SetupRefineRequest): Promise<SetupRefineResult | null> {
+    try {
+      const result = await withBusy('setup:refine', () => request<SetupRefineResult>('POST', '/api/setup/refine', body));
+      if (!result.ok) {
+        show('error', result.message);
+      }
+      return result;
+    } catch (error) {
+      show('error', `Could not refine the draft: ${errorText(error)}`);
+      return null;
+    }
+  }
+
+  /** A refused accept (the file changed meanwhile) is not an error: the result carries the new text to diff against. */
+  async function acceptSetup(body: SetupAcceptRequest): Promise<SetupAcceptResult | null> {
+    try {
+      const result = await withBusy('setup:accept', () => request<SetupAcceptResult>('POST', '/api/setup/accept', body));
+      show(result.ok ? 'ok' : result.current ? 'blocked' : 'error', result.message);
+      await refreshAll();
+      return result;
+    } catch (error) {
+      show('error', `Could not accept the draft: ${errorText(error)}`);
+      return null;
+    }
+  }
+
   const actions: Actions = {
     config,
     writes,
@@ -485,6 +533,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
     forgetWorkThread: (input) =>
       run(`forget:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/forget', input)),
     saveSweepSkip: (patterns) => run('workContext:skip', null, () => request('PUT', '/api/work-context/skip-list', { patterns })),
+    startSetupSweep,
+    refineSetup,
+    acceptSetup,
+    skipSetup: () => run('setup:skip', null, () => request('POST', '/api/setup/skip')),
   };
 
   return <ActionsContext.Provider value={actions}>{props.children}</ActionsContext.Provider>;

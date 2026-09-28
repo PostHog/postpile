@@ -9,6 +9,9 @@ function originText(version: InstructionsVersionView): string {
   if (version.origin === 'chat') {
     return version.sourceText ? `From chat: “${version.sourceText}”` : 'From chat';
   }
+  if (version.origin === 'setup') {
+    return 'Accepted in setup';
+  }
   return version.version === 1 ? 'Found on disk' : 'Edited outside the app';
 }
 
