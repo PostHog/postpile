@@ -100,6 +100,17 @@ export function tilesInTierOrder(views: TileView[]): TileView[] {
 }
 
 /**
+ * The tile the grid shows first: the first unread or open tile in tier
+ * order, else the first snoozed, else the first done (the folded rows).
+ */
+export function firstGridTile(views: TileView[]): TileView | null {
+  const ordered = tilesInTierOrder(views);
+  const live = ordered.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
+  const snoozed = ordered.filter((view) => view.state.kind === 'snoozed');
+  return live[0] ?? snoozed[0] ?? ordered[0] ?? null;
+}
+
+/**
  * Unread on a topic row: coral when an unread tile is still open, grey when
  * every unread tile is merged or closed (news, nothing to act on), else none.
  */

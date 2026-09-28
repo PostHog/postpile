@@ -22,8 +22,8 @@ import { TitleBar } from './components/TitleBar.tsx';
 import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
-import { sameView, type NavEntry } from './lib/history.ts';
-import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
+import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
+import { applyQueueFilter, filterCounts, firstGridTile, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { leadPr } from './lib/tiles.ts';
@@ -43,11 +43,11 @@ function EmptyMain(props: { text: string }) {
 }
 
 /**
- * The tile and PR the user picked, falling back to the first (shown) tile and
- * its first PR matching the search, else its lead PR.
+ * The tile and PR the user picked, falling back to the grid's first (shown)
+ * tile and its first PR matching the search, else its lead PR.
  */
 function resolveSelection(entry: NavEntry, tiles: TileView[], matchingPrKeys: Set<string> | null) {
-  const view = tiles.find((candidate) => candidate.tile.id === entry.tileId) ?? tiles[0] ?? null;
+  const view = tiles.find((candidate) => candidate.tile.id === entry.tileId) ?? firstGridTile(tiles);
   let prKey: string | null = null;
   if (view) {
     const picked = view.prs.find((pr) => pr.key === entry.prKey);
@@ -99,6 +99,20 @@ export function App() {
       nav.navigate(next);
     }
   };
+  // Write the fallbacks into the current entry, so a reorder or refetch does
+  // not move the selection (and remount the detail pane, losing a chat draft)
+  // or mark a topic seen the user never left. Not while a search or queue
+  // filter narrows the list: that fallback is derived and goes when the
+  // filter does.
+  const pin = narrowed ? null : pinnedEntry(nav.current, shown);
+  const pinKey = pin ? `${pin.topicId}|${pin.tileId}|${pin.prKey}` : null;
+  const replaceEntry = nav.replace;
+  useEffect(() => {
+    if (pin) {
+      replaceEntry(pin);
+    }
+    // pinKey stands for pin, whose object is new on every render.
+  }, [pinKey]);
   const pickTile = (tileId: string, prKey: string) => go({ pane: 'topic', topicId: activeItem?.topic.id ?? null, tileId, prKey });
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 

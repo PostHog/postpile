@@ -60,8 +60,9 @@ describe('visibleTopic', () => {
     expect(visibleTopic(items, 'quiet-b', filterTopics(items, filter))?.topic.id).toBe('loud');
   });
 
-  it('shows nothing when nothing matches, the first topic without a pick', () => {
+  it('shows nothing when nothing matches, the sidebar\'s first topic without a pick', () => {
     expect(visibleTopic(items, 'loud', filterTopics(items, searchFilter(result({}))))).toBeNull();
-    expect(visibleTopic(items, null, null)?.topic.id).toBe('quiet-a');
+    // API order starts with quiet-a; the sidebar puts the loud topic first.
+    expect(visibleTopic(items, null, null)?.topic.id).toBe('loud');
   });
 });

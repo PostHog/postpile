@@ -41,6 +41,13 @@ const NOTICE_MS = 6000;
 // Matches the engine's memory correction undo tokens.
 const MEMORY_UNDO_PREFIX = 'memory:';
 const PROBLEM_NOTICE_MS = 12000;
+/** Busy keys of the inbox cleanup's actions, one each (see withBusy). */
+export const CLEANUP_BUSY = {
+  markRead: 'cleanup:mark-read',
+  startFresh: 'cleanup:start-fresh',
+  clearStartFresh: 'cleanup:clear-fresh',
+  notNow: 'cleanup:not-now',
+} as const;
 // Room for the engine to send or park a batch after its window ends.
 const UNDO_SETTLE_MS = 400;
 
@@ -460,10 +467,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     setRepoScope,
     setRepoQuiet,
     sendTestNotification,
-    cleanUpInbox: (age) => run('cleanup', 'cleanup', () => request('POST', '/api/inbox-cleanup/mark-read', { olderThanDays: age })),
-    startFresh: () => run('cleanup', null, () => request('POST', '/api/inbox-cleanup/start-fresh')),
-    clearStartFresh: () => run('cleanup', null, () => request('DELETE', '/api/inbox-cleanup/start-fresh')),
-    hideInboxCleanup: () => run('cleanup', null, () => request('POST', '/api/inbox-cleanup/not-now')),
+    // One busy key each: withBusy drops every copy of a key when one run ends.
+    cleanUpInbox: (age) => run(CLEANUP_BUSY.markRead, 'cleanup', () => request('POST', '/api/inbox-cleanup/mark-read', { olderThanDays: age })),
+    startFresh: () => run(CLEANUP_BUSY.startFresh, null, () => request('POST', '/api/inbox-cleanup/start-fresh')),
+    clearStartFresh: () => run(CLEANUP_BUSY.clearStartFresh, null, () => request('DELETE', '/api/inbox-cleanup/start-fresh')),
+    hideInboxCleanup: () => run(CLEANUP_BUSY.notNow, null, () => request('POST', '/api/inbox-cleanup/not-now')),
     markTopicSeen,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),

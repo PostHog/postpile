@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CleanupAge, InboxCleanupView } from '@postpile/core';
-import { useActions } from '../api/actions.tsx';
+import { CLEANUP_BUSY, useActions } from '../api/actions.tsx';
 import { cleanupChoices, shortDate } from '../lib/cleanup.ts';
 import { Button } from './Button.tsx';
 
@@ -29,7 +29,7 @@ export function InboxCleanupDialog(props: { view: InboxCleanupView; onClose: () 
   const [choice, setChoice] = useState<Choice>(14);
   const { view, onClose } = props;
   const locked = actions.writes?.enabled !== true;
-  const busy = actions.isBusy('cleanup');
+  const busy = Object.values(CLEANUP_BUSY).some((key) => actions.isBusy(key));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

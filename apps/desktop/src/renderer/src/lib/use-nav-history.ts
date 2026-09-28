@@ -7,6 +7,7 @@ import {
   goBack,
   goForward,
   navigate,
+  replaceCurrent,
   startHistory,
   type NavEntry,
 } from './history.ts';
@@ -14,6 +15,8 @@ import {
 export interface NavHistoryControls {
   current: NavEntry;
   navigate: (entry: NavEntry) => void;
+  /** Rewrites the current entry in place (pinning fallbacks), no new entry. */
+  replace: (entry: NavEntry) => void;
   back: () => void;
   forward: () => void;
   canBack: boolean;
@@ -27,6 +30,7 @@ export function useNavHistory(topicIds: ReadonlySet<string>): NavHistoryControls
   return {
     current: currentEntry(history),
     navigate: (entry) => setHistory((previous) => navigate(previous, entry)),
+    replace: (entry) => setHistory((previous) => replaceCurrent(previous, entry)),
     back: () => setHistory((previous) => goBack(previous, usable)),
     forward: () => setHistory((previous) => goForward(previous, usable)),
     canBack: canGoBack(history, usable),

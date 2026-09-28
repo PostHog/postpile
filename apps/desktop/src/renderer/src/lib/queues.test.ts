@@ -7,6 +7,7 @@ import {
   prMatchesFilter,
   queueLayout,
   tileMatchesFilter,
+  firstGridTile,
   tilesInTierOrder,
   unreadLook,
 } from './queues.ts';
@@ -133,6 +134,22 @@ describe('tilesInTierOrder', () => {
     const routed = { ...tile('routed', 'to_review'), forWhom: { kind: 'team' as const, team: 'team-devex' } };
     const views = [routed, tile('personal', 'to_review'), tile('rest', 'rest'), tile('teammate', 'to_review')];
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['personal', 'teammate', 'routed', 'rest']);
+  });
+});
+
+describe('firstGridTile', () => {
+  it('picks the first live tile in tier order, not the first in API order', () => {
+    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [] } };
+    const views = [tile('rest', 'rest'), done, tile('team', 'team')];
+    expect(firstGridTile(views)?.tile.id).toBe('team');
+  });
+
+  it('falls back to snoozed, then done, then nothing', () => {
+    const snoozed = { ...tile('snoozed', 'rest'), state: { kind: 'snoozed' as const, unreadBecause: [] } };
+    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [] } };
+    expect(firstGridTile([done, snoozed])?.tile.id).toBe('snoozed');
+    expect(firstGridTile([done])?.tile.id).toBe('done');
+    expect(firstGridTile([])).toBeNull();
   });
 });
 

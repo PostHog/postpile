@@ -61,6 +61,34 @@ export function navigate(history: NavHistory, entry: NavEntry): NavHistory {
   return { entries, index: entries.length - 1 };
 }
 
+/** Swaps the current entry for `entry`, no new history entry. */
+export function replaceCurrent(history: NavHistory, entry: NavEntry): NavHistory {
+  const entries = history.entries.map((candidate, index) => (index === history.index ? entry : candidate));
+  return { ...history, entries };
+}
+
+/**
+ * The current entry with the app's fallbacks written in (the first topic,
+ * the grid's first tile, its PR), so a later reorder or refetch does not
+ * move what is on screen. Null when there is nothing to pin: another pane,
+ * no topic yet, or the entry already says it. Before the tiles load
+ * (`shown.tileId` null) only the topic is pinned.
+ */
+export function pinnedEntry(current: NavEntry, shown: NavEntry): NavEntry | null {
+  if (current.pane !== 'topic' || shown.topicId === null) {
+    return null;
+  }
+  const tileKnown = shown.tileId !== null;
+  const next: NavEntry = {
+    pane: 'topic',
+    topicId: shown.topicId,
+    tileId: tileKnown ? shown.tileId : current.tileId,
+    prKey: tileKnown ? shown.prKey : current.prKey,
+  };
+  const same = next.topicId === current.topicId && next.tileId === current.tileId && next.prKey === current.prKey;
+  return same ? null : next;
+}
+
 /**
  * Index of the nearest usable entry in `step` direction (-1 back, +1
  * forward), or null. Entries whose topic is gone are skipped.

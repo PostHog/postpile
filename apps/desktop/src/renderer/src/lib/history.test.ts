@@ -8,6 +8,8 @@ import {
   goForward,
   MAX_ENTRIES,
   navigate,
+  pinnedEntry,
+  replaceCurrent,
   sameView,
   startHistory,
   type NavEntry,
@@ -108,5 +110,29 @@ describe('entryUsable', () => {
     expect(entryUsable(inbox, none)).toBe(true);
     expect(entryUsable(startHistory().entries[0]!, none)).toBe(true);
     expect(entryUsable(topic('a'), none)).toBe(false);
+  });
+});
+
+describe('replaceCurrent', () => {
+  it('swaps the current entry without adding one', () => {
+    const history = navigate(navigate(startHistory(), topic('a')), topic('b'));
+    const replaced = replaceCurrent(history, topic('b', 'tile-1', 'pr-1'));
+    expect(replaced.entries).toHaveLength(3);
+    expect(replaced.index).toBe(2);
+    expect(currentEntry(replaced)).toEqual(topic('b', 'tile-1', 'pr-1'));
+  });
+});
+
+describe('pinnedEntry', () => {
+  it('writes the fallback topic, tile and PR into an unpicked entry', () => {
+    const start = { pane: 'topic' as const, topicId: null, tileId: null, prKey: null };
+    expect(pinnedEntry(start, topic('a'))).toEqual(topic('a'));
+    expect(pinnedEntry(topic('a'), topic('a', 'tile-1', 'pr-1'))).toEqual(topic('a', 'tile-1', 'pr-1'));
+  });
+
+  it('pins nothing when the entry already says it, or on another pane', () => {
+    expect(pinnedEntry(topic('a', 'tile-1', 'pr-1'), topic('a', 'tile-1', 'pr-1'))).toBeNull();
+    expect(pinnedEntry(inbox, topic('a', 'tile-1', 'pr-1'))).toBeNull();
+    expect(pinnedEntry(topic('a'), topic('a'))).toBeNull();
   });
 });
