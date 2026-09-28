@@ -289,6 +289,11 @@ now".
   - Resizable panes: drag the sidebar | tiles and tiles | detail edges,
     double-click resets to the default clamps, widths kept per viewer in
     localStorage (DESIGN.md "Three-pane balance").
+  - Sidebar faces: only you and teammates when involved (you first), else
+    the others; three at most, no "+N" (`topicFaces` in core).
+  - Sidebar numbers: one per row, the unread tile count in a bubble (coral
+    when urgent, grey when calm); the per-row tier PR count and the loose
+    unread dot are gone. Section headers keep their PR count.
 
 ## Stubbed or thin
 

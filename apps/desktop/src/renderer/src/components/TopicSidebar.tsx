@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
 import { statusLabel } from '../lib/memory.ts';
-import { queueLayout, unreadLook, visibleFaces, type QueueFilter } from '../lib/queues.ts';
+import { queueLayout, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
 import { Avatar } from './Avatar.tsx';
@@ -34,38 +34,40 @@ const SECTION_LOOK: Record<PrTier | 'other', { label: string; text: string; dot:
   other: { label: 'Other topics', text: 'text-muted', dot: 'bg-ghost' },
 };
 
-/** Coral dot while an unread tile is open; a grey count when all unread tiles are merged or closed. */
-function UnreadMark(props: { item: TopicListItem }) {
+/**
+ * The row's one number: unread tiles, in a small bubble. Coral while an unread
+ * tile is still open (the urgency rule), grey when every unread tile is merged
+ * or closed. Nothing when all is read.
+ */
+function UnreadBubble(props: { item: TopicListItem }) {
   const look = unreadLook(props.item);
   const count = props.item.unreadTiles;
-  if (look === 'urgent') {
-    const label = `${count} unread ${count === 1 ? 'tile' : 'tiles'}`;
-    return <span title={label} aria-label={label} className="size-1.5 shrink-0 rounded-full bg-unread" />;
+  if (look === null) {
+    return null;
   }
-  if (look === 'calm') {
-    const label = `${count} merged since you looked`;
-    return (
-      <span title={label} aria-label={label} className="flex shrink-0 items-center gap-[3px] font-mono text-[10px] text-faint">
-        <span className="size-1.5 rounded-full bg-dot-quiet" />
-        {count}
-      </span>
-    );
-  }
-  return null;
+  const label = look === 'urgent' ? `${count} unread ${count === 1 ? 'tile' : 'tiles'}` : `${count} merged or closed since you looked`;
+  const tint = look === 'urgent' ? 'bg-unread text-on-ink' : 'bg-chip text-muted';
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className={`flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-[5px] font-mono text-[10px] leading-none font-semibold ${tint}`}
+    >
+      {count}
+    </span>
+  );
 }
 
-/** Up to four faces, you and your team first with a sea ring, then "+N". */
+/** Up to three faces (`TopicListItem.people`): you and your team with a sea ring, else the others. */
 function FaceStack(props: { people: TopicPerson[]; active: boolean }) {
-  const { shown, more } = visibleFaces(props.people);
   const background = props.active ? 'ring-surface' : 'ring-sidebar';
   return (
     <span className="flex shrink-0 items-center pl-[5px]">
-      {shown.map((person) => (
+      {props.people.map((person) => (
         <span key={person.login} className="-ml-[5px] rounded-full" title={person.relation === 'other' ? person.login : `${person.login} (${person.relation === 'you' ? 'you' : 'team'})`}>
           <Avatar login={person.login} className={`ring-2 ${person.relation === 'other' ? background : 'ring-sea'}`} />
         </span>
       ))}
-      {more > 0 && <span className="ml-[3px] font-mono text-[10px] text-muted">+{more}</span>}
     </span>
   );
 }
@@ -80,8 +82,8 @@ function YourMoveChip(props: { count: number }) {
   );
 }
 
-/** One topic: name, unread mark, faces and the section's PR count, then a one-line summary with the "your move" chip at its end. */
-function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; count: number | null; countClass: string }) {
+/** One topic: name, faces and the unread bubble, then a one-line summary with the "your move" chip at its end. */
+function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
   const { item } = props;
   const weight = props.active || unreadLook(item) === 'urgent' ? 'font-semibold' : 'font-medium';
   return (
@@ -93,14 +95,11 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
     >
       <span className="flex w-full min-w-0 items-center gap-[7px]">
         <span className={`truncate text-[12.5px] tracking-[-0.005em] ${weight}`}>{item.topic.name}</span>
-        <UnreadMark item={item} />
         <span className="ml-auto" />
         <FaceStack people={item.people} active={props.active} />
-        {props.count !== null && (
-          <span className={`w-[18px] shrink-0 text-right font-mono text-[10.5px] font-semibold ${props.countClass}`}>{props.count}</span>
-        )}
+        <UnreadBubble item={item} />
       </span>
-      {/* The chip sits under the count; at 1100px row one has no room left, so the summary gives way first. */}
+      {/* The chip sits under the bubble; at 1100px row one has no room left, so the summary gives way first. */}
       <span className="flex w-full min-w-0 items-center gap-[7px]">
         <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
           {topicSnippet(item)}
@@ -221,17 +220,10 @@ export function TopicSidebar(props: TopicSidebarProps) {
   // While filtering every fold is open, so no match hides in one.
   const isOpen = (key: SectionKey) => narrowed || !folded.includes(key);
   const toggle = (key: SectionKey) => setFolded(isOpen(key) ? [...folded, key] : folded.filter((entry) => entry !== key));
-  const topicItem = (item: TopicListItem, count: number | null, countClass = '') => (
-    <TopicItem
-      key={item.topic.id}
-      item={item}
-      active={item.topic.id === props.activeTopicId}
-      onSelect={() => props.onSelect(item.topic.id)}
-      count={count}
-      countClass={countClass}
-    />
+  const topicItem = (item: TopicListItem) => (
+    <TopicItem key={item.topic.id} item={item} active={item.topic.id === props.activeTopicId} onSelect={() => props.onSelect(item.topic.id)} />
   );
-  const otherItems = (items: TopicListItem[]) => items.map((item) => topicItem(item, null));
+  const otherItems = (items: TopicListItem[]) => items.map(topicItem);
   const group = (key: SectionKey, label: string, items: TopicListItem[], children: ReactNode) =>
     items.length === 0 ? null : (
       <div key={key} className="flex flex-col gap-px">
@@ -254,7 +246,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       {layout.sections.map((section) => (
         <div key={section.tier} className="flex flex-col gap-px">
           <SectionHeader tier={section.tier} count={section.count} />
-          {section.rows.map((row) => topicItem(row.item, row.count, SECTION_LOOK[section.tier].text))}
+          {section.rows.map((row) => topicItem(row.item))}
         </div>
       ))}
       {layout.other.length > 0 && (

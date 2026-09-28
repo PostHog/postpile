@@ -9,7 +9,6 @@ import {
   tileMatchesFilter,
   tilesInTierOrder,
   unreadLook,
-  visibleFaces,
 } from './queues.ts';
 
 type Tiers = Partial<Record<PrTier, number>>;
@@ -125,14 +124,6 @@ describe('tilesInTierOrder', () => {
   it('sorts by tier and keeps the order inside a tier', () => {
     const views = [tile('a', 'rest'), tile('b', 'team'), tile('c', 'needs_reply'), tile('d', 'team')];
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['c', 'b', 'd', 'a']);
-  });
-});
-
-describe('visibleFaces', () => {
-  it('shows four faces and counts the rest', () => {
-    const people = ['a', 'b', 'c', 'd', 'e', 'f'].map((login) => ({ login, relation: 'other' as const }));
-    expect(visibleFaces(people)).toEqual({ shown: people.slice(0, 4), more: 2 });
-    expect(visibleFaces(people.slice(0, 2)).more).toBe(0);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { PrSummary, PrTier, TileView, TopicListItem, TopicPerson } from '@postpile/core';
+import type { PrSummary, PrTier, TileView, TopicListItem } from '@postpile/core';
 
 /** Queue tiers in section order, same as core's PR_TIER_ORDER (the renderer imports types only). */
 export const TIER_ORDER: PrTier[] = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
@@ -89,11 +89,6 @@ export function queueLayout(items: TopicListItem[]): QueueLayout {
 /** Tiles by queue, most urgent tier first; the order inside a tier stays. */
 export function tilesInTierOrder(views: TileView[]): TileView[] {
   return views.toSorted((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
-}
-
-/** At most `max` faces, the rest as a "+N". */
-export function visibleFaces(people: TopicPerson[], max = 4): { shown: TopicPerson[]; more: number } {
-  return { shown: people.slice(0, max), more: Math.max(0, people.length - max) };
 }
 
 /**

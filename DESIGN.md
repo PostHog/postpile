@@ -957,20 +957,32 @@ avatars and filters", QueuesB2).
   queue count and no filter count, their `PrSummary.tier` is `rest`
   (`memberTier`) and filters never match them. They stay on their stack
   tile as context.
-- **Rows**: name, unread mark, face stack, the section's count, then a
-  one-line summary with a honey "N your move" chip at its end, right under
-  the count (`yourMoveTiles`: live tiles where whose-turn says it's your
-  move, merging your approved PR included). At 1100px row one has no room
-  for the chip, so the summary truncates first and the chip stays. Faces are `TopicListItem.people` (`topicPeople`):
-  authors, reviewers (submitted, then requested) and commenters, no bots,
-  you and your team first with a sea ring, four at most then "+N".
+- **Rows**: name, face stack, one count bubble, then a one-line summary
+  with a honey "N your move" chip at its end, right under the bubble
+  (`yourMoveTiles`: live tiles where whose-turn says it's your move,
+  merging your approved PR included). At 1100px row one has no room for the
+  chip, so the summary truncates first and the chip stays.
+- **One number per row** (2026-09-28): the row's count is its unread tiles,
+  in a small round bubble, the same in every section and in Other topics. It
+  answers "what is new here", which the tier's PR count on each row did not
+  (the section header already carries that PR count). Coral bubble when the
+  urgency rule says so (an unread tile is still open), grey bubble when
+  every unread tile is merged or closed, no bubble when all is read. The old
+  separate coral dot, grey dot + count and the per-row tier count are gone.
+- **Faces** (`TopicListItem.people` = `topicFaces(topicPeople(...))`):
+  `topicPeople` collects authors, reviewers (submitted, then requested) and
+  commenters, no bots. `topicFaces` then picks: if you or teammates
+  (`Viewer.teamMembers`) are involved, only those show, you first, then
+  teammates, with a sea ring; only when neither is involved do the other
+  people show. Three faces at most, no "+N" (2026-09-28: a row full of
+  strangers said nothing about whether it concerns you).
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
   tile and that move is more than "Merge, it is approved" on your own PR
   (`isMergeApprovedMove`). That move still shows on the tile footer and in
-  the chip count, it just doesn't make the topic urgent. Only then is its unread mark a coral dot and does it rank as
+  the chip count, it just doesn't make the topic urgent. Only then is its unread bubble coral and does it rank as
   `needs_you`. When every unread tile is merged or closed the row shows a
-  grey dot and count ("merged since you looked") and ranks below the urgent
+  grey bubble ("merged or closed since you looked") and ranks below the urgent
   ones (`compareTopicUrgency`: needs you, then open unread tiles, then any
   unread). Tiles still show unread as before.
 - **Filters**: Mine (your avatar), Team (up to three teammates), Reply,
