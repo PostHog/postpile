@@ -22,7 +22,7 @@ Read this file first. Details live elsewhere:
 - **Rules first, agent second.** Deterministic rules (loudness, tiers, whose turn, stack completion) decide what they can. The agent judges what needs judgement and can veto or rephrase, never silently override.
 - **The agent proposes, the user decides** anything lasting: topic renames and merges, instruction changes, and the scope of a chat point.
 - **GitHub text is untrusted data.** It's fenced in prompts, and calls that read it run without tools.
-- **Quality over cost.** The user is on a Claude subscription. Default to Sonnet; use Opus where depth matters (context sweep). Call caps are generous.
+- **Quality over cost.** The user is on a Claude subscription. Default to Sonnet (pinned as `claude-sonnet-5-5` in `models.ts`); use Opus where depth matters (context sweep, setup). Call caps are generous.
 - **Boring code.** Readable over clever, functions defined before use, pure logic in `packages/core` with tests.
 
 ## Decided (don't re-propose the rejected ones)

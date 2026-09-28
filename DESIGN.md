@@ -239,7 +239,12 @@ claude --no-session-persistence -p --output-format json --model <m> \
 
 with `MAX_THINKING_TOKENS=0` and the prompt on stdin (flags carried over from
 ghatchup, where they took a PR summary from ~30s to ~3s). Everything runs on
-`sonnet` (`POSTPILE_MODEL`); glances can be switched separately with
+Sonnet 5.5, pinned by full id `claude-sonnet-5-5` (`POSTPILE_MODEL`; since
+2026-09-28, before that the `sonnet` alias). The alias maps to the same model
+in claude CLI 2.1.284 but moves with CLI updates and user settings, and the
+model is part of the glance and set input hashes, so the pin keeps answers
+and their records stable. The sweep and setup stay on the `opus` alias to
+follow the newest Opus. Glances can be switched separately with
 `POSTPILE_GLANCE_MODEL` (they ran on `claude-haiku-4-5` until a side-by-side
 run showed Sonnet judging verdicts better). An API-backed runner can replace it later without
 touching callers.
@@ -654,7 +659,7 @@ stored and before a dossier goes into a glance prompt
   **dossier version**, instructions, tailoring, standing rules, feedback on
   that PR, model. Never the other PRs in the batch. Stored glances get
   `dossierVersion`.
-- Model: the glance model (`sonnet` by default, `POSTPILE_GLANCE_MODEL`).
+- Model: the glance model (`claude-sonnet-5-5` by default, `POSTPILE_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
 

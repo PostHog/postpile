@@ -125,7 +125,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
 - `POSTPILE_POLL_SECONDS`: the notification poll interval, default 10 (0 turns it off)
 - `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac notifications
-- `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`, `POSTPILE_SWEEP_MODEL`, `POSTPILE_SETUP_MODEL`, `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs
+- `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL` (default `claude-sonnet-5-5`), `POSTPILE_SWEEP_MODEL`, `POSTPILE_SETUP_MODEL` (default `opus`), `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs
 - `POSTPILE_CLAUDE_BIN`: the `claude` binary to run
 - `POSTPILE_CLAUDE_DIR`: the folder the work context sweep reads, default `~/.claude`
 - `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `taxes,garden,hobby,personal,private`; empty means none

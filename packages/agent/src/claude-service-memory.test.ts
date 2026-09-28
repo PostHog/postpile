@@ -221,7 +221,7 @@ describe('RunnerAgentService.updateDossier', () => {
     const result = await service.updateDossier(input);
 
     expect(result.inputHash).toBe(dossierInputHash(input));
-    expect(result.model).toBe('sonnet');
+    expect(result.model).toBe('claude-sonnet-5-5');
     expect(result.dossier.people).toEqual([{ login: 'alice', role: 'driver', note: 'drives it' }]);
     expect(result.dossier.timeline.map((e) => e.prKey)).toEqual(['acme/app#1', 'acme/app#2']);
     expect(result.dossier.openQuestions[0]).toEqual({
@@ -394,7 +394,7 @@ describe('RunnerAgentService.glanceBatch', () => {
         pullInReason: null,
         dossierVersion: 7,
         inputHash: glanceItemInputHash(input, input.items[0]!),
-        model: 'sonnet',
+        model: 'claude-sonnet-5-5',
         createdAt: NOW,
       },
     ]);

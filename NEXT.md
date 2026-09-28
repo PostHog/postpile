@@ -737,6 +737,11 @@ the app meanwhile.
 
 ## Decided
 
+- **Sonnet 5.5, pinned** (2026-09-28): the Sonnet calls use the full id
+  `claude-sonnet-5-5` instead of the `sonnet` alias. claude CLI 2.1.284
+  resolves the alias to the same model, but the pin keeps it from moving
+  with CLI updates or user settings. Opus stays on the alias.
+
 - **Bot approvals are a neutral signal, shown in words** (2026-09-28): an
   approval by a bot (an AI review agent like reviewbot[bot]) counts like
   any approval, as on GitHub. The app says who approved ("approved by
