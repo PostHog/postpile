@@ -35,6 +35,7 @@ export function appConfigFromEnv(): AppConfig {
   return {
     fake: isFake(),
     syncCallCap: syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS),
+    syncOnStart: process.env.POSTPILE_SYNC_ON_START !== '0',
   };
 }
 

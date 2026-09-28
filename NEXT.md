@@ -509,7 +509,7 @@ open 'http://127.0.0.1:5177/index.html?api=http://127.0.0.1:4877&token=devtok'
 
 The renderer syncs on load. Against a real database that means real GitHub
 reads and agent calls; use a DB copy with `POSTPILE_READ_ONLY=1
-POSTPILE_MAX_AGENT_CALLS=0`.
+POSTPILE_MAX_AGENT_CALLS=0`, or `POSTPILE_SYNC_ON_START=0` to skip it.
 
 Fake mode (sample "Move CI to Depot" data, no GitHub, no agent, no database):
 
@@ -534,6 +534,8 @@ Env switches:
   (default `~/Library/Application Support/PostPile/db.sqlite`) and the
   instructions file (default `~/.config/postpile/instructions.md`).
 - `POSTPILE_TOKEN`: fixed token for the standalone server.
+- `POSTPILE_SYNC_ON_START=0`: the renderer does not sync when it loads
+  (UI and perf runs against a DB copy, no GitHub or agent traffic).
 - `POSTPILE_POLL_SECONDS`: live poll interval in the desktop app, default
   10, 0 turns it off. `POSTPILE_PING_CAP`: ping decision calls per 24h,
   default 200 (then rules only). `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac

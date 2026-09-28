@@ -28,7 +28,7 @@ interface TestApp {
 
 /** Wraps the app so every request carries the token. */
 function appWithFake(): TestApp {
-  const app = createApp(new FakeEngine(), TOKEN, { fake: true, syncCallCap: 30 });
+  const app = createApp(new FakeEngine(), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true });
   return {
     request: async (path, init = {}) => {
       const headers = { ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };
@@ -53,7 +53,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('rechecks a memory line and validates the body', async () => {
-    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30 });
+    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true });
     const headers = { [TOKEN_HEADER]: TOKEN, 'content-type': 'application/json' };
     const body = { factId: 'fact-rowan-drives', topicId: null, text: 'rowan drives it', target: { kind: 'fact', factId: 'fact-rowan-drives' } };
     const res = await app.request('/api/memory/recheck', { method: 'POST', headers, body: JSON.stringify(body) });

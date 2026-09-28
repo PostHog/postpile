@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
 import { createApp, TOKEN_HEADER } from './app.ts';
-import { pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
+import { appConfigFromEnv, pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
 import { OFF_POLL_STATUS } from '@postpile/core';
 
-const CONFIG: AppConfig = { fake: false, syncCallCap: 30 };
+const CONFIG: AppConfig = { fake: false, syncCallCap: 30, syncOnStart: true };
 
 function notImplemented(): never {
   throw new Error('not implemented');
@@ -117,7 +117,7 @@ describe('server app', () => {
     const app = createApp(fakeEngine({}), 'secret', CONFIG);
     expect((await app.request('/api/config')).status).toBe(401);
     const res = await app.request('/api/config', { headers: { [TOKEN_HEADER]: 'secret' } });
-    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30 });
+    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30, syncOnStart: true });
   });
 
   it('applies the app call cap to a sync without one, and keeps an explicit cap', async () => {
@@ -147,6 +147,22 @@ describe('server app', () => {
     expect(syncCallCapFromEnv('0')).toBe(0);
     expect(syncCallCapFromEnv('lots')).toBe(150);
     expect(syncCallCapFromEnv('-3')).toBe(150);
+  });
+
+  it('syncs on start unless POSTPILE_SYNC_ON_START=0', () => {
+    const before = process.env.POSTPILE_SYNC_ON_START;
+    try {
+      delete process.env.POSTPILE_SYNC_ON_START;
+      expect(appConfigFromEnv().syncOnStart).toBe(true);
+      process.env.POSTPILE_SYNC_ON_START = '0';
+      expect(appConfigFromEnv().syncOnStart).toBe(false);
+    } finally {
+      if (before === undefined) {
+        delete process.env.POSTPILE_SYNC_ON_START;
+      } else {
+        process.env.POSTPILE_SYNC_ON_START = before;
+      }
+    }
   });
 
   it('reads the poll interval from the environment, 0 turns it off', () => {

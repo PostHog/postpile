@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { TileView } from '@postpile/core';
 import { useActions } from './api/actions.tsx';
+import { useAppConfig } from './api/config.ts';
 import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
 import { useSearch } from './api/search.ts';
@@ -57,6 +58,7 @@ export function App() {
   const proposals = useProposals();
   const live = useLivePoll();
   const viewer = useViewer();
+  const config = useAppConfig();
 
   const [query, setQuery] = useState('');
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
@@ -109,15 +111,20 @@ export function App() {
     }
   }, [pickedTopicId, actions]);
 
-  // Sync once on app start; after that only on "Sync now". The ref keeps
-  // React's dev double-mount from starting a second one.
+  // Sync once on app start (unless POSTPILE_SYNC_ON_START=0); after that
+  // only on "Sync now". The ref keeps React's dev double-mount from starting
+  // a second one.
+  const syncOnStart = config.data?.syncOnStart;
   const syncedOnStart = useRef(false);
   useEffect(() => {
-    if (!syncedOnStart.current) {
-      syncedOnStart.current = true;
+    if (syncOnStart === undefined || syncedOnStart.current) {
+      return;
+    }
+    syncedOnStart.current = true;
+    if (syncOnStart) {
       void actions.sync();
     }
-  }, [actions]);
+  }, [actions, syncOnStart]);
 
   // A click on a Mac notification opens its tile, as a normal navigation. The
   // listener is added once and calls the latest go() through this ref.

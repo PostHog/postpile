@@ -295,6 +295,12 @@ export interface AppConfig {
    * over the cap waits for the next sync. The CLI keeps its own flags.
    */
   syncCallCap: number;
+  /**
+   * Whether the renderer syncs once when it loads. POSTPILE_SYNC_ON_START=0
+   * turns it off, for UI and perf runs against a DB copy that should make no
+   * GitHub or agent traffic.
+   */
+  syncOnStart: boolean;
 }
 
 /**

@@ -233,6 +233,7 @@ history entry, and clearing the filter brings the pick back.
   runtime packages bundled by electron-vite (the desktop package has only
   devDependencies, and no node_modules go into the app). Don't read files
   from `build/` at runtime in a packaged app; it is not shipped.
-- Sync runs once on app start and then only on "Sync now". The main process
+- Sync runs once on app start and then only on "Sync now".
+  `POSTPILE_SYNC_ON_START=0` (`AppConfig.syncOnStart`) skips the start sync. The main process
   runs the live poll (`engine.startLivePoll`) and shows Mac notifications
   (`main/mac-notifier.ts`); closing the window hides it on macOS, Cmd+Q quits.
