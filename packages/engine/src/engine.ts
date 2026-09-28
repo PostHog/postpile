@@ -252,9 +252,9 @@ export class Engine implements EngineService {
     return this.reads.repos();
   }
 
-  async setRepoScope(repos: string[] | null): Promise<RepoOverview> {
+  async setRepoScope(repo: string | null): Promise<RepoOverview> {
     const { store } = this.deps;
-    saveRepoSettings(store, { ...loadRepoSettings(store), scope: normalizeRepoScope(repos) });
+    saveRepoSettings(store, { ...loadRepoSettings(store), scope: normalizeRepoScope(repo) });
     return this.reads.repos();
   }
 

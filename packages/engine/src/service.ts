@@ -73,13 +73,15 @@ export interface EngineService {
   getViewer(): Promise<ViewerView>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */
   getTopic(topicId: string): Promise<TopicDetail | null>;
-  /** The title bar's repo menu: repos with PRs, their counts, the scope and the quiet repos. */
+  /** The title bar's repo menu: repos with topic and PR counts, the chosen repo and the quiet repos. */
   listRepos(): Promise<RepoOverview>;
   /**
-   * Narrows topics, queues, tiles and search to these repos; null (or an
-   * empty list) shows all. Kept in meta. Local, never a GitHub write.
+   * "All repos" (null) or one repo. It only selects topics: the sidebar,
+   * queue counts and search keep the topics with a PR in that repo, and an
+   * opened topic still shows all its tiles, labelling the ones from other
+   * repos. Kept in meta. Local, never a GitHub write.
    */
-  setRepoScope(repos: string[] | null): Promise<RepoOverview>;
+  setRepoScope(repo: string | null): Promise<RepoOverview>;
   /**
    * "Let it go stale": PRs of a quiet repo still sync and feed topic memory,
    * but never make a topic urgent, never ping and stay out of the queue and

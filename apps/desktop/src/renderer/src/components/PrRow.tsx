@@ -2,7 +2,7 @@ import type { PrSummary } from '@postpile/core';
 import { prNumber } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph } from './icons.tsx';
-import { StatusPill, WhyBadge } from './pills.tsx';
+import { RepoLabel, StatusPill, WhyBadge } from './pills.tsx';
 
 interface PrRowProps {
   pr: PrSummary;
@@ -38,7 +38,10 @@ export function PrRow(props: PrRowProps) {
     >
       <WhyBadge code={pr.why} provenance={pr.provenance} greyed={props.greyed} size="row" />
       <span className={`font-mono text-[10.5px] ${props.selected ? 'text-accent' : 'text-muted'}`}>#{prNumber(pr.key)}</span>
-      <span className={`truncate ${weight} ${titleTone}`}>{pr.title}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className={`truncate ${weight} ${titleTone}`}>{pr.title}</span>
+        {pr.repoLabel && <RepoLabel label={pr.repoLabel} />}
+      </span>
       <span className="flex items-center gap-1">
         <StatusPill status={pr.status} greyed={props.greyed} />
         {pr.openThreads > 0 && (

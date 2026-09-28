@@ -24,8 +24,12 @@ import type {
 export const SAMPLE_REPO = 'PostHog/posthog';
 export const SAMPLE_VIEWER = 'you';
 
-/** Sample PRs outside the main repo, so the title bar's repo menu has more than one row. */
+/**
+ * Sample PRs outside the main repo, so the title bar's repo menu has more
+ * than one row and the Depot topic shows a repo label on its example-infra tile.
+ */
 const OTHER_REPOS: Record<number, string> = {
+  41915: 'PostHog/example-infra',
   41925: 'PostHog/posthog-python',
   41940: 'PostHog/posthog-desktop',
 };

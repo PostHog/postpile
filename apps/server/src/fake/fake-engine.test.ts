@@ -49,7 +49,7 @@ describe('FakeEngine', () => {
   it('refuses undo after the 6s window', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });
-    const marked = await engine.markRead('pr:PostHog/posthog#41915');
+    const marked = await engine.markRead('pr:PostHog/example-infra#41915');
     now = new Date(now.getTime() + 7000);
     const undone = await engine.undo(marked.undoToken);
     expect(undone).toEqual({ ok: false, message: 'undo window closed', undoToken: null });
@@ -58,7 +58,7 @@ describe('FakeEngine', () => {
   it('undoes the newest batch when no token is given', async () => {
     const engine = new FakeEngine();
     await engine.setGitHubWrites(true);
-    await engine.markRead('pr:PostHog/posthog#41915');
+    await engine.markRead('pr:PostHog/example-infra#41915');
     await engine.markRead('pr:PostHog/posthog#41790');
     await engine.undo(null);
     const topics = await engine.listTopics();

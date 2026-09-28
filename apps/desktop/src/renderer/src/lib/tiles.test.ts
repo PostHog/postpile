@@ -24,6 +24,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     unseenLoudEvents: 0,
     updatedAt: at(number),
     quietRepo: false,
+    repoLabel: null,
     ...overrides,
   };
 }
@@ -42,6 +43,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     turn: { kind: 'none', who: null, what: '', prKey: null },
     pendingWrite: null,
     quietRepo: false,
+    repoLabel: null,
   };
 }
 

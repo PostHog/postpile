@@ -4,8 +4,9 @@ import {
   isMergeApprovedMove,
   isPrInQuietRepo,
   isQuietTile,
-  isTileInScope,
+  isTopicInScope,
   isUnseenLoud,
+  labelBaseRepo,
   memberTier,
   openThreadCount,
   personRelation,
@@ -14,6 +15,7 @@ import {
   prTier,
   repoOverview,
   searchTopics,
+  tileRepoLabels,
   TILE_STATE_ORDER,
   tilePeople,
   tileTier,
@@ -21,6 +23,7 @@ import {
   topicPeople,
   topicQueues,
   topicUrgency,
+  viewerOrgs,
   whoseTurn,
   whyHere,
   type FactQuery,
@@ -94,9 +97,9 @@ export class ReadModels {
     return Board.load(this.store, this.now().toISOString());
   }
 
-  /** The topic's tiles inside the repo scope (all of them under "All repos"). */
-  private scopedTiles(board: Board, topicId: string, settings: RepoSettings): Tile[] {
-    return board.tilesForTopic(topicId).filter((tile) => isTileInScope(memberKeys(tile), settings));
+  /** The repo menu lists a topic when one of its PRs is in the chosen repo; its tiles are never narrowed. */
+  private isListed(tiles: Tile[], settings: RepoSettings): boolean {
+    return tiles.length > 0 && isTopicInScope(tiles.flatMap(memberKeys), settings);
   }
 
   /**
@@ -138,10 +141,17 @@ export class ReadModels {
     return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, reason });
   }
 
-  private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>, viewer: Viewer | null, settings: RepoSettings): PrSummary[] {
+  private prSummaries(
+    board: Board,
+    tile: Tile,
+    stale: Set<PrKey>,
+    viewer: Viewer | null,
+    settings: RepoSettings,
+    repoLabels: (string | null)[],
+  ): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     const summaries: PrSummary[] = [];
-    for (const member of tile.members) {
+    for (const [index, member] of tile.members.entries()) {
       const pr = board.prs.get(member.prKey);
       if (!pr) {
         continue;
@@ -169,6 +179,7 @@ export class ReadModels {
         unseenLoudEvents: member.provenance.kind === 'found' ? 0 : (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
         quietRepo,
+        repoLabel: repoLabels[index] ?? null,
       });
     }
     return summaries;
@@ -176,12 +187,16 @@ export class ReadModels {
 
   private tileViews(board: Board, topicId: string): TileView[] {
     const settings = loadRepoSettings(this.store);
-    const tiles = this.scopedTiles(board, topicId, settings);
+    // An opened topic shows every tile; the repo scope only labels the ones from another repo.
+    const tiles = board.tilesForTopic(topicId);
     const stale = this.staleGlances(board, tiles.flatMap((tile) => tile.members.map((m) => m.prKey)));
     const viewer = loadViewer(this.store);
     const pending = this.pendingWrites.byPrKey();
+    const baseRepo = labelBaseRepo(tiles.flatMap(memberKeys), settings);
+    const orgs = viewerOrgs(viewer?.teams ?? []);
     const views = tiles.map((tile): TileView => {
-      const prs = this.prSummaries(board, tile, stale, viewer, settings);
+      const labels = tileRepoLabels(memberKeys(tile), baseRepo, orgs);
+      const prs = this.prSummaries(board, tile, stale, viewer, settings, labels.prs);
       const memberPrs = tile.members.flatMap((member) => board.prs.get(member.prKey) ?? []);
       return {
         tile,
@@ -193,6 +208,7 @@ export class ReadModels {
         turn: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }),
         pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
         quietRepo: isQuietTile(memberKeys(tile), settings),
+        repoLabel: labels.tile,
       };
     });
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
@@ -218,8 +234,8 @@ export class ReadModels {
     const settings = loadRepoSettings(this.store);
     const items: TopicListItem[] = [];
     for (const topic of topics) {
-      const tiles = this.scopedTiles(board, topic.id, settings);
-      if (tiles.length === 0) {
+      const tiles = board.tilesForTopic(topic.id);
+      if (!this.isListed(tiles, settings)) {
         continue;
       }
       const states = tiles.map((tile) => board.stateOf(tile).kind);
@@ -265,10 +281,11 @@ export class ReadModels {
     return items.sort(compareTopics);
   }
 
-  /** The title bar's repo menu: every repo with PRs in the tiles, counted over all repos, not the scope. */
+  /** The title bar's repo menu: topics and PRs per repo, counted over every topic, not the scope. */
   repos(): RepoOverview {
     const board = this.board();
-    return repoOverview(board.allTiles().flatMap(memberKeys), loadRepoSettings(this.store));
+    const topicsPrKeys = board.topics().map((topic) => board.tilesForTopic(topic.id).flatMap(memberKeys));
+    return repoOverview(topicsPrKeys, loadRepoSettings(this.store));
   }
 
   /** The stored viewer for the sidebar's filter buttons. */
@@ -308,11 +325,13 @@ export class ReadModels {
   search(query: string): SearchResult {
     const board = this.board();
     const settings = loadRepoSettings(this.store);
-    const topics: SearchableTopic[] = board.topics().map((topic) => ({
+    // Only the topics the sidebar lists, each with all its tiles, like an opened topic.
+    const listed = board.topics().filter((topic) => this.isListed(board.tilesForTopic(topic.id), settings));
+    const topics: SearchableTopic[] = listed.map((topic) => ({
       topicId: topic.id,
       name: topic.name,
       area: topic.area,
-      tiles: this.scopedTiles(board, topic.id, settings).map((tile) => ({
+      tiles: board.tilesForTopic(topic.id).map((tile) => ({
         tileId: tile.id,
         prs: tile.members.flatMap((member) => {
           const pr = board.prs.get(member.prKey);

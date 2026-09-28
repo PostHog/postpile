@@ -6,7 +6,7 @@ import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
-import { PendingWritePill, VerdictPill, WhyBadge } from './pills.tsx';
+import { PendingWritePill, RepoLabel, VerdictPill, WhyBadge } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { TileMenu } from './TileMenu.tsx';
@@ -93,6 +93,7 @@ export function Tile(props: TileProps) {
             <span className={`shrink-0 text-[11px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>{kindLabel(view)}</span>
             <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} gap={lead?.glanceGap} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
+            {view.repoLabel && <RepoLabel label={view.repoLabel} />}
             {view.quietRepo && (
               <span className="shrink-0 text-[10.5px] text-faint" title="This repo is set to “Let it go stale” in the repo menu: still synced, never urgent, never pings">
                 quiet repo

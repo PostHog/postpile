@@ -1,16 +1,18 @@
-// Repo scope and quiet repos. The title bar's repo menu narrows what the app
-// shows to some repos, and a repo can be set to "Let it go stale" (quiet):
-// its PRs still sync and feed topic memory, but never make a topic urgent,
-// never ping and stay out of the queue and filter counts. Rules only, no IO;
-// the engine and FakeEngine call the same functions. DESIGN.md "Repo scope
-// and quiet repos".
+// Repo scope and quiet repos. The title bar's repo menu picks "All repos" or
+// one repo. The chosen repo only selects topics: the sidebar lists topics
+// with at least one PR in it, and an opened topic always shows all of its
+// tiles, with a small repo label on the ones from another repo. A repo can be
+// set to "Let it go stale" (quiet): its PRs still sync and feed topic memory,
+// but never make a topic urgent, never ping and stay out of the queue and
+// filter counts. Rules only, no IO; the engine and FakeEngine call the same
+// functions. DESIGN.md "Repo scope and quiet repos".
 import { parsePrKey } from './keys.ts';
 import type { PrKey } from './types.ts';
 
 /** Kept in meta, changed from the repo menu. Repo names are "owner/name" as GitHub gives them. */
 export interface RepoSettings {
-  /** Repos the app shows. Null shows every repo ("All repos"). */
-  scope: string[] | null;
+  /** The one repo whose topics the sidebar lists. Null lists every topic ("All repos"). */
+  scope: string | null;
   /** Repos set to "Let it go stale". */
   quiet: string[];
 }
@@ -20,26 +22,30 @@ export const DEFAULT_REPO_SETTINGS: RepoSettings = { scope: null, quiet: [] };
 /** One row of the repo menu. */
 export interface RepoEntry {
   repo: string;
+  /** Topics with at least one PR of this repo: what the sidebar lists when it is chosen. */
+  topics: number;
   /** PRs of this repo in some topic's tiles, pulled-in stack layers included. */
   prs: number;
   quiet: boolean;
-  /** Checked in the menu: in the scope, or every repo when the scope is "All repos". */
-  inScope: boolean;
+  /** The chosen repo. False for every row under "All repos". */
+  selected: boolean;
 }
 
-/** GET /api/repos: the menu's rows, most PRs first, plus the stored scope. */
+/** GET /api/repos: the menu's rows, most topics first, plus the stored choice. */
 export interface RepoOverview {
-  scope: string[] | null;
+  scope: string | null;
+  /** Topics with at least one PR: what the sidebar lists under "All repos". */
+  topics: number;
   repos: RepoEntry[];
 }
 
-/** GitHub repo names are case-insensitive. */
-function sameRepo(a: string, b: string): boolean {
+/** GitHub repo and org names are case-insensitive. */
+function sameName(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
-function listsRepo(list: string[], repo: string): boolean {
-  return list.some((entry) => sameRepo(entry, repo));
+function listsName(list: string[], name: string): boolean {
+  return list.some((entry) => sameName(entry, name));
 }
 
 /** "PostHog/posthog#12" -> "PostHog/posthog". */
@@ -47,48 +53,39 @@ export function repoOfPr(key: PrKey): string {
   return parsePrKey(key).repo;
 }
 
+/** A blank choice is "All repos". */
+export function normalizeRepoScope(repo: string | null): string | null {
+  const trimmed = repo?.trim() ?? '';
+  return trimmed === '' ? null : trimmed;
+}
+
 /**
- * An empty selection means "All repos", so the app never narrows to
- * nothing. Duplicates (any case) are dropped, the first spelling kept.
+ * The stored scope, read from any version. Before the single choice the
+ * scope was a list: one entry becomes that repo, several (or none) "All
+ * repos", since there is no fair way to pick one of them.
  */
-export function normalizeRepoScope(scope: string[] | null): string[] | null {
-  if (scope === null) {
-    return null;
+export function migrateRepoScope(stored: unknown): string | null {
+  if (typeof stored === 'string') {
+    return normalizeRepoScope(stored);
   }
-  const unique: string[] = [];
-  for (const repo of scope.map((entry) => entry.trim()).filter((entry) => entry !== '')) {
-    if (!listsRepo(unique, repo)) {
-      unique.push(repo);
-    }
+  if (Array.isArray(stored) && stored.length === 1 && typeof stored[0] === 'string') {
+    return normalizeRepoScope(stored[0]);
   }
-  return unique.length > 0 ? unique : null;
+  return null;
 }
 
 /** Adds or removes a repo from the quiet list. */
 export function withQuietRepo(settings: RepoSettings, repo: string, quiet: boolean): RepoSettings {
-  const others = settings.quiet.filter((entry) => !sameRepo(entry, repo));
+  const others = settings.quiet.filter((entry) => !sameName(entry, repo));
   return { ...settings, quiet: quiet ? [...others, repo] : others };
 }
 
-export function isRepoInScope(repo: string, settings: RepoSettings): boolean {
-  return settings.scope === null || listsRepo(settings.scope, repo);
-}
-
-export function isPrInScope(key: PrKey, settings: RepoSettings): boolean {
-  return isRepoInScope(repoOfPr(key), settings);
-}
-
 export function isQuietRepo(repo: string, settings: RepoSettings): boolean {
-  return listsRepo(settings.quiet, repo);
+  return listsName(settings.quiet, repo);
 }
 
 export function isPrInQuietRepo(key: PrKey, settings: RepoSettings): boolean {
   return isQuietRepo(repoOfPr(key), settings);
-}
-
-/** A tile shows when one of its PRs is in scope. A set can mix repos; a stack cannot. */
-export function isTileInScope(prKeys: PrKey[], settings: RepoSettings): boolean {
-  return prKeys.some((key) => isPrInScope(key, settings));
 }
 
 /** A tile is quiet when every one of its PRs is in a quiet repo. A tile without PRs is not. */
@@ -96,29 +93,132 @@ export function isQuietTile(prKeys: PrKey[], settings: RepoSettings): boolean {
   return prKeys.length > 0 && prKeys.every((key) => isPrInQuietRepo(key, settings));
 }
 
+/** The sidebar lists a topic when one of its PRs (any tile) is in the chosen repo, or always under "All repos". */
+export function isTopicInScope(topicPrKeys: PrKey[], settings: RepoSettings): boolean {
+  const scope = settings.scope;
+  if (scope === null) {
+    return true;
+  }
+  return topicPrKeys.some((key) => sameName(repoOfPr(key), scope));
+}
+
+/** The repo with most of the topic's PRs; a tie goes to the one seen first. Null without PRs. */
+export function mainRepoOf(topicPrKeys: PrKey[]): string | null {
+  const counts = new Map<string, { repo: string; prs: number }>();
+  for (const key of new Set(topicPrKeys)) {
+    const repo = repoOfPr(key);
+    const entry = counts.get(repo.toLowerCase()) ?? { repo, prs: 0 };
+    entry.prs += 1;
+    counts.set(repo.toLowerCase(), entry);
+  }
+  let main: { repo: string; prs: number } | null = null;
+  for (const entry of counts.values()) {
+    if (main === null || entry.prs > main.prs) {
+      main = entry;
+    }
+  }
+  return main?.repo ?? null;
+}
+
+/** ["PostHog/team-devex"] -> ["PostHog"]: the orgs a repo label leaves out. Works on repo names too. */
+export function viewerOrgs(teams: string[]): string[] {
+  const orgs: string[] = [];
+  for (const team of teams) {
+    const org = team.split('/')[0] ?? '';
+    if (org !== '' && !listsName(orgs, org)) {
+      orgs.push(org);
+    }
+  }
+  return orgs;
+}
+
+/** "PostHog/example-infra" -> "example-infra" when PostHog is one of the viewer's orgs, else the full name. */
+export function repoLabel(repo: string, orgs: string[]): string {
+  const slash = repo.indexOf('/');
+  if (slash < 0) {
+    return repo;
+  }
+  return listsName(orgs, repo.slice(0, slash)) ? repo.slice(slash + 1) : repo;
+}
+
 /**
- * The repo menu: every repo with PRs in the tiles, plus the repos the
- * settings name that have none left (so they can still be unchecked or woken
- * up). Most PRs first, then by name. `prKeys` may repeat a PR; it counts once.
+ * What an opened topic's tiles are compared against for the repo label: the
+ * chosen repo, or under "All repos" the topic's main repo.
  */
-export function repoOverview(prKeys: PrKey[], settings: RepoSettings): RepoOverview {
-  const counts = new Map<string, number>();
-  const spelling = new Map<string, string>();
-  const note = (repo: string, add: number) => {
+export function labelBaseRepo(topicPrKeys: PrKey[], settings: RepoSettings): string | null {
+  return settings.scope ?? mainRepoOf(topicPrKeys);
+}
+
+/** A tile's repo labels: on the tile or on single PR rows (same order as `prKeys`), null where none shows. */
+export interface TileRepoLabels {
+  tile: string | null;
+  prs: (string | null)[];
+}
+
+/**
+ * A tile whose PRs all sit in one other repo gets the label once, on the
+ * tile. A set mixing repos gets it on each PR row from another repo instead.
+ * `orgs` is `viewerOrgs`; when empty, the base repo's org counts as the
+ * viewer's so the label stays short.
+ */
+export function tileRepoLabels(prKeys: PrKey[], baseRepo: string | null, orgs: string[]): TileRepoLabels {
+  const none: TileRepoLabels = { tile: null, prs: prKeys.map(() => null) };
+  if (baseRepo === null || prKeys.length === 0) {
+    return none;
+  }
+  const homeOrgs = orgs.length > 0 ? orgs : viewerOrgs([baseRepo]);
+  const repos = prKeys.map(repoOfPr);
+  const first = repos[0]!;
+  if (repos.every((repo) => sameName(repo, first))) {
+    return sameName(first, baseRepo) ? none : { tile: repoLabel(first, homeOrgs), prs: none.prs };
+  }
+  return { tile: null, prs: repos.map((repo) => (sameName(repo, baseRepo) ? null : repoLabel(repo, homeOrgs))) };
+}
+
+/**
+ * The repo menu: every repo with PRs in some topic, with how many topics
+ * and PRs it has, plus the repos the settings name that have none left (so
+ * they can still be picked away from or woken up). Most topics first, then
+ * PRs, then name. `topicsPrKeys` holds each listed topic's PR keys; a PR in
+ * two tiles counts once.
+ */
+export function repoOverview(topicsPrKeys: PrKey[][], settings: RepoSettings): RepoOverview {
+  const rows = new Map<string, { repo: string; topics: number; prs: Set<PrKey> }>();
+  const rowOf = (repo: string) => {
     const id = repo.toLowerCase();
-    spelling.set(id, spelling.get(id) ?? repo);
-    counts.set(id, (counts.get(id) ?? 0) + add);
+    const row = rows.get(id) ?? { repo, topics: 0, prs: new Set<PrKey>() };
+    rows.set(id, row);
+    return row;
   };
-  for (const key of new Set(prKeys)) {
-    note(repoOfPr(key), 1);
+  let topics = 0;
+  for (const keys of topicsPrKeys) {
+    if (keys.length > 0) {
+      topics += 1;
+    }
+    const counted = new Set<string>();
+    for (const key of keys) {
+      const row = rowOf(repoOfPr(key));
+      row.prs.add(key);
+      if (!counted.has(row.repo)) {
+        counted.add(row.repo);
+        row.topics += 1;
+      }
+    }
   }
-  for (const repo of [...(settings.scope ?? []), ...settings.quiet]) {
-    note(repo, 0);
+  const named = settings.scope === null ? settings.quiet : [settings.scope, ...settings.quiet];
+  for (const repo of named) {
+    rowOf(repo);
   }
-  const repos = [...counts.entries()].map(([id, prs]): RepoEntry => {
-    const repo = spelling.get(id)!;
-    return { repo, prs, quiet: isQuietRepo(repo, settings), inScope: isRepoInScope(repo, settings) };
-  });
-  repos.sort((a, b) => b.prs - a.prs || a.repo.localeCompare(b.repo));
-  return { scope: settings.scope, repos };
+  const scope = settings.scope;
+  const repos = [...rows.values()].map(
+    (row): RepoEntry => ({
+      repo: row.repo,
+      topics: row.topics,
+      prs: row.prs.size,
+      quiet: isQuietRepo(row.repo, settings),
+      selected: scope !== null && sameName(row.repo, scope),
+    }),
+  );
+  repos.sort((a, b) => b.topics - a.topics || b.prs - a.prs || a.repo.localeCompare(b.repo));
+  return { scope, topics, repos };
 }

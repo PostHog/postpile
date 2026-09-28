@@ -2,46 +2,49 @@ import { useCallback, useRef, useState } from 'react';
 import type { RepoEntry, RepoOverview } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useRepos } from '../api/repos.ts';
-import { scopeLabel, shortRepo, toggledScope } from '../lib/repos.ts';
+import { countTitle, scopeLabel, shortRepo } from '../lib/repos.ts';
 import { useDismiss } from '../lib/use-dismiss.ts';
-import { CheckIcon, ChevronIcon } from './icons.tsx';
+import { ChevronIcon } from './icons.tsx';
 
 const QUIET_TITLE =
   'Let it go stale: its PRs still sync and feed topic memory, but never make a topic urgent, never ping and stay out of the queue counts.';
 
-function CheckBox(props: { checked: boolean }) {
-  const look = props.checked ? 'border-ink bg-ink text-on-ink' : 'border-control bg-surface text-transparent';
-  return <span className={`flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border ${look}`}>{props.checked && <CheckIcon />}</span>;
+function Radio(props: { checked: boolean }) {
+  const look = props.checked ? 'border-ink' : 'border-control';
+  return (
+    <span className={`flex size-3.5 shrink-0 items-center justify-center rounded-full border bg-surface ${look}`}>
+      {props.checked && <span className="size-1.5 rounded-full bg-ink" />}
+    </span>
+  );
 }
 
-function RepoRow(props: { entry: RepoEntry; overview: RepoOverview; busy: boolean }) {
+function Count(props: { topics: number; prs: number | null }) {
+  return (
+    <span className="font-mono text-[10.5px] text-faint" title={countTitle(props.topics, props.prs)}>
+      {props.topics}
+    </span>
+  );
+}
+
+function RepoRow(props: { entry: RepoEntry; busy: boolean }) {
   const actions = useActions();
   const { entry } = props;
   return (
     <li className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-subtle">
       <button
         type="button"
-        role="menuitemcheckbox"
-        aria-checked={entry.inScope}
+        role="menuitemradio"
+        aria-checked={entry.selected}
         disabled={props.busy}
-        title={entry.inScope ? `Hide ${entry.repo}` : `Show ${entry.repo}`}
-        onClick={() => void actions.setRepoScope(toggledScope(props.overview, entry.repo))}
+        title={`Only topics with a PR in ${entry.repo}`}
+        onClick={() => void actions.setRepoScope(entry.repo)}
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
-        <CheckBox checked={entry.inScope} />
+        <Radio checked={entry.selected} />
         <span className={`min-w-0 truncate text-xs ${entry.quiet ? 'text-muted' : 'text-ink'}`} title={entry.repo}>
           {shortRepo(entry.repo)}
         </span>
-        <span className="font-mono text-[10.5px] text-faint">{entry.prs}</span>
-      </button>
-      <button
-        type="button"
-        disabled={props.busy}
-        title={`Show only ${entry.repo}`}
-        onClick={() => void actions.setRepoScope([entry.repo])}
-        className="hidden text-[10.5px] text-muted group-hover:block hover:text-ink"
-      >
-        Only
+        <Count topics={entry.topics} prs={entry.prs} />
       </button>
       <button
         type="button"
@@ -60,10 +63,11 @@ function RepoRow(props: { entry: RepoEntry; overview: RepoOverview; busy: boolea
 }
 
 /**
- * Title bar repo filter: "All repos" or some of them, each with its PR
- * count, plus a per-repo "Let it go stale" switch. The scope narrows the
- * sidebar, queues and tiles on the server, so it combines with the search
- * and the queue filters. Both choices are kept in the database.
+ * Title bar repo filter: "All repos" or one repo, each with its topic
+ * count, plus a per-repo "Let it go stale" switch. The chosen repo picks the
+ * topics the sidebar lists (and so the queue counts and search) on the
+ * server; an opened topic still shows all its tiles, labelling the ones from
+ * other repos. Both choices are kept in the database.
  */
 export function RepoScopeMenu() {
   const actions = useActions();
@@ -85,7 +89,7 @@ export function RepoScopeMenu() {
         aria-expanded={open}
         aria-haspopup="menu"
         disabled={empty}
-        title={empty ? 'No repos yet: sync first' : 'Show some repos only, or let a repo go stale'}
+        title={empty ? 'No repos yet: sync first' : 'Show the topics of one repo, or let a repo go stale'}
         onClick={() => setOpen(!open)}
         className={`flex h-7 max-w-40 shrink-0 items-center gap-1.5 rounded-control border px-2.5 text-xs shadow-control disabled:opacity-50 ${look}`}
       >
@@ -102,16 +106,18 @@ export function RepoScopeMenu() {
             onClick={() => void actions.setRepoScope(null)}
             className="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-ink hover:bg-subtle"
           >
-            <CheckBox checked={!narrowed} />
-            All repos
+            <Radio checked={!narrowed} />
+            <span className="min-w-0 truncate">All repos</span>
+            <Count topics={overview.topics} prs={null} />
           </button>
           <ul className="flex max-h-80 flex-col overflow-auto border-t border-hairline pt-1">
             {overview.repos.map((entry) => (
-              <RepoRow key={entry.repo} entry={entry} overview={overview} busy={busy} />
+              <RepoRow key={entry.repo} entry={entry} busy={busy} />
             ))}
           </ul>
           <p className="border-t border-hairline px-2 pt-1.5 pb-0.5 text-[10.5px] leading-snug text-faint">
-            Quiet repos still sync, but never ping or make a topic urgent.
+            A repo picks the topics; an open topic still shows all its tiles. Quiet repos still sync, but never ping or make a
+            topic urgent.
           </p>
         </div>
       )}

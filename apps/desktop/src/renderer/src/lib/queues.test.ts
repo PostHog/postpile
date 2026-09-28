@@ -53,6 +53,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     unseenLoudEvents: 0,
     updatedAt: at(0),
     quietRepo: false,
+    repoLabel: null,
     ...overrides,
   };
 }
@@ -68,6 +69,7 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
     turn: { kind: 'none', who: null, what: '', prKey: null },
     pendingWrite: null,
     quietRepo: false,
+    repoLabel: null,
   };
 }
 

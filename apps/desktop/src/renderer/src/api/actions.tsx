@@ -94,8 +94,8 @@ export interface Actions {
   correctMemory(input: MemoryCorrection): Promise<boolean>;
   /** "Recheck": one agent call, nothing written. Null when the request itself failed. */
   recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult | null>;
-  /** The repo menu's scope; null shows all repos. Local, quiet (no toast). */
-  setRepoScope(repos: string[] | null): Promise<void>;
+  /** The repo menu's choice: one repo, or null for all. Local, quiet (no toast). */
+  setRepoScope(repo: string | null): Promise<void>;
   /** "Let it go stale" on a repo, or waking it up again. Local, not a GitHub write. */
   setRepoQuiet(repo: string, quiet: boolean): Promise<void>;
   /**
@@ -289,9 +289,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function setRepoScope(repos: string[] | null): Promise<void> {
+  async function setRepoScope(repo: string | null): Promise<void> {
     try {
-      await withBusy('repos', () => request<RepoOverview>('POST', '/api/repos/scope', { repos }));
+      await withBusy('repos', () => request<RepoOverview>('POST', '/api/repos/scope', { repo }));
       await refreshAll();
     } catch (error) {
       show('error', `Could not change the repo filter: ${errorText(error)}`);

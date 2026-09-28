@@ -266,13 +266,18 @@ now".
   inbox moved), so PRs handled entirely on GitHub get their events logged
   as seen and reach topics and dossiers. Nothing is marked read on GitHub.
 - Repo scope and quiet repos (DESIGN.md "Repo scope and quiet repos"): a
-  repo menu in the title bar ("All repos" or some, with PR counts) narrows
-  topics, queues, tiles and search in the engine read models, so it
-  combines with search and the queue filters. Per repo "Let it go stale":
+  repo menu in the title bar, a radio list ("All repos" or one repo, with
+  topic counts). The chosen repo only selects topics: the sidebar, queue
+  and filter counts and search keep the topics with a PR in it. An opened
+  topic always shows all its tiles; the ones from another repo (than the
+  chosen one, or the topic's main repo) carry a small repo label, on the
+  tile or on the PR rows of a mixed set. A stored multi-selection migrates
+  (one repo stays, several become All repos). Per repo "Let it go stale":
   still synced and remembered, never urgent, never pings, out of the queue
   and filter counts, tiles say "quiet repo". Rules in core
-  (`repo-scope.ts`), settings in meta. Fake data has PRs in
-  posthog-desktop and posthog-python.
+  (`repo-scope.ts`), settings in meta. Fake data has PRs in example-infra (a
+  Depot tile, for the label), posthog-desktop and posthog-python; no
+  mixed-repo set, so PR row labels only show in tests.
 - pnpm instead of npm workspaces (2026-09-28): `pnpm-workspace.yaml`,
   `packageManager: pnpm@12.6.0`, `workspace:*` deps, `pnpm-lock.yaml`
   (imported from the npm lock). Each package declares what it imports; the
@@ -486,12 +491,12 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   from one thread lookup (20 per sync, the sync time beyond that). Should
   read-only PRs stay out of the tiles (memory only)?
 
-- **Repo scope / quiet repos**: the scope applies to the whole app
-  (sidebar, tiles, footer counts, search) but not to the live poll, Mac
-  pings or the notifications debug view: a ping from an out-of-scope repo
+- **Repo scope / quiet repos**: the scope picks the sidebar's topics
+  (and so the counts and search) but not the live poll, Mac pings or the
+  notifications debug view: a ping from a topic outside the chosen repo
   still arrives (quiet repos never ping). Should the scope also mute pings?
-  The repo counts are PRs in tiles, not unread threads. A mixed set tile
-  (quiet + loud repo) counts only its loud PRs for urgency.
+  The menu counts topics (PRs in the tooltip), not unread threads. A mixed
+  set tile (quiet + loud repo) counts only its loud PRs for urgency.
 
 - **Fake mode**: rebuild it on the real Engine (in-memory store, fake GitHub
   reader with the Depot sample, canned agent answers) and delete FakeEngine, or
@@ -561,6 +566,13 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Repo scope is one repo that picks topics** (2026-09-28): "All repos"
+  or exactly one repo, replacing the multi-select. The repo selects
+  topics (at least one PR in it), never tiles: an opened topic shows all
+  its tiles across repos, never filtered or faded, with a small neutral
+  repo label on the ones from another repo. A stored multi-selection
+  migrates: one entry stays, several become All repos.
 
 - **Sweep skip list** (2026-09-28): private projects are kept out by a
   skip list before anything leaves the machine, not only by the prompt.

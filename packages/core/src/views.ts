@@ -120,6 +120,11 @@ export interface PrSummary {
   updatedAt: IsoTime;
   /** In a quiet repo ("Let it go stale"): tier rest, never urgent, never pings. */
   quietRepo: boolean;
+  /**
+   * Short repo name ("example-infra") when this row of a mixed-repo set is from
+   * another repo than the chosen one (or the topic's main repo); else null.
+   */
+  repoLabel: string | null;
 }
 
 export interface TileView {
@@ -138,6 +143,11 @@ export interface TileView {
   pendingWrite: TilePendingWrite | null;
   /** Every PR of the tile is in a quiet repo; the tile shows a small "quiet repo" note. */
   quietRepo: boolean;
+  /**
+   * Short repo name ("example-infra") when every PR of the tile is in another repo
+   * than the chosen one (or, under "All repos", the topic's main repo).
+   */
+  repoLabel: string | null;
 }
 
 /** "pending: mark read on GitHub" on a tile. */

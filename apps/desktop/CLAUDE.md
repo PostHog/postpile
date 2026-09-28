@@ -216,9 +216,12 @@ the mouse side buttons and the trackpad swipe (main process 'swipe' -> preload
 `onOpenPing` and goes through `go()` too. Anything new that navigates should
 call `go()`.
 
-The repo scope (`RepoScopeMenu`) is applied by the server: `/api/topics`,
-`/api/topics/:id` and `/api/search` already leave out-of-scope tiles out,
-so the renderer never filters by repo itself. Setting the scope or a quiet
+The repo scope (`RepoScopeMenu`, a radio list: All repos or one) is
+applied by the server: `/api/topics` and `/api/search` only return the
+topics with a PR in the chosen repo, and `/api/topics/:id` always returns
+every tile with `repoLabel` set on tiles and PR rows from another repo
+(drawn with `RepoLabel` from `pills.tsx`). The renderer never filters or
+fades by repo itself. Setting the scope or a quiet
 repo goes through `useActions()` (`setRepoScope`, `setRepoQuiet`, local,
 not on the `GithubWrite` list). Popovers use `lib/use-dismiss.ts` to close
 on outside click and Escape.

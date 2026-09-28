@@ -47,8 +47,10 @@ import type {
   SnoozeCondition,
   SyncReport,
   Tile,
+  TileRepoLabels,
   TileState,
   TileView,
+  Topic,
   TopicDetail,
   TopicListItem,
   UnreadReason,
@@ -66,7 +68,10 @@ import {
   unreadOlderThan,
   isPrInQuietRepo,
   isQuietTile,
-  isTileInScope,
+  isTopicInScope,
+  labelBaseRepo,
+  tileRepoLabels,
+  viewerOrgs,
   normalizeRepoScope,
   repoOverview,
   withQuietRepo,
@@ -331,13 +336,17 @@ export class FakeEngine implements EngineService {
     return prTier({ pr, events: this.eventsOf(pr.key), viewer: this.viewer(), reason });
   }
 
-  /** Why-codes, status pills, faces and whose turn come from the same core rules as the engine. */
-  private tileView(tile: Tile): TileView {
+  /**
+   * Why-codes, status pills, faces and whose turn come from the same core
+   * rules as the engine. `labels` are the repo labels of the opened topic;
+   * none where they do not show (the sidebar counts).
+   */
+  private tileView(tile: Tile, labels: TileRepoLabels | null = null): TileView {
     const viewer = this.viewer();
     const pending = this.writes.pendingByPrKey();
     const prs: PrSummary[] = [];
     const memberPrs: Pr[] = [];
-    for (const member of tile.members) {
+    for (const [index, member] of tile.members.entries()) {
       const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
       if (!pr) {
         continue;
@@ -365,6 +374,7 @@ export class FakeEngine implements EngineService {
         unseenLoudEvents: member.provenance.kind === 'found' ? 0 : this.eventsOf(pr.key).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
         quietRepo,
+        repoLabel: labels?.prs[index] ?? null,
       });
     }
     const turn = whoseTurn({
@@ -384,6 +394,7 @@ export class FakeEngine implements EngineService {
       turn,
       pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
       quietRepo: isQuietTile(tile.members.map((member) => member.prKey), this.repoSettings),
+      repoLabel: labels?.tile ?? null,
     };
   }
 
@@ -391,9 +402,26 @@ export class FakeEngine implements EngineService {
     return this.data.tiles.filter((tile) => tile.topicId === topicId);
   }
 
-  /** The topic's tiles inside the repo scope, like the engine. */
-  private scopedTiles(topicId: string): Tile[] {
-    return this.tilesOfTopic(topicId).filter((tile) => isTileInScope(tile.members.map((member) => member.prKey), this.repoSettings));
+  private topicPrKeys(topicId: string): PrKey[] {
+    return this.tilesOfTopic(topicId).flatMap((tile) => tile.members.map((member) => member.prKey));
+  }
+
+  /** Active topics the sidebar lists: with a PR in the chosen repo, like the engine. Their tiles are never narrowed. */
+  private listedTopics(): Topic[] {
+    return this.data.topics.filter((topic) => {
+      const keys = this.topicPrKeys(topic.id);
+      return topic.status === 'active' && keys.length > 0 && isTopicInScope(keys, this.repoSettings);
+    });
+  }
+
+  /** An opened topic: every tile, the ones from another repo labelled. */
+  private topicTileViews(topicId: string): TileView[] {
+    const baseRepo = labelBaseRepo(this.topicPrKeys(topicId), this.repoSettings);
+    const orgs = viewerOrgs(this.data.viewerTeams);
+    return this.tilesOfTopic(topicId).map((tile) => {
+      const keys = tile.members.map((member) => member.prKey);
+      return this.tileView(tile, tileRepoLabels(keys, baseRepo, orgs));
+    });
   }
 
   /** Same landing rules as the engine's debug view, over the sample data. */
@@ -480,9 +508,8 @@ export class FakeEngine implements EngineService {
   async listTopics(): Promise<TopicListItem[]> {
     this.writes.settle();
     const viewer = this.viewer();
-    const shown = this.data.topics.filter((topic) => topic.status === 'active' && this.scopedTiles(topic.id).length > 0);
-    const items = shown.map((topic): TopicListItem => {
-      const tiles = this.scopedTiles(topic.id);
+    const items = this.listedTopics().map((topic): TopicListItem => {
+      const tiles = this.tilesOfTopic(topic.id);
       const views = tiles.map((tile) => this.tileView(tile));
       const urgency = topicUrgency(
         views.map((view) => ({
@@ -521,14 +548,12 @@ export class FakeEngine implements EngineService {
   }
 
   async listRepos(): Promise<RepoOverview> {
-    const keys = this.data.tiles
-      .filter((tile) => this.data.topics.some((topic) => topic.id === tile.topicId && topic.status === 'active'))
-      .flatMap((tile) => tile.members.map((member) => member.prKey));
-    return repoOverview(keys, this.repoSettings);
+    const active = this.data.topics.filter((topic) => topic.status === 'active');
+    return repoOverview(active.map((topic) => this.topicPrKeys(topic.id)), this.repoSettings);
   }
 
-  async setRepoScope(repos: string[] | null): Promise<RepoOverview> {
-    this.repoSettings = { ...this.repoSettings, scope: normalizeRepoScope(repos) };
+  async setRepoScope(repo: string | null): Promise<RepoOverview> {
+    this.repoSettings = { ...this.repoSettings, scope: normalizeRepoScope(repo) };
     return this.listRepos();
   }
 
@@ -591,7 +616,7 @@ export class FakeEngine implements EngineService {
     return {
       topic,
       placement: this.memory.placement(topic),
-      tiles: this.scopedTiles(topicId).map((tile) => this.tileView(tile)),
+      tiles: this.topicTileViews(topicId),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
       dossier: this.memory.dossierView(topicId, this.feedback, this.baseline),
@@ -600,20 +625,18 @@ export class FakeEngine implements EngineService {
 
   /** Same matcher as the engine, over the sample topics the sidebar lists. */
   async search(query: string): Promise<SearchResult> {
-    const topics: SearchableTopic[] = this.data.topics
-      .filter((topic) => topic.status === 'active')
-      .map((topic) => ({
-        topicId: topic.id,
-        name: topic.name,
-        area: topic.area,
-        tiles: this.scopedTiles(topic.id).map((tile) => ({
-          tileId: tile.id,
-          prs: tile.members.flatMap((member) => {
-            const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
-            return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
-          }),
-        })),
-      }));
+    const topics: SearchableTopic[] = this.listedTopics().map((topic) => ({
+      topicId: topic.id,
+      name: topic.name,
+      area: topic.area,
+      tiles: this.tilesOfTopic(topic.id).map((tile) => ({
+        tileId: tile.id,
+        prs: tile.members.flatMap((member) => {
+          const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
+          return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
+        }),
+      })),
+    }));
     return searchTopics(topics, query);
   }
 

@@ -983,21 +983,34 @@ avatars and filters", QueuesB2).
 A repo menu in the title bar (right column, before the sync status; the
 left column clips popovers). Rules in core `repo-scope.ts`, settings in
 meta (`repo_settings`: `{scope, quiet}`), `GET /api/repos`, `POST
-/api/repos/scope {repos}`, `POST /api/repos/quiet {repo, quiet}`. Both are
+/api/repos/scope {repo}`, `POST /api/repos/quiet {repo, quiet}`. Both are
 local; nothing goes to GitHub.
 
-- **Scope**: "All repos" or a multi-select of the repos with PRs in some
-  tile, each with its PR count (counted over all repos, so the menu does not
-  shrink while narrowed). A repo the settings name but with no PRs left
-  still shows with 0, so it can be unchecked. An empty selection is "All
-  repos". The engine applies the scope in the read models: a tile is in
-  scope when one of its PRs is (`isTileInScope`; a set can mix repos),
-  topics without tiles in scope drop out of `listTopics`, `getTopic` and
-  search only return tiles in scope, and every count (unread, queues,
-  filter counts) is over the scoped tiles. That is why it combines with
+- **Scope**: a radio list, "All repos" (default) or exactly one repo.
+  Topics are the structure, so the chosen repo only selects topics, never
+  tiles: the sidebar (queues and Other topics) lists the topics with at
+  least one PR (any tile, pulled-in layers included) in that repo
+  (`isTopicInScope`), and the queue and filter counts and search cover
+  those topics, each with all its tiles. That is why it combines with
   search and the Mine / Team / Reply / Review filters without renderer
-  logic. Unchecking one repo out of "All repos" keeps the others; "Only"
-  picks one.
+  logic.
+- **Opened topic**: always every tile across repos, never filtered or
+  faded by repo. A tile whose PRs all sit in another repo than the chosen
+  one (or, under "All repos", the topic's main repo: most PRs, first seen
+  on a tie, `mainRepoOf`) gets a small neutral repo label; a set mixing
+  repos gets it on each PR row from another repo instead
+  (`tileRepoLabels`, `TileView.repoLabel`, `PrSummary.repoLabel`). The
+  label is the short name (`example-infra`, `example-tools`) when the org is one
+  of the viewer's team orgs (`viewerOrgs`, falling back to the base repo's
+  org), else `owner/name`.
+- **Menu rows**: each repo with its topic count (PR count in the tooltip),
+  counted over every topic so the menu does not shrink while narrowed; the
+  "All repos" row counts every topic with PRs. A repo the settings name
+  but with no PRs left still shows with 0, so it can be picked away from
+  or woken up.
+- **Migration**: a scope stored as a list (the multi-select before
+  2026-09-28) reads as that repo when it held one entry, else "All repos"
+  (`migrateRepoScope`); the next change stores the new shape.
 - **Quiet repos ("Let it go stale")**: PRs still sync, get events, topics,
   dossiers and facts. They never make a topic urgent (`UrgencyTile.quiet`
   when every PR of a tile is quiet; a mixed tile only passes the states of
@@ -1458,7 +1471,7 @@ preflight and does not know the token, so CORS stays open.
 | `POST`/`DELETE /api/inbox-cleanup/start-fresh` | `startFresh()` / `clearStartFresh()` |
 | `POST /api/inbox-cleanup/not-now` | `hideInboxCleanup()` (7 days) |
 | `GET /api/repos` | `listRepos()` (repo menu: counts, scope, quiet) |
-| `POST /api/repos/scope` `{repos}` | `setRepoScope()` (null or [] = all) |
+| `POST /api/repos/scope` `{repo}` | `setRepoScope()` (one repo, null = all) |
 | `POST /api/repos/quiet` `{repo, quiet}` | `setRepoQuiet()` |
 | `GET /api/debug/notifications?limit=` | `debugNotifications()` (default 200, max 1000) |
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |

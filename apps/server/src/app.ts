@@ -184,8 +184,8 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   // The title bar's repo menu. Scope and quiet repos are kept in meta; local, never GitHub writes.
   app.get('/api/repos', async (c) => c.json(await engine.listRepos()));
   app.post('/api/repos/scope', async (c) => {
-    const body = z.object({ repos: z.array(repoName).nullable() }).parse(await c.req.json());
-    return c.json(await engine.setRepoScope(body.repos));
+    const body = z.object({ repo: repoName.nullable() }).parse(await c.req.json());
+    return c.json(await engine.setRepoScope(body.repo));
   });
   app.post('/api/repos/quiet', async (c) => {
     const body = z.object({ repo: repoName, quiet: z.boolean() }).parse(await c.req.json());

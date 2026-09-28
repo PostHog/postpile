@@ -126,3 +126,18 @@ export function RelationBadge(props: { relation: TopicRelation }) {
     </span>
   );
 }
+
+/**
+ * Small neutral repo name on a tile or PR row from another repo than the
+ * chosen one (or the topic's main repo). Never a filter, just where it lives.
+ */
+export function RepoLabel(props: { label: string }) {
+  return (
+    <span
+      title={`In ${props.label}, another repo than the rest of this topic or the one picked in the repo menu`}
+      className="shrink-0 rounded-[4px] border border-pill-line bg-subtle px-1 font-mono text-[10px] leading-[14px] text-muted"
+    >
+      {props.label}
+    </span>
+  );
+}

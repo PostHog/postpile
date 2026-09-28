@@ -68,16 +68,32 @@ describe('server routes over the fake engine', () => {
     expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).baseline).toBeNull();
   });
 
-  it('lists repos, narrows topics to the scope and sets a repo quiet', async () => {
+  it('lists repos, keeps the topics of the chosen repo, labels other repos and sets a repo quiet', async () => {
     const app = appWithFake();
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
     expect(repos.scope).toBeNull();
-    expect(repos.repos.map((entry) => entry.repo)).toEqual(['PostHog/posthog', 'PostHog/posthog-desktop', 'PostHog/posthog-python']);
+    expect(repos.repos.map((entry) => [entry.repo, entry.topics])).toEqual([
+      ['PostHog/posthog', 6],
+      ['PostHog/example-infra', 1],
+      ['PostHog/posthog-desktop', 1],
+      ['PostHog/posthog-python', 1],
+    ]);
 
-    const scoped = await post<RepoOverview>(app, '/api/repos/scope', { repos: ['PostHog/posthog-desktop'] });
-    expect(scoped.json.scope).toEqual(['PostHog/posthog-desktop']);
+    // All repos: the Depot topic labels its tile outside its main repo.
+    const depot = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
+    const tileLabels = depot.tiles.flatMap((view) => (view.repoLabel ? [view.repoLabel] : []));
+    expect(tileLabels).toEqual(['example-infra']);
+
+    const scoped = await post<RepoOverview>(app, '/api/repos/scope', { repo: 'PostHog/example-infra' });
+    expect(scoped.json.scope).toBe('PostHog/example-infra');
+    expect(scoped.json.repos.find((entry) => entry.selected)?.repo).toBe('PostHog/example-infra');
     const topics = (await (await app.request('/api/topics')).json()) as TopicListItem[];
-    expect(topics.map((item) => item.topic.id)).toEqual(['topic-desktop-release']);
+    expect(topics.map((item) => item.topic.id)).toEqual(['topic-depot']);
+    // The opened topic keeps every tile; now the posthog ones carry the label.
+    const narrowed = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
+    expect(narrowed.tiles.length).toBe(depot.tiles.length);
+    expect(narrowed.tiles.find((view) => view.prs.some((pr) => pr.key === 'PostHog/example-infra#41915'))?.repoLabel).toBeNull();
+    expect(narrowed.tiles.find((view) => view.tile.kind === 'stack')?.repoLabel).toBe('posthog');
 
     const quiet = await post<RepoOverview>(app, '/api/repos/quiet', { repo: 'PostHog/posthog-desktop', quiet: true });
     expect(quiet.json.repos.find((entry) => entry.repo === 'PostHog/posthog-desktop')?.quiet).toBe(true);
@@ -85,7 +101,8 @@ describe('server routes over the fake engine', () => {
     expect(detail.tiles[0]?.quietRepo).toBe(true);
 
     expect((await post(app, '/api/repos/quiet', { repo: 'not a repo', quiet: true })).status).toBe(400);
-    expect((await post<RepoOverview>(app, '/api/repos/scope', { repos: null })).json.scope).toBeNull();
+    expect((await post(app, '/api/repos/scope', { repos: ['PostHog/example-infra'] })).status).toBe(400);
+    expect((await post<RepoOverview>(app, '/api/repos/scope', { repo: null })).json.scope).toBeNull();
   });
 
   it('lists topics grouped by whether they need the user', async () => {

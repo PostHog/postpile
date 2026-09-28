@@ -6,23 +6,14 @@ export function shortRepo(repo: string): string {
   return slash >= 0 ? repo.slice(slash + 1) : repo;
 }
 
-/** The menu button: "All repos", one repo's short name, or "N repos". */
+/** The menu button: "All repos" or the chosen repo's short name. */
 export function scopeLabel(overview: RepoOverview | undefined): string {
   const scope = overview?.scope ?? null;
-  if (scope === null) {
-    return 'All repos';
-  }
-  return scope.length === 1 ? shortRepo(scope[0]!) : `${scope.length} repos`;
+  return scope === null ? 'All repos' : shortRepo(scope);
 }
 
-/**
- * The scope after (un)checking one repo. From "All repos" unchecking one
- * keeps every other listed repo. Checking the last missing one, or
- * unchecking the last checked one, goes back to all (null).
- */
-export function toggledScope(overview: RepoOverview, repo: string): string[] | null {
-  const checked = overview.repos.filter((entry) => entry.inScope).map((entry) => entry.repo);
-  const next = checked.includes(repo) ? checked.filter((entry) => entry !== repo) : [...checked, repo];
-  const all = overview.repos.every((entry) => next.includes(entry.repo));
-  return next.length === 0 || all ? null : next;
+/** "3 topics, 5 PRs" for a row's count. */
+export function countTitle(topics: number, prs: number | null): string {
+  const topicText = `${topics} topic${topics === 1 ? '' : 's'}`;
+  return prs === null ? topicText : `${topicText}, ${prs} PR${prs === 1 ? '' : 's'}`;
 }
