@@ -26,15 +26,32 @@ export interface ApproveButtonLook {
   headMoved: boolean;
 }
 
-/** The viewer's newest approving review on GitHub, any commit. */
-function viewerApproval(input: ApproveButtonInput): Review | null {
+/** The viewer's newest approve or request-changes review on GitHub, any commit. */
+function viewerVerdictReview(input: ApproveButtonInput): Review | null {
   let newest: Review | null = null;
   for (const review of input.reviews) {
-    if (review.state === 'APPROVED' && review.author === input.viewerLogin && (!newest || review.submittedAt > newest.submittedAt)) {
+    const isVerdict = review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED';
+    if (isVerdict && review.author === input.viewerLogin && (!newest || review.submittedAt > newest.submittedAt)) {
       newest = review;
     }
   }
   return newest;
+}
+
+/** The viewer's approving review, unless a later "request changes" from the viewer undid it. */
+function viewerApproval(input: ApproveButtonInput): Review | null {
+  const newest = viewerVerdictReview(input);
+  return newest?.state === 'APPROVED' ? newest : null;
+}
+
+/** The app's own approval record, unless a newer "request changes" from the viewer undid it. */
+function appApprovalAt(input: ApproveButtonInput): string | null {
+  const newest = viewerVerdictReview(input);
+  if (input.viewerApprovedAt === null) {
+    return null;
+  }
+  const undone = newest?.state === 'CHANGES_REQUESTED' && newest.submittedAt > input.viewerApprovedAt;
+  return undone ? null : input.viewerApprovedAt;
 }
 
 function othersApproved(input: ApproveButtonInput): boolean {
@@ -62,7 +79,7 @@ function approvedCommit(input: ApproveButtonInput, review: Review | null): strin
  */
 export function approveButton(input: ApproveButtonInput): ApproveButtonLook {
   const review = viewerApproval(input);
-  const viewerApproved = input.viewerApprovedAt !== null || review !== null;
+  const viewerApproved = appApprovalAt(input) !== null || review !== null;
   if (viewerApproved) {
     const commit = approvedCommit(input, review);
     return { label: 'Approve again', variant: 'secondary', viewerApproved, headMoved: commit !== null && commit !== input.headOid };
@@ -79,7 +96,7 @@ export function approveButton(input: ApproveButtonInput): ApproveButtonLook {
 
 /** The viewer's newest approval time: the app record or the newest approving review. */
 export function viewerApprovedAt(input: ApproveButtonInput): string | null {
-  return input.viewerApprovedAt ?? viewerApproval(input)?.submittedAt ?? null;
+  return appApprovalAt(input) ?? viewerApproval(input)?.submittedAt ?? null;
 }
 
 export interface StateGlyph {

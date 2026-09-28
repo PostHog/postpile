@@ -3,8 +3,8 @@ import type { Review } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
 import { approveButton, approveStateGlyphs, viewerApprovedAt, type ApproveButtonInput } from './approve.ts';
 
-function review(author: string, state: Review['state'], commitOid: string | null = null): Review {
-  return { id: `${author}-${state}`, author, state, body: '', submittedAt: at(10), commitOid };
+function review(author: string, state: Review['state'], commitOid: string | null = null, minute = 10): Review {
+  return { id: `${author}-${state}-${minute}`, author, state, body: '', submittedAt: at(minute), commitOid };
 }
 
 function input(overrides: Partial<ApproveButtonInput> = {}): ApproveButtonInput {
@@ -96,5 +96,23 @@ describe('approveStateGlyphs', () => {
 
   it('shows changes requested', () => {
     expect(approveStateGlyphs('open', 'CHANGES_REQUESTED')[1]).toEqual({ glyph: 'changes', title: 'Changes requested' });
+  });
+});
+
+describe('approveButton after a request for changes', () => {
+  it('treats a later request changes from the viewer as undoing the approval', () => {
+    const reviews = [review('viewer', 'APPROVED', 'a', 10), review('viewer', 'CHANGES_REQUESTED', 'b', 20)];
+    expect(approveButton(input({ reviews })).label).toBe('Approve');
+  });
+
+  it('lets a request changes newer than the app record undo that record too', () => {
+    const reviews = [review('viewer', 'CHANGES_REQUESTED', 'b', 20)];
+    expect(approveButton(input({ reviews, viewerApprovedAt: at(10) })).label).toBe('Approve');
+    expect(viewerApprovedAt(input({ reviews, viewerApprovedAt: at(10) }))).toBeNull();
+  });
+
+  it('keeps the approval when it came after the viewer asked for changes', () => {
+    const reviews = [review('viewer', 'CHANGES_REQUESTED', 'a', 10), review('viewer', 'APPROVED', 'b', 20)];
+    expect(approveButton(input({ reviews })).label).toBe('Approve again');
   });
 });
