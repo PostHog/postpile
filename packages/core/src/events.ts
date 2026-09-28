@@ -348,6 +348,7 @@ export function deriveEvents(
     const decision = ruleLoudness({
       kind: raw.kind,
       actor: raw.actor,
+      at: raw.at,
       isBot: raw.isBot,
       pr,
       viewer,

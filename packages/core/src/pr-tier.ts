@@ -1,6 +1,7 @@
 // PR tiers, ported from ghatchup's triage.Classify: which PR-level queue an
 // open PR belongs to. Rules only, no agent. The sidebar's queue sections
 // are built on it (`topicQueues`).
+import { changesAnswered } from './changes-answered.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import { isApprovedByViewer } from './tiles.ts';
 import type { EventKind, NotificationReason, Pr, PrEvent, Viewer } from './types.ts';
@@ -10,7 +11,8 @@ import { unansweredAsk } from './whose-turn.ts';
  * needs_reply: a human spoke to the viewer (mention, question, reply) and
  * they have not answered. mine: the viewer wrote it. team: a teammate wrote
  * it. to_review: a review is asked of the viewer or their team and they have
- * not reviewed the head. team_mentioned: the team was @-mentioned. rest:
+ * not reviewed the head, or the author addressed the viewer's changes request
+ * (pushed or replied after it, no re-request needed). team_mentioned: the team was @-mentioned. rest:
  * everything else, and every PR that is not open.
  */
 export type PrTier = 'needs_reply' | 'mine' | 'team' | 'to_review' | 'team_mentioned' | 'rest';
@@ -58,8 +60,15 @@ export function prTier(input: PrTierInput): PrTier {
   if (pr.state !== 'OPEN') {
     return 'rest';
   }
-  if (unansweredAsk(pr, input.events, viewer, REPLY_KINDS) !== null) {
+  const ask = unansweredAsk(pr, input.events, viewer, REPLY_KINDS);
+  // Addressed your changes: a re-review, even from a teammate. The author's
+  // thread replies are part of it; an ask from anyone else still wins.
+  const answered = !pr.isDraft && changesAnswered(pr, viewer) !== null;
+  if (ask !== null && !(answered && sameLogin(ask.actor, pr.author))) {
     return 'needs_reply';
+  }
+  if (answered) {
+    return 'to_review';
   }
   if (sameLogin(pr.author, viewer.login)) {
     return 'mine';

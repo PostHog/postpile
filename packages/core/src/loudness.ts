@@ -1,11 +1,14 @@
+import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
-import type { EventDisplayState, EventKind, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
+import type { EventDisplayState, EventKind, IsoTime, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
 export interface LoudnessInput {
   kind: EventKind;
   /** Login of whoever caused the event. */
   actor: string;
+  /** When it happened. Without it, time-based rules (addressed your changes) do not apply. */
+  at?: IsoTime;
   isBot: boolean;
   pr: Pr;
   viewer: Viewer;
@@ -100,6 +103,10 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
   }
   if (ADDRESSED_KINDS.includes(input.kind)) {
     return addressedLoudness(input);
+  }
+  // The author pushed or replied after the viewer asked for changes: that is aimed at the viewer.
+  if (input.at !== undefined && isChangesAnswerEvent({ kind: input.kind, actor: input.actor, at: input.at }, input.pr, input.viewer)) {
+    return decide('loud', CHANGES_ANSWERED_REASON);
   }
   if (reviewKinds.includes(input.kind)) {
     return reviewLoudness(input);

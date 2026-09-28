@@ -18,6 +18,7 @@ export * from './why-here.ts';
 export * from './for-whom.ts';
 export * from './pr-status.ts';
 export * from './tile-people.ts';
+export * from './changes-answered.ts';
 export * from './whose-turn.ts';
 export * from './primary-action.ts';
 export * from './pr-tier.ts';

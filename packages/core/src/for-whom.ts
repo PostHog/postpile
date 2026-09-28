@@ -1,6 +1,7 @@
 // "For whom" a PR or tile is: the word chip and color band on tiles, built
 // on the why-here codes (`whyHere`, `tileWhy`). Only the output changes: the
 // codes still decide, the UI shows words instead of RV / RT / @ / ...
+import { changesAnswered } from './changes-answered.ts';
 import { isOwnTeam, mentionsTeam, sameLogin } from './mentions.ts';
 import type { Pr, Viewer } from './types.ts';
 import type { WhyCode } from './why-here.ts';
@@ -48,6 +49,10 @@ function teamOf(pr: Pr | null, viewer: Viewer | null): string {
 export function forWhom(code: WhyCode, pr: Pr | null, viewer: Viewer | null): ForWhom {
   if (code === 'AU' || (pr !== null && viewer !== null && sameLogin(pr.author, viewer.login))) {
     return { kind: 'own' };
+  }
+  // The author addressed the viewer's changes request: a re-review for them, whatever the notification said.
+  if (pr !== null && viewer !== null && !pr.isDraft && changesAnswered(pr, viewer) !== null) {
+    return { kind: 'you' };
   }
   switch (code) {
     case 'RV':

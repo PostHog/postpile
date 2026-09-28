@@ -1,6 +1,7 @@
 // Mac pings: which new activity may interrupt the user, and what the
 // notification says when the agent does not write it. Rules only, no IO.
 // DESIGN.md "Live poll and Mac pings" has the whole flow.
+import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { clipText } from './dossier.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
@@ -97,9 +98,11 @@ export const OFF_POLL_STATUS: LivePollStatus = {
 
 /**
  * Loud events that are about the user in person: someone talks to them,
- * or, on an open PR, asks for their review, blocks their own PR, or pushes
- * after their approval when the agent raised that push (it starts quiet). Other loud events (a comment or an approval on their PR, a merge
- * without their review) stay unread tiles but never ping.
+ * or, on an open PR, asks for their review, blocks their own PR, addresses
+ * their changes request (the author pushed or replied after it), or pushes
+ * after their approval when the agent raised that push (it starts quiet).
+ * Other loud events (a comment or an approval on their PR, a merge without
+ * their review) stay unread tiles but never ping.
  */
 export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
   if (effectiveLoudness(event) !== 'loud') {
@@ -115,6 +118,9 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
   // A review request or a push on a merged or closed PR leaves nothing to do.
   if (pr.state !== 'OPEN') {
     return false;
+  }
+  if (isChangesAnswerEvent(event, pr, viewer)) {
+    return true;
   }
   switch (event.kind) {
     case 'review_requested':
@@ -170,6 +176,10 @@ export const PING_BODY_MAX = 200;
 
 function headline(event: PrEvent): string {
   const who = `@${event.actor}`;
+  // Replies keep their own reason ("replies to you"); only pushes and plain comments carry this one.
+  if (event.ruleReason === CHANGES_ANSWERED_REASON) {
+    return `${who} addressed your changes`;
+  }
   switch (event.kind) {
     case 'mention':
       return `${who} mentioned you`;

@@ -312,6 +312,16 @@ describe('FakeEngine queues', () => {
   });
 });
 
+describe('FakeEngine addressed your changes', () => {
+  it('lists a PR whose author pushed after your changes request under To review, for you', async () => {
+    const devEnv = (await new FakeEngine().getTopic('topic-dev-env'))?.tiles ?? [];
+    const view = devEnv.find((item) => item.tile.id === 'pr:PostHog/posthog#41960');
+    expect(view?.turn).toMatchObject({ kind: 'you', what: 'paul addressed your changes: re-review' });
+    expect(view?.prs[0]?.tier).toBe('to_review');
+    expect(view?.forWhom).toEqual({ kind: 'you' });
+  });
+});
+
 describe('FakeEngine found PRs', () => {
   it('shows found PRs calm, with their turn and a why code', async () => {
     const engine = new FakeEngine();

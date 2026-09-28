@@ -273,6 +273,27 @@ function buildPrs(clock: SampleClock): Pr[] {
       number: 41950, title: 'Cache pnpm store in the hogli CI image', author: SAMPLE_VIEWER, state: 'OPEN',
       size: [34, 8, 2], checks: 'PENDING', openedHoursAgo: 30,
     }),
+    // Addressed your changes: you asked for changes yesterday, paul pushed and
+    // answered your thread, and never re-requested a review. Back to you.
+    samplePr(clock, {
+      number: 41960, title: 'Split the toolbar into its own bundle', author: 'paul', state: 'OPEN',
+      size: [260, 90, 9], checks: 'SUCCESS', openedHoursAgo: 50,
+      reviews: [[SAMPLE_VIEWER, 'CHANGES_REQUESTED', 'The chunk names change on every build, which busts the CDN cache.', 'sha41960-a', 30]],
+      threads: [
+        {
+          id: 'thread-41960-1',
+          path: 'frontend/vite.config.ts',
+          comments: [
+            { author: SAMPLE_VIEWER, body: 'Can these chunk names be stable?', hoursAgo: 30 },
+            { author: 'paul', body: 'Now hashed from the entry path, stable across builds.', hoursAgo: 2 },
+          ],
+        },
+      ],
+      commits: [
+        { oid: 'sha41960-a', headline: 'Split the toolbar bundle', hoursAgo: 48 },
+        { oid: 'sha41960', headline: 'Stable chunk names for the toolbar', hoursAgo: 2.2 },
+      ],
+    }),
     samplePr(clock, {
       number: 41955, title: 'Pin the Playwright browser version', author: 'nell', state: 'OPEN',
       size: [12, 4, 2], checks: 'SUCCESS', openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
@@ -354,6 +375,11 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 41870, [
       { kind: 'review_requested', actor: 'sol', text: 'requested @team-devex', hoursAgo: 72, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41960, [
+      { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 30, rule: 'quiet', seen: true },
+      { kind: 'commits_pushed', actor: 'paul', text: 'pushed: Stable chunk names for the toolbar', hoursAgo: 2.2, rule: 'loud' },
+      { kind: 'reply_to_user', actor: 'paul', text: 'replied to you: "Now hashed from the entry path"', hoursAgo: 2, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 41955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
@@ -472,6 +498,9 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(41934)}`, 'Ingestion asks devex about runner labels', [pinged(41934, 'team_mention')]),
     sampleTile(TOPIC.deps, 'single', `pr:${sampleKey(41925)}`, 'Bump ruff to 0.7', [pinged(41925, 'subscribed')]),
     sampleTile(TOPIC.frontend, 'single', `pr:${sampleKey(41857)}`, 'Vite 7 landed; jude asks about snapshots', [pinged(41857, 'mention')]),
+    sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(41960)}`, 'paul addressed your toolbar bundle changes', [
+      pinged(41960, 'comment'),
+    ]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(41870)}`, 'hogli start would default to minimal stack', [
       pinged(41870, 'review_requested'),
     ]),

@@ -1,6 +1,7 @@
 // "Whose turn": is the next move on a tile the viewer's, someone else's, or
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
 import { isBot } from './bots.ts';
+import { changesAnswered, type ChangesAnswer } from './changes-answered.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { isApprovedByViewer } from './tiles.ts';
@@ -300,6 +301,11 @@ function draftTurn(ctx: PrContext): WhoseTurn {
   return NO_TURN;
 }
 
+/** "paul addressed your changes: re-review", or "paul replied to your review" when there was no push. */
+function changesAnsweredText(author: string, answer: ChangesAnswer): string {
+  return answer.pushed ? `${author} addressed your changes: re-review` : `${author} replied to your review`;
+}
+
 function prTurn(ctx: PrContext): WhoseTurn {
   if (ctx.pr.state !== 'OPEN') {
     return NO_TURN;
@@ -308,6 +314,12 @@ function prTurn(ctx: PrContext): WhoseTurn {
     return draftTurn(ctx);
   }
   const ask = openAsk(ctx);
+  // The author's thread replies are asks too; the answer to the changes
+  // request says more. An ask from anyone else still goes first.
+  const answer = changesAnswered(ctx.pr, ctx.viewer);
+  if (answer && (ask === null || sameLogin(ask.actor, ctx.pr.author))) {
+    return you(ctx, changesAnsweredText(ctx.pr.author, answer));
+  }
   if (ask) {
     const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login)
       ? false

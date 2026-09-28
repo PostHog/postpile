@@ -82,8 +82,11 @@ export interface SamplePrInput {
   headRef?: string;
   openedHoursAgo: number;
   mergedHoursAgo?: number;
-  /** commitOid defaults to the head; pass an older one for "commits after approval". */
-  reviews?: [author: string, state: ReviewState, body?: string, commitOid?: string][];
+  /**
+   * commitOid defaults to the head; pass an older one for "commits after
+   * approval". hoursAgo defaults to 1; set it for a review older than later pushes.
+   */
+  reviews?: [author: string, state: ReviewState, body?: string, commitOid?: string, hoursAgo?: number][];
   reviewerUsers?: string[];
   reviewerTeams?: string[];
   body?: string;
@@ -100,7 +103,7 @@ export interface SamplePrInput {
 }
 
 /** Like GitHub with a review rule: a standing change request wins, then any approval. */
-function sampleReviewDecision(reviews: [string, ReviewState, string?, string?][]): ReviewDecision {
+function sampleReviewDecision(reviews: [string, ReviewState, string?, string?, number?][]): ReviewDecision {
   if (reviews.some(([, state]) => state === 'CHANGES_REQUESTED')) {
     return 'CHANGES_REQUESTED';
   }
@@ -132,12 +135,12 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     reviewDecision: sampleReviewDecision(input.reviews ?? []),
     reviewerUsers: input.reviewerUsers ?? [],
     reviewerTeams: input.reviewerTeams ?? [],
-    reviews: (input.reviews ?? []).map(([author, state, body, commitOid], index) => ({
+    reviews: (input.reviews ?? []).map(([author, state, body, commitOid, hoursAgo], index) => ({
       id: `review-${input.number}-${index}`,
       author,
       state,
       body: body ?? '',
-      submittedAt: clock.hoursAgo(1),
+      submittedAt: clock.hoursAgo(hoursAgo ?? 1),
       commitOid: commitOid ?? headOid,
     })),
     commits: (input.commits ?? []).map((commit) => ({
