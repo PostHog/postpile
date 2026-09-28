@@ -87,6 +87,12 @@ function conditionalHeaders(conditions: NotificationConditions): Record<string, 
   return headers;
 }
 
+/** X-Poll-Interval in seconds, or null when missing or not a positive number. */
+export function pollIntervalOf(response: Response): number | null {
+  const value = Number(response.headers.get('x-poll-interval') ?? '');
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 /**
  * Walks every page of the unread inbox. Only the first page is conditional:
  * once it comes back 200 the inbox has moved and later pages must be read in full.
@@ -96,8 +102,9 @@ export async function listNotifications(
   conditions: NotificationConditions,
 ): Promise<NotificationsResult> {
   const first = await http.request('GET', FIRST_PAGE, { headers: conditionalHeaders(conditions) });
+  const pollIntervalSeconds = pollIntervalOf(first);
   if (first.status === 304) {
-    return { notModified: true };
+    return { notModified: true, pollIntervalSeconds };
   }
   if (!first.ok) {
     throw await errorFromResponse('GET notifications', first);
@@ -121,5 +128,6 @@ export async function listNotifications(
     threads,
     etag: first.headers.get('etag'),
     lastModified: first.headers.get('last-modified'),
+    pollIntervalSeconds,
   };
 }

@@ -7,13 +7,28 @@ export const API_URL = 'https://api.github.com';
 /** Calls the global fetch without binding it to our object. */
 const globalFetch: FetchFn = (url, init) => fetch(url, init);
 
+export interface RateLimitInfo {
+  /** GitHub asked to slow down: 429, or 403 with a rate-limit sign (Retry-After, no requests left, "rate limit" message). */
+  rateLimited: boolean;
+  /** From Retry-After, or from X-RateLimit-Reset when no requests are left. Null when GitHub said neither. */
+  retryAfterSeconds: number | null;
+}
+
+const NOT_LIMITED: RateLimitInfo = { rateLimited: false, retryAfterSeconds: null };
+
 export class GitHubError extends Error {
+  readonly rateLimited: boolean;
+  readonly retryAfterSeconds: number | null;
+
   constructor(
     message: string,
     readonly status: number,
+    limit: RateLimitInfo = NOT_LIMITED,
   ) {
     super(message);
     this.name = 'GitHubError';
+    this.rateLimited = limit.rateLimited;
+    this.retryAfterSeconds = limit.retryAfterSeconds;
   }
 }
 
@@ -79,6 +94,38 @@ export class GitHubHttp {
   }
 }
 
+/** Whole seconds, or null for a missing or unreadable header. */
+function secondsHeader(response: Response, name: string): number | null {
+  const value = Number(response.headers.get(name) ?? '');
+  return response.headers.get(name) !== null && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Primary limits answer 403 or 429 with X-RateLimit-Remaining 0 and a reset
+ * time; secondary limits answer 403 or 429 with Retry-After or only a
+ * message. `nowMs` is the local clock, compared against the reset epoch.
+ */
+export function rateLimitOf(response: Response, message: string, nowMs: number = Date.now()): RateLimitInfo {
+  if (response.status !== 403 && response.status !== 429) {
+    return NOT_LIMITED;
+  }
+  const retryAfter = secondsHeader(response, 'retry-after');
+  const remaining = secondsHeader(response, 'x-ratelimit-remaining');
+  const reset = secondsHeader(response, 'x-ratelimit-reset');
+  const exhausted = remaining === 0;
+  const rateLimited = response.status === 429 || retryAfter !== null || exhausted || /rate limit/i.test(message);
+  if (!rateLimited) {
+    return NOT_LIMITED;
+  }
+  if (retryAfter !== null) {
+    return { rateLimited, retryAfterSeconds: Math.max(0, Math.ceil(retryAfter)) };
+  }
+  if (exhausted && reset !== null) {
+    return { rateLimited, retryAfterSeconds: Math.max(0, Math.ceil(reset - nowMs / 1000)) };
+  }
+  return { rateLimited, retryAfterSeconds: null };
+}
+
 export async function errorFromResponse(what: string, response: Response): Promise<GitHubError> {
   let detail = '';
   try {
@@ -88,5 +135,5 @@ export async function errorFromResponse(what: string, response: Response): Promi
     // Body was not JSON; the status alone has to do.
   }
   const suffix = detail ? `: ${detail}` : '';
-  return new GitHubError(`GitHub ${what} failed with ${response.status}${suffix}`, response.status);
+  return new GitHubError(`GitHub ${what} failed with ${response.status}${suffix}`, response.status, rateLimitOf(response, detail));
 }

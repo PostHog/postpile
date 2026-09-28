@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GitHubClient } from './client.ts';
 import { FakeFetch, fakeTokens, loadFixture } from './fake-fetch.ts';
-import { GitHubError } from './http.ts';
+import { GitHubError, rateLimitOf } from './http.ts';
 import { nextPageUrl } from './notifications.ts';
 
 const PAGE_2 = 'https://api.github.com/notifications?all=false&per_page=50&page=2';
@@ -31,7 +31,12 @@ describe('listNotifications', () => {
 
     const result = await client.listNotifications({ etag: null, lastModified: null });
 
-    expect(result).toMatchObject({ notModified: false, etag: 'W/"abc"', lastModified: 'Sat, 20 Sep 2026 10:00:00 GMT' });
+    expect(result).toMatchObject({
+      notModified: false,
+      etag: 'W/"abc"',
+      lastModified: 'Sat, 20 Sep 2026 10:00:00 GMT',
+      pollIntervalSeconds: null,
+    });
     if (result.notModified) throw new Error('expected threads');
     expect(result.threads.map((t) => [t.id, t.reason, t.repo, t.number, t.subjectType])).toEqual([
       ['1001', 'review_requested', 'acme/app', 42, 'PullRequest'],
@@ -50,12 +55,12 @@ describe('listNotifications', () => {
   });
 
   it('sends the previous ETag and Last-Modified and reports 304 as notModified', async () => {
-    const fake = new FakeFetch([{ status: 304 }]);
+    const fake = new FakeFetch([{ status: 304, headers: { 'x-poll-interval': '60' } }]);
     const client = new GitHubClient(fakeTokens, fake.fn);
 
     const result = await client.listNotifications({ etag: 'W/"abc"', lastModified: 'Sat, 20 Sep 2026 10:00:00 GMT' });
 
-    expect(result).toEqual({ notModified: true });
+    expect(result).toEqual({ notModified: true, pollIntervalSeconds: 60 });
     expect(fake.requests[0]?.headers['if-none-match']).toBe('W/"abc"');
     expect(fake.requests[0]?.headers['if-modified-since']).toBe('Sat, 20 Sep 2026 10:00:00 GMT');
   });
@@ -81,6 +86,42 @@ describe('listNotifications', () => {
 
     await expect(call).rejects.toBeInstanceOf(GitHubError);
     await expect(call).rejects.toThrow(/401: Bad credentials/);
+    await expect(call).rejects.toMatchObject({ rateLimited: false, retryAfterSeconds: null });
+  });
+
+  it('marks a secondary rate limit with its Retry-After', async () => {
+    const fake = new FakeFetch([
+      { status: 403, body: { message: 'You have exceeded a secondary rate limit.' }, headers: { 'retry-after': '90' } },
+    ]);
+    const client = new GitHubClient(fakeTokens, fake.fn);
+
+    await expect(client.listNotifications({ etag: null, lastModified: null })).rejects.toMatchObject({
+      status: 403,
+      rateLimited: true,
+      retryAfterSeconds: 90,
+    });
+  });
+
+  it('marks 429 as a rate limit even without headers', async () => {
+    const fake = new FakeFetch([{ status: 429, body: { message: 'Too many requests' } }]);
+    const client = new GitHubClient(fakeTokens, fake.fn);
+
+    await expect(client.listNotifications({ etag: null, lastModified: null })).rejects.toMatchObject({
+      rateLimited: true,
+      retryAfterSeconds: null,
+    });
+  });
+});
+
+describe('rateLimitOf', () => {
+  it('waits until X-RateLimit-Reset when no requests are left', () => {
+    const response = new Response(null, { status: 403, headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1000' } });
+    expect(rateLimitOf(response, '', 880_000)).toEqual({ rateLimited: true, retryAfterSeconds: 120 });
+  });
+
+  it('leaves a plain 403 alone', () => {
+    const response = new Response(null, { status: 403, headers: { 'x-ratelimit-remaining': '4000' } });
+    expect(rateLimitOf(response, 'Resource not accessible by integration')).toEqual({ rateLimited: false, retryAfterSeconds: null });
   });
 });
 

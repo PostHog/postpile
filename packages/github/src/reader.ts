@@ -5,9 +5,19 @@ export interface NotificationConditions {
   lastModified: string | null;
 }
 
+/**
+ * pollIntervalSeconds is GitHub's X-Poll-Interval header: how often it would
+ * like the inbox polled (usually 60). Null when the header is missing.
+ */
 export type NotificationsResult =
-  | { notModified: true }
-  | { notModified: false; threads: NotificationThread[]; etag: string | null; lastModified: string | null };
+  | { notModified: true; pollIntervalSeconds: number | null }
+  | {
+      notModified: false;
+      threads: NotificationThread[];
+      etag: string | null;
+      lastModified: string | null;
+      pollIntervalSeconds: number | null;
+    };
 
 /**
  * PRs to look up by branch, for completing stacks. side head: PRs whose head
