@@ -13,6 +13,7 @@ import type { Store } from '@code-manager/store';
 import { errorText } from './errors.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { StackLayerFinder } from './stack-layers.ts';
+import { TeamMembers } from './team-members.ts';
 import { saveViewer } from './viewer-meta.ts';
 
 const ETAG_KEY = 'notifications_etag';
@@ -51,6 +52,7 @@ function refOf(thread: NotificationThread): PrRef | null {
  */
 export class GitHubSync {
   private readonly layers: StackLayerFinder;
+  private readonly teamMembers: TeamMembers;
 
   constructor(
     private readonly store: Store,
@@ -59,6 +61,7 @@ export class GitHubSync {
     private readonly now: () => Date,
   ) {
     this.layers = new StackLayerFinder(reader, now);
+    this.teamMembers = new TeamMembers(store, reader, now);
   }
 
   private setMeta(key: string, value: string | null): void {
@@ -190,7 +193,7 @@ export class GitHubSync {
   }
 
   async run(maxPrs: number): Promise<GitHubSyncResult> {
-    const viewer = await this.reader.viewer();
+    const viewer = await this.teamMembers.attach(await this.reader.viewer());
     saveViewer(this.store, viewer);
     const notifications = await this.syncNotifications();
 

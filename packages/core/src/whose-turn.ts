@@ -61,21 +61,24 @@ function isViewer(ctx: PrContext, login: string): boolean {
   return sameLogin(login, ctx.viewer.login);
 }
 
-/** The viewer commented or reviewed after `since`. */
-function spokeSince(ctx: PrContext, since: string): boolean {
-  const comment = ctx.pr.comments.some((c) => isViewer(ctx, c.author) && c.createdAt > since);
-  const review = ctx.pr.reviews.some((r) => isViewer(ctx, r.author) && r.state !== 'PENDING' && r.submittedAt > since);
+/** The viewer commented or reviewed on the PR after `since`. */
+function spokeSince(pr: Pr, viewer: Viewer, since: string): boolean {
+  const comment = pr.comments.some((c) => sameLogin(c.author, viewer.login) && c.createdAt > since);
+  const review = pr.reviews.some((r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING' && r.submittedAt > since);
   return comment || review;
 }
 
-/** The newest human mention, question or reply to the viewer they have not answered yet. */
-function openAsk(ctx: PrContext): PrEvent | null {
+/**
+ * The newest human event of `kinds` aimed at the viewer that they have not
+ * answered since (no comment or review after it). Also used by `prTier`.
+ */
+export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: EventKind[] = ASK_KINDS): PrEvent | null {
   let newest: PrEvent | null = null;
-  for (const event of ctx.events) {
-    if (!ASK_KINDS.includes(event.kind) || event.isBot || isViewer(ctx, event.actor)) {
+  for (const event of events) {
+    if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
       continue;
     }
-    if (spokeSince(ctx, event.at)) {
+    if (spokeSince(pr, viewer, event.at)) {
       continue;
     }
     if (newest === null || event.at > newest.at) {
@@ -83,6 +86,11 @@ function openAsk(ctx: PrContext): PrEvent | null {
     }
   }
   return newest;
+}
+
+/** The newest human mention, question or reply to the viewer they have not answered yet. */
+function openAsk(ctx: PrContext): PrEvent | null {
+  return unansweredAsk(ctx.pr, ctx.events, ctx.viewer);
 }
 
 function viewerReviews(ctx: PrContext): Review[] {
@@ -129,13 +137,25 @@ function otherReviewers(ctx: PrContext): string[] {
   return [...new Set(logins)];
 }
 
+/**
+ * Other reviewers who are on one of the viewer's teams. Until the member
+ * list has been fetched (`teamMembers` missing) any other reviewer counts.
+ */
+function teammateReviewers(ctx: PrContext): string[] {
+  const members = ctx.viewer.teamMembers;
+  const others = otherReviewers(ctx);
+  if (members === undefined) {
+    return others;
+  }
+  return others.filter((login) => members.some((member) => sameLogin(member, login)));
+}
+
 type ReviewAsk = 'you' | 'team' | 'team_taken' | null;
 
 /**
  * you: the viewer is a requested reviewer. team: one of the viewer's teams
- * is, and nobody but the author has reviewed yet. team_taken: a team request
- * someone else already picked up. We do not know who is on the team, so any
- * other reviewer counts as the teammate.
+ * is, and no teammate has reviewed yet. team_taken: a teammate already
+ * picked the team request up.
  */
 function reviewAsk(ctx: PrContext): ReviewAsk {
   if (ctx.pr.reviewerUsers.some((login) => isViewer(ctx, login))) {
@@ -144,7 +164,7 @@ function reviewAsk(ctx: PrContext): ReviewAsk {
   if (!ctx.pr.reviewerTeams.some((team) => isOwnTeam(team, ctx.viewer.teams))) {
     return null;
   }
-  return otherReviewers(ctx).length === 0 ? 'team' : 'team_taken';
+  return teammateReviewers(ctx).length === 0 ? 'team' : 'team_taken';
 }
 
 function ownTeamSlug(ctx: PrContext): string {
@@ -251,7 +271,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     if (pr.reviewDecision === 'APPROVED') {
       return them(ctx, pr.author, 'to merge');
     }
-    return them(ctx, otherReviewers(ctx)[0]!, 'is reviewing');
+    return them(ctx, teammateReviewers(ctx)[0]!, 'is reviewing');
   }
   return NO_TURN;
 }

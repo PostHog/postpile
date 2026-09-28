@@ -9,6 +9,8 @@ export type NotificationsResult =
   | { notModified: true }
   | { notModified: false; threads: NotificationThread[]; etag: string | null; lastModified: string | null };
 
+export type TeamMembersResult = { notModified: true } | { notModified: false; logins: string[]; etag: string | null };
+
 /**
  * PRs to look up by branch, for completing stacks. side head: PRs whose head
  * branch is `branch` (the layer below a PR based on it). side base: PRs whose
@@ -33,6 +35,12 @@ export interface BranchPr {
 /** Every read GitHub call the app makes. Safe to use against the real API in smoke tests. */
 export interface GitHubReader {
   viewer(): Promise<Viewer>;
+
+  /**
+   * Logins on one team ("org/slug"), all pages. Sends the previous ETag so an
+   * unchanged team answers 304. A team the token cannot read answers an empty list.
+   */
+  teamMembers(team: string, etag: string | null): Promise<TeamMembersResult>;
 
   /**
    * Walks the whole unread inbox (all pages). Sends the previous ETag and

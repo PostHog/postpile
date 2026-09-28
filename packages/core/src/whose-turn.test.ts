@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeUserState, singleTile, viewer } from './fixtures.ts';
-import type { Pr, PrEvent, Tile, UserPrState } from './types.ts';
+import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
 import { whoseTurn, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
 
-function turnOf(tile: Tile, prs: Pr[], events: PrEvent[] = [], userStates: UserPrState[] = []): WhoseTurn {
+function turnOf(tile: Tile, prs: Pr[], events: PrEvent[] = [], userStates: UserPrState[] = [], who: Viewer = viewer): WhoseTurn {
   const eventMap = new Map<string, PrEvent[]>();
   for (const event of events) {
     eventMap.set(event.prKey, [...(eventMap.get(event.prKey) ?? []), event]);
@@ -15,7 +15,7 @@ function turnOf(tile: Tile, prs: Pr[], events: PrEvent[] = [], userStates: UserP
     prs: new Map(prs.map((pr) => [pr.key, pr])),
     events: eventMap,
     userStates: new Map(userStates.map((state) => [state.prKey, state])),
-    viewer,
+    viewer: who,
   });
 }
 
@@ -38,6 +38,15 @@ describe('whoseTurn: your move', () => {
     expect(single(taken)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
     const approved = { ...taken, reviewDecision: 'APPROVED' as const };
     expect(single(approved)).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
+  });
+
+  it('counts only teammates as picking up a team review once team members are known', () => {
+    const withTeam: Viewer = { ...viewer, teams: ['PostHog/team-devex'], teamMembers: ['lyra'] };
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['PostHog/team-devex'] });
+    const outsider = { ...pr, reviews: [makeReview({ author: 'mira', state: 'COMMENTED' })] };
+    expect(turnOf(singleTile(outsider), [outsider], [], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review for team-devex' });
+    const teammate = { ...pr, reviews: [makeReview({ author: 'mira', state: 'COMMENTED' }), makeReview({ author: 'lyra', state: 'COMMENTED' })] };
+    expect(turnOf(singleTile(teammate), [teammate], [], [], withTeam)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
   });
 
   it('asks to re-check commits that landed after your approval', () => {

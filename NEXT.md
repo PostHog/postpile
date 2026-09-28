@@ -142,6 +142,13 @@ now".
   a coral unread count, a honey "N your move" chip (`yourMoveTiles` on
   `TopicListItem`) and the relation in Needs you; a one-tile-wide middle
   column (clamp 420-480px); the detail pane takes the rest.
+- Team members (DESIGN.md "Tile faces"): every other login on the
+  viewer's teams, REST with ETags, refreshed at most daily in sync, on
+  `Viewer.teamMembers`. Whose turn's "teammate is reviewing" uses it.
+  `prTier` (ghatchup's needs_reply / mine / team / to_review /
+  team_mentioned / rest) is in core with tests, not wired into the UI.
+  The first real sync after this makes one members call per viewer team
+  (a 403 on a SAML-protected org counts as an empty team).
 - Notification debug view (DESIGN.md "Notification debug view"):
   `GET /api/debug/notifications`, engine + FakeEngine (sample threads incl.
   an issue, a release and an unsynced PR), sidebar footer entry, filters,
@@ -198,8 +205,7 @@ now".
 - Recheck: not run against the real agent yet; the fake answers cycle
   holds / fix / drop after 1.5s. The daily cap (40) is a guess. A fix of a
   fact keeps the old refs; no new ref points at the evidence in `why`.
-- Whose turn is rules only and still rough: team membership of other people
-  is unknown (any other reviewer counts as "a teammate reviewing"), "you
+- Whose turn is rules only and still rough: "you
   commented on the head" only looks at reviews, and the own-PR "Merge, it is
   approved" rule is an addition. Not tried against real data yet.
 - Tiles are one column now, ~380px wide at the 1100px minimum window and
@@ -219,9 +225,9 @@ now".
   PRs that moved. Not yet watched against the real account.
 - `pr_glance.pull_in_reason` and the glance prompt's pulled-in wording are
   left in place but unused, since layers get no glance.
-- Relation rules know the user's own teams only (viewer teams); other
-  authors' team membership is not fetched, so ownerTeam of routed topics
-  comes from the agent. CODEOWNERS is inferred from team review requests
+- Relation rules know the user's own teams only (viewer teams); team
+  members are fetched now but relation rules do not use them yet, so
+  ownerTeam of routed topics comes from the agent. CODEOWNERS is inferred from team review requests
   plus the touched directory, the CODEOWNERS file is not read.
 - Existing topics get a relation and area on their next dossier update; until
   then they sit under Your team / "Other".

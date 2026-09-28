@@ -19,6 +19,8 @@ export interface SampleData {
   viewer: string;
   /** The viewer's teams, as GitHub names them ("org/slug"). */
   viewerTeams: string[];
+  /** Everyone else on those teams, like the engine's daily team-member fetch. */
+  viewerTeamMembers: string[];
   topics: Topic[];
   prs: Pr[];
   events: PrEvent[];
@@ -497,6 +499,7 @@ export function buildSampleData(now: Date): SampleData {
   return {
     viewer: SAMPLE_VIEWER,
     viewerTeams: ['PostHog/team-devex'],
+    viewerTeamMembers: ['lyra', 'nell', 'rowan', 'sol'],
     topics: buildTopics(clock),
     prs: buildPrs(clock),
     events: buildEvents(clock),

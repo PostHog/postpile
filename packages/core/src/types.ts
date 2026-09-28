@@ -184,6 +184,12 @@ export interface Viewer {
   login: string;
   /** "org/team-slug" for every team the viewer belongs to. */
   teams: string[];
+  /**
+   * Every other login on those teams, fetched at most daily. Missing until
+   * the first fetch (or in a viewer stored before it existed); rules then
+   * fall back to treating any other reviewer as a teammate.
+   */
+  teamMembers?: string[];
 }
 
 // ---------------------------------------------------------------------------

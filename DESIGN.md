@@ -833,8 +833,25 @@ authors.
 A tile takes the most urgent member (you over them over none); on a tie the
 PR with the newest unseen loud event wins, so the footer and the unread strip
 talk about the same PR, else tile order. Multi-PR tiles add " on #N".
-Team membership of other people is unknown, so "a teammate is reviewing"
-means "anyone but the author reviewed".
+"A teammate is reviewing" means a reviewer from `Viewer.teamMembers`; until
+that list has been fetched once, any reviewer but the author counts.
+
+**Team members** (`TeamMembers` in the engine, ghatchup's
+`Meta.TeamMembers`): every other login on the viewer's teams, from REST
+`GET /orgs/{org}/teams/{slug}/members` (all pages, ETag per team), kept in
+meta `team_members` and put on the stored viewer. Refreshed during sync at
+most once a day, or when the viewer's teams change. A team the token cannot
+read counts as empty; a failed refresh keeps the last list and never fails
+the sync.
+
+**PR tiers** (`prTier` in `pr-tier.ts`, ported from ghatchup's
+`triage.Classify`): one tier per open PR, first match wins: `needs_reply`
+(a human mention, question or reply the viewer has not answered, same
+check as whose-turn), `mine`, `team` (author in `teamMembers`),
+`to_review` (review asked of the viewer or their team, head not reviewed),
+`team_mentioned` (thread reason or a stored team_mention event), `rest`.
+Pure and tested, not in the UI yet: how PR-level queues sit next to topics
+is still being wireframed.
 
 ### Three-pane balance
 

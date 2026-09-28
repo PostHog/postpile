@@ -2,7 +2,15 @@
 import { FakeRunner } from '@code-manager/agent';
 import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager/core';
 import { FakeTimers, viewer as fixtureViewer } from '@code-manager/core/fixtures';
-import type { BranchLookup, BranchPr, GitHubReader, GitHubWriter, NotificationConditions, NotificationsResult } from '@code-manager/github';
+import type {
+  BranchLookup,
+  BranchPr,
+  GitHubReader,
+  GitHubWriter,
+  NotificationConditions,
+  NotificationsResult,
+  TeamMembersResult,
+} from '@code-manager/github';
 import { Store } from '@code-manager/store';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
@@ -22,6 +30,12 @@ export class FakeReader implements GitHubReader {
   branchLookups: BranchLookup[][] = [];
   /** Head lookups on this branch answer nothing, like the real client on a repo's default branch. */
   defaultBranch = 'master';
+  /** Logins per "org/slug"; a team missing here answers an empty list. */
+  teams = new Map<string, string[]>();
+  /** Every teamMembers call as [team, etag sent]. */
+  teamCalls: [string, string | null][] = [];
+  /** Set to make teamMembers throw, like a network error. */
+  teamError: Error | null = null;
 
   constructor(private readonly who: Viewer = fixtureViewer) {}
 
@@ -37,6 +51,16 @@ export class FakeReader implements GitHubReader {
 
   async viewer(): Promise<Viewer> {
     return this.who;
+  }
+
+  async teamMembers(team: string, etag: string | null): Promise<TeamMembersResult> {
+    this.teamCalls.push([team, etag]);
+    if (this.teamError) {
+      throw this.teamError;
+    }
+    const logins = this.teams.get(team) ?? [];
+    const tag = `team-etag:${logins.join(',')}`;
+    return etag === tag ? { notModified: true } : { notModified: false, logins, etag: tag };
   }
 
   async listNotifications(conditions: NotificationConditions): Promise<NotificationsResult> {

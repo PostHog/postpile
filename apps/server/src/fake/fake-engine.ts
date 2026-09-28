@@ -215,7 +215,7 @@ export class FakeEngine implements EngineService {
   }
 
   private viewer(): Viewer {
-    return { login: this.data.viewer, teams: this.data.viewerTeams };
+    return { login: this.data.viewer, teams: this.data.viewerTeams, teamMembers: this.data.viewerTeamMembers };
   }
 
   private isSnoozed(tileId: string): boolean {

@@ -2,6 +2,7 @@ import type { NotificationThread, Pr, PrKey, PrRef, Viewer } from '@code-manager
 import { GitHubError, GitHubHttp, type FetchFn } from './http.ts';
 import { toBranchPr, toPr } from './normalize.ts';
 import { getThread, listNotifications } from './notifications.ts';
+import { listTeamMembers } from './teams.ts';
 import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
 import type { RawBatchResponse, RawBranchResponse, RawViewerTeams } from './raw.ts';
 import {
@@ -12,6 +13,7 @@ import {
   type GitHubReader,
   type NotificationConditions,
   type NotificationsResult,
+  type TeamMembersResult,
 } from './reader.ts';
 import type { TokenSource } from './token.ts';
 
@@ -77,6 +79,10 @@ export class GitHubClient implements GitHubReader {
       }
     }
     return teams;
+  }
+
+  teamMembers(team: string, etag: string | null): Promise<TeamMembersResult> {
+    return listTeamMembers(this.http, team, etag);
   }
 
   listNotifications(conditions: NotificationConditions): Promise<NotificationsResult> {
