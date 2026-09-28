@@ -3,7 +3,7 @@ import { AgentBudget } from '../budget.ts';
 import { reviveRetiredTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';
 import { errorText } from '../errors.ts';
-import type { GitHubSync } from '../github-sync.ts';
+import { NO_FOCUS, type GitHubSync, type PollFocus } from '../github-sync.ts';
 import { emptyFactCounts } from '../memory/fact-writer.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { RunDeps } from '../run-deps.ts';
@@ -17,8 +17,8 @@ export const POLL_MAX_PRS = 24;
 export const POLL_TOPIC_CALLS = 1;
 
 /**
- * One cycle of the fast poll: conditional inbox read; on a change, fetch the
- * PRs whose threads moved, log their events with rule loudness, give new PRs
+ * One cycle of the fast poll: conditional inbox and read-threads reads, a
+ * freshness check once a minute; on a change, fetch the PRs that moved, log their events with rule loudness, give new PRs
  * a topic, and decide pings. Dossiers, glances, sets, stack layers and the
  * event second opinion are left to the regular full sync. Never marks
  * anything read on GitHub.
@@ -46,9 +46,9 @@ export class PollRun {
     await assigner.run();
   }
 
-  async run(): Promise<PollCycle> {
+  async run(focus: PollFocus = NO_FOCUS): Promise<PollCycle> {
     const { store, now, callLog } = this.deps;
-    const inbox = await this.github.poll(POLL_MAX_PRS);
+    const inbox = await this.github.poll(POLL_MAX_PRS, focus);
     const done = { kind: 'done' as const, notModified: inbox.notModified, githubPollIntervalSeconds: inbox.pollIntervalSeconds };
     // A thread read on github.com usually brings no PR to fetch, only read times.
     advanceSeenFromGitHub(store, inbox.readOnGitHub, now().toISOString());

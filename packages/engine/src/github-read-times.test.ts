@@ -92,7 +92,7 @@ describe('GitHub read times', () => {
     expect(unsorted?.tiles.map((view) => [view.prs[0]?.key, view.state.kind])).toEqual([[pr.key, 'open']]);
   });
 
-  it('moves the read-list since to each full sync, and the poll reuses its ETag', async () => {
+  it('moves the read-list since to each full sync; the poll keeps its own watch cursor', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
@@ -100,18 +100,17 @@ describe('GitHub read times', () => {
     expect(h.reader.readListCalls).toEqual([['2026-08-26T12:00:00.000Z', null]]);
     expect(h.store.meta.get('read_threads_since')).toBe(NOW.toISOString());
 
-    // An unchanged inbox: the poll does not ask for the read list.
+    // The watch starts where the sync's read list ended and keeps its own ETag.
     await h.engine.pollOnce();
-    expect(h.reader.readListCalls).toHaveLength(1);
-
-    h.reader.etag = 'etag-2';
-    await h.engine.pollOnce();
-    h.reader.etag = 'etag-3';
     await h.engine.pollOnce();
     expect(h.reader.readListCalls.slice(1)).toEqual([
       [NOW.toISOString(), null],
       [NOW.toISOString(), 'read-etag-1'],
     ]);
+
+    // The next full sync asks from the last sync start again, without the watch's ETag.
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.readListCalls.at(-1)).toEqual([NOW.toISOString(), null]);
   });
 
   it('moves "since you last looked" forward once the topic is caught up on GitHub', async () => {

@@ -17,6 +17,8 @@ export class PrActions {
     private readonly contexts: PromptContextSource,
     private readonly readMarker: ReadMarker,
     private readonly now: () => Date,
+    /** Fetches the PR again right after a write, so the answer already shows GitHub's new state. */
+    private readonly refreshPr: (key: PrKey) => Promise<void> = async () => {},
   ) {}
 
   private openPr(key: PrKey): Pr | null {
@@ -45,6 +47,7 @@ export class PrActions {
       return failed(`Approve failed: ${errorText(error)}`);
     }
     this.store.userPrStates.markApproved(key, pr.headOid, this.now().toISOString());
+    await this.refreshPr(key);
     const batch = this.readMarker.markRead([key], [], { origin: 'tile', tileId: null });
     return ok('Approved', batch.token);
   }
@@ -74,6 +77,7 @@ export class PrActions {
     } catch (error) {
       return failed(`Comment failed: ${errorText(error)}`);
     }
+    await this.refreshPr(key);
     return ok('Comment sent');
   }
 }

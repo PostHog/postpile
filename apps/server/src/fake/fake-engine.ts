@@ -1271,6 +1271,13 @@ export class FakeEngine implements EngineService {
     return this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
   }
 
+  /** Sample data never changes on GitHub; one poll cycle keeps the flow the same as the real engine. */
+  async refreshOnFocus(prKeys: PrKey[]): Promise<void> {
+    if (prKeys.length > 0) {
+      await this.livePoller?.runCycle();
+    }
+  }
+
   async flushPendingWrites(): Promise<void> {
     // Nothing leaves the process; the fake queue only logs and flips sample flags.
     this.writes.flush();

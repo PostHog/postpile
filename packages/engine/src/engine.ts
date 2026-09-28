@@ -43,7 +43,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
 } from '@postpile/core';
-import { normalizeRepoScope, OFF_POLL_STATUS, systemTimers, withQuietRepo } from '@postpile/core';
+import { normalizeRepoScope, OFF_POLL_STATUS, parsePrKey, systemTimers, withQuietRepo } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -57,7 +57,8 @@ import { ReadMarker } from './actions/read-marker.ts';
 import { TileActions } from './actions/tile-actions.ts';
 import type { AgentCallLog } from './agent-call-log.ts';
 import { ConsolidationRun } from './consolidation/consolidation-run.ts';
-import { GitHubSync } from './github-sync.ts';
+import { errorText } from './errors.ts';
+import { GitHubSync, NO_FOCUS, type PollFocus } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { InstructionsHistory } from './instructions/history.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
@@ -129,6 +130,9 @@ export class Engine implements EngineService {
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
   private livePoller: LivePoller | null = null;
+  private readonly github: GitHubSync;
+  /** What the next poll cycle also looks at, set by refreshOnFocus. */
+  private focus: PollFocus = NO_FOCUS;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
@@ -142,7 +146,7 @@ export class Engine implements EngineService {
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
-    this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now);
+    this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now, (key) => this.refreshAfterWrite(key));
     this.feedback = new FeedbackActions(store, readMarker, now);
     this.chats = new ChatActions(store, deps.agent, contexts, now);
     this.proposals = new ProposalActions(store, now);
@@ -151,7 +155,8 @@ export class Engine implements EngineService {
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
-    const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites);
+    const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
+    this.github = github;
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);
     const decider = new PingDecider({
@@ -163,6 +168,19 @@ export class Engine implements EngineService {
     });
     this.pollRun = new PollRun(runDeps, github, decider);
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
+  }
+
+  /**
+   * Right after an approve or comment reached GitHub: fetch that PR now, so
+   * the action's answer already carries GitHub's new review state. A
+   * failure is logged; the write itself went through.
+   */
+  private async refreshAfterWrite(key: PrKey): Promise<void> {
+    try {
+      await this.github.refreshPrs([parsePrKey(key)]);
+    } catch (error) {
+      (this.deps.syncLog ?? console.log)(`refresh after write: ${key}: ${errorText(error)}`);
+    }
   }
 
   /** After a cleanup reached GitHub: one poll cycle, so the threads it read show up as read. */
@@ -187,6 +205,8 @@ export class Engine implements EngineService {
         .then(() => this.syncRun.run(options))
         .finally(() => {
           this.syncing = null;
+          // The poll was blocked while the sync ran; catch up on what happened meanwhile.
+          void this.livePoller?.runCycle();
         });
     }
     return this.syncing;
@@ -217,7 +237,9 @@ export class Engine implements EngineService {
       return Promise.resolve({ kind: 'blocked', reason: 'consolidation running' });
     }
     if (!this.polling) {
-      this.polling = this.pollRun.run().finally(() => {
+      const focus = this.focus;
+      this.focus = NO_FOCUS;
+      this.polling = this.pollRun.run(focus).finally(() => {
         this.polling = null;
       });
     }
@@ -235,6 +257,23 @@ export class Engine implements EngineService {
   stopLivePoll(): void {
     this.livePoller?.stop();
     this.livePoller = null;
+  }
+
+  async refreshOnFocus(prKeys: PrKey[]): Promise<void> {
+    if (prKeys.length === 0 || this.syncing || this.consolidating) {
+      return;
+    }
+    const threads = this.deps.store.notifications.getByPrKeys(prKeys);
+    this.focus = {
+      threadIds: [...threads.values()].map((thread) => thread.id),
+      prRefs: prKeys.filter((key) => !threads.has(key)).map(parsePrKey),
+    };
+    // A cycle already running is joined; the focus then waits for the next one.
+    if (this.livePoller) {
+      await this.livePoller.runCycle();
+    } else {
+      await this.pollOnce().catch(() => {});
+    }
   }
 
   async livePollStatus(): Promise<LivePollStatus> {

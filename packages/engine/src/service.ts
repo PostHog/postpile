@@ -70,6 +70,13 @@ export interface EngineService {
   stopLivePoll(): void;
   /** For the status footer. `off` when the poll was never started. */
   livePollStatus(): Promise<LivePollStatus>;
+  /**
+   * The window got focus back after the user opened these PRs on github.com
+   * from the app: one poll cycle now, with a direct thread lookup for each
+   * (and a direct fetch for PRs without a thread), so their tiles follow
+   * GitHub right away. Skipped while a full sync or consolidation runs.
+   */
+  refreshOnFocus(prKeys: PrKey[]): Promise<void>;
 
   listTopics(): Promise<TopicListItem[]>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */

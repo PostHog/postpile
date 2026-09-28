@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeEvent } from './fixtures.ts';
-import { eventsReadOnGitHub, seenBoundary } from './github-read.ts';
+import { at, makeEvent, makePr, makeThreadFor } from './fixtures.ts';
+import { eventsReadOnGitHub, nextWatchSince, ownEventsOnReadThread, seenBoundary } from './github-read.ts';
 
 describe('eventsReadOnGitHub', () => {
   it('picks unseen events at or before the last read', () => {
@@ -15,6 +15,32 @@ describe('eventsReadOnGitHub', () => {
 
   it('picks nothing for a thread never read', () => {
     expect(eventsReadOnGitHub([makeEvent({ at: at(1) })], null)).toEqual([]);
+  });
+});
+
+describe('ownEventsOnReadThread', () => {
+  it('picks unseen events by the viewer, whatever the case of the login', () => {
+    const events = [
+      makeEvent({ id: 'merge', actor: 'Me', at: at(3) }),
+      makeEvent({ id: 'bob', actor: 'bob', at: at(3) }),
+      makeEvent({ id: 'seen', actor: 'me', at: at(1), seenAt: at(1) }),
+      makeEvent({ id: 'nobody', actor: '', at: at(2) }),
+    ];
+    expect(ownEventsOnReadThread(events, 'me').map((event) => event.id)).toEqual(['merge']);
+  });
+});
+
+describe('nextWatchSince', () => {
+  const since = '2026-09-28T12:00:00.000Z';
+
+  it('moves to the newest update less the overlap', () => {
+    const threads = [makeThreadFor(makePr(), { updatedAt: '2026-09-28T12:20:07.000Z' }), makeThreadFor(makePr(), { updatedAt: '2026-09-28T12:10:00.000Z' })];
+    expect(nextWatchSince(since, threads)).toBe('2026-09-28T12:19:07.000Z');
+  });
+
+  it('stays put on an empty answer or one inside the overlap', () => {
+    expect(nextWatchSince(since, [])).toBe(since);
+    expect(nextWatchSince(since, [makeThreadFor(makePr(), { updatedAt: '2026-09-28T12:00:30.000Z' })])).toBe(since);
   });
 });
 

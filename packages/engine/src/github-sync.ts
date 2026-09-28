@@ -3,6 +3,8 @@ import {
   daysBefore,
   deriveEvents,
   eventsReadOnGitHub,
+  nextWatchSince,
+  ownEventsOnReadThread,
   prKey,
   threadPrKey,
   type NotificationThread,
@@ -30,6 +32,16 @@ const POLLED_KEY = 'poll_fetched_since_sync';
 const READ_SINCE_KEY = 'read_threads_since';
 /** ETag of the read-threads call; only valid for the stored `since`. */
 const READ_ETAG_KEY = 'read_threads_etag';
+/** `since` of the poll's read-threads watch (see nextWatchSince); moves on each 200. */
+const WATCH_SINCE_KEY = 'poll_watch_since';
+/** ETag of the watch's last 200. */
+const WATCH_ETAG_KEY = 'poll_watch_etag';
+/** Without a stored watch `since` or read-list `since`, the watch starts this far back. */
+export const WATCH_FIRST_WINDOW_MS = 60 * 60 * 1000;
+/** The poll runs the freshness check at most this often; the full sync always runs it. */
+export const FRESHNESS_POLL_EVERY_MS = 60 * 1000;
+/** Merged or closed PRs stay in the freshness check this long after their last update. */
+export const FRESHNESS_CLOSED_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Without a stored `since` (first run, or no last-sync marker), read threads this far back. */
 export const FIRST_READ_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** getThread lookups per sync for threads that left the inbox without showing up in the read list. */
@@ -56,8 +68,21 @@ export interface GitHubSyncResult {
   errors: string[];
 }
 
+/**
+ * Extra work for one poll, from the window getting focus after the user
+ * opened PRs on github.com from the app: look up these threads directly and
+ * fetch these PRs (the ones without a thread) whatever the lists say.
+ */
+export interface PollFocus {
+  threadIds: string[];
+  prRefs: PrRef[];
+}
+
+export const NO_FOCUS: PollFocus = { threadIds: [], prRefs: [] };
+
 /** One fast-poll look at the inbox. Stack layers are left to the full sync. */
 export interface InboxPollResult {
+  /** Neither list moved and nothing was fetched. */
   notModified: boolean;
   /** GitHub's X-Poll-Interval. */
   pollIntervalSeconds: number | null;
@@ -72,7 +97,10 @@ export interface InboxPollResult {
 }
 
 interface NotificationsSync {
+  /** The unread list answered 304. */
   notModified: boolean;
+  /** Something to store: the unread list moved, or the read list or a thread lookup brought threads. */
+  changed: boolean;
   threads: number;
   pollIntervalSeconds: number | null;
 }
@@ -98,6 +126,10 @@ export class GitHubSync {
   private readonly teamMembers: TeamMembers;
   /** PRs reconciled with GitHub's read time during the current run; taken by run() and poll(). */
   private readOnGitHub = new Set<PrKey>();
+  /** How often the read-threads watch answered, and how often with a 200, since the app started. */
+  private readonly watchAnswers = { total: 0, changed: 0 };
+  /** When the freshness check last ran, in ms; 0 before the first. */
+  private lastFreshnessAt = 0;
 
   constructor(
     private readonly store: Store,
@@ -106,6 +138,7 @@ export class GitHubSync {
     private readonly now: () => Date,
     private readonly log: ActionLog,
     private readonly pendingWrites: PendingWrites,
+    private readonly textLog: (line: string) => void = () => {},
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.teamMembers = new TeamMembers(store, reader, now);
@@ -139,6 +172,41 @@ export class GitHubSync {
   }
 
   /**
+   * The poll's watch on read and unread threads (`?all=true&since=`), so a
+   * merge, a close or the user's own comment on a thread that stays read
+   * shows within a cycle. `since` only moves on a 200 (nextWatchSince), so
+   * between changes the URL and ETag stay the same and GitHub answers 304.
+   * Null after a 304 or an empty answer. Every 200 is logged with the tally.
+   */
+  private async watchThreads(): Promise<NotificationThread[] | null> {
+    const fallback = new Date(this.now().getTime() - WATCH_FIRST_WINDOW_MS).toISOString();
+    const since = this.store.meta.get(WATCH_SINCE_KEY) ?? this.store.meta.get(READ_SINCE_KEY) ?? fallback;
+    const result = await this.reader.listThreadsSince(since, this.store.meta.get(WATCH_ETAG_KEY));
+    this.watchAnswers.total += 1;
+    if (result.notModified) {
+      return null;
+    }
+    this.watchAnswers.changed += 1;
+    this.store.meta.set(WATCH_SINCE_KEY, nextWatchSince(since, result.threads));
+    this.setMeta(WATCH_ETAG_KEY, result.etag);
+    const { changed, total } = this.watchAnswers;
+    this.textLog(`live poll: read-threads watch answered 200 with ${result.threads.length} threads since ${since} (200 on ${changed} of ${total} polls since start)`);
+    return result.threads.length > 0 ? result.threads : null;
+  }
+
+  /** Threads looked up one by one (focus refresh). A failed or unknown lookup is skipped. */
+  private async lookUpThreads(threadIds: string[]): Promise<NotificationThread[]> {
+    const threads: NotificationThread[] = [];
+    for (const id of threadIds) {
+      const thread = await this.reader.getThread(id).catch(() => null);
+      if (thread) {
+        threads.push(thread);
+      }
+    }
+    return threads;
+  }
+
+  /**
    * When each thread that left the inbox was read on GitHub: from the read
    * list, else one thread lookup (at most READ_TIME_LOOKUPS), else now. A
    * failed lookup falls back to now; the sync goes on.
@@ -166,11 +234,17 @@ export class GitHubSync {
    * the action log as observed. A pending write for such a thread is
    * cleared: GitHub already has it read. Nothing here writes to GitHub.
    *
-   * The full sync always asks for the read list (a thread can come and go
-   * between syncs and leave the inbox unchanged); the poll only when the
-   * inbox moved.
+   * The full sync asks for the read list since its last start (a thread
+   * can come and go between syncs and leave the inbox unchanged); the poll
+   * asks its own watch (watchThreads) every cycle. `looked` are threads the
+   * focus refresh looked up one by one; they count like read-list entries.
+   *
+   * Each "read elsewhere" is logged with how it was noticed: the unread list
+   * answering 200 without it, or the read list saying read while the unread
+   * list answered 304. The second would mean GitHub's inbox ETag does not
+   * move when a thread is read on github.com.
    */
-  private async syncNotifications(origin: 'sync' | 'poll'): Promise<NotificationsSync> {
+  private async syncNotifications(origin: 'sync' | 'poll', looked: NotificationThread[] = []): Promise<NotificationsSync> {
     const startedAt = this.now().toISOString();
     const result = await this.reader.listNotifications({
       etag: this.store.meta.get(ETAG_KEY),
@@ -178,9 +252,11 @@ export class GitHubSync {
     });
     const pollIntervalSeconds = result.pollIntervalSeconds;
     const inbox = result.notModified ? null : result.threads;
-    const readList = inbox !== null || origin === 'sync' ? await this.readThreads(origin === 'sync' ? startedAt : null) : null;
+    const listed = origin === 'sync' ? await this.readThreads(startedAt) : await this.watchThreads();
+    const readList = listed === null && looked.length === 0 ? null : [...(listed ?? []), ...looked];
     if (inbox === null && readList === null) {
-      return { notModified: true, threads: this.store.notifications.list().filter((t) => t.unread).length, pollIntervalSeconds };
+      const threads = this.store.notifications.list().filter((t) => t.unread).length;
+      return { notModified: true, changed: false, threads, pollIntervalSeconds };
     }
     const inboxIds = new Set((inbox ?? []).map((t) => t.id));
     const readById = new Map((readList ?? []).filter((t) => !inboxIds.has(t.id)).map((t) => [t.id, t]));
@@ -196,7 +272,9 @@ export class GitHubSync {
         this.store.notifications.upsertMany(result.threads);
       }
       const hadPending = this.pendingWrites.observeRead(new Set(readElsewhere.map((thread) => thread.id)), origin);
+      const noticed = inbox !== null ? 'it left the unread list (unread list 200)' : 'the read list says read (unread list 304)';
       for (const stored of readElsewhere) {
+        this.textLog(`${origin}: ${threadPrKey(stored) ?? `thread ${stored.id}`} was read elsewhere, noticed because ${noticed}`);
         this.store.notifications.markRead(stored.id, readAt.get(stored.id)!);
         this.log.record({
           action: 'mark_read',
@@ -214,7 +292,7 @@ export class GitHubSync {
       this.reconcileReadTimes();
     });
     const threads = inbox?.length ?? this.store.notifications.list().filter((t) => t.unread).length;
-    return { notModified: result.notModified, threads, pollIntervalSeconds };
+    return { notModified: result.notModified, changed: true, threads, pollIntervalSeconds };
   }
 
   /**
@@ -241,6 +319,16 @@ export class GitHubSync {
   private markReadOnGitHub(key: PrKey, eventIds: string[], lastReadAt: IsoTime): void {
     if (eventIds.length > 0) {
       this.store.events.markSeen(eventIds, lastReadAt);
+      this.readOnGitHub.add(key);
+    }
+  }
+
+  private markOwnEventsSeen(key: PrKey, viewer: Viewer): void {
+    const own = ownEventsOnReadThread(this.store.events.listForPr(key), viewer.login);
+    for (const event of own) {
+      this.store.events.markSeen([event.id], event.at);
+    }
+    if (own.length > 0) {
       this.readOnGitHub.add(key);
     }
   }
@@ -314,9 +402,14 @@ export class GitHubSync {
         at,
       );
       // Anything older than the user's last read on github.com was already seen there.
-      const lastReadAt = this.store.notifications.getByPrKey(pr.key)?.lastReadAt ?? null;
+      const thread = this.store.notifications.getByPrKey(pr.key);
+      const lastReadAt = thread?.lastReadAt ?? null;
       if (lastReadAt !== null) {
         this.markReadOnGitHub(pr.key, eventsReadOnGitHub(this.store.events.listForPr(pr.key), lastReadAt), lastReadAt);
+      }
+      // A thread that stays read: the user's own merge, close, comment or review never made it unread.
+      if (thread && !thread.unread) {
+        this.markOwnEventsSeen(pr.key, viewer);
       }
       return created;
     });
@@ -387,6 +480,71 @@ export class GitHubSync {
     return prs;
   }
 
+  /**
+   * PRs a tile shows (pinged, found or pulled in) that are open or draft,
+   * plus ones merged or closed within FRESHNESS_CLOSED_WINDOW_MS.
+   */
+  private freshnessRefs(skip: Set<PrKey>): PrRef[] {
+    const tracked = new Set<PrKey>([...this.store.foundPrs.listAll().keys(), ...this.store.pullIns.listAll().keys()]);
+    for (const thread of this.store.notifications.list()) {
+      const ref = refOf(thread);
+      if (ref) {
+        tracked.add(prKey(ref));
+      }
+    }
+    const cutoff = new Date(this.now().getTime() - FRESHNESS_CLOSED_WINDOW_MS).toISOString();
+    return this.store.prs
+      .listAll()
+      .filter((pr) => tracked.has(pr.key) && !skip.has(pr.key))
+      .filter((pr) => pr.state === 'OPEN' || pr.updatedAt >= cutoff)
+      .map((pr) => pr.ref);
+  }
+
+  /**
+   * The freshness check: one updatedAt query for every PR a tile shows.
+   * Notification threads do not move for everything (the user's own
+   * approve or merge, quiet PRs, threads that stay read), so without it a
+   * PR could stay stale for days. Returns the PRs GitHub has newer than the
+   * store; the caller fetches them in full. The poll logs only when
+   * something moved.
+   */
+  private async movedPrs(skip: Set<PrKey>, origin: 'sync' | 'poll'): Promise<PrRef[]> {
+    this.lastFreshnessAt = this.now().getTime();
+    const refs = this.freshnessRefs(skip);
+    if (refs.length === 0) {
+      return [];
+    }
+    const remote = await this.reader.prUpdatedAts(refs);
+    const stored = this.store.prs.updatedAtByKey();
+    const moved = refs.filter((ref) => {
+      const updatedAt = remote.get(prKey(ref));
+      const was = stored.get(prKey(ref));
+      return updatedAt !== undefined && (was === undefined || updatedAt > was);
+    });
+    if (origin === 'sync' || moved.length > 0) {
+      const which = moved.length > 0 ? `: ${moved.map(prKey).join(', ')}` : '';
+      this.textLog(`${origin}: freshness check, ${refs.length} PRs checked, ${moved.length} moved${which}`);
+    }
+    return moved;
+  }
+
+  private freshnessDue(): boolean {
+    return this.now().getTime() - this.lastFreshnessAt >= FRESHNESS_POLL_EVERY_MS;
+  }
+
+  /** The poll's freshness check when due; a failure is logged and skipped, the poll goes on. */
+  private async movedPrsFromPoll(skip: Set<PrKey>): Promise<PrRef[]> {
+    if (!this.freshnessDue()) {
+      return [];
+    }
+    try {
+      return await this.movedPrs(skip, 'poll');
+    } catch (error) {
+      this.textLog(`poll: freshness check failed: ${errorText(error)}`);
+      return [];
+    }
+  }
+
   /** Remembers what the poll fetched, so the next full sync verifies facts and walks stacks for them too. */
   private rememberPolled(keys: PrKey[]): void {
     const known = JSON.parse(this.store.meta.get(POLLED_KEY) ?? '[]') as PrKey[];
@@ -425,19 +583,30 @@ export class GitHubSync {
   }
 
   /**
-   * The fast poll: a conditional inbox read, and on a change the PRs whose
-   * threads moved since their last fetch, newest first, at most maxPrs. The
-   * rest wait for the next change or the full sync. No stack layers, no
-   * agent. Shares the ETag with the full sync, so whichever reads a change
-   * first stores it and the other gets a 304; the full sync still finds the
-   * events through the event log.
+   * The fast poll: a conditional inbox read plus the read-threads watch,
+   * and on a change the PRs whose threads moved since their last fetch,
+   * newest first, at most maxPrs. Once a minute also the freshness check.
+   * The rest wait for the next change or the full sync. No stack layers, no
+   * agent. Shares the inbox ETag with the full sync, so whichever reads a
+   * change first stores it and the other gets a 304; the full sync still
+   * finds the events through the event log.
    */
-  async poll(maxPrs: number): Promise<InboxPollResult> {
+  async poll(maxPrs: number, focus: PollFocus = NO_FOCUS): Promise<InboxPollResult> {
     this.readOnGitHub = new Set();
     const firstLook = this.store.notifications.list().length === 0;
-    const notifications = await this.syncNotifications('poll');
+    const looked = await this.lookUpThreads(focus.threadIds);
+    const notifications = await this.syncNotifications('poll', looked);
     const { pollIntervalSeconds } = notifications;
-    if (notifications.notModified) {
+    const refs = notifications.changed ? this.candidates().slice(0, maxPrs).map((candidate) => candidate.ref) : [];
+    const picked = new Set(refs.map(prKey));
+    for (const ref of focus.prRefs) {
+      if (!picked.has(prKey(ref))) {
+        refs.push(ref);
+        picked.add(prKey(ref));
+      }
+    }
+    refs.push(...(await this.movedPrsFromPoll(picked)));
+    if (!notifications.changed && refs.length === 0) {
       return { notModified: true, pollIntervalSeconds, firstLook, viewer: null, fetchedPrKeys: [], newEventIds: [], readOnGitHub: [] };
     }
     let viewer = loadViewer(this.store);
@@ -445,12 +614,27 @@ export class GitHubSync {
       viewer = await this.reader.viewer();
       saveViewer(this.store, viewer);
     }
-    const refs = this.candidates().slice(0, maxPrs).map((candidate) => candidate.ref);
     const fetched = refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, Pr>();
     const newEventIds = this.storeAll(fetched, viewer);
     this.rememberPolled([...fetched.keys()]);
     const readOnGitHub = this.takeReadOnGitHub();
     return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds, readOnGitHub };
+  }
+
+  /**
+   * Fetches these PRs now and stores them, e.g. right after the app
+   * approved or commented on one, so the tile shows GitHub's new state
+   * without waiting for a thread to move. Returns the PRs stored.
+   */
+  async refreshPrs(refs: PrRef[]): Promise<PrKey[]> {
+    const viewer = loadViewer(this.store);
+    if (!viewer || refs.length === 0) {
+      return [];
+    }
+    const fetched = await this.reader.fetchPrs(refs);
+    this.storeAll(fetched, viewer);
+    this.rememberPolled([...fetched.keys()]);
+    return [...fetched.keys()];
   }
 
   async run(maxPrs: number): Promise<GitHubSyncResult> {
@@ -465,6 +649,17 @@ export class GitHubSync {
     const errors: string[] = [];
     const fetched = await this.fetchPartial(picked.map((candidate) => candidate.ref), errors, 'PRs');
     const newEventIds = this.storeAll(fetched, viewer);
+    // PRs whose thread did not move but GitHub has a newer updatedAt: approvals, merges, pushes.
+    let movedRefs: PrRef[] = [];
+    try {
+      movedRefs = await this.movedPrs(new Set(fetched.keys()), 'sync');
+    } catch (error) {
+      errors.push(`freshness check: ${errorText(error)}`);
+    }
+    for (const [key, pr] of await this.fetchPartial(movedRefs, errors, 'moved PRs')) {
+      fetched.set(key, pr);
+      newEventIds.push(...this.storePr(pr, viewer));
+    }
     // The poll fetched these already; they still get their stacks walked and facts verified here.
     const polled = this.takePolled(fetched);
     const found = await this.syncFound(viewer, fetched, errors);

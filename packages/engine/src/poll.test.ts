@@ -173,13 +173,13 @@ describe('Engine.pollOnce', () => {
     await sync;
 
     h.reader.etag = 'etag-9';
-    const poll = h.engine.pollOnce();
     const callsBefore = h.reader.notificationCalls;
+    const poll = h.engine.pollOnce();
     const syncAfter = h.engine.sync({ maxAgentCalls: 0 });
     await poll;
     await syncAfter;
     // The poll read the inbox first; the sync came after it and got a 304.
-    expect(h.reader.notificationCalls).toBe(callsBefore + 1);
+    expect(h.reader.notificationCalls).toBe(callsBefore + 2);
     expect((await syncAfter).notificationsNotModified).toBe(true);
   });
 
