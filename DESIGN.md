@@ -65,7 +65,9 @@ for all topics" (an instructions proposal) or "Just this once" (only logged).
 The agent spots the point but never picks the scope.
 
 **Mark read is deferred**: acting on a tile marks the GitHub notification read
-through a queue with a 6s undo window, because GitHub has no mark-unread API.
+through a queue with a 6s undo window, because GitHub has no mark-unread API
+(and only while the footer lock allows GitHub writes; otherwise it stays in
+the app, see "GitHub writes: lock, action log, bring back").
 Batches stack; undo walks back newest first; quitting flushes instead of
 dropping (and waits for sends already in flight). The queue lives in the
 engine (`MarkReadQueue`), in memory. A GitHub mark-read covers the whole
@@ -880,7 +882,95 @@ landed (`NotificationLanding`: tile with topic, or not a PR / PR not synced
 / no topic / topic hidden / no tile). Filters: reason, unread only, text.
 A click jumps to the tile through `go()`, so Back returns to the list;
 without a tile the row says why inline. The chevron shows the PR's five
-newest stored events. Nothing in it marks anything read.
+newest stored events. Opening a row never marks anything read; the row's
+"Mark read" and "Bring back" buttons and its last logged action are
+described in "GitHub writes: lock, action log, bring back".
+
+## GitHub writes: lock, action log, bring back
+
+**What GitHub can and cannot do** (scouted 2026-09-28 with read-only calls
+only: the REST docs and a GraphQL schema introspection,
+`gh api graphql -f query='{ __schema { mutationType { fields { name } } } }'`,
+261 mutations):
+
+| want | API | notes |
+|---|---|---|
+| mark a thread read | REST `PATCH /notifications/threads/{id}` ([docs](https://docs.github.com/en/rest/activity/notifications#mark-a-thread-as-read)) | 205 Reset Content. The app's only notification write today (`GitHubWriteClient.markThreadRead`). |
+| mark a thread done | REST `DELETE /notifications/threads/{id}` ([docs](https://docs.github.com/en/rest/activity/notifications#mark-a-thread-as-done)) | 204. Removes it from the inbox for good (also from `?all=true` listings). Not used. |
+| subscribe / ignore a thread | REST `PUT /notifications/threads/{id}/subscription` `{ignored}` ([docs](https://docs.github.com/en/rest/activity/notifications#set-a-thread-subscription)) | `ignored: true` mutes future notifications until you comment or get @mentioned. Changes future pings only, never read state. |
+| unsubscribe (mute) a thread | REST `DELETE /notifications/threads/{id}/subscription` ([docs](https://docs.github.com/en/rest/activity/notifications#delete-a-thread-subscription)) | 204. Same: future notifications only. |
+| subscription on the PR itself | GraphQL `updateSubscription(subscribableId, state: SUBSCRIBED/UNSUBSCRIBED/IGNORED)` ([docs](https://docs.github.com/en/graphql/reference/mutations#updatesubscription)) | Per issue/PR/repo, not per thread. Future notifications only. |
+| mark a thread **unread** | none | No REST endpoint. The public GraphQL schema has no notification type and no notification mutation at all (the ones github.com uses internally are not exposed). |
+| "Saved" notifications | none | Neither REST nor GraphQL can list or set them. `GET /notifications?all=true` only adds read threads. |
+
+So nothing brings a read thread back on GitHub. Re-subscribing does not
+help either: marking read never unsubscribes, so a thread that was only read
+is still subscribed.
+
+**The lock.** GitHub writes are a runtime switch (`WriteSwitch` in
+engine `writes/`), off (read-only) on first run, flipped by the lock in the
+status footer (`POST /api/github-writes {enabled}`), kept in meta
+`github_writes` so it survives restarts. While off the switch hands out the
+`ReadOnlyWriter`, so a path that forgets to ask still cannot write.
+`CODE_MANAGER_READ_ONLY=1` never builds the real write client; the lock
+then shows disabled with the reason and turning it on answers `ok: false`.
+Opening the lock asks in a popover ("Mark-read and approvals will reach
+GitHub"); closing is instant. The UI guard follows it: approve and comment
+are blocked while locked, mark read and "not mine" run and stay in the app.
+`CODE_MANAGER_ALLOW_WRITES` is gone.
+
+**One door.** `GitHubWrites` is the only thing in the engine that calls the
+writer: approve, comment and the mark-read queue go through it. Every call
+asks the switch and writes an `action_log` row (reached GitHub, failed with
+the error, or not sent because writes are off). A mark-read batch remembers
+whether writes were on when it was queued: a batch queued while read-only
+stays local even if the lock opens inside its 6s window, and a batch whose
+window ends after the lock closed is not sent either.
+
+**Action log** (`action_log`, migration 008): `id`, `at`, `action`
+(`mark_read`, `undo_mark_read`, `approve`, `comment`, `bring_back`,
+`writes_on`, `writes_off`; `mark_done` / `subscribe` / `unsubscribe` get
+added with their writer methods), `origin` (who decided: `tile` = the user in
+a tile or the detail pane, `debug` = the notifications view, `queue` = the
+deferred queue when a batch's window ran out, `quit` = the flush on quit,
+`sync` / `poll` = a thread left the inbox, `footer` = the lock), `outcome`
+(`queued`, `github`, `local`, `skipped`, `failed`, `observed`), `thread_id`,
+`pr_key`, `tile_id`, `batch` (a UUID per mark-read batch, links the queue
+send to the click that queued it), `detail`. Rows at queue time: one per
+queued thread (`queued`, or `local` while read-only) and one `local` row per
+PR without an unread thread. Rows at send time: `github`, `failed`,
+`skipped` (activity after the last sync), `observed` (already read on
+GitHub). `GET /api/debug/actions?limit=` lists the newest.
+
+**What marks read without a click** (grepped: `markThreadRead`,
+`notifications.markRead`, `markSeen`): nothing writes to GitHub on its own.
+Locally, the full sync and the live poll mark a stored thread read when it
+drops out of the inbox (read on github.com or another client); those rows
+are logged as `observed` with origin `sync` / `poll`. The first sync of a PR
+also marks events older than the thread's `last_read_at` seen (event state,
+not logged). Glances, consolidation, dossiers and ping decisions never mark
+anything read. There is no CLI write and no "mark all read".
+
+**Debug view rows.** Each row carries `lastAction` (the newest log entry for
+the thread or its PR) and `decidedBy` (for a queue send, the click that
+queued it), rendered as "marked read by the deferred queue, queued by you in
+a tile · 3m ago", "stayed local: read-only · marked read by you in a tile",
+"brought back by you". A read thread without an entry reads as "read on
+github.com or another client". Filter "Read by this app": the newest entry is
+the app's own mark-read (sent, queued, or local).
+
+**Bring back** (debug view, `POST /api/prs/.../bring-back`): GitHub cannot
+mark unread, so it resets the app only. `user_pr_state.brought_back_at`
+(migration 008) is set and `handled_at` cleared; every tile holding the PR
+gets an unread reason `{kind: 'brought_back', summary: 'brought back by
+you'}` (`deriveTileState` in core) and loses its snooze. The next mark-read
+clears it (and its undo puts it back). Nothing is sent to GitHub; the GitHub
+thread keeps its read flag, and the tooltip says so. No re-subscribe: it
+would not change read state (see the table).
+
+Fake mode runs the same flows on `FakeWrites`: the lock (off at start, not
+persisted), the log, queue sends after 6s that only flip the sample thread's
+"GitHub" unread flag, bring back.
 
 ## Live poll and Mac pings
 
@@ -978,7 +1068,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins, 007 ping decisions), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins, 007 ping decisions, 008 action log + bring back), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query, PRs by branch for stack completion) and `GitHubWriter` (mark thread read,
@@ -988,7 +1078,7 @@ core  <- store, github, agent  <- engine  <- server, cli
   set grouping, dossier update, fact reconcile, glance batch, event batch, consolidation,
   draft comment, chat).
 - **packages/engine**: `EngineService`, the API the server and CLI call. Sync pipeline:
-  fetch -> store -> classify -> agent digest -> derive tiles. `MarkReadQueue`. `createEngine`
+  fetch -> store -> classify -> agent digest -> derive tiles. `MarkReadQueue`. `WriteSwitch` + `GitHubWrites` (lock and action log, the only door to the writer). `createEngine`
   wires real dependencies; tests build `Engine` with fakes.
 - **apps/server**: Hono + `@hono/node-server`, binds 127.0.0.1 only.
 - **apps/desktop**: Electron via electron-vite. Main starts the server in-process on a random
@@ -1025,6 +1115,10 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/feedback` | `giveFeedback()` |
 | `POST /api/events/:id/unmute` | `unmuteEvent()` |
 | `GET /api/live` | `livePollStatus()` (fast poll state, backoff, X-Poll-Interval, `changeCount`) |
+| `GET`/`POST /api/github-writes` `{enabled}` | `githubWrites()` / `setGitHubWrites()` (the footer lock) |
+| `GET /api/debug/actions?limit=` | `actionLog()` (default 200, max 1000) |
+| `POST /api/notifications/:threadId/mark-read` | `markThreadRead()` (debug view, origin `debug`) |
+| `POST /api/prs/:owner/:repo/:number/bring-back` | `bringBack()` (local only) |
 
 ### Build and tooling decisions
 
@@ -1056,8 +1150,9 @@ preflight and does not know the token, so CORS stays open.
 - **Timestamps**: core compares ISO strings, so `packages/github` normalises every GitHub time
   through `toISOString()` (GitHub omits milliseconds, the app writes them).
 - **Env switches**: `CODE_MANAGER_FAKE=1` runs server/CLI/desktop on the in-memory Depot sample
-  data (`FakeEngine`, for UI work). `CODE_MANAGER_READ_ONLY=1` swaps the GitHub writer for one
-  that refuses every write (smoke runs against a real account). `CODE_MANAGER_POLL_SECONDS`
+  data (`FakeEngine`, for UI work). `CODE_MANAGER_READ_ONLY=1` never builds the real GitHub
+  writer and keeps the footer lock closed (smoke runs against a real account). Without it,
+  writes are still off until the lock is opened. `CODE_MANAGER_POLL_SECONDS`
   (default 10, 0 off), `CODE_MANAGER_PING_CAP` (default 200 per 24h) and
   `CODE_MANAGER_MAC_NOTIFICATIONS=0` tune the live poll.
 - **Test builders** live at `@code-manager/core/fixtures` (incl. `FakeTimers`); engine tests use
@@ -1066,7 +1161,8 @@ preflight and does not know the token, so CORS stays open.
 ### Safety while building
 
 - No GitHub write calls in tests or smoke runs. Tests use fakes; `GitHubWriteClient` is only
-  constructed by `createEngine`, and not at all with `CODE_MANAGER_READ_ONLY=1`. The sync path
+  constructed by `createEngine`, and not at all with `CODE_MANAGER_READ_ONLY=1`. A fresh
+  database starts with the lock closed. The sync path
   (`GitHubSync`) only holds a `GitHubReader`.
 - Live `claude` calls: at most 3 across the build, small inputs.
 
