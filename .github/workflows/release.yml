@@ -1,0 +1,214 @@
+# Release workflow
+#
+# Triggers:
+#   - Push of a v* tag (e.g. v0.1.0-alpha.0)  -> GitHub release with the zip + sha256, then the Homebrew cask
+#   - Manual dispatch with an existing v* tag -> the same, from that tag
+#
+# The manual arm is a fallback: an org tag ruleset can let an admin push a tag
+# without firing the push trigger (same reasoning as other PostHog release workflows).
+#
+# The Homebrew job runs in the `homebrew-tap` environment, which holds the tap
+# token secrets and should only admit v* tags, so a branch can't publish the cask.
+# It renders homebrew/postpile.rb.tmpl into Casks/postpile.rb in
+# PostHog/homebrew-tap, mirroring PostHog/posthog's build-phrocs.yml.
+
+name: Release
+
+on:
+    push:
+        tags:
+            - 'v*'
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Existing v* tag to release (e.g. v0.1.0-alpha.0). Push the tag first.'
+                required: true
+                type: string
+
+# One release per tag: a tag push and a dispatch of the same tag must not race
+# the same GitHub release and cask commit.
+concurrency:
+    group: release-${{ inputs.tag || github.ref_name }}
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+
+jobs:
+    build:
+        # Apple silicon runner: the app is arm64 only.
+        runs-on: macos-14
+        timeout-minutes: 30
+        if: github.repository == 'PostHog/postpile'
+        permissions:
+            contents: write
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+            sha256: ${{ steps.checksum.outputs.sha256 }}
+        env:
+            TAG: ${{ inputs.tag || github.ref_name }}
+        steps:
+            - name: Validate tag
+              run: |
+                  set -euo pipefail
+                  case "$TAG" in
+                      v*) ;;
+                      *) echo "::error::'${TAG}' is not a v* release tag"; exit 1 ;;
+                  esac
+
+            - name: Checkout repository
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  # On dispatch, check out the tag itself, not the default branch.
+                  ref: ${{ inputs.tag || github.ref }}
+
+            - name: Check the tag matches the app version
+              id: version
+              run: |
+                  set -euo pipefail
+                  VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+                  if [ "v${VERSION}" != "$TAG" ]; then
+                      echo "::error::tag ${TAG} does not match apps/desktop/package.json version ${VERSION}"
+                      exit 1
+                  fi
+                  echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+            # Takes the pnpm version from packageManager in package.json.
+            - name: Set up pnpm
+              uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+            - name: Set up Node
+              uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+              with:
+                  node-version: 24
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Typecheck and test
+              run: |
+                  pnpm typecheck
+                  pnpm test
+
+            # electron-vite build, then electron-builder: ad-hoc signed app + zip, never published by electron-builder itself.
+            - name: Build the app
+              run: pnpm dist
+
+            # macOS drops notifications from an app with a broken signature, so a bad bundle must not ship.
+            - name: Verify the app bundle
+              env:
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  APP=apps/desktop/dist/mac-arm64/PostPile.app
+                  codesign --verify --deep --strict "$APP"
+                  test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = com.posthog.postpile
+                  test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
+                  test -f "apps/desktop/dist/PostPile-${VERSION}-mac-arm64.zip"
+
+            - name: Checksum
+              id: checksum
+              env:
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  cd apps/desktop/dist
+                  ZIP="PostPile-${VERSION}-mac-arm64.zip"
+                  shasum -a 256 "$ZIP" > "${ZIP}.sha256"
+                  cat "${ZIP}.sha256"
+                  echo "sha256=$(awk '{print $1}' "${ZIP}.sha256")" >> "$GITHUB_OUTPUT"
+
+            # Notes: the version's section of CHANGELOG.md ("## <version>" up to the next "## ").
+            - name: Create GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  VERSION: ${{ steps.version.outputs.version }}
+                  GIT_SHA: ${{ github.sha }}
+              run: |
+                  set -euo pipefail
+                  awk -v heading="## ${VERSION}" '
+                      index($0, heading) == 1 { found = 1; next }
+                      found && /^## / { exit }
+                      found { print }
+                  ' CHANGELOG.md > /tmp/release-notes.md
+                  if [ ! -s /tmp/release-notes.md ]; then
+                      echo "Built from commit ${GIT_SHA}." > /tmp/release-notes.md
+                  fi
+                  # 0.1.0-alpha.0 and friends are pre-releases; 0.1.0 is not.
+                  case "$VERSION" in
+                      *-*) PRERELEASE=true ;;
+                      *) PRERELEASE=false ;;
+                  esac
+                  ZIP="apps/desktop/dist/PostPile-${VERSION}-mac-arm64.zip"
+                  gh release create "$TAG" "$ZIP" "${ZIP}.sha256" \
+                      --verify-tag \
+                      --title "PostPile ${VERSION}" \
+                      --notes-file /tmp/release-notes.md \
+                      --prerelease="$PRERELEASE"
+
+    publish-homebrew:
+        needs: build
+        # ghcommit-action is a Docker action and needs Linux.
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        environment: homebrew-tap
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout cask template
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  ref: ${{ inputs.tag || github.ref }}
+                  sparse-checkout: homebrew/postpile.rb.tmpl
+                  sparse-checkout-cone-mode: false
+
+            # Render to /tmp before the tap checkout, which replaces the workspace.
+            - name: Render Homebrew cask
+              env:
+                  VERSION: ${{ needs.build.outputs.version }}
+                  SHA256: ${{ needs.build.outputs.sha256 }}
+              run: |
+                  set -euo pipefail
+                  [ -n "$VERSION" ] && [ -n "$SHA256" ] || { echo "::error::missing version or sha256 from the build job"; exit 1; }
+                  sed \
+                      -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
+                      -e "s/SHA256_PLACEHOLDER/${SHA256}/g" \
+                      homebrew/postpile.rb.tmpl > /tmp/postpile.rb
+                  if grep -q PLACEHOLDER /tmp/postpile.rb; then
+                      echo "::error::placeholder left in the rendered cask"
+                      exit 1
+                  fi
+                  cat /tmp/postpile.rb
+
+            - name: Generate Homebrew tap token
+              id: app-token
+              uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+              with:
+                  client-id: ${{ secrets.GH_APP_HOMEBREW_TAP_RELEASER_APP_ID }}
+                  private-key: ${{ secrets.GH_APP_HOMEBREW_TAP_RELEASER_PRIVATE_KEY }}
+                  owner: PostHog
+                  repositories: homebrew-tap
+
+            - name: Checkout Homebrew tap
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  repository: PostHog/homebrew-tap
+                  token: ${{ steps.app-token.outputs.token }}
+
+            # Staged so ghcommit-action sees the file itself; an untracked new
+            # Casks/ folder would show up in git status as the folder only.
+            - name: Stage rendered cask
+              run: |
+                  mkdir -p Casks
+                  cp /tmp/postpile.rb Casks/postpile.rb
+                  git add Casks/postpile.rb
+
+            - name: Commit Homebrew cask update
+              uses: planetscale/ghcommit-action@25309d8005ac7c3bcd61d3fe19b69e0fe47dbdde # v0.2.20
+              with:
+                  commit_message: 'chore: update postpile cask to ${{ needs.build.outputs.version }}'
+                  repo: PostHog/homebrew-tap
+                  branch: main
+              env:
+                  GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
