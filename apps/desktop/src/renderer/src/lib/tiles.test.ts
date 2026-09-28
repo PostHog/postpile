@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { countPrs, isFyiNews, isOwnTile, kindLabel, leadPr, tileForYou } from './tiles.ts';
+import { countPrs, isFyiNews, kindLabel, leadPr, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -14,6 +14,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     isDraft: false,
     provenance: { kind: 'pinged', reason: 'review_requested' },
     why: 'RV',
+    forWhom: { kind: 'you' },
     tier: 'to_review',
     authorRelation: 'team',
     status: { lifecycle: 'open', review: 'review', checks: 'ok' },
@@ -39,6 +40,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     },
     prs,
     why: 'RV',
+    forWhom: { kind: 'you' },
     tier: 'to_review',
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
@@ -52,12 +54,6 @@ const pulled = { kind: 'pulled_in', reason: 'same cache keys' } as const;
 
 describe('own PR helpers', () => {
   const mine = (number: number) => summary(number, { authorRelation: 'you' });
-
-  it('marks a tile as yours when every tracked PR is yours', () => {
-    expect(isOwnTile(setView([mine(1), summary(2, { provenance: pulled })]))).toBe(true);
-    expect(isOwnTile(setView([mine(1), summary(2)]))).toBe(false);
-    expect(isOwnTile(setView([summary(1, { provenance: pulled })]))).toBe(false);
-  });
 
   it('calls news on your own PR FYI unless whose-turn says it is your move', () => {
     const view = setView([mine(1)], ['PostHog/posthog#1']);

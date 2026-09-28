@@ -158,7 +158,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
   `InboxCleanup` (sidebar footer line or middle-column banner, as the
   server's `look` says) + `InboxCleanupDialog`.
-- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `WhyBadge`,
+- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `ForWhomChip`,
   `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
@@ -177,9 +177,11 @@ Four spots per tile, all derived in core and shipped on `TileView` /
 `PrSummary` (DESIGN.md "Tile faces"); the renderer only picks labels and
 tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
 
-- Why it's here: `WhyBadge`, mono code, honey = you, sea = your team,
-  neutral = yours, quiet grey = passive, dashed = stack context, grey on
-  done tiles.
+- For whom: `ForWhomChip` ("For you" honey, "For team-devex" sea, "Your
+  PR" neutral, nothing else) from `TileView.forWhom` / `PrSummary.forWhom`,
+  plus a 4px left band on the tile in the same color (`BANDS` in
+  `Tile.tsx`); PR rows get the small chip, no band. The tooltip keeps the
+  long why-here reason (`whyTitle`). Grey on done tiles.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), coral dot, age.
 - PR status: `StatusPill`, one segment pill; open threads after it. Both

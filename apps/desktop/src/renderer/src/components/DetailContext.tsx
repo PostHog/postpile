@@ -1,7 +1,7 @@
 import type { TileView } from '@postpile/core';
 import { kindLabel, prNumber } from '../lib/tiles.ts';
 import { KindIcon } from './icons.tsx';
-import { StatusPill, WhyBadge } from './pills.tsx';
+import { ForWhomChip, StatusPill } from './pills.tsx';
 
 interface DetailContextProps {
   view: TileView;
@@ -61,13 +61,13 @@ export function DetailContext(props: DetailContextProps) {
                 key={pr.key}
                 type="button"
                 onClick={() => props.onSelectPr(pr.key)}
-                className={`grid h-[26px] grid-cols-[26px_46px_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 text-left text-[11.5px] ${
+                className={`grid h-[26px] grid-cols-[46px_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-2 text-left text-[11.5px] ${
                   picked ? 'bg-surface shadow-picked' : 'hover:bg-surface/60'
                 }`}
               >
-                <WhyBadge code={pr.why} provenance={pr.provenance} size="row" />
                 <span className={`font-mono text-[10px] ${picked ? 'text-accent' : 'text-muted'}`}>#{prNumber(pr.key)}</span>
                 <span className={`truncate ${picked ? 'font-semibold' : 'font-[450]'}`}>{pr.title}</span>
+                <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} size="row" />
                 <StatusPill status={pr.status} />
               </button>
             );

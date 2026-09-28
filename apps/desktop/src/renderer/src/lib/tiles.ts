@@ -37,12 +37,6 @@ export function leadPr(view: TileView): PrSummary | null {
   return openPinged ?? view.prs[0] ?? null;
 }
 
-/** Every PR the tile tracks (not pulled-in stack context) is the viewer's own: the tile gets a "Your PR" marker. */
-export function isOwnTile(view: TileView): boolean {
-  const tracked = view.prs.filter((pr) => pr.provenance.kind !== 'pulled_in');
-  return tracked.length > 0 && tracked.every((pr) => pr.authorRelation === 'you');
-}
-
 /**
  * The unread news is on the viewer's own PR and asks nothing of them (a bot,
  * a finished review): the strip says what happened and adds that no move is

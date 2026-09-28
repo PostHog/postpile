@@ -1,12 +1,12 @@
-import type { PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
+import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { ageLabel } from '../lib/time.ts';
-import { isOwnTile, kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
-import { OwnPrPill, PendingWritePill, RepoLabel, VerdictPill, WhyBadge } from './pills.tsx';
+import { ForWhomChip, PendingWritePill, RepoLabel, VerdictPill } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { TileMenu } from './TileMenu.tsx';
@@ -38,6 +38,14 @@ function frameClasses(props: TileProps): string {
   }
   return 'border border-hairline-strong shadow-tile';
 }
+
+/** The left band per "for whom": honey for you, sea for your team, neutral for your own PR, none else. */
+const BANDS: Record<ForWhom['kind'], string | null> = {
+  you: 'bg-honey',
+  team: 'bg-sea',
+  own: 'bg-muted',
+  none: null,
+};
 
 /** The people involved as a small overlapping stack of avatars. */
 function PeopleStack(props: { people: TilePerson[] }) {
@@ -85,13 +93,16 @@ export function Tile(props: TileProps) {
           className={`absolute top-1/2 -right-[7px] z-10 -mt-1.5 size-3 rotate-45 border-t-[1.5px] border-r-[1.5px] border-accent ${background}`}
         />
       )}
+      {BANDS[view.forWhom.kind] && (
+        // The "for whom" band down the left edge, in the chip's color; grey on done tiles.
+        <span aria-hidden="true" className={`absolute inset-y-0 left-0 z-[1] w-1 rounded-l-[11px] ${done ? 'bg-ghost' : BANDS[view.forWhom.kind]}`} />
+      )}
       {unread && <UnreadStrip view={view} />}
       <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pt-3 pb-3">
         <div className="flex cursor-pointer flex-col gap-2" onClick={selectLead}>
           <div className="flex items-center gap-[7px]">
-            <WhyBadge code={view.why} greyed={done} />
+            <ForWhomChip forWhom={view.forWhom} code={view.why} greyed={done} />
             <span className={`shrink-0 text-[11px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>{kindLabel(view)}</span>
-            {isOwnTile(view) && <OwnPrPill greyed={done} />}
             <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} gap={lead?.glanceGap} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}

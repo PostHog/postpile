@@ -2,7 +2,7 @@ import type { PrSummary } from '@postpile/core';
 import { prNumber } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph } from './icons.tsx';
-import { RepoLabel, StatusPill, WhyBadge } from './pills.tsx';
+import { ForWhomChip, RepoLabel, StatusPill } from './pills.tsx';
 
 interface PrRowProps {
   pr: PrSummary;
@@ -16,7 +16,7 @@ interface PrRowProps {
   onClick: () => void;
 }
 
-/** One PR line inside a tile: why it's here, number, title, status pill, open threads, author. */
+/** One PR line inside a tile: number, title with its small "for whom" chip, status pill, open threads, author. */
 export function PrRow(props: PrRowProps) {
   const { pr } = props;
   const background = props.selected ? 'bg-accent-row' : 'bg-surface hover:bg-subtle';
@@ -32,14 +32,14 @@ export function PrRow(props: PrRowProps) {
       type="button"
       aria-pressed={props.selected}
       onClick={props.onClick}
-      className={`grid h-8 grid-cols-[26px_44px_minmax(0,1fr)_auto_18px] items-center gap-[7px] px-[9px] text-left text-xs ${
+      className={`grid h-8 grid-cols-[44px_minmax(0,1fr)_auto_18px] items-center gap-[7px] px-[9px] text-left text-xs ${
         props.first ? '' : 'border-t border-hairline-soft'
       } ${background}`}
     >
-      <WhyBadge code={pr.why} provenance={pr.provenance} greyed={props.greyed} size="row" />
       <span className={`font-mono text-[10.5px] ${props.selected ? 'text-accent' : 'text-muted'}`}>#{prNumber(pr.key)}</span>
       <span className="flex min-w-0 items-center gap-1.5">
         <span className={`truncate ${weight} ${titleTone}`}>{pr.title}</span>
+        <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={props.greyed} size="row" />
         {pr.repoLabel && <RepoLabel label={pr.repoLabel} />}
       </span>
       <span className="flex items-center gap-1">

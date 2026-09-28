@@ -1,5 +1,7 @@
 import {
   activityList,
+  forWhom,
+  tileForWhom,
   compareTopicUrgency,
   displayState,
   isMergeApprovedMove,
@@ -174,6 +176,7 @@ export class ReadModels {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
+        forWhom: forWhom(whyHere(member.provenance, pr, viewer), pr, viewer),
         tier: memberTier(this.tierOf(board, pr, viewer), member.provenance, quietRepo),
         authorRelation,
         primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approvedHead, tileUnread }),
@@ -212,6 +215,7 @@ export class ReadModels {
         state,
         prs,
         why: tileWhy(prs.map((pr) => pr.why)),
+        forWhom: tileForWhom(prs.map((pr) => pr.forWhom)),
         tier: tileTier(prs.map((pr) => pr.tier)),
         people: tilePeople(memberPrs, viewer?.login ?? null),
         turn: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }),

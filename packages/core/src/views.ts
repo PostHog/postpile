@@ -30,6 +30,7 @@ import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts
 import type { TilePerson } from './tile-people.ts';
 import type { WhoseTurn } from './whose-turn.ts';
 import type { WhyCode } from './why-here.ts';
+import type { ForWhom } from './for-whom.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
@@ -104,8 +105,10 @@ export interface PrSummary {
   state: PrState;
   isDraft: boolean;
   provenance: Provenance;
-  /** Why the PR is in the tile, as a short code (RV, RT, @, ...). */
+  /** Why the PR is in the tile, as a short code (RV, RT, @, ...). Tooltips and rules; the UI shows `forWhom`. */
   why: WhyCode;
+  /** The word chip: "For you", "For team-devex", "Your PR", or none (`forWhom`). */
+  forWhom: ForWhom;
   /** The PR queue it falls into (`prTier`); merged and closed PRs are rest. */
   tier: PrTier;
   /** Whether you, a teammate or someone else wrote it. */
@@ -140,6 +143,8 @@ export interface TileView {
   prs: PrSummary[];
   /** The most aimed code among the PRs. */
   why: WhyCode;
+  /** The chip and left band of the tile (`tileForWhom`). */
+  forWhom: ForWhom;
   /** The most urgent tier among the PRs (`tileTier`); the topic column sorts by it. */
   tier: PrTier;
   /** Author(s), the viewer if they reviewed, other reviewers. At most TILE_PEOPLE_MAX. */

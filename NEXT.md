@@ -306,6 +306,8 @@ now".
     predicate (`isBigClaim`: drives, owns, decided, blocked_by, user_cares);
     none on change lines, activity or trivial facts. "Recheck this
     assessment" on the whole glance (`MemoryRecheckRequest.prKey`).
+  - "For whom" chips and left bands replace the tile code badges
+    (`forWhom` in core; "For you", "For team-devex", "Your PR").
 
 ## Stubbed or thin
 
@@ -587,6 +589,11 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **For whom as words and a band** (2026-09-28): tiles show "For you" /
+  "For <team>" / "Your PR" chips and a 4px left band in honey / sea /
+  neutral instead of the RV/RT/@/... code badges (mockup ForWhom2, part 1
+  variant B). PR rows get the small chip without the band.
 
 - **Repo scope is one repo that picks topics** (2026-09-28): "All repos"
   or exactly one repo, replacing the multi-select. The repo selects

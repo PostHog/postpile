@@ -1,30 +1,38 @@
-import type { Provenance, TilePersonRole, WhoseTurn, WhyCode } from '@postpile/core';
+import type { ForWhom, Provenance, TilePersonRole, WhoseTurn, WhyCode } from '@postpile/core';
 
-/**
- * you: aimed at the viewer (honey). team: at one of their teams (sea).
- * own: their own PR (neutral). passive: took part or follows (quiet grey).
- * context: pulled in for the stack (dashed outline).
- */
-export type WhyTone = 'you' | 'team' | 'own' | 'passive' | 'context';
-
-export const WHY: Record<WhyCode, { label: string; tone: WhyTone }> = {
-  RV: { label: 'Review asked of you', tone: 'you' },
-  RT: { label: 'Review asked of your team', tone: 'team' },
-  '@': { label: 'Mentioned you', tone: 'you' },
-  '@T': { label: 'Mentioned your team', tone: 'team' },
-  AS: { label: 'Assigned to you', tone: 'you' },
-  AU: { label: 'You wrote it', tone: 'own' },
-  CM: { label: 'You took part', tone: 'passive' },
-  FW: { label: 'Following', tone: 'passive' },
-  ST: { label: 'Pulled in as stack context', tone: 'context' },
+/** The long reason behind each why-here code, for the "for whom" chip's tooltip. */
+const WHY_LABELS: Record<WhyCode, string> = {
+  RV: 'Review asked of you',
+  RT: 'Review asked of your team',
+  '@': 'Mentioned you',
+  '@T': 'Mentioned your team',
+  AS: 'Assigned to you',
+  AU: 'You wrote it',
+  CM: 'You took part',
+  FW: 'Following',
+  ST: 'Pulled in as stack context',
 };
 
+/** The chip's words: "For you", "For team-devex", "Your PR"; empty for none. */
+export function forWhomLabel(forWhom: ForWhom): string {
+  switch (forWhom.kind) {
+    case 'you':
+      return 'For you';
+    case 'team':
+      return `For ${forWhom.team}`;
+    case 'own':
+      return 'Your PR';
+    case 'none':
+      return '';
+  }
+}
+
 /**
- * The badge tooltip. A pulled-in PR also says which layer it is ("stack
+ * The chip tooltip. A pulled-in PR also says which layer it is ("stack
  * layer below #12"); a found PR says it is not in the inbox.
  */
 export function whyTitle(code: WhyCode, provenance?: Provenance): string {
-  const label = WHY[code].label;
+  const label = WHY_LABELS[code];
   if (provenance?.kind === 'pulled_in') {
     return `${label}: ${provenance.reason}`;
   }

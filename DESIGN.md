@@ -867,6 +867,18 @@ and FakeEngine call the same functions.
 **Why it's here** (`whyHere`, `tileWhy` in `why-here.ts`): one code per PR,
 the tile shows the most aimed one (order RV, @, AS, RT, @T, AU, CM, FW, ST).
 
+**For whom** (`forWhom`, `tileForWhom` in `for-whom.ts`; 2026-09-28, mockup
+ForWhom2 part 1 variant B). The codes still decide; the UI shows words, not
+codes. RV, @, AS -> "For you" (honey chip, 4px honey band down the tile's
+left edge). RT, @T -> "For <team slug>" ("For team-devex", sea chip and
+band), the slug from the pending team request, else the timeline request,
+else a team mention. AU, and any PR the viewer wrote even with a CODEOWNERS
+team request on it -> "Your PR" (neutral chip, neutral grey band). CM, FW,
+ST -> no chip, no band. A tile takes the most aimed of its PRs (you, team,
+own). PR rows in multi-PR tiles (and the detail pane's PR list) show the
+same words as a small chip without a band. The chip's tooltip keeps the
+long why-here reason. The table below is still the rule behind it.
+
 | code | meaning | from |
 |---|---|---|
 | RV / RT | review asked of you / your team | `review_requested`: a pending request names the viewer or one of `Viewer.teams`, else the newest timeline request does, else RV |

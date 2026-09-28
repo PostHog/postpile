@@ -59,6 +59,8 @@ import type {
 } from '@postpile/core';
 import {
   activityList,
+  forWhom,
+  tileForWhom,
   compareTopicUrgency,
   actionTrail,
   applyBaseline,
@@ -370,6 +372,7 @@ export class FakeEngine implements EngineService {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
+        forWhom: forWhom(whyHere(member.provenance, pr, viewer), pr, viewer),
         tier: memberTier(this.tierOf(pr, member), member.provenance, quietRepo),
         authorRelation,
         primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approvedHead, tileUnread: tileState.kind === 'unread' }),
@@ -397,6 +400,7 @@ export class FakeEngine implements EngineService {
       state: tileState,
       prs,
       why: tileWhy(prs.map((pr) => pr.why)),
+      forWhom: tileForWhom(prs.map((pr) => pr.forWhom)),
       tier: tileTier(prs.map((pr) => pr.tier)),
       people: tilePeople(memberPrs, viewer.login),
       turn,

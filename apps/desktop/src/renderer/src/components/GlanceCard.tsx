@@ -3,7 +3,7 @@ import { useActions } from '../api/actions.tsx';
 import { glanceGapText } from '../lib/glance.ts';
 import { whyTitle } from '../lib/why.ts';
 import { Button } from './Button.tsx';
-import { VerdictPill, WhyBadge } from './pills.tsx';
+import { ForWhomChip, VerdictPill } from './pills.tsx';
 
 interface GlanceCardProps {
   detail: PrDetail;
@@ -40,7 +40,7 @@ export function GlanceCard(props: GlanceCardProps) {
     <div className="flex flex-col gap-2 rounded-[10px] border border-hairline-soft bg-subtle p-3">
       <div className="flex flex-wrap items-center gap-2">
         {!stackLayer && <VerdictPill verdict={glance?.verdict ?? null} stale={glanceStale} gap={glanceGap} />}
-        {summary && <WhyBadge code={summary.why} provenance={summary.provenance} />}
+        {summary && <ForWhomChip forWhom={summary.forWhom} code={summary.why} provenance={summary.provenance} />}
         {summary && <span className="text-[11.5px] text-muted">{whyTitle(summary.why, summary.provenance)}</span>}
       </div>
       {glance && <p className="text-[13px] leading-normal font-medium select-text">{glance.forYou}</p>}

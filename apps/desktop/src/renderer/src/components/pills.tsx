@@ -1,10 +1,10 @@
 // Small status chips used across panes: verdict, why it's here, PR status.
-import type { GlanceGap, PrStatus, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
+import type { ForWhom, GlanceGap, PrStatus, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
 import { pendingWriteTitle } from '../lib/guard.ts';
 import { glanceGapText } from '../lib/glance.ts';
 import { statusParts, type StatusTone } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';
-import { WHY, whyTitle, type WhyTone } from '../lib/why.ts';
+import { forWhomLabel, whyTitle } from '../lib/why.ts';
 import { ClockIcon } from './icons.tsx';
 
 const VERDICTS: Record<Verdict, { glyph: string; label: string; tone: string }> = {
@@ -25,18 +25,6 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
     >
       <ClockIcon />
       {failed ? 'pending: send failed' : 'pending: mark read on GitHub'}
-    </span>
-  );
-}
-
-/** "Your PR" on tiles of the viewer's own PRs: the neutral "yours" look of the why badges, in words. */
-export function OwnPrPill(props: { greyed?: boolean }) {
-  return (
-    <span
-      title="You wrote this PR: nothing to approve, it waits on reviewers or on you to merge"
-      className={`flex h-5 shrink-0 items-center rounded-[5px] px-1.5 text-[10.5px] font-semibold ${props.greyed ? 'bg-why-done text-muted' : 'bg-segment text-ink'}`}
-    >
-      Your PR
     </span>
   );
 }
@@ -65,32 +53,34 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; g
   );
 }
 
-const WHY_TONES: Record<WhyTone, string> = {
+const FOR_WHOM_TONES: Record<Exclude<ForWhom['kind'], 'none'>, string> = {
   you: 'bg-honey-soft text-honey-ink',
   team: 'bg-sea-soft text-sea-ink',
   own: 'bg-segment text-ink',
-  passive: 'bg-quiet-soft text-muted',
-  context: 'border border-dashed border-ghost text-faint',
 };
 
-const WHY_SIZES = {
-  tile: 'h-5 px-1.5 text-[10.5px] font-bold',
-  row: 'h-[17px] w-[26px] text-[9.5px] font-bold',
+const FOR_WHOM_SIZES = {
+  tile: 'h-[22px] px-[9px] text-[11.5px]',
+  row: 'h-[17px] px-1.5 text-[10px]',
 };
 
 /**
- * "Why it's here": a mono code (RV, RT, @, ...) tinted by who it is aimed
- * at. Greyed on done tiles; the stack-context outline stays an outline.
+ * "For whom" as words: "For you" (honey), "For team-devex" (sea), "Your PR"
+ * (neutral). Nothing for everything else. The tooltip keeps the long reason
+ * (`whyTitle`). Greyed on done tiles.
  */
-export function WhyBadge(props: { code: WhyCode; provenance?: Provenance; greyed?: boolean; size?: keyof typeof WHY_SIZES }) {
-  const tone = WHY[props.code].tone;
-  const look = props.greyed && tone !== 'context' ? 'bg-why-done text-muted' : WHY_TONES[tone];
+export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance?: Provenance; greyed?: boolean; size?: keyof typeof FOR_WHOM_SIZES }) {
+  const { forWhom } = props;
+  if (forWhom.kind === 'none') {
+    return null;
+  }
+  const look = props.greyed ? 'bg-why-done text-muted' : FOR_WHOM_TONES[forWhom.kind];
   return (
     <span
       title={whyTitle(props.code, props.provenance)}
-      className={`flex shrink-0 items-center justify-center rounded-[5px] font-mono leading-none ${WHY_SIZES[props.size ?? 'tile']} ${look}`}
+      className={`flex shrink-0 items-center rounded-full font-bold whitespace-nowrap ${FOR_WHOM_SIZES[props.size ?? 'tile']} ${look}`}
     >
-      {props.code}
+      {forWhomLabel(forWhom)}
     </span>
   );
 }

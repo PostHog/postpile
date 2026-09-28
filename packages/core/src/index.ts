@@ -15,6 +15,7 @@ export * from './stacks.ts';
 export * from './snooze.ts';
 export * from './tiles.ts';
 export * from './why-here.ts';
+export * from './for-whom.ts';
 export * from './pr-status.ts';
 export * from './tile-people.ts';
 export * from './whose-turn.ts';
