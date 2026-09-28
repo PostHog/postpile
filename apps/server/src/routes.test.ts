@@ -7,6 +7,7 @@ import type {
   InstructionsSaveResult,
   InstructionsView,
   MemorySources,
+  NotificationDebugRow,
   PrDetail,
   SearchResult,
   TopicDetail,
@@ -57,6 +58,30 @@ describe('server routes over the fake engine', () => {
     expect(await res.json()).toMatchObject({ status: 'answered', outcome: 'holds' });
     const bad = await app.request('/api/memory/recheck', { method: 'POST', headers, body: JSON.stringify({ text: '' }) });
     expect(bad.status).toBe(400);
+  });
+
+  it('lists stored notification threads newest first with where they landed', async () => {
+    const app = appWithFake();
+    const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
+    const times = rows.map((row) => row.thread.updatedAt);
+    expect(times).toEqual([...times].sort().reverse());
+    const kinds = new Set(rows.map((row) => row.landing.kind));
+    expect(kinds).toEqual(new Set(['tile', 'not_pr', 'pr_not_synced']));
+    const depot = rows.find((row) => row.prKey === 'PostHog/posthog#41902');
+    expect(depot?.landing).toMatchObject({ kind: 'tile', topicId: 'topic-depot', tileId: 'set:turbo-cache' });
+    expect(depot?.recentEvents.length).toBeGreaterThan(0);
+
+    const limited = (await (await app.request('/api/debug/notifications?limit=2')).json()) as NotificationDebugRow[];
+    expect(limited).toHaveLength(2);
+    expect((await app.request('/api/debug/notifications?limit=0')).status).toBe(400);
+  });
+
+  it('does not mark anything read when the debug list is read', async () => {
+    const app = appWithFake();
+    const before = (await (await app.request('/api/topics')).json()) as TopicListItem[];
+    await app.request('/api/debug/notifications');
+    const after = (await (await app.request('/api/topics')).json()) as TopicListItem[];
+    expect(after.map((item) => item.unreadTiles)).toEqual(before.map((item) => item.unreadTiles));
   });
 
   it('filters topics and tiles by a search query', async () => {

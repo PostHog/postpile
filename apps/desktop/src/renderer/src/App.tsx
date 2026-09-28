@@ -7,6 +7,7 @@ import { useTopic, useTopics } from './api/topics.ts';
 import { DetailPane } from './components/DetailPane.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
+import { NotificationsPane } from './components/NotificationsPane.tsx';
 import { SearchField } from './components/SearchField.tsx';
 import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
@@ -113,6 +114,9 @@ export function App() {
     main = <InboxPane proposals={proposals.data} topics={items} error={proposals.error?.message ?? null} />;
   } else if (pane === 'instructions') {
     main = <InstructionsPane />;
+  } else if (pane === 'notifications') {
+    // A jump goes through go(), so back returns to this list.
+    main = <NotificationsPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
   } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
   } else if (!topics.isPending && items.length === 0) {
@@ -164,19 +168,24 @@ export function App() {
             onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
             instructionsOpen={pane === 'instructions'}
             onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
+            notificationsOpen={pane === 'notifications'}
+            onOpenNotifications={() => go({ ...shown, pane: 'notifications' })}
             loading={topics.isPending}
             error={topics.error?.message ?? null}
             filter={filter}
             onClearFilter={() => setQuery('')}
           />
           {main}
-          <DetailPane
-            key={selected.view?.tile.id ?? 'none'}
-            view={selected.view}
-            prKey={selected.prKey}
-            onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
-            chatRequest={chatRequest}
-          />
+          {/* The notifications list is wide and has no tile of its own; it takes the detail pane's column too. */}
+          {pane !== 'notifications' && (
+            <DetailPane
+              key={selected.view?.tile.id ?? 'none'}
+              view={selected.view}
+              prKey={selected.prKey}
+              onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
+              chatRequest={chatRequest}
+            />
+          )}
         </div>
         <StatusFooter topics={items} detail={topic.data} />
         <Toast />

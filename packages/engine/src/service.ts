@@ -17,6 +17,7 @@ import type {
   MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
+  NotificationDebugRow,
   PendingProposals,
   PrDetail,
   PrKey,
@@ -45,6 +46,11 @@ export interface EngineService {
   getTopic(topicId: string): Promise<TopicDetail | null>;
   /** Search bar: topics, tiles and PRs matching every term of `query`. Empty query, empty result. */
   search(query: string): Promise<SearchResult>;
+  /**
+   * Debug view of the raw notification stream: the newest `limit` stored
+   * threads with where each landed in the app. Read only, never marks anything read.
+   */
+  debugNotifications(limit: number): Promise<NotificationDebugRow[]>;
   /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
   /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */

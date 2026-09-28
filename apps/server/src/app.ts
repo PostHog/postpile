@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
-import { prKey, type AppConfig } from '@code-manager/core';
+import { DEBUG_NOTIFICATIONS_DEFAULT_LIMIT, DEBUG_NOTIFICATIONS_MAX_LIMIT, prKey, type AppConfig } from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 
 /** Every /api request must carry the server's token in this header. */
@@ -47,6 +47,8 @@ const memoryRecheckBody = z.object({
   text: z.string().min(1),
   target: memoryTargetBody.nullable().default(null),
 });
+
+const debugLimit = z.coerce.number().int().positive().max(DEBUG_NOTIFICATIONS_MAX_LIMIT).default(DEBUG_NOTIFICATIONS_DEFAULT_LIMIT);
 
 const syncBody = z
   .object({
@@ -166,6 +168,8 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
   // Search bar filter: ?q= is matched term by term (AND); a missing or empty q matches nothing.
   app.get('/api/search', async (c) => c.json(await engine.search(c.req.query('q') ?? '')));
+  // Debug view of the stored notification threads. Read only: nothing is marked read.
+  app.get('/api/debug/notifications', async (c) => c.json(await engine.debugNotifications(debugLimit.parse(c.req.query('limit')))));
   app.get('/api/topics/:id', async (c) => {
     const topic = await engine.getTopic(c.req.param('id'));
     return topic ? c.json(topic) : c.json({ error: 'not found' }, 404);

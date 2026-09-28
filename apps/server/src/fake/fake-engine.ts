@@ -24,6 +24,8 @@ import type {
   MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
+  NotificationDebugRow,
+  NotificationLanding,
   PendingProposals,
   PrDetail,
   PrEvent,
@@ -40,6 +42,7 @@ import type {
   UserPrState,
 } from '@code-manager/core';
 import {
+  debugEventLines,
   emptyAgentCallStats,
   fixedClaimNote,
   openThreadCount,
@@ -47,6 +50,7 @@ import {
   searchTopics,
   setIdFromTileId,
   tilePeople,
+  threadPrKey,
   tileWhy,
   whoseTurn,
   whyHere,
@@ -59,6 +63,7 @@ import {
 import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeMemory } from './fake-memory.ts';
+import { sampleThreads } from './fake-notifications.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
 interface MarkReadBatch {
@@ -301,6 +306,41 @@ export class FakeEngine implements EngineService {
     return this.data.tiles.filter((tile) => tile.topicId === topicId);
   }
 
+  /** Same landing rules as the engine's debug view, over the sample data. */
+  private landingOf(key: PrKey | null): NotificationLanding {
+    if (key === null) {
+      return { kind: 'not_pr' };
+    }
+    if (!this.data.prs.some((pr) => pr.key === key)) {
+      return { kind: 'pr_not_synced' };
+    }
+    const holds = (tile: Tile) => tile.members.some((member) => member.prKey === key);
+    // Pulled-in layers have no membership and show in their anchor's topic.
+    const topicId = this.data.membership.get(key) ?? this.data.tiles.find(holds)?.topicId ?? null;
+    const topic = this.data.topics.find((candidate) => candidate.id === topicId);
+    if (topicId === null || !topic) {
+      return { kind: 'no_topic' };
+    }
+    if (topic.status !== 'active') {
+      return { kind: 'topic_hidden', topicId, topicName: topic.name };
+    }
+    // Some sample PRs keep their own topic but sit in another topic's set tile.
+    const tile = this.tilesOfTopic(topicId).find(holds) ?? this.data.tiles.find(holds);
+    const tileTopic = this.data.topics.find((candidate) => candidate.id === tile?.topicId);
+    if (!tile || !tileTopic) {
+      return { kind: 'no_tile', topicId, topicName: topic.name };
+    }
+    return {
+      kind: 'tile',
+      topicId: tileTopic.id,
+      topicName: tileTopic.name,
+      tileId: tile.id,
+      tileTitle: tile.title,
+      tileState: this.tileState(tile).kind,
+      unsorted: false,
+    };
+  }
+
   private recordFeedback(input: Omit<Feedback, 'id' | 'createdAt'>): void {
     this.feedback.push({ ...input, id: this.newId(), createdAt: this.timestamp() });
   }
@@ -379,6 +419,20 @@ export class FakeEngine implements EngineService {
         })),
       }));
     return searchTopics(topics, query);
+  }
+
+  async debugNotifications(limit: number): Promise<NotificationDebugRow[]> {
+    return sampleThreads(this.data, this.now())
+      .slice(0, limit)
+      .map((thread) => {
+        const key = threadPrKey(thread);
+        return {
+          thread,
+          prKey: key,
+          landing: this.landingOf(key),
+          recentEvents: key === null ? [] : debugEventLines(this.eventsOf(key)),
+        };
+      });
   }
 
   async getPr(prKey: PrKey): Promise<PrDetail | null> {

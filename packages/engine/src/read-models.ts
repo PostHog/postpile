@@ -12,6 +12,7 @@ import {
   type FactQuery,
   type FactView,
   type GlanceGap,
+  type NotificationDebugRow,
   type PrDetail,
   type PrKey,
   type PrSummary,
@@ -26,6 +27,7 @@ import {
 import type { AgentService } from '@code-manager/agent';
 import type { Store } from '@code-manager/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
+import { debugNotificationRows } from './debug-notifications.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { GlanceInputs } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
@@ -197,6 +199,11 @@ export class ReadModels {
       pendingProposals: isUnsorted ? [] : this.store.proposals.listPendingForTopic(topicId),
       dossier: isUnsorted ? null : this.memory.dossierView(topicId, board.prs),
     };
+  }
+
+  /** Debug view: the newest `limit` stored notification threads and where each landed. */
+  debugNotifications(limit: number): NotificationDebugRow[] {
+    return debugNotificationRows(this.board(), this.store.notifications.list().slice(0, limit));
   }
 
   /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */

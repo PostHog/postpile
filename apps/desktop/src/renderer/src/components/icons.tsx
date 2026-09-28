@@ -170,6 +170,15 @@ export function InboxIcon() {
   );
 }
 
+export function BellIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <path d="M4 11V7a4 4 0 0 1 8 0v4l1.2 1.5H2.8z" />
+      <path d="M6.5 14h3" />
+    </svg>
+  );
+}
+
 /** A circle as a path, so a glyph stays one <path>. */
 function ring(cx: number, cy: number, r: number): string {
   return `M${cx} ${cy - r}a${r} ${r} 0 1 0 0 ${2 * r}a${r} ${r} 0 1 0 0 -${2 * r}z`;

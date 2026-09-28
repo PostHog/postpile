@@ -31,7 +31,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
-  (`useMemorySources`, only enabled while a "Why?" panel is open).
+  (`useMemorySources`, only enabled while a "Why?" panel is open). `debug.ts`
+  (`useDebugNotifications`, the notifications debug pane).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@code-manager/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -111,7 +112,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 
 - One component per file in `components/`, named like the UI part:
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
-  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`,
+  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`),
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
   `StatusFooter`, `Toast`, `SearchField` (title bar filter).
@@ -155,7 +156,8 @@ folds snoozed / done ones. Tiles stay in one column (DESIGN.md "Three-pane
 balance"); sidebar rows show the dossier summary and a "your move" chip.
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
-"Your instructions"), and the picked
+"Your instructions", the notifications debug list, which also takes the
+detail pane's column), and the picked
 tile + PR. Everything else is
 derived on render (`resolveSelection`): a missing pick falls back to the first
 topic, its first tile and that tile's lead PR. Don't mirror server data into

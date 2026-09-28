@@ -9,5 +9,6 @@ export const queryKeys = {
   proposals: ['proposals'] as const,
   instructions: ['instructions'] as const,
   instructionsChat: ['instructions-chat'] as const,
+  debugNotifications: (limit: number) => ['debug-notifications', limit] as const,
   memorySources: (targetKey: string) => ['memory-sources', targetKey] as const,
 };

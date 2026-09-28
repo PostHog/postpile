@@ -27,6 +27,7 @@ import type {
   SyncReport,
   TopicDetail,
   TopicListItem,
+  NotificationDebugRow,
 } from '@code-manager/core';
 import type { GitHubReader, GitHubWriter } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
@@ -140,6 +141,10 @@ export class Engine implements EngineService {
 
   async getPr(prKey: PrKey): Promise<PrDetail | null> {
     return this.reads.getPr(prKey);
+  }
+
+  async debugNotifications(limit: number): Promise<NotificationDebugRow[]> {
+    return this.reads.debugNotifications(limit);
   }
 
   async getChat(tileId: string): Promise<ChatMessage[]> {

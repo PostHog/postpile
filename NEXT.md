@@ -142,6 +142,10 @@ now".
   a coral unread count, a honey "N your move" chip (`yourMoveTiles` on
   `TopicListItem`) and the relation in Needs you; a one-tile-wide middle
   column (clamp 420-480px); the detail pane takes the rest.
+- Notification debug view (DESIGN.md "Notification debug view"):
+  `GET /api/debug/notifications`, engine + FakeEngine (sample threads incl.
+  an issue, a release and an unsynced PR), sidebar footer entry, filters,
+  jump to tile through the history, per-PR recent events.
 - "Warm reach" tile look (DESIGN.md "Tile faces"): why-it's-here code
   badges (RV, RT, @, @T, AS, AU, CM, FW, ST) on tiles and rows, a warm
   "why now" strip with the actor's avatar and an ink event glyph, a segment

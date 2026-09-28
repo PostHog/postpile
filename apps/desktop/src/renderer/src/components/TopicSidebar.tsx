@@ -3,7 +3,7 @@ import type { TopicListItem } from '@code-manager/core';
 import { statusLabel } from '../lib/memory.ts';
 import { filterTopics, type SearchFilter } from '../lib/search.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
-import { CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
+import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 import { RelationBadge } from './pills.tsx';
 
 /**
@@ -136,6 +136,8 @@ interface TopicSidebarProps {
   onOpenInbox: () => void;
   instructionsOpen: boolean;
   onOpenInstructions: () => void;
+  notificationsOpen: boolean;
+  onOpenNotifications: () => void;
   loading: boolean;
   error: string | null;
   /** The search bar's filter; null shows every topic. */
@@ -233,6 +235,21 @@ export function TopicSidebar(props: TopicSidebarProps) {
             <InstructionsIcon />
           </span>
           Your instructions
+        </button>
+        <button
+          type="button"
+          onClick={props.onOpenNotifications}
+          aria-current={props.notificationsOpen ? 'true' : undefined}
+          title="Debug: the raw GitHub notification threads as stored, and where each landed. Read only, nothing is marked read."
+          className={`flex items-center gap-2 rounded-control px-2.5 py-[7px] text-left text-[12.5px] ${
+            props.notificationsOpen ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
+          }`}
+        >
+          <span className="text-muted">
+            <BellIcon />
+          </span>
+          Notifications
+          <span className="ml-auto font-mono text-[9.5px] font-normal text-faint">debug</span>
         </button>
         <button
           type="button"

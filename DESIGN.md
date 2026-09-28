@@ -851,6 +851,18 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   selected tile's notch always points at the detail pane.
 - **Detail pane**: takes the remaining width.
 
+### Notification debug view
+
+A read-only look at the raw stream, for checking the sorting. Sidebar
+footer "Notifications" (debug) opens a pane over the middle and detail
+columns: the stored `notification_thread` rows newest first (repo#number,
+title, subject type, reason, GitHub's unread flag, updated) and where each
+landed (`NotificationLanding`: tile with topic, or not a PR / PR not synced
+/ no topic / topic hidden / no tile). Filters: reason, unread only, text.
+A click jumps to the tile through `go()`, so Back returns to the list;
+without a tile the row says why inline. The chevron shows the PR's five
+newest stored events. Nothing in it marks anything read.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.
@@ -895,6 +907,7 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/sync` | `sync()` |
 | `GET /api/topics` | `listTopics()` |
 | `GET /api/topics/:id` | `getTopic()` |
+| `GET /api/debug/notifications?limit=` | `debugNotifications()` (default 200, max 1000) |
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
 | `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` |
