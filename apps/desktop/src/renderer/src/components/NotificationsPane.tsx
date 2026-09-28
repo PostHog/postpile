@@ -11,8 +11,9 @@ const CONTROL = 'h-7 rounded-control border border-control bg-surface px-2 text-
 
 /**
  * Debug pane: the stored GitHub notification threads, newest first, as
- * GitHub sent them, with where each landed in the app. Reading it and
- * clicking rows never marks anything read.
+ * GitHub sent them, with where each landed in the app and the app's last
+ * logged action on it. Opening a row never marks anything read; the row's
+ * "Mark read" and "Bring back" buttons are the only actions here.
  */
 export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void }) {
   const notifications = useDebugNotifications(LIMIT);
@@ -24,8 +25,8 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Notifications</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
-          The raw GitHub notification threads as the last sync stored them, and where each one landed. A click opens its tile; nothing here marks anything
-          read on GitHub.
+          The raw GitHub notification threads as the last sync stored them, where each one landed, and what the app last did to it. A click opens its
+          tile. "Mark read" goes through the same queue, undo and footer lock as a tile; "Bring back" only resets the app, GitHub cannot mark unread.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2.5">
@@ -45,6 +46,10 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
         <label className="flex items-center gap-1.5 text-[12px] text-ink-2">
           <input type="checkbox" checked={filter.unreadOnly} onChange={(event) => setFilter({ ...filter, unreadOnly: event.target.checked })} />
           Unread on GitHub only
+        </label>
+        <label className="flex items-center gap-1.5 text-[12px] text-ink-2" title="Threads whose newest logged action is the app's own mark-read (on GitHub, or in the app while read-only)">
+          <input type="checkbox" checked={filter.readByApp} onChange={(event) => setFilter({ ...filter, readByApp: event.target.checked })} />
+          Read by this app
         </label>
         <input
           type="search"
@@ -70,7 +75,7 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
         <ul className="flex shrink-0 flex-col overflow-hidden rounded-tile border border-hairline bg-surface shadow-tile">
           <li
             aria-hidden="true"
-            className="grid grid-cols-[52px_minmax(0,1fr)_128px_minmax(0,0.8fr)_36px] gap-3 border-b border-hairline bg-subtle py-1.5 pr-11 pl-3 text-[10.5px] font-medium text-faint"
+            className="grid grid-cols-[52px_minmax(0,1fr)_128px_minmax(0,0.8fr)_36px] gap-3 border-b border-hairline bg-subtle py-1.5 pr-[186px] pl-3 text-[10.5px] font-medium text-faint"
           >
             <span>GitHub</span>
             <span>Thread</span>

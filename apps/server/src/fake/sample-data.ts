@@ -86,7 +86,7 @@ function buildTopics(clock: SampleClock): Topic[] {
       id: TOPIC.frontend,
       area: 'Frontend',
       name: 'Frontend build',
-      summary: 'Vite 7 upgrade in review.',
+      summary: 'Vite 7 upgrade merged; jude asked about snapshots after the merge.',
       tailoring: 'Only cache changes.',
       driver: 'lyra',
       userRole: 'watcher',
@@ -231,6 +231,32 @@ function buildPrs(clock: SampleClock): Pr[] {
       number: 41940, title: 'Release desktop 2.3', author: 'mae', state: 'OPEN',
       size: [30, 10, 4], checks: 'PENDING', openedHoursAgo: 30, reviews: [['koa', 'APPROVED']],
     }),
+    // Added for the sidebar's queue sections: your own PRs (My PRs), a team
+    // mention (Team mentioned), a bot bump (Other topics) and a merged PR with
+    // news on it (unread, but calm).
+    samplePr(clock, {
+      number: 41945, title: 'Cap CI shard retries at 2', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [14, 6, 2], checks: 'SUCCESS', openedHoursAgo: 8, reviewerUsers: ['lyra'],
+      reviews: [['remy', 'COMMENTED', 'Would 3 hide fewer real flakes?']],
+    }),
+    samplePr(clock, {
+      number: 41808, title: 'Drop the old error_tracking re-exports', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [3, 40, 2], checks: 'SUCCESS', openedHoursAgo: 20, reviews: [['nell', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 41934, title: 'Ingestion runner pool as a Terraform module', author: 'ines', state: 'OPEN',
+      size: [220, 0, 6], checks: 'SUCCESS', openedHoursAgo: 10,
+      comments: [{ id: 'issuecomment-5', author: 'ines', body: '@PostHog/team-devex do the runner labels clash with yours?', hoursAgo: 1.5 }],
+    }),
+    samplePr(clock, {
+      number: 41925, title: 'Bump ruff to 0.7', author: 'renovate[bot]', state: 'OPEN',
+      size: [2, 2, 1], checks: 'SUCCESS', openedHoursAgo: 12,
+    }),
+    samplePr(clock, {
+      number: 41857, title: 'Upgrade to Vite 7', author: 'lyra', state: 'MERGED',
+      size: [120, 90, 14], checks: 'SUCCESS', openedHoursAgo: 50, mergedHoursAgo: 3, reviews: [['jude', 'APPROVED']],
+      comments: [{ id: 'issuecomment-6', author: 'jude', body: '@you are the stale snapshots gone after this?', hoursAgo: 2 }],
+    }),
     samplePr(clock, {
       number: 41870, title: 'Make hogli start default to minimal stack', author: 'sol', state: 'OPEN',
       size: [70, 12, 4], checks: 'SUCCESS', openedHoursAgo: 72, reviewerTeams: ['PostHog/team-devex'],
@@ -289,6 +315,19 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 41940, [
       { kind: 'comment', actor: 'mae', text: 'commented: "2.3 goes out Thursday"', hoursAgo: 6, rule: 'quiet' },
+    ]),
+    ...sampleEvents(clock, 41945, [
+      { kind: 'review_commented', actor: 'remy', text: 'commented: "Would 3 hide fewer real flakes?"', hoursAgo: 1, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 41934, [
+      { kind: 'team_mention', actor: 'ines', text: 'mentioned @team-devex: "do the runner labels clash?"', hoursAgo: 1.5, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 41925, [
+      { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 12, rule: 'quiet', isBot: true },
+    ]),
+    ...sampleEvents(clock, 41857, [
+      { kind: 'merged', actor: 'lyra', text: 'merged it', hoursAgo: 3, rule: 'quiet', seen: true },
+      { kind: 'mention', actor: 'jude', text: 'mentioned you: "are the stale snapshots gone?"', hoursAgo: 2, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 41870, [
       { kind: 'review_requested', actor: 'sol', text: 'requested @team-devex', hoursAgo: 72, rule: 'loud' },
@@ -397,9 +436,14 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(41822)}`, 'Timing-based shards, no devex review', [
       pinged(41822, 'review_requested'),
     ]),
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(41945)}`, 'Your shard retry cap waits on lyra', [pinged(41945, 'author')]),
     sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(41801)}`, 'Ada asks if the error_tracking move is reversible', [
       pinged(41801, 'author'),
     ]),
+    sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(41808)}`, 'Old error_tracking re-exports are approved', [pinged(41808, 'author')]),
+    sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(41934)}`, 'Ingestion asks devex about runner labels', [pinged(41934, 'team_mention')]),
+    sampleTile(TOPIC.deps, 'single', `pr:${sampleKey(41925)}`, 'Bump ruff to 0.7', [pinged(41925, 'subscribed')]),
+    sampleTile(TOPIC.frontend, 'single', `pr:${sampleKey(41857)}`, 'Vite 7 landed; jude asks about snapshots', [pinged(41857, 'mention')]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(41870)}`, 'hogli start would default to minimal stack', [
       pinged(41870, 'review_requested'),
     ]),
@@ -469,12 +513,14 @@ function buildUserStates(clock: SampleClock): UserPrState[] {
     approvedAt: clock.hoursAgo(hoursAgo),
     approvedCommitOid: `sha${number}`,
     handledAt: null,
+    broughtBackAt: null,
   });
   const approvedOlderHead: UserPrState = {
     prKey: sampleKey(41911),
     approvedAt: clock.hoursAgo(4),
     approvedCommitOid: 'sha41911-a',
     handledAt: null,
+    broughtBackAt: null,
   };
   return [approved(41899, 24), approvedOlderHead];
 }

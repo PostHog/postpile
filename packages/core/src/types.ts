@@ -411,10 +411,14 @@ export interface Tile {
 
 export type TileStateKind = 'unread' | 'open' | 'done' | 'snoozed';
 
+/** An event kind, or `brought_back` when the user brought the PR back in the app (no event behind it). */
+export type UnreadKind = EventKind | 'brought_back';
+
 export interface UnreadReason {
   prKey: PrKey;
+  /** The event, or `brought_back:<prKey>` for a bring-back. */
   eventId: string;
-  kind: EventKind;
+  kind: UnreadKind;
   /** Who did it, so the UI can show their avatar. */
   actor: string;
   summary: string;
@@ -465,6 +469,8 @@ export interface UserPrState {
   approvedCommitOid: string | null;
   /** Marked read / handled in the app. */
   handledAt: IsoTime | null;
+  /** "Bring back" in the debug view: the tile reads as unread until the next mark-read. */
+  broughtBackAt: IsoTime | null;
 }
 
 export type SnoozeCondition =

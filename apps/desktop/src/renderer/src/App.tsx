@@ -5,6 +5,7 @@ import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
 import { useSearch } from './api/search.ts';
 import { useTopic, useTopics } from './api/topics.ts';
+import { useViewer } from './api/viewer.ts';
 import { DetailPane } from './components/DetailPane.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
@@ -18,7 +19,8 @@ import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
 import { sameView, type NavEntry } from './lib/history.ts';
-import { searchFilter, visibleTopic } from './lib/search.ts';
+import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
+import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { leadPr } from './lib/tiles.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 
@@ -54,8 +56,11 @@ export function App() {
   const topics = useTopics();
   const proposals = useProposals();
   const live = useLivePoll();
+  const viewer = useViewer();
 
   const [query, setQuery] = useState('');
+  // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
+  const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   // "Tell the agent what's wrong" from a memory line opens the selected tile's chat with a draft.
   const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
   const search = useSearch(query);
@@ -70,7 +75,10 @@ export function App() {
   // When the filter hides the picked topic, the first match shows instead. That is
   // derived, not a navigation: history stays clean and clearing the filter
   // brings the picked topic back.
-  const activeItem = visibleTopic(items, nav.current.topicId, filter);
+  // Search and queue filter both narrow the sidebar; the open topic follows.
+  const narrowed = filter !== null || queueFilter !== null;
+  const shownItems = applyQueueFilter(filterTopics(items, filter), queueFilter);
+  const activeItem = visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null);
   const topic = useTopic(activeItem?.topic.id ?? null);
   const matchingTileIds = activeItem && filter ? (filter.tilesByTopic.get(activeItem.topic.id) ?? new Set<string>()) : null;
   const shownTiles = (topic.data?.tiles ?? []).filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
@@ -139,6 +147,8 @@ export function App() {
     main = <EmptyMain text={actions.syncing ? 'Syncing your GitHub notifications…' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'} />;
   } else if (filter && !activeItem) {
     main = <EmptyMain text={`Nothing matches “${query.trim()}”. Esc clears the filter.`} />;
+  } else if (queueFilter && !activeItem) {
+    main = <EmptyMain text="No topic has a PR that matches the filter. Click the filter again to clear it." />;
   } else if (topic.error) {
     main = <EmptyMain text={`Could not load the topic: ${topic.error.message}`} />;
   } else if (activeItem && topic.data) {
@@ -152,6 +162,7 @@ export function App() {
           selectedPrKey={selected.prKey}
           onSelect={pickTile}
           matchingTileIds={matchingTileIds}
+          queueFilter={queueFilter}
         />
       </MainPane>
     );
@@ -190,6 +201,11 @@ export function App() {
             error={topics.error?.message ?? null}
             filter={filter}
             onClearFilter={() => setQuery('')}
+            shown={shownItems}
+            queueFilter={queueFilter}
+            onQueueFilter={setQueueFilter}
+            filterCounts={filterCounts(items)}
+            viewer={viewer.data}
           />
           {main}
           {/* The notifications list is wide and has no tile of its own; it takes the detail pane's column too. */}

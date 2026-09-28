@@ -1,5 +1,6 @@
 // PR tiers, ported from ghatchup's triage.Classify: which PR-level queue an
-// open PR belongs to. Rules only, no agent. Not shown in the UI yet.
+// open PR belongs to. Rules only, no agent. The sidebar's queue sections
+// are built on it (`topicQueues`).
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import type { EventKind, NotificationReason, Pr, PrEvent, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';

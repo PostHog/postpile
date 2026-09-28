@@ -1,13 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { writeBlockedReason } from './guard.ts';
+import { markReadNote, writeBlockedReason } from './guard.ts';
+
+const OFF = { enabled: false, forcedOffReason: null };
+const ON = { enabled: true, forcedOffReason: null };
+const FORCED = { enabled: false, forcedOffReason: 'CODE_MANAGER_READ_ONLY=1 forces read-only.' };
 
 describe('writeBlockedReason', () => {
-  it('blocks GitHub writes unless the server allows them', () => {
-    expect(writeBlockedReason('approve', { fake: false, writesAllowed: false, syncCallCap: 30 })).toMatch(/CODE_MANAGER_ALLOW_WRITES=1/);
-    expect(writeBlockedReason('approve', { fake: false, writesAllowed: true, syncCallCap: 30 })).toBeNull();
+  it('blocks approve and comment while GitHub writes are off', () => {
+    expect(writeBlockedReason('approve', OFF)).toMatch(/Open the lock in the footer/);
+    expect(writeBlockedReason('comment', FORCED)).toMatch(/CODE_MANAGER_READ_ONLY=1/);
+    expect(writeBlockedReason('approve', ON)).toBeNull();
   });
 
-  it('blocks while the config is still loading', () => {
-    expect(writeBlockedReason('markRead', undefined)).toMatch(/until the app config has loaded/);
+  it('lets mark-reads run while off, they stay in the app', () => {
+    expect(writeBlockedReason('markRead', OFF)).toBeNull();
+    expect(writeBlockedReason('notMine', FORCED)).toBeNull();
+    expect(markReadNote(OFF)).toMatch(/app only/);
+    expect(markReadNote(ON)).toBeUndefined();
+  });
+
+  it('blocks while the writes state is still loading', () => {
+    expect(writeBlockedReason('markRead', undefined)).toMatch(/until the app knows/);
   });
 });

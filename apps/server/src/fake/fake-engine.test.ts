@@ -190,4 +190,103 @@ describe('FakeEngine rechecks', () => {
     await engine.undo(fixed.undoToken);
     expect((await engine.getPr(key))?.facts.map((view) => view.fact.text).sort()).toEqual([...before].sort());
   });
+
+  it('flips the writes lock and fills the action log with fake queue sends', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now });
+    expect(await engine.githubWrites()).toEqual({ enabled: false, forcedOffReason: null });
+    await engine.setGitHubWrites(true);
+
+    const marked = await engine.markRead('set:turbo-cache');
+    expect(marked.message).not.toMatch(/here only/);
+    now = new Date(now.getTime() + 7000);
+
+    const rows = await engine.debugNotifications(100);
+    const sent = rows.filter((row) => row.lastAction?.origin === 'queue');
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((row) => !row.thread.unread && row.lastAction?.outcome === 'github' && row.decidedBy?.origin === 'tile')).toBe(true);
+    const log = await engine.actionLog(50);
+    expect(log.at(-1)).toMatchObject({ action: 'writes_on', origin: 'footer' });
+  });
+
+  it('keeps read-only mark-reads local: the sample thread stays unread "on GitHub"', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now });
+    const before = await engine.debugNotifications(100);
+    const unread = before.filter((row) => row.thread.unread && row.landing.kind === 'tile' && row.landing.tileId === 'set:turbo-cache');
+    expect(unread.length).toBeGreaterThan(0);
+
+    await engine.markRead('set:turbo-cache');
+    await engine.setGitHubWrites(true);
+    now = new Date(now.getTime() + 7000);
+
+    const after = await engine.debugNotifications(100);
+    for (const row of unread) {
+      const again = after.find((candidate) => candidate.thread.id === row.thread.id);
+      expect(again?.thread.unread).toBe(true);
+      expect(again?.lastAction).toMatchObject({ action: 'mark_read', outcome: 'local' });
+    }
+  });
+
+  it('brings a PR back: its tile turns unread with "brought back by you"', async () => {
+    const engine = new FakeEngine();
+    await engine.markRead('pr:PostHog/posthog#41822');
+    await engine.bringBack('PostHog/posthog#41822');
+    const topicId = (await engine.getPr('PostHog/posthog#41822'))?.topicId;
+    const topic = await engine.getTopic(topicId!);
+    const view = topic?.tiles.find((candidate) => candidate.tile.id === 'pr:PostHog/posthog#41822');
+    expect(view?.state.kind).toBe('unread');
+    expect(view?.state.unreadBecause[0]).toMatchObject({ kind: 'brought_back', summary: 'brought back by you' });
+  });
+});
+
+describe('FakeEngine queues', () => {
+  it('fills every queue section and puts some topics in several', async () => {
+    const topics = await new FakeEngine().listTopics();
+    const tiers = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned'] as const;
+    for (const tier of tiers) {
+      expect(topics.some((item) => item.queues.tiers[tier] > 0)).toBe(true);
+    }
+    const depot = topics.find((item) => item.topic.id === 'topic-depot');
+    expect(tiers.filter((tier) => (depot?.queues.tiers[tier] ?? 0) > 0)).toEqual(['needs_reply', 'team', 'to_review']);
+    expect(depot?.people.slice(0, 3).map((person) => person.relation)).toEqual(['team', 'team', 'team']);
+    expect(await new FakeEngine().getViewer()).toEqual({ login: 'you', teamMembers: ['lyra', 'nell', 'rowan', 'sol'] });
+  });
+
+  it('keeps a topic whose only unread tile is merged calm and ranks it below the urgent ones', async () => {
+    const topics = await new FakeEngine().listTopics();
+    const frontend = topics.find((item) => item.topic.id === 'topic-frontend-build');
+    expect(frontend).toMatchObject({ group: 'quiet', unreadTiles: 1, urgentUnreadTiles: 0 });
+    const lastUrgent = topics.findLastIndex((item) => item.group === 'needs_you');
+    expect(topics.indexOf(frontend!)).toBeGreaterThan(lastUrgent);
+  });
+
+  it('counts merging your approved PR as a move without making the topic urgent', async () => {
+    const engine = new FakeEngine();
+    const migrations = (await engine.getTopic('topic-migrations'))?.tiles ?? [];
+    const approved = migrations.find((view) => view.tile.id === 'pr:PostHog/posthog#41808');
+    expect(approved?.turn).toMatchObject({ kind: 'you', what: 'Merge, it is approved' });
+    const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-migrations');
+    expect(item?.yourMoveTiles).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
+  });
+
+  it('keeps pulled-in stack layers out of the queues', async () => {
+    const engine = new FakeEngine();
+    const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
+    const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
+    const layers = stack?.prs.filter((pr) => pr.provenance.kind === 'pulled_in') ?? [];
+    expect(layers.map((pr) => pr.tier)).toEqual(['rest', 'rest']);
+    const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-depot');
+    // rowan's two open layers would add 2 to team and byTeam; only pinged PRs count.
+    expect(item?.queues.tiers.team).toBe(2);
+    expect(item?.queues.byTeam).toBe(3);
+  });
+
+  it('gives tiles and PRs their tier', async () => {
+    const depot = (await new FakeEngine().getTopic('topic-depot'))?.tiles ?? [];
+    const set = depot.find((view) => view.tile.id === 'set:turbo-cache');
+    expect(set?.prs.map((pr) => pr.tier)).toEqual(['needs_reply', 'to_review', 'rest']);
+    expect(set?.tier).toBe('needs_reply');
+    expect(set?.prs[0]?.authorRelation).toBe('team');
+  });
 });

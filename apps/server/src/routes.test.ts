@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  ActionLogEntry,
   ActionResult,
   ChatReply,
+  GitHubWritesChange,
   InstructionsChatReply,
   InstructionsProposalReply,
   InstructionsSaveResult,
@@ -26,7 +28,7 @@ interface TestApp {
 
 /** Wraps the app so every request carries the token. */
 function appWithFake(): TestApp {
-  const app = createApp(new FakeEngine(), TOKEN, { fake: true, writesAllowed: true, syncCallCap: 30 });
+  const app = createApp(new FakeEngine(), TOKEN, { fake: true, syncCallCap: 30 });
   return {
     request: async (path, init = {}) => {
       const headers = { ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };
@@ -51,7 +53,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('rechecks a memory line and validates the body', async () => {
-    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, writesAllowed: true, syncCallCap: 30 });
+    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30 });
     const headers = { [TOKEN_HEADER]: TOKEN, 'content-type': 'application/json' };
     const body = { factId: 'fact-rowan-drives', topicId: null, text: 'rowan drives it', target: { kind: 'fact', factId: 'fact-rowan-drives' } };
     const res = await app.request('/api/memory/recheck', { method: 'POST', headers, body: JSON.stringify(body) });
@@ -145,12 +147,37 @@ describe('server routes over the fake engine', () => {
     expect(topic.tiles.find((view) => view.tile.id === 'set:turbo-cache')?.state.kind).toBe('unread');
   });
 
-  it('approves a PR', async () => {
+  it('refuses to approve while GitHub writes are off, approves once the lock is open', async () => {
     const app = appWithFake();
+    const refused = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41911/approve');
+    expect(refused.json.ok).toBe(false);
+    const change = await post<GitHubWritesChange>(app, '/api/github-writes', { enabled: true });
+    expect(change.json.status.enabled).toBe(true);
+    expect(await (await app.request('/api/github-writes')).json()).toEqual({ enabled: true, forcedOffReason: null });
     const res = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41911/approve');
     expect(res.json.ok).toBe(true);
     const detail = (await (await app.request('/api/prs/PostHog/posthog/41911')).json()) as PrDetail;
     expect(detail.userState?.approvedAt).toBeTruthy();
+  });
+
+  it('marks a thread read from the debug view, brings its PR back, and logs both', async () => {
+    const app = appWithFake();
+    const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
+    const row = rows.find((candidate) => candidate.prKey === 'PostHog/posthog#41902' && candidate.thread.unread)!;
+    const marked = await post<ActionResult>(app, `/api/notifications/${encodeURIComponent(row.thread.id)}/mark-read`);
+    expect(marked.json.message).toMatch(/here only/);
+
+    const back = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41902/bring-back');
+    expect(back.json.ok).toBe(true);
+
+    const log = (await (await app.request('/api/debug/actions')).json()) as ActionLogEntry[];
+    expect(log.map((entry) => [entry.action, entry.origin, entry.outcome])).toEqual([
+      ['bring_back', 'debug', 'local'],
+      ['mark_read', 'debug', 'local'],
+    ]);
+    const after = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
+    expect(after.find((candidate) => candidate.thread.id === row.thread.id)?.lastAction?.action).toBe('bring_back');
+    expect((await app.request('/api/debug/actions?limit=0')).status).toBe(400);
   });
 
   it('snoozes and unsnoozes a tile', async () => {
@@ -228,6 +255,7 @@ describe('server routes over the fake engine', () => {
     const app = appWithFake();
     const draft = await post<{ body: string }>(app, '/api/prs/PostHog/posthog/41915/draft-ask', { person: 'rowan', intent: 'why not the org secret?' });
     expect(draft.json.body).toMatch(/^@rowan why not the org secret\?/);
+    await post(app, '/api/github-writes', { enabled: true });
     const sent = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41915/comment', { body: draft.json.body });
     expect(sent.json.message).toContain('nothing sent to GitHub');
   });

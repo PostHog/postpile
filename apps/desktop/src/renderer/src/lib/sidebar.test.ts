@@ -14,9 +14,12 @@ function item(id: string, unreadTiles: number, placement: Partial<TopicPlacement
     statusLine: null,
     group: unreadTiles > 0 ? 'needs_you' : 'quiet',
     unreadTiles,
+    urgentUnreadTiles: unreadTiles,
     openTiles: 0,
     totalTiles: 1,
     yourMoveTiles: 0,
+    queues: { tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 1 }, byYou: 0, byTeam: 0 },
+    people: [],
   };
 }
 

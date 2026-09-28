@@ -6,9 +6,9 @@ export interface AreaGroup {
 }
 
 export interface SidebarGroups {
-  /** Unread topics from every relation. */
+  /** Topics that need you (`TopicListItem.group`) from every relation. */
   needsYou: TopicListItem[];
-  /** The user's team's topics without unread tiles, by area. */
+  /** The user's team's other topics, by area. */
   team: AreaGroup[];
   routed: TopicListItem[];
   fyi: TopicListItem[];
@@ -36,13 +36,14 @@ function byArea(items: TopicListItem[]): AreaGroup[] {
 }
 
 /**
- * Sidebar sections: everything unread first whatever its relation, then the
- * rest by relation. Topics keep the order the API gave them inside a section.
+ * The groups inside "Other topics": topics that need you first whatever their
+ * relation, then the rest by relation. Unread tiles that are all merged or
+ * closed do not count as needing you. Topics keep the API order in a group.
  */
 export function sidebarGroups(items: TopicListItem[]): SidebarGroups {
-  const quiet = items.filter((item) => item.unreadTiles === 0);
+  const quiet = items.filter((item) => item.group !== 'needs_you');
   return {
-    needsYou: items.filter((item) => item.unreadTiles > 0),
+    needsYou: items.filter((item) => item.group === 'needs_you'),
     team: byArea(quiet.filter((item) => (item.placement?.relation ?? 'team') === 'team')),
     routed: quiet.filter((item) => item.placement?.relation === 'routed'),
     fyi: quiet.filter((item) => item.placement?.relation === 'fyi'),

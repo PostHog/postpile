@@ -1,10 +1,10 @@
 import type { AgentService } from '@code-manager/agent';
 import type { ActionResult, Pr, PrKey } from '@code-manager/core';
-import type { GitHubWriter } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { errorText } from '../errors.ts';
 import { loadViewer } from '../viewer-meta.ts';
+import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
 
@@ -12,7 +12,7 @@ import { failed, ok } from './results.ts';
 export class PrActions {
   constructor(
     private readonly store: Store,
-    private readonly writer: GitHubWriter,
+    private readonly writes: GitHubWrites,
     private readonly agent: AgentService,
     private readonly contexts: PromptContextSource,
     private readonly readMarker: ReadMarker,
@@ -36,13 +36,17 @@ export class PrActions {
     if (!pr) {
       return failed(`${key} is not an open PR in the store`);
     }
+    const origin = { origin: 'tile' as const, prKey: key };
     try {
-      await this.writer.approvePr(pr.ref, '', pr.headOid);
+      if ((await this.writes.approvePr(pr.ref, '', pr.headOid, origin)) === 'off') {
+        return failed('GitHub writes are off (lock in the footer): nothing was approved');
+      }
     } catch (error) {
       return failed(`Approve failed: ${errorText(error)}`);
     }
     this.store.userPrStates.markApproved(key, pr.headOid, this.now().toISOString());
-    return ok('Approved', this.readMarker.markRead([key], []));
+    const batch = this.readMarker.markRead([key], [], { origin: 'tile', tileId: null });
+    return ok('Approved', batch.token);
   }
 
   async draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {
@@ -64,7 +68,9 @@ export class PrActions {
       return failed('Empty comment');
     }
     try {
-      await this.writer.commentOnPr(pr.ref, body);
+      if ((await this.writes.commentOnPr(pr.ref, body, { origin: 'tile', prKey: key })) === 'off') {
+        return failed('GitHub writes are off (lock in the footer): the comment was not sent');
+      }
     } catch (error) {
       return failed(`Comment failed: ${errorText(error)}`);
     }

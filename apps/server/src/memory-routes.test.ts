@@ -24,7 +24,7 @@ function setup(): { recorded: Recorded; request: (path: string, init?: RequestIn
       return FakeEngine.prototype.consolidate.call(fake);
     },
   });
-  const app = createApp(engine, TOKEN, { fake: true, writesAllowed: true, syncCallCap: 30 });
+  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30 });
   const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
     const headers = { 'content-type': 'application/json', ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };
     return app.request(path, { ...init, headers });

@@ -181,10 +181,36 @@ describe('UserPrStateRepo', () => {
       approvedAt: at(2),
       approvedCommitOid: 'abc',
       handledAt: at(1),
+      broughtBackAt: null,
     });
     store.userPrStates.clearHandled(key);
     expect(store.userPrStates.get(key)?.handledAt).toBeNull();
     expect(store.userPrStates.getMany([key, 'x/y#2']).size).toBe(1);
+  });
+
+  it('brings a PR back: handled cleared, brought back until set again', () => {
+    const key = 'PostHog/posthog#1';
+    store.userPrStates.markHandled(key, at(1));
+    store.userPrStates.markBroughtBack(key, at(2));
+    expect(store.userPrStates.get(key)).toMatchObject({ handledAt: null, broughtBackAt: at(2) });
+    store.userPrStates.setBroughtBack(key, null);
+    expect(store.userPrStates.get(key)?.broughtBackAt).toBeNull();
+    store.userPrStates.markBroughtBack('x/y#2', at(3));
+    expect(store.userPrStates.get('x/y#2')).toMatchObject({ handledAt: null, broughtBackAt: at(3), approvedAt: null });
+  });
+});
+
+describe('ActionLogRepo', () => {
+  const base = { at: at(1), origin: 'tile', outcome: 'queued', threadId: 't1', prKey: 'a/b#1', tileId: 'pr:a/b#1', batch: 'b1', detail: '' } as const;
+
+  it('keeps the newest entry per thread and PR and the first per batch', () => {
+    const first = store.actionLog.add({ ...base, action: 'mark_read' });
+    const sent = store.actionLog.add({ ...base, action: 'mark_read', origin: 'queue', outcome: 'github', at: at(2) });
+    store.actionLog.add({ ...base, action: 'bring_back', threadId: null, batch: null, origin: 'debug', outcome: 'local', at: at(3) });
+    expect(store.actionLog.latestByThread().get('t1')?.id).toBe(sent);
+    expect(store.actionLog.latestByPrKey().get('a/b#1')?.action).toBe('bring_back');
+    expect(store.actionLog.firstOfBatches().get('b1')?.id).toBe(first);
+    expect(store.actionLog.listRecent(2).map((entry) => entry.action)).toEqual(['bring_back', 'mark_read']);
   });
 });
 

@@ -5,7 +5,14 @@ import { filterTopics, searchFilter, sidebarOrder, visibleTopic } from './search
 function item(id: string, unreadTiles: number): TopicListItem {
   const at = '2026-09-27T00:00:00.000Z';
   const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', area: null, createdAt: at, updatedAt: at };
-  return { topic, placement: null, statusLine: null, group: unreadTiles > 0 ? 'needs_you' : 'quiet', unreadTiles, openTiles: 0, totalTiles: 1, yourMoveTiles: 0 };
+  return { topic, placement: null, statusLine: null, group: unreadTiles > 0 ? 'needs_you' : 'quiet', unreadTiles,
+    urgentUnreadTiles: unreadTiles,
+    openTiles: 0,
+    totalTiles: 1,
+    yourMoveTiles: 0,
+    queues: { tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 1 }, byYou: 0, byTeam: 0 },
+    people: [],
+  };
 }
 
 const items = [item('quiet-a', 0), item('loud', 2), item('quiet-b', 0)];
@@ -32,24 +39,29 @@ describe('filterTopics', () => {
 });
 
 describe('sidebarOrder', () => {
-  it('lists unread topics first like the sidebar', () => {
+  it('lists topics that need you first like the sidebar', () => {
     expect(sidebarOrder(items).map((i) => i.topic.id)).toEqual(['loud', 'quiet-a', 'quiet-b']);
+  });
+
+  it('puts queue sections before other topics and lists a topic once', () => {
+    const queued = { ...item('queued', 0), queues: { tiers: { needs_reply: 1, mine: 1, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: 1, byTeam: 0 } };
+    expect(sidebarOrder([...items, queued]).map((i) => i.topic.id)).toEqual(['queued', 'loud', 'quiet-a', 'quiet-b']);
   });
 });
 
 describe('visibleTopic', () => {
   it('keeps the pick while it matches', () => {
     expect(visibleTopic(items, 'quiet-b', null)?.topic.id).toBe('quiet-b');
-    expect(visibleTopic(items, 'quiet-b', searchFilter(result({ 'quiet-b': ['x'] })))?.topic.id).toBe('quiet-b');
+    expect(visibleTopic(items, 'quiet-b', filterTopics(items, searchFilter(result({ 'quiet-b': ['x'] }))))?.topic.id).toBe('quiet-b');
   });
 
   it('falls back to the first match in sidebar order when the pick is filtered out', () => {
     const filter = searchFilter(result({ 'quiet-a': ['x'], loud: ['y'] }));
-    expect(visibleTopic(items, 'quiet-b', filter)?.topic.id).toBe('loud');
+    expect(visibleTopic(items, 'quiet-b', filterTopics(items, filter))?.topic.id).toBe('loud');
   });
 
   it('shows nothing when nothing matches, the first topic without a pick', () => {
-    expect(visibleTopic(items, 'loud', searchFilter(result({})))).toBeNull();
+    expect(visibleTopic(items, 'loud', filterTopics(items, searchFilter(result({}))))).toBeNull();
     expect(visibleTopic(items, null, null)?.topic.id).toBe('quiet-a');
   });
 });

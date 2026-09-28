@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
-import { FakeReader, FakeWriter, NOW } from './testing/fakes.ts';
+import { FakeReader, FakeWriter, makeWrites, NOW } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 
 function runnerEngine(): { engine: Engine; runner: FakeRunner; reader: FakeReader; store: Store } {
@@ -18,8 +18,9 @@ function runnerEngine(): { engine: Engine; runner: FakeRunner; reader: FakeReade
   const now = (): Date => NOW;
   const callLog = new AgentCallLog(store, now);
   const agent = new RunnerAgentService(runner, { now: () => NOW.toISOString(), observer: callLog });
-  const markReadQueue = new MarkReadQueue(writer, reader, new FakeTimers(), undefined, () => {});
-  const engine = new Engine({ store, reader, writer, agent, callLog, markReadQueue, instructionsFile: '/nonexistent', now });
+  const writes = makeWrites(store, writer, now);
+  const markReadQueue = new MarkReadQueue(writes, reader, new FakeTimers(), undefined, () => {});
+  const engine = new Engine({ store, reader, writes, agent, callLog, markReadQueue, instructionsFile: '/nonexistent', now });
   return { engine, runner, reader, store };
 }
 

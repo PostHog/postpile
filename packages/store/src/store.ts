@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { inTransaction, openDatabase } from './database.ts';
+import { ActionLogRepo } from './repos/action-log.ts';
 import { AgentCallRepo } from './repos/agent-calls.ts';
 import { ChatRepo } from './repos/chat.ts';
 import { CursorRepo } from './repos/cursors.ts';
@@ -50,6 +51,8 @@ export class Store {
   readonly pingDecisions: PingDecisionRepo;
   readonly workContext: WorkContextRepo;
 
+  readonly actionLog: ActionLogRepo;
+
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
     this.notifications = new NotificationRepo(db);
@@ -73,6 +76,7 @@ export class Store {
     this.instructions = new InstructionsRepo(db);
     this.pullIns = new PullInRepo(db);
     this.pingDecisions = new PingDecisionRepo(db);
+    this.actionLog = new ActionLogRepo(db);
     this.workContext = new WorkContextRepo(db);
   }
 

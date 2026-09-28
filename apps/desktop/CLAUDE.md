@@ -28,11 +28,13 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
+  `viewer.ts` (`useViewer`, login and teammates for the filter buttons),
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
   (`useMemorySources`, only enabled while a "Why?" panel is open), `debug.ts`
-  (`useDebugNotifications`, the notifications debug pane), `live.ts`
+  (`useDebugNotifications`, the notifications debug pane), `writes.ts`
+  (`useGitHubWrites`, the footer lock), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
@@ -51,12 +53,25 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   Components never call `request()` for a mutation.
 - **GitHub writes are guarded.** approve, send comment, mark read and "not
   mine" (it queues a mark-read) pass through `writeBlockedReason` in
-  `lib/guard.ts`. They are blocked, with a clear toast, unless the server says
-  `writesAllowed` (`CODE_MANAGER_ALLOW_WRITES=1`, or fake mode where nothing
-  reaches GitHub). Writes are also blocked until the config has loaded. Don't
-  bypass the guard, and put a new GitHub-writing action on the `GithubWrite`
-  list.
+  `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
+  /api/github-writes`, changes at runtime). With the lock closed
+  (read-only, the default) approve and comment are blocked with a clear
+  toast; mark read and "not mine" still run and stay in the app (the toast
+  says "here only", buttons carry `markReadNote`). Everything is blocked
+  until the writes state has loaded. Don't bypass the guard, and put a new
+  GitHub-writing action on the `GithubWrite` list.
+- **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
+  asks in a small popover ("Mark-read and approvals will reach GitHub");
+  closing it is instant. With `CODE_MANAGER_READ_ONLY=1` it is disabled and
+  its title says why. The server keeps the choice; the renderer never
+  stores it.
 - Buttons for guarded actions carry the blocked reason as their `title`.
+- The notifications debug pane has "Mark read" (thread level, same queue,
+  undo, lock and action log as a tile) and "Bring back" (app state only:
+  GitHub has no mark-unread). Each row shows its last action log entry
+  (`actionLine` in `lib/notifications.ts`); a read thread without one reads
+  as "read on github.com or another client". Keep the tooltips honest about
+  what reaches GitHub.
 - After an action the provider invalidates every query except the config.
   Mark-read and memory correction results carry an undo token; the toast
   offers Undo for the 6s window and the footer counts pending mark-reads
@@ -122,7 +137,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`),
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
-  `StatusFooter`, `Toast`, `SearchField` (title bar filter).
+  `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `WhyBadge`,
   `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
@@ -156,12 +171,18 @@ tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
 
 ## Selection
 
-The sidebar groups topics with `lib/sidebar.ts` (`sidebarGroups`): Needs you,
-Your team by area, Routed to you, FYI. Fold state is local UI state; Routed
-and FYI start folded. Relation corrections go through `correctMemory` with
-`relation` set (`RelationLine`), local only. `TileGrid` shows live tiles and
-folds snoozed / done ones. Tiles stay in one column (DESIGN.md "Three-pane
-balance"); sidebar rows show the dossier summary and a "your move" chip.
+The sidebar lists topics in queue sections (`lib/queues.ts`,
+`queueLayout`; DESIGN.md "Queue sections"): Needs reply, My PRs, Team's
+PRs, To review, Team mentioned, then Other topics, which keeps the old
+groups from `lib/sidebar.ts` (`sidebarGroups`: Needs you, Your team by
+area, Routed, FYI). A topic can sit in several sections on purpose. Fold
+state is local UI state; Routed and FYI start folded. The Mine / Team /
+Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
+not history entries; they narrow together with the search. Relation
+corrections go through `correctMemory` with `relation` set
+(`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
+the ones a queue filter does not match and folds snoozed / done ones.
+Tiles stay in one column (DESIGN.md "Three-pane balance").
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
 "Your instructions", the notifications debug list, which also takes the
