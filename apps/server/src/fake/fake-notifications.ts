@@ -1,13 +1,9 @@
-import type { NotificationThread, PrEvent } from '@postpile/core';
+import { isUnseenLoud, type NotificationThread } from '@postpile/core';
 import { SAMPLE_REPO } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 
 function hoursBefore(now: Date, hours: number): string {
   return new Date(now.getTime() - hours * 3600_000).toISOString();
-}
-
-function unseenLoud(events: PrEvent[]): boolean {
-  return events.some((event) => !event.seenAt && (event.override?.loudness ?? event.ruleLoudness) === 'loud');
 }
 
 /**
@@ -26,7 +22,7 @@ export function sampleThreads(data: SampleData, now: Date): NotificationThread[]
       threads.set(pr.key, {
         id: `sample-thread-${pr.ref.number}`,
         reason: member.provenance.reason,
-        unread: unseenLoud(data.events.filter((event) => event.prKey === pr.key)),
+        unread: data.events.some((event) => event.prKey === pr.key && isUnseenLoud(event)),
         updatedAt: pr.updatedAt,
         lastReadAt: null,
         subjectType: 'PullRequest',

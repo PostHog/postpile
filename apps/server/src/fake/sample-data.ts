@@ -230,7 +230,7 @@ function buildPrs(clock: SampleClock): Pr[] {
       ],
     }),
     samplePr(clock, {
-      number: 41930, title: 'RFC: self-hosted runners for ingestion CI', author: 'ines', state: 'OPEN',
+      number: 41932, title: 'RFC: self-hosted runners for ingestion CI', author: 'ines', state: 'OPEN',
       size: [140, 12, 3], checks: 'SUCCESS', openedHoursAgo: 20, reviewerTeams: ['PostHog/team-devex'],
       body: 'Ingestion jobs need more memory than Depot offers. This RFC adds a runner pool and one workflow change.',
     }),
@@ -354,7 +354,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 41801, [
       { kind: 'question_to_user', actor: 'ada', text: 'asked "is this reversible?"', hoursAgo: 24, rule: 'loud' },
     ]),
-    ...sampleEvents(clock, 41930, [
+    ...sampleEvents(clock, 41932, [
       { kind: 'review_requested', actor: 'ines', text: 'requested @team-devex', hoursAgo: 2, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 41940, [
@@ -504,8 +504,8 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(41870)}`, 'hogli start would default to minimal stack', [
       pinged(41870, 'review_requested'),
     ]),
-    sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(41930)}`, 'Ingestion asks devex about its runner workflow', [
-      pinged(41930, 'review_requested'),
+    sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(41932)}`, 'Ingestion asks devex about its runner workflow', [
+      pinged(41932, 'review_requested'),
     ]),
     sampleTile(TOPIC.desktop, 'single', `pr:${sampleKey(41940)}`, 'Desktop 2.3 release thread', [pinged(41940, 'subscribed')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(41950)}`, 'Your pnpm cache PR waits for CI', [found(41950, 'own_open', 'your open PR')]),

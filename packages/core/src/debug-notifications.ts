@@ -2,6 +2,7 @@
 
 import { DEBUG_EVENTS_PER_PR, type DebugEventLine } from './debug-views.ts';
 import { prKey } from './keys.ts';
+import { effectiveLoudness } from './loudness.ts';
 import type { NotificationThread, PrEvent, PrKey } from './types.ts';
 
 /** The PR a thread is about. Only PullRequest threads with a number map to one. */
@@ -23,7 +24,7 @@ export function debugEventLines(events: PrEvent[]): DebugEventLine[] {
       actor: event.actor,
       at: event.at,
       summary: event.summary,
-      loudness: event.override?.loudness ?? event.ruleLoudness,
+      loudness: effectiveLoudness(event),
       seen: event.seenAt !== null,
     }));
 }

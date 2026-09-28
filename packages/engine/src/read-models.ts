@@ -1,37 +1,27 @@
 import {
   activityList,
-  forWhom,
-  tileForWhom,
+  buildPrSummary,
+  buildTileView,
   compareTopicUrgency,
   displayState,
   isMergeApprovedMove,
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
-  isUnseenLoud,
   labelBaseRepo,
-  memberTier,
-  openThreadCount,
-  isApprovedByViewer,
   personRelation,
-  prPrimaryAction,
   pingedPrKeys,
-  prStatus,
   prTier,
   repoOverview,
   searchTopics,
   tileRepoLabels,
   TILE_STATE_ORDER,
-  tilePeople,
-  tileTier,
-  tileWhy,
   topicFaces,
   topicPeople,
   topicQueues,
   topicUrgency,
   viewerOrgs,
   whoseTurn,
-  whyHere,
   type FactQuery,
   type FactView,
   type GlanceGap,
@@ -147,6 +137,7 @@ export class ReadModels {
     return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, userState: board.userStates.get(pr.key) ?? null, reason });
   }
 
+  /** The tile's rows: gathers each member's inputs from the board and the store. */
   private prSummaries(
     board: Board,
     tile: Tile,
@@ -157,43 +148,29 @@ export class ReadModels {
     tileUnread: boolean,
   ): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
-    const summaries: PrSummary[] = [];
-    for (const [index, member] of tile.members.entries()) {
+    return tile.members.flatMap((member, index) => {
       const pr = board.prs.get(member.prKey);
       if (!pr) {
-        continue;
+        return [];
       }
-      const glance = glances.get(pr.key);
-      const quietRepo = isPrInQuietRepo(pr.key, settings);
-      const authorRelation = personRelation(pr.author, viewer);
-      const approved = isApprovedByViewer(pr, board.userStates.get(pr.key) ?? null, viewer?.login);
-      summaries.push({
-        key: pr.key,
-        title: pr.title,
-        url: pr.url,
-        author: pr.author,
-        state: pr.state,
-        isDraft: pr.isDraft,
-        provenance: member.provenance,
-        why: whyHere(member.provenance, pr, viewer),
-        forWhom: forWhom(whyHere(member.provenance, pr, viewer), pr, viewer),
-        tier: memberTier(this.tierOf(board, pr, viewer), member.provenance, quietRepo),
-        authorRelation,
-        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approved, tileUnread }),
-        status: prStatus(pr),
-        openThreads: openThreadCount(pr),
-        verdict: glance?.verdict ?? null,
-        glanceStale: stale.has(pr.key),
-        forYou: glance?.forYou ?? null,
-        glanceGap: this.glanceGap(pr.key, glance !== undefined),
-        // A found PR never counts as unread; its events are there for whose turn and memory.
-        unseenLoudEvents: member.provenance.kind === 'found' ? 0 : (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
-        updatedAt: pr.updatedAt,
-        quietRepo,
-        repoLabel: repoLabels[index] ?? null,
-      });
-    }
-    return summaries;
+      const glance = glances.get(pr.key) ?? null;
+      return [
+        buildPrSummary({
+          pr,
+          member,
+          viewer,
+          userState: board.userStates.get(pr.key) ?? null,
+          events: board.events.get(pr.key) ?? [],
+          reason: board.threads.get(pr.key)?.reason ?? null,
+          glance,
+          glanceStale: stale.has(pr.key),
+          glanceGap: this.glanceGap(pr.key, glance !== null),
+          quietRepo: isPrInQuietRepo(pr.key, settings),
+          repoLabel: repoLabels[index] ?? null,
+          tileUnread,
+        }),
+      ];
+    });
   }
 
   private tileViews(board: Board, topicId: string): TileView[] {
@@ -208,21 +185,18 @@ export class ReadModels {
     const views = tiles.map((tile): TileView => {
       const labels = tileRepoLabels(memberKeys(tile), baseRepo, orgs);
       const state = board.stateOf(tile);
-      const prs = this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread');
-      const memberPrs = tile.members.flatMap((member) => board.prs.get(member.prKey) ?? []);
-      return {
+      return buildTileView({
         tile,
         state,
-        prs,
-        why: tileWhy(prs.map((pr) => pr.why)),
-        forWhom: tileForWhom(prs.map((pr) => pr.forWhom)),
-        tier: tileTier(prs.map((pr) => pr.tier)),
-        people: tilePeople(memberPrs, viewer?.login ?? null),
-        turn: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }),
+        prs: this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread'),
+        prsByKey: board.prs,
+        events: board.events,
+        userStates: board.userStates,
+        viewer,
         pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
         quietRepo: isQuietTile(memberKeys(tile), settings),
         repoLabel: labels.tile,
-      };
+      });
     });
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
   }

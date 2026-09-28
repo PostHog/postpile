@@ -4,7 +4,6 @@ import type {
   ChatMessage,
   ChatReply,
   ConsolidationReport,
-  EventDisplayState,
   EventView,
   FactQuery,
   FactView,
@@ -28,7 +27,6 @@ import type {
   LivePollStatus,
   SyncPhase,
   SyncProgress,
-  Loudness,
   MemoryCorrection,
   MemoryCorrectionKind,
   MemoryRecheckOutcome,
@@ -43,9 +41,9 @@ import type {
   PrDetail,
   PrEvent,
   PrKey,
-  PrSummary,
   RepoOverview,
   RepoSettings,
+  Snooze,
   SnoozeCondition,
   SyncReport,
   Tile,
@@ -55,14 +53,15 @@ import type {
   Topic,
   TopicDetail,
   TopicListItem,
-  UnreadReason,
   UserPrState,
   ViewerView,
 } from '@postpile/core';
 import {
   activityList,
-  forWhom,
-  tileForWhom,
+  buildPrSummary,
+  buildTileView,
+  deriveTileState,
+  displayState,
   compareTopicUrgency,
   actionTrail,
   applyBaseline,
@@ -71,7 +70,6 @@ import {
   CLEANUP_SNOOZE_DAYS,
   DEFAULT_REPO_SETTINGS,
   unreadOlderThan,
-  isPrDone,
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
@@ -85,28 +83,18 @@ import {
   emptyAgentCallStats,
   fixedClaimNote,
   isMergeApprovedMove,
-  memberTier,
   OFF_POLL_STATUS,
   systemTimers,
-  openThreadCount,
-  isApprovedByViewer,
   personRelation,
-  prPrimaryAction,
   pingedPrKeys,
-  prStatus,
   prTier,
   searchTopics,
   setIdFromTileId,
-  tilePeople,
   threadPrKey,
-  tileTier,
-  tileWhy,
   topicFaces,
   topicPeople,
   topicQueues,
   topicUrgency,
-  whoseTurn,
-  whyHere,
   type AgentCallStats,
   type Pr,
   type PrTier,
@@ -186,18 +174,6 @@ function fail(message: string): ActionResult {
   return { ok: false, message, undoToken: null };
 }
 
-function loudnessOf(event: PrEvent): Loudness {
-  return event.override?.loudness ?? event.ruleLoudness;
-}
-
-function displayOf(event: PrEvent): EventDisplayState {
-  return event.seenAt ? 'seen' : loudnessOf(event);
-}
-
-function isUnseenLoud(event: PrEvent): boolean {
-  return !event.seenAt && loudnessOf(event) === 'loud';
-}
-
 /** Stand-in for the agent spotting a lasting point in chat. Where it applies is the user's pick. */
 const LASTING = /\b(always|never|from now on|in general|every topic|all topics)\b/i;
 
@@ -217,8 +193,8 @@ function sampleSyncStats(): AgentCallStats {
 /**
  * In-memory EngineService over the Depot sample data. Lets the server, CLI and
  * desktop app run before the real engine exists. Never talks to GitHub or the
- * agent; actions only change the in-memory copy. Tile state uses its own small
- * rules here, the real ones live in core.
+ * agent; actions only change the in-memory copy. Tile state, rows and tile
+ * views come from the same core rules as the engine.
  */
 export class FakeEngine implements EngineService {
   private readonly data: SampleData;
@@ -229,7 +205,7 @@ export class FakeEngine implements EngineService {
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
   private readonly now: () => Date;
-  private readonly snoozes = new Map<string, SnoozeCondition>();
+  private readonly snoozes = new Map<string, Snooze>();
   private readonly chats = new Map<string, ChatMessage[]>();
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
@@ -316,55 +292,33 @@ export class FakeEngine implements EngineService {
     return state;
   }
 
-  /** Same done rule as the engine: a PR that still asks something of the viewer is never done. */
-  private isPrDone(prKey: PrKey): boolean {
-    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
-    if (!pr) {
-      return false;
-    }
-    const state = this.data.userStates.find((candidate) => candidate.prKey === prKey) ?? null;
-    return isPrDone(pr, state, this.viewer(), this.eventsOf(prKey));
-  }
-
   private viewer(): Viewer {
     return { login: this.data.viewer, teams: this.data.viewerTeams, teamMembers: this.data.viewerTeamMembers };
   }
 
-  private isSnoozed(tileId: string): boolean {
-    const condition = this.snoozes.get(tileId);
-    if (condition?.kind === 'until_time' && condition.until <= this.timestamp()) {
-      this.snoozes.delete(tileId);
-      return false;
-    }
-    return condition !== undefined;
+  private prsByKey(): Map<PrKey, Pr> {
+    return new Map(this.data.prs.map((pr) => [pr.key, pr]));
   }
 
+  private userStatesByKey(): Map<PrKey, UserPrState> {
+    return new Map(this.data.userStates.map((state) => [state.prKey, state]));
+  }
+
+  private eventsByKey(keys: PrKey[]): Map<PrKey, PrEvent[]> {
+    return new Map(keys.map((key) => [key, this.eventsOf(key)]));
+  }
+
+  /** Core's tile state rule over the sample data, snoozes included. */
   private tileState(tile: Tile): TileState {
-    const unreadBecause: UnreadReason[] = [];
-    // A found PR (no notification) never makes its tile unread, like the real rule.
-    for (const member of tile.members.filter((candidate) => candidate.provenance.kind !== 'found')) {
-      for (const event of this.eventsOf(member.prKey).filter(isUnseenLoud)) {
-        unreadBecause.push({
-          prKey: member.prKey,
-          eventId: event.id,
-          kind: event.kind,
-          actor: event.actor,
-          summary: event.summary,
-          at: event.at,
-        });
-      }
-    }
-    if (unreadBecause.length > 0) {
-      return { kind: 'unread', unreadBecause };
-    }
-    if (this.isSnoozed(tile.id)) {
-      return { kind: 'snoozed', unreadBecause };
-    }
-    const pingedMembers = tile.members.filter((member) => member.provenance.kind !== 'pulled_in');
-    if (pingedMembers.every((member) => this.isPrDone(member.prKey))) {
-      return { kind: 'done', unreadBecause };
-    }
-    return { kind: 'open', unreadBecause };
+    return deriveTileState({
+      tile,
+      prs: this.prsByKey(),
+      events: this.eventsByKey(tile.members.map((member) => member.prKey)),
+      userStates: this.userStatesByKey(),
+      snooze: this.snoozes.get(tile.id) ?? null,
+      now: this.timestamp(),
+      viewer: this.viewer(),
+    });
   }
 
   /** Same tier rule as the engine; the sample has no threads, so a pinged member's reason stands in. */
@@ -375,71 +329,52 @@ export class FakeEngine implements EngineService {
   }
 
   /**
-   * Why-codes, status pills, faces and whose turn come from the same core
-   * rules as the engine. `labels` are the repo labels of the opened topic;
-   * none where they do not show (the sidebar counts).
+   * Gathers the sample's inputs for core's buildPrSummary / buildTileView,
+   * the same rules as the engine. The sample has no threads, so a pinged
+   * member's reason stands in for the thread reason. `labels` are the repo
+   * labels of the opened topic; none where they do not show (the sidebar counts).
    */
   private tileView(tile: Tile, labels: TileRepoLabels | null = null): TileView {
     const viewer = this.viewer();
     const pending = this.writes.pendingByPrKey();
-    const tileState = this.tileState(tile);
-    const prs: PrSummary[] = [];
-    const memberPrs: Pr[] = [];
-    for (const [index, member] of tile.members.entries()) {
-      const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
+    const state = this.tileState(tile);
+    const prsByKey = this.prsByKey();
+    const events = this.eventsByKey(tile.members.map((member) => member.prKey));
+    const userStates = this.userStatesByKey();
+    const prs = tile.members.flatMap((member, index) => {
+      const pr = prsByKey.get(member.prKey);
       if (!pr) {
-        continue;
+        return [];
       }
-      memberPrs.push(pr);
-      const glance = this.data.glances.find((candidate) => candidate.prKey === pr.key);
-      const quietRepo = isPrInQuietRepo(pr.key, this.repoSettings);
-      const authorRelation = personRelation(pr.author, viewer);
-      const approved = isApprovedByViewer(pr, this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null, viewer.login);
-      prs.push({
-        key: pr.key,
-        title: pr.title,
-        url: pr.url,
-        author: pr.author,
-        state: pr.state,
-        isDraft: pr.isDraft,
-        provenance: member.provenance,
-        why: whyHere(member.provenance, pr, viewer),
-        forWhom: forWhom(whyHere(member.provenance, pr, viewer), pr, viewer),
-        tier: memberTier(this.tierOf(pr, member), member.provenance, quietRepo),
-        authorRelation,
-        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approved, tileUnread: tileState.kind === 'unread' }),
-        status: prStatus(pr),
-        openThreads: openThreadCount(pr),
-        verdict: glance?.verdict ?? null,
-        glanceStale: false,
-        forYou: glance?.forYou ?? null,
-        glanceGap: this.glanceGapOf(pr.key),
-        unseenLoudEvents: member.provenance.kind === 'found' ? 0 : this.eventsOf(pr.key).filter(isUnseenLoud).length,
-        updatedAt: pr.updatedAt,
-        quietRepo,
-        repoLabel: labels?.prs[index] ?? null,
-      });
-    }
-    const turn = whoseTurn({
-      tile,
-      prs: new Map(memberPrs.map((pr) => [pr.key, pr])),
-      events: new Map(memberPrs.map((pr) => [pr.key, this.eventsOf(pr.key)])),
-      userStates: new Map(this.data.userStates.map((state) => [state.prKey, state])),
-      viewer,
+      return [
+        buildPrSummary({
+          pr,
+          member,
+          viewer,
+          userState: userStates.get(pr.key) ?? null,
+          events: events.get(pr.key) ?? [],
+          reason: member.provenance.kind === 'pinged' ? member.provenance.reason : null,
+          glance: this.data.glances.find((candidate) => candidate.prKey === pr.key) ?? null,
+          glanceStale: false,
+          glanceGap: this.glanceGapOf(pr.key),
+          quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
+          repoLabel: labels?.prs[index] ?? null,
+          tileUnread: state.kind === 'unread',
+        }),
+      ];
     });
-    return {
+    return buildTileView({
       tile,
-      state: tileState,
+      state,
       prs,
-      why: tileWhy(prs.map((pr) => pr.why)),
-      forWhom: tileForWhom(prs.map((pr) => pr.forWhom)),
-      tier: tileTier(prs.map((pr) => pr.tier)),
-      people: tilePeople(memberPrs, viewer.login),
-      turn,
+      prsByKey,
+      events,
+      userStates,
+      viewer,
       pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
       quietRepo: isQuietTile(tile.members.map((member) => member.prKey), this.repoSettings),
       repoLabel: labels?.tile ?? null,
-    };
+    });
   }
 
   private tilesOfTopic(topicId: string): Tile[] {
@@ -762,7 +697,7 @@ export class FakeEngine implements EngineService {
     }
     const events: EventView[] = this.eventsOf(prKey)
       .toSorted((a, b) => b.at.localeCompare(a.at))
-      .map((event) => ({ event, display: displayOf(event) }));
+      .map((event) => ({ event, display: displayState(event) }));
     return {
       pr,
       events,
@@ -930,7 +865,7 @@ export class FakeEngine implements EngineService {
     if (!this.findTile(tileId)) {
       return fail(`no tile ${tileId}`);
     }
-    this.snoozes.set(tileId, condition);
+    this.snoozes.set(tileId, { tileId, condition, since: this.timestamp() });
     return ok(`snoozed until ${condition.kind}`);
   }
 

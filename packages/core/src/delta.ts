@@ -1,3 +1,4 @@
+import { effectiveLoudness } from './loudness.ts';
 import type { DossierIssue, DossierVersion, Fact, LoggedEvent, TopicDelta } from './memory.ts';
 import type { Feedback, PrEvent, PrKey } from './types.ts';
 
@@ -33,7 +34,7 @@ export interface TopicDeltaInput {
 }
 
 function isMuted(event: PrEvent): boolean {
-  return (event.override?.loudness ?? event.ruleLoudness) === 'muted';
+  return effectiveLoudness(event) === 'muted';
 }
 
 function bySeq(a: LoggedEvent, b: LoggedEvent): number {
