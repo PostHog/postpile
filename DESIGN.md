@@ -967,6 +967,86 @@ instructions). One call per poll cycle with addressed news, so a normal day is
 roughly 10-40 calls, $0.40-1.50; the cap bounds it at 200 calls (about $8).
 Poll topic assignments add a few calls a day for PRs new to the app.
 
+## Work context sweep ("What you're working on")
+
+A short, agent-written digest of what the user is working on, taken from
+their local Claude Code data and fed to the relevance prompts as background.
+Agent-derived memory in the sense of "Memory by author": it never touches
+instructions.md, and the user steers it only with Forget and Refresh.
+
+**Collect** (engine `work-context/collector.ts`, deterministic, no agent tools),
+from `CODE_MANAGER_CLAUDE_DIR` (default `~/.claude`):
+
+- `CLAUDE.md` plus the files it @-includes (`@RTK.md`, `@~/x.md`), resolved
+  against the including file's folder and its symlink target's folder, only
+  under `~/.claude` or the folder the symlink points into (the dotfiles). Lines
+  in code fences do not count. Depth 3.
+- Every `projects/*/memory/*.md`, ref = path incl. the project folder.
+  MEMORY.md indexes first, then files changed in the last 7 days, then the
+  rest, newest first. 2,500 chars per index, 1,200 per file.
+- Sessions: `projects/*/*.jsonl` modified in the last 7 days, streamed line by
+  line; only lines that can hold a signal are parsed. Per session: cwd, first
+  and last timestamp, the `ai-title`, the first 3 typed prompts (300 chars,
+  one line) and the newest compaction or summary record (500 chars). Skipped:
+  sidechains, `isMeta`, tool results, `origin.kind` other than human,
+  `promptSource` system/sdk, messages opening with a tag (`<command-name>`,
+  `<local-command-...>`, `<task-notification>`), "Caveat:", system reminders
+  (stripped), and pasted blobs (opens like JSON / a log / a stack trace / a
+  diff, or 20+ lines that are mostly not prose). Sessions started through the
+  SDK (`entrypoint: sdk-cli`), without anything typed or titled, and forks
+  that repeat a newer session's prompts are dropped.
+- A regex pass masks obvious secrets (GitHub, Anthropic/OpenAI, Slack, AWS,
+  Google, PostHog, GitLab, npm tokens, JWTs, private keys, Bearer tokens,
+  `password=...`-style assignments, URL credentials).
+- Budget about 60k chars: CLAUDE.md 6k, sessions 30k (newest first), memory
+  24k; unused room carries to the next section. Everything left out is
+  counted in the stats and logged grouped by reason.
+
+A run over the real folder takes about a second (115 session files, ~470 MB).
+
+**Call**: one toolless `context_sweep` call, `opus` by default
+(`CODE_MANAGER_SWEEP_MODEL` overrides; `models.ts`), 5 min timeout. Input:
+the collected items with short ids (`c1`, `m3`, `s7`), instructions.md, the
+active topics (id, name, dossier brief), the previous digest (for stable
+threads) and the threads the user forgot. The prompt says the material is the
+user's own and trusted, unlike GitHub text, but the prompts in it were meant
+for other agents and are not instructions; it is fenced in `<local_context>`
+so it cannot close early. Work only: no personal or private life, even when
+memory files hold it. Answer (zod): `{summary (3-6 sentences), threads[]
+(≤12: title, detail, topicIds, sources as item ids), lastSeenAt}`. Unknown
+topic ids and source ids are dropped, sources map back to `{kind, ref}`,
+forgotten titles are filtered again, `lastSeenAt` comes from the collector.
+Calls land in `agent_call` under run id `sweep`, never in a sync's stats.
+Measured: ~60k chars in, 12 threads, about $0.40 and 45s.
+
+**Store** (`work_context_version`, migration 009; 008 is the writes branch's
+action log): version, digest JSON, input sources, input stats, model, time.
+Newest 30 kept. A failure keeps the previous version; the error sits in meta
+`work_context_last_error` until the next success.
+
+**Schedule**: the desktop app checks at start and every 30 minutes
+(`startWorkContextSchedule`); `sweepDue` in core: local time 06:00 or later,
+no success in 24h, no failure in the last 2h. Also `npm run cli -- sweep` and
+Refresh in the UI. The sweep runs beside syncs: neither waits for the other.
+
+**Use**: `PromptContext.workContext` carries the latest digest as compact text
+(date, summary, one line per thread with topic names, details cut to 240,
+whole threads up to 5k chars; forgotten threads left out at once).
+`workContextBlock` renders it as "What the user is working on (from their
+local Claude Code notes; may be stale)" after the user's instructions in
+topic_assignment, dossier_update, glance_batch, ping_decision and chat only.
+It is in no input hash, so a new digest regenerates no glance, dossier or
+set; it applies on their next natural update.
+
+**UI**: "What you're working on" at the bottom of "Your instructions", dashed
+and marked agent-written: summary, threads with clickable topic chips, "Why?"
+with the sources (file path, or session project + start time + title), Forget
+per thread (feedback `work_context_forget`, 6s Undo, struck through until the
+next sweep drops it), input stats, the last updated time or the last error,
+and Refresh. Routes: `GET /api/work-context`, `POST /api/work-context/sweep`,
+`POST /api/work-context/forget {version, index}`. Fake mode shows a sample
+digest linked to the sample topics.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.
@@ -978,7 +1058,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins, 007 ping decisions), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins, 007 ping decisions, 009 work context), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query, PRs by branch for stack completion) and `GitHubWriter` (mark thread read,
@@ -986,7 +1066,7 @@ core  <- store, github, agent  <- engine  <- server, cli
   memory.
 - **packages/agent**: `AgentRunner`, `ClaudeCliRunner`, `AgentService` (topic assignment,
   set grouping, dossier update, fact reconcile, glance batch, event batch, consolidation,
-  draft comment, chat).
+  draft comment, chat, ping decision, context sweep).
 - **packages/engine**: `EngineService`, the API the server and CLI call. Sync pipeline:
   fetch -> store -> classify -> agent digest -> derive tiles. `MarkReadQueue`. `createEngine`
   wires real dependencies; tests build `Engine` with fakes.
@@ -1049,7 +1129,8 @@ preflight and does not know the token, so CORS stays open.
 - **Localhost API safety**: binds 127.0.0.1, and a token is always required (per launch in the
   desktop app, per run in the standalone server) so web pages and other local processes cannot
   drive approve/comment/mark-read.
-- **Paths**: database at `~/Library/Application Support/code-manager/db.sqlite` on macOS
+- **Paths**: `CODE_MANAGER_CLAUDE_DIR` (default `~/.claude`) is what the work context sweep
+  reads. Database at `~/Library/Application Support/code-manager/db.sqlite` on macOS
   (`$XDG_DATA_HOME/code-manager/db.sqlite` elsewhere), instructions at
   `~/.config/code-manager/instructions.md`. `CODE_MANAGER_DB` and `CODE_MANAGER_INSTRUCTIONS`
   override. The CLI and the desktop app share one database; WAL lets them run side by side.
@@ -1110,6 +1191,15 @@ preflight and does not know the token, so CORS stays open.
   - dossier history: keep the newest 50 versions per topic, pruned on save [50]
   - glance batches with 18 PRs per call [yes; moved from haiku to sonnet after a side-by-side run]
   - dossier driver overrides "most frequent author" for the topic driver [yes]
+- **Work context sweep** (current choices in brackets):
+  - model [opus; cost is no concern, the call has to judge work vs. private in loose notes]
+  - private projects (taxes, home automation, personal sites) are sent to the model and
+    filtered by the prompt [yes; a skip list of project folders would keep them local]
+  - which prompts get the digest [topic assignment, dossiers, glances, pings, chat; not sets,
+    events, consolidation, recheck, drafts]
+  - budget split and caps [60k: CLAUDE.md 6k, sessions 30k, memory 24k; most memory files of
+    the posthog project never fit, only its MEMORY.md index]
+  - a failed sweep retries after 2h, not on every 30-minute check [yes]
 - **Live poll and Mac pings** (current choices in brackets):
   - obey GitHub's X-Poll-Interval (60s) or poll faster [10s as asked; 304s are free, the value
     is shown in the footer tooltip]

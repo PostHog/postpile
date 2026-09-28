@@ -99,7 +99,9 @@ now".
 - Fix pass after the first real full sync (142 PRs, 120 calls, $3.23,
   61 topics):
   - syncs the app starts are capped (`CODE_MANAGER_MAX_AGENT_CALLS`,
-    default 30); the title bar says when a sync stopped at the cap
+    default 30, raised to 150 on 2026-09-28 since cost is no concern and a
+    full first sync of ~120 calls then fits in one); the title bar says when
+    a sync stopped at the cap
   - topic assignment prefers existing topics (member counts in the
     prompt), may leave a lone PR in Unsorted, creates at most 5 topics per
     sync; Unsorted PRs are asked about again after the next consolidation,
@@ -169,6 +171,21 @@ now".
   notifications grouped per tile (2 min) and as a summary above 3; a click
   opens the tile. Closing the window hides it, Cmd+Q quits. Fake mode pings a
   sample question every ~45s. CLI `poll` runs one cycle.
+- Work context sweep (DESIGN.md "Work context sweep"): a daily agent-written
+  digest of what Julian is working on, from `~/.claude` (CLAUDE.md and its
+  @-includes, every project's memory files, light signals from sessions of
+  the last 7 days; secrets masked, ~60k chars budget, drops logged). One opus
+  `context_sweep` call (`CODE_MANAGER_SWEEP_MODEL`), versions in
+  `work_context_version` (migration 009, last 30). Runs from the desktop app
+  once a day from 06:00 (checked at start and every 30 min), on
+  `npm run cli -- sweep` and on Refresh; never blocks a sync. Injected as
+  background into topic assignment, dossier updates, glances, ping decisions
+  and chat, outside every input hash. "What you're working on" at the bottom
+  of "Your instructions": summary, threads with topic links, Why?, Forget
+  (with Undo), Refresh, last error. One real run against a DB copy: 60k chars
+  in, 12 threads, $0.40, 43s; personal sessions (taxes, shopping) left out.
+- Default agent-call cap for app syncs raised from 30 to 150
+  (`CODE_MANAGER_MAX_AGENT_CALLS`).
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -236,6 +253,12 @@ now".
 - Tiles are one column now, ~380px wide at the 1100px minimum window and
   ~435px at 1440px. PR row titles in multi-PR tiles still truncate at the
   minimum width; the full text is in the tooltips.
+- Work context sweep: the schedule and Refresh are not tried in the running
+  desktop app yet (tests and one CLI run only). Only the newest compaction
+  per session is kept and only the first 3 prompts, so a long session that
+  changed direction reads as what it started with. Forks are matched on
+  identical first prompts. Forget matches threads by title; a reworded
+  thread can come back. Session refs use local time of the machine.
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 
@@ -308,6 +331,14 @@ now".
   memory numbers (10 feedback entries per prompt, when sets regroup), snooze
   wake-up on any loud human event, the extra loudness rules, repo name.
 
+- **Work context sweep**: private projects (taxes, home automation,
+  personal sites) go to the model and only the prompt keeps them out of the
+  digest (the real run did). Keep that, or skip project folders by a list
+  before anything leaves the machine? Budget split (sessions 30k, memory
+  24k) means most posthog memory files never make it, only their MEMORY.md
+  index; fine? Which prompts get the digest (now: topics, dossiers, glances,
+  pings, chat)?
+
 - **Live poll**: poll at 10s and only show GitHub's X-Poll-Interval (60s), or
   obey it? Should loud-but-not-addressed activity (approval or comment on your
   own PR) ping? Team review requests and team mentions ping today (the agent
@@ -348,6 +379,7 @@ npm run cli -- topic <id>                     # with the dossier and changes sin
 npm run cli -- pr owner/repo#123              # with facts
 npm run cli -- consolidate [--if-due] [--max-agent-calls n]
 npm run cli -- poll                           # one live-poll cycle, prints ping decisions
+npm run cli -- sweep                          # "what you're working on" from ~/.claude, one opus call
 ```
 
 Smoke run on a throwaway database, read-only:
@@ -389,7 +421,10 @@ Env switches:
 - `CODE_MANAGER_ALLOW_WRITES=1`: lets the UI send GitHub writes. Off by
   default.
 - `CODE_MANAGER_MAX_AGENT_CALLS`: agent-call cap for syncs the app starts
-  (launch and "Sync now"), default 30. The CLI uses `--max-agent-calls`.
+  (launch and "Sync now"), default 150 (was 30). The CLI uses `--max-agent-calls`.
+- `CODE_MANAGER_CLAUDE_DIR`: the Claude Code folder the work context sweep
+  reads, default `~/.claude`. `CODE_MANAGER_SWEEP_MODEL`: its model, default
+  `opus`.
 - `CODE_MANAGER_DB`, `CODE_MANAGER_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/code-manager/db.sqlite`) and the
   instructions file (default `~/.config/code-manager/instructions.md`).
