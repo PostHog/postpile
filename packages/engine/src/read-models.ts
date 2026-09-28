@@ -152,12 +152,19 @@ export class ReadModels {
     const board = this.board();
     const topics = board.topics();
     const dossiers = this.store.dossiers.latestMany(topics.map((topic) => topic.id));
+    const viewer = loadViewer(this.store);
     const items: TopicListItem[] = [];
     for (const topic of topics) {
-      const states = board.tilesForTopic(topic.id).map((tile) => board.stateOf(tile).kind);
+      const tiles = board.tilesForTopic(topic.id);
+      const states = tiles.map((tile) => board.stateOf(tile).kind);
       if (states.length === 0) {
         continue;
       }
+      const yourMoveTiles = tiles.filter(
+        (tile) =>
+          board.stateOf(tile).kind !== 'done' &&
+          whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }).kind === 'you',
+      ).length;
       const unreadTiles = states.filter((kind) => kind === 'unread').length;
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
@@ -169,6 +176,7 @@ export class ReadModels {
         unreadTiles,
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
+        yourMoveTiles,
       });
     }
     return items.sort(compareTopics);

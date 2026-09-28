@@ -71,6 +71,8 @@ export interface TopicListItem {
   unreadTiles: number;
   openTiles: number;
   totalTiles: number;
+  /** Live (not done) tiles where the turn is the user's ("Your move"). */
+  yourMoveTiles: number;
 }
 
 export interface PrSummary {

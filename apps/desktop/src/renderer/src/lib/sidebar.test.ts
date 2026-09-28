@@ -16,6 +16,7 @@ function item(id: string, unreadTiles: number, placement: Partial<TopicPlacement
     unreadTiles,
     openTiles: 0,
     totalTiles: 1,
+    yourMoveTiles: 0,
   };
 }
 

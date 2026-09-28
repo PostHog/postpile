@@ -151,7 +151,8 @@ The sidebar groups topics with `lib/sidebar.ts` (`sidebarGroups`): Needs you,
 Your team by area, Routed to you, FYI. Fold state is local UI state; Routed
 and FYI start folded. Relation corrections go through `correctMemory` with
 `relation` set (`RelationLine`), local only. `TileGrid` shows live tiles and
-folds snoozed / done ones.
+folds snoozed / done ones. Tiles stay in one column (DESIGN.md "Three-pane
+balance"); sidebar rows show the dossier summary and a "your move" chip.
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
 "Your instructions"), and the picked

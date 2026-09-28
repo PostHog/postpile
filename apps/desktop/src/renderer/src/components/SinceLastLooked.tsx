@@ -18,10 +18,11 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string }
   const since = dossier.changesSinceSeen?.since;
   return (
     <section className="flex max-w-[680px] flex-col gap-2 rounded-row border border-accent-line bg-accent-soft px-3.5 py-3">
-      <div className="flex items-baseline gap-2">
-        <h2 className="text-[12.5px] font-semibold text-ink">{block.heading}</h2>
-        {since && <span className="font-mono text-[10.5px] text-muted">{sinceLabel(since, now)}</span>}
-        {block.counts && <span className="ml-auto font-mono text-[10.5px] text-muted">{block.counts}</span>}
+      {/* Wraps as whole pieces in the narrow tile column instead of breaking words. */}
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <h2 className="text-[12.5px] font-semibold whitespace-nowrap text-ink">{block.heading}</h2>
+        {since && <span className="font-mono text-[10.5px] whitespace-nowrap text-muted">{sinceLabel(since, now)}</span>}
+        {block.counts && <span className="ml-auto font-mono text-[10.5px] whitespace-nowrap text-muted">{block.counts}</span>}
       </div>
       {block.changes.length === 0 && <p className="text-xs text-muted">Nothing new in the dossier since then.</p>}
       {block.changes.map((change) => {

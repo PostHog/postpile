@@ -34,6 +34,15 @@ describe('FakeEngine', () => {
 });
 
 describe('FakeEngine tile faces', () => {
+  it('counts live "your move" tiles per topic in the topic list', async () => {
+    const engine = new FakeEngine();
+    const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
+    const expected = depot.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length;
+    const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-depot');
+    expect(expected).toBeGreaterThan(0);
+    expect(item?.yourMoveTiles).toBe(expected);
+  });
+
   it('shows all three turn kinds with the core rules', async () => {
     const engine = new FakeEngine();
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];

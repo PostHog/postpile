@@ -6,15 +6,21 @@ import { sidebarGroups } from '../lib/sidebar.ts';
 import { CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 import { RelationBadge } from './pills.tsx';
 
-/** Second line under the name: the dossier's short state line, else tile counts. */
-function topicLine(item: TopicListItem): string {
+/**
+ * The "what's going on" snippet under the name: the dossier summary, else its
+ * short state line, else tile counts.
+ */
+function topicSnippet(item: TopicListItem): string {
+  if (item.topic.summary) {
+    return item.topic.summary;
+  }
   if (item.statusLine) {
     return item.statusLine.note ? item.statusLine.note : statusLabel(item.statusLine.status);
   }
   return `${item.openTiles} open · ${item.totalTiles} tiles`;
 }
 
-/** Right-hand badge: matching tiles while filtering, else unread tiles, else nothing. */
+/** Right-hand badge: matching tiles while filtering, else unread tiles in coral, else nothing. */
 function TopicBadge(props: { unread: number; matches: number | null; active: boolean }) {
   const shape = 'flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] font-mono text-[10.5px] font-semibold';
   if (props.matches !== null) {
@@ -28,30 +34,56 @@ function TopicBadge(props: { unread: number; matches: number | null; active: boo
   if (props.unread === 0) {
     return <span className={shape} />;
   }
-  return <span className={`${shape} ${props.active ? 'bg-accent text-on-accent' : 'bg-chip text-ink-2'}`}>{props.unread}</span>;
+  const label = `${props.unread} unread ${props.unread === 1 ? 'tile' : 'tiles'}`;
+  return (
+    <span title={label} aria-label={label} className={`${shape} ${props.active ? 'bg-unread text-on-accent' : 'bg-unread-soft text-unread-ink'}`}>
+      {props.unread}
+    </span>
+  );
+}
+
+/** "2 your move" in the warm-reach honey, for tiles waiting on the user. */
+function YourMoveChip(props: { count: number }) {
+  const label = `${props.count} ${props.count === 1 ? 'tile waits' : 'tiles wait'} on you`;
+  return (
+    <span title={label} className="flex h-[15px] shrink-0 items-center gap-1 rounded bg-honey-soft px-1 text-[9.5px] font-semibold text-honey-ink">
+      <span className="font-mono">{props.count}</span> your move
+    </span>
+  );
 }
 
 function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; showRelation?: boolean; matches: number | null }) {
-  const unread = props.item.unreadTiles > 0;
+  const { item } = props;
+  const unread = item.unreadTiles > 0;
   const weight = props.active || unread ? 'font-semibold' : 'font-normal';
-  const relation = props.item.placement?.relation;
+  const relation = props.showRelation ? (item.placement?.relation ?? null) : null;
+  const hasIndicators = item.yourMoveTiles > 0 || relation !== null;
   return (
     <button
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      className={`grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 rounded-row px-2.5 py-2 text-left ${
+      className={`grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-[3px] rounded-row px-2.5 py-2 text-left ${
         props.active ? 'bg-surface shadow-active-row' : 'hover:bg-surface/60'
       }`}
     >
       <span className={`size-[7px] justify-self-center rounded-full ${unread ? 'bg-unread ring-3 ring-unread/15' : ''}`} />
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className={`truncate text-[13px] tracking-[-0.005em] ${weight}`}>{props.item.topic.name}</span>
-        {props.showRelation && relation && <RelationBadge relation={relation} />}
-      </span>
-      <TopicBadge unread={props.item.unreadTiles} matches={props.matches} active={props.active} />
+      <span className={`truncate text-[13px] tracking-[-0.005em] ${weight}`}>{item.topic.name}</span>
+      <TopicBadge unread={item.unreadTiles} matches={props.matches} active={props.active} />
       <span />
-      <span className="col-span-2 truncate text-[11.5px] text-muted">{topicLine(props.item)}</span>
+      {/* The snippet gives way first: one line in a narrow sidebar, two when there is room. */}
+      <span title={topicSnippet(item)} className="col-span-2 line-clamp-1 text-[11.5px] leading-[1.4] text-muted @min-[270px]:line-clamp-2">
+        {topicSnippet(item)}
+      </span>
+      {hasIndicators && (
+        <>
+          <span />
+          <span className="col-span-2 flex items-center gap-1.5">
+            {item.yourMoveTiles > 0 && <YourMoveChip count={item.yourMoveTiles} />}
+            {relation && <RelationBadge relation={relation} />}
+          </span>
+        </>
+      )}
     </button>
   );
 }
@@ -165,7 +197,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
     );
   const teamItems = groups.team.flatMap((group) => group.items);
   return (
-    <nav aria-label="Topics" className="flex min-h-0 flex-col gap-[18px] overflow-auto border-r border-hairline-strong bg-sidebar px-2.5 pt-3.5 pb-2.5">
+    <nav aria-label="Topics" className="@container flex min-h-0 flex-col gap-[18px] overflow-auto border-r border-hairline-strong bg-sidebar px-2.5 pt-3.5 pb-2.5">
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
       {props.error && <p className="px-2.5 text-xs text-unread-ink">Could not load topics: {props.error}</p>}

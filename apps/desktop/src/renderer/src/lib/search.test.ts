@@ -5,7 +5,7 @@ import { filterTopics, searchFilter, sidebarOrder, visibleTopic } from './search
 function item(id: string, unreadTiles: number): TopicListItem {
   const at = '2026-09-27T00:00:00.000Z';
   const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', area: null, createdAt: at, updatedAt: at };
-  return { topic, placement: null, statusLine: null, group: unreadTiles > 0 ? 'needs_you' : 'quiet', unreadTiles, openTiles: 0, totalTiles: 1 };
+  return { topic, placement: null, statusLine: null, group: unreadTiles > 0 ? 'needs_you' : 'quiet', unreadTiles, openTiles: 0, totalTiles: 1, yourMoveTiles: 0 };
 }
 
 const items = [item('quiet-a', 0), item('loud', 2), item('quiet-b', 0)];

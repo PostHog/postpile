@@ -24,23 +24,24 @@ function FilterButton(props: { label: string; active: boolean; onClick: () => vo
   );
 }
 
-/** Tiles two per row when there is room. */
+/**
+ * Tiles in one column, never side by side: the selected tile's notch then
+ * always points straight at the detail pane.
+ */
 function Grid(props: TileGridProps & { views: TileView[] }) {
   return (
-    <div className="@container">
-      <div className="grid auto-rows-[minmax(282px,auto)] grid-cols-1 gap-3.5 @2xl:grid-cols-2">
-        {props.views.map((view) => (
-          <Tile
-            key={view.tile.id}
-            view={view}
-            sets={props.detail.sets}
-            topics={props.topics}
-            selected={view.tile.id === props.selectedTileId}
-            selectedPrKey={props.selectedPrKey}
-            onSelect={(prKey) => props.onSelect(view.tile.id, prKey)}
-          />
-        ))}
-      </div>
+    <div className="flex flex-col gap-3.5">
+      {props.views.map((view) => (
+        <Tile
+          key={view.tile.id}
+          view={view}
+          sets={props.detail.sets}
+          topics={props.topics}
+          selected={view.tile.id === props.selectedTileId}
+          selectedPrKey={props.selectedPrKey}
+          onSelect={(prKey) => props.onSelect(view.tile.id, prKey)}
+        />
+      ))}
     </div>
   );
 }

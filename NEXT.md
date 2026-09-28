@@ -36,7 +36,8 @@ now".
 - Desktop renderer rebuilt in the "Crisp native, refined" style: Tailwind v4
   on design tokens (`apps/desktop/src/renderer/src/styles/`), react-query
   hooks per resource, one guarded `ActionsProvider` for every mutation,
-  hidden-inset title bar, three panes (264px | 1fr | 404px), status footer,
+  hidden-inset title bar, three panes (see "Three-pane balance" in
+  DESIGN.md), status footer,
   toast with Undo. Rules for the renderer are in `apps/desktop/CLAUDE.md`.
 - GitHub writes from the UI (approve, comment, mark read, "not mine") are
   blocked unless the app runs with `CODE_MANAGER_ALLOW_WRITES=1`; the server
@@ -136,6 +137,11 @@ now".
   call, then Accept (keep / fix / drop) or tell the agent in the tile chat;
   every memory correction has a 6s Undo. DESIGN.md "Recheck instead of
   Wrong".
+- Three-pane balance: wider topic sidebar (clamp 248-330px) whose rows
+  show the dossier summary (one line when narrow, two when there is room),
+  a coral unread count, a honey "N your move" chip (`yourMoveTiles` on
+  `TopicListItem`) and the relation in Needs you; a one-tile-wide middle
+  column (clamp 420-480px); the detail pane takes the rest.
 - "Warm reach" tile look (DESIGN.md "Tile faces"): why-it's-here code
   badges (RV, RT, @, @T, AS, AU, CM, FW, ST) on tiles and rows, a warm
   "why now" strip with the actor's avatar and an ink event glyph, a segment
@@ -192,8 +198,9 @@ now".
   is unknown (any other reviewer counts as "a teammate reviewing"), "you
   commented on the head" only looks at reviews, and the own-PR "Merge, it is
   approved" rule is an addition. Not tried against real data yet.
-- In a narrow two-column grid (~330px tiles) the row titles and the turn
-  text truncate hard; the full text is in the tooltips.
+- Tiles are one column now, ~380px wide at the 1100px minimum window and
+  ~435px at 1440px. PR row titles in multi-PR tiles still truncate at the
+  minimum width; the full text is in the tooltips.
 - Web app: not started. The renderer already talks HTTP and takes
   `?api=...&token=...`, so it can be served on its own later.
 

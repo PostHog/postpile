@@ -836,6 +836,21 @@ talk about the same PR, else tile order. Multi-PR tiles add " on #N".
 Team membership of other people is unknown, so "a teammate is reviewing"
 means "anyone but the author reviewed".
 
+### Three-pane balance
+
+Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
+1440px that is about 317 | 475 | 648, at the 1100px minimum 248 | 420 | 432.
+
+- **Sidebar rows**: name, unread count (coral: new since you looked), the
+  topic summary from the dossier (two lines when the sidebar has room, one
+  at the minimum; the snippet is what shrinks first), then small
+  indicators: "N your move" in honey (live tiles whose turn is the user's,
+  `TopicListItem.yourMoveTiles`, same `whoseTurn` as the tile footer) and
+  the relation badge where sections mix relations (Needs you).
+- **Middle column**: one tile wide, tiles never sit side by side, so the
+  selected tile's notch always points at the detail pane.
+- **Detail pane**: takes the remaining width.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, npm workspaces.

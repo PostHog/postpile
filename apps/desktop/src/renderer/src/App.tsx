@@ -21,7 +21,7 @@ import { leadPr } from './lib/tiles.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 
 function MainPane(props: { children: ReactNode }) {
-  return <main className="flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">{props.children}</main>;
+  return <main className="flex min-w-0 flex-col gap-[18px] overflow-auto px-5 py-[22px]">{props.children}</main>;
 }
 
 function EmptyMain(props: { text: string }) {
@@ -152,7 +152,9 @@ export function App() {
           onForward={nav.forward}
           search={<SearchField value={query} onChange={setQuery} />}
         />
-        <div className="grid min-h-0 flex-1 grid-cols-[264px_minmax(0,1fr)_404px]">
+        {/* Sidebar | tiles | detail. The tile column stays one tile wide and the detail
+            pane takes the rest; widths hold from the 1100px minimum window up. */}
+        <div className="grid min-h-0 flex-1 grid-cols-[clamp(248px,22vw,330px)_clamp(420px,33vw,480px)_minmax(0,1fr)]">
           <TopicSidebar
             topics={items}
             activeTopicId={shownTopicId}

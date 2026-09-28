@@ -331,7 +331,8 @@ export class FakeEngine implements EngineService {
   async listTopics(): Promise<TopicListItem[]> {
     const shown = this.data.topics.filter((topic) => topic.status === 'active');
     return shown.map((topic) => {
-      const states = this.tilesOfTopic(topic.id).map((tile) => this.tileState(tile));
+      const views = this.tilesOfTopic(topic.id).map((tile) => this.tileView(tile));
+      const states = views.map((view) => view.state);
       const unreadTiles = states.filter((state) => state.kind === 'unread').length;
       return {
         topic,
@@ -341,6 +342,7 @@ export class FakeEngine implements EngineService {
         unreadTiles,
         openTiles: states.filter((state) => state.kind === 'open').length,
         totalTiles: states.length,
+        yourMoveTiles: views.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length,
       };
     });
   }
