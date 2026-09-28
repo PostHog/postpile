@@ -2,8 +2,39 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Pr, PrKey } from '@postpile/core';
 import { all, one, placeholders, run } from '../sql.ts';
 
+interface ParsedPr {
+  fetchedAt: string;
+  pr: Pr;
+}
+
 export class PrRepo {
+  /**
+   * Parsed snapshots by key, with the fetched_at they were stored with. The
+   * json blobs are large (comments, review threads: ~15 MB for ~150 PRs) and
+   * every read model loads all PRs, so parsing them on each request cost
+   * ~45 ms. A row is parsed again once its fetched_at changes, which also
+   * catches writes from another process (the CLI). Callers must not mutate
+   * the returned PRs.
+   */
+  private readonly parsed = new Map<PrKey, ParsedPr>();
+
   constructor(private readonly db: DatabaseSync) {}
+
+  /** Parses the json of the given keys that are missing from the cache or older than their row. */
+  private refreshParsed(rows: Array<{ key: string; fetched_at: string }>): void {
+    const stale = rows.filter((row) => this.parsed.get(row.key)?.fetchedAt !== row.fetched_at).map((row) => row.key);
+    if (stale.length === 0) {
+      return;
+    }
+    const fresh = all<{ key: string; fetched_at: string; json: string }>(
+      this.db,
+      `SELECT key, fetched_at, json FROM pr WHERE key IN (${placeholders(stale.length)})`,
+      ...stale,
+    );
+    for (const row of fresh) {
+      this.parsed.set(row.key, { fetchedAt: row.fetched_at, pr: JSON.parse(row.json) as Pr });
+    }
+  }
 
   upsert(pr: Pr, fetchedAt: string): void {
     run(
@@ -24,6 +55,8 @@ export class PrRepo {
       fetchedAt,
       JSON.stringify(pr),
     );
+    // Two upserts can share a fetched_at, so never trust the cache after one.
+    this.parsed.delete(pr.key);
   }
 
   get(key: PrKey): Pr | null {
@@ -36,14 +69,17 @@ export class PrRepo {
     if (keys.length === 0) {
       return result;
     }
-    const rows = all<{ json: string }>(
+    const rows = all<{ key: string; fetched_at: string }>(
       this.db,
-      `SELECT json FROM pr WHERE key IN (${placeholders(keys.length)})`,
+      `SELECT key, fetched_at FROM pr WHERE key IN (${placeholders(keys.length)})`,
       ...keys,
     );
+    this.refreshParsed(rows);
     for (const row of rows) {
-      const pr = JSON.parse(row.json) as Pr;
-      result.set(pr.key, pr);
+      const cached = this.parsed.get(row.key);
+      if (cached) {
+        result.set(row.key, cached.pr);
+      }
     }
     return result;
   }
@@ -57,9 +93,9 @@ export class PrRepo {
 
   /** Every stored PR, for stack detection across topics. */
   listAll(): Pr[] {
-    return all<{ json: string }>(this.db, 'SELECT json FROM pr ORDER BY repo, number').map(
-      (row) => JSON.parse(row.json) as Pr,
-    );
+    const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT key, fetched_at FROM pr ORDER BY repo, number');
+    this.refreshParsed(rows);
+    return rows.flatMap((row) => this.parsed.get(row.key)?.pr ?? []);
   }
 
   /** updated_at per stored PR, so sync can skip PRs that did not move. */

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { PrSet, Topic } from '@postpile/core';
 import { at, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
@@ -104,6 +107,30 @@ describe('PrRepo', () => {
     store.prs.upsert(makePr({ updatedAt: at(2), title: 'renamed' }), at(2));
     expect(store.prs.get('PostHog/posthog#1')?.title).toBe('renamed');
     expect(store.prs.updatedAtByKey()).toEqual(new Map([['PostHog/posthog#1', at(2)]]));
+  });
+
+  it('serves a new snapshot after an upsert with the same fetched_at', () => {
+    store.prs.upsert(makePr({ title: 'first' }), at(1));
+    expect(store.prs.listAll()[0]?.title).toBe('first');
+    store.prs.upsert(makePr({ title: 'second' }), at(1));
+    expect(store.prs.listAll()[0]?.title).toBe('second');
+    expect(store.prs.getMany(['PostHog/posthog#1']).get('PostHog/posthog#1')?.title).toBe('second');
+  });
+
+  it('sees snapshots written by another connection', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'postpile-prs-'));
+    const reader = Store.open(join(dir, 'db.sqlite'));
+    const writer = Store.open(join(dir, 'db.sqlite'));
+    try {
+      writer.prs.upsert(makePr({ title: 'first' }), at(1));
+      expect(reader.prs.listAll()[0]?.title).toBe('first');
+      writer.prs.upsert(makePr({ title: 'second' }), at(2));
+      expect(reader.prs.listAll()[0]?.title).toBe('second');
+    } finally {
+      reader.close();
+      writer.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
