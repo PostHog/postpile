@@ -7,7 +7,8 @@ Read this file first. Details live elsewhere:
 - `DESIGN.md`: the spec. Product model, engine memory, tile faces, sidebar, writes, and every rule with its reasoning.
 - `NEXT.md`: status. Done, stubbed, open decisions, later, decided, how to run.
 - `apps/desktop/CLAUDE.md`: renderer rules (Tailwind tokens, react-query hooks, components).
-- `README.md`: setup and env vars.
+- `README.md`: what the app is, install, privacy, setup and env vars.
+- `RELEASING.md`: how a release goes out (tag, workflow, Homebrew cask). `CHANGELOG.md`: add user-visible changes under the unreleased version.
 
 ## What the app is for (focus)
 
@@ -59,6 +60,7 @@ The full dated list is under "Decided" in `NEXT.md`. Add to it when the user dec
   - If 1Password signing fails, commit with `-c commit.gpgsign=false` and note the hash for re-signing.
 - **Parallel agents:** use a separate git worktree per agent when two touch the engine or the same files. Merge with `--no-ff`.
 - **Keep docs current:** update `DESIGN.md` for rule changes, `NEXT.md` for status and decisions, and `apps/desktop/CLAUDE.md` for renderer conventions.
+- **Public repo:** tests, sample data and docs use invented names and data (`acme/app`, `alice`). Never paste real PR text, agent answers from a real database, personal paths or private repo names.
 
 ## Repo map
 
