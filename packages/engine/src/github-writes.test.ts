@@ -226,6 +226,18 @@ describe('pending writes while locked', () => {
     expect((await tile(h))?.pendingWrite).toBeNull();
   });
 
+  it('a second send while one runs joins it instead of sending twice', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+    await h.engine.setGitHubWrites(true);
+
+    const [first, second] = await Promise.all([h.engine.sendPendingWrites(), h.engine.sendPendingWrites()]);
+
+    expect(first).toBe(second);
+    expect(h.writer.calls).toEqual(['markThreadRead thread-1']);
+  });
+
   it('unlock and send: reaches GitHub, is logged, and only then the tile turns done', async () => {
     const h = await synced({ writesEnabled: false });
     await h.engine.markRead(tileId);

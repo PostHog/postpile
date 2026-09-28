@@ -80,8 +80,13 @@ export type ThreadNotTaken = (thread: QueuedThread, local: LocalChange) => void;
 
 export const NEWER_ACTIVITY_REASON = 'activity after the last sync';
 
-/** What one thread's send came to. */
-export type ThreadOutcome = { kind: 'sent' } | { kind: 'observed' } | { kind: 'skipped'; reason: string } | { kind: 'failed'; error: string };
+/** What one thread's send came to. off: the lock closed while the batch was on its way, nothing was sent. */
+export type ThreadOutcome =
+  | { kind: 'sent' }
+  | { kind: 'observed' }
+  | { kind: 'skipped'; reason: string }
+  | { kind: 'failed'; error: string }
+  | { kind: 'off' };
 
 /** Who sends, for the log: the queue when a window ran out, the quit flush, or the user sending pending writes from the footer. */
 export interface SendContext {
@@ -167,7 +172,7 @@ export class MarkReadQueue {
     }
     const result = await this.writes.markThreadRead(thread.id, logContext);
     if (result === 'off') {
-      return { kind: 'failed', error: 'GitHub writes are off' };
+      return { kind: 'off' };
     }
     this.onMarked(thread.id, current.updatedAt);
     return { kind: 'sent' };
@@ -190,10 +195,35 @@ export class MarkReadQueue {
   }
 
   /**
+   * Threads the lock stopped mid-send become a pending write, like a batch
+   * that found writes off before it started. Their PRs go back to unread
+   * first: GitHub does not have them read yet.
+   */
+  private parkOff(payload: MarkReadPayload, off: QueuedThread[]): void {
+    if (off.length === 0) {
+      return;
+    }
+    for (const thread of off) {
+      this.onNotTaken(thread, payload.local);
+    }
+    const offKeys = new Set(off.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey])));
+    this.onParked({
+      origin: payload.origin,
+      tileId: payload.tileId,
+      batchId: payload.batchId,
+      threads: off,
+      prKeys: [...offKeys],
+      handleKeys: payload.handleKeys.filter((key) => offKeys.has(key)),
+      local: NO_LOCAL_CHANGE,
+    });
+  }
+
+  /**
    * Parks the batch when writes were or are off. Nothing retries a failure of
    * a batch sent from the queue: it already left the undo queue. A thread
    * GitHub did not take (failed, or skipped for newer activity) puts its PR
-   * back to unread here, and the next sync report says why.
+   * back to unread here, and the next sync report says why. Threads the lock
+   * stopped mid-send are parked (parkOff).
    */
   private async send(payload: MarkReadPayload): Promise<void> {
     if (payload.threads.length === 0) {
@@ -206,15 +236,24 @@ export class MarkReadQueue {
     }
     const context: SendContext = { origin: this.flushing ? 'quit' : 'queue', tileId: payload.tileId, batchId: payload.batchId };
     const outcomes = await this.markThreads(payload.threads, context);
+    const off: QueuedThread[] = [];
     outcomes.forEach((outcome, index) => {
       const thread = payload.threads[index];
-      if (!thread || (outcome.kind !== 'failed' && outcome.kind !== 'skipped')) {
+      if (!thread) {
+        return;
+      }
+      if (outcome.kind === 'off') {
+        off.push(thread);
+        return;
+      }
+      if (outcome.kind !== 'failed' && outcome.kind !== 'skipped') {
         return;
       }
       const reason = outcome.kind === 'failed' ? outcome.error : outcome.reason;
       this.onNotTaken(thread, payload.local);
       this.notes.push(`mark-read of ${thread.prKey ?? `notification ${thread.id}`}: ${notTakenDetail(reason)}`);
     });
+    this.parkOff(payload, off);
   }
 
   enqueue(request: MarkReadRequest, origin: BatchOrigin): PendingBatch {

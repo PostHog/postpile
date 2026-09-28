@@ -21,6 +21,9 @@ export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or an
  * changes, the tiles stay unread like GitHub has them).
  */
 export class PendingWrites {
+  /** The send in flight; a second "Send" while it runs joins it instead of sending the same rows twice. */
+  private sending: Promise<PendingWritesResult> | null = null;
+
   constructor(
     private readonly store: Store,
     private readonly writes: GitHubWrites,
@@ -203,6 +206,9 @@ export class PendingWrites {
       if (outcome?.kind === 'failed') {
         left.push(thread);
         errors.push(outcome.error);
+      } else if (outcome?.kind === 'off') {
+        left.push(thread);
+        errors.push('GitHub writes are off');
       } else if (outcome?.kind === 'skipped') {
         notTaken.push(`${this.title(write)}: ${notTakenDetail(outcome.reason)}`);
       } else if (outcome && thread.prKey !== null) {
@@ -251,8 +257,7 @@ export class PendingWrites {
     return cleared;
   }
 
-  /** "Send N to GitHub". Refused while writes are off (the lock, or POSTPILE_READ_ONLY=1). */
-  async send(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
+  private async sendAll(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
     const writes = this.list();
     if (!this.writes.enabled()) {
       const reason = this.writes.status().forcedOffReason ?? 'Unlock GitHub writes first.';
@@ -270,6 +275,16 @@ export class PendingWrites {
       failed === 0 ? `Sent ${done} to GitHub` : `Sent ${done} to GitHub, ${failed} failed and ${failed === 1 ? 'stays' : 'stay'} pending`;
     const message = [summary, ...notTaken].join('. ');
     return { ok: failed === 0, message, done, failed, status: status() };
+  }
+
+  /** "Send N to GitHub". Refused while writes are off (the lock, or POSTPILE_READ_ONLY=1). A send while one runs joins it. */
+  send(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
+    if (!this.sending) {
+      this.sending = this.sendAll(queue, status).finally(() => {
+        this.sending = null;
+      });
+    }
+    return this.sending;
   }
 
   /** "Discard": drops every pending write. Nothing changes in the app; the tiles stay unread, like on GitHub. */

@@ -30,7 +30,7 @@ function queueWithTwoThreads(writesOn = true) {
   const origin = { origin: 'tile' as const, tileId: null };
   const keys = [first.key, second.key];
   const request = { threads, prKeys: keys, handleKeys: keys, local: NO_LOCAL_CHANGE };
-  return { store, queue, writer, writes, marked, parked, request, origin };
+  return { store, queue, reader, writer, writes, marked, parked, request, origin };
 }
 
 describe('MarkReadQueue', () => {
@@ -75,6 +75,27 @@ describe('MarkReadQueue', () => {
     expect(writer.calls).toEqual([]);
     expect(parked).toHaveLength(1);
     expect(store.actionLog.listRecent(10).filter((entry) => entry.action === 'mark_read')).toEqual([]);
+  });
+
+  it('parks the threads the lock stopped mid-send instead of dropping them to unread', async () => {
+    const { queue, reader, writer, writes, marked, parked, request, origin } = queueWithTwoThreads();
+    const getThread = reader.getThread.bind(reader);
+    reader.getThread = async (id) => {
+      if (id === 'thread-2') {
+        writes.set(false);
+      }
+      return getThread(id);
+    };
+
+    const batch = queue.enqueue(request, origin);
+    await queue.flush();
+
+    expect(writer.calls).toEqual(['markThreadRead thread-1']);
+    expect(marked).toEqual(['thread-1']);
+    expect(parked).toEqual([
+      expect.objectContaining({ batchId: batch.batchId, threads: [request.threads[1]], prKeys: [request.prKeys[1]], handleKeys: [request.prKeys[1]] }),
+    ]);
+    expect(queue.takeNotes()).toEqual([]);
   });
 
   it('parks nothing for a batch without threads', async () => {
