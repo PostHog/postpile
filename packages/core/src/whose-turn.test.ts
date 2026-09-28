@@ -108,9 +108,38 @@ describe('whoseTurn: on your own PR', () => {
     expect(single(failing).what).toBe('Fix failing CI');
   });
 
-  it('waits on the first requested reviewer', () => {
-    expect(single({ ...own, reviewerUsers: ['sol', 'lyra'] })).toEqual({ kind: 'them', who: 'sol', what: 'to review', prKey: own.key });
-    expect(single({ ...own, reviewerTeams: ['PostHog/team-devex'] })).toMatchObject({ kind: 'them', who: 'PostHog/team-devex' });
+  it('says it waits on the first requested reviewer', () => {
+    expect(single({ ...own, reviewerUsers: ['sol', 'lyra'] })).toEqual({ kind: 'them', who: 'sol', what: 'and 1 more', prKey: own.key, lead: 'Waiting on' });
+    expect(single({ ...own, reviewerTeams: ['PostHog/team-devex'] })).toEqual({ kind: 'them', who: 'PostHog/team-devex', what: '', prKey: own.key, lead: 'Waiting on' });
+    expect(single({ ...own, reviewerUsers: ['sol'], reviewerTeams: ['PostHog/team-devex'] })).toMatchObject({ who: 'sol', what: 'and 1 more' });
+  });
+
+  it('names the PR on a multi-PR tile while waiting', () => {
+    const second = makePr({ number: 2, author: me, reviewerUsers: ['sol'] });
+    const tile: Tile = {
+      id: 'set:x',
+      topicId: 'topic-1',
+      kind: 'set',
+      title: 'set',
+      members: [{ prKey: second.key, provenance: { kind: 'pinged', reason: 'author' } }, { prKey: 'PostHog/posthog#9', provenance: { kind: 'pinged', reason: 'author' } }],
+    };
+    expect(turnOf(tile, [second])).toMatchObject({ kind: 'them', who: 'sol', what: 'on #2', lead: 'Waiting on' });
+  });
+
+  it('never asks you to review your own PR, even when your team is requested', () => {
+    const teamAsked = { ...own, reviewerTeams: ['PostHog/team-devex'] };
+    const requested = makeEvent({ prKey: own.key, kind: 'review_requested', actor: 'github-actions', isBot: true, ruleLoudness: 'loud' });
+    const turn = single(teamAsked, [requested]);
+    expect(turn.kind).toBe('them');
+    expect(turn.what).not.toContain('Review');
+  });
+
+  it('asks nothing of you after a bot comment or a finished review', () => {
+    const botComment = makeEvent({ prKey: own.key, kind: 'bot_comment', actor: 'greptile-apps[bot]', isBot: true, ruleLoudness: 'loud' });
+    const reviewed = { ...own, reviews: [makeReview({ author: 'lyra', state: 'COMMENTED' })] };
+    const review = makeEvent({ prKey: own.key, kind: 'review_commented', actor: 'lyra', ruleLoudness: 'loud' });
+    expect(single(own, [botComment]).kind).toBe('none');
+    expect(single(reviewed, [review]).kind).toBe('none');
   });
 
   it('asks you to merge once it is approved', () => {

@@ -83,7 +83,9 @@ import {
   OFF_POLL_STATUS,
   systemTimers,
   openThreadCount,
+  isHeadApproved,
   personRelation,
+  prPrimaryAction,
   pingedPrKeys,
   prStatus,
   prTier,
@@ -345,6 +347,7 @@ export class FakeEngine implements EngineService {
   private tileView(tile: Tile, labels: TileRepoLabels | null = null): TileView {
     const viewer = this.viewer();
     const pending = this.writes.pendingByPrKey();
+    const tileState = this.tileState(tile);
     const prs: PrSummary[] = [];
     const memberPrs: Pr[] = [];
     for (const [index, member] of tile.members.entries()) {
@@ -355,6 +358,8 @@ export class FakeEngine implements EngineService {
       memberPrs.push(pr);
       const glance = this.data.glances.find((candidate) => candidate.prKey === pr.key);
       const quietRepo = isPrInQuietRepo(pr.key, this.repoSettings);
+      const authorRelation = personRelation(pr.author, viewer);
+      const approvedHead = isHeadApproved(pr, this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null, viewer.login);
       prs.push({
         key: pr.key,
         title: pr.title,
@@ -365,7 +370,8 @@ export class FakeEngine implements EngineService {
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
         tier: memberTier(this.tierOf(pr, member), member.provenance, quietRepo),
-        authorRelation: personRelation(pr.author, viewer),
+        authorRelation,
+        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approvedHead, tileUnread: tileState.kind === 'unread' }),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,
@@ -387,7 +393,7 @@ export class FakeEngine implements EngineService {
     });
     return {
       tile,
-      state: this.tileState(tile),
+      state: tileState,
       prs,
       why: tileWhy(prs.map((pr) => pr.why)),
       tier: tileTier(prs.map((pr) => pr.tier)),

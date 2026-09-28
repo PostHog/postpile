@@ -1,4 +1,4 @@
-import { isBot, isMachineComment } from '@postpile/core';
+import { isBot, isMachineComment, sameLogin } from '@postpile/core';
 import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
@@ -144,6 +144,13 @@ export const batchDetail: PrDetailLimits = { body: 1500, files: 15, comments: 8,
  * GitHub data. viewer is null where the prompt is not about the user's own
  * review (chat).
  */
+/**
+ * Under the viewer's own PRs. GitHub never lets an author approve their own
+ * PR, so advice must be about reviews, answers and merging, never "approve".
+ */
+export const OWN_PR_NOTE =
+  'The user wrote this PR. They cannot approve or re-review it; for them it is about answering reviewers, getting reviews and merging.';
+
 export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits): string {
   const lines: string[] = [prLine(pr), `Base ${pr.baseRef} <- head ${pr.headRef}`];
   if (pr.labels.length > 0) {
@@ -186,5 +193,7 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
       lines.push(`Human discussion, oldest first:\n${rendered.join('\n')}`);
     }
   }
-  return githubData(lines.join('\n'));
+  const fenced = githubData(lines.join('\n'));
+  // Outside the fence: this is the app speaking, not GitHub text.
+  return viewer && sameLogin(pr.author, viewer.login) ? `${fenced}\n${OWN_PR_NOTE}` : fenced;
 }

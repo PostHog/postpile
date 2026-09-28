@@ -1,7 +1,7 @@
 import type { TileView } from '@postpile/core';
 import { eventGlyph, splitActor } from '../lib/events.ts';
 import { ageLabel } from '../lib/time.ts';
-import { newestUnreadReason, prNumber } from '../lib/tiles.ts';
+import { isFyiNews, newestUnreadReason, prNumber } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph } from './icons.tsx';
@@ -36,6 +36,11 @@ export function UnreadStrip(props: { view: TileView }) {
           reason.summary
         )}
       </span>
+      {isFyiNews(props.view) && (
+        <span className="shrink-0 text-[11px] text-muted" title="News on your own PR; nothing in it asks you to act">
+          · FYI, nothing to do
+        </span>
+      )}
       {props.view.prs.length > 1 && <span className="shrink-0 font-mono text-[10.5px] text-muted">#{prNumber(reason.prKey)}</span>}
       {more > 0 && (
         <span className="shrink-0 text-[11px] text-muted" title={`${more} more unread on this tile`}>

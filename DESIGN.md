@@ -879,7 +879,10 @@ authors.
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
      changes"), else failing CI ("Fix failing CI").
-   - them: the first pending reviewer, user before team ("sol to review").
+   - them: the first pending reviewer, user before team, shown as "Waiting
+     on sol" (`WhoseTurn.lead`), "and N more" when several are asked. Your
+     own team asked by CODEOWNERS counts as a reviewer here, never as a
+     review for you.
    - you: approved and not a draft ("Merge, it is approved"). Not in the
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
@@ -896,6 +899,24 @@ authors.
    - them: a team request someone else picked up: the author "to merge" when
      approved, else that reviewer "is reviewing".
    - else none (following, subscribed, took part earlier).
+
+**Own PRs never ask for a review** (2026-09-28, Julian got asked to
+approve his own PRs). The rules above already route own PRs to rule 3 before
+any review ask; on top of that:
+
+- The detail pane's primary button comes from core (`prPrimaryAction`,
+  `PrSummary.primaryAction`): Approve (or a disabled "Approved ✓" while your
+  approval covers the head; a push re-enables it) only on an open PR someone
+  else wrote. On your own PR, or a merged or closed one: Mark read while the
+  tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
+- Tiles whose tracked PRs are all yours carry a neutral "Your PR" marker
+  (the own/ink look of the AU badge, in words) next to the kind label.
+- News on your own PR that asks nothing of you (a bot, a finished review;
+  whose-turn is not "you") gets "· FYI, nothing to do" in the unread strip,
+  so the strip reads as what happened, not as a to-do.
+- Prompts: `prDetails` adds a note outside the GitHub fence that the user
+  wrote the PR and cannot approve or re-review it, so glances do not advise
+  approving.
 
 A tile takes the most urgent member (you over them over none); on a tie the
 PR with the newest unseen loud event wins, so the footer and the unread strip

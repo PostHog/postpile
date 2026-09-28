@@ -9,7 +9,9 @@ import {
   labelBaseRepo,
   memberTier,
   openThreadCount,
+  isHeadApproved,
   personRelation,
+  prPrimaryAction,
   pingedPrKeys,
   prStatus,
   prTier,
@@ -149,6 +151,7 @@ export class ReadModels {
     viewer: Viewer | null,
     settings: RepoSettings,
     repoLabels: (string | null)[],
+    tileUnread: boolean,
   ): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     const summaries: PrSummary[] = [];
@@ -159,6 +162,8 @@ export class ReadModels {
       }
       const glance = glances.get(pr.key);
       const quietRepo = isPrInQuietRepo(pr.key, settings);
+      const authorRelation = personRelation(pr.author, viewer);
+      const approvedHead = isHeadApproved(pr, board.userStates.get(pr.key) ?? null, viewer?.login);
       summaries.push({
         key: pr.key,
         title: pr.title,
@@ -169,7 +174,8 @@ export class ReadModels {
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
         tier: memberTier(this.tierOf(board, pr, viewer), member.provenance, quietRepo),
-        authorRelation: personRelation(pr.author, viewer),
+        authorRelation,
+        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approvedHead, tileUnread }),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,
@@ -197,11 +203,12 @@ export class ReadModels {
     const orgs = viewerOrgs(viewer?.teams ?? []);
     const views = tiles.map((tile): TileView => {
       const labels = tileRepoLabels(memberKeys(tile), baseRepo, orgs);
-      const prs = this.prSummaries(board, tile, stale, viewer, settings, labels.prs);
+      const state = board.stateOf(tile);
+      const prs = this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread');
       const memberPrs = tile.members.flatMap((member) => board.prs.get(member.prKey) ?? []);
       return {
         tile,
-        state: board.stateOf(tile),
+        state,
         prs,
         why: tileWhy(prs.map((pr) => pr.why)),
         tier: tileTier(prs.map((pr) => pr.tier)),

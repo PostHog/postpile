@@ -4,7 +4,7 @@ import { draftCommentPrompt } from './prompts/comment.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
-import { contextBlock, githubData } from './prompts/shared.ts';
+import { contextBlock, githubData, OWN_PR_NOTE } from './prompts/shared.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { Pr, Provenance } from '@postpile/core';
 import type { PromptContext } from './service.ts';
@@ -115,5 +115,14 @@ describe('setGroupingPrompt', () => {
       context: emptyContext,
     });
     expect(prompt).toContain('"Old grouping" (DISSOLVED by the user');
+  });
+});
+
+describe('own PRs in prompts', () => {
+  it('tells the agent the user cannot approve their own PR', () => {
+    const own = oneGlancePrompt(makePr({ author: viewer.login }), { kind: 'pinged', reason: 'author' });
+    expect(own).toContain(OWN_PR_NOTE);
+    const others = oneGlancePrompt(makePr({ author: 'bob' }), { kind: 'pinged', reason: 'review_requested' });
+    expect(others).not.toContain(OWN_PR_NOTE);
   });
 });

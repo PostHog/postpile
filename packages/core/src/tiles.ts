@@ -76,6 +76,17 @@ function approvedHeadOnGitHub(pr: Pr, viewerLogin: string | undefined): boolean 
   );
 }
 
+/** The viewer's approval, from the app or github.com, covers the PR's current head. */
+export function isHeadApproved(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
+  if (userState?.approvedAt) {
+    const oid = userState.approvedCommitOid;
+    if (oid === null || oid === pr.headOid) {
+      return true;
+    }
+  }
+  return approvedHeadOnGitHub(pr, viewerLogin);
+}
+
 /**
  * A pinged PR is done once it is merged/closed, the user handled it, or the
  * user approved its current head. A push after approval makes it not done.
@@ -87,13 +98,7 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewerLogin?: st
   if (userState?.handledAt) {
     return true;
   }
-  if (userState?.approvedAt) {
-    const oid = userState.approvedCommitOid;
-    if (oid === null || oid === pr.headOid) {
-      return true;
-    }
-  }
-  return approvedHeadOnGitHub(pr, viewerLogin);
+  return isHeadApproved(pr, userState, viewerLogin);
 }
 
 /** A found PR (no notification thread) never makes its tile unread; its events are there for whose turn and memory. */

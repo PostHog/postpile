@@ -29,6 +29,18 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
   );
 }
 
+/** "Your PR" on tiles of the viewer's own PRs: the neutral "yours" look of the why badges, in words. */
+export function OwnPrPill(props: { greyed?: boolean }) {
+  return (
+    <span
+      title="You wrote this PR: nothing to approve, it waits on reviewers or on you to merge"
+      className={`flex h-5 shrink-0 items-center rounded-[5px] px-1.5 text-[10.5px] font-semibold ${props.greyed ? 'bg-why-done text-muted' : 'bg-segment text-ink'}`}
+    >
+      Your PR
+    </span>
+  );
+}
+
 /** Greyed on done tiles; "stale" when the glance was made for an older state. */
 export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean; gap?: GlanceGap | null }) {
   if (!props.verdict) {

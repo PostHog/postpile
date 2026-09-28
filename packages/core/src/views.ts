@@ -23,6 +23,7 @@ import type {
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
+import type { PrPrimaryAction } from './primary-action.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
 import type { TilePerson } from './tile-people.ts';
@@ -108,6 +109,8 @@ export interface PrSummary {
   tier: PrTier;
   /** Whether you, a teammate or someone else wrote it. */
   authorRelation: PersonRelation;
+  /** The detail pane's primary button (`prPrimaryAction`): never Approve on your own PR. */
+  primaryAction: PrPrimaryAction;
   /** Lifecycle, review and checks for the status pill. */
   status: PrStatus;
   /** Unresolved review threads. */

@@ -1,12 +1,12 @@
 import type { PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { ageLabel } from '../lib/time.ts';
-import { kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { isOwnTile, kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
-import { PendingWritePill, RepoLabel, VerdictPill, WhyBadge } from './pills.tsx';
+import { OwnPrPill, PendingWritePill, RepoLabel, VerdictPill, WhyBadge } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { TileMenu } from './TileMenu.tsx';
@@ -91,6 +91,7 @@ export function Tile(props: TileProps) {
           <div className="flex items-center gap-[7px]">
             <WhyBadge code={view.why} greyed={done} />
             <span className={`shrink-0 text-[11px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>{kindLabel(view)}</span>
+            {isOwnTile(view) && <OwnPrPill greyed={done} />}
             <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} gap={lead?.glanceGap} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}

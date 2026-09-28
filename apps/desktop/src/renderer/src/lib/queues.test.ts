@@ -38,6 +38,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     url: '',
     author: 'rowan',
     state: 'OPEN',
+    primaryAction: 'approve',
     isDraft: false,
     provenance: { kind: 'pinged', reason: 'review_requested' },
     why: 'RV',

@@ -17,6 +17,7 @@ export * from './why-here.ts';
 export * from './pr-status.ts';
 export * from './tile-people.ts';
 export * from './whose-turn.ts';
+export * from './primary-action.ts';
 export * from './pr-tier.ts';
 export * from './topic-queues.ts';
 export * from './topic-urgency.ts';

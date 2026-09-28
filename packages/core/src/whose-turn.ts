@@ -19,6 +19,11 @@ export interface WhoseTurn {
   what: string;
   /** The PR the move is about. Null for none. */
   prKey: PrKey | null;
+  /**
+   * them: words before the name, for turns where the name is not the
+   * sentence's subject ("Waiting on" sol). Absent means none.
+   */
+  lead?: string;
 }
 
 export interface WhoseTurnInput {
@@ -54,6 +59,12 @@ function you(ctx: PrContext, what: string): WhoseTurn {
 
 function them(ctx: PrContext, who: string, what: string): WhoseTurn {
   return { kind: 'them', who, what: `${what}${ctx.where}`, prKey: ctx.pr.key };
+}
+
+/** Own PR waiting on reviewers: "Waiting on sol and 1 more". */
+function waitingOn(ctx: PrContext, who: string, more: number): WhoseTurn {
+  const rest = [more > 0 ? `and ${more} more` : '', ctx.where.trim()].filter((part) => part !== '').join(' ');
+  return { kind: 'them', who, what: rest, prKey: ctx.pr.key, lead: 'Waiting on' };
 }
 
 function plural(count: number, word: string): string {
@@ -239,9 +250,10 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
   if (pr.checks.rollup === 'FAILURE') {
     return you(ctx, 'Fix failing CI');
   }
-  const waitingOn = pr.reviewerUsers[0] ?? pr.reviewerTeams[0];
-  if (waitingOn) {
-    return them(ctx, waitingOn, 'to review');
+  // Users before teams; the viewer's own team can sit here too (CODEOWNERS).
+  const reviewers = [...pr.reviewerUsers, ...pr.reviewerTeams];
+  if (reviewers.length > 0) {
+    return waitingOn(ctx, reviewers[0]!, reviewers.length - 1);
   }
   if (!pr.isDraft && pr.reviewDecision === 'APPROVED') {
     return you(ctx, MERGE_APPROVED_MOVE);

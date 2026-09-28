@@ -294,6 +294,11 @@ now".
   - Sidebar numbers: one per row, the unread tile count in a bubble (coral
     when urgent, grey when calm); the per-row tier PR count and the loose
     unread dot are gone. Section headers keep their PR count.
+  - Own PRs: never Approve / re-review. Primary button from core
+    (`prPrimaryAction`: Mark read when unread, else Open on GitHub), "Waiting
+    on <reviewer or team>" as the turn, a "Your PR" marker, "FYI, nothing to
+    do" on news that asks nothing, and a prompt note so glances don't advise
+    approving. Approve also re-enables after a push past your approval.
 
 ## Stubbed or thin
 
