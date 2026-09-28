@@ -29,8 +29,8 @@ PostPile sits one level above GitHub PRs. It reads what GitHub pings you about, 
 Requirements:
 
 - macOS 12 or later on Apple silicon (arm64)
-- [GitHub CLI](https://cli.github.com) (`gh`), logged in: `gh auth login`
-- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), logged in. PostPile uses it for every agent call, on your own Claude plan or API key.
+- [GitHub CLI](https://cli.github.com) (`gh`), logged in: `brew install gh`, then `gh auth login`. Without it nothing syncs.
+- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), logged in: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude auth login`. PostPile uses it for every agent call, on your own Claude plan or API key. Without it the app still runs on rules only: tiles, whose turn and notifications work; topics, dossiers, glances and chat do not.
 
 With Homebrew (once 0.1.0-alpha.0 is released):
 
@@ -53,6 +53,16 @@ The app is ad-hoc signed. It is not signed with an Apple Developer ID and not no
 - Open the app once, then go to System Settings › Privacy & Security and click Open Anyway. On macOS 14 and older, right-click the app and choose Open.
 
 On the first launch, macOS asks for permission to show notifications. The first sync takes a few minutes while the agent sorts your PRs into topics.
+
+## Troubleshooting
+
+PostPile checks `gh` and `claude` on start and says in the window what is missing, with the exact command to run and a Check again button. It looks again by itself every few minutes while something is wrong. `pnpm cli tools` prints the same check from a terminal.
+
+- **"GitHub CLI (gh) not found"**: install it with `brew install gh`, then `gh auth login`. Nothing syncs until then; topics you already have stay.
+- **"gh is not logged in"** or **"GitHub did not accept the gh login"**: run `gh auth login` (the token expired or was revoked). No restart needed, click Check again.
+- **"Agent features are off: claude not found"** or **"claude is not logged in"**: install Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`) and run `claude auth login`. Meanwhile the app runs on rules only.
+- **"Agent features are paused: Claude usage limit reached"**: the agent is tried again when the limit resets; the rules carry on.
+- **Works in a terminal but not from Finder**: a Finder launch has a minimal PATH. The app reads PATH from your login shell and also looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local`. A binary somewhere else needs to be on the PATH your login shell exports, or set `POSTPILE_CLAUDE_BIN` for claude. The log (Help › Reveal Logs) shows the PATH at start and every tool state change.
 
 ## Privacy
 
@@ -101,6 +111,7 @@ pnpm cli sync --max-agent-calls 5 --agent-jobs topics,glances
 pnpm cli topics
 pnpm cli topic <id>
 pnpm cli pr owner/repo#123
+pnpm cli tools              # is gh and claude usable, and the fix if not
 
 pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
 ```
@@ -109,7 +120,7 @@ Dev runs use their own database: `pnpm desktop` (unpackaged Electron), `pnpm cli
 
 Only one process opens a database at a time (`postpile.lock` next to it). While the app runs, `pnpm cli topics --read-only` (also `topic`, `pr`) still reads; sync, poll and sweep refuse.
 
-The packaged app bundles main, preload, renderer, the workspace packages and the server, so it runs without tsx or node_modules. The server runs in-process on a random localhost port, protected by a random token. A Finder launch gets a minimal PATH, so the app reads PATH from the login shell and also looks in `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin` for `gh` and `claude`.
+The packaged app bundles main, preload, renderer, the workspace packages and the server, so it runs without tsx or node_modules. The server runs in-process on a random localhost port, protected by a random token. A Finder launch gets a minimal PATH, so the app reads PATH from the login shell and also looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local` for `gh` and `claude`.
 
 Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPile-dev`), rotated at 5 MB. Help › Reveal Logs opens the folder.
 
@@ -120,6 +131,7 @@ Instructions for every prompt go in `~/.config/postpile/instructions.md` (honour
 Environment variables. The packaged app only sees them when you start its binary from a terminal; `open` does not pass them.
 
 - `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
+- `POSTPILE_FAKE_MISSING`: with `POSTPILE_FAKE=1`, simulates missing tools for UI checks (comma separated: `gh`, `gh-auth`, `gh-token`, `gh-offline`, `claude`, `claude-auth`, `claude-limit`)
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls

@@ -6,6 +6,13 @@ now".
 
 ## Done
 
+- Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
+  a typed status (`GET /api/tools`) checked once and then on a backoff.
+  Without gh the sync is skipped and the poll paused with a fix note as
+  the empty state or a banner; without claude everything runs on rules
+  with one "Agent features are off" line. `pnpm cli tools`,
+  `POSTPILE_FAKE_MISSING` for sample data. Not tried against a real
+  machine without gh or claude yet (fake mode and unit tests only).
 - Setup flow (2026-09-28, DESIGN.md "Setup flow"): a first run (no
   instructions, no flag in meta `setup_state`) opens on four screens
   instead of topics: checks (gh, login, notifications, claude, with fix
@@ -847,6 +854,7 @@ pnpm cli consolidate [--if-due] [--max-agent-calls n]
 pnpm cli poll                           # one live-poll cycle, prints ping decisions
 pnpm cli sweep                          # "what you're working on" from ~/.claude, one opus call
 pnpm cli setup-draft                    # setup checks, sweep and the drafted instructions with sources, one opus call
+pnpm cli tools                          # gh and claude: found where, logged in, the fix when not
 ```
 
 Setup draft against a real account with scratch state (writes no
@@ -932,6 +940,13 @@ Env switches:
 
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_SETUP=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  ```
+- `POSTPILE_FAKE_MISSING` (with `POSTPILE_FAKE=1`): simulates missing
+  tools, comma separated `gh`, `gh-auth`, `gh-token`, `gh-offline`,
+  `claude`, `claude-auth`, `claude-limit`:
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_MISSING=gh,claude POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
   `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.
