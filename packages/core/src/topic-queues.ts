@@ -55,12 +55,14 @@ export interface QueuedPr {
   state: PrState;
   /** Only pulled into the topic's tiles as a stack layer, never pinged. */
   pulledIn: boolean;
+  /** In a quiet repo ("Let it go stale"). */
+  quiet: boolean;
 }
 
 /**
  * PR counts per tier, plus open PRs by author for the Mine and Team filters.
  * Tiers only put open PRs in the queues; merged and closed ones are `rest`.
- * Pulled-in stack layers stay out of every count.
+ * Pulled-in stack layers and PRs in quiet repos stay out of every count.
  */
 export interface TopicQueues {
   tiers: Record<PrTier, number>;
@@ -79,7 +81,7 @@ export function topicQueues(prs: QueuedPr[]): TopicQueues {
   let byYou = 0;
   let byTeam = 0;
   for (const pr of prs) {
-    if (pr.pulledIn) {
+    if (pr.pulledIn || pr.quiet) {
       continue;
     }
     tiers[pr.tier] += 1;
@@ -114,7 +116,10 @@ export function pingedPrKeys(tiles: Tile[]): Set<PrKey> {
   return keys;
 }
 
-/** The tier a tile member shows and sorts by: a pulled-in layer is `rest`, whatever `prTier` says. */
-export function memberTier(tier: PrTier, provenance: Provenance): PrTier {
-  return provenance.kind === 'pulled_in' ? 'rest' : tier;
+/**
+ * The tier a tile member shows and sorts by: a pulled-in layer and a PR in a
+ * quiet repo are `rest`, whatever `prTier` says.
+ */
+export function memberTier(tier: PrTier, provenance: Provenance, quietRepo: boolean): PrTier {
+  return provenance.kind === 'pulled_in' || quietRepo ? 'rest' : tier;
 }

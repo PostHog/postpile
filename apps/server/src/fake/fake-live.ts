@@ -1,4 +1,4 @@
-import { pingTemplate, type PingDecision, type PrEvent, type Tile } from '@postpile/core';
+import { pingTemplate, type PingDecision, type PrEvent, type PrKey, type Tile } from '@postpile/core';
 import type { PollCycle } from '@postpile/engine';
 import type { SampleData } from './sample-data.ts';
 
@@ -24,16 +24,18 @@ export class FakeLivePoll {
   constructor(
     private readonly data: SampleData,
     private readonly now: () => Date,
+    /** PRs in a quiet repo never get a sample ping, like the real ping rules. */
+    private readonly isQuiet: (prKey: PrKey) => boolean,
   ) {
     this.lastPingAt = now().getTime();
   }
 
-  /** Open tiles with a pinged PR, in sample order; the fake walks through them. */
+  /** Open tiles with a pinged PR outside quiet repos, in sample order; the fake walks through them. */
   private tiles(): Tile[] {
     return this.data.tiles.filter((tile) =>
       tile.members.some((member) => {
         const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
-        return member.provenance.kind === 'pinged' && pr?.state === 'OPEN';
+        return member.provenance.kind === 'pinged' && pr?.state === 'OPEN' && !this.isQuiet(member.prKey);
       }),
     );
   }
@@ -48,7 +50,7 @@ export class FakeLivePoll {
     this.lastPingAt = nowMs;
     const n = this.count++;
     const tile = tiles[n % tiles.length]!;
-    const member = tile.members.find((candidate) => candidate.provenance.kind === 'pinged')!;
+    const member = tile.members.find((candidate) => candidate.provenance.kind === 'pinged' && !this.isQuiet(candidate.prKey))!;
     const pr = this.data.prs.find((candidate) => candidate.key === member.prKey)!;
     const at = new Date(nowMs).toISOString();
     const actor = ASKERS[n % ASKERS.length]!;

@@ -40,6 +40,8 @@ import type {
   PrEvent,
   PrKey,
   PrSummary,
+  RepoOverview,
+  RepoSettings,
   SnoozeCondition,
   SyncReport,
   Tile,
@@ -54,6 +56,13 @@ import type {
 import {
   compareTopicUrgency,
   actionTrail,
+  DEFAULT_REPO_SETTINGS,
+  isPrInQuietRepo,
+  isQuietTile,
+  isTileInScope,
+  normalizeRepoScope,
+  repoOverview,
+  withQuietRepo,
   debugEventLines,
   emptyAgentCallStats,
   fixedClaimNote,
@@ -184,6 +193,8 @@ export class FakeEngine implements EngineService {
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
   private readonly recheckDelayMs: number;
   private recheckCount = 0;
+  // The repo menu's choices; in memory like the lock, gone on restart.
+  private repoSettings: RepoSettings = DEFAULT_REPO_SETTINGS;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
 
@@ -194,7 +205,7 @@ export class FakeEngine implements EngineService {
     this.data = buildSampleData(this.now());
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
-    this.live = new FakeLivePoll(this.data, this.now);
+    this.live = new FakeLivePoll(this.data, this.now, (prKey) => isPrInQuietRepo(prKey, this.repoSettings));
     this.writes = new FakeWrites(this.now, {
       revert: (local) => this.revertLocal(local.eventIds, local.handledPrKeys),
       markReadHere: (prKeys, handleKeys) => this.markSampleRead(prKeys, handleKeys),
@@ -315,6 +326,7 @@ export class FakeEngine implements EngineService {
       }
       memberPrs.push(pr);
       const glance = this.data.glances.find((candidate) => candidate.prKey === pr.key);
+      const quietRepo = isPrInQuietRepo(pr.key, this.repoSettings);
       prs.push({
         key: pr.key,
         title: pr.title,
@@ -324,7 +336,7 @@ export class FakeEngine implements EngineService {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
-        tier: memberTier(this.tierOf(pr, member), member.provenance),
+        tier: memberTier(this.tierOf(pr, member), member.provenance, quietRepo),
         authorRelation: personRelation(pr.author, viewer),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
@@ -334,6 +346,7 @@ export class FakeEngine implements EngineService {
         glanceGap: this.glanceGapOf(pr.key),
         unseenLoudEvents: this.eventsOf(pr.key).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
+        quietRepo,
       });
     }
     const turn = whoseTurn({
@@ -352,11 +365,17 @@ export class FakeEngine implements EngineService {
       people: tilePeople(memberPrs, viewer.login),
       turn,
       pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
+      quietRepo: isQuietTile(tile.members.map((member) => member.prKey), this.repoSettings),
     };
   }
 
   private tilesOfTopic(topicId: string): Tile[] {
     return this.data.tiles.filter((tile) => tile.topicId === topicId);
+  }
+
+  /** The topic's tiles inside the repo scope, like the engine. */
+  private scopedTiles(topicId: string): Tile[] {
+    return this.tilesOfTopic(topicId).filter((tile) => isTileInScope(tile.members.map((member) => member.prKey), this.repoSettings));
   }
 
   /** Same landing rules as the engine's debug view, over the sample data. */
@@ -437,16 +456,17 @@ export class FakeEngine implements EngineService {
   async listTopics(): Promise<TopicListItem[]> {
     this.writes.settle();
     const viewer = this.viewer();
-    const shown = this.data.topics.filter((topic) => topic.status === 'active');
+    const shown = this.data.topics.filter((topic) => topic.status === 'active' && this.scopedTiles(topic.id).length > 0);
     const items = shown.map((topic): TopicListItem => {
-      const tiles = this.tilesOfTopic(topic.id);
+      const tiles = this.scopedTiles(topic.id);
       const views = tiles.map((tile) => this.tileView(tile));
       const urgency = topicUrgency(
         views.map((view) => ({
           state: view.state.kind,
-          prStates: view.prs.map((pr) => pr.state),
+          prStates: view.prs.filter((pr) => !pr.quietRepo).map((pr) => pr.state),
           yourMove: view.turn.kind === 'you',
           mergeApproved: isMergeApprovedMove(view.turn),
+          quiet: view.quietRepo,
         })),
       );
       const prs = this.topicPrs(tiles);
@@ -467,12 +487,30 @@ export class FakeEngine implements EngineService {
             author: personRelation(pr.author, viewer),
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
+            quiet: isPrInQuietRepo(pr.key, this.repoSettings),
           })),
         ),
         people: topicPeople(prs.map(({ pr }) => pr), viewer),
       };
     });
     return items.sort(compareTopicUrgency);
+  }
+
+  async listRepos(): Promise<RepoOverview> {
+    const keys = this.data.tiles
+      .filter((tile) => this.data.topics.some((topic) => topic.id === tile.topicId && topic.status === 'active'))
+      .flatMap((tile) => tile.members.map((member) => member.prKey));
+    return repoOverview(keys, this.repoSettings);
+  }
+
+  async setRepoScope(repos: string[] | null): Promise<RepoOverview> {
+    this.repoSettings = { ...this.repoSettings, scope: normalizeRepoScope(repos) };
+    return this.listRepos();
+  }
+
+  async setRepoQuiet(repo: string, quiet: boolean): Promise<RepoOverview> {
+    this.repoSettings = withQuietRepo(this.repoSettings, repo, quiet);
+    return this.listRepos();
   }
 
   async getViewer(): Promise<ViewerView> {
@@ -488,7 +526,7 @@ export class FakeEngine implements EngineService {
     return {
       topic,
       placement: this.memory.placement(topic),
-      tiles: this.tilesOfTopic(topicId).map((tile) => this.tileView(tile)),
+      tiles: this.scopedTiles(topicId).map((tile) => this.tileView(tile)),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
       dossier: this.memory.dossierView(topicId, this.feedback),
@@ -503,7 +541,7 @@ export class FakeEngine implements EngineService {
         topicId: topic.id,
         name: topic.name,
         area: topic.area,
-        tiles: this.tilesOfTopic(topic.id).map((tile) => ({
+        tiles: this.scopedTiles(topic.id).map((tile) => ({
           tileId: tile.id,
           prs: tile.members.flatMap((member) => {
             const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);

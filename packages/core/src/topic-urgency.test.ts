@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compareTopicUrgency, topicUrgency, type RankedTopic, type UrgencyTile } from './topic-urgency.ts';
 
 function tile(overrides: Partial<UrgencyTile>): UrgencyTile {
-  return { state: 'open', prStates: ['OPEN'], yourMove: false, mergeApproved: false, ...overrides };
+  return { state: 'open', prStates: ['OPEN'], yourMove: false, mergeApproved: false, quiet: false, ...overrides };
 }
 
 describe('topicUrgency', () => {
@@ -56,5 +56,17 @@ describe('compareTopicUrgency', () => {
 
   it('is a tie for equal topics', () => {
     expect(compareTopicUrgency(rank({ unreadTiles: 1 }), rank({ unreadTiles: 1 }))).toBe(0);
+  });
+});
+
+describe('quiet repos', () => {
+  it('never makes a topic urgent from a quiet tile', () => {
+    const urgency = topicUrgency([tile({ state: 'unread', quiet: true }), tile({ yourMove: true, quiet: true })]);
+    expect(urgency).toEqual({ unreadTiles: 1, urgentUnreadTiles: 0, yourMoveTiles: 1, needsYou: false });
+  });
+
+  it('lets a mixed tile count only its PRs outside quiet repos', () => {
+    // The engine passes the states of the non-quiet PRs: here only a merged one.
+    expect(topicUrgency([tile({ state: 'unread', prStates: ['MERGED'] })]).needsYou).toBe(false);
   });
 });

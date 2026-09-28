@@ -17,7 +17,7 @@ import type {
   UserRef,
   UserRefKind,
 } from '@postpile/core';
-import { SAMPLE_REPO, SampleClock, sampleKey } from './sample-builders.ts';
+import { SAMPLE_REPO, SampleClock, sampleKey, sampleRepo } from './sample-builders.ts';
 
 export interface SampleMemory {
   /** Every stored version per topic, oldest first. */
@@ -38,7 +38,8 @@ const FRONTEND = 'topic-frontend-build';
 const CI = 'topic-ci-tests';
 
 function ref(clock: SampleClock, kind: FactRefKind, number: number, hoursAgo: number, sourceId: string | null = null): FactRef {
-  const url = sourceId ? `https://github.com/${SAMPLE_REPO}/pull/${number}#${sourceId}` : `https://github.com/${SAMPLE_REPO}/pull/${number}`;
+  const base = `https://github.com/${sampleRepo(number)}/pull/${number}`;
+  const url = sourceId ? `${base}#${sourceId}` : base;
   return { kind, prKey: sampleKey(number), sourceId, url, at: clock.hoursAgo(hoursAgo), headOid: null };
 }
 

@@ -2,6 +2,9 @@ import {
   compareTopicUrgency,
   displayState,
   isMergeApprovedMove,
+  isPrInQuietRepo,
+  isQuietTile,
+  isTileInScope,
   isUnseenLoud,
   memberTier,
   openThreadCount,
@@ -9,6 +12,7 @@ import {
   pingedPrKeys,
   prStatus,
   prTier,
+  repoOverview,
   searchTopics,
   TILE_STATE_ORDER,
   tilePeople,
@@ -28,6 +32,8 @@ import {
   type PrKey,
   type PrSummary,
   type PrTier,
+  type RepoOverview,
+  type RepoSettings,
   type SearchableTopic,
   type SearchResult,
   type Tile,
@@ -46,11 +52,16 @@ import { GlanceInputs } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
 import { placementOf } from './memory/placement.ts';
 import type { PromptContextSource } from './prompt-context.ts';
+import { loadRepoSettings } from './repo-settings.ts';
 import { loadViewer } from './viewer-meta.ts';
 import type { PendingWrites } from './writes/pending-writes.ts';
 
 function isUnsortedTopic(topicId: string): boolean {
   return topicId === UNSORTED_TOPIC_ID;
+}
+
+function memberKeys(tile: Tile): PrKey[] {
+  return tile.members.map((member) => member.prKey);
 }
 
 function compareTopics(a: TopicListItem, b: TopicListItem): number {
@@ -81,6 +92,11 @@ export class ReadModels {
 
   private board(): Board {
     return Board.load(this.store, this.now().toISOString());
+  }
+
+  /** The topic's tiles inside the repo scope (all of them under "All repos"). */
+  private scopedTiles(board: Board, topicId: string, settings: RepoSettings): Tile[] {
+    return board.tilesForTopic(topicId).filter((tile) => isTileInScope(memberKeys(tile), settings));
   }
 
   /**
@@ -122,7 +138,7 @@ export class ReadModels {
     return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, reason });
   }
 
-  private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>, viewer: Viewer | null): PrSummary[] {
+  private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>, viewer: Viewer | null, settings: RepoSettings): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     const summaries: PrSummary[] = [];
     for (const member of tile.members) {
@@ -131,6 +147,7 @@ export class ReadModels {
         continue;
       }
       const glance = glances.get(pr.key);
+      const quietRepo = isPrInQuietRepo(pr.key, settings);
       summaries.push({
         key: pr.key,
         title: pr.title,
@@ -140,7 +157,7 @@ export class ReadModels {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
-        tier: memberTier(this.tierOf(board, pr, viewer), member.provenance),
+        tier: memberTier(this.tierOf(board, pr, viewer), member.provenance, quietRepo),
         authorRelation: personRelation(pr.author, viewer),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
@@ -150,18 +167,20 @@ export class ReadModels {
         glanceGap: this.glanceGap(pr.key, glance !== undefined),
         unseenLoudEvents: (board.events.get(pr.key) ?? []).filter(isUnseenLoud).length,
         updatedAt: pr.updatedAt,
+        quietRepo,
       });
     }
     return summaries;
   }
 
   private tileViews(board: Board, topicId: string): TileView[] {
-    const tiles = board.tilesForTopic(topicId);
+    const settings = loadRepoSettings(this.store);
+    const tiles = this.scopedTiles(board, topicId, settings);
     const stale = this.staleGlances(board, tiles.flatMap((tile) => tile.members.map((m) => m.prKey)));
     const viewer = loadViewer(this.store);
     const pending = this.pendingWrites.byPrKey();
     const views = tiles.map((tile): TileView => {
-      const prs = this.prSummaries(board, tile, stale, viewer);
+      const prs = this.prSummaries(board, tile, stale, viewer, settings);
       const memberPrs = tile.members.flatMap((member) => board.prs.get(member.prKey) ?? []);
       return {
         tile,
@@ -172,6 +191,7 @@ export class ReadModels {
         people: tilePeople(memberPrs, viewer?.login ?? null),
         turn: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }),
         pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
+        quietRepo: isQuietTile(memberKeys(tile), settings),
       };
     });
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
@@ -194,9 +214,10 @@ export class ReadModels {
     const topics = board.topics();
     const dossiers = this.store.dossiers.latestMany(topics.map((topic) => topic.id));
     const viewer = loadViewer(this.store);
+    const settings = loadRepoSettings(this.store);
     const items: TopicListItem[] = [];
     for (const topic of topics) {
-      const tiles = board.tilesForTopic(topic.id);
+      const tiles = this.scopedTiles(board, topic.id, settings);
       if (tiles.length === 0) {
         continue;
       }
@@ -204,11 +225,13 @@ export class ReadModels {
       const urgency = topicUrgency(
         tiles.map((tile, index) => {
           const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer });
+          const loudMembers = tile.members.filter((member) => !isPrInQuietRepo(member.prKey, settings));
           return {
             state: states[index] ?? 'open',
-            prStates: tile.members.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
+            prStates: loudMembers.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
             yourMove: turn.kind === 'you',
             mergeApproved: isMergeApprovedMove(turn),
+            quiet: isQuietTile(memberKeys(tile), settings),
           };
         }),
       );
@@ -232,12 +255,19 @@ export class ReadModels {
             author: personRelation(pr.author, viewer),
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
+            quiet: isPrInQuietRepo(pr.key, settings),
           })),
         ),
         people: topicPeople(prs, viewer),
       });
     }
     return items.sort(compareTopics);
+  }
+
+  /** The title bar's repo menu: every repo with PRs in the tiles, counted over all repos, not the scope. */
+  repos(): RepoOverview {
+    const board = this.board();
+    return repoOverview(board.allTiles().flatMap(memberKeys), loadRepoSettings(this.store));
   }
 
   /** The stored viewer for the sidebar's filter buttons. */
@@ -276,11 +306,12 @@ export class ReadModels {
   /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */
   search(query: string): SearchResult {
     const board = this.board();
+    const settings = loadRepoSettings(this.store);
     const topics: SearchableTopic[] = board.topics().map((topic) => ({
       topicId: topic.id,
       name: topic.name,
       area: topic.area,
-      tiles: board.tilesForTopic(topic.id).map((tile) => ({
+      tiles: this.scopedTiles(board, topic.id, settings).map((tile) => ({
         tileId: tile.id,
         prs: tile.members.flatMap((member) => {
           const pr = board.prs.get(member.prKey);

@@ -26,6 +26,7 @@ import type {
   PendingProposals,
   PrDetail,
   PrKey,
+  RepoOverview,
   SearchResult,
   SnoozeCondition,
   SyncOptions,
@@ -39,7 +40,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
 } from '@postpile/core';
-import { OFF_POLL_STATUS, systemTimers } from '@postpile/core';
+import { normalizeRepoScope, OFF_POLL_STATUS, systemTimers, withQuietRepo } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -65,6 +66,7 @@ import { MemoryRechecker } from './memory/memory-recheck.ts';
 import { MemorySourcesReads } from './memory/memory-sources-reads.ts';
 import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
+import { loadRepoSettings, saveRepoSettings } from './repo-settings.ts';
 import type { EngineService } from './service.ts';
 import { SyncRun } from './sync-run.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
@@ -225,6 +227,22 @@ export class Engine implements EngineService {
 
   async listTopics(): Promise<TopicListItem[]> {
     return this.reads.listTopics();
+  }
+
+  async listRepos(): Promise<RepoOverview> {
+    return this.reads.repos();
+  }
+
+  async setRepoScope(repos: string[] | null): Promise<RepoOverview> {
+    const { store } = this.deps;
+    saveRepoSettings(store, { ...loadRepoSettings(store), scope: normalizeRepoScope(repos) });
+    return this.reads.repos();
+  }
+
+  async setRepoQuiet(repo: string, quiet: boolean): Promise<RepoOverview> {
+    const { store } = this.deps;
+    saveRepoSettings(store, withQuietRepo(loadRepoSettings(store), repo, quiet));
+    return this.reads.repos();
   }
 
   async getViewer(): Promise<ViewerView> {

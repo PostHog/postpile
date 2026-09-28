@@ -118,6 +118,8 @@ export interface PrSummary {
   glanceGap: GlanceGap | null;
   unseenLoudEvents: number;
   updatedAt: IsoTime;
+  /** In a quiet repo ("Let it go stale"): tier rest, never urgent, never pings. */
+  quietRepo: boolean;
 }
 
 export interface TileView {
@@ -134,6 +136,8 @@ export interface TileView {
   turn: WhoseTurn;
   /** A mark-read of one of its PRs waits for the writes lock; null when none does. */
   pendingWrite: TilePendingWrite | null;
+  /** Every PR of the tile is in a quiet repo; the tile shows a small "quiet repo" note. */
+  quietRepo: boolean;
 }
 
 /** "pending: mark read on GitHub" on a tile. */

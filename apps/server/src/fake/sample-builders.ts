@@ -24,6 +24,16 @@ import type {
 export const SAMPLE_REPO = 'PostHog/posthog';
 export const SAMPLE_VIEWER = 'you';
 
+/** Sample PRs outside the main repo, so the title bar's repo menu has more than one row. */
+const OTHER_REPOS: Record<number, string> = {
+  41925: 'PostHog/posthog-python',
+  41940: 'PostHog/posthog-desktop',
+};
+
+export function sampleRepo(number: number): string {
+  return OTHER_REPOS[number] ?? SAMPLE_REPO;
+}
+
 export class SampleClock {
   constructor(private readonly now: Date) {}
 
@@ -33,7 +43,7 @@ export class SampleClock {
 }
 
 export function sampleKey(number: number): PrKey {
-  return prKey({ repo: SAMPLE_REPO, number });
+  return prKey({ repo: sampleRepo(number), number });
 }
 
 export interface SampleCommentInput {
@@ -93,14 +103,15 @@ function sampleReviewDecision(reviews: [string, ReviewState, string?, string?][]
 
 export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
   const key = sampleKey(input.number);
+  const repo = sampleRepo(input.number);
   const headOid = `sha${input.number}`;
   const mergedAt = input.mergedHoursAgo === undefined ? null : clock.hoursAgo(input.mergedHoursAgo);
   const [additions, deletions, changedFiles] = input.size;
   return {
     key,
-    ref: { repo: SAMPLE_REPO, number: input.number },
+    ref: { repo, number: input.number },
     title: input.title,
-    url: `https://github.com/${SAMPLE_REPO}/pull/${input.number}`,
+    url: `https://github.com/${repo}/pull/${input.number}`,
     body: input.body ?? '',
     author: input.author,
     state: input.state,
@@ -135,7 +146,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
       body: comment.body,
       createdAt: clock.hoursAgo(comment.hoursAgo),
       kind: 'comment' as const,
-      url: `https://github.com/${SAMPLE_REPO}/pull/${input.number}#${comment.id}`,
+      url: `https://github.com/${repo}/pull/${input.number}#${comment.id}`,
       path: null,
       threadId: null,
     })),
@@ -149,7 +160,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
         body: comment.body,
         createdAt: clock.hoursAgo(comment.hoursAgo),
         kind: 'review_comment' as const,
-        url: `https://github.com/${SAMPLE_REPO}/pull/${input.number}#discussion_${thread.id}`,
+        url: `https://github.com/${repo}/pull/${input.number}#discussion_${thread.id}`,
         path: thread.path,
         threadId: thread.id,
       })),

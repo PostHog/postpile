@@ -11,7 +11,7 @@ import type { IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
  * What the rules make of a PR's new events, most aimed at the user first.
  * Only `addressed` can ping: the agent sees those and may veto or rephrase.
  */
-export type PingRuleClass = 'addressed' | 'not_addressed' | 'quiet' | 'muted' | 'bot';
+export type PingRuleClass = 'addressed' | 'not_addressed' | 'quiet' | 'muted' | 'bot' | 'quiet_repo';
 
 export interface PingRule {
   class: PingRuleClass;
@@ -131,13 +131,17 @@ function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {
 /**
  * The deterministic part of a ping decision for one PR's new events.
  * Newest event first within a class, so the notification is about the
- * latest thing that happened.
+ * latest thing that happened. A PR in a quiet repo ("Let it go stale")
+ * never pings, whatever happened.
  */
-export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer): PingRule {
+export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean): PingRule {
   if (events.length === 0) {
     return { class: 'quiet', loudness: 'quiet', reason: 'no new events', event: null };
   }
   const newestFirst = [...events].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
+  if (quietRepo) {
+    return { ...ruleFrom('quiet_repo', newestFirst[0]!), reason: 'quiet repo (let it go stale)' };
+  }
   if (newestFirst.every((event) => event.isBot)) {
     return ruleFrom('bot', newestFirst[0]!);
   }

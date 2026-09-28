@@ -1,6 +1,7 @@
 import { EVENTS_PER_PING_ITEM, type AgentService, type PingDecisionAnswer, type PingDecisionItem } from '@postpile/agent';
 import {
   dossierBrief,
+  isPrInQuietRepo,
   pingRule,
   pingTemplate,
   whoseTurn,
@@ -18,6 +19,7 @@ import {
 import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { errorText } from '../errors.ts';
+import { loadRepoSettings } from '../repo-settings.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
 
 /** Ping decisions per rolling 24 hours. One sonnet call per poll cycle with news, whatever the batch size. */
@@ -63,9 +65,9 @@ function newestFirst(events: PrEvent[]): PrEvent[] {
 
 /**
  * Decides per PR thread whether the fast poll's new events ping the Mac.
- * Rules first: muted, quiet, bot-only and loud-but-not-addressed activity
- * never pings and never reaches the agent. Addressed activity goes to the
- * agent in one call per cycle, which may veto or rephrase. If the agent
+ * Rules first: muted, quiet, bot-only, loud-but-not-addressed activity and
+ * anything in a quiet repo never pings and never reaches the agent.
+ * Addressed activity goes to the agent in one call per cycle, which may veto or rephrase. If the agent
  * fails, skips an item or the daily cap is spent, the rules decide: ping
  * with the template text. Every decision is stored in ping_decision.
  */
@@ -100,6 +102,7 @@ export class PingDecider {
 
   private candidates(board: Board, prKeys: PrKey[], newEventIds: Set<string>, viewer: Viewer): Candidate[] {
     const cutoff = new Date(this.deps.now().getTime() - PING_FRESH_MS).toISOString();
+    const settings = loadRepoSettings(this.deps.store);
     const result: Candidate[] = [];
     for (const key of prKeys) {
       const thread = board.threads.get(key);
@@ -111,7 +114,8 @@ export class PingDecider {
       if (events.length === 0) {
         continue;
       }
-      result.push({ threadId: thread.id, pr, events: newestFirst(events), rule: pingRule(events, pr, viewer), ...this.locate(board, key) });
+      const rule = pingRule(events, pr, viewer, isPrInQuietRepo(key, settings));
+      result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, ...this.locate(board, key) });
     }
     return result;
   }

@@ -26,6 +26,7 @@ import type {
   PendingProposals,
   PrDetail,
   PrKey,
+  RepoOverview,
   SearchResult,
   SnoozeCondition,
   SyncOptions,
@@ -68,6 +69,19 @@ export interface EngineService {
   getViewer(): Promise<ViewerView>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */
   getTopic(topicId: string): Promise<TopicDetail | null>;
+  /** The title bar's repo menu: repos with PRs, their counts, the scope and the quiet repos. */
+  listRepos(): Promise<RepoOverview>;
+  /**
+   * Narrows topics, queues, tiles and search to these repos; null (or an
+   * empty list) shows all. Kept in meta. Local, never a GitHub write.
+   */
+  setRepoScope(repos: string[] | null): Promise<RepoOverview>;
+  /**
+   * "Let it go stale": PRs of a quiet repo still sync and feed topic memory,
+   * but never make a topic urgent, never ping and stay out of the queue and
+   * filter counts. Kept in meta. Local, never a GitHub write.
+   */
+  setRepoQuiet(repo: string, quiet: boolean): Promise<RepoOverview>;
   /** Search bar: topics, tiles and PRs matching every term of `query`. Empty query, empty result. */
   search(query: string): Promise<SearchResult>;
   /**

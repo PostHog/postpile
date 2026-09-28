@@ -55,6 +55,9 @@ const memoryRecheckBody = z.object({
   target: memoryTargetBody.nullable().default(null),
 });
 
+/** "PostHog/posthog". */
+const repoName = z.string().regex(/^[^/\s]+\/[^/\s]+$/, 'repo must look like owner/name');
+
 const debugLimit = z.coerce.number().int().positive().max(DEBUG_NOTIFICATIONS_MAX_LIMIT).default(DEBUG_NOTIFICATIONS_DEFAULT_LIMIT);
 const actionLogLimit = z.coerce.number().int().positive().max(ACTION_LOG_MAX_LIMIT).default(ACTION_LOG_DEFAULT_LIMIT);
 
@@ -177,6 +180,16 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
+  // The title bar's repo menu. Scope and quiet repos are kept in meta; local, never GitHub writes.
+  app.get('/api/repos', async (c) => c.json(await engine.listRepos()));
+  app.post('/api/repos/scope', async (c) => {
+    const body = z.object({ repos: z.array(repoName).nullable() }).parse(await c.req.json());
+    return c.json(await engine.setRepoScope(body.repos));
+  });
+  app.post('/api/repos/quiet', async (c) => {
+    const body = z.object({ repo: repoName, quiet: z.boolean() }).parse(await c.req.json());
+    return c.json(await engine.setRepoQuiet(body.repo, body.quiet));
+  });
   // Search bar filter: ?q= is matched term by term (AND); a missing or empty q matches nothing.
   app.get('/api/search', async (c) => c.json(await engine.search(c.req.query('q') ?? '')));
   // Debug view of the stored notification threads. Read only: nothing is marked read.

@@ -11,6 +11,7 @@ import type {
   MemorySources,
   NotificationDebugRow,
   PrDetail,
+  RepoOverview,
   SearchResult,
   TopicDetail,
   TopicListItem,
@@ -43,6 +44,26 @@ async function post<T>(app: TestApp, path: string, body: unknown = {}): Promise<
 }
 
 describe('server routes over the fake engine', () => {
+  it('lists repos, narrows topics to the scope and sets a repo quiet', async () => {
+    const app = appWithFake();
+    const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
+    expect(repos.scope).toBeNull();
+    expect(repos.repos.map((entry) => entry.repo)).toEqual(['PostHog/posthog', 'PostHog/posthog-desktop', 'PostHog/posthog-python']);
+
+    const scoped = await post<RepoOverview>(app, '/api/repos/scope', { repos: ['PostHog/posthog-desktop'] });
+    expect(scoped.json.scope).toEqual(['PostHog/posthog-desktop']);
+    const topics = (await (await app.request('/api/topics')).json()) as TopicListItem[];
+    expect(topics.map((item) => item.topic.id)).toEqual(['topic-desktop-release']);
+
+    const quiet = await post<RepoOverview>(app, '/api/repos/quiet', { repo: 'PostHog/posthog-desktop', quiet: true });
+    expect(quiet.json.repos.find((entry) => entry.repo === 'PostHog/posthog-desktop')?.quiet).toBe(true);
+    const detail = (await (await app.request('/api/topics/topic-desktop-release')).json()) as TopicDetail;
+    expect(detail.tiles[0]?.quietRepo).toBe(true);
+
+    expect((await post(app, '/api/repos/quiet', { repo: 'not a repo', quiet: true })).status).toBe(400);
+    expect((await post<RepoOverview>(app, '/api/repos/scope', { repos: null })).json.scope).toBeNull();
+  });
+
   it('lists topics grouped by whether they need the user', async () => {
     const res = await appWithFake().request('/api/topics');
     const topics = (await res.json()) as TopicListItem[];
