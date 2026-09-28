@@ -14,7 +14,8 @@ now".
   `setup_draft` call), review (editable sections with "Why?" per claim,
   `setup_refine` shown as a diff, quiet repo toggles, main repo radios)
   and accept (new instructions version with origin `setup`, quiet repos,
-  scope, done flag, then the first sync). "Skip for now" and "Run setup
+  scope, done flag, then the first sync). The sweep reads CODEOWNERS and
+  owners.yaml rules; `pnpm cli setup-draft` prints a draft with its sources. "Skip for now" and "Run setup
   again" live in the Instructions pane. Fake mode walks it with canned
   results; `POSTPILE_FAKE_SETUP=1` forces it.
 
@@ -612,18 +613,13 @@ the app meanwhile.
 ## Needs Julian's decisions
 
 - **Setup flow**:
-  - Accept sets the repo scope to the suggested main repo by default, so a
-    new user starts with a narrowed sidebar. Prefill "All repos" instead?
-  - The draft has no real-account test yet (opus prompt, reviewed-by
-    search, CODEOWNERS reads); worth one run on a DB copy with
-    `POSTPILE_READ_ONLY=1` before it ships.
-  - A refine re-prefills the quiet toggles and main repo from the new
-    draft, dropping toggles the user changed before. Keep the user's picks
-    instead?
   - An existing install with instructions never sees the flow; one with an
     empty file and no flag (e.g. the dev profile) will on its next start.
   - Skip on a first run syncs right away with empty instructions, as a
     normal start would.
+  - owners.yaml is read at the root and in the 6 top-level folders the
+    user's PRs touch most, only when the root file exists. Nested files
+    deeper down (`products/x/owners.yaml`) are not read. Enough?
 
 - **Found PRs**: one request per sync, first page of each alias only (own
   100, searches 50 each, 200 total); a real run returned 18 own, 1 review,
@@ -741,6 +737,19 @@ the app meanwhile.
 
 ## Decided
 
+- **Setup picks** (2026-09-28): Accept does not narrow the repo scope by
+  default. The main repo radio starts on "All repos"; the suggested main
+  repo carries a "suggested" chip with its reason and the user can pick
+  it. A refine keeps the user's own quiet toggles and main repo pick; only
+  untouched toggles follow the new draft.
+
+- **Setup real-account check** (2026-09-28): ran the sweep and draft
+  against a real account with scratch state (`pnpm cli setup-draft`).
+  The reviewed-by search worked; CODEOWNERS alone was too thin for a repo
+  that keeps ownership in owners.yaml, so the sweep reads those too, and
+  the prompt now asks for owned areas with paths instead of one line per
+  PR.
+
 - **Team mentions ask only until read** (2026-09-28): an unanswered
   team_mention is "your move" until the tile is read. After a mark-read (or
   a read on GitHub) it no longer keeps the tile off Done or the topic in
@@ -837,6 +846,16 @@ pnpm cli pr owner/repo#123              # with facts
 pnpm cli consolidate [--if-due] [--max-agent-calls n]
 pnpm cli poll                           # one live-poll cycle, prints ping decisions
 pnpm cli sweep                          # "what you're working on" from ~/.claude, one opus call
+pnpm cli setup-draft                    # setup checks, sweep and the drafted instructions with sources, one opus call
+```
+
+Setup draft against a real account with scratch state (writes no
+instructions, stores only the viewer in the scratch database):
+
+```
+S=/tmp/pp-setup; mkdir -p $S && : > $S/instructions.md
+POSTPILE_DATA_DIR=$S POSTPILE_INSTRUCTIONS=$S/instructions.md XDG_CONFIG_HOME=$S/config \
+  POSTPILE_READ_ONLY=1 pnpm cli setup-draft
 ```
 
 Smoke run on a throwaway database, read-only:

@@ -905,14 +905,22 @@ current ink, next quiet) and word chips, never symbols alone:
      review-requested:@me`, `reviewed-by:@me -author:@me updated:>=` (40 /
      20 / 40, about 100 PRs), each PR once (authored first), title plus
      the top-level folders of its first 50 changed files (`topLevelDirs`);
-   - CODEOWNERS of the 5 busiest repos (`rankActivityRepos`): the first of
-     `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS` through the
-     contents API (raw, read-only; 403/404 read as missing), cut to rules
-     naming `@login` or `@org/team` (`codeownersLines`, 20 per repo);
+   - ownership files of the 5 busiest repos (`rankActivityRepos`), through
+     the contents API (raw, read-only; 403/404 read as missing):
+     - CODEOWNERS: the first of `.github/CODEOWNERS`, `CODEOWNERS`,
+       `docs/CODEOWNERS`, cut to rules naming `@login` or `@org/team`
+       (`codeownersLines`, 20 per file);
+     - owners.yaml (the owners-yaml format some repos use instead, with
+       CODEOWNERS kept minimal): the root file, and when it exists, the
+       `owners.yaml` in each of the 6 top-level folders the user's PRs
+       touch most (`busiestDirs`). Cut to rules whose owner fields name
+       `@login`, `@org/team` or the bare team slug (`ownersYamlLines`, 20
+       per file), one line each with patterns read from the repo root
+       ("/.github/workflows/ -> owners: team-devex");
    - the latest work context digest (its prompt text), if any;
    - one `setup_draft` call: opus (`POSTPILE_SETUP_MODEL` overrides it and
      refine, in `models.ts`), toolless, recorded under the `action` run.
-     PR lines and CODEOWNERS lines are fenced as `<github_data>`; the
+     PR lines and ownership rules are fenced as `<github_data>`; the
      digest sits in a `<local_context>` section as trusted background; the
      current instructions (on a re-run) as the user's own words.
    A failed call leaves `blankSetupDraft`: the five headings empty and the
@@ -920,14 +928,19 @@ current ink, next quiet) and word chips, never symbols alone:
 3. **Review the draft.** Sections (About me, What I own, What gets routed
    to me, What to ignore or keep quiet, Preferences) as one text box each,
    with "Why?" listing the agent's lines and their sources (team, PR with
-   link, CODEOWNERS lines, digest). "Tell the agent what's off" makes one
+   link, ownership rules, digest). "Tell the agent what's off" makes one
    `setup_refine` call (`POST /api/setup/refine`, same model and material,
    the edited sections plus the message and earlier messages) and shows
    the change as a `DiffView` with the changed headings. Lines the user
    wrote themselves (`userWrittenLines`) come back `fromUser` and need no
-   source. Quiet repo toggles and main repo radios ("All repos" + the
-   busiest 8) come prefilled from the draft; the main repo cannot also be
-   quiet. On a re-run the whole draft shows as a diff against the current
+   source. Quiet repo toggles come prefilled from the draft's
+   suggestions. The main repo radios ("All repos" + the busiest 8) start
+   on "All repos", so Accept does not narrow the sidebar by default; the
+   suggested main repo carries a "suggested" chip and its reason, and the
+   user can pick it. The main repo cannot also be quiet. A refine keeps
+   the user's picks: toggles they flipped and their main repo stay, only
+   untouched toggles follow the new draft (`picksAfterRefine` in the
+   renderer's `lib/setup.ts`). On a re-run the whole draft shows as a diff against the current
    file.
 4. **Accept** (`POST /api/setup/accept`) lists what happens, shows the
    final diff and then: writes `instructions.md` as a new version with
@@ -940,7 +953,8 @@ current ink, next quiet) and word chips, never symbols alone:
    carries the file as it is now; the review diffs against it again.
 
 **Citations.** Sources get short ids in `setupSources`: `t1..` teams,
-`p1..` PRs, `o1..` CODEOWNERS excerpts, `d1` the digest. Every claim is
+`p1..` PRs, `o1..` ownership file excerpts (CODEOWNERS or owners.yaml),
+`d1` the digest. Every claim is
 `{text, sources}`; `mapSetupDraft` drops unknown ids (4 per claim at most),
 drops repo suggestions the sweep never saw, keeps a claim with no source
 (the UI says "No source cited: a default the agent suggests" or "Your
