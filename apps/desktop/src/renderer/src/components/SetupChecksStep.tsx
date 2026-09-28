@@ -1,32 +1,9 @@
-import { useState } from 'react';
 import type { SetupCheck } from '@postpile/core';
 import { useSetupChecks } from '../api/setup.ts';
 import { CHECK_CHIPS } from '../lib/setup.ts';
 import { Button } from './Button.tsx';
+import { FixCommand } from './FixCommand.tsx';
 import { SetupChip } from './SetupChip.tsx';
-
-/** The exact command to run, with a copy button. Copying is local; nothing runs from here. */
-function FixCommand(props: { command: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(props.command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // No clipboard (plain web page without permission): the command stays selectable.
-    }
-  }
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11.5px] text-muted">Run in a terminal:</span>
-      <code className="rounded-control border border-hairline bg-subtle px-2 py-0.5 font-mono text-[11px] text-ink select-text">{props.command}</code>
-      <button type="button" onClick={() => void copy()} className="text-[11px] text-faint hover:text-ink-2 hover:underline">
-        {copied ? 'Copied' : 'Copy'}
-      </button>
-    </div>
-  );
-}
 
 function CheckRow(props: { check: SetupCheck }) {
   const { check } = props;

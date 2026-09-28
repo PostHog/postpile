@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { SyncProgress } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useSyncProgress } from '../api/sync.ts';
+import { useTools } from '../api/tools.ts';
 import { capNote } from '../lib/agent-stats.ts';
 import { syncProgressDetail, syncProgressText } from '../lib/sync-progress.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
@@ -29,8 +30,12 @@ function SyncStatus() {
   const actions = useActions();
   const now = useNow();
   const progress = useSyncProgress(actions.syncing).data;
+  const tools = useTools().data;
   if (actions.syncing) {
     return <SyncProgressStatus progress={progress} />;
+  }
+  if (tools && !tools.canSync) {
+    return <StatusText dot="bg-closer" text="sync off · gh needs a fix" detail={`${tools.gh.headline}. The note in the middle column has the fix.`} />;
   }
   const report = actions.lastSync;
   let dot = 'bg-dot-quiet';
@@ -82,6 +87,25 @@ interface TitleBarProps {
  * free for the traffic lights. Three columns, the outer two of equal width
  * and the padding symmetric, keep the search field centered on the window.
  */
+/** Disabled, not hidden, while gh cannot be used; the title says why. */
+function SyncButton() {
+  const actions = useActions();
+  const tools = useTools().data;
+  const ghOff = tools && !tools.canSync ? tools.gh.headline : null;
+  return (
+    <button
+      type="button"
+      aria-label="Sync now"
+      title={ghOff ? `Sync is off: ${ghOff}` : 'Sync now'}
+      disabled={actions.syncing || ghOff !== null}
+      onClick={() => void actions.sync()}
+      className="flex h-7 w-[30px] shrink-0 items-center justify-center rounded-control border border-control bg-surface text-ink-2 shadow-control hover:bg-subtle disabled:opacity-60 disabled:hover:bg-surface"
+    >
+      <SyncIcon className={actions.syncing ? 'animate-spin' : ''} />
+    </button>
+  );
+}
+
 export function TitleBar(props: TitleBarProps) {
   const actions = useActions();
   return (
@@ -124,16 +148,7 @@ export function TitleBar(props: TitleBarProps) {
       <div className="flex min-w-0 items-center justify-end gap-3.5">
         {props.repoScope}
         <SyncStatus />
-        <button
-          type="button"
-          aria-label="Sync now"
-          title="Sync now"
-          disabled={actions.syncing}
-          onClick={() => void actions.sync()}
-          className="flex h-7 w-[30px] shrink-0 items-center justify-center rounded-control border border-control bg-surface text-ink-2 shadow-control hover:bg-subtle disabled:opacity-60"
-        >
-          <SyncIcon className={actions.syncing ? 'animate-spin' : ''} />
-        </button>
+        <SyncButton />
       </div>
     </header>
   );

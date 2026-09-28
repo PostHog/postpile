@@ -45,6 +45,9 @@ export function syncReportDetail(report: SyncReport): string {
   if (capped > 0) {
     lines.push(`Skipped by the call cap: ${capped}`);
   }
+  if (report.agentOff) {
+    lines.push(`Rules only: ${report.agentOff}`);
+  }
   if (report.errors.length > 0) {
     lines.push(`Errors (${report.errors.length}):`, ...report.errors.map((error) => `- ${error}`));
   }

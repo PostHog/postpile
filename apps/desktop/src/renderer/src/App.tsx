@@ -6,6 +6,7 @@ import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
 import { useSearch } from './api/search.ts';
 import { useSetupStatus } from './api/setup.ts';
+import { useTools } from './api/tools.ts';
 import { useTopic, useTopics } from './api/topics.ts';
 import { useViewer } from './api/viewer.ts';
 import { DetailPane } from './components/DetailPane.tsx';
@@ -22,6 +23,7 @@ import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { TileGrid } from './components/TileGrid.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
+import { ToolsNotice } from './components/ToolsNotice.tsx';
 import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
@@ -31,6 +33,7 @@ import { applyQueueFilter, filterCounts, firstGridTile, type QueueFilter } from 
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { leadPr } from './lib/tiles.ts';
+import { toolsNotice } from './lib/tools.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 
@@ -69,6 +72,7 @@ export function App() {
   const viewer = useViewer();
   const config = useAppConfig();
   const setupStatus = useSetupStatus();
+  const tools = useTools();
   const panes = usePaneWidths(viewer.data?.login ?? null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -166,16 +170,19 @@ export function App() {
   // from starting a second one.
   const syncOnStart = config.data?.syncOnStart;
   const setupLoaded = setupStatus.data !== undefined || setupStatus.isError;
+  // Without gh the start sync is skipped quietly: the note in the middle column says why.
+  const toolsLoaded = tools.data !== undefined || tools.isError;
+  const ghWorks = tools.data?.canSync !== false;
   const syncedOnStart = useRef(false);
   useEffect(() => {
-    if (syncOnStart === undefined || !setupLoaded || syncedOnStart.current) {
+    if (syncOnStart === undefined || !setupLoaded || !toolsLoaded || syncedOnStart.current) {
       return;
     }
     syncedOnStart.current = true;
-    if (syncOnStart && !setupNeeded) {
+    if (syncOnStart && !setupNeeded && ghWorks) {
       void actions.sync();
     }
-  }, [actions, syncOnStart, setupLoaded, setupNeeded]);
+  }, [actions, syncOnStart, setupLoaded, toolsLoaded, ghWorks, setupNeeded]);
 
   // A click on a Mac notification opens its tile, as a normal navigation. The
   // listener is added once and calls the latest go() through this ref.
@@ -201,6 +208,13 @@ export function App() {
     main = <NotificationsPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
   } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
+  } else if (!topics.isPending && items.length === 0 && toolsNotice(tools.data).gh) {
+    // Without gh nothing can sync: the fix is the empty state, not an error.
+    main = (
+      <MainPane>
+        <ToolsNotice place="empty" />
+      </MainPane>
+    );
   } else if (!topics.isPending && items.length === 0) {
     main = (
       <MainPane>
@@ -219,6 +233,7 @@ export function App() {
   } else if (activeItem && topic.data) {
     main = (
       <MainPane>
+        <ToolsNotice place="banner" />
         <InboxCleanup place="banner" />
         <TopicHeader detail={topic.data} group={activeItem.group} topics={items} />
         <TileGrid

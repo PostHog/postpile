@@ -576,7 +576,7 @@ export class FakeEngine implements EngineService {
   /** Same urgency rule and order as the engine; ties keep the sample's order. */
   async listTopics(): Promise<TopicListItem[]> {
     // A first run without gh: nothing synced yet, so the empty state shows.
-    if (this.toolStatus.ghOff() !== null) {
+    if (this.toolStatus.neverSynced()) {
       return [];
     }
     this.writes.settle();

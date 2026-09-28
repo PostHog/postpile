@@ -29,6 +29,7 @@ import type {
   SetupSweepView,
   SnoozeCondition,
   SyncReport,
+  ToolsView,
   WorkContextSweepResult,
   WorkThreadForget,
 } from '@postpile/core';
@@ -84,6 +85,8 @@ export interface Actions {
   blockedReason(action: GithubWrite): string | null;
 
   sync(): Promise<void>;
+  /** "Check again" on a missing-tool note: checks gh and claude now. Local, runs nothing on GitHub. */
+  checkTools(): Promise<void>;
   /** The footer lock. Turning on is confirmed in the footer first; the server refuses it when the env forces read-only. Returns whether it switched. */
   setGitHubWrites(enabled: boolean): Promise<boolean>;
   /** "Send N to GitHub": the mark-reads made while locked. Refused by the server while writes are off. */
@@ -254,6 +257,12 @@ export function ActionsProvider(props: { children: ReactNode }) {
     setSyncing(true);
     try {
       const report = await request<SyncReport>('POST', '/api/sync');
+      if (report.blockedBy) {
+        // Not a sync: the last real one stays in the title bar, the note in the middle says how to fix it.
+        show('blocked', `Sync skipped: ${report.blockedBy}`);
+        await refreshAll();
+        return;
+      }
       setLastSync(report);
       const capped = capNote(report.agentCallStats);
       if (report.errors.length > 0) {
@@ -266,6 +275,18 @@ export function ActionsProvider(props: { children: ReactNode }) {
       show('error', `Sync failed: ${errorText(error)}`);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function checkTools(): Promise<void> {
+    try {
+      const view = await withBusy('tools:check', () => request<ToolsView>('POST', '/api/tools/check'));
+      queryClient.setQueryData(queryKeys.tools, view);
+      const stillOff = [view.canSync ? null : view.gh.headline, view.agentOn ? null : view.claude.headline].filter((line) => line !== null);
+      show(stillOff.length > 0 ? 'blocked' : 'ok', stillOff.length > 0 ? `Still: ${stillOff.join('. ')}` : 'gh and claude work');
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not check: ${errorText(error)}`);
     }
   }
 
@@ -477,6 +498,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     blockedReason: (write) => writeBlockedReason(write, writes),
 
     sync,
+    checkTools,
     setGitHubWrites,
     sendPendingWrites: () => settlePendingWrites('send'),
     discardPendingWrites: () => settlePendingWrites('discard'),

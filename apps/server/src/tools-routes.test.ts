@@ -51,6 +51,12 @@ describe('tool routes on sample data', () => {
     expect(await call<SyncReport>('/api/sync', 'POST')).toMatchObject({ agentOff: 'Agent features are off: claude not found', agentCalls: 0, errors: [] });
   });
 
+  it('with a refused token: the topics stay, the sync is skipped', async () => {
+    const call = appWith(['gh-token']);
+    expect((await call<TopicListItem[]>('/api/topics')).length).toBeGreaterThan(0);
+    expect(await call<SyncReport>('/api/sync', 'POST')).toMatchObject({ blockedBy: 'GitHub did not accept the gh login' });
+  });
+
   it('with a usage limit: the retry time is on the wire', async () => {
     const call = appWith(['claude-limit']);
     const tools = await call<ToolsView>('/api/tools');

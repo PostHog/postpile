@@ -44,7 +44,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `syncing · agent 34/82 · 2m`, text from `lib/sync-progress.ts`),
   `setup.ts` (`useSetupStatus`, `useSetupChecks` (runs gh and claude on
   the server, so only enabled on the checks screen; "Check again" is its
-  refetch), `useSetupSweep`, polled every second while the job runs).
+  refetch), `useSetupSweep`, polled every second while the job runs),
+  `tools.ts` (`useTools`: gh and claude status with fix commands, every
+  30s while something is wrong, else every 5 min; "Check again" is
+  `useActions().checkTools`).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -158,6 +161,23 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 - Plain CSS in `app.css` only for things Tailwind can't say well: the
   `.drag-region` for the title bar, base `html/body` rules.
 
+## Missing tools (gh, claude)
+
+The server says what works (`GET /api/tools`, `ToolsView` with headline,
+detail and fix commands); `lib/tools.ts` only picks where it shows, and
+`ToolsNotice` renders it. Never write your own wording for a tool state.
+
+- gh missing, logged out or refused: with no topics the note is the middle
+  column's empty state (`place="empty"`), otherwise a banner above the
+  topics. The Sync button is disabled with the reason as `title`, the
+  title bar says "sync off", and the start sync is skipped quietly.
+- claude off or at its limit: one "Rules only" / "Paused" line above the
+  topics with a "How to fix" fold. Agent actions still show their own
+  error toast.
+- gh offline only shows in the footer ("GitHub unreachable"); the poll backs
+  off by itself.
+- Check with `POSTPILE_FAKE_MISSING=gh|gh-auth|gh-token|gh-offline|claude|claude-auth|claude-limit`.
+
 ## Components: small files, extract for behavior
 
 - One component per file in `components/`, named like the UI part:
@@ -166,6 +186,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
+  `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
   `InboxCleanup` (sidebar footer line or middle-column banner, as the
   server's `look` says) + `InboxCleanupDialog`.

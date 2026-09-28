@@ -80,6 +80,15 @@ export class FakeTools {
     return ghBlocksSync(this.gh) ? ghStatus(this.gh, null).headline : null;
   }
 
+  /**
+   * gh missing or logged out reads as a first run: nothing was ever synced,
+   * so the sample shows no topics. A refused token reads as a login that
+   * expired later: the topics stay and the note sits above them.
+   */
+  neverSynced(): boolean {
+    return this.gh === 'missing' || this.gh === 'logged_out';
+  }
+
   /** The claude headline while the agent is off; null otherwise. */
   agentOff(): string | null {
     return claudeBlocksAgent(this.claude) ? claudeStatus(this.claude, null).headline : null;

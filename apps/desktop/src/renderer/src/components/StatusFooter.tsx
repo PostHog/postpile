@@ -1,19 +1,22 @@
 import type { LivePollStatus, TopicDetail, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useTools } from '../api/tools.ts';
 import { callStatsLabel } from '../lib/agent-stats.ts';
 import { liveLabel } from '../lib/live.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
 import { useNow } from '../lib/use-now.ts';
 import { countPrs } from '../lib/tiles.ts';
+import { toolsFooter } from '../lib/tools.ts';
 import { WritesLock } from './WritesLock.tsx';
 
-/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, agent calls of the last sync, mark-read queue, app version. */
+/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, what gh or claude leave off, agent calls of the last sync, mark-read queue, app version. */
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
   const now = useNow(1000);
   const live = liveLabel(props.live, now);
   const unread = props.topics.reduce((sum, item) => sum + item.unreadTiles, 0);
   const counts = props.detail ? countPrs(props.detail.tiles) : null;
+  const tools = toolsFooter(useTools().data);
   return (
     <footer className="flex h-[26px] shrink-0 items-center gap-4 border-t border-hairline-strong bg-titlebar px-3.5 font-mono text-[10.5px] text-muted">
       <span className="flex items-center gap-1.5">
@@ -38,6 +41,11 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
       <span className={live.warn ? 'text-closer' : ''} title={live.title}>
         {live.text}
       </span>
+      {tools && (
+        <span className="text-closer" title={tools.title}>
+          {tools.text}
+        </span>
+      )}
       {actions.lastSync && (
         <span title={syncReportDetail(actions.lastSync)} className={actions.lastSync.errors.length > 0 ? 'text-unread-ink' : ''}>
           last sync: {callStatsLabel(actions.lastSync.agentCallStats)}
