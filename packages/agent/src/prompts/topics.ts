@@ -1,5 +1,5 @@
 import type { TopicAssignmentInput, TopicChoice } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail, viewerLine, workContextBlock } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, shortDetail, viewerLine, workContextBlock } from './shared.ts';
 
 /** The dossier brief (goal, status, driver) says far more than a name; the summary is the fallback. */
 function topicLine(topic: TopicChoice): string {
@@ -21,8 +21,8 @@ ongoing work that spans PRs, like "Move CI to Depot" or "Session replay ingestio
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}
-Existing topics:
-${topics}
+Existing topics (names and briefs are written from GitHub text):
+${githubData(topics)}
 
 Pull requests to sort:
 

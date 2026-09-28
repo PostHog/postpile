@@ -73,9 +73,10 @@ function joinedBlock(input: DossierUpdateInput): string {
 function factsBlocks(input: DossierUpdateInput, refs: DossierRefs): string {
   const known = input.knownFacts.map((f) => factLine(f, refs.factShortId(f) ?? '', ''));
   const stale = input.staleFacts.map((f) => factLine(f, refs.factShortId(f) ?? '', ` (check failed: ${f.staleReason ?? 'unknown'})`));
+  // Facts are extracted from GitHub text, so they stay fenced like it.
   return (
-    block('Known facts (checked against GitHub, context only):', known) +
-    block('Facts that failed a check. For each one: confirm it, close it, or state the corrected fact:', stale)
+    dataBlock('Known facts (checked against GitHub, context only):', known) +
+    dataBlock('Facts that failed a check. For each one: confirm it, close it, or state the corrected fact:', stale)
   );
 }
 
@@ -163,18 +164,20 @@ const answerShape = `{
 export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs): string {
   const limits = DOSSIER_LIMITS;
   const prsByKey = new Map(input.prs.map((pr) => [pr.key, pr]));
-  const previous = input.previous ? renderDossier(input.previous, prsByKey) : 'None yet. This is the first write-up of the topic.';
+  // The previous dossier was written from GitHub text: data, not instructions.
+  const previous = input.previous ? githubData(renderDossier(input.previous, prsByKey)) : 'None yet. This is the first write-up of the topic.';
   const left = input.delta.leftPrKeys.map((key) => `- ${key}`);
   const claims = input.delta.staleClaims.map((c) => `- ${c.path}: ${c.reason}`);
-  return `You keep a living dossier on one piece of ongoing work, the topic "${input.topic.name}"
-(id ${input.topic.id}), for a developer who follows it on GitHub. You get the previous dossier and
-only what happened since. Rewrite the dossier so it is true now.
+  return `You keep a living dossier on one piece of ongoing work, the topic with id ${input.topic.id},
+for a developer who follows it on GitHub. You get the previous dossier and only what happened
+since. Rewrite the dossier so it is true now. The topic's current name:
+${githubData(input.topic.name)}
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}
 Previous dossier:
 ${previous}
-${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${placementBlock(input)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
+${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${placementBlock(input)}${factsBlocks(input, refs)}${dataBlock('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
 - Every field is read by the user as a fact about the work. Never write about the dossier itself

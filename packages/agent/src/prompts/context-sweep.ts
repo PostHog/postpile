@@ -8,9 +8,9 @@ const kindLabels: Record<ContextSweepItem['kind'], string> = {
   session: 'session',
 };
 
-/** Breaks up a closing tag inside the material so it cannot end the fence early. */
+/** Renames every spelling of the tag name inside the material (any case), so nothing in it can open or end the fence. */
 function fenced(text: string): string {
-  return text.replace(/<\s*(\/?)\s*local_context\s*>/gi, '<$1local-context>');
+  return text.replace(/local_context/gi, 'local-context');
 }
 
 function itemSection(item: ContextSweepItem): string {

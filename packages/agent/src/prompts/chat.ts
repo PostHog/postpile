@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@postpile/core';
 import type { ChatInput } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail, workContextBlock } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, shortDetail, workContextBlock } from './shared.ts';
 
 function historyLine(message: ChatMessage): string {
   const who = message.role === 'user' ? 'User' : 'You';
@@ -15,8 +15,10 @@ function historyLine(message: ChatMessage): string {
 export function chatPrompt(input: ChatInput): string {
   const prs = input.prs.map((pr) => prDetails(pr, null, shortDetail)).join('\n\n---\n\n');
   const history = input.history.length === 0 ? '(no earlier messages)' : input.history.slice(-20).map(historyLine).join('\n');
-  return `You are the assistant inside a developer's code review inbox, chatting about one tile
-("${input.tile.title}") in the topic "${input.topic.name}". ${input.topic.summary}
+  // Tile titles, topic names and summaries are written from GitHub text, so they are fenced like it.
+  const about = githubData(`Tile: ${input.tile.title}\nTopic: ${input.topic.name}\nTopic summary: ${input.topic.summary}`);
+  return `You are the assistant inside a developer's code review inbox, chatting about one tile in a topic:
+${about}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}
 Pull requests on this tile:

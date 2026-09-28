@@ -9,7 +9,9 @@ function setLine(set: PrSet): string {
     set.removedKeys.length > 0
       ? `\n  the user said NOT related, never group again with the PRs above: ${set.removedKeys.join(', ')}`
       : '';
-  return `- "${set.title}"${status}: ${members}${removed}`;
+  return `- set of ${members}${status}${removed}
+  its title:
+${githubData(set.title)}`;
 }
 
 /**
@@ -25,8 +27,9 @@ export function setGroupingPrompt(input: SetGroupingInput): string {
     })
     .join('\n\n');
   const existing = input.existingSets.length === 0 ? '(none)' : input.existingSets.map(setLine).join('\n');
-  return `You are grouping related GitHub pull requests inside the topic "${input.topic.name}" so a
-developer can review them together. ${input.topic.summary}
+  return `You are grouping related GitHub pull requests inside one topic so a developer can review
+them together. The topic, as written from GitHub activity:
+${githubData(`${input.topic.name}\n${input.topic.summary}`)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Pull requests in the topic:

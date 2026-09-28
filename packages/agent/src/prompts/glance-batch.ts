@@ -1,6 +1,6 @@
 import type { GlanceBatchInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { batchDetail, contextBlock, GITHUB_DATA_RULE, howItReached, jsonOnly, prDetails, viewerLine, workContextBlock } from './shared.ts';
+import { batchDetail, contextBlock, GITHUB_DATA_RULE, githubData, howItReached, jsonOnly, prDetails, viewerLine, workContextBlock } from './shared.ts';
 
 function topicBlock(input: GlanceBatchInput): string {
   if (!input.topic) {
@@ -8,7 +8,8 @@ function topicBlock(input: GlanceBatchInput): string {
   }
   const prs = new Map(input.items.map((item) => [item.pr.key, item.pr]));
   const dossier = input.dossier ? renderDossier(input.dossier, prs) : `No dossier yet. ${input.topic.summary}`;
-  return `They all belong to the topic "${input.topic.name}". What is known about that work:\n\n${dossier}`;
+  // Topic name and dossier are written from GitHub text: fenced as data.
+  return `They all belong to one topic. Its name and what is known about that work:\n\n${githubData(`Topic: ${input.topic.name}\n\n${dossier}`)}`;
 }
 
 /** On the retry batch: the first answer for these PRs could not be used. */

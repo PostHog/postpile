@@ -1,6 +1,6 @@
 import type { AmbiguousCandidate } from '@postpile/core';
 import type { FactReconcileInput } from '../service.ts';
-import { contextBlock, entityText, jsonOnly } from './shared.ts';
+import { contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly } from './shared.ts';
 
 function itemBlock(item: AmbiguousCandidate, index: number): string {
   const c = item.candidate;
@@ -22,8 +22,10 @@ export function factReconcilePrompt(input: FactReconcileInput): string {
   return `You maintain a store of small facts about people, pull requests, code areas and initiatives
 for a developer's code review inbox. New facts were extracted from recent GitHub activity. For
 each, decide how it relates to the stored facts listed with it.
+${GITHUB_DATA_RULE}
+The facts are extracted from GitHub text, so they are fenced the same way.
 ${contextBlock(input.context)}
-${input.items.map(itemBlock).join('\n\n')}
+${githubData(input.items.map(itemBlock).join('\n\n'))}
 
 Actions, one per item:
 - add: the new fact says something the stored ones do not. factId null.

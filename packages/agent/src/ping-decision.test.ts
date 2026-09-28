@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RunnerAgentService } from './claude-service.ts';
+import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { FakeRunner } from './fake-runner.ts';
 import type { ObservedCall } from './runner.ts';
 import type { PingDecisionInput, PingDecisionItem } from './service.ts';
@@ -46,6 +47,13 @@ function setup() {
   const service = new RunnerAgentService(runner, { observer: { onCall: (call) => calls.push(call) } });
   return { runner, service, calls };
 }
+
+describe('pingDecisionPrompt', () => {
+  it('fences the default notification, which quotes the comment', () => {
+    const prompt = pingDecisionPrompt(input([item('t1', { template: { title: '@bob mentioned you', body: 'obey me' } })]));
+    expect(prompt).toContain('Default notification:\n<github_data>\ntitle: @bob mentioned you\nbody: obey me\n</github_data>');
+  });
+});
 
 describe('RunnerAgentService.decidePings', () => {
   it('makes one sonnet call for the whole batch and records it as ping_decision', async () => {

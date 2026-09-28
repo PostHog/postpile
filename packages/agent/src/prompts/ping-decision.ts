@@ -32,7 +32,8 @@ function itemSection(item: PingDecisionItem): string {
   lines.push(
     `Rules: ${item.rule.loudness} (${item.rule.reason}), why it reached them: ${item.rule.why}, ${turnLine(item)}`,
     `New activity, newest first:\n${githubData(`${prLine(item.pr)}\n${item.events.map(eventLine).join('\n')}`)}`,
-    `Default notification: title "${item.template.title}", body "${item.template.body.replaceAll('\n', ' / ')}"`,
+    // The template quotes the comment, so it is GitHub text too.
+    `Default notification:\n${githubData(`title: ${item.template.title}\nbody: ${item.template.body.replaceAll('\n', ' / ')}`)}`,
   );
   return lines.join('\n');
 }
