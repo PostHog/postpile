@@ -1,4 +1,4 @@
-# code-manager design
+# PostPile design
 
 Decisions from the design rounds, tidied. Open points are at the end.
 
@@ -117,7 +117,7 @@ and only recomputes on change.
 
 | what | where | invalidated when |
 |---|---|---|
-| general instructions | `~/.config/code-manager/instructions.md`, in every prompt; absent = none | file edited (part of every input hash) |
+| general instructions | `~/.config/postpile/instructions.md`, in every prompt; absent = none | file edited (part of every input hash) |
 | glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI), dossier version, instructions, tailoring, standing rules or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
 | topic | `topic`: name, summary, tailoring, driver, user_role, status | summary mirrors the latest `dossier.summary` |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
@@ -171,8 +171,8 @@ claude --no-session-persistence -p --output-format json --model <m> \
 
 with `MAX_THINKING_TOKENS=0` and the prompt on stdin (flags carried over from
 ghatchup, where they took a PR summary from ~30s to ~3s). Everything runs on
-`sonnet` (`CODE_MANAGER_MODEL`); glances can be switched separately with
-`CODE_MANAGER_GLANCE_MODEL` (they ran on `claude-haiku-4-5` until a side-by-side
+`sonnet` (`POSTPILE_MODEL`); glances can be switched separately with
+`POSTPILE_GLANCE_MODEL` (they ran on `claude-haiku-4-5` until a side-by-side
 run showed Sonnet judging verdicts better). An API-backed runner can replace it later without
 touching callers.
 
@@ -542,7 +542,7 @@ stored and before a dossier goes into a glance prompt
   **dossier version**, instructions, tailoring, standing rules, feedback on
   that PR, model. Never the other PRs in the batch. Stored glances get
   `dossierVersion`.
-- Model: the glance model (`sonnet` by default, `CODE_MANAGER_GLANCE_MODEL`).
+- Model: the glance model (`sonnet` by default, `POSTPILE_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
 
@@ -956,7 +956,7 @@ engine `writes/`), off (read-only) on first run, flipped by the lock in the
 status footer (`POST /api/github-writes {enabled}`), kept in meta
 `github_writes` so it survives restarts. While off the switch hands out the
 `ReadOnlyWriter`, so a path that forgets to ask still cannot write.
-`CODE_MANAGER_READ_ONLY=1` never builds the real write client; the lock
+`POSTPILE_READ_ONLY=1` never builds the real write client; the lock
 then shows disabled with the reason and turning it on answers `ok: false`.
 Opening the lock asks in a popover ("Mark-read and approvals will reach
 GitHub"); closing is instant. The UI guard follows it: approve and comment
@@ -1024,7 +1024,7 @@ standalone server never starts it.
 
 **Poll** (`LivePoller` in engine `live/`, started by the desktop main process):
 
-- `GET /notifications` every `CODE_MANAGER_POLL_SECONDS` (default 10, 0 turns
+- `GET /notifications` every `POSTPILE_POLL_SECONDS` (default 10, 0 turns
   it off) with the stored ETag / Last-Modified, shared with the full sync. A
   304 costs no rate limit and does nothing else.
 - GitHub's `X-Poll-Interval` (usually 60) is read, logged when it changes and
@@ -1072,7 +1072,7 @@ beyond what the full sync already does for threads that left the inbox).
   code. Answer per item (zod): `{ id, ping, title, body, reason }`. The agent
   may veto or rephrase, never add.
 - Fallback when the call fails, skips an item, or the daily cap is spent
-  (`CODE_MANAGER_PING_CAP`, default 200 calls per rolling 24h): ping with
+  (`POSTPILE_PING_CAP`, default 200 calls per rolling 24h): ping with
   `pingTemplate` text ("@bob asked you something · posthog#41850").
 - Every decision lands in `ping_decision` (migration 007): thread, PR, ping
   yes/no, source rules / agent / fallback, title, body, reason, time.
@@ -1083,13 +1083,13 @@ beyond what the full sync already does for threads that left the inbox).
   3 in one cycle become one summary ("4 PRs need you", first titles listed,
   a click opens the first).
 - Native `Notification` with sound. A click shows and focuses the window and
-  sends `code-manager:open-ping` with `{topicId, tileId, prKey}`; the renderer
+  sends `postpile:open-ping` with `{topicId, tileId, prKey}`; the renderer
   navigates through `go()`, so it is a normal history entry.
 - Closing the window hides it on macOS and the app keeps polling; Cmd+Q quits
   (flushes mark-reads as before). Dock click shows the window again.
 - macOS asks for permission on the first notification. Electron cannot read
   that permission, so a denial only means nothing shows up; tiles still turn
-  unread. `CODE_MANAGER_MAC_NOTIFICATIONS=0` turns notifications off (the poll
+  unread. `POSTPILE_MAC_NOTIFICATIONS=0` turns notifications off (the poll
   still runs). A settings toggle and quiet hours are not built yet.
 
 **Fake mode**: `FakeLivePoll` adds a sample question to the next open pinged
@@ -1109,7 +1109,7 @@ Agent-derived memory in the sense of "Memory by author": it never touches
 instructions.md, and the user steers it only with Forget and Refresh.
 
 **Collect** (engine `work-context/collector.ts`, deterministic, no agent tools),
-from `CODE_MANAGER_CLAUDE_DIR` (default `~/.claude`):
+from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
 
 - `CLAUDE.md` plus the files it @-includes (`@RTK.md`, `@~/x.md`), resolved
   against the including file's folder and its symlink target's folder, only
@@ -1139,7 +1139,7 @@ from `CODE_MANAGER_CLAUDE_DIR` (default `~/.claude`):
 A run over the real folder takes about a second (115 session files, ~470 MB).
 
 **Call**: one toolless `context_sweep` call, `opus` by default
-(`CODE_MANAGER_SWEEP_MODEL` overrides; `models.ts`), 5 min timeout. Input:
+(`POSTPILE_SWEEP_MODEL` overrides; `models.ts`), 5 min timeout. Input:
 the collected items with short ids (`c1`, `m3`, `s7`), instructions.md, the
 active topics (id, name, dossier brief), the previous digest (for stable
 threads) and the threads the user forgot. The prompt says the material is the
@@ -1214,9 +1214,9 @@ core  <- store, github, agent  <- engine  <- server, cli
 ### HTTP API
 
 Ids containing `/`, `#` or `:` (tile ids, event ids) are `encodeURIComponent`-ed
-in paths. Every request needs `x-code-manager-token`. The desktop app makes a
+in paths. Every request needs `x-postpile-token`. The desktop app makes a
 per-launch token; the standalone server prints a per-run one unless
-`CODE_MANAGER_TOKEN` is set. A web page cannot send the header without a
+`POSTPILE_TOKEN` is set. A web page cannot send the header without a
 preflight and does not know the token, so CORS stays open.
 
 | route | engine call |
@@ -1267,26 +1267,30 @@ preflight and does not know the token, so CORS stays open.
 - **Localhost API safety**: binds 127.0.0.1, and a token is always required (per launch in the
   desktop app, per run in the standalone server) so web pages and other local processes cannot
   drive approve/comment/mark-read.
-- **Paths**: `CODE_MANAGER_CLAUDE_DIR` (default `~/.claude`) is what the work context sweep
-  reads. Database at `~/Library/Application Support/code-manager/db.sqlite` on macOS
-  (`$XDG_DATA_HOME/code-manager/db.sqlite` elsewhere), instructions at
-  `~/.config/code-manager/instructions.md`. `CODE_MANAGER_DB` and `CODE_MANAGER_INSTRUCTIONS`
+- **Paths**: `POSTPILE_CLAUDE_DIR` (default `~/.claude`) is what the work context sweep
+  reads. Database at `~/Library/Application Support/PostPile/db.sqlite` on macOS
+  (`$XDG_DATA_HOME/postpile/db.sqlite` elsewhere), instructions at
+  `~/.config/postpile/instructions.md`. `POSTPILE_DB` and `POSTPILE_INSTRUCTIONS`
   override. The CLI and the desktop app share one database; WAL lets them run side by side.
+  Until 2026-09-28 these folders were named `code-manager`: `migrateLegacyData`
+  (`packages/engine/src/legacy-data.ts`) moves them on start when no other process holds the
+  database, else copies and leaves a README note. `applyLegacyEnv` (`paths.ts`) still maps
+  `CODE_MANAGER_*` to `POSTPILE_*` with a deprecation line.
 - **Timestamps**: core compares ISO strings, so `packages/github` normalises every GitHub time
   through `toISOString()` (GitHub omits milliseconds, the app writes them).
-- **Env switches**: `CODE_MANAGER_FAKE=1` runs server/CLI/desktop on the in-memory Depot sample
-  data (`FakeEngine`, for UI work). `CODE_MANAGER_READ_ONLY=1` never builds the real GitHub
+- **Env switches**: `POSTPILE_FAKE=1` runs server/CLI/desktop on the in-memory Depot sample
+  data (`FakeEngine`, for UI work). `POSTPILE_READ_ONLY=1` never builds the real GitHub
   writer and keeps the footer lock closed (smoke runs against a real account). Without it,
-  writes are still off until the lock is opened. `CODE_MANAGER_POLL_SECONDS`
-  (default 10, 0 off), `CODE_MANAGER_PING_CAP` (default 200 per 24h) and
-  `CODE_MANAGER_MAC_NOTIFICATIONS=0` tune the live poll.
-- **Test builders** live at `@code-manager/core/fixtures` (incl. `FakeTimers`); engine tests use
+  writes are still off until the lock is opened. `POSTPILE_POLL_SECONDS`
+  (default 10, 0 off), `POSTPILE_PING_CAP` (default 200 per 24h) and
+  `POSTPILE_MAC_NOTIFICATIONS=0` tune the live poll.
+- **Test builders** live at `@postpile/core/fixtures` (incl. `FakeTimers`); engine tests use
   fake reader/writer and the agent's `FakeRunner`.
 
 ### Safety while building
 
 - No GitHub write calls in tests or smoke runs. Tests use fakes; `GitHubWriteClient` is only
-  constructed by `createEngine`, and not at all with `CODE_MANAGER_READ_ONLY=1`. A fresh
+  constructed by `createEngine`, and not at all with `POSTPILE_READ_ONLY=1`. A fresh
   database starts with the lock closed. The sync path
   (`GitHubSync`) only holds a `GitHubReader`.
 - Live `claude` calls: at most 3 across the build, small inputs.
@@ -1356,4 +1360,5 @@ preflight and does not know the token, so CORS stays open.
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
   spoke on the PR after it; loud events on pulled-in PRs also make a tile unread; every commit
   after the user's approval is its own loud event (a busy PR lists many reasons).
-- **Repo name**: `code-manager` is a working title.
+- **Repo name**: decided 2026-09-28, the app is PostPile (formerly the working title
+  `code-manager`). Renaming the repo folder is still open.

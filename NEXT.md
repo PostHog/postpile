@@ -43,7 +43,7 @@ now".
   back"): the lock in the status footer switches GitHub writes on and off at
   runtime (`WriteSwitch`, `GET/POST /api/github-writes`), kept in meta,
   read-only on first run, confirm popover to open, instant to close,
-  disabled with the reason under `CODE_MANAGER_READ_ONLY=1`. Locked: approve
+  disabled with the reason under `POSTPILE_READ_ONLY=1`. Locked: approve
   and comment blocked, mark read and "not mine" stay in the app; batches
   queued while locked never reach GitHub. `CODE_MANAGER_ALLOW_WRITES` is
   gone.
@@ -112,7 +112,7 @@ now".
     line and see the user's chat turns in the topic.
 - Fix pass after the first real full sync (142 PRs, 120 calls, $3.23,
   61 topics):
-  - syncs the app starts are capped (`CODE_MANAGER_MAX_AGENT_CALLS`,
+  - syncs the app starts are capped (`POSTPILE_MAX_AGENT_CALLS`,
     default 30, raised to 150 on 2026-09-28 since cost is no concern and a
     full first sync of ~120 calls then fits in one); the title bar says when
     a sync stopped at the cap
@@ -200,7 +200,7 @@ now".
   digest of what Julian is working on, from `~/.claude` (CLAUDE.md and its
   @-includes, every project's memory files, light signals from sessions of
   the last 7 days; secrets masked, ~60k chars budget, drops logged). One opus
-  `context_sweep` call (`CODE_MANAGER_SWEEP_MODEL`), versions in
+  `context_sweep` call (`POSTPILE_SWEEP_MODEL`), versions in
   `work_context_version` (migration 009, last 30). Runs from the desktop app
   once a day from 06:00 (checked at start and every 30 min), on
   `npm run cli -- sweep` and on Refresh; never blocks a sync. Injected as
@@ -210,7 +210,7 @@ now".
   (with Undo), Refresh, last error. One real run against a DB copy: 60k chars
   in, 12 threads, $0.40, 43s; personal sessions (taxes, shopping) left out.
 - Default agent-call cap for app syncs raised from 30 to 150
-  (`CODE_MANAGER_MAX_AGENT_CALLS`).
+  (`POSTPILE_MAX_AGENT_CALLS`).
 - Tests (vitest) and typecheck green across all workspaces.
 
 ## Stubbed or thin
@@ -220,14 +220,14 @@ now".
   navigation between tiles, dark mode, one-press approve from a tile (Approve lives in the
   detail pane, next to the glance).
 - The footer lock is enforced in the engine (`GitHubWrites`), not only in the
-  UI; `CODE_MANAGER_READ_ONLY=1` stays the hard stop (no write client at all).
+  UI; `POSTPILE_READ_ONLY=1` stays the hard stop (no write client at all).
   Any caller with the token can still open the lock through the API.
 - The lock in fake mode is not persisted (starts locked on every start).
 - Bring back does not touch GitHub and cannot: the GitHub thread keeps its
   read flag. mark done, subscribe / unsubscribe have no writer methods yet.
 - Mark-reads while locked log one `local` row per PR without an unread
   thread too (pulled-in stack layers), which makes the log a bit chatty.
-- Fake mode (`CODE_MANAGER_FAKE=1`) runs `FakeEngine`, a second
+- Fake mode (`POSTPILE_FAKE=1`) runs `FakeEngine`, a second
   EngineService with its own copies of the tile/loudness/undo rules. It can
   drift from the real engine. See decisions below.
 - The full sync is on demand only (Sync now, app start); the live poll only
@@ -238,8 +238,8 @@ now".
   cannot read the notification permission, so a denial is silent (tiles still
   turn unread). One real `ping_decision` call ran against a DB copy (2 items,
   $0.04, 4.4s) and `cli poll` against the real inbox (read-only copy).
-- No settings UI: "Mac notifications" on/off is `CODE_MANAGER_MAC_NOTIFICATIONS=0`
-  and the interval is `CODE_MANAGER_POLL_SECONDS`; quiet hours are not built.
+- No settings UI: "Mac notifications" on/off is `POSTPILE_MAC_NOTIFICATIONS=0`
+  and the interval is `POSTPILE_POLL_SECONDS`; quiet hours are not built.
 - The ping throttle and the poll's backoff live in memory; a restart forgets
   the 2-minute window.
 - A poll whose PR fetch fails after the inbox answered 200 leaves those PRs to
@@ -338,7 +338,7 @@ now".
 
 - **Fake mode**: rebuild it on the real Engine (in-memory store, fake GitHub
   reader with the Depot sample, canned agent answers) and delete FakeEngine, or
-  drop it and use `CODE_MANAGER_READ_ONLY=1` + `sync --no-agent` against the
+  drop it and use `POSTPILE_READ_ONLY=1` + `sync --no-agent` against the
   real account for UI work.
 - **Mark-read vs. CI noise**: a thread bumped by CI or bots between sync and
   mark-read is left unread on GitHub (and reported). Safe, but may be annoying
@@ -366,7 +366,9 @@ now".
   around 80-90 calls; worth a watched run before relying on it.
 - Still open from DESIGN.md: UI framework final call, three-pane layout,
   memory numbers (10 feedback entries per prompt, when sets regroup), snooze
-  wake-up on any loud human event, the extra loudness rules, repo name.
+  wake-up on any loud human event, the extra loudness rules. The name is
+  PostPile (2026-09-28); renaming the repo folder `~/workspace/code-manager`
+  is Julian's call.
 
 - **Queue sidebar**: (1) "Your move" alone now makes a topic needs-you,
   as asked; that includes "Merge, it is approved" on own PRs, which may
@@ -400,7 +402,20 @@ now".
   reasons come back) instead of one "brought back by you" reason? Should
   it live on tiles too, not only in the debug view?
 
+## Later
+
+- Dig deeper: a chat send mode that runs Opus with read-only tools (local
+  checkout, gh pr view/diff) for a user's hunch, writing findings back into
+  topic memory. Not a separate button. Deferred by Julian 2026-09-28.
+- Drop the `CODE_MANAGER_*` env fallback (`applyLegacyEnv`) and the
+  code-manager folder migration (`legacy-data.ts`) once the move has run.
+
 ## Decided
+
+- **Name** (2026-09-28): PostPile. Package scope `@postpile/*`, env vars
+  `POSTPILE_*` (old `CODE_MANAGER_*` still read, with a deprecation line),
+  data in `~/Library/Application Support/PostPile` and
+  `~/.config/postpile`, moved from the code-manager folders on first start.
 
 - **Instructions scope** (2026-09-27): Julian picks the scope of a lasting
   chat point, not the agent: Keep for this topic (tailoring) / Keep for all
@@ -439,7 +454,7 @@ npm run cli -- sweep                          # "what you're working on" from ~/
 Smoke run on a throwaway database, read-only:
 
 ```
-CODE_MANAGER_READ_ONLY=1 CODE_MANAGER_DB=/tmp/cm-smoke/db.sqlite \
+POSTPILE_READ_ONLY=1 POSTPILE_DB=/tmp/cm-smoke/db.sqlite \
   npm run cli -- sync --limit 15 --max-agent-calls 6
 ```
 
@@ -463,40 +478,40 @@ npm run build                                 # electron-vite bundle into apps/d
 UI check in fake mode as a plain web page (no Electron):
 
 ```
-CODE_MANAGER_FAKE=1 CODE_MANAGER_TOKEN=devtok PORT=4877 npm run server
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 npm run server
 (cd apps/desktop/out/renderer && python3 -m http.server 5177)
 open 'http://127.0.0.1:5177/index.html?api=http://127.0.0.1:4877&token=devtok'
 ```
 
 The renderer syncs on load. Against a real database that means real GitHub
-reads and agent calls; use a DB copy with `CODE_MANAGER_READ_ONLY=1
-CODE_MANAGER_MAX_AGENT_CALLS=0`.
+reads and agent calls; use a DB copy with `POSTPILE_READ_ONLY=1
+POSTPILE_MAX_AGENT_CALLS=0`.
 
 Fake mode (sample "Move CI to Depot" data, no GitHub, no agent, no database):
 
 ```
-CODE_MANAGER_FAKE=1 npm run cli -- topics
-CODE_MANAGER_FAKE=1 npm run desktop
-CODE_MANAGER_FAKE=1 npm run server
+POSTPILE_FAKE=1 npm run cli -- topics
+POSTPILE_FAKE=1 npm run desktop
+POSTPILE_FAKE=1 npm run server
 ```
 
 Env switches:
 
-- `CODE_MANAGER_READ_ONLY=1`: real reads, every GitHub write refused, the
+- `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the
   footer lock cannot be opened. Use this for smoke runs against the real
   account.
-- `CODE_MANAGER_MAX_AGENT_CALLS`: agent-call cap for syncs the app starts
+- `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs the app starts
   (launch and "Sync now"), default 150 (was 30). The CLI uses `--max-agent-calls`.
-- `CODE_MANAGER_CLAUDE_DIR`: the Claude Code folder the work context sweep
-  reads, default `~/.claude`. `CODE_MANAGER_SWEEP_MODEL`: its model, default
+- `POSTPILE_CLAUDE_DIR`: the Claude Code folder the work context sweep
+  reads, default `~/.claude`. `POSTPILE_SWEEP_MODEL`: its model, default
   `opus`.
-- `CODE_MANAGER_DB`, `CODE_MANAGER_INSTRUCTIONS`: override the database
-  (default `~/Library/Application Support/code-manager/db.sqlite`) and the
-  instructions file (default `~/.config/code-manager/instructions.md`).
-- `CODE_MANAGER_TOKEN`: fixed token for the standalone server.
-- `CODE_MANAGER_POLL_SECONDS`: live poll interval in the desktop app, default
-  10, 0 turns it off. `CODE_MANAGER_PING_CAP`: ping decision calls per 24h,
-  default 200 (then rules only). `CODE_MANAGER_MAC_NOTIFICATIONS=0`: no Mac
+- `POSTPILE_DB`, `POSTPILE_INSTRUCTIONS`: override the database
+  (default `~/Library/Application Support/PostPile/db.sqlite`) and the
+  instructions file (default `~/.config/postpile/instructions.md`).
+- `POSTPILE_TOKEN`: fixed token for the standalone server.
+- `POSTPILE_POLL_SECONDS`: live poll interval in the desktop app, default
+  10, 0 turns it off. `POSTPILE_PING_CAP`: ping decision calls per 24h,
+  default 200 (then rules only). `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac
   notifications, the poll still refreshes tiles.
-- `CODE_MANAGER_MODEL`, `CODE_MANAGER_GLANCE_MODEL`,
-  `CODE_MANAGER_AGENT_CONCURRENCY`: agent knobs.
+- `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
+  `POSTPILE_AGENT_CONCURRENCY`: agent knobs.

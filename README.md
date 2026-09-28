@@ -1,4 +1,4 @@
-# code-manager
+# PostPile
 
 A desktop app one level above GitHub PRs. It groups what GitHub pings you about
 into topics, tiles and stacks, digests each PR with an agent against your own
@@ -32,15 +32,20 @@ npm run desktop                # Electron dev mode
 ```
 
 General instructions for every prompt go in
-`~/.config/code-manager/instructions.md` (honours `XDG_CONFIG_HOME`, or set
-`CODE_MANAGER_INSTRUCTIONS`). The database lives at
-`~/Library/Application Support/code-manager/db.sqlite`, or wherever
-`CODE_MANAGER_DB` points.
+`~/.config/postpile/instructions.md` (honours `XDG_CONFIG_HOME`, or set
+`POSTPILE_INSTRUCTIONS`). The database lives at
+`~/Library/Application Support/PostPile/db.sqlite`, or wherever
+`POSTPILE_DB` points.
 
-- `CODE_MANAGER_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
-- `CODE_MANAGER_READ_ONLY=1`: real reads, every GitHub write refused, the footer lock cannot be opened
+Renamed from code-manager on 2026-09-28. On first start the app moves the old
+`code-manager` data and config folders over (or copies them and leaves a note
+when the database is in use). `CODE_MANAGER_*` env vars still work for now,
+with a deprecation line; switch to `POSTPILE_*`.
+
+- `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
+- `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the footer lock cannot be opened
 - GitHub writes (approve, comment, mark read) are off until the lock in the status footer is opened; the choice is kept in the database
-- `CODE_MANAGER_MODEL`, `CODE_MANAGER_GLANCE_MODEL`, `CODE_MANAGER_AGENT_CONCURRENCY`: agent knobs
+- `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`, `POSTPILE_AGENT_CONCURRENCY`: agent knobs
 
 ## Layout
 

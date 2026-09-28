@@ -10,7 +10,7 @@ open, so keep components small and cheap to move.
 The renderer shows what the local API returned and nothing else.
 
 - **Sample data lives in one place: `FakeEngine`** (apps/server), switched on
-  with `CODE_MANAGER_FAKE=1`. The renderer never has its own fixtures and never
+  with `POSTPILE_FAKE=1`. The renderer never has its own fixtures and never
   has a `fake ? sample : real` branch. The title bar shows a "Sample data" pill
   when `/api/config` says `fake: true`; that is the only difference.
 - **Don't fill empty screens.** No topics, no tiles, no glance, no reviews:
@@ -38,7 +38,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
-- Wire types come from `@code-manager/core` as `import type` only. The
+- Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
   pure helpers live in `lib/` with tests next to them.
 - No OpenAPI codegen. When a screen needs a new field, add it to the core view
@@ -62,7 +62,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   GitHub-writing action on the `GithubWrite` list.
 - **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
   asks in a small popover ("Mark-read and approvals will reach GitHub");
-  closing it is instant. With `CODE_MANAGER_READ_ONLY=1` it is disabled and
+  closing it is instant. With `POSTPILE_READ_ONLY=1` it is disabled and
   its title says why. The server keeps the choice; the renderer never
   stores it.
 - Buttons for guarded actions carry the blocked reason as their `title`.
@@ -208,6 +208,13 @@ history entry, and clearing the filter brings the pick back.
 
 ## Electron shell
 
+- The app is PostPile (renamed from code-manager 2026-09-28). The icon lives
+  in `apps/desktop/build/` (`icon.icns`, `icon.png`, original artwork in
+  `icon-source.png`); main uses `build/icon.png` for the window and the dev
+  Dock icon. The title bar logo is `renderer/src/assets/logo-64.png`, a crop
+  of the same icon. Regenerate it with `sips` when the icon changes.
+- Names on the wire: preload global `window.postpile`, IPC channels
+  `postpile:*`, API header `x-postpile-token`.
 - `titleBarStyle: 'hiddenInset'`: the renderer draws the 52px title bar and
   keeps 88px free on the left for the traffic lights. Interactive elements in
   the bar must stay clickable (`.drag-region` sets them to no-drag).
