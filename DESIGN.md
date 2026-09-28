@@ -1047,6 +1047,15 @@ any review ask; on top of that:
   approval covers the head; a push re-enables it) only on an open PR someone
   else wrote. On your own PR, or a merged or closed one: Mark read while the
   tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
+- The Approve button says what you approve into (2026-09-28,
+  `approveButton` / `approveStateGlyphs` in the renderer's `lib/approve.ts`):
+  the lifecycle glyph (draft / ready) and the review glyph (approved /
+  changes requested / review required, also on drafts) sit in front of the
+  label, words in their tooltips. The label is "Approve as well" when others
+  approved and you never did (any commit); an older approval of yours keeps
+  plain "Approve". Drafts get an outlined "Approve draft"; draft wins over
+  "as well", since not-ready is the bigger caveat and the review glyph
+  already shows the approvals.
 - Tiles whose tracked PRs are all yours carry a neutral "Your PR" marker
   (the own/ink look of the AU badge, in words) next to the kind label.
 - News on your own PR that asks nothing of you (a bot, a finished review;

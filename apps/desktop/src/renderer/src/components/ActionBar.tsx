@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import type { PrDetail, PrPrimaryAction, TileView } from '@postpile/core';
+import type { PrDetail, PrLifecycle, PrPrimaryAction, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useViewer } from '../api/viewer.ts';
+import { approveButton, approveStateGlyphs } from '../lib/approve.ts';
 import { isBotLogin } from '../lib/people.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
-import { ChatIcon } from './icons.tsx';
+import { ChatIcon, Glyph } from './icons.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { markReadNote } from '../lib/guard.ts';
@@ -34,9 +36,16 @@ function primaryActionOf(props: ActionBarProps): PrPrimaryAction {
   return summary?.primaryAction ?? 'approve';
 }
 
+/** The status pill's lifecycle; derived from the PR when the summary is missing. */
+function lifecycleOf(props: ActionBarProps): PrLifecycle {
+  const summary = props.view.prs.find((candidate) => candidate.key === props.detail.pr.key);
+  return summary?.status.lifecycle ?? (props.detail.pr.isDraft ? 'draft' : 'open');
+}
+
 /**
  * Primary, ask, mark read, snooze, chat. The primary button comes from core:
- * Approve (or a disabled Approved) on someone else's open PR; on your own
+ * Approve (or a disabled Approved) on someone else's open PR, label and look
+ * from `approveButton` ("Approve as well", outlined "Approve draft"); on your own
  * PR, or a merged or closed one, Mark read while the tile is unread, else
  * Open on GitHub. Approve acts on the PR, the rest on the tile.
  */
@@ -47,6 +56,14 @@ export function ActionBar(props: ActionBarProps) {
   const tileId = props.view.tile.id;
   const primary = primaryActionOf(props);
   const [recheckOpen, setRecheckOpen] = useState(false);
+  const viewer = useViewer();
+  const approve = approveButton({
+    primary: primary === 'approved' ? 'approved' : 'approve',
+    isDraft: pr.isDraft,
+    viewerLogin: viewer.data?.login ?? null,
+    reviews: pr.reviews,
+    viewerApprovedAt: props.detail.userState?.approvedAt ?? null,
+  });
   const glance = props.detail.glance;
   const markReadTitle = props.view.pendingWrite
     ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
@@ -60,13 +77,21 @@ export function ActionBar(props: ActionBarProps) {
     <div className="flex flex-wrap items-center gap-1.5">
       {(primary === 'approve' || primary === 'approved') && (
         <Button
-          variant="primary"
+          variant={approve.variant}
           size="md"
           disabled={primary === 'approved' || actions.isBusy(`approve:${pr.key}`)}
           title={approveTitle(props, actions.blockedReason('approve'), now)}
           onClick={() => void actions.approve(pr.key)}
         >
-          {primary === 'approved' ? 'Approved ✓' : 'Approve'}
+          {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}
+          <span className="flex items-center gap-1 opacity-75">
+            {approveStateGlyphs(lifecycleOf(props), pr.reviewDecision).map((part) => (
+              <span key={part.glyph} role="img" aria-label={part.title} title={part.title} className="flex">
+                <Glyph glyph={part.glyph} size={11} strokeWidth={1.8} />
+              </span>
+            ))}
+          </span>
+          {approve.label}
         </Button>
       )}
       {primary === 'mark_read' && markRead('primary')}

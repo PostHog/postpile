@@ -328,6 +328,9 @@ now".
     or inside one set, never split. Topic assignment asks once per stack and
     new layers join their stack's topic; "wrong topic", splits and "not
     related" move whole stacks (DESIGN.md "Stacks as one unit").
+- Approve button (2026-09-28): "Approve as well" when others approved and you
+  never did, outlined "Approve draft" on drafts (draft wins), lifecycle and
+  review glyphs in front of the label with worded tooltips (`lib/approve.ts`).
 
 ## Stubbed or thin
 
