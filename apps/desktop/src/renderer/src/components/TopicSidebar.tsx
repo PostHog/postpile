@@ -85,16 +85,22 @@ function YourMoveChip(props: { count: number }) {
 /** One topic: name, faces and the unread bubble, then a one-line summary with the "your move" chip at its end. */
 function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
   const { item } = props;
-  const weight = props.active || unreadLook(item) === 'urgent' ? 'font-semibold' : 'font-medium';
+  // Unread rows: bold ink name, the bubble and a light warm row. Read rows: regular, muted, no bubble.
+  const unread = unreadLook(item) !== null;
+  const name = unread ? 'font-semibold text-ink' : props.active ? 'font-medium text-ink-2' : 'font-normal text-muted';
+  let row = unread ? 'bg-warm-strip hover:bg-surface/60' : 'hover:bg-surface/60';
+  if (props.active) {
+    row = 'bg-surface shadow-active-row';
+  }
   return (
     <button
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 py-1.5 text-left ${props.active ? 'bg-surface shadow-active-row' : 'hover:bg-surface/60'}`}
+      className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 py-1.5 text-left ${row}`}
     >
       <span className="flex w-full min-w-0 items-center gap-[7px]">
-        <span className={`truncate text-[12.5px] tracking-[-0.005em] ${weight}`}>{item.topic.name}</span>
+        <span className={`truncate text-[12.5px] tracking-[-0.005em] ${name}`}>{item.topic.name}</span>
         <span className="ml-auto" />
         <FaceStack people={item.people} active={props.active} />
         <UnreadBubble item={item} />
@@ -110,20 +116,22 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
   );
 }
 
-/** Queue section title: colored dot, label, PR count on the right (none for Other topics). */
-function SectionHeader(props: { tier: PrTier | 'other'; count: number | null }) {
+/**
+ * Queue section title: colored dot and label. No count: a PR count read like
+ * an unread count, and how many PRs a queue holds does not matter.
+ */
+function SectionHeader(props: { tier: PrTier | 'other' }) {
   const look = SECTION_LOOK[props.tier];
   return (
     <span className={`flex items-center gap-1.5 px-2 pt-1 pb-[3px] text-[10.5px] font-bold tracking-[0.05em] uppercase ${look.text}`}>
       <span className={`size-[7px] rounded-[2px] ${look.dot}`} />
       {look.label}
-      {props.count !== null && <span className="ml-auto font-mono font-medium text-muted">{props.count}</span>}
     </span>
   );
 }
 
 /** A section title that folds its topics away. */
-function GroupHeader(props: { label: string; count: number; open: boolean; onToggle: () => void; small?: boolean; indent?: boolean }) {
+function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; indent?: boolean }) {
   const size = props.small ? 'text-[10.5px] font-medium text-muted' : 'text-[11px] font-semibold tracking-[0.04em] text-muted';
   return (
     <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center gap-1.5 py-1 text-left ${props.indent ? 'px-4' : 'px-2'}`}>
@@ -131,7 +139,6 @@ function GroupHeader(props: { label: string; count: number; open: boolean; onTog
         <ChevronIcon />
       </span>
       <span className={size}>{props.label}</span>
-      <span className="font-mono text-[10.5px] text-faint">{props.count}</span>
     </button>
   );
 }
@@ -227,7 +234,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
   const group = (key: SectionKey, label: string, items: TopicListItem[], children: ReactNode) =>
     items.length === 0 ? null : (
       <div key={key} className="flex flex-col gap-px">
-        <GroupHeader small label={label} count={items.length} open={isOpen(key)} onToggle={() => toggle(key)} />
+        <GroupHeader small label={label} open={isOpen(key)} onToggle={() => toggle(key)} />
         {isOpen(key) && children}
       </div>
     );
@@ -245,13 +252,13 @@ export function TopicSidebar(props: TopicSidebarProps) {
       )}
       {layout.sections.map((section) => (
         <div key={section.tier} className="flex flex-col gap-px">
-          <SectionHeader tier={section.tier} count={section.count} />
+          <SectionHeader tier={section.tier} />
           {section.rows.map((row) => topicItem(row.item))}
         </div>
       ))}
       {layout.other.length > 0 && (
         <div className="flex flex-col gap-1">
-          <SectionHeader tier="other" count={null} />
+          <SectionHeader tier="other" />
           {group('needs', 'Needs you', groups.needsYou, otherItems(groups.needsYou))}
           {group(
             'team',
@@ -259,7 +266,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
             groups.team.flatMap((entry) => entry.items),
             groups.team.map((entry) => (
               <div key={entry.area} className="flex flex-col gap-px">
-                <GroupHeader small indent label={entry.area} count={entry.items.length} open={isOpen(`area:${entry.area}`)} onToggle={() => toggle(`area:${entry.area}`)} />
+                <GroupHeader small indent label={entry.area} open={isOpen(`area:${entry.area}`)} onToggle={() => toggle(`area:${entry.area}`)} />
                 {isOpen(`area:${entry.area}`) && otherItems(entry.items)}
               </div>
             )),

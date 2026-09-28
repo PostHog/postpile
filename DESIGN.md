@@ -1081,10 +1081,17 @@ avatars and filters", QueuesB2).
   (`yourMoveTiles`: live tiles where whose-turn says it's your move,
   merging your approved PR included). At 1100px row one has no room for the
   chip, so the summary truncates first and the chip stays.
+- **No counts on section headers** (2026-09-28, later the same day):
+  Julian read the PR counts on headers and rows as unread counts, and how
+  many PRs a queue holds does not matter. Section and group headers show
+  no number; the only number in the list is a row's unread bubble.
+- **Read vs unread rows**: an unread row (any unread tile) has a bold ink
+  name, the bubble and a light warm row background (`bg-warm-strip`, not
+  coral); a read row is regular weight with a muted name and no bubble.
 - **One number per row** (2026-09-28): the row's count is its unread tiles,
   in a small round bubble, the same in every section and in Other topics. It
   answers "what is new here", which the tier's PR count on each row did not
-  (the section header already carries that PR count). Coral bubble when the
+  (section headers carry no count either). Coral bubble when the
   urgency rule says so (an unread tile is still open), grey bubble when
   every unread tile is merged or closed, no bubble when all is read. The old
   separate coral dot, grey dot + count and the per-row tier count are gone.
