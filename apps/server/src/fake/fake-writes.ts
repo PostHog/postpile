@@ -1,5 +1,6 @@
 import {
   indexActionLog,
+  UNDO_WINDOW_MS,
   type ActionLogEntry,
   type ActionLogIndex,
   type ActionOrigin,
@@ -12,7 +13,6 @@ import {
   type PrKey,
   type TilePendingWrite,
 } from '@postpile/core';
-import { UNDO_WINDOW_MS } from '@postpile/engine';
 
 const SAMPLE_DETAIL = 'sample data: nothing left the process';
 const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending write after the undo window';

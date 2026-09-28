@@ -13,11 +13,6 @@ import type { GitHubReader } from '@postpile/github';
 import { errorText } from './errors.ts';
 import { notTakenDetail, type GitHubWrites } from './writes/github-writes.ts';
 
-export { UNDO_WINDOW_MS, type Timers };
-
-/** A thread to mark read, with its updated_at as of the last sync. */
-export type QueuedThread = PendingThread;
-
 /** Who queued a batch, for the action log. */
 export interface BatchOrigin {
   origin: ActionOrigin;
@@ -34,7 +29,7 @@ export const NO_LOCAL_CHANGE: LocalChange = { eventIds: [], handledKeys: [] };
 
 /** One click's worth of mark-read. */
 export interface MarkReadRequest {
-  threads: QueuedThread[];
+  threads: PendingThread[];
   prKeys: PrKey[];
   /** PRs that also count as handled once read (pinged members). */
   handleKeys: PrKey[];
@@ -76,7 +71,7 @@ export type ThreadMarkedRead = (threadId: string, readAt: IsoTime) => void;
  * click, so this puts that PR back to unread: the app never holds a read
  * state GitHub doesn't have.
  */
-export type ThreadNotTaken = (thread: QueuedThread, local: LocalChange) => void;
+export type ThreadNotTaken = (thread: PendingThread, local: LocalChange) => void;
 
 export const NEWER_ACTIVITY_REASON = 'activity after the last sync';
 
@@ -155,7 +150,7 @@ export class MarkReadQueue {
     return this.writes.enabled();
   }
 
-  private async markOne(thread: QueuedThread, context: SendContext): Promise<ThreadOutcome> {
+  private async markOne(thread: PendingThread, context: SendContext): Promise<ThreadOutcome> {
     const logContext = { origin: context.origin, prKey: thread.prKey, tileId: context.tileId, batch: context.batchId };
     const log = (outcome: 'observed' | 'skipped', detail: string) =>
       this.writes.log.record({ action: 'mark_read', threadId: thread.id, ...logContext, outcome, detail });
@@ -182,7 +177,7 @@ export class MarkReadQueue {
    * Marks each thread read on GitHub, in order. One failed thread does not
    * stop the rest; its outcome carries the error (already logged).
    */
-  async markThreads(threads: QueuedThread[], context: SendContext): Promise<ThreadOutcome[]> {
+  async markThreads(threads: PendingThread[], context: SendContext): Promise<ThreadOutcome[]> {
     const outcomes: ThreadOutcome[] = [];
     for (const thread of threads) {
       try {
@@ -199,7 +194,7 @@ export class MarkReadQueue {
    * that found writes off before it started. Their PRs go back to unread
    * first: GitHub does not have them read yet.
    */
-  private parkOff(payload: MarkReadPayload, off: QueuedThread[]): void {
+  private parkOff(payload: MarkReadPayload, off: PendingThread[]): void {
     if (off.length === 0) {
       return;
     }
@@ -236,7 +231,7 @@ export class MarkReadQueue {
     }
     const context: SendContext = { origin: this.flushing ? 'quit' : 'queue', tileId: payload.tileId, batchId: payload.batchId };
     const outcomes = await this.markThreads(payload.threads, context);
-    const off: QueuedThread[] = [];
+    const off: PendingThread[] = [];
     outcomes.forEach((outcome, index) => {
       const thread = payload.threads[index];
       if (!thread) {

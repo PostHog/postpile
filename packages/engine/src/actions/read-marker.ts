@@ -1,6 +1,6 @@
-import { threadPrKey, type NotificationThread, type PrKey } from '@postpile/core';
+import { threadPrKey, type NotificationThread, type PendingThread, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { NO_LOCAL_CHANGE, type BatchOrigin, type LocalChange, type MarkReadQueue, type PendingBatch, type QueuedThread } from '../mark-read-queue.ts';
+import { NO_LOCAL_CHANGE, type BatchOrigin, type LocalChange, type MarkReadQueue, type PendingBatch } from '../mark-read-queue.ts';
 import type { ActionLog } from '../writes/action-log.ts';
 import { putBackLocalChange } from './local-change.ts';
 
@@ -30,7 +30,7 @@ export class ReadMarker {
     private readonly now: () => Date,
   ) {}
 
-  private unreadThreads(keys: PrKey[]): QueuedThread[] {
+  private unreadThreads(keys: PrKey[]): PendingThread[] {
     return [...this.store.notifications.getByPrKeys(keys).entries()]
       .filter(([, thread]) => thread.unread)
       .map(([key, thread]) => ({ id: thread.id, updatedAt: thread.updatedAt, prKey: key }));
@@ -53,7 +53,7 @@ export class ReadMarker {
     return change;
   }
 
-  private logQueued(batch: PendingBatch, threads: QueuedThread[], keys: PrKey[], changedHere: boolean): void {
+  private logQueued(batch: PendingBatch, threads: PendingThread[], keys: PrKey[], changedHere: boolean): void {
     const base = { action: 'mark_read' as const, origin: batch.origin, tileId: batch.tileId, batch: batch.batchId };
     for (const thread of threads) {
       this.log.record({
@@ -73,7 +73,7 @@ export class ReadMarker {
     }
   }
 
-  private enqueueBatch(threads: QueuedThread[], keys: PrKey[], handleKeys: PrKey[], origin: BatchOrigin): PendingBatch {
+  private enqueueBatch(threads: PendingThread[], keys: PrKey[], handleKeys: PrKey[], origin: BatchOrigin): PendingBatch {
     const changeHere = this.queue.writesEnabled() || threads.length === 0;
     const local = changeHere ? this.applyLocally(keys, handleKeys) : NO_LOCAL_CHANGE;
     const batch = this.queue.enqueue({ threads, prKeys: keys, handleKeys, local }, origin);

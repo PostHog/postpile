@@ -8,7 +8,6 @@ import { DataDirLock, type LockKind } from './data-lock.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
-import { migrateLegacyData } from './legacy-data.ts';
 import { defaultPaths, seedDevInstructions, type AppPaths } from './paths.ts';
 import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
@@ -45,8 +44,6 @@ export function pingCapFromEnv(value: string | undefined): number {
 /** Wires the real dependencies. Tests build Engine directly with fakes instead. */
 export function createEngine(options: CreateEngineOptions = {}): EngineService {
   if (!options.paths) {
-    // One-time move from the code-manager folders into the real location; a no-op once done, and in dev.
-    migrateLegacyData();
     const seeded = seedDevInstructions();
     if (seeded) {
       console.log(`PostPile dev profile: copied your instructions to ${seeded}`);

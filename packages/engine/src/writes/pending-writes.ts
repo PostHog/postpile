@@ -174,12 +174,6 @@ export class PendingWrites {
     this.store.pendingWrites.remove(write.id);
   }
 
-  /**
-   * Sends one pending write. Returns true when it is done: every thread
-   * reached GitHub, was already read, or was left unread on purpose (activity
-   * after the last sync, its reason goes to `notTaken`). Threads that failed
-   * stay, with the error.
-   */
   /** The cleanup's single PUT. Done when GitHub took it; a failure stays pending with the error. */
   private async sendCleanup(write: PendingWrite, notTaken: string[]): Promise<boolean> {
     try {
@@ -194,6 +188,12 @@ export class PendingWrites {
     return true;
   }
 
+  /**
+   * Sends one pending write. Returns true when it is done: every thread
+   * reached GitHub, was already read, or was left unread on purpose (activity
+   * after the last sync, its reason goes to `notTaken`). Threads that failed
+   * stay, with the error.
+   */
   private async sendOne(write: PendingWrite, queue: MarkReadQueue, notTaken: string[]): Promise<boolean> {
     if (write.kind === 'mark_all_read_before') {
       return this.sendCleanup(write, notTaken);

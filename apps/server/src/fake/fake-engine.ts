@@ -58,6 +58,7 @@ import type {
 } from '@postpile/core';
 import {
   activityList,
+  UNDO_WINDOW_MS,
   viewerApproval,
   buildPrSummary,
   buildTileView,
@@ -104,7 +105,7 @@ import {
   type SearchResult,
   type Viewer,
 } from '@postpile/core';
-import { LivePoller, UNDO_WINDOW_MS, type EngineService, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { LivePoller, type EngineService, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';

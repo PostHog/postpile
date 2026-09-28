@@ -251,7 +251,8 @@ async function start(): Promise<void> {
   // POSTPILE_FAKE=1 runs on sample data, see engineFromEnv.
   // GitHub writes stay off until the footer lock is opened (kept in the store); POSTPILE_READ_ONLY=1 forces off.
   try {
-    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev' });
+    // The legacy folder move already ran at the top of this file, before userData existed.
+    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev', migrateLegacy: false });
   } catch (error) {
     if (error instanceof DataDirLockedError) {
       const holder = error.holder;

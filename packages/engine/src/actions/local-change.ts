@@ -1,6 +1,6 @@
-import type { PrKey } from '@postpile/core';
+import type { PendingThread, PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import type { LocalChange, QueuedThread } from '../mark-read-queue.ts';
+import type { LocalChange } from '../mark-read-queue.ts';
 
 /** Puts back what a mark-read changed in the app: its events turn unseen, its PRs lose handled. */
 export function putBackLocalChange(store: Store, change: LocalChange): void {
@@ -22,7 +22,7 @@ export function localChangeForPr(store: Store, change: LocalChange, key: PrKey):
 }
 
 /** GitHub did not take this thread's mark-read: its PR goes back to how it was before the click. */
-export function putBackNotTaken(store: Store, thread: QueuedThread, change: LocalChange): void {
+export function putBackNotTaken(store: Store, thread: PendingThread, change: LocalChange): void {
   if (thread.prKey !== null) {
     putBackLocalChange(store, localChangeForPr(store, change, thread.prKey));
   }

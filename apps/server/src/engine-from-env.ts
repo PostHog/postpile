@@ -1,5 +1,5 @@
 import type { AppConfig } from '@postpile/core';
-import { createEngine, defaultPaths, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
+import { createEngine, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 
 export function isFake(): boolean {
@@ -11,6 +11,12 @@ export interface EngineFromEnvOptions {
   lockKind?: LockKind;
   /** The CLI's --read-only: read the database while another process holds it, no GitHub writes. */
   withoutLock?: boolean;
+  /**
+   * Run the one-time move from the code-manager folders first (default).
+   * The desktop app passes false: it runs the move itself before Electron
+   * creates its userData folder.
+   */
+  migrateLegacy?: boolean;
 }
 
 /**
@@ -21,6 +27,10 @@ export interface EngineFromEnvOptions {
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
   if (isFake()) {
     return new FakeEngine();
+  }
+  if (options.migrateLegacy ?? true) {
+    // A no-op once done, and in dev.
+    migrateLegacyData();
   }
   return createEngine({ lockKind: options.lockKind ?? 'server', withoutLock: options.withoutLock });
 }
