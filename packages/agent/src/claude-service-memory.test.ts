@@ -423,6 +423,20 @@ describe('RunnerAgentService.glanceBatch', () => {
     });
   });
 
+  it('reads the corrected second answer when Sonnet fixes its own typo', async () => {
+    // Real answer for acme/digest#30, replayed from a copy of the database.
+    const { runner, service } = setup();
+    const entry = JSON.stringify({ glances: [{ prKey: 'acme/app#1', ...glanceEntry, verdict: 'LOOKS_SASAFE' }] });
+    const fixed = JSON.stringify({ glances: [{ prKey: 'acme/app#1', ...glanceEntry, verdict: 'LOOKS_SAFE' }] });
+    runner.answer('glance_batch', `${entry}\n\nWait, let me correct a typo in the verdict field.\n\n${fixed}`);
+    const input = glanceInput({ items: [glanceInput().items[0]!] });
+
+    const result = await service.glanceBatch(input);
+
+    expect(result.glances.map((glance) => [glance.prKey, glance.verdict])).toEqual([['acme/app#1', 'LOOKS_SAFE']]);
+    expect(result.missing).toEqual([]);
+  });
+
   it('fills pullInReason from provenance and labels the retry attempt', async () => {
     const { runner, service, calls } = setup();
     runner.answer('glance_batch', { glances: [{ prKey: 'acme/app#2', ...glanceEntry }] });
