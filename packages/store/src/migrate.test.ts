@@ -6,9 +6,9 @@ import * as init from './migrations/001_init.ts';
 describe('migrations', () => {
   it('creates the schema on a fresh database and is idempotent', () => {
     const db = openDatabase(':memory:');
-    expect(currentVersion(db)).toBe(11);
+    expect(currentVersion(db)).toBe(12);
     runMigrations(db);
-    expect(currentVersion(db)).toBe(11);
+    expect(currentVersion(db)).toBe(12);
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all();
     const names = tables.map((row) => row.name);
     for (const table of ['pr_glance', 'event_log', 'cursor', 'topic_dossier', 'fact', 'fact_ref', 'rule_proposal', 'agent_call', 'instructions_version', 'pr_pull_in', 'ping_decision', 'action_log', 'work_context_version', 'pending_write']) {
@@ -16,6 +16,9 @@ describe('migrations', () => {
     }
     const columns = db.prepare('PRAGMA table_info(user_pr_state)').all().map((row) => row.name);
     expect(columns).not.toContain('brought_back_at');
+    const eventIndexes = db.prepare('PRAGMA index_list(pr_event)').all().map((row) => row.name);
+    expect(eventIndexes).toContain('pr_event_pr_key_at_id');
+    expect(eventIndexes).not.toContain('pr_event_pr_key');
     db.close();
   });
 

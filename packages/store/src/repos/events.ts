@@ -113,7 +113,8 @@ export class EventRepo {
     }
     const rows = all<EventRow>(
       this.db,
-      `SELECT * FROM pr_event WHERE pr_key IN (${placeholders(prKeys.length)}) ORDER BY at, id`,
+      // pr_key first so the rows come straight from the (pr_key, at, id) index, no sort.
+      `SELECT * FROM pr_event WHERE pr_key IN (${placeholders(prKeys.length)}) ORDER BY pr_key, at, id`,
       ...prKeys,
     );
     for (const row of rows) {
