@@ -1,7 +1,19 @@
 {
   "name": "@postpile/engine",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
+  "description": "PostPile engine: sync, live poll, digest pipeline, writes and the work-context sweep",
   "private": true,
+  "license": "MIT",
+  "author": "PostHog Inc. (https://posthog.com)",
+  "homepage": "https://github.com/PostHog/postpile#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/postpile.git",
+    "directory": "packages/engine"
+  },
+  "bugs": {
+    "url": "https://github.com/PostHog/postpile/issues"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

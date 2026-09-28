@@ -1,7 +1,19 @@
 {
   "name": "@postpile/core",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
+  "description": "PostPile domain types and pure logic: tiles, loudness, whose turn, memory rules",
   "private": true,
+  "license": "MIT",
+  "author": "PostHog Inc. (https://posthog.com)",
+  "homepage": "https://github.com/PostHog/postpile#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/postpile.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/PostHog/postpile/issues"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

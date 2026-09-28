@@ -7,7 +7,7 @@ import { useNow } from '../lib/use-now.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { WritesLock } from './WritesLock.tsx';
 
-/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, agent calls of the last sync, mark-read queue. */
+/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, agent calls of the last sync, mark-read queue, app version. */
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
   const now = useNow(1000);
@@ -47,6 +47,7 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
       <span className="ml-auto">
         {actions.pendingMarkReads > 0 ? `${actions.pendingMarkReads} mark-read in the undo window` : 'mark-read queue empty'}
       </span>
+      {window.postpile?.version && <span title="PostPile › About PostPile">v{window.postpile.version}</span>}
     </footer>
   );
 }

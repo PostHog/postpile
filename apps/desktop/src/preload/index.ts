@@ -1,4 +1,4 @@
-// Runs sandboxed before the renderer. It hands over where the API lives, two
+// Runs sandboxed before the renderer. It hands over where the API lives, the app version, two
 // listeners (trackpad swipes, clicks on Mac notifications) and one call (the
 // test notification), nothing else: no node access, no other ipc. The main
 // process passes the API values as extra command line arguments, which a
@@ -15,6 +15,8 @@ function argValue(name: string): string {
 contextBridge.exposeInMainWorld('postpile', {
   apiUrl: argValue('postpile-api'),
   token: argValue('postpile-token'),
+  /** The app version, e.g. 0.1.0-alpha.0, for the status footer. */
+  version: argValue('postpile-version'),
   /** Shows a test Mac notification; answers shown, off (POSTPILE_MAC_NOTIFICATIONS=0) or unsupported. */
   sendTestNotification(): Promise<'shown' | 'off' | 'unsupported'> {
     return ipcRenderer.invoke('postpile:test-notification') as Promise<'shown' | 'off' | 'unsupported'>;

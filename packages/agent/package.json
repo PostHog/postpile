@@ -1,7 +1,19 @@
 {
   "name": "@postpile/agent",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
+  "description": "PostPile agent layer: claude CLI runner, prompts and answer schemas",
   "private": true,
+  "license": "MIT",
+  "author": "PostHog Inc. (https://posthog.com)",
+  "homepage": "https://github.com/PostHog/postpile#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/postpile.git",
+    "directory": "packages/agent"
+  },
+  "bugs": {
+    "url": "https://github.com/PostHog/postpile/issues"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

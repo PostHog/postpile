@@ -5,8 +5,14 @@
 # Ad-hoc signed (identity "-"): no Developer ID, no notarization. An
 # unsigned or half-signed bundle has an invalid signature, and macOS drops
 # notifications from such apps without a word.
-appId: com.postpile.app
+# Changed from com.postpile.app for 0.1.0-alpha.0. macOS keys notification
+# permission by the bundle id, so an install that ran the old id asks for it
+# again. The data folder (and with it the single-instance lock and the
+# welcome marker) is keyed by productName and stays where it is.
+appId: com.posthog.postpile
 productName: PostPile
+# The version comes from this package's package.json (kept in sync with the root).
+copyright: Copyright © 2026 PostHog Inc.
 electronVersion: 44.4.5
 directories:
   output: dist

@@ -10,6 +10,8 @@ import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
 import { welcomeOnce } from './welcome.ts';
 
+const REPO_URL = 'https://github.com/PostHog/postpile';
+
 // A GUI launch (Finder, Dock, the packaged app) gets launchd's minimal PATH.
 // gh and claude live in /opt/homebrew/bin and ~/.local/bin, so take PATH
 // from the login shell, and add the usual install folders in case the shell
@@ -42,8 +44,19 @@ if (!isFake()) {
 // Otherwise userData lands under the npm package name, "@postpile/desktop".
 // Also the name in the menu bar and the About box.
 app.setName('PostPile');
-app.setAppUserModelId('com.postpile.app');
-app.setAboutPanelOptions({ applicationName: 'PostPile' });
+// Same as appId in electron-builder.yml.
+app.setAppUserModelId('com.posthog.postpile');
+// PostPile › About PostPile. The version is the desktop package.json version.
+app.setAboutPanelOptions({
+  applicationName: 'PostPile',
+  // A dev run is the Electron binary, whose own bundle version macOS would show otherwise.
+  // With both the same, macOS shows the version once.
+  applicationVersion: app.getVersion(),
+  version: app.getVersion(),
+  copyright: 'Copyright © 2026 PostHog Inc. MIT licensed.',
+  credits: 'Alpha. Runs on your Mac only, talks to GitHub through gh and to Anthropic through the claude CLI.',
+  website: REPO_URL,
+});
 if (profileFromEnv(process.env) === 'dev') {
   app.setPath('userData', process.env.POSTPILE_DATA_DIR || dataDirs().dataDir);
 }
@@ -88,9 +101,10 @@ function refreshOpenedPrs(): void {
 }
 
 /**
- * The standard macOS menus, plus Help › Reveal Logs, which shows main.log in
- * Finder. Kept close to Electron's default menu so the usual shortcuts
- * (copy, paste, reload, zoom) keep working.
+ * The standard macOS menus (the app menu holds About PostPile), plus Help ›
+ * Reveal Logs, which shows main.log in Finder, and links to the repo and its
+ * issues. Kept close to Electron's default menu so the usual shortcuts (copy,
+ * paste, reload, zoom) keep working.
  */
 function setAppMenu(): void {
   const menu = Menu.buildFromTemplate([
@@ -101,7 +115,12 @@ function setAppMenu(): void {
     { role: 'windowMenu' },
     {
       role: 'help',
-      submenu: [{ label: 'Reveal Logs', click: () => shell.showItemInFolder(fileLog.file) }],
+      submenu: [
+        { label: 'Reveal Logs', click: () => shell.showItemInFolder(fileLog.file) },
+        { type: 'separator' },
+        { label: 'PostPile on GitHub', click: () => void shell.openExternal(REPO_URL) },
+        { label: 'Report an Issue', click: () => void shell.openExternal(`${REPO_URL}/issues`) },
+      ],
     },
   ]);
   Menu.setApplicationMenu(menu);
@@ -138,7 +157,7 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       // Read by the preload script, see src/preload/index.ts.
-      additionalArguments: [`--postpile-api=${apiUrl}`, `--postpile-token=${token}`],
+      additionalArguments: [`--postpile-api=${apiUrl}`, `--postpile-token=${token}`, `--postpile-version=${app.getVersion()}`],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
