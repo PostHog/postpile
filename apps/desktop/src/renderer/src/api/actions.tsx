@@ -18,6 +18,7 @@ import type {
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
+  PendingWritesResult,
   PrKey,
   SnoozeCondition,
   SyncReport,
@@ -37,6 +38,8 @@ const NOTICE_MS = 6000;
 // Matches the engine's memory correction undo tokens.
 const MEMORY_UNDO_PREFIX = 'memory:';
 const PROBLEM_NOTICE_MS = 12000;
+// Room for the engine to send or park a batch after its window ends.
+const UNDO_SETTLE_MS = 400;
 
 export type NoticeTone = 'ok' | 'error' | 'blocked';
 
@@ -66,8 +69,12 @@ export interface Actions {
   blockedReason(action: GithubWrite): string | null;
 
   sync(): Promise<void>;
-  /** The footer lock. Turning on is confirmed in the footer first; the server refuses it when the env forces read-only. */
-  setGitHubWrites(enabled: boolean): Promise<void>;
+  /** The footer lock. Turning on is confirmed in the footer first; the server refuses it when the env forces read-only. Returns whether it switched. */
+  setGitHubWrites(enabled: boolean): Promise<boolean>;
+  /** "Send N to GitHub": the mark-reads made while locked. Refused by the server while writes are off. */
+  sendPendingWrites(): Promise<void>;
+  /** "Discard": drops the pending writes; the tiles stay unread, like on GitHub. */
+  discardPendingWrites(): Promise<void>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo and lock as a tile. */
   markThreadRead(threadId: string): Promise<void>;
   approve(prKey: PrKey): Promise<void>;
@@ -136,15 +143,21 @@ export function ActionsProvider(props: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  // Drop undo entries once the engine has sent them to GitHub.
+  // Drop undo entries once the engine has sent them to GitHub (or, while
+  // locked, turned them into pending writes), then refetch so tiles and the
+  // footer lock show what happened.
   useEffect(() => {
     const first = pendingUndos[0];
     if (!first) {
       return;
     }
-    const timer = setTimeout(() => {
-      setPendingUndos((current) => current.filter((entry) => entry.until > Date.now()));
-    }, Math.max(first.until - Date.now(), 0));
+    const timer = setTimeout(
+      () => {
+        setPendingUndos((current) => current.filter((entry) => entry.until > Date.now()));
+        void refreshAll();
+      },
+      Math.max(first.until - Date.now(), 0) + UNDO_SETTLE_MS,
+    );
     return () => clearTimeout(timer);
   }, [pendingUndos]);
 
@@ -213,13 +226,25 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function setGitHubWrites(enabled: boolean): Promise<void> {
+  async function setGitHubWrites(enabled: boolean): Promise<boolean> {
     try {
       const change = await withBusy('github-writes', () => request<GitHubWritesChange>('POST', '/api/github-writes', { enabled }));
       show(change.ok ? 'ok' : 'blocked', change.message);
       await refreshAll();
+      return change.ok;
     } catch (error) {
       show('error', `Could not switch GitHub writes: ${errorText(error)}`);
+      return false;
+    }
+  }
+
+  async function settlePendingWrites(path: 'send' | 'discard'): Promise<void> {
+    try {
+      const result = await withBusy('github-writes', () => request<PendingWritesResult>('POST', `/api/github-writes/pending/${path}`));
+      show(result.ok ? 'ok' : 'error', result.message);
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not ${path} the pending writes: ${errorText(error)}`);
     }
   }
 
@@ -340,6 +365,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
 
     sync,
     setGitHubWrites,
+    sendPendingWrites: () => settlePendingWrites('send'),
+    discardPendingWrites: () => settlePendingWrites('discard'),
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },

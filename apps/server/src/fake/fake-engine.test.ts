@@ -57,6 +57,7 @@ describe('FakeEngine', () => {
 
   it('undoes the newest batch when no token is given', async () => {
     const engine = new FakeEngine();
+    await engine.setGitHubWrites(true);
     await engine.markRead('pr:PostHog/posthog#41915');
     await engine.markRead('pr:PostHog/posthog#41790');
     await engine.undo(null);
@@ -69,6 +70,7 @@ describe('FakeEngine', () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });
     const tileId = 'pr:PostHog/posthog#41822';
+    await engine.setGitHubWrites(true);
     await engine.markRead(tileId);
     await engine.snooze(tileId, { kind: 'until_time', until: '2026-09-27T11:00:00.000Z' });
     expect((await engine.getTopic('topic-ci-tests'))?.tiles.find((view) => view.tile.id === tileId)?.state.kind).toBe('snoozed');
@@ -194,7 +196,7 @@ describe('FakeEngine rechecks', () => {
   it('flips the writes lock and fills the action log with fake queue sends', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });
-    expect(await engine.githubWrites()).toEqual({ enabled: false, forcedOffReason: null });
+    expect(await engine.githubWrites()).toEqual({ enabled: false, forcedOffReason: null, pending: [] });
     await engine.setGitHubWrites(true);
 
     const marked = await engine.markRead('set:turbo-cache');
@@ -209,23 +211,51 @@ describe('FakeEngine rechecks', () => {
     expect(log.at(-1)).toMatchObject({ action: 'writes_on', origin: 'footer' });
   });
 
-  it('keeps read-only mark-reads local: the sample thread stays unread "on GitHub"', async () => {
+  it('turns a locked mark-read into a pending write: the tile stays unread until it is sent', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });
+    const tileOf = async () => (await engine.getTopic('topic-depot'))?.tiles.find((view) => view.tile.id === 'set:turbo-cache');
     const before = await engine.debugNotifications(100);
     const unread = before.filter((row) => row.thread.unread && row.landing.kind === 'tile' && row.landing.tileId === 'set:turbo-cache');
     expect(unread.length).toBeGreaterThan(0);
 
-    await engine.markRead('set:turbo-cache');
-    await engine.setGitHubWrites(true);
+    const marked = await engine.markRead('set:turbo-cache');
+    expect(marked.message).toMatch(/pending until you unlock/);
     now = new Date(now.getTime() + 7000);
 
+    expect((await tileOf())?.state.kind).toBe('unread');
+    expect((await tileOf())?.pendingWrite).not.toBeNull();
+    expect((await engine.githubWrites()).pending).toEqual([expect.objectContaining({ tileId: 'set:turbo-cache', threadCount: unread.length })]);
     const after = await engine.debugNotifications(100);
     for (const row of unread) {
       const again = after.find((candidate) => candidate.thread.id === row.thread.id);
       expect(again?.thread.unread).toBe(true);
-      expect(again?.lastAction).toMatchObject({ action: 'mark_read', outcome: 'local' });
+      expect(again?.lastAction).toMatchObject({ action: 'mark_read', outcome: 'pending' });
     }
+
+    expect((await engine.sendPendingWrites()).ok).toBe(false);
+    await engine.setGitHubWrites(true);
+    const sent = await engine.sendPendingWrites();
+    expect(sent).toMatchObject({ ok: true, done: 1 });
+    expect(sent.status.pending).toEqual([]);
+    expect((await tileOf())?.state.kind).toBe('done');
+    const sentRows = await engine.debugNotifications(100);
+    expect(unread.every((row) => sentRows.find((candidate) => candidate.thread.id === row.thread.id)?.thread.unread === false)).toBe(true);
+  });
+
+  it('discards pending writes and leaves the tile unread', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now });
+    await engine.markRead('set:turbo-cache');
+    now = new Date(now.getTime() + 7000);
+
+    const discarded = await engine.discardPendingWrites();
+
+    expect(discarded.status.pending).toEqual([]);
+    const view = (await engine.getTopic('topic-depot'))?.tiles.find((candidate) => candidate.tile.id === 'set:turbo-cache');
+    expect(view?.state.kind).toBe('unread');
+    expect(view?.pendingWrite).toBeNull();
+    expect((await engine.actionLog(1))[0]).toMatchObject({ outcome: 'discarded', origin: 'footer' });
   });
 });
 

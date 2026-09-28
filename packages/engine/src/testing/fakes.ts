@@ -17,6 +17,7 @@ import { Engine } from '../engine.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
 import { ActionLog } from '../writes/action-log.ts';
 import { GitHubWrites } from '../writes/github-writes.ts';
+import { PendingWrites } from '../writes/pending-writes.ts';
 import { WriteSwitch } from '../writes/write-switch.ts';
 import { FakeAgent } from './fake-agent.ts';
 
@@ -185,8 +186,14 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const runner = new FakeRunner();
   const timers = new FakeTimers();
-  const markReadQueue = new MarkReadQueue(writes, reader, timers, undefined, (threadId, readAt) =>
-    store.notifications.markRead(threadId, readAt),
+  const pendingWrites = new PendingWrites(store, writes, now);
+  const markReadQueue = new MarkReadQueue(
+    writes,
+    reader,
+    timers,
+    undefined,
+    (threadId, readAt) => store.notifications.markRead(threadId, readAt),
+    (batch) => pendingWrites.park(batch),
   );
   const callLog = new AgentCallLog(store, now);
   const agent = new FakeAgent(runner, callLog);
@@ -197,6 +204,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     agent,
     callLog,
     markReadQueue,
+    pendingWrites,
     instructionsFile,
     now,
     timers,

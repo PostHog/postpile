@@ -9,6 +9,7 @@ import * as pingDecisions from './migrations/007_ping_decisions.ts';
 import * as actionLog from './migrations/008_action_log.ts';
 import * as workContext from './migrations/009_work_context.ts';
 import * as dropBroughtBack from './migrations/010_drop_brought_back.ts';
+import * as pendingWrite from './migrations/011_pending_write.ts';
 
 interface Migration {
   version: number;
@@ -16,7 +17,7 @@ interface Migration {
 }
 
 // Append new migrations here, in order. Never edit one that has shipped.
-const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack];
+const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite];
 
 export function currentVersion(db: DatabaseSync): number {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');

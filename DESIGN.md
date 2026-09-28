@@ -66,8 +66,9 @@ The agent spots the point but never picks the scope.
 
 **Mark read is deferred**: acting on a tile marks the GitHub notification read
 through a queue with a 6s undo window, because GitHub has no mark-unread API
-(and only while the footer lock allows GitHub writes; otherwise it stays in
-the app, see "GitHub writes: lock, action log").
+(and only while the footer lock allows GitHub writes; otherwise it becomes a
+pending write and nothing changes in the app, see "GitHub writes: lock,
+action log").
 Batches stack; undo walks back newest first; quitting flushes instead of
 dropping (and waits for sends already in flight). The queue lives in the
 engine (`MarkReadQueue`), in memory. A GitHub mark-read covers the whole
@@ -960,16 +961,53 @@ status footer (`POST /api/github-writes {enabled}`), kept in meta
 then shows disabled with the reason and turning it on answers `ok: false`.
 Opening the lock asks in a popover ("Mark-read and approvals will reach
 GitHub"); closing is instant. The UI guard follows it: approve and comment
-are blocked while locked, mark read and "not mine" run and stay in the app.
-`CODE_MANAGER_ALLOW_WRITES` is gone.
+are blocked while locked (no pending queue for them), mark read and "not
+mine" run and become pending writes. `CODE_MANAGER_ALLOW_WRITES` is gone.
+
+**Pending writes** (2026-09-28). GitHub is the source of truth for read and
+unread; the app never holds a read state GitHub doesn't have. So a mark-read
+while locked (tile, detail pane, "not mine", debug row, quit flush) does not
+make the tile done:
+
+- The click goes through the queue as usual, so the 6s undo works. Nothing
+  changes in the app. When the window runs out (or on quit) the queue parks
+  the batch (`MarkReadQueue` -> `PendingWrites.park`) into `pending_write`
+  (migration 011, one row per click: PR keys, keys to mark handled, threads
+  with their synced `updated_at`, last error). Logged as `pending`.
+- A batch queued unlocked whose window ends after the lock closed is parked
+  too; the local change it already made (events seen, handled) is put back.
+- PRs with no unread GitHub thread have nothing to disagree with: they
+  change in the app right away (logged `local`), locked or not.
+- Tiles holding a pending PR carry `TileView.pendingWrite` and show a
+  neutral "pending: mark read on GitHub" marker (clock glyph, tooltip about
+  the lock); their Mark read button is disabled. The footer lock shows a
+  count badge (`GitHubWritesStatus.pending`).
+- Unlocking opens a popover that lists them (count, first five titles):
+  "Send N to GitHub" (unlock, then `POST /api/github-writes/pending/send`),
+  "Discard" (unlock, drop them), "Cancel" (stay locked), and "Discard
+  pending, stay locked". With writes on and something left (a failed send)
+  a click on the lock offers Send / Discard / Lock. Under
+  `POSTPILE_READ_ONLY=1` it only offers Discard.
+- Sending goes thread by thread through the same path as the queue
+  (`markThreads`: re-read the thread, skip on newer activity, else
+  `GitHubWrites.markThreadRead`), origin `footer`. A PR turns read here only
+  once its thread is through (sent or already read): events up to the
+  click seen, pinged PRs handled. Skipped threads (activity after the last
+  sync) drop out and stay unread. Failures stay pending with the error.
+  Refused (`ok: false`) while writes are off.
+- Discard (`POST /api/github-writes/pending/discard`) drops the rows, logs
+  `discarded`, and changes nothing else: the tiles stay unread, exactly as
+  GitHub has them.
+- Pending writes survive restarts (SQLite).
 
 **One door.** `GitHubWrites` is the only thing in the engine that calls the
 writer: approve, comment and the mark-read queue go through it. Every call
 asks the switch and writes an `action_log` row (reached GitHub, failed with
-the error, or not sent because writes are off). A mark-read batch remembers
-whether writes were on when it was queued: a batch queued while read-only
-stays local even if the lock opens inside its 6s window, and a batch whose
-window ends after the lock closed is not sent either.
+the error, or not sent because writes are off). A mark-read batch is only
+sent when it was queued with writes on and they are still on when its
+window ends; otherwise it is parked as a pending write (a batch queued
+locked stays pending even if the lock opens inside its window: the unlock
+popover is where the user decides).
 
 **Action log** (`action_log`, migration 008): `id`, `at`, `action`
 (`mark_read`, `undo_mark_read`, `approve`, `comment`, `writes_on`,
@@ -977,12 +1015,15 @@ window ends after the lock closed is not sent either.
 added with their writer methods), `origin` (who decided: `tile` = the user in
 a tile or the detail pane, `debug` = the notifications view, `queue` = the
 deferred queue when a batch's window ran out, `quit` = the flush on quit,
-`sync` / `poll` = a thread left the inbox, `footer` = the lock), `outcome`
-(`queued`, `github`, `local`, `skipped`, `failed`, `observed`), `thread_id`,
+`sync` / `poll` = a thread left the inbox, `footer` = the lock, also sending
+or discarding pending writes), `outcome` (`queued`, `pending`, `discarded`,
+`github`, `local`, `skipped`, `failed`, `observed`), `thread_id`,
 `pr_key`, `tile_id`, `batch` (a UUID per mark-read batch, links the queue
 send to the click that queued it), `detail`. Rows at queue time: one per
-queued thread (`queued`, or `local` while read-only) and one `local` row per
-PR without an unread thread. Rows at send time: `github`, `failed`,
+queued thread (`queued`; detail says it turns pending when locked) and one
+`local` row per PR without an unread thread that changed right away. At the
+end of the window while locked: one `pending` row per thread. Older rows
+may carry `local` for a read-only mark-read from before pending writes. Rows at send time: `github`, `failed`,
 `skipped` (activity after the last sync), `observed` (already read on
 GitHub). `GET /api/debug/actions?limit=` lists the newest.
 
@@ -998,9 +1039,12 @@ anything read. There is no CLI write and no "mark all read".
 **Debug view rows.** Each row carries `lastAction` (the newest log entry for
 the thread or its PR) and `decidedBy` (for a queue send, the click that
 queued it), rendered as "marked read by the deferred queue, queued by you in
-a tile · 3m ago", "stayed local: read-only · marked read by you in a tile". A read thread
-without an entry reads as "read on github.com or another client". Filter "Read by this app": the newest entry is
-the app's own mark-read (sent, queued, or local).
+a tile · 3m ago", "pending while locked · marked read by you in a tile, not
+on GitHub yet", "pending mark-read discarded: unread, like on GitHub". A
+read thread without an entry reads as "read on github.com or another
+client". Filter "Read by this app": the newest entry is the app's own
+mark-read, sent or queued with writes on. Filter "Pending while locked":
+a pending (or failed pending) mark-read.
 
 **No bring back** (removed 2026-09-28): GitHub is the source of truth for
 read and unread, and nothing marks a thread unread there, so an app-only
@@ -1012,7 +1056,7 @@ as "brought back in the app (removed feature)".
 
 Fake mode runs the same flows on `FakeWrites`: the lock (off at start, not
 persisted), the log, queue sends after 6s that only flip the sample thread's
-"GitHub" unread flag.
+"GitHub" unread flag, pending writes (in memory) with send and discard.
 
 ## Live poll and Mac pings
 
@@ -1190,7 +1234,7 @@ core  <- store, github, agent  <- engine  <- server, cli
 
 - **packages/core**: domain types (`types.ts`), API read models (`views.ts`), pure logic: tile
   state, loudness rules, snooze evaluation, provenance, stacks, bot detection. No IO.
-- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins, 007 ping decisions, 008 action log, 009 work context, 010 drops `brought_back_at`), one repository
+- **packages/store**: `node:sqlite`, migrations in `migrations/` (001 init, 002 engine memory, 003 fact recheck, 004 instructions versions, 005 topic areas, 006 pull-ins, 007 ping decisions, 008 action log, 009 work context, 010 drops `brought_back_at`, 011 pending writes), one repository
   class per table group, `Store` bundles them.
 - **packages/github**: `GitHubReader` (viewer, notifications with ETag / If-Modified-Since,
   batched GraphQL PR enrichment, 12 PRs per query, PRs by branch for stack completion) and `GitHubWriter` (mark thread read,

@@ -16,6 +16,7 @@ import { MetaRepo } from './repos/meta.ts';
 import { NotificationRepo } from './repos/notifications.ts';
 import { TopicProposalRepo } from './repos/proposals.ts';
 import { PrRepo } from './repos/prs.ts';
+import { PendingWriteRepo } from './repos/pending-writes.ts';
 import { PingDecisionRepo } from './repos/ping-decisions.ts';
 import { PullInRepo } from './repos/pull-ins.ts';
 import { RuleProposalRepo } from './repos/rule-proposals.ts';
@@ -52,6 +53,7 @@ export class Store {
   readonly workContext: WorkContextRepo;
 
   readonly actionLog: ActionLogRepo;
+  readonly pendingWrites: PendingWriteRepo;
 
   constructor(readonly db: DatabaseSync) {
     this.meta = new MetaRepo(db);
@@ -77,6 +79,7 @@ export class Store {
     this.pullIns = new PullInRepo(db);
     this.pingDecisions = new PingDecisionRepo(db);
     this.actionLog = new ActionLogRepo(db);
+    this.pendingWrites = new PendingWriteRepo(db);
     this.workContext = new WorkContextRepo(db);
   }
 

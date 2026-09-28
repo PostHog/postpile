@@ -132,6 +132,15 @@ export interface TileView {
   people: TilePerson[];
   /** Whose move it is on the tile. */
   turn: WhoseTurn;
+  /** A mark-read of one of its PRs waits for the writes lock; null when none does. */
+  pendingWrite: TilePendingWrite | null;
+}
+
+/** "pending: mark read on GitHub" on a tile. */
+export interface TilePendingWrite {
+  since: IsoTime;
+  /** The last send's error, null before any try. */
+  error: string | null;
 }
 
 export interface TopicDetail {

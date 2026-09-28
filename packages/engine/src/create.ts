@@ -11,6 +11,7 @@ import { defaultPaths, type AppPaths } from './paths.ts';
 import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
+import { PendingWrites } from './writes/pending-writes.ts';
 import { WriteSwitch } from './writes/write-switch.ts';
 
 export interface CreateEngineOptions {
@@ -48,6 +49,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const markThreadReadLocally = (threadId: string, readAt: string): void => {
     store.notifications.markRead(threadId, readAt);
   };
+  const pendingWrites = new PendingWrites(store, writes, now);
   const callLog = new AgentCallLog(store, now);
   return new Engine({
     store,
@@ -55,7 +57,8 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     writes,
     agent: new RunnerAgentService(new ClaudeCliRunner(), { observer: callLog }),
     callLog,
-    markReadQueue: new MarkReadQueue(writes, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
+    markReadQueue: new MarkReadQueue(writes, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally, (batch) => pendingWrites.park(batch)),
+    pendingWrites,
     instructionsFile: paths.instructionsFile,
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),

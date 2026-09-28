@@ -10,6 +10,7 @@ import type {
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
+  PendingWritesResult,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposalReply,
@@ -77,14 +78,22 @@ export interface EngineService {
   /** The newest `limit` action log entries: every GitHub-affecting action and local mark-reads. */
   actionLog(limit: number): Promise<ActionLogEntry[]>;
 
-  /** The footer lock: are GitHub writes on, and is read-only forced by the env. */
+  /** The footer lock: are GitHub writes on, is read-only forced by the env, and the pending writes. */
   githubWrites(): Promise<GitHubWritesStatus>;
   /**
    * Flips the lock at runtime and keeps the choice. Refused (ok false) when
-   * POSTPILE_READ_ONLY=1 forces read-only. Mark-reads queued while off
-   * stay local even if writes come on inside their undo window.
+   * POSTPILE_READ_ONLY=1 forces read-only. Unlocking sends nothing by
+   * itself: pending writes wait for sendPendingWrites.
    */
   setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange>;
+  /**
+   * "Send N to GitHub": every pending write through the writes door, each
+   * result logged. The PRs turn read here as their threads reach GitHub;
+   * failures stay pending with the error. Refused while writes are off.
+   */
+  sendPendingWrites(): Promise<PendingWritesResult>;
+  /** "Discard": drops the pending writes. Nothing changes in the app, the tiles stay unread like on GitHub. */
+  discardPendingWrites(): Promise<PendingWritesResult>;
   /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
   /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */
@@ -97,7 +106,8 @@ export interface EngineService {
   approve(prKey: PrKey): Promise<ActionResult>;
   /**
    * Marks the tile's events seen and queues the GitHub mark-read behind the
-   * undo window. With GitHub writes off it only changes the app.
+   * undo window. With GitHub writes locked nothing changes in the app: after
+   * the window it becomes a pending write (the tile shows a marker).
    */
   markRead(tileId: string): Promise<ActionResult>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
@@ -174,7 +184,7 @@ export interface EngineService {
   startWorkContextSchedule(): void;
   stopWorkContextSchedule(): void;
 
-  /** Sends every queued mark-read now. Call on quit: the user meant to clear them. */
+  /** Sends every queued mark-read now (locked ones become pending writes). Call on quit: the user meant to clear them. */
   flushPendingWrites(): Promise<void>;
   close(): Promise<void>;
 }

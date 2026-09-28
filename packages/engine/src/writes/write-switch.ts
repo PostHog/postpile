@@ -1,4 +1,4 @@
-import type { GitHubWritesStatus } from '@postpile/core';
+import type { WriteSwitchState } from '@postpile/core';
 import type { GitHubWriter } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ReadOnlyWriter } from './read-only-writer.ts';
@@ -33,7 +33,7 @@ export class WriteSwitch {
     return this.real !== null && this.store.meta.get(GITHUB_WRITES_META_KEY) === 'on';
   }
 
-  status(): GitHubWritesStatus {
+  status(): WriteSwitchState {
     return { enabled: this.enabled(), forcedOffReason: this.forcedOffReason() };
   }
 

@@ -42,7 +42,7 @@ async function tile(h: Harness) {
 describe('GitHub writes switch', () => {
   it('starts read-only on a fresh store', async () => {
     const h = makeHarness({ writesEnabled: false });
-    expect(await h.engine.githubWrites()).toEqual({ enabled: false, forcedOffReason: null });
+    expect(await h.engine.githubWrites()).toEqual({ enabled: false, forcedOffReason: null, pending: [] });
   });
 
   it('uses the real writer after turning on and the read-only one after turning off, without a restart', async () => {
@@ -103,23 +103,6 @@ describe('action log at every write path', () => {
     ]);
     const [queued, sent] = h.store.actionLog.listRecent(2).toReversed();
     expect(sent).toMatchObject({ threadId: 'thread-1', prKey: pr.key, tileId, batch: queued?.batch });
-  });
-
-  it('read-only mark-read: changes the app, sends nothing, logs local, even if writes come on inside the window', async () => {
-    const h = await synced({ writesEnabled: false });
-
-    const result = await h.engine.markRead(tileId);
-    await h.engine.setGitHubWrites(true);
-    await afterUndoWindow(h);
-
-    expect(result.message).toMatch(/here only/);
-    expect((await tile(h))?.state.kind).toBe('done');
-    expect(h.writer.calls).toEqual([]);
-    expect(h.store.notifications.get('thread-1')?.unread).toBe(true);
-    expect(logRows(h)).toEqual([
-      ['mark_read', 'tile', 'local'],
-      ['writes_on', 'footer', 'local'],
-    ]);
   });
 
   it('undo inside the window is logged', async () => {
@@ -209,6 +192,165 @@ describe('action log at every write path', () => {
     h.reader.etag = 'etag-2';
     await h.engine.pollOnce();
     expect(logRows(h)).toEqual([['mark_read', 'poll', 'observed']]);
+  });
+});
+
+describe('pending writes while locked', () => {
+  it('a locked mark-read changes nothing, then becomes a pending write and the tile stays unread', async () => {
+    const h = await synced({ writesEnabled: false });
+
+    const result = await h.engine.markRead(tileId);
+    expect(result.message).toMatch(/pending until you unlock/);
+    expect((await h.engine.githubWrites()).pending).toEqual([]);
+    await afterUndoWindow(h);
+
+    const view = await tile(h);
+    expect(view?.state.kind).toBe('unread');
+    expect(view?.pendingWrite).toMatchObject({ error: null });
+    expect(h.writer.calls).toEqual([]);
+    expect(h.store.notifications.get('thread-1')?.unread).toBe(true);
+    const status = await h.engine.githubWrites();
+    expect(status.pending).toEqual([expect.objectContaining({ title: pr.title, prKeys: [pr.key], threadCount: 1, tileId, origin: 'tile' })]);
+    expect(logRows(h)).toEqual([
+      ['mark_read', 'tile', 'queued'],
+      ['mark_read', 'tile', 'pending'],
+    ]);
+  });
+
+  it('undo inside the window leaves nothing pending', async () => {
+    const h = await synced({ writesEnabled: false });
+    const result = await h.engine.markRead(tileId);
+    await h.engine.undo(result.undoToken);
+    await afterUndoWindow(h);
+    expect((await h.engine.githubWrites()).pending).toEqual([]);
+    expect((await tile(h))?.pendingWrite).toBeNull();
+  });
+
+  it('unlock and send: reaches GitHub, is logged, and only then the tile turns done', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+
+    await h.engine.setGitHubWrites(true);
+    const sent = await h.engine.sendPendingWrites();
+
+    expect(sent).toMatchObject({ ok: true, done: 1, failed: 0 });
+    expect(sent.status.pending).toEqual([]);
+    expect(h.writer.calls).toEqual(['markThreadRead thread-1']);
+    expect(h.store.notifications.get('thread-1')?.unread).toBe(false);
+    const view = await tile(h);
+    expect(view?.state.kind).toBe('done');
+    expect(view?.pendingWrite).toBeNull();
+    expect(logRows(h).slice(-2)).toEqual([
+      ['writes_on', 'footer', 'local'],
+      ['mark_read', 'footer', 'github'],
+    ]);
+  });
+
+  it('discard drops them: nothing is sent and the tile stays unread, like on GitHub', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+
+    const discarded = await h.engine.discardPendingWrites();
+
+    expect(discarded).toMatchObject({ ok: true, done: 1 });
+    expect(discarded.status.pending).toEqual([]);
+    expect(h.writer.calls).toEqual([]);
+    const view = await tile(h);
+    expect(view?.state.kind).toBe('unread');
+    expect(view?.pendingWrite).toBeNull();
+    expect(logRows(h).at(-1)).toEqual(['mark_read', 'footer', 'discarded']);
+  });
+
+  it('survives a restart', async () => {
+    const store = Store.open(':memory:');
+    const first = await synced({ store, writesEnabled: false });
+    await first.engine.markRead(tileId);
+    await afterUndoWindow(first);
+
+    const second = makeHarness({ store, writesEnabled: false });
+    expect((await second.engine.githubWrites()).pending).toHaveLength(1);
+  });
+
+  it('a quit flush while locked stores the mark-read as pending', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await h.engine.flushPendingWrites();
+    expect((await h.engine.githubWrites()).pending).toHaveLength(1);
+    expect(h.writer.calls).toEqual([]);
+  });
+
+  it('locking inside the undo window of an unlocked mark-read puts the tile back and parks it', async () => {
+    const h = await synced();
+    await h.engine.markRead(tileId);
+    expect((await tile(h))?.state.kind).toBe('done');
+
+    await h.engine.setGitHubWrites(false);
+    await afterUndoWindow(h);
+
+    expect(h.writer.calls).toEqual([]);
+    const view = await tile(h);
+    expect(view?.state.kind).toBe('unread');
+    expect(view?.pendingWrite).not.toBeNull();
+  });
+
+  it('a failed send stays pending with the error', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+    await h.engine.setGitHubWrites(true);
+    h.writer.failingThreads.add('thread-1');
+
+    const sent = await h.engine.sendPendingWrites();
+
+    expect(sent).toMatchObject({ ok: false, done: 0, failed: 1 });
+    expect(sent.status.pending).toEqual([expect.objectContaining({ error: 'boom thread-1', threadCount: 1 })]);
+    const view = await tile(h);
+    expect(view?.state.kind).toBe('unread');
+    expect(view?.pendingWrite).toMatchObject({ error: 'boom thread-1' });
+    expect(logRows(h).at(-1)).toEqual(['mark_read', 'footer', 'failed']);
+  });
+
+  it('is refused while locked and keeps the pending writes', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+    const sent = await h.engine.sendPendingWrites();
+    expect(sent.ok).toBe(false);
+    expect(sent.status.pending).toHaveLength(1);
+  });
+
+  it('POSTPILE_READ_ONLY=1 keeps them pending and refuses the send', async () => {
+    const h = await synced({ forcedReadOnly: true });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+
+    expect((await h.engine.setGitHubWrites(true)).ok).toBe(false);
+    const sent = await h.engine.sendPendingWrites();
+
+    expect(sent).toMatchObject({ ok: false, done: 0, failed: 1 });
+    expect(sent.message).toContain(FORCED_READ_ONLY_REASON);
+    expect(sent.status.pending).toHaveLength(1);
+    expect(h.writer.calls).toEqual([]);
+    expect((await tile(h))?.state.kind).toBe('unread');
+  });
+
+  it('the debug view mark-read goes pending too, with origin debug', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markThreadRead('thread-1');
+    await afterUndoWindow(h);
+    expect((await h.engine.githubWrites()).pending).toEqual([expect.objectContaining({ origin: 'debug' })]);
+    const [row] = await h.engine.debugNotifications(10);
+    expect(row?.lastAction).toMatchObject({ outcome: 'pending' });
+  });
+
+  it('approve and comment stay blocked, with no pending queue', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.approve(pr.key);
+    await h.engine.sendComment(pr.key, 'hi');
+    await afterUndoWindow(h);
+    expect((await h.engine.githubWrites()).pending).toEqual([]);
   });
 });
 

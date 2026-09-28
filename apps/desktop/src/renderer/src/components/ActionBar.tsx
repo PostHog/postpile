@@ -54,7 +54,12 @@ export function ActionBar(props: ActionBarProps) {
       )}
       <Button
         size="md"
-        title={actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks the whole tile read; GitHub follows after 6s'}
+        title={
+          props.view.pendingWrite
+            ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
+            : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks the whole tile read; GitHub follows after 6s')
+        }
+        disabled={props.view.pendingWrite !== null}
         onClick={() => void actions.markRead(tileId)}
       >
         Mark read

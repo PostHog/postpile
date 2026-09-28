@@ -17,6 +17,7 @@ const TONE: Record<ActionTone, string> = {
   local: 'text-ink-2',
   problem: 'text-unread-ink',
   outside: 'text-faint',
+  pending: 'text-muted',
 };
 
 /** Hover text for "Mark read", or why it is disabled. */
@@ -28,13 +29,14 @@ function markReadTitle(row: NotificationDebugRow, writes: GitHubWritesStatus | u
   if (!row.thread.unread) {
     return { title: 'Already read on GitHub.', disabled: true };
   }
-  if (!writes.enabled && !hasPr) {
-    return { title: 'GitHub writes are off and this thread has no tile, so there is nothing to mark.', disabled: true };
-  }
   if (!writes.enabled) {
-    return { title: 'GitHub writes are off: marks the PR read in the app only; the thread stays unread on GitHub. Logged.', disabled: false };
+    return {
+      title: 'GitHub writes are locked: after the 6s undo window this becomes a pending write. Nothing changes here or on GitHub until you unlock and send it. Logged.',
+      disabled: false,
+    };
   }
-  return { title: 'Marks the thread read on GitHub after the 6s undo window (and its PR read here). Logged.', disabled: false };
+  const here = hasPr ? ' (and its PR read here)' : '';
+  return { title: `Marks the thread read on GitHub after the 6s undo window${here}. Logged.`, disabled: false };
 }
 
 /** Mark read, through the queue, lock and log. GitHub has no mark-unread, so there is no way back after the undo window. */

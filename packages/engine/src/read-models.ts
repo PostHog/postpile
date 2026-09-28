@@ -47,6 +47,7 @@ import { MemoryReads } from './memory/memory-reads.ts';
 import { placementOf } from './memory/placement.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { loadViewer } from './viewer-meta.ts';
+import type { PendingWrites } from './writes/pending-writes.ts';
 
 function isUnsortedTopic(topicId: string): boolean {
   return topicId === UNSORTED_TOPIC_ID;
@@ -73,6 +74,7 @@ export class ReadModels {
     private readonly agent: AgentService,
     private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
+    private readonly pendingWrites: PendingWrites,
   ) {
     this.memory = new MemoryReads(store, now);
   }
@@ -157,6 +159,7 @@ export class ReadModels {
     const tiles = board.tilesForTopic(topicId);
     const stale = this.staleGlances(board, tiles.flatMap((tile) => tile.members.map((m) => m.prKey)));
     const viewer = loadViewer(this.store);
+    const pending = this.pendingWrites.byPrKey();
     const views = tiles.map((tile): TileView => {
       const prs = this.prSummaries(board, tile, stale, viewer);
       const memberPrs = tile.members.flatMap((member) => board.prs.get(member.prKey) ?? []);
@@ -168,6 +171,7 @@ export class ReadModels {
         tier: tileTier(prs.map((pr) => pr.tier)),
         people: tilePeople(memberPrs, viewer?.login ?? null),
         turn: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }),
+        pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
       };
     });
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);

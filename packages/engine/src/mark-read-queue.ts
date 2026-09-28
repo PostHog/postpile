@@ -5,6 +5,7 @@ import {
   type ActionOrigin,
   type DeferredBatch,
   type IsoTime,
+  type PendingThread,
   type PrKey,
   type Timers,
 } from '@postpile/core';
@@ -15,12 +16,7 @@ import type { GitHubWrites } from './writes/github-writes.ts';
 export { UNDO_WINDOW_MS, type Timers };
 
 /** A thread to mark read, with its updated_at as of the last sync. */
-export interface QueuedThread {
-  id: string;
-  updatedAt: IsoTime;
-  /** Null for issues, releases and other non-PR threads. */
-  prKey: PrKey | null;
-}
+export type QueuedThread = PendingThread;
 
 /** Who queued a batch, for the action log. */
 export interface BatchOrigin {
@@ -28,14 +24,25 @@ export interface BatchOrigin {
   tileId: string | null;
 }
 
-interface MarkReadPayload extends BatchOrigin {
+/** What a mark-read changed in the app right away, so an undo (or parking the batch) can put it back. */
+export interface LocalChange {
+  eventIds: string[];
+  handledKeys: PrKey[];
+}
+
+export const NO_LOCAL_CHANGE: LocalChange = { eventIds: [], handledKeys: [] };
+
+/** One click's worth of mark-read. */
+export interface MarkReadRequest {
   threads: QueuedThread[];
   prKeys: PrKey[];
-  /**
-   * Whether GitHub writes were on when the batch was queued. A batch queued
-   * while read-only stays local, even when writes are turned on inside its
-   * undo window.
-   */
+  /** PRs that also count as handled once read (pinged members). */
+  handleKeys: PrKey[];
+  local: LocalChange;
+}
+
+interface MarkReadPayload extends BatchOrigin, MarkReadRequest {
+  /** Whether GitHub writes were on when the batch was queued. */
   writesOn: boolean;
   /** Unique across restarts (the undo token is not), links log rows of one batch. */
   batchId: string;
@@ -47,8 +54,15 @@ export interface PendingBatch extends BatchOrigin {
   threadIds: string[];
   prKeys: PrKey[];
   writesOn: boolean;
+  local: LocalChange;
   dueAt: number;
 }
+
+/**
+ * A batch whose undo window ran out while GitHub writes were locked (or that
+ * was queued locked). It becomes a pending write instead of being sent.
+ */
+export type ParkedBatch = BatchOrigin & MarkReadRequest & { batchId: string };
 
 /**
  * Called after a thread was really marked read on GitHub, to mirror it
@@ -56,14 +70,25 @@ export interface PendingBatch extends BatchOrigin {
  */
 export type ThreadMarkedRead = (threadId: string, readAt: IsoTime) => void;
 
+/** What one thread's send came to. */
+export type ThreadOutcome = { kind: 'sent' } | { kind: 'observed' } | { kind: 'skipped' } | { kind: 'failed'; error: string };
+
+/** Who sends, for the log: the queue when a window ran out, the quit flush, or the user sending pending writes from the footer. */
+export interface SendContext {
+  origin: 'queue' | 'quit' | 'footer';
+  tileId: string | null;
+  batchId: string;
+}
+
 function toPending(batch: DeferredBatch<MarkReadPayload>): PendingBatch {
-  const { threads, prKeys, writesOn, batchId, origin, tileId } = batch.payload;
+  const { threads, prKeys, writesOn, batchId, origin, tileId, local } = batch.payload;
   return {
     token: batch.token,
     batchId,
     threadIds: threads.map((thread) => thread.id),
     prKeys,
     writesOn,
+    local,
     origin,
     tileId,
     dueAt: batch.dueAt,
@@ -80,8 +105,13 @@ function toPending(batch: DeferredBatch<MarkReadPayload>): PendingBatch {
  * moved since the sync, it stays unread and the next sync picks the new
  * activity up instead of it being lost.
  *
+ * A batch is only sent when it was queued with writes on and they are still
+ * on when its window ends. Otherwise it is parked (`onParked`) as a pending
+ * write, and nothing reaches GitHub until the user sends it from the footer.
+ *
  * Every send goes through GitHubWrites, so it respects the footer lock and
- * lands in the action log (origin `queue`, or `quit` for the flush).
+ * lands in the action log (origin `queue`, `quit` for the flush, `footer`
+ * for pending writes).
  */
 export class MarkReadQueue {
   private readonly queue: DeferredQueue<MarkReadPayload>;
@@ -95,6 +125,7 @@ export class MarkReadQueue {
     timers: Timers,
     delayMs: number = UNDO_WINDOW_MS,
     private readonly onMarked: ThreadMarkedRead = () => {},
+    private readonly onParked: (batch: ParkedBatch) => void = () => {},
   ) {
     this.queue = new DeferredQueue<MarkReadPayload>(
       (payload) => this.send(payload),
@@ -104,58 +135,75 @@ export class MarkReadQueue {
     );
   }
 
-  private async markOne(thread: QueuedThread, payload: MarkReadPayload): Promise<void> {
-    const context = {
-      origin: this.flushing ? ('quit' as const) : ('queue' as const),
-      prKey: thread.prKey,
-      tileId: payload.tileId,
-      batch: payload.batchId,
-    };
-    const log = (outcome: 'observed' | 'skipped' | 'local', detail: string) =>
-      this.writes.log.record({ action: 'mark_read', threadId: thread.id, ...context, outcome, detail });
-    if (!this.writes.enabled()) {
-      log('local', 'GitHub writes were turned off before it was sent');
-      return;
-    }
+  writesEnabled(): boolean {
+    return this.writes.enabled();
+  }
+
+  private async markOne(thread: QueuedThread, context: SendContext): Promise<ThreadOutcome> {
+    const logContext = { origin: context.origin, prKey: thread.prKey, tileId: context.tileId, batch: context.batchId };
+    const log = (outcome: 'observed' | 'skipped', detail: string) =>
+      this.writes.log.record({ action: 'mark_read', threadId: thread.id, ...logContext, outcome, detail });
     const current = await this.reader.getThread(thread.id);
     if (current === null || !current.unread) {
       // Gone, or read somewhere else in the meantime: nothing to send.
       this.onMarked(thread.id, current?.lastReadAt ?? thread.updatedAt);
       log('observed', 'already read on GitHub');
-      return;
+      return { kind: 'observed' };
     }
     if (current.updatedAt > thread.updatedAt) {
       this.notes.push(`mark-read: left notification ${thread.id} unread, it has activity after the last sync`);
       log('skipped', 'left unread: activity after the last sync');
-      return;
+      return { kind: 'skipped' };
     }
-    const result = await this.writes.markThreadRead(thread.id, context);
-    if (result === 'sent') {
-      this.onMarked(thread.id, current.updatedAt);
+    const result = await this.writes.markThreadRead(thread.id, logContext);
+    if (result === 'off') {
+      return { kind: 'failed', error: 'GitHub writes are off' };
     }
+    this.onMarked(thread.id, current.updatedAt);
+    return { kind: 'sent' };
   }
 
   /**
-   * One failed thread must not stop the rest of the batch. Nothing retries a
-   * failure: the batch already left the undo queue. The thread stays unread
-   * locally and on GitHub, and the next sync report says so. A batch queued
-   * while read-only sends nothing; its local rows were logged when it was queued.
+   * Marks each thread read on GitHub, in order. One failed thread does not
+   * stop the rest; its outcome carries the error (already logged).
    */
-  private async send(payload: MarkReadPayload): Promise<void> {
-    if (!payload.writesOn) {
-      return;
-    }
-    for (const thread of payload.threads) {
+  async markThreads(threads: QueuedThread[], context: SendContext): Promise<ThreadOutcome[]> {
+    const outcomes: ThreadOutcome[] = [];
+    for (const thread of threads) {
       try {
-        await this.markOne(thread, payload);
+        outcomes.push(await this.markOne(thread, context));
       } catch (error) {
-        this.notes.push(`mark-read: notification ${thread.id} failed: ${errorText(error)}`);
+        outcomes.push({ kind: 'failed', error: errorText(error) });
       }
     }
+    return outcomes;
   }
 
-  enqueue(threads: QueuedThread[], prKeys: PrKey[], origin: BatchOrigin): PendingBatch {
-    const payload: MarkReadPayload = { threads, prKeys, ...origin, writesOn: this.writes.enabled(), batchId: randomUUID() };
+  /**
+   * Parks the batch when writes were or are off. Nothing retries a failure of
+   * a batch sent from the queue: it already left the undo queue, and the next
+   * sync report says so.
+   */
+  private async send(payload: MarkReadPayload): Promise<void> {
+    if (payload.threads.length === 0) {
+      return;
+    }
+    if (!payload.writesOn || !this.writes.enabled()) {
+      const { writesOn: _writesOn, ...parked } = payload;
+      this.onParked(parked);
+      return;
+    }
+    const context: SendContext = { origin: this.flushing ? 'quit' : 'queue', tileId: payload.tileId, batchId: payload.batchId };
+    const outcomes = await this.markThreads(payload.threads, context);
+    outcomes.forEach((outcome, index) => {
+      if (outcome.kind === 'failed') {
+        this.notes.push(`mark-read: notification ${payload.threads[index]?.id} failed: ${outcome.error}`);
+      }
+    });
+  }
+
+  enqueue(request: MarkReadRequest, origin: BatchOrigin): PendingBatch {
+    const payload: MarkReadPayload = { ...request, ...origin, writesOn: this.writes.enabled(), batchId: randomUUID() };
     return toPending(this.queue.enqueue(payload));
   }
 
@@ -176,6 +224,7 @@ export class MarkReadQueue {
     return notes;
   }
 
+  /** On quit. A batch that would be parked is parked (stored), so a locked mark-read survives the restart. */
   async flush(): Promise<void> {
     this.flushing = true;
     try {

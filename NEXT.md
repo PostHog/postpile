@@ -43,9 +43,11 @@ now".
   runtime (`WriteSwitch`, `GET/POST /api/github-writes`), kept in meta,
   read-only on first run, confirm popover to open, instant to close,
   disabled with the reason under `POSTPILE_READ_ONLY=1`. Locked: approve
-  and comment blocked, mark read and "not mine" stay in the app; batches
-  queued while locked never reach GitHub. `CODE_MANAGER_ALLOW_WRITES` is
-  gone.
+  and comment blocked; mark read and "not mine" become pending writes
+  (`pending_write`, migration 011) after the undo window, the tile keeps its
+  state with a "pending: mark read on GitHub" marker, the lock shows a count
+  badge, and unlocking offers Send N / Discard / Cancel (plus "Discard
+  pending, stay locked"). `CODE_MANAGER_ALLOW_WRITES` is gone.
 - Action log (`action_log`, migration 008): every GitHub write, local
   mark-read, undo and lock flip, with origin (tile, debug, queue,
   quit, sync, poll, footer) and outcome (queued, github, local, skipped,
@@ -222,8 +224,16 @@ now".
   Any caller with the token can still open the lock through the API.
 - The lock in fake mode is not persisted (starts locked on every start).
 - mark done, subscribe / unsubscribe have no writer methods yet.
-- Mark-reads while locked log one `local` row per PR without an unread
-  thread too (pulled-in stack layers), which makes the log a bit chatty.
+- Mark-reads log one `local` row per PR without an unread thread
+  (pulled-in stack layers), which makes the log a bit chatty.
+- A mark-read sent with writes on that fails (or is skipped for newer
+  activity) after the window still leaves the tile read in the app while
+  GitHub keeps it unread. Pending writes only cover the locked case; making
+  queue failures revert and park too would close that gap.
+- A pending write for a thread that later gets read on github.com keeps its
+  marker until it is sent (then logged `observed`) or discarded; the sync
+  does not clear it.
+- Pending writes in fake mode live in memory (gone on restart).
 - Fake mode (`POSTPILE_FAKE=1`) runs `FakeEngine`, a second
   EngineService with its own copies of the tile/loudness/undo rules. It can
   drift from the real engine. See decisions below.
@@ -390,10 +400,10 @@ now".
   guesses.
 
 - **GitHub writes lock**: `CODE_MANAGER_ALLOW_WRITES` was dropped instead of
-  kept as "start unlocked"; the lock is the one switch. Locked mark-reads
-  still change the app (tile done, GitHub unread) instead of being blocked.
-  Opening the lock does not send batches queued while locked. Keep all
-  three? Should the lock also be persisted in fake mode?
+  kept as "start unlocked"; the lock is the one switch. A batch queued while
+  locked stays pending even when the lock opens inside its undo window (the
+  unlock popover is where the user decides). Keep that? Should the lock also
+  be persisted in fake mode?
 
 ## Later
 
@@ -404,6 +414,10 @@ now".
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Pending writes, not local reads** (2026-09-28): a mark-read while
+  locked changes nothing in the app; it waits as a pending write until the
+  user sends or discards it. Approve and comment have no pending queue.
 
 - **No bring back** (2026-09-28): GitHub is the source of truth for read
   and unread, and it has no mark-unread (no REST or GraphQL mutation). An

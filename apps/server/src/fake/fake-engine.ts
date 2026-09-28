@@ -12,6 +12,7 @@ import type {
   FeedbackInput,
   FeedbackKind,
   GitHubWritesChange,
+  PendingWritesResult,
   GitHubWritesStatus,
   GlanceGap,
   InstructionsChatReply,
@@ -194,7 +195,11 @@ export class FakeEngine implements EngineService {
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
     this.live = new FakeLivePoll(this.data, this.now);
-    this.writes = new FakeWrites(this.now);
+    this.writes = new FakeWrites(this.now, {
+      revert: (local) => this.revertLocal(local.eventIds, local.handledPrKeys),
+      markReadHere: (prKeys, handleKeys) => this.markSampleRead(prKeys, handleKeys),
+      title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
+    });
     this.workContext = new FakeWorkContext(this.data.topics, this.now, options.sweepDelayMs ?? 2000);
     this.instructions = new FakeInstructions({
     now: this.now,
@@ -300,6 +305,7 @@ export class FakeEngine implements EngineService {
   /** Why-codes, status pills, faces and whose turn come from the same core rules as the engine. */
   private tileView(tile: Tile): TileView {
     const viewer = this.viewer();
+    const pending = this.writes.pendingByPrKey();
     const prs: PrSummary[] = [];
     const memberPrs: Pr[] = [];
     for (const member of tile.members) {
@@ -345,6 +351,7 @@ export class FakeEngine implements EngineService {
       tier: tileTier(prs.map((pr) => pr.tier)),
       people: tilePeople(memberPrs, viewer.login),
       turn,
+      pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
     };
   }
 
@@ -428,6 +435,7 @@ export class FakeEngine implements EngineService {
 
   /** Same urgency rule and order as the engine; ties keep the sample's order. */
   async listTopics(): Promise<TopicListItem[]> {
+    this.writes.settle();
     const viewer = this.viewer();
     const shown = this.data.topics.filter((topic) => topic.status === 'active');
     const items = shown.map((topic): TopicListItem => {
@@ -472,6 +480,7 @@ export class FakeEngine implements EngineService {
   }
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {
+    this.writes.settle();
     const topic = this.data.topics.find((candidate) => candidate.id === topicId);
     if (!topic) {
       return null;
@@ -533,11 +542,23 @@ export class FakeEngine implements EngineService {
   }
 
   async githubWrites(): Promise<GitHubWritesStatus> {
+    this.writes.settle();
     return this.writes.status();
   }
 
   async setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange> {
-    return this.writes.set(enabled);
+    this.writes.settle();
+    return { ...this.writes.set(enabled), status: this.writes.status() };
+  }
+
+  async sendPendingWrites(): Promise<PendingWritesResult> {
+    this.writes.settle();
+    return this.writes.sendPending();
+  }
+
+  async discardPendingWrites(): Promise<PendingWritesResult> {
+    this.writes.settle();
+    return this.writes.discardPending();
   }
 
   async getPr(prKey: PrKey): Promise<PrDetail | null> {
@@ -593,6 +614,42 @@ export class FakeEngine implements EngineService {
    * threads go through the fake queue, which logs like the real one.
    * `extraThreads` are threads without a stored PR (debug view).
    */
+  /** Events of `prKeys` seen, `handleKeys` handled; returns what changed. */
+  private markSampleRead(prKeys: PrKey[], handleKeys: PrKey[]): { eventIds: string[]; handledPrKeys: PrKey[] } {
+    const change = { eventIds: [] as string[], handledPrKeys: [] as PrKey[] };
+    for (const prKey of prKeys) {
+      for (const event of this.eventsOf(prKey).filter((candidate) => !candidate.seenAt)) {
+        event.seenAt = this.timestamp();
+        change.eventIds.push(event.id);
+      }
+      const state = this.userStateOf(prKey);
+      if (handleKeys.includes(prKey) && !state.handledAt) {
+        state.handledAt = this.timestamp();
+        change.handledPrKeys.push(prKey);
+      }
+    }
+    return change;
+  }
+
+  private revertLocal(eventIds: string[], handledPrKeys: PrKey[]): void {
+    for (const event of this.data.events.filter((candidate) => eventIds.includes(candidate.id))) {
+      event.seenAt = null;
+    }
+    for (const prKey of handledPrKeys) {
+      this.userStateOf(prKey).handledAt = null;
+    }
+  }
+
+  /** Same as the engine: the first PR's title, "(+N)" for the rest. */
+  private pendingTitle(prKeys: PrKey[], threadId: string | null): string {
+    const pr = this.data.prs.find((candidate) => candidate.key === prKeys[0]);
+    if (pr) {
+      return prKeys.length > 1 ? `${pr.title} (+${prKeys.length - 1})` : pr.title;
+    }
+    const thread = this.threadsOnGitHub().find((candidate) => candidate.id === threadId);
+    return thread?.title ?? 'notification';
+  }
+
   private markPrsRead(
     prKeys: PrKey[],
     handleKeys: PrKey[],
@@ -602,32 +659,26 @@ export class FakeEngine implements EngineService {
   ): ActionResult {
     // Read the GitHub flags before the events change: the fake derives a thread's first flag from them.
     const githubThreads = this.threadsOnGitHub();
-    const batch: MarkReadBatch = {
-      token: `undo-${this.newId()}`,
-      batchId: `fake-batch-${this.newId()}`,
-      eventIds: [],
-      handledPrKeys: [],
-      queuedAt: this.now().getTime(),
-    };
-    for (const prKey of prKeys) {
-      for (const event of this.eventsOf(prKey).filter((candidate) => !candidate.seenAt)) {
-        event.seenAt = this.timestamp();
-        batch.eventIds.push(event.id);
-      }
-      const state = this.userStateOf(prKey);
-      if (handleKeys.includes(prKey) && !state.handledAt) {
-        state.handledAt = this.timestamp();
-        batch.handledPrKeys.push(prKey);
-      }
-    }
-    this.batches.push(batch);
     const threads = [...githubThreads.filter((thread) => prKeys.includes(threadPrKey(thread) ?? '')), ...extraThreads]
       .filter((thread) => thread.unread)
       .map((thread) => ({ id: thread.id, prKey: threadPrKey(thread) }));
     const writesOn = this.writes.isEnabled();
-    this.writes.queued({ token: batch.token, batchId: batch.batchId, origin, tileId, threads, prKeys, writesOn, queuedAt: batch.queuedAt });
-    const where = writesOn ? '' : ' here only (GitHub writes are off)';
-    return ok(`marked ${batch.eventIds.length} events read${where}`, batch.token);
+    // Like ReadMarker: locked with something unread on GitHub, nothing changes until the write goes out.
+    const changeHere = writesOn || threads.length === 0;
+    const local = changeHere ? this.markSampleRead(prKeys, handleKeys) : { eventIds: [], handledPrKeys: [] };
+    const batch: MarkReadBatch = {
+      token: `undo-${this.newId()}`,
+      batchId: `fake-batch-${this.newId()}`,
+      eventIds: local.eventIds,
+      handledPrKeys: local.handledPrKeys,
+      queuedAt: this.now().getTime(),
+    };
+    this.batches.push(batch);
+    this.writes.queued({ ...batch, origin, tileId, threads, prKeys, handleKeys, local, writesOn });
+    if (!changeHere) {
+      return ok('Marked read: pending until you unlock GitHub writes, stays unread here until then', batch.token);
+    }
+    return ok(`marked ${batch.eventIds.length} events read`, batch.token);
   }
 
   async markRead(tileId: string): Promise<ActionResult> {
@@ -676,12 +727,7 @@ export class FakeEngine implements EngineService {
       return fail('undo window closed');
     }
     this.writes.undone(batch.token);
-    for (const event of this.data.events.filter((candidate) => batch.eventIds.includes(candidate.id))) {
-      event.seenAt = null;
-    }
-    for (const prKey of batch.handledPrKeys) {
-      this.userStateOf(prKey).handledAt = null;
-    }
+    this.revertLocal(batch.eventIds, batch.handledPrKeys);
     return ok('undone');
   }
 

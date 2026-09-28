@@ -47,9 +47,13 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
           <input type="checkbox" checked={filter.unreadOnly} onChange={(event) => setFilter({ ...filter, unreadOnly: event.target.checked })} />
           Unread on GitHub only
         </label>
-        <label className="flex items-center gap-1.5 text-[12px] text-ink-2" title="Threads whose newest logged action is the app's own mark-read (on GitHub, or in the app while read-only)">
+        <label className="flex items-center gap-1.5 text-[12px] text-ink-2" title="Threads whose newest logged action is the app's own mark-read: sent to GitHub, or queued to be">
           <input type="checkbox" checked={filter.readByApp} onChange={(event) => setFilter({ ...filter, readByApp: event.target.checked })} />
           Read by this app
+        </label>
+        <label className="flex items-center gap-1.5 text-[12px] text-ink-2" title="Threads with a mark-read made while GitHub writes were locked, waiting to be sent or discarded from the footer lock">
+          <input type="checkbox" checked={filter.pendingOnly} onChange={(event) => setFilter({ ...filter, pendingOnly: event.target.checked })} />
+          Pending while locked
         </label>
         <input
           type="search"

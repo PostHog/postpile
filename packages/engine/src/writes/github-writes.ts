@@ -1,4 +1,4 @@
-import type { ActionOrigin, GitHubWritesChange, GitHubWritesStatus, LoggedAction, PrKey, PrRef } from '@postpile/core';
+import type { ActionOrigin, LoggedAction, PrKey, PrRef, WriteSwitchState } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import type { ActionLog } from './action-log.ts';
 import type { WriteSwitch } from './write-switch.ts';
@@ -32,19 +32,20 @@ export class GitHubWrites {
     return this.writeSwitch.enabled();
   }
 
-  status(): GitHubWritesStatus {
+  status(): WriteSwitchState {
     return this.writeSwitch.status();
   }
 
   /** The footer lock. Turning on is refused while POSTPILE_READ_ONLY=1 forces read-only. */
-  set(enabled: boolean): GitHubWritesChange {
+  set(enabled: boolean): { ok: boolean; message: string } {
     if (!this.writeSwitch.set(enabled)) {
-      const status = this.status();
-      return { ok: false, message: status.forcedOffReason ?? 'GitHub writes stay off', status };
+      return { ok: false, message: this.status().forcedOffReason ?? 'GitHub writes stay off' };
     }
     this.log.record({ action: enabled ? 'writes_on' : 'writes_off', origin: 'footer', outcome: 'local' });
-    const message = enabled ? 'GitHub writes on: mark-read and approvals reach GitHub' : 'GitHub writes off: actions stay in the app';
-    return { ok: true, message, status: this.status() };
+    const message = enabled
+      ? 'GitHub writes on: mark-read and approvals reach GitHub'
+      : 'GitHub writes locked: mark-reads wait as pending writes, approve and comment are blocked';
+    return { ok: true, message };
   }
 
   /**

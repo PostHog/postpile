@@ -56,15 +56,20 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
   /api/github-writes`, changes at runtime). With the lock closed
   (read-only, the default) approve and comment are blocked with a clear
-  toast; mark read and "not mine" still run and stay in the app (the toast
-  says "here only", buttons carry `markReadNote`). Everything is blocked
+  toast; mark read and "not mine" still run but change nothing in the app:
+  after the undo window they become pending writes (buttons carry
+  `markReadNote`, the tile shows `PendingWritePill` from `pills.tsx`, its
+  Mark read button is disabled). Never show a locked mark-read as done. Everything is blocked
   until the writes state has loaded. Don't bypass the guard, and put a new
   GitHub-writing action on the `GithubWrite` list.
 - **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
-  asks in a small popover ("Mark-read and approvals will reach GitHub");
-  closing it is instant. With `POSTPILE_READ_ONLY=1` it is disabled and
-  its title says why. The server keeps the choice; the renderer never
-  stores it.
+  asks in a small popover ("Mark-read and approvals will reach GitHub")
+  that also lists the pending writes (`lib/pending.ts`) with "Send N to
+  GitHub" / "Discard" / "Cancel" and "Discard pending, stay locked"; the
+  count badge sits on the lock. Closing it is instant unless something is
+  pending. With `POSTPILE_READ_ONLY=1` it cannot unlock, only discard. The
+  server keeps the choice and the pending writes; the renderer never
+  stores them.
 - Buttons for guarded actions carry the blocked reason as their `title`.
 - The notifications debug pane has "Mark read" (thread level, same queue,
   undo, lock and action log as a tile). There is no "bring back": GitHub has
@@ -74,8 +79,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   what reaches GitHub.
 - After an action the provider invalidates every query except the config.
   Mark-read and memory correction results carry an undo token; the toast
-  offers Undo for the 6s window and the footer counts pending mark-reads
-  (tokens starting with `memory:` are not mark-reads).
+  offers Undo for the 6s window and the footer counts mark-reads in the
+  undo window (tokens starting with `memory:` are not mark-reads). When a
+  window ends the provider refetches, so a locked mark-read shows up as
+  pending.
 - Memory lines get "Recheck" (and "Forget" on a care). Recheck opens
   `RecheckDialog`: `recheckMemory` runs one agent call and writes nothing;
   the user then accepts the outcome through `correctMemory` (holds ->

@@ -1,15 +1,33 @@
 // Small status chips used across panes: verdict, why it's here, PR status.
-import type { GlanceGap, PrStatus, Provenance, TopicRelation, Verdict, WhyCode } from '@postpile/core';
+import type { GlanceGap, PrStatus, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
+import { pendingWriteTitle } from '../lib/guard.ts';
 import { glanceGapText } from '../lib/glance.ts';
 import { statusParts, type StatusTone } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';
 import { WHY, whyTitle, type WhyTone } from '../lib/why.ts';
+import { ClockIcon } from './icons.tsx';
 
 const VERDICTS: Record<Verdict, { glyph: string; label: string; tone: string }> = {
   LOOKS_SAFE: { glyph: '✓', label: 'Looks safe', tone: 'bg-safe-soft text-safe' },
   LOOK_CLOSER: { glyph: '◉', label: 'Look closer', tone: 'bg-closer-soft text-closer' },
   NOT_YOURS: { glyph: '–', label: 'Not yours', tone: 'bg-segment text-muted' },
 };
+
+/** "pending: mark read on GitHub": a mark-read made while writes were locked. Neutral, not coral: nothing is new. */
+export function PendingWritePill(props: { pending: TilePendingWrite }) {
+  const failed = props.pending.error !== null;
+  return (
+    <span
+      title={pendingWriteTitle(props.pending.error)}
+      className={`flex h-[19px] shrink-0 items-center gap-1 rounded-full border px-[7px] text-[10.5px] font-medium whitespace-nowrap ${
+        failed ? 'border-status-bad text-status-bad' : 'border-pill-line bg-subtle text-muted'
+      }`}
+    >
+      <ClockIcon />
+      {failed ? 'pending: send failed' : 'pending: mark read on GitHub'}
+    </span>
+  );
+}
 
 /** Greyed on done tiles; "stale" when the glance was made for an older state. */
 export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean; gap?: GlanceGap | null }) {

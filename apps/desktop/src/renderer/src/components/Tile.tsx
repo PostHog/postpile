@@ -6,7 +6,7 @@ import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
-import { VerdictPill, WhyBadge } from './pills.tsx';
+import { PendingWritePill, VerdictPill, WhyBadge } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { TileMenu } from './TileMenu.tsx';
@@ -98,6 +98,11 @@ export function Tile(props: TileProps) {
             {!unread && updatedAt && <span className="shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(updatedAt, now)}</span>}
           </div>
           <h2 className={`text-[14.5px] leading-snug font-semibold tracking-[-0.01em] ${done ? 'text-muted' : 'text-ink'}`}>{tile.title}</h2>
+          {view.pendingWrite && (
+            <div className="flex">
+              <PendingWritePill pending={view.pendingWrite} />
+            </div>
+          )}
           {forYou && <p className={`line-clamp-3 text-[12.5px] leading-[1.45] ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
         </div>
         <div className={`flex flex-col overflow-hidden rounded-row border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`}>
@@ -122,8 +127,12 @@ export function Tile(props: TileProps) {
           ) : (
             <Button
               variant="primary"
-              title={actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks every PR here read; GitHub follows after 6s'}
-              disabled={actions.isBusy(`markRead:${tile.id}`)}
+              title={
+                view.pendingWrite
+                  ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
+                  : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks every PR here read; GitHub follows after 6s')
+              }
+              disabled={view.pendingWrite !== null || actions.isBusy(`markRead:${tile.id}`)}
               onClick={() => void actions.markRead(tile.id)}
             >
               {unread ? 'Mark read' : 'Mark done'}

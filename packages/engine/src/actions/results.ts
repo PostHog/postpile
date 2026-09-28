@@ -9,7 +9,13 @@ export function failed(message: string): ActionResult {
   return { ok: false, message, undoToken: null };
 }
 
-/** "Marked read", plus a note when the batch stays in the app because GitHub writes are off. */
+/**
+ * "Marked read", or, while GitHub writes are locked, that nothing changes
+ * until the write reaches GitHub (it turns pending after the undo window).
+ */
 export function readMessage(base: string, batch: PendingBatch): string {
-  return batch.writesOn ? base : `${base} here only (GitHub writes are off)`;
+  if (batch.writesOn || batch.threadIds.length === 0) {
+    return base;
+  }
+  return `${base}: pending until you unlock GitHub writes, stays unread here until then`;
 }

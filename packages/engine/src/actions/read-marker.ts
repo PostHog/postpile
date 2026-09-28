@@ -1,42 +1,33 @@
 import { threadPrKey, type NotificationThread, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import type { BatchOrigin, MarkReadQueue, PendingBatch, QueuedThread } from '../mark-read-queue.ts';
+import { NO_LOCAL_CHANGE, type BatchOrigin, type LocalChange, type MarkReadQueue, type PendingBatch, type QueuedThread } from '../mark-read-queue.ts';
 import type { ActionLog } from '../writes/action-log.ts';
-import { WRITES_OFF_DETAIL } from '../writes/github-writes.ts';
 
-/** What a mark-read changed locally, so an undo can put it back. */
-interface LocalChange {
-  eventIds: string[];
-  handledKeys: PrKey[];
-}
+export const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending write after the undo window';
 
 /**
- * Marks PRs read: locally right away (events seen, optionally handled), on
- * GitHub through the deferred queue. Undo inside the window reverts both;
- * after the window GitHub has no way back, so undo reports nothing to undo.
+ * Marks PRs read, through the deferred queue. Undo inside the window reverts
+ * it; after the window GitHub has no way back, so undo reports nothing to undo.
  *
- * While GitHub writes are off the batch still goes through the queue (so
- * undo works the same), but it only ever changes the app. Every PR and
- * thread gets an action log row at queue time: queued, or local.
+ * GitHub is the source of truth for read and unread:
+ * - writes on: the app changes right away (events seen, pinged PRs handled)
+ *   and GitHub follows after the undo window.
+ * - writes locked: the app does not change. When the window runs out the
+ *   batch becomes a pending write (PendingWrites) that waits for the user to
+ *   unlock and send it, or discard it.
+ * - nothing unread on GitHub for these PRs: the app changes right away either
+ *   way, there is nothing to disagree with.
+ *
+ * Every queued thread gets an action log row at queue time; PRs without an
+ * unread thread get a `local` row when they change here.
  */
 export class ReadMarker {
-  private readonly changes = new Map<string, LocalChange>();
-
   constructor(
     private readonly store: Store,
     private readonly queue: MarkReadQueue,
     private readonly log: ActionLog,
     private readonly now: () => Date,
   ) {}
-
-  private forgetSent(): void {
-    const pending = new Set(this.queue.pending().map((batch) => batch.token));
-    for (const token of this.changes.keys()) {
-      if (!pending.has(token)) {
-        this.changes.delete(token);
-      }
-    }
-  }
 
   private unreadThreads(keys: PrKey[]): QueuedThread[] {
     return [...this.store.notifications.getByPrKeys(keys).entries()]
@@ -61,17 +52,19 @@ export class ReadMarker {
     return change;
   }
 
-  /** One row per queued thread, and one per PR that had no unread thread to queue. */
-  private logQueued(batch: PendingBatch, threads: QueuedThread[], keys: PrKey[]): void {
+  private logQueued(batch: PendingBatch, threads: QueuedThread[], keys: PrKey[], changedHere: boolean): void {
     const base = { action: 'mark_read' as const, origin: batch.origin, tileId: batch.tileId, batch: batch.batchId };
     for (const thread of threads) {
       this.log.record({
         ...base,
         threadId: thread.id,
         prKey: thread.prKey,
-        outcome: batch.writesOn ? 'queued' : 'local',
-        detail: batch.writesOn ? '' : WRITES_OFF_DETAIL,
+        outcome: 'queued',
+        detail: batch.writesOn ? '' : QUEUED_LOCKED_DETAIL,
       });
+    }
+    if (!changedHere) {
+      return;
     }
     const queuedKeys = new Set(threads.map((thread) => thread.prKey));
     for (const key of keys.filter((candidate) => !queuedKeys.has(candidate))) {
@@ -79,18 +72,17 @@ export class ReadMarker {
     }
   }
 
-  private queueAndRemember(threads: QueuedThread[], keys: PrKey[], change: LocalChange, origin: BatchOrigin): PendingBatch {
-    const batch = this.queue.enqueue(threads, keys, origin);
-    this.changes.set(batch.token, change);
-    this.logQueued(batch, threads, keys);
+  private enqueueBatch(threads: QueuedThread[], keys: PrKey[], handleKeys: PrKey[], origin: BatchOrigin): PendingBatch {
+    const changeHere = this.queue.writesEnabled() || threads.length === 0;
+    const local = changeHere ? this.applyLocally(keys, handleKeys) : NO_LOCAL_CHANGE;
+    const batch = this.queue.enqueue({ threads, prKeys: keys, handleKeys, local }, origin);
+    this.logQueued(batch, threads, keys, changeHere);
     return batch;
   }
 
   /** Every event of `keys` becomes seen, `handleKeys` also count as done. The batch's token is the undo token. */
   markRead(keys: PrKey[], handleKeys: PrKey[], origin: BatchOrigin): PendingBatch {
-    this.forgetSent();
-    const change = this.applyLocally(keys, handleKeys);
-    return this.queueAndRemember(this.unreadThreads(keys), keys, change, origin);
+    return this.enqueueBatch(this.unreadThreads(keys), keys, handleKeys, origin);
   }
 
   /**
@@ -103,10 +95,8 @@ export class ReadMarker {
     if (key !== null && this.store.prs.get(key)) {
       return this.markRead([key], [key], origin);
     }
-    this.forgetSent();
-    const change: LocalChange = { eventIds: [], handledKeys: [] };
     const threads = thread.unread ? [{ id: thread.id, updatedAt: thread.updatedAt, prKey: key }] : [];
-    return this.queueAndRemember(threads, [], change, origin);
+    return this.enqueueBatch(threads, [], [], origin);
   }
 
   /** Null token undoes the newest pending batch. Returns null when nothing is left to undo. */
@@ -115,16 +105,12 @@ export class ReadMarker {
     if (!batch) {
       return null;
     }
-    const change = this.changes.get(batch.token);
-    this.changes.delete(batch.token);
-    if (change) {
-      this.store.transaction(() => {
-        this.store.events.clearSeen(change.eventIds);
-        for (const key of change.handledKeys) {
-          this.store.userPrStates.clearHandled(key);
-        }
-      });
-    }
+    this.store.transaction(() => {
+      this.store.events.clearSeen(batch.local.eventIds);
+      for (const key of batch.local.handledKeys) {
+        this.store.userPrStates.clearHandled(key);
+      }
+    });
     const keys = batch.prKeys.length > 0 ? batch.prKeys : [null];
     for (const key of keys) {
       this.log.record({

@@ -34,7 +34,7 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
         </span>
       )}
       <span className="ml-auto">
-        {actions.pendingMarkReads > 0 ? `${actions.pendingMarkReads} mark-read pending · undo open` : 'mark-read queue empty'}
+        {actions.pendingMarkReads > 0 ? `${actions.pendingMarkReads} mark-read in the undo window` : 'mark-read queue empty'}
       </span>
     </footer>
   );

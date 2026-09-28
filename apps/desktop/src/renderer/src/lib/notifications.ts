@@ -5,13 +5,15 @@ export interface NotificationFilter {
   /** Null shows every reason. */
   reason: NotificationReason | null;
   unreadOnly: boolean;
-  /** Only threads the app itself marked read last (on GitHub, or in the app while read-only). */
+  /** Only threads the app itself marked read last (sent to GitHub, or queued to be). */
   readByApp: boolean;
+  /** Only threads with a mark-read waiting for the writes lock. */
+  pendingOnly: boolean;
   /** Matched against repo#number, title, topic and tile title, case-insensitive. */
   text: string;
 }
 
-export const NO_NOTIFICATION_FILTER: NotificationFilter = { reason: null, unreadOnly: false, readByApp: false, text: '' };
+export const NO_NOTIFICATION_FILTER: NotificationFilter = { reason: null, unreadOnly: false, readByApp: false, pendingOnly: false, text: '' };
 
 /** "PostHog/posthog#41902", or just the repo for subjects without a number. */
 export function threadRef(row: NotificationDebugRow): string {
@@ -63,10 +65,19 @@ function haystack(row: NotificationDebugRow): string {
   return [threadRef(row), row.thread.title, row.thread.subjectType, landingLabel(row.landing)].join(' ').toLowerCase();
 }
 
-/** The app's own mark-read is the newest thing that happened to the thread. */
+/**
+ * The app's own mark-read is the newest thing that happened to the thread:
+ * sent to GitHub, or queued with writes on. Pending writes are not read yet.
+ */
 export function readByApp(row: NotificationDebugRow): boolean {
   const last = row.lastAction;
-  return last !== null && last.action === 'mark_read' && (last.outcome === 'github' || last.outcome === 'local' || last.outcome === 'queued');
+  return last !== null && last.action === 'mark_read' && (last.outcome === 'github' || (last.outcome === 'queued' && last.detail === ''));
+}
+
+/** A mark-read of this thread waits for the writes lock. */
+export function pendingWrite(row: NotificationDebugRow): boolean {
+  const last = row.lastAction;
+  return last !== null && last.action === 'mark_read' && (last.outcome === 'pending' || (last.outcome === 'failed' && last.origin === 'footer'));
 }
 
 /** Rows that pass every filter; keeps the server's order (newest first). */
@@ -77,6 +88,7 @@ export function filterNotifications(rows: NotificationDebugRow[], filter: Notifi
       (filter.reason === null || row.thread.reason === filter.reason) &&
       (!filter.unreadOnly || row.thread.unread) &&
       (!filter.readByApp || readByApp(row)) &&
+      (!filter.pendingOnly || pendingWrite(row)) &&
       terms.every((term) => haystack(row).includes(term)),
   );
 }
@@ -88,7 +100,7 @@ const WHO: Record<ActionOrigin, string> = {
   quit: 'the queue on quit',
   sync: 'sync',
   poll: 'the live poll',
-  footer: 'you',
+  footer: 'you from the lock',
 };
 
 /**
@@ -96,8 +108,9 @@ const WHO: Record<ActionOrigin, string> = {
  * - local: only the app's own state changed
  * - problem: not sent, or failed
  * - outside: read on github.com or another client
+ * - pending: waits for the writes lock
  */
-export type ActionTone = 'app' | 'local' | 'problem' | 'outside';
+export type ActionTone = 'app' | 'local' | 'problem' | 'outside' | 'pending';
 
 export interface ActionLine {
   text: string;
@@ -112,15 +125,26 @@ function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): {
     case 'github':
       return { text: `marked read by ${who}${decidedBy ? `, queued by ${WHO[decidedBy.origin]}` : ''}`, tone: 'app' };
     case 'queued':
+      if (last.detail !== '') {
+        return { text: `queued by ${who}, turns pending after the undo window (locked)`, tone: 'local' };
+      }
       return { text: `queued by ${who}, reaches GitHub after the undo window`, tone: 'local' };
+    case 'pending':
+      return { text: `pending while locked · marked read by ${who}, not on GitHub yet`, tone: 'pending' };
+    case 'discarded':
+      return { text: 'pending mark-read discarded: unread, like on GitHub', tone: 'local' };
     case 'local':
       if (last.detail === 'no unread GitHub thread') {
         return { text: `marked read in the app by ${who}`, tone: 'local' };
       }
+      // Older rows: a read-only mark-read changed the app only (before pending writes).
       return { text: `stayed local: read-only · marked read by ${decidedBy ? WHO[decidedBy.origin] : who}`, tone: 'local' };
     case 'skipped':
       return { text: `left unread by ${who}: ${last.detail}`, tone: 'problem' };
     case 'failed':
+      if (last.origin === 'footer') {
+        return { text: 'pending mark-read failed to send, still pending', tone: 'problem' };
+      }
       return { text: `mark-read failed (${who})`, tone: 'problem' };
     case 'observed':
       if (last.origin === 'sync' || last.origin === 'poll') {

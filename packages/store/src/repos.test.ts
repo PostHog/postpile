@@ -467,3 +467,22 @@ describe('PingDecisionRepo', () => {
     ]);
   });
 });
+
+describe('PendingWriteRepo', () => {
+  it('keeps pending writes oldest first, shrinks them after a try and removes them', () => {
+    const threads = [
+      { id: 't1', updatedAt: at(1), prKey: 'a/b#1' },
+      { id: 't2', updatedAt: at(1), prKey: 'a/b#2' },
+    ];
+    const first = store.pendingWrites.add({ createdAt: at(2), origin: 'tile', tileId: 'set:x', batch: 'b1', prKeys: ['a/b#1', 'a/b#2'], handleKeys: ['a/b#1'], threads });
+    store.pendingWrites.add({ createdAt: at(3), origin: 'debug', tileId: null, batch: 'b2', prKeys: [], handleKeys: [], threads: [] });
+    expect(store.pendingWrites.list().map((write) => write.batch)).toEqual(['b1', 'b2']);
+    expect(store.pendingWrites.list()[0]).toMatchObject({ prKeys: ['a/b#1', 'a/b#2'], handleKeys: ['a/b#1'], threads, error: null, triedAt: null });
+
+    store.pendingWrites.keepAfterTry(first, [threads[1]!], 'boom', at(4));
+    expect(store.pendingWrites.list()[0]).toMatchObject({ threads: [threads[1]], error: 'boom', triedAt: at(4) });
+
+    store.pendingWrites.remove(first);
+    expect(store.pendingWrites.list().map((write) => write.batch)).toEqual(['b2']);
+  });
+});

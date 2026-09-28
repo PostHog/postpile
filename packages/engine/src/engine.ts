@@ -11,6 +11,7 @@ import type {
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
+  PendingWritesResult,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposalReply,
@@ -71,6 +72,7 @@ import { WorkContextSchedule } from './work-context/schedule.ts';
 import { WorkContextSweeper } from './work-context/sweeper.ts';
 import { WorkContextMemory } from './work-context/work-context.ts';
 import type { GitHubWrites } from './writes/github-writes.ts';
+import type { PendingWrites } from './writes/pending-writes.ts';
 
 export interface EngineDeps {
   store: Store;
@@ -81,6 +83,8 @@ export interface EngineDeps {
   /** Must be the observer the agent service reports its calls to; the run stats come from it. */
   callLog: AgentCallLog;
   markReadQueue: MarkReadQueue;
+  /** Mark-reads parked while writes were locked. The queue must park into the same one. */
+  pendingWrites: PendingWrites;
   instructionsFile: string;
   now: () => Date;
   /** Clock for the live poll. Defaults to the system timers. */
@@ -122,7 +126,7 @@ export class Engine implements EngineService {
     this.workContext = new WorkContextMemory(store, this.sweeper, now);
     this.sweepSchedule = new WorkContextSchedule(this.sweeper, deps.timers ?? systemTimers, now);
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
-    this.reads = new ReadModels(store, deps.agent, contexts, now);
+    this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites);
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
@@ -243,12 +247,25 @@ export class Engine implements EngineService {
     return this.deps.store.actionLog.listRecent(limit);
   }
 
+  private writesStatus(): GitHubWritesStatus {
+    return { ...this.deps.writes.status(), pending: this.deps.pendingWrites.views() };
+  }
+
   async githubWrites(): Promise<GitHubWritesStatus> {
-    return this.deps.writes.status();
+    return this.writesStatus();
   }
 
   async setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange> {
-    return this.deps.writes.set(enabled);
+    const change = this.deps.writes.set(enabled);
+    return { ...change, status: this.writesStatus() };
+  }
+
+  sendPendingWrites(): Promise<PendingWritesResult> {
+    return this.deps.pendingWrites.send(this.deps.markReadQueue, () => this.writesStatus());
+  }
+
+  async discardPendingWrites(): Promise<PendingWritesResult> {
+    return this.deps.pendingWrites.discard(() => this.writesStatus());
   }
 
   async getChat(tileId: string): Promise<ChatMessage[]> {

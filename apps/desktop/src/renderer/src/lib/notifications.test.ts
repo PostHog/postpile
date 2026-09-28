@@ -89,13 +89,23 @@ describe('notification debug helpers', () => {
     expect(actionLine({ ...row({ unread: false }), lastAction: noticed }, NOW)?.text).toMatch(/^read on github.com or another client · noticed by sync/);
   });
 
-  it('filters to threads the app marked read', () => {
+  it('filters to threads the app marked read, and to pending ones', () => {
     const rows = [
       { ...row({ id: 'a', unread: false }), lastAction: entry({ origin: 'queue', outcome: 'github' }) },
       { ...row({ id: 'b', unread: false }), lastAction: entry({ origin: 'sync', outcome: 'observed' }) },
-      { ...row({ id: 'c' }), lastAction: entry({ outcome: 'local' }) },
+      { ...row({ id: 'c' }), lastAction: entry({ outcome: 'pending', detail: 'GitHub writes are locked' }) },
+      { ...row({ id: 'e' }), lastAction: entry({ outcome: 'queued', detail: 'GitHub writes are locked: becomes a pending write' }) },
+      { ...row({ id: 'f' }), lastAction: entry({ outcome: 'queued' }) },
       row({ id: 'd', unread: false }),
     ];
-    expect(filterNotifications(rows, { ...NO_NOTIFICATION_FILTER, readByApp: true }).map((r) => r.thread.id)).toEqual(['a', 'c']);
+    expect(filterNotifications(rows, { ...NO_NOTIFICATION_FILTER, readByApp: true }).map((r) => r.thread.id)).toEqual(['a', 'f']);
+    expect(filterNotifications(rows, { ...NO_NOTIFICATION_FILTER, pendingOnly: true }).map((r) => r.thread.id)).toEqual(['c']);
+  });
+
+  it('labels pending, discarded and locked-queued mark-reads', () => {
+    expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'pending' }) }, NOW)).toMatchObject({ tone: 'pending' });
+    expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'pending' }) }, NOW)?.text).toMatch(/^pending while locked/);
+    expect(actionLine({ ...row({}), lastAction: entry({ origin: 'footer', outcome: 'discarded' }) }, NOW)?.text).toMatch(/discarded: unread, like on GitHub/);
+    expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'queued', detail: 'locked' }) }, NOW)?.text).toMatch(/turns pending/);
   });
 });

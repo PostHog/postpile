@@ -11,9 +11,10 @@ const WHAT: Record<GithubWrite, string> = {
 };
 
 /**
- * Mark-reads still make sense with GitHub writes off: they change the app and
- * the GitHub notification stays unread. Approve and comment do nothing but
- * write to GitHub, so they are blocked while the lock is closed.
+ * Mark-reads still run with GitHub writes locked: they change nothing in the
+ * app and wait as pending writes until the user unlocks and sends them (or
+ * discards them). Approve and comment have no pending queue, so they are
+ * blocked while the lock is closed.
  */
 const LOCAL_WHEN_OFF: Record<GithubWrite, boolean> = {
   approve: false,
@@ -46,5 +47,12 @@ export function markReadNote(writes: GitHubWritesStatus | undefined): string | u
   if (!writes || writes.enabled) {
     return undefined;
   }
-  return 'GitHub writes are off: this marks it read in the app only, GitHub stays unread.';
+  return 'GitHub writes are locked: this becomes a pending write. The tile stays unread until you unlock and send it from the footer.';
+}
+
+/** Tooltip of the pending marker on a tile. */
+export function pendingWriteTitle(error: string | null): string {
+  const base =
+    'Pending: this mark-read waits for GitHub. GitHub writes were locked, so nothing changed here yet; the tile stays unread until you unlock and send it from the footer lock, or discard it.';
+  return error ? `${base}\nLast try failed: ${error}` : base;
 }

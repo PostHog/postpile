@@ -1,7 +1,7 @@
 import { FakeTimers, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { Store } from '@postpile/store';
 import { describe, expect, it } from 'vitest';
-import { MarkReadQueue } from './mark-read-queue.ts';
+import { MarkReadQueue, NO_LOCAL_CHANGE, type ParkedBatch } from './mark-read-queue.ts';
 import { FakeReader, FakeWriter, makeWrites } from './testing/fakes.ts';
 
 function queueWithTwoThreads(writesOn = true) {
@@ -10,7 +10,15 @@ function queueWithTwoThreads(writesOn = true) {
   const writer = new FakeWriter();
   const writes = makeWrites(store, writer, undefined, writesOn);
   const marked: string[] = [];
-  const queue = new MarkReadQueue(writes, reader, new FakeTimers(), 6000, (threadId) => marked.push(threadId));
+  const parked: ParkedBatch[] = [];
+  const queue = new MarkReadQueue(
+    writes,
+    reader,
+    new FakeTimers(),
+    6000,
+    (threadId) => marked.push(threadId),
+    (batch) => parked.push(batch),
+  );
   const first = makePr({ number: 1 });
   const second = makePr({ number: 2 });
   reader.addPr(first, makeThreadFor(first));
@@ -20,15 +28,17 @@ function queueWithTwoThreads(writesOn = true) {
     { id: 'thread-2', updatedAt: second.updatedAt, prKey: second.key },
   ];
   const origin = { origin: 'tile' as const, tileId: null };
-  return { store, queue, writer, writes, marked, threads, origin, keys: [first.key, second.key] };
+  const keys = [first.key, second.key];
+  const request = { threads, prKeys: keys, handleKeys: keys, local: NO_LOCAL_CHANGE };
+  return { store, queue, writer, writes, marked, parked, request, origin };
 }
 
 describe('MarkReadQueue', () => {
   it('keeps sending the rest of a batch after one thread fails and reports it', async () => {
-    const { store, queue, writer, marked, threads, keys, origin } = queueWithTwoThreads();
+    const { store, queue, writer, marked, request, origin } = queueWithTwoThreads();
     writer.failingThreads.add('thread-1');
 
-    const batch = queue.enqueue(threads, keys, origin);
+    const batch = queue.enqueue(request, origin);
     await queue.flush();
 
     expect(writer.calls).toEqual(['markThreadRead thread-2']);
@@ -42,27 +52,36 @@ describe('MarkReadQueue', () => {
     ]);
   });
 
-  it('keeps a batch queued while read-only local, even when writes come on inside the undo window', async () => {
-    const { queue, writer, writes, marked, threads, keys, origin } = queueWithTwoThreads(false);
+  it('parks a batch queued while locked, even when writes come on inside the undo window', async () => {
+    const { queue, writer, writes, marked, parked, request, origin } = queueWithTwoThreads(false);
 
-    const batch = queue.enqueue(threads, keys, origin);
+    const batch = queue.enqueue(request, origin);
     writes.set(true);
     await queue.flush();
 
     expect(batch.writesOn).toBe(false);
     expect(writer.calls).toEqual([]);
     expect(marked).toEqual([]);
+    expect(parked).toEqual([expect.objectContaining({ batchId: batch.batchId, threads: request.threads, handleKeys: request.handleKeys })]);
   });
 
-  it('sends nothing when writes are turned off inside the undo window, and logs it as local', async () => {
-    const { store, queue, writer, writes, threads, keys, origin } = queueWithTwoThreads();
+  it('parks instead of sending when writes are locked inside the undo window', async () => {
+    const { store, queue, writer, writes, parked, request, origin } = queueWithTwoThreads();
 
-    queue.enqueue(threads, keys, origin);
+    queue.enqueue(request, origin);
     writes.set(false);
     await queue.flush();
 
     expect(writer.calls).toEqual([]);
-    const sends = store.actionLog.listRecent(10).filter((entry) => entry.action === 'mark_read');
-    expect(sends.map((entry) => entry.outcome)).toEqual(['local', 'local']);
+    expect(parked).toHaveLength(1);
+    expect(store.actionLog.listRecent(10).filter((entry) => entry.action === 'mark_read')).toEqual([]);
+  });
+
+  it('parks nothing for a batch without threads', async () => {
+    const { queue, writes, parked, request, origin } = queueWithTwoThreads(false);
+    queue.enqueue({ ...request, threads: [] }, origin);
+    writes.set(false);
+    await queue.flush();
+    expect(parked).toEqual([]);
   });
 });

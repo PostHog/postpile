@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { markReadNote, writeBlockedReason } from './guard.ts';
 
-const OFF = { enabled: false, forcedOffReason: null };
-const ON = { enabled: true, forcedOffReason: null };
-const FORCED = { enabled: false, forcedOffReason: 'POSTPILE_READ_ONLY=1 forces read-only.' };
+const OFF = { enabled: false, forcedOffReason: null, pending: [] };
+const ON = { enabled: true, forcedOffReason: null, pending: [] };
+const FORCED = { enabled: false, forcedOffReason: 'POSTPILE_READ_ONLY=1 forces read-only.', pending: [] };
 
 describe('writeBlockedReason', () => {
   it('blocks approve and comment while GitHub writes are off', () => {
@@ -12,10 +12,10 @@ describe('writeBlockedReason', () => {
     expect(writeBlockedReason('approve', ON)).toBeNull();
   });
 
-  it('lets mark-reads run while off, they stay in the app', () => {
+  it('lets mark-reads run while locked, they become pending writes', () => {
     expect(writeBlockedReason('markRead', OFF)).toBeNull();
     expect(writeBlockedReason('notMine', FORCED)).toBeNull();
-    expect(markReadNote(OFF)).toMatch(/app only/);
+    expect(markReadNote(OFF)).toMatch(/pending write/);
     expect(markReadNote(ON)).toBeUndefined();
   });
 

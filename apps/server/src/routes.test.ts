@@ -136,6 +136,7 @@ describe('server routes over the fake engine', () => {
 
   it('marks a tile read and undoes it', async () => {
     const app = appWithFake();
+    await post(app, '/api/github-writes', { enabled: true });
     const marked = await post<ActionResult>(app, `/api/tiles/${setTile}/mark-read`);
     expect(marked.json.undoToken).toBeTruthy();
     let topic = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
@@ -153,7 +154,7 @@ describe('server routes over the fake engine', () => {
     expect(refused.json.ok).toBe(false);
     const change = await post<GitHubWritesChange>(app, '/api/github-writes', { enabled: true });
     expect(change.json.status.enabled).toBe(true);
-    expect(await (await app.request('/api/github-writes')).json()).toEqual({ enabled: true, forcedOffReason: null });
+    expect(await (await app.request('/api/github-writes')).json()).toEqual({ enabled: true, forcedOffReason: null, pending: [] });
     const res = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41911/approve');
     expect(res.json.ok).toBe(true);
     const detail = (await (await app.request('/api/prs/PostHog/posthog/41911')).json()) as PrDetail;
@@ -165,11 +166,11 @@ describe('server routes over the fake engine', () => {
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     const row = rows.find((candidate) => candidate.prKey === 'PostHog/posthog#41902' && candidate.thread.unread)!;
     const marked = await post<ActionResult>(app, `/api/notifications/${encodeURIComponent(row.thread.id)}/mark-read`);
-    expect(marked.json.message).toMatch(/here only/);
+    expect(marked.json.message).toMatch(/pending until you unlock/);
 
     const log = (await (await app.request('/api/debug/actions')).json()) as ActionLogEntry[];
     expect(log.map((entry) => [entry.action, entry.origin, entry.outcome])).toEqual([
-      ['mark_read', 'debug', 'local'],
+      ['mark_read', 'debug', 'queued'],
     ]);
     const after = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     expect(after.find((candidate) => candidate.thread.id === row.thread.id)?.lastAction?.action).toBe('mark_read');
@@ -179,6 +180,7 @@ describe('server routes over the fake engine', () => {
   it('snoozes and unsnoozes a tile', async () => {
     const app = appWithFake();
     const tile = encodeURIComponent('pr:PostHog/posthog#41822');
+    await post(app, '/api/github-writes', { enabled: true });
     await post(app, `/api/tiles/${tile}/mark-read`);
     await post(app, `/api/tiles/${tile}/snooze`, { condition: { kind: 'new_push' } });
     let topic = (await (await app.request('/api/topics/topic-ci-tests')).json()) as TopicDetail;

@@ -9,7 +9,68 @@ import type { IsoTime, PrKey } from './types.ts';
  * in the store. POSTPILE_READ_ONLY=1 forces it off: then `forcedOffReason`
  * says why and turning it on is refused.
  */
-export interface GitHubWritesStatus {
+export interface GitHubWritesStatus extends WriteSwitchState {
+  /** Mark-reads waiting for the user to unlock (or discard), oldest first. */
+  pending: PendingWriteView[];
+}
+
+/** A GitHub notification thread a mark-read covers, with its updated_at as of the last sync. */
+export interface PendingThread {
+  id: string;
+  updatedAt: IsoTime;
+  /** Null for issues, releases and other non-PR threads. */
+  prKey: PrKey | null;
+}
+
+/**
+ * A mark-read made while GitHub writes were locked. Nothing changed in the
+ * app: the tile keeps its state until the write reaches GitHub. Stored, so it
+ * survives a restart; one row per click (tile, debug row, "not mine").
+ */
+export interface PendingWrite {
+  id: number;
+  createdAt: IsoTime;
+  origin: ActionOrigin;
+  tileId: string | null;
+  /** The batch id of the click, links the log rows. */
+  batch: string;
+  /** Every PR the click covered; they turn read here once the write is through. */
+  prKeys: PrKey[];
+  /** PRs that also count as handled then (pinged members). */
+  handleKeys: PrKey[];
+  /** Threads still to mark read on GitHub. */
+  threads: PendingThread[];
+  /** The last send's error, null before any try. */
+  error: string | null;
+  triedAt: IsoTime | null;
+}
+
+/** A pending write as the footer lists it. */
+export interface PendingWriteView {
+  id: number;
+  createdAt: IsoTime;
+  origin: ActionOrigin;
+  /** Tile or PR title, or the notification's title for a thread without a stored PR. */
+  title: string;
+  prKeys: PrKey[];
+  tileId: string | null;
+  threadCount: number;
+  error: string | null;
+}
+
+/** Answer to "Send N to GitHub" or "Discard". */
+export interface PendingWritesResult {
+  ok: boolean;
+  message: string;
+  /** Pending writes that are done (sent, already read, or left unread on purpose). */
+  done: number;
+  /** Pending writes that failed and stay pending with their error. */
+  failed: number;
+  status: GitHubWritesStatus;
+}
+
+/** The lock alone: on or off, and why it is forced off. */
+export interface WriteSwitchState {
   enabled: boolean;
   forcedOffReason: string | null;
 }
@@ -38,20 +99,24 @@ export type LoggedAction = 'mark_read' | 'undo_mark_read' | 'approve' | 'comment
  * - quit: the queue flushed on quit
  * - sync / poll: the full sync or the live poll saw a thread leave the inbox
  *   (read on github.com or another client) and mirrored it locally
- * - footer: the lock in the status footer
+ * - footer: the lock in the status footer (also sending or discarding pending writes)
  */
 export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer';
 
 /**
  * What came of it.
- * - queued: done locally, waiting in the undo window before it goes to GitHub
+ * - queued: waiting in the undo window (done locally only while writes are on)
+ * - pending: GitHub writes were locked when the undo window ran out; waits
+ *   in pending_write for the user to unlock and send, or discard
+ * - discarded: a pending write the user dropped; the app stays unread like GitHub
  * - github: reached GitHub
- * - local: only changed the app's own state (writes were off, or the action is local by nature)
+ * - local: only changed the app's own state (nothing unread on GitHub, or the action is local by nature;
+ *   older rows: writes were off)
  * - skipped: not sent on purpose (already read on GitHub, or activity after the last sync)
  * - failed: GitHub refused or the call broke; `detail` has the error
  * - observed: GitHub already had it; the app only mirrored it
  */
-export type ActionOutcome = 'queued' | 'github' | 'local' | 'skipped' | 'failed' | 'observed';
+export type ActionOutcome = 'queued' | 'pending' | 'discarded' | 'github' | 'local' | 'skipped' | 'failed' | 'observed';
 
 export interface ActionLogEntry {
   id: number;
