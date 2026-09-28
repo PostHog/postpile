@@ -369,9 +369,27 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    lost.
 10. The report adds `agentCallStats`, `dossiersUpdated` and `facts` counts.
 
-With a call cap (`--max-agent-calls`) the budget is spent in that order:
-topic assignment (everything needs it), dossiers, fact reconcile, sets,
-glances, events. Consolidation is
+**Scheduling** (`Digester`). The numbers above are data dependencies, not
+a queue. Topic assignment runs alone first (its batches one after another,
+a batch can create a topic the next one needs). After that every job runs
+side by side and waits only for the output it reads:
+
+- dossier updates all start at once;
+- a topic's glances start when that topic's own dossier update settled (the
+  glance hash carries the dossier version), then its retry batch right
+  after, not after every other topic;
+- fact reconcile (batches side by side) and the driver/role refresh wait
+  for all dossiers;
+- sets and event classification read no dossier, so they start right away.
+
+How many calls run at once is the runner's job: `ClaudeCliRunner`'s
+limiter, `POSTPILE_AGENT_CONCURRENCY`, default 8 (was 4; on a subscription
+wall time is the cost, and at 4 most of a 5-minute sync sat in the queue).
+
+With a call cap (`--max-agent-calls`) the budget is spent in the order jobs
+ask for it (`budget.take` is synchronous, so parallel jobs cannot overshoot
+it): topic assignment, dossiers, sets, events, then glances as their
+dossiers land, then fact reconcile. Consolidation is
 not part of `sync()` and never overlaps with it (each waits for the other,
 so every call lands in the right run's stats); see below.
 

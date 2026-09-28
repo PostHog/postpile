@@ -1,6 +1,6 @@
 import type { Dossier, Pr } from '@postpile/core';
 import { at, makeCandidate, makeComment, makeFact, makeFactRef, makeThreadFor } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -151,6 +151,28 @@ describe('the call cap', () => {
     expect(report.agentCallStats.byKind.dossier_update?.calls).toBe(2);
     expect(report.agentCallStats.byKind.glance_batch).toMatchObject({ calls: 1, skippedByBudget: 1 });
     expect(report.agentCalls).toBe(3);
+  });
+});
+
+describe('scheduling', () => {
+  it("starts a topic's glances when its own dossier lands, not after every dossier", async () => {
+    const h = makeHarness();
+    const depot = reviewRequestedPr(1);
+    const billing = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [depot]);
+    topicWithPrs(h, 'billing', [billing]);
+    const release = h.agent.holdDossier('billing');
+
+    const syncing = h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
+    await vi.waitFor(() => expect(h.agent.glanceInputs).toHaveLength(1));
+    expect(h.agent.glanceInputs[0]?.topic?.id).toBe('depot');
+    release();
+    await syncing;
+
+    expect(h.agent.glanceInputs.map((input) => [input.topic?.id, input.dossier?.version])).toEqual([
+      ['depot', 1],
+      ['billing', 1],
+    ]);
   });
 });
 
