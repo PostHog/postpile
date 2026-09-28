@@ -4,7 +4,7 @@
 // whom, tiers and the done rule all read the same answer.
 import { isBot } from './bots.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
-import type { Pr, Review, UserPrState, Viewer } from './types.ts';
+import type { IsoTime, Pr, Review, UserPrState, Viewer } from './types.ts';
 
 /**
  * you: the viewer is a requested reviewer.
@@ -18,31 +18,56 @@ import type { Pr, Review, UserPrState, Viewer } from './types.ts';
  */
 export type ReviewRequest = 'you' | 'team_for_you' | 'team' | 'team_taken' | null;
 
+/** An approve, request-changes or dismissed review: a verdict. A plain comment review is none. */
+export function isVerdict(review: Review): boolean {
+  return review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED' || review.state === 'DISMISSED';
+}
+
+/** The newest verdict review by `login`, or null. */
+export function newestVerdictBy(reviews: Review[], login: string): Review | null {
+  let newest: Review | null = null;
+  for (const review of reviews) {
+    if (isVerdict(review) && sameLogin(review.author, login) && (newest === null || review.submittedAt > newest.submittedAt)) {
+      newest = review;
+    }
+  }
+  return newest;
+}
+
+/** When the viewer approved and on which commit (null when unknown). */
+export interface ViewerApproval {
+  at: IsoTime;
+  commitOid: string | null;
+}
+
 /**
- * The viewer approved the PR, on any commit: from the app (the stored
- * approval) or on github.com (their newest approve-or-request-changes
- * review is an approval). Approvals do not follow the head: a push after
- * approval does not undo it (decided 2026-09-28).
+ * The viewer's standing approval, on any commit: from the app (the stored
+ * approval) or on github.com (their newest verdict review is an approval).
+ * Approvals do not follow the head: a push after approval does not undo it
+ * (decided 2026-09-28). Null when they have not approved.
  *
  * The stored approval only bridges the gap until GitHub shows the viewer's
  * review on the approved commit. From then on GitHub's newest verdict
  * decides, so a later change request or a dismissal (which keeps the
  * original submittedAt) wins over the local timestamp.
  */
-export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
-  const decisive = viewerLogin === undefined
-    ? []
-    : pr.reviews
-        .filter((r) => (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED' || r.state === 'DISMISSED') && sameLogin(r.author, viewerLogin))
-        .sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
-  const newest = decisive[decisive.length - 1];
+export function viewerApproval(pr: Pr, userState: UserPrState | null, viewerLogin?: string): ViewerApproval | null {
+  const newest = viewerLogin === undefined ? null : newestVerdictBy(pr.reviews, viewerLogin);
   const approvedInApp = userState?.approvedAt ?? null;
   const approvedCommit = userState?.approvedCommitOid ?? null;
-  const onGitHub = approvedCommit !== null && decisive.some((review) => review.commitOid === approvedCommit);
+  const onGitHub =
+    viewerLogin !== undefined &&
+    approvedCommit !== null &&
+    pr.reviews.some((review) => isVerdict(review) && sameLogin(review.author, viewerLogin) && review.commitOid === approvedCommit);
   if (approvedInApp !== null && !onGitHub && (!newest || approvedInApp >= newest.submittedAt)) {
-    return true;
+    return { at: approvedInApp, commitOid: approvedCommit };
   }
-  return newest?.state === 'APPROVED';
+  return newest?.state === 'APPROVED' ? { at: newest.submittedAt, commitOid: newest.commitOid } : null;
+}
+
+/** The viewer approved the PR, on any commit (see `viewerApproval`). */
+export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
+  return viewerApproval(pr, userState, viewerLogin) !== null;
 }
 
 /** The login is on one of the viewer's teams (never true before the member list is fetched). */

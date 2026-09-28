@@ -1105,8 +1105,9 @@ any review ask; on top of that:
   the lifecycle glyph (draft / ready) and the review glyph (approved /
   changes requested / review required, also on drafts) sit in front of the
   label, words in their tooltips. Approvals do not depend on the commit:
-  once you approved (app record or an approving review, any commit) the
-  button stays usable but calm, an outlined "Approve again" whose tooltip
+  once you approved (app record or an approving review, any commit; core's
+  `viewerApproval`, shipped as `PrDetail.viewerApproval`, so the button and
+  the turn rules agree) the button stays usable but calm, an outlined "Approve again" whose tooltip
   says you already approved and whether commits came after; no ink, no nag.
   It wins over draft. Else "Approve as well" when others approved and you
   never did. Drafts get an outlined "Approve draft"; draft wins over "as

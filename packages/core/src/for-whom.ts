@@ -53,7 +53,7 @@ export function forWhom(code: WhyCode, pr: Pr | null, viewer: Viewer | null): Fo
     return { kind: 'own' };
   }
   // The author addressed the viewer's changes request: a re-review for them, whatever the notification said.
-  if (pr !== null && viewer !== null && !pr.isDraft && changesAnswered(pr, viewer) !== null) {
+  if (pr !== null && viewer !== null && changesAnswered(pr, viewer) !== null) {
     return { kind: 'you' };
   }
   // A team request on a teammate's PR that no other teammate covered yet counts like a personal one.

@@ -6,7 +6,7 @@ import { isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
-import { isApprovedByViewer, isPersonalRequest, reviewRequest, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
+import { isApprovedByViewer, isPersonalRequest, isVerdict, reviewRequest, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
 
 export type WhoseTurnKind = 'you' | 'them' | 'none';
@@ -111,11 +111,6 @@ export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: 
   return newest;
 }
 
-/** The newest human mention, question or reply to the viewer they have not answered yet. */
-function openAsk(ctx: PrContext): PrEvent | null {
-  return unansweredAsk(ctx.pr, ctx.events, ctx.viewer);
-}
-
 function viewerReviews(ctx: PrContext): Review[] {
   return ctx.pr.reviews
     .filter((r) => isViewer(ctx, r.author) && r.state !== 'PENDING' && r.state !== 'DISMISSED')
@@ -134,11 +129,6 @@ function requester(ctx: PrContext): string | null {
     .filter((item) => item.kind === 'review_requested' && isViewerSubject(item.subject, ctx.viewer) && !isBot(item.actor))
     .sort((a, b) => (a.at < b.at ? -1 : 1));
   return requests[requests.length - 1]?.actor ?? null;
-}
-
-/** The pending review request that concerns the viewer (see `reviewRequest`). */
-function reviewAsk(ctx: PrContext): ReviewRequest {
-  return reviewRequest(ctx.pr, ctx.viewer);
 }
 
 function ownTeamSlug(ctx: PrContext): string {
@@ -192,7 +182,7 @@ function threadsViewerOpened(ctx: PrContext): number {
 function changesRequestedBy(ctx: PrContext): string | null {
   const latest = new Map<string, Review>();
   for (const review of [...ctx.pr.reviews].sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1))) {
-    if (review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED' || review.state === 'DISMISSED') {
+    if (isVerdict(review)) {
       latest.set(review.author.toLowerCase(), review);
     }
   }
@@ -226,7 +216,7 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
 
 function othersPrTurn(ctx: PrContext): WhoseTurn {
   const { pr } = ctx;
-  const ask = reviewAsk(ctx);
+  const ask = reviewRequest(ctx.pr, ctx.viewer);
   // An approval on any commit stands; a push after it is not the viewer's move.
   if (isApprovedByViewer(pr, ctx.userState, ctx.viewer.login)) {
     return them(ctx, pr.author, 'to merge');
@@ -291,7 +281,7 @@ function prTurn(ctx: PrContext): WhoseTurn {
   if (ctx.pr.isDraft) {
     return draftTurn(ctx);
   }
-  const ask = openAsk(ctx);
+  const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer);
   // The author's thread replies are asks too; the answer to the changes
   // request says more. An ask from anyone else still goes first.
   const answer = changesAnswered(ctx.pr, ctx.viewer);
@@ -301,7 +291,7 @@ function prTurn(ctx: PrContext): WhoseTurn {
   if (ask) {
     const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login)
       ? false
-      : isPersonalRequest(reviewAsk(ctx)) && headReview(ctx) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
+      : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && headReview(ctx) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
     return you(ctx, askText(ask, reviewToo));
   }
   return sameLogin(ctx.pr.author, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);

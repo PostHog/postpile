@@ -1,7 +1,7 @@
 // The detail pane's Approve button: its label, its look and the small state
 // glyphs in front of the label. Pure, so the rules stay tested and the
 // ActionBar stays dumb.
-import type { Pr, PrLifecycle, Review } from '@postpile/core';
+import type { Pr, PrLifecycle, Review, ViewerApproval } from '@postpile/core';
 import type { EventGlyph } from './events.ts';
 
 export interface ApproveButtonInput {
@@ -9,10 +9,8 @@ export interface ApproveButtonInput {
   /** Null before the first sync stored the viewer; every approval then counts as someone else's. */
   viewerLogin: string | null;
   reviews: Review[];
-  /** The app's own record of the viewer's approval (any commit). */
-  viewerApprovedAt: string | null;
-  /** Head commit at the app's approval, null when the app has no record. */
-  viewerApprovedCommitOid: string | null;
+  /** The viewer's standing approval from core (`PrDetail.viewerApproval`): app record or GitHub, any commit. */
+  approval: ViewerApproval | null;
   headOid: string;
 }
 
@@ -26,41 +24,8 @@ export interface ApproveButtonLook {
   headMoved: boolean;
 }
 
-/** The viewer's newest approve or request-changes review on GitHub, any commit. */
-function viewerVerdictReview(input: ApproveButtonInput): Review | null {
-  let newest: Review | null = null;
-  for (const review of input.reviews) {
-    const isVerdict = review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED';
-    if (isVerdict && review.author === input.viewerLogin && (!newest || review.submittedAt > newest.submittedAt)) {
-      newest = review;
-    }
-  }
-  return newest;
-}
-
-/** The viewer's approving review, unless a later "request changes" from the viewer undid it. */
-function viewerApproval(input: ApproveButtonInput): Review | null {
-  const newest = viewerVerdictReview(input);
-  return newest?.state === 'APPROVED' ? newest : null;
-}
-
-/** The app's own approval record, unless a newer "request changes" from the viewer undid it. */
-function appApprovalAt(input: ApproveButtonInput): string | null {
-  const newest = viewerVerdictReview(input);
-  if (input.viewerApprovedAt === null) {
-    return null;
-  }
-  const undone = newest?.state === 'CHANGES_REQUESTED' && newest.submittedAt > input.viewerApprovedAt;
-  return undone ? null : input.viewerApprovedAt;
-}
-
 function othersApproved(input: ApproveButtonInput): boolean {
   return input.reviews.some((review) => review.state === 'APPROVED' && review.author !== input.viewerLogin);
-}
-
-/** The commit the viewer's approval was for: the app record first, else the newest review. Null when unknown. */
-function approvedCommit(input: ApproveButtonInput, review: Review | null): string | null {
-  return input.viewerApprovedCommitOid ?? review?.commitOid ?? null;
 }
 
 /**
@@ -78,11 +43,10 @@ function approvedCommit(input: ApproveButtonInput, review: Review | null): strin
  * - Else "Approve".
  */
 export function approveButton(input: ApproveButtonInput): ApproveButtonLook {
-  const review = viewerApproval(input);
-  const viewerApproved = appApprovalAt(input) !== null || review !== null;
-  if (viewerApproved) {
-    const commit = approvedCommit(input, review);
-    return { label: 'Approve again', variant: 'secondary', viewerApproved, headMoved: commit !== null && commit !== input.headOid };
+  const approval = input.approval;
+  if (approval) {
+    const commit = approval.commitOid;
+    return { label: 'Approve again', variant: 'secondary', viewerApproved: true, headMoved: commit !== null && commit !== input.headOid };
   }
   const base = { viewerApproved: false, headMoved: false };
   if (input.isDraft) {
@@ -92,11 +56,6 @@ export function approveButton(input: ApproveButtonInput): ApproveButtonLook {
     return { label: 'Approve as well', variant: 'primary', ...base };
   }
   return { label: 'Approve', variant: 'primary', ...base };
-}
-
-/** The viewer's newest approval time: the app record or the newest approving review. */
-export function viewerApprovedAt(input: ApproveButtonInput): string | null {
-  return appApprovalAt(input) ?? viewerApproval(input)?.submittedAt ?? null;
 }
 
 export interface StateGlyph {

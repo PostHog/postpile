@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { PrDetail, PrLifecycle, PrPrimaryAction, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useViewer } from '../api/viewer.ts';
-import { approveButton, approveStateGlyphs, viewerApprovedAt, type ApproveButtonInput, type ApproveButtonLook } from '../lib/approve.ts';
+import { approveButton, approveStateGlyphs, type ApproveButtonInput, type ApproveButtonLook } from '../lib/approve.ts';
 import { isBotLogin } from '../lib/people.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -24,7 +24,7 @@ interface ActionBarProps {
 /** What Approve does, why it is blocked, or that you already approved, for the hover title. */
 function approveTitle(input: ApproveButtonInput, look: ApproveButtonLook, blocked: string | null, now: Date): string {
   const action = blocked ?? 'Approves on GitHub right away. Cannot be undone.';
-  const approvedAt = viewerApprovedAt(input);
+  const approvedAt = input.approval?.at ?? null;
   if (!look.viewerApproved || !approvedAt) {
     return action;
   }
@@ -65,8 +65,7 @@ export function ActionBar(props: ActionBarProps) {
     isDraft: pr.isDraft,
     viewerLogin: viewer.data?.login ?? null,
     reviews: pr.reviews,
-    viewerApprovedAt: props.detail.userState?.approvedAt ?? null,
-    viewerApprovedCommitOid: props.detail.userState?.approvedCommitOid ?? null,
+    approval: props.detail.viewerApproval,
     headOid: pr.headOid,
   };
   const approve = approveButton(approveInput);

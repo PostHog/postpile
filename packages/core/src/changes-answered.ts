@@ -6,7 +6,8 @@
 import { isBot } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
-import type { EventKind, IsoTime, Pr, Review, Viewer } from './types.ts';
+import { newestVerdictBy } from './review-request.ts';
+import type { EventKind, IsoTime, Pr, Viewer } from './types.ts';
 
 export interface ChangesAnswer {
   /** The author pushed commits (or force-pushed) after `since`. */
@@ -40,21 +41,6 @@ function newest(times: IsoTime[]): IsoTime | null {
   return best;
 }
 
-/** The viewer's newest approve, request changes or dismissed review. A plain comment review is no verdict. */
-function newestVerdict(pr: Pr, viewer: Viewer): Review | null {
-  let verdict: Review | null = null;
-  for (const review of pr.reviews) {
-    const isVerdict = review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED' || review.state === 'DISMISSED';
-    if (!isVerdict || !sameLogin(review.author, viewer.login)) {
-      continue;
-    }
-    if (verdict === null || review.submittedAt > verdict.submittedAt) {
-      verdict = review;
-    }
-  }
-  return verdict;
-}
-
 /** When the viewer last spoke on the PR (comment or submitted review), or null. */
 function viewerLastWord(pr: Pr, viewer: Viewer): IsoTime | null {
   const comments = pr.comments.filter((c) => sameLogin(c.author, viewer.login)).map((c) => c.createdAt);
@@ -86,14 +72,14 @@ function repliedAfter(pr: Pr, since: IsoTime): boolean {
  * The author answered the viewer's changes request: the viewer's newest
  * verdict on an open PR someone else wrote asks for changes, and since the
  * viewer's last word (the request, or a later comment or re-review) the
- * author pushed or replied. Null otherwise. Drafts count too; the draft
- * rules decide separately whether that is a move.
+ * author pushed or replied. Null otherwise, and always on a draft: nobody
+ * re-reviews a draft (its author's thread reply is a personal ask instead).
  */
 export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
-  if (pr.state !== 'OPEN' || sameLogin(pr.author, viewer.login)) {
+  if (pr.state !== 'OPEN' || pr.isDraft || sameLogin(pr.author, viewer.login)) {
     return null;
   }
-  const verdict = newestVerdict(pr, viewer);
+  const verdict = newestVerdictBy(pr.reviews, viewer.login);
   if (verdict === null || verdict.state !== 'CHANGES_REQUESTED') {
     return null;
   }
@@ -112,7 +98,7 @@ export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
  * viewer's last word, on a non-draft PR whose changes request was answered.
  */
 export function isChangesAnswerEvent(event: { kind: EventKind; actor: string; at: IsoTime }, pr: Pr, viewer: Viewer): boolean {
-  if (pr.isDraft || !ANSWER_KINDS.includes(event.kind)) {
+  if (!ANSWER_KINDS.includes(event.kind)) {
     return false;
   }
   const answer = changesAnswered(pr, viewer);

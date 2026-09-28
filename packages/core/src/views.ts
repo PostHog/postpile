@@ -26,6 +26,7 @@ import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './me
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
 import type { PrTier } from './pr-tier.ts';
+import type { ViewerApproval } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
 import type { TilePerson } from './tile-people.ts';
 import type { WhoseTurn } from './whose-turn.ts';
@@ -196,6 +197,8 @@ export interface PrDetail {
   /** Set while there is no glance and the last sync said why. */
   glanceGap: GlanceGap | null;
   userState: UserPrState | null;
+  /** The viewer's standing approval (`viewerApproval`): app record or GitHub, any commit. Null when none. */
+  viewerApproval: ViewerApproval | null;
   topicId: string | null;
   /** Ids of every tile this PR appears in. */
   tileIds: string[];

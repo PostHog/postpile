@@ -164,6 +164,7 @@ describe('addressed your changes: variants', () => {
     expect(turn(pushedDraft).kind).toBe('none');
     expect(tier(pushedDraft)).toBe('rest');
     expect(forWhom('CM', pushedDraft, viewer)).toEqual({ kind: 'none' });
+    expect(changesAnswered(pushedDraft, viewer)).toBeNull();
     const events = deriveEvents(pushedDraft, viewer, null);
     expect(events.find((event) => event.sourceId === 'c3')?.ruleLoudness).toBe('quiet');
   });

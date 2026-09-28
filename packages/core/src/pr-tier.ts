@@ -52,7 +52,7 @@ export function prTier(input: PrTierInput): PrTier {
   const ask = unansweredAsk(pr, input.events, viewer, REPLY_KINDS);
   // Addressed your changes: a re-review, even from a teammate. The author's
   // thread replies are part of it; an ask from anyone else still wins.
-  const answered = !pr.isDraft && changesAnswered(pr, viewer) !== null;
+  const answered = changesAnswered(pr, viewer) !== null;
   if (ask !== null && !(answered && sameLogin(ask.actor, pr.author))) {
     return 'needs_reply';
   }

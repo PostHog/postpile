@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
-import { isApprovedByViewer, isPersonalRequest, reviewPending, reviewRequest, teamRequestTakenBy } from './review-request.ts';
+import { isApprovedByViewer, isPersonalRequest, newestVerdictBy, viewerApproval, reviewPending, reviewRequest, teamRequestTakenBy } from './review-request.ts';
 import type { Viewer } from './types.ts';
 
 const me = viewer.login;
@@ -82,5 +82,45 @@ describe('isApprovedByViewer', () => {
       makeReview({ id: 'r2', author: me, state: 'CHANGES_REQUESTED', commitOid: 'c2', submittedAt: at(25) }),
     ];
     expect(isApprovedByViewer({ ...pr, reviews }, inApp, me)).toBe(false);
+  });
+});
+
+describe('viewerApproval', () => {
+  const pr = makePr({ author: 'ada', headOid: 'head' });
+
+  it('reads the newest approving review, with its commit', () => {
+    const reviews = [makeReview({ author: me, commitOid: 'old', submittedAt: at(10) })];
+    expect(viewerApproval({ ...pr, reviews }, null, me)).toEqual({ at: at(10), commitOid: 'old' });
+  });
+
+  it('reads the app record while GitHub does not show it yet', () => {
+    const state = makeUserState({ prKey: pr.key, approvedAt: at(5), approvedCommitOid: 'old' });
+    expect(viewerApproval(pr, state, me)).toEqual({ at: at(5), commitOid: 'old' });
+  });
+
+  it('follows the newest verdict: a later change request undoes an approval, a later approval stands', () => {
+    const undone = [makeReview({ id: 'a', author: me, commitOid: 'a', submittedAt: at(10) }), makeReview({ id: 'b', author: me, state: 'CHANGES_REQUESTED', submittedAt: at(20) })];
+    expect(viewerApproval({ ...pr, reviews: undone }, null, me)).toBeNull();
+    const redone = [makeReview({ id: 'a', author: me, state: 'CHANGES_REQUESTED', submittedAt: at(10) }), makeReview({ id: 'b', author: me, commitOid: 'b', submittedAt: at(20) })];
+    expect(viewerApproval({ ...pr, reviews: redone }, null, me)).toEqual({ at: at(20), commitOid: 'b' });
+    // A change request newer than the app record undoes that record too.
+    const state = makeUserState({ prKey: pr.key, approvedAt: at(10), approvedCommitOid: 'x' });
+    expect(viewerApproval({ ...pr, reviews: [makeReview({ author: me, state: 'CHANGES_REQUESTED', submittedAt: at(20) })] }, state, me)).toBeNull();
+  });
+
+  it('is null after a dismissal or without a verdict', () => {
+    expect(viewerApproval({ ...pr, reviews: [makeReview({ author: me, state: 'DISMISSED' })] }, null, me)).toBeNull();
+    expect(viewerApproval({ ...pr, reviews: [makeReview({ author: me, state: 'COMMENTED' })] }, null, me)).toBeNull();
+  });
+});
+
+describe('newestVerdictBy', () => {
+  it('skips comment reviews and other authors', () => {
+    const reviews = [
+      makeReview({ id: 'a', author: me, state: 'CHANGES_REQUESTED', submittedAt: at(10) }),
+      makeReview({ id: 'b', author: me, state: 'COMMENTED', submittedAt: at(20) }),
+      makeReview({ id: 'c', author: 'lyra', state: 'APPROVED', submittedAt: at(30) }),
+    ];
+    expect(newestVerdictBy(reviews, me)?.id).toBe('a');
   });
 });

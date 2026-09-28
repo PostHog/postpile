@@ -58,6 +58,7 @@ import type {
 } from '@postpile/core';
 import {
   activityList,
+  viewerApproval,
   buildPrSummary,
   buildTileView,
   deriveTileState,
@@ -706,6 +707,7 @@ export class FakeEngine implements EngineService {
       glanceStale: false,
       glanceGap: this.glanceGapOf(prKey),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
+      viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
       facts: this.memory.prFacts(prKey),
