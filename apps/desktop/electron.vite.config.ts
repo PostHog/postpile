@@ -27,5 +27,8 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react(), tailwindcss()],
+    // electron-vite leaves the renderer unminified by default; minified, the
+    // bundle is about a third of the size, which the window parses on every start.
+    build: { minify: true },
   },
 });
