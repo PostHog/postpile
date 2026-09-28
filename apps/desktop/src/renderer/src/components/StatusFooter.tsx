@@ -25,6 +25,15 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
         </span>
       )}
       <WritesLock />
+      <button
+        type="button"
+        onClick={() => void actions.sendTestNotification()}
+        disabled={!window.postpile?.sendTestNotification}
+        title={window.postpile?.sendTestNotification ? 'Send a test Mac notification' : 'Only in the desktop app'}
+        className="text-muted hover:text-ink disabled:opacity-50 disabled:hover:text-muted"
+      >
+        test ping
+      </button>
       <span className={live.warn ? 'text-closer' : ''} title={live.title}>
         {live.text}
       </span>

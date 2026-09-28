@@ -40,6 +40,31 @@ export class MacNotifier {
     }
   }
 
+  /** What a single notification did: shown, or why not. */
+  private showOne(title: string, body: string, target: PingTarget | null): 'shown' | 'off' | 'unsupported' {
+    if (!this.options.enabled) {
+      return 'off';
+    }
+    if (!Notification.isSupported()) {
+      return 'unsupported';
+    }
+    this.show([{ title, body, target, count: 1 }]);
+    return 'shown';
+  }
+
+  /**
+   * The first-launch welcome: a calm first notification, so macOS asks for
+   * the permission now and not in the middle of a real ping.
+   */
+  showWelcome(): 'shown' | 'off' | 'unsupported' {
+    return this.showOne('PostPile', 'PostPile will ping you here when something needs you.', null);
+  }
+
+  /** "Send test notification" from the status footer. */
+  showTest(): 'shown' | 'off' | 'unsupported' {
+    return this.showOne('PostPile test notification', 'This is how a ping looks. Clicking one opens its tile.', null);
+  }
+
   show(items: MacNotification[]): void {
     if (!this.options.enabled) {
       return;

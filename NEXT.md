@@ -219,6 +219,12 @@ now".
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
+- Notification permission at a calm moment: a welcome Mac notification on
+  the first launch (flag in userData) triggers the macOS prompt; "test ping"
+  next to the lock in the footer sends a test one. Dev runs register as
+  "Electron" in System Settings › Notifications, the packaged app as
+  "PostPile". The welcome with notifications on was not tried by hand (it
+  would ping the real Mac); the off path and the IPC were.
 - Dev runs away from the real database (DESIGN.md "Safety while
   building"): `POSTPILE_PROFILE=dev` (set by the unpackaged desktop app,
   defaulted by `pnpm cli` / `pnpm server`) uses PostPile-dev and

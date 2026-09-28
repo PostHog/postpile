@@ -1252,6 +1252,18 @@ beyond what the full sync already does for threads that left the inbox).
   that permission, so a denial only means nothing shows up; tiles still turn
   unread. `POSTPILE_MAC_NOTIFICATIONS=0` turns notifications off (the poll
   still runs). A settings toggle and quiet hours are not built yet.
+- **Permission at a calm moment**: on the first launch (flag file
+  `welcome-notification.json` in userData) the app shows one welcome
+  notification ("PostPile will ping you here when something needs you") a
+  few seconds after the window shows, so macOS asks for the permission then
+  and not on the first real ping. Not stored while notifications are off
+  (`POSTPILE_MAC_NOTIFICATIONS=0`), so it comes once they work. "test ping"
+  next to the lock in the status footer sends a test notification over the
+  preload (`sendTestNotification`, IPC `postpile:test-notification`) and
+  says in a toast whether it was shown, off or unsupported. Dev runs are the
+  Electron binary and show up as "Electron" in System Settings ›
+  Notifications; the packaged app has its own "PostPile" entry, so the
+  permission is asked (and set) once for each.
 
 **Fake mode**: `FakeLivePoll` adds a sample question to the next open pinged
 tile every ~45s and pings for it with a fake rules decision, through the same

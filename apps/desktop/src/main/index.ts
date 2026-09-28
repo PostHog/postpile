@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron';
 import fixPath from 'fix-path';
 import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { MacNotifier } from './mac-notifier.ts';
+import { welcomeOnce } from './welcome.ts';
 
 // A GUI launch (Finder, Dock, the packaged app) gets launchd's minimal PATH.
 // gh and claude live in /opt/homebrew/bin and ~/.local/bin, so take PATH
@@ -173,6 +174,12 @@ async function start(): Promise<void> {
       }
     },
   });
+  // "Send test notification" in the status footer.
+  ipcMain.handle('postpile:test-notification', () => notifier.showTest());
+  // First launch: one calm welcome notification, so macOS asks for the
+  // permission now and not on the first real ping. A few seconds after the
+  // window shows, once the app has settled.
+  setTimeout(() => welcomeOnce(app.getPath('userData'), () => notifier.showWelcome()), 3000);
   // The fast notification poll runs as long as the app does, window open or not.
   engine.startLivePoll({
     intervalSeconds: pollSecondsFromEnv(process.env.POSTPILE_POLL_SECONDS),

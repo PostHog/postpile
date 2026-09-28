@@ -107,6 +107,8 @@ export interface Actions {
   clearStartFresh(): Promise<boolean>;
   /** "Not now": hides the cleanup for a week. Local. */
   hideInboxCleanup(): Promise<boolean>;
+  /** "Send test notification" (desktop app only, over the preload). Says in a toast what happened. */
+  sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
@@ -303,6 +305,22 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function sendTestNotification(): Promise<void> {
+    const send = window.postpile?.sendTestNotification;
+    if (!send) {
+      show('blocked', 'Test notifications only work in the desktop app');
+      return;
+    }
+    const result = await send();
+    if (result === 'shown') {
+      show('ok', 'Test notification sent. Nothing showed up? Allow PostPile (dev runs: Electron) in System Settings › Notifications.');
+    } else if (result === 'off') {
+      show('blocked', 'Mac notifications are off for this run (POSTPILE_MAC_NOTIFICATIONS=0)');
+    } else {
+      show('error', 'This system does not support notifications');
+    }
+  }
+
   async function draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null> {
     try {
       const draft = await withBusy(`ask:${prKey}`, () =>
@@ -438,6 +456,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     recheckMemory,
     setRepoScope,
     setRepoQuiet,
+    sendTestNotification,
     cleanUpInbox: (age) => run('cleanup', 'cleanup', () => request('POST', '/api/inbox-cleanup/mark-read', { olderThanDays: age })),
     startFresh: () => run('cleanup', null, () => request('POST', '/api/inbox-cleanup/start-fresh')),
     clearStartFresh: () => run('cleanup', null, () => request('DELETE', '/api/inbox-cleanup/start-fresh')),
