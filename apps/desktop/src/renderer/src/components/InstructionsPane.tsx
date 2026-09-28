@@ -4,6 +4,7 @@ import { InstructionsChat } from './InstructionsChat.tsx';
 import { InstructionsFileLine } from './InstructionsFileLine.tsx';
 import { InstructionsText } from './InstructionsText.tsx';
 import { InstructionsVersions } from './InstructionsVersions.tsx';
+import { WorkContextSection } from './WorkContextSection.tsx';
 
 function Section(props: { title: string; meta?: string; children: ReactNode }) {
   return (
@@ -20,9 +21,10 @@ function Section(props: { title: string; meta?: string; children: ReactNode }) {
 /**
  * Middle pane for "Your instructions": the user's own text, read-only here,
  * a chat that proposes changes as diffs, and every version with where it
- * came from. The agent never changes this text without an Accept.
+ * came from. The agent never changes this text without an Accept. Below it,
+ * set apart, the agent-written "What you're working on".
  */
-export function InstructionsPane() {
+export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void }) {
   const instructions = useInstructions();
   const data = instructions.data;
   return (
@@ -49,6 +51,7 @@ export function InstructionsPane() {
           <InstructionsVersions versions={data.versions} />
         </Section>
       )}
+      <WorkContextSection onOpenTopic={props.onOpenTopic} />
     </main>
   );
 }

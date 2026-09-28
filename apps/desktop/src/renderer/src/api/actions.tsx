@@ -19,6 +19,8 @@ import type {
   PrKey,
   SnoozeCondition,
   SyncReport,
+  WorkContextSweepResult,
+  WorkThreadForget,
 } from '@code-manager/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
@@ -86,6 +88,10 @@ export interface Actions {
   proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposal | null>;
   /** Accepts a proposal: writes instructions.md. Local, not a GitHub write. */
   saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult | null>;
+  /** "Refresh" on "What you're working on": one agent call over local notes, can take a minute. */
+  refreshWorkContext(): Promise<void>;
+  /** "Forget" on a digest thread. Local only; the toast offers Undo. */
+  forgetWorkThread(input: WorkThreadForget): Promise<boolean>;
 }
 
 const ActionsContext = createContext<Actions | null>(null);
@@ -287,6 +293,19 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function refreshWorkContext(): Promise<void> {
+    try {
+      // Shows "running" right away: the view is refetched while the sweep works.
+      const sweep = request<WorkContextSweepResult>('POST', '/api/work-context/sweep');
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workContext });
+      const result = await withBusy('workContext:refresh', () => sweep);
+      show(result.ok ? 'ok' : 'error', result.message);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workContext });
+    } catch (error) {
+      show('error', `Refresh failed: ${errorText(error)}`);
+    }
+  }
+
   const actions: Actions = {
     config,
     notice,
@@ -337,6 +356,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     instructionsChat,
     proposeInstructions,
     saveInstructions,
+    refreshWorkContext,
+    forgetWorkThread: (input) =>
+      run(`forget:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/forget', input)),
   };
 
   return <ActionsContext.Provider value={actions}>{props.children}</ActionsContext.Provider>;
