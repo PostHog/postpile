@@ -1,9 +1,12 @@
 import {
   compareTopicUrgency,
   displayState,
+  isMergeApprovedMove,
   isUnseenLoud,
+  memberTier,
   openThreadCount,
   personRelation,
+  pingedPrKeys,
   prStatus,
   prTier,
   searchTopics,
@@ -135,7 +138,7 @@ export class ReadModels {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
-        tier: this.tierOf(board, pr, viewer),
+        tier: memberTier(this.tierOf(board, pr, viewer), member.provenance),
         authorRelation: personRelation(pr.author, viewer),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
@@ -195,13 +198,18 @@ export class ReadModels {
       }
       const states = tiles.map((tile) => board.stateOf(tile).kind);
       const urgency = topicUrgency(
-        tiles.map((tile, index) => ({
-          state: states[index] ?? 'open',
-          prStates: tile.members.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
-          yourMove: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }).kind === 'you',
-        })),
+        tiles.map((tile, index) => {
+          const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer });
+          return {
+            state: states[index] ?? 'open',
+            prStates: tile.members.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
+            yourMove: turn.kind === 'you',
+            mergeApproved: isMergeApprovedMove(turn),
+          };
+        }),
       );
       const prs = this.topicPrs(board, tiles);
+      const pinged = pingedPrKeys(tiles);
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
       items.push({
@@ -214,7 +222,14 @@ export class ReadModels {
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
         yourMoveTiles: urgency.yourMoveTiles,
-        queues: topicQueues(prs.map((pr) => ({ tier: this.tierOf(board, pr, viewer), author: personRelation(pr.author, viewer), state: pr.state }))),
+        queues: topicQueues(
+          prs.map((pr) => ({
+            tier: this.tierOf(board, pr, viewer),
+            author: personRelation(pr.author, viewer),
+            state: pr.state,
+            pulledIn: !pinged.has(pr.key),
+          })),
+        ),
         people: topicPeople(prs, viewer),
       });
     }

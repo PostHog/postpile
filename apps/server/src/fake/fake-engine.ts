@@ -48,10 +48,13 @@ import {
   debugEventLines,
   emptyAgentCallStats,
   fixedClaimNote,
+  isMergeApprovedMove,
+  memberTier,
   OFF_POLL_STATUS,
   systemTimers,
   openThreadCount,
   personRelation,
+  pingedPrKeys,
   prStatus,
   prTier,
   searchTopics,
@@ -298,7 +301,7 @@ export class FakeEngine implements EngineService {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
-        tier: this.tierOf(pr, member),
+        tier: memberTier(this.tierOf(pr, member), member.provenance),
         authorRelation: personRelation(pr.author, viewer),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
@@ -414,9 +417,15 @@ export class FakeEngine implements EngineService {
       const tiles = this.tilesOfTopic(topic.id);
       const views = tiles.map((tile) => this.tileView(tile));
       const urgency = topicUrgency(
-        views.map((view) => ({ state: view.state.kind, prStates: view.prs.map((pr) => pr.state), yourMove: view.turn.kind === 'you' })),
+        views.map((view) => ({
+          state: view.state.kind,
+          prStates: view.prs.map((pr) => pr.state),
+          yourMove: view.turn.kind === 'you',
+          mergeApproved: isMergeApprovedMove(view.turn),
+        })),
       );
       const prs = this.topicPrs(tiles);
+      const pinged = pingedPrKeys(tiles);
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
@@ -427,7 +436,14 @@ export class FakeEngine implements EngineService {
         openTiles: views.filter((view) => view.state.kind === 'open').length,
         totalTiles: views.length,
         yourMoveTiles: urgency.yourMoveTiles,
-        queues: topicQueues(prs.map(({ pr, member }) => ({ tier: this.tierOf(pr, member), author: personRelation(pr.author, viewer), state: pr.state }))),
+        queues: topicQueues(
+          prs.map(({ pr, member }) => ({
+            tier: this.tierOf(pr, member),
+            author: personRelation(pr.author, viewer),
+            state: pr.state,
+            pulledIn: !pinged.has(pr.key),
+          })),
+        ),
         people: topicPeople(prs.map(({ pr }) => pr), viewer),
       };
     });

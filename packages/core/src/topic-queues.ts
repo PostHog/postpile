@@ -4,7 +4,7 @@
 import { isBot } from './bots.ts';
 import { sameLogin } from './mentions.ts';
 import { PR_TIER_ORDER, type PrTier } from './pr-tier.ts';
-import type { Pr, PrState, Viewer } from './types.ts';
+import type { Pr, PrKey, PrState, Provenance, Tile, Viewer } from './types.ts';
 
 /** How a login relates to the viewer: the viewer, someone on their teams, anyone else. */
 export type PersonRelation = 'you' | 'team' | 'other';
@@ -53,11 +53,14 @@ export interface QueuedPr {
   tier: PrTier;
   author: PersonRelation;
   state: PrState;
+  /** Only pulled into the topic's tiles as a stack layer, never pinged. */
+  pulledIn: boolean;
 }
 
 /**
  * PR counts per tier, plus open PRs by author for the Mine and Team filters.
  * Tiers only put open PRs in the queues; merged and closed ones are `rest`.
+ * Pulled-in stack layers stay out of every count.
  */
 export interface TopicQueues {
   tiers: Record<PrTier, number>;
@@ -76,6 +79,9 @@ export function topicQueues(prs: QueuedPr[]): TopicQueues {
   let byYou = 0;
   let byTeam = 0;
   for (const pr of prs) {
+    if (pr.pulledIn) {
+      continue;
+    }
     tiers[pr.tier] += 1;
     if (pr.state !== 'OPEN') {
       continue;
@@ -92,4 +98,23 @@ export function topicQueues(prs: QueuedPr[]): TopicQueues {
 /** The tile sorts under its most urgent PR's tier. A tile without PRs is `rest`. */
 export function tileTier(tiers: PrTier[]): PrTier {
   return PR_TIER_ORDER.find((tier) => tiers.includes(tier)) ?? 'rest';
+}
+
+/**
+ * PRs some tile of the topic holds as pinged. Any other PR there was only
+ * pulled in as a stack layer: context on its tile, outside the queues.
+ */
+export function pingedPrKeys(tiles: Tile[]): Set<PrKey> {
+  const keys = new Set<PrKey>();
+  for (const member of tiles.flatMap((tile) => tile.members)) {
+    if (member.provenance.kind === 'pinged') {
+      keys.add(member.prKey);
+    }
+  }
+  return keys;
+}
+
+/** The tier a tile member shows and sorts by: a pulled-in layer is `rest`, whatever `prTier` says. */
+export function memberTier(tier: PrTier, provenance: Provenance): PrTier {
+  return provenance.kind === 'pulled_in' ? 'rest' : tier;
 }

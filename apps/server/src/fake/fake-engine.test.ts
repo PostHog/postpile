@@ -198,6 +198,27 @@ describe('FakeEngine queues', () => {
     expect(topics.indexOf(frontend!)).toBeGreaterThan(lastUrgent);
   });
 
+  it('counts merging your approved PR as a move without making the topic urgent', async () => {
+    const engine = new FakeEngine();
+    const migrations = (await engine.getTopic('topic-migrations'))?.tiles ?? [];
+    const approved = migrations.find((view) => view.tile.id === 'pr:PostHog/posthog#41808');
+    expect(approved?.turn).toMatchObject({ kind: 'you', what: 'Merge, it is approved' });
+    const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-migrations');
+    expect(item?.yourMoveTiles).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
+  });
+
+  it('keeps pulled-in stack layers out of the queues', async () => {
+    const engine = new FakeEngine();
+    const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
+    const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
+    const layers = stack?.prs.filter((pr) => pr.provenance.kind === 'pulled_in') ?? [];
+    expect(layers.map((pr) => pr.tier)).toEqual(['rest', 'rest']);
+    const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-depot');
+    // rowan's two open layers would add 2 to team and byTeam; only pinged PRs count.
+    expect(item?.queues.tiers.team).toBe(2);
+    expect(item?.queues.byTeam).toBe(3);
+  });
+
   it('gives tiles and PRs their tier', async () => {
     const depot = (await new FakeEngine().getTopic('topic-depot'))?.tiles ?? [];
     const set = depot.find((view) => view.tile.id === 'set:turbo-cache');

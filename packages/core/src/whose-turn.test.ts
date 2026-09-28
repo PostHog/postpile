@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeUserState, singleTile, viewer } from './fixtures.ts';
 import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
-import { whoseTurn, type WhoseTurn } from './whose-turn.ts';
+import { isMergeApprovedMove, whoseTurn, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
 
@@ -115,6 +115,8 @@ describe('whoseTurn: on your own PR', () => {
 
   it('asks you to merge once it is approved', () => {
     expect(single({ ...own, reviewDecision: 'APPROVED' }).what).toBe('Merge, it is approved');
+    expect(isMergeApprovedMove(single({ ...own, reviewDecision: 'APPROVED' }))).toBe(true);
+    expect(isMergeApprovedMove(single({ ...own, checks: { ...own.checks, rollup: 'FAILURE' }, reviewDecision: 'APPROVED' }))).toBe(false);
     expect(single({ ...own, reviewDecision: 'APPROVED', isDraft: true }).kind).toBe('none');
   });
 });

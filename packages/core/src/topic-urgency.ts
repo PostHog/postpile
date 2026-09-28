@@ -10,6 +10,8 @@ export interface UrgencyTile {
   prStates: PrState[];
   /** Whose turn says it is the viewer's move. */
   yourMove: boolean;
+  /** That move is only "Merge, it is approved" on the viewer's own PR (`isMergeApprovedMove`). */
+  mergeApproved: boolean;
 }
 
 export interface TopicUrgency {
@@ -17,9 +19,12 @@ export interface TopicUrgency {
   unreadTiles: number;
   /** Unread tiles with at least one open PR. These light up the topic. */
   urgentUnreadTiles: number;
-  /** Live (not done) tiles where it is the viewer's move. */
+  /** Live (not done) tiles where it is the viewer's move, merging an approved PR included. */
   yourMoveTiles: number;
-  /** An unread tile is still open, or it is the viewer's move somewhere. */
+  /**
+   * An unread tile is still open, or it is the viewer's move on a live tile
+   * and that move is more than merging their own approved PR.
+   */
   needsYou: boolean;
 }
 
@@ -30,8 +35,9 @@ export function isUrgentUnread(tile: UrgencyTile): boolean {
 export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
   const unreadTiles = tiles.filter((tile) => tile.state === 'unread').length;
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
-  const yourMoveTiles = tiles.filter((tile) => tile.state !== 'done' && tile.yourMove).length;
-  return { unreadTiles, urgentUnreadTiles, yourMoveTiles, needsYou: urgentUnreadTiles > 0 || yourMoveTiles > 0 };
+  const yourMove = tiles.filter((tile) => tile.state !== 'done' && tile.yourMove);
+  const urgentMoves = yourMove.filter((tile) => !tile.mergeApproved).length;
+  return { unreadTiles, urgentUnreadTiles, yourMoveTiles: yourMove.length, needsYou: urgentUnreadTiles > 0 || urgentMoves > 0 };
 }
 
 /** The fields `compareTopicUrgency` reads; `TopicListItem` has them all. */

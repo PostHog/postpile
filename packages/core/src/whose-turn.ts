@@ -29,6 +29,9 @@ export interface WhoseTurnInput {
   viewer: Viewer | null;
 }
 
+/** The move on the viewer's own approved PR. It shows on the tile, but it is not urgent. */
+export const MERGE_APPROVED_MOVE = 'Merge, it is approved';
+
 export const NO_TURN: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 
 const TURN_ORDER: Record<WhoseTurnKind, number> = { you: 0, them: 1, none: 2 };
@@ -241,7 +244,7 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
     return them(ctx, waitingOn, 'to review');
   }
   if (!pr.isDraft && pr.reviewDecision === 'APPROVED') {
-    return you(ctx, 'Merge, it is approved');
+    return you(ctx, MERGE_APPROVED_MOVE);
   }
   return NO_TURN;
 }
@@ -297,6 +300,11 @@ function newestUnseenLoudAt(events: PrEvent[]): string {
     }
   }
   return newest;
+}
+
+/** Your move, and it is only merging your own approved PR (multi-PR tiles add " on #n"). */
+export function isMergeApprovedMove(turn: WhoseTurn): boolean {
+  return turn.kind === 'you' && turn.what.startsWith(MERGE_APPROVED_MOVE);
 }
 
 /**

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compareTopicUrgency, topicUrgency, type RankedTopic, type UrgencyTile } from './topic-urgency.ts';
 
 function tile(overrides: Partial<UrgencyTile>): UrgencyTile {
-  return { state: 'open', prStates: ['OPEN'], yourMove: false, ...overrides };
+  return { state: 'open', prStates: ['OPEN'], yourMove: false, mergeApproved: false, ...overrides };
 }
 
 describe('topicUrgency', () => {
@@ -25,6 +25,17 @@ describe('topicUrgency', () => {
   it('needs you when it is your move, even with nothing unread', () => {
     expect(topicUrgency([tile({ yourMove: true })]).needsYou).toBe(true);
     expect(topicUrgency([tile({ state: 'unread', prStates: ['MERGED'] }), tile({ yourMove: true })]).needsYou).toBe(true);
+  });
+
+  it('does not lift a topic for merging your own approved PR, but still counts the move', () => {
+    expect(topicUrgency([tile({ yourMove: true, mergeApproved: true })])).toEqual({
+      unreadTiles: 0,
+      urgentUnreadTiles: 0,
+      yourMoveTiles: 1,
+      needsYou: false,
+    });
+    expect(topicUrgency([tile({ yourMove: true, mergeApproved: true }), tile({ yourMove: true })]).needsYou).toBe(true);
+    expect(topicUrgency([tile({ state: 'unread', yourMove: true, mergeApproved: true })]).needsYou).toBe(true);
   });
 
   it('ignores your move on done tiles', () => {

@@ -241,7 +241,7 @@ function buildPrs(clock: SampleClock): Pr[] {
     }),
     samplePr(clock, {
       number: 41808, title: 'Drop the old error_tracking re-exports', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [3, 40, 2], checks: 'PENDING', openedHoursAgo: 20, reviewerUsers: ['nell'],
+      size: [3, 40, 2], checks: 'SUCCESS', openedHoursAgo: 20, reviews: [['nell', 'APPROVED']],
     }),
     samplePr(clock, {
       number: 41934, title: 'Ingestion runner pool as a Terraform module', author: 'ines', state: 'OPEN',
@@ -440,7 +440,7 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(41801)}`, 'Ada asks if the error_tracking move is reversible', [
       pinged(41801, 'author'),
     ]),
-    sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(41808)}`, 'Old error_tracking re-exports go away', [pinged(41808, 'author')]),
+    sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(41808)}`, 'Old error_tracking re-exports are approved', [pinged(41808, 'author')]),
     sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(41934)}`, 'Ingestion asks devex about runner labels', [pinged(41934, 'team_mention')]),
     sampleTile(TOPIC.deps, 'single', `pr:${sampleKey(41925)}`, 'Bump ruff to 0.7', [pinged(41925, 'subscribed')]),
     sampleTile(TOPIC.frontend, 'single', `pr:${sampleKey(41857)}`, 'Vite 7 landed; jude asks about snapshots', [pinged(41857, 'mention')]),
