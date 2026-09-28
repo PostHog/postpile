@@ -18,6 +18,7 @@ import {
 import type { BranchPr } from './reader.ts';
 import type {
   RawActor,
+  RawBaseRefChanges,
   RawBranchPr,
   RawCheckContext,
   RawComment,
@@ -104,14 +105,28 @@ function toPrState(state: string): PrState {
   return 'OPEN';
 }
 
+/** Former base branches, oldest first, without repeats. */
+function previousBaseRefs(changes: RawBaseRefChanges | undefined): string[] {
+  const refs: string[] = [];
+  for (const node of changes?.nodes ?? []) {
+    const ref = node?.previousRefName;
+    if (ref && !refs.includes(ref)) {
+      refs.push(ref);
+    }
+  }
+  return refs;
+}
+
 export function toBranchPr(repo: string, raw: RawBranchPr): BranchPr {
   return {
     ref: { repo, number: raw.number },
     state: toPrState(raw.state),
+    createdAt: isoTime(raw.createdAt),
     mergedAt: isoTimeOrNull(raw.mergedAt),
     updatedAt: isoTime(raw.updatedAt),
     baseRef: raw.baseRefName,
     headRef: raw.headRefName,
+    previousBaseRefs: previousBaseRefs(raw.baseRefChanges),
   };
 }
 
@@ -303,5 +318,6 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     updatedAt: isoTime(raw.updatedAt),
     mergedAt: isoTimeOrNull(raw.mergedAt),
     mergedBy: raw.mergedBy ? actorLogin(raw.mergedBy) : null,
+    previousBaseRefs: previousBaseRefs(raw.baseRefChanges),
   };
 }

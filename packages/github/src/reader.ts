@@ -46,10 +46,13 @@ export interface BranchLookup {
 export interface BranchPr {
   ref: PrRef;
   state: PrState;
+  createdAt: IsoTime;
   mergedAt: IsoTime | null;
   updatedAt: IsoTime;
   baseRef: string;
   headRef: string;
+  /** Base branches it had before, oldest first (GitHub moves a PR down when the layer below merges). */
+  previousBaseRefs: string[];
 }
 
 /** Every read GitHub call the app makes. Safe to use against the real API in smoke tests. */

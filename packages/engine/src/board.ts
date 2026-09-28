@@ -66,7 +66,7 @@ export class Board {
     readonly pullIns: Map<PrKey, PullIn>,
     readonly found: Map<PrKey, FoundPr>,
   ) {
-    this.stacks = buildStacks([...prs.values()], now);
+    this.stacks = buildStacks([...prs.values()]);
   }
 
   /**
