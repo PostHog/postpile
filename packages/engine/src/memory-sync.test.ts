@@ -174,6 +174,23 @@ describe('scheduling', () => {
       ['billing', 1],
     ]);
   });
+
+  it('reports calls done and planned so far while a sync runs, and nothing after', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    topicWithPrs(h, 'billing', [reviewRequestedPr(2)]);
+    const release = h.agent.holdDossier('billing');
+    expect(await h.engine.syncProgress()).toBeNull();
+
+    const syncing = h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
+    await vi.waitFor(() => expect(h.agent.glanceInputs).toHaveLength(1));
+    // Both dossiers and depot's glance are planned; billing's glance is not yet.
+    expect(await h.engine.syncProgress()).toMatchObject({ running: ['dossiers', 'glances'], agentCallsDone: 2, agentCallsPlanned: 3 });
+    release();
+    await syncing;
+
+    expect(await h.engine.syncProgress()).toBeNull();
+  });
 });
 
 describe('batched glances', () => {

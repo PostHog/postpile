@@ -7,7 +7,7 @@ import { recordAgentCall, type AgentCallKind, type AgentCallStats } from '@postp
  * to the same stats.
  */
 export class AgentBudget {
-  private granted = 0;
+  private grantedCalls = 0;
 
   constructor(
     private readonly max: number,
@@ -15,12 +15,17 @@ export class AgentBudget {
   ) {}
 
   take(kind: AgentCallKind): boolean {
-    if (this.granted >= this.max) {
+    if (this.grantedCalls >= this.max) {
       recordAgentCall(this.stats, { kind, outcome: 'skipped_by_budget' });
       return false;
     }
-    this.granted += 1;
+    this.grantedCalls += 1;
     return true;
+  }
+
+  /** Calls granted so far, for live progress. */
+  granted(): number {
+    return this.grantedCalls;
   }
 
   /** Work whose input hash matched the stored answer. Not a call, only counted. */

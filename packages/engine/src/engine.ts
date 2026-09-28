@@ -20,6 +20,7 @@ import type {
   InstructionsSaveResult,
   InstructionsView,
   LivePollStatus,
+  SyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
@@ -238,6 +239,10 @@ export class Engine implements EngineService {
 
   async livePollStatus(): Promise<LivePollStatus> {
     return this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
+  }
+
+  async syncProgress(): Promise<SyncProgress | null> {
+    return this.syncRun.progress();
   }
 
   async lastSyncReport(): Promise<SyncReport | null> {

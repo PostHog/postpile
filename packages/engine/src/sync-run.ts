@@ -1,4 +1,4 @@
-import { ALL_AGENT_JOBS, type SyncOptions, type SyncReport } from '@postpile/core';
+import { ALL_AGENT_JOBS, type AgentCallStats, type SyncOptions, type SyncProgress, type SyncReport } from '@postpile/core';
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { reviveRetiredTopics } from './consolidation/revive.ts';
@@ -33,14 +33,41 @@ function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): S
   };
 }
 
+/** What progress() reads while a sync runs. */
+interface LiveSync {
+  startedAt: string;
+  phases: PhaseClock;
+  budget: AgentBudget;
+  stats: AgentCallStats;
+}
+
 /** One sync: fetch -> verify facts -> agent digest. Tiles are derived on read. */
 export class SyncRun {
+  private live: LiveSync | null = null;
+
   constructor(
     private readonly deps: RunDeps,
     private readonly github: GitHubSync,
     private readonly markReadQueue: MarkReadQueue,
     private readonly log: (line: string) => void = (line) => console.log(line),
   ) {}
+
+  /**
+   * The running sync, null between syncs. Planned is what the budget granted
+   * so far, so it grows as later phases plan their calls; done counts calls
+   * that came back, failed ones included.
+   */
+  progress(): SyncProgress | null {
+    if (!this.live) {
+      return null;
+    }
+    return {
+      startedAt: this.live.startedAt,
+      running: this.live.phases.running(),
+      agentCallsDone: this.live.stats.total,
+      agentCallsPlanned: this.live.budget.granted(),
+    };
+  }
 
   async run(options: SyncOptions): Promise<SyncReport> {
     const { store, now, callLog } = this.deps;
@@ -52,6 +79,8 @@ export class SyncRun {
     noteSyncStart(store, startedAt);
     this.log(`sync: started (max agent calls ${options.maxAgentCalls ?? 'unlimited'})`);
     const phases = new PhaseClock(now);
+    const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
+    this.live = { startedAt, phases, budget, stats: report.agentCallStats };
     try {
       const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY));
       report.notificationsNotModified = fetched.notModified;
@@ -69,7 +98,7 @@ export class SyncRun {
         store,
         agent: this.deps.agent,
         contexts: this.deps.contexts,
-        budget: new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats),
+        budget,
         facts: this.deps.facts,
         viewer: fetched.viewer,
         errors,
@@ -85,6 +114,7 @@ export class SyncRun {
       this.log(`sync: failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     } finally {
       callLog.end();
+      this.live = null;
     }
     // Mark-reads run in the background; the sync report is where the user hears about them.
     errors.push(...this.markReadQueue.takeNotes());

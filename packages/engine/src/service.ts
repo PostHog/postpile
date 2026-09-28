@@ -19,6 +19,7 @@ import type {
   InstructionsSaveResult,
   InstructionsView,
   LivePollStatus,
+  SyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
@@ -55,6 +56,8 @@ export interface EngineService {
   sync(options?: SyncOptions): Promise<SyncReport>;
   /** The report of the last finished sync, errors and timing included (meta last_sync_report). Null before the first one. */
   lastSyncReport(): Promise<SyncReport | null>;
+  /** The sync in flight (phases, agent calls done and planned so far); null when none runs. */
+  syncProgress(): Promise<SyncProgress | null>;
 
   /**
    * One fast-poll cycle: conditional inbox read, and on a change a light

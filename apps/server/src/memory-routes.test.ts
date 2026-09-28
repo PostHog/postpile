@@ -13,7 +13,7 @@ interface Recorded {
 /** The sample FakeEngine, but remembering what the routes passed to the memory calls. */
 function setup(): { recorded: Recorded; request: (path: string, init?: RequestInit) => Promise<Response> } {
   const recorded: Recorded = { factQueries: [], consolidateOptions: [] };
-  const fake = new FakeEngine();
+  const fake = new FakeEngine({ syncStepMs: 0 });
   const engine = Object.assign(fake, {
     listFacts: async (query: FactQuery): Promise<FactView[]> => {
       recorded.factQueries.push(query);

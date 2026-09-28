@@ -31,7 +31,7 @@ interface TestApp {
 
 /** Wraps the app so every request carries the token. */
 function appWithFake(): TestApp {
-  const app = createApp(new FakeEngine(), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null });
+  const app = createApp(new FakeEngine({ syncStepMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null });
   return {
     request: async (path, init = {}) => {
       const headers = { ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };

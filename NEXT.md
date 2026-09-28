@@ -474,6 +474,9 @@ the app meanwhile.
 - Per-phase timings (`phaseMs`) in the last sync report, the `sync: done`
   log line and the sync tooltip, so the next slow sync says where the time
   went.
+- Live progress in the title bar while syncing: `syncing · agent 34/82 ·
+  2m` from `GET /api/sync/progress`. The total is what the sync planned so
+  far and grows (glances are planned as dossiers land).
 - Open: measure the next real sync. The per-kind durations in
   `agent_call` include the time queued in the limiter, so they read longer
   than the model took.

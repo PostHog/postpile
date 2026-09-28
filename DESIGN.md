@@ -670,6 +670,15 @@ dossier save, not here.
   line, a summary and one line per error (the desktop app writes these to
   `~/Library/Logs/PostPile/main.log`). A failed start sync used to leave only
   `last_sync_started_at` behind.
+- While a sync runs, `EngineService.syncProgress` (`GET /api/sync/progress`,
+  null between syncs) gives `SyncProgress`: running phases, agent calls done
+  (the run's `agentCallStats.total`) and planned (what `AgentBudget` granted
+  so far). Planned grows mid-run, since glances are planned only once their
+  topic's dossier landed; every granted call is a real call, so done reaches
+  planned at the end. The title bar polls it every second while this window
+  waits on a sync and shows `syncing · agent 34/82 · 2m` (`fetching GitHub`
+  before any call is planned; tooltip lists the running phases). FakeEngine
+  walks five canned steps (`syncStepMs`, 800 ms each) so the fake UI shows it.
 - A failed PR batch in the full sync (GitHub's "Something went wrong"
   timeout on a heavy aliased query, a 502, a secondary rate limit) no longer
   throws the sync away: `fetchPrsPartial` keeps the other batches, the error

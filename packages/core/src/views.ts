@@ -220,6 +220,20 @@ export const SYNC_PHASES: SyncPhase[] = ['fetch', 'topics', 'dossiers', 'facts',
 /** Milliseconds per phase that ran. */
 export type SyncPhaseTimings = Partial<Record<SyncPhase, number>>;
 
+/** A sync in flight, for the title bar ("syncing · agent 34/82 · 2m"). */
+export interface SyncProgress {
+  startedAt: IsoTime;
+  /** Phases started and not finished, in sync order. */
+  running: SyncPhase[];
+  /** Agent calls answered or failed so far. */
+  agentCallsDone: number;
+  /**
+   * Agent calls the sync has taken budget for so far. Grows while it runs:
+   * glances are only planned once their topic's dossier landed.
+   */
+  agentCallsPlanned: number;
+}
+
 export interface SyncReport {
   startedAt: IsoTime;
   finishedAt: IsoTime;

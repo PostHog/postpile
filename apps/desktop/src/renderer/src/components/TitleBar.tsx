@@ -1,23 +1,42 @@
 import type { ReactNode } from 'react';
+import type { SyncProgress } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useSyncProgress } from '../api/sync.ts';
 import { capNote } from '../lib/agent-stats.ts';
+import { syncProgressDetail, syncProgressText } from '../lib/sync-progress.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import logoUrl from '../assets/logo-64.png';
 import { BackIcon, ForwardIcon, SyncIcon } from './icons.tsx';
 
+function StatusText(props: { dot: string; text: string; detail: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted" title={props.detail}>
+      <span className={`size-1.5 shrink-0 rounded-full ${props.dot}`} />
+      <span className="truncate">{props.text}</span>
+    </span>
+  );
+}
+
+/** "syncing · agent 34/82 · 2m". Its own component so only it ticks every second, and only while a sync runs. */
+function SyncProgressStatus(props: { progress: SyncProgress | null | undefined }) {
+  const now = useNow(1000);
+  return <StatusText dot="bg-accent" text={syncProgressText(props.progress, now)} detail={syncProgressDetail(props.progress)} />;
+}
+
 function SyncStatus() {
   const actions = useActions();
   const now = useNow();
+  const progress = useSyncProgress(actions.syncing).data;
+  if (actions.syncing) {
+    return <SyncProgressStatus progress={progress} />;
+  }
   const report = actions.lastSync;
   let dot = 'bg-dot-quiet';
   let text = 'not synced yet';
   let detail: string | null = null;
-  if (actions.syncing) {
-    dot = 'bg-accent';
-    text = 'syncing…';
-  } else if (report) {
+  if (report) {
     dot = report.errors.length > 0 ? 'bg-unread' : 'bg-open';
     const age = ageLabel(report.finishedAt, now);
     const when = age === 'now' ? 'just now' : `${age} ago`;
@@ -29,12 +48,7 @@ function SyncStatus() {
       text = `${text} · ${capped}`;
     }
   }
-  return (
-    <span className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted" title={detail ?? text}>
-      <span className={`size-1.5 shrink-0 rounded-full ${dot}`} />
-      <span className="truncate">{text}</span>
-    </span>
-  );
+  return <StatusText dot={dot} text={text} detail={detail ?? text} />;
 }
 
 function NavButton(props: { label: string; shortcut: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
