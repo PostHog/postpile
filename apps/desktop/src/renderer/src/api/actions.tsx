@@ -70,8 +70,6 @@ export interface Actions {
   setGitHubWrites(enabled: boolean): Promise<void>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo and lock as a tile. */
   markThreadRead(threadId: string): Promise<void>;
-  /** "Bring back" in the debug view: local only, the tile turns unread again. */
-  bringBack(prKey: PrKey): Promise<void>;
   approve(prKey: PrKey): Promise<void>;
   markRead(tileId: string): Promise<void>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
@@ -344,9 +342,6 @@ export function ActionsProvider(props: { children: ReactNode }) {
     setGitHubWrites,
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
-    },
-    bringBack: async (prKey) => {
-      await run(`bringBack:${prKey}`, null, () => request('POST', `${prPath(prKey)}/bring-back`));
     },
     approve: async (prKey) => {
       await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`));

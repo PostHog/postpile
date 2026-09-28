@@ -141,7 +141,7 @@ export function makeEvent(overrides: Partial<PrEvent> = {}): PrEvent {
 }
 
 export function makeUserState(overrides: Partial<UserPrState> = {}): UserPrState {
-  return { prKey: 'PostHog/posthog#1', approvedAt: null, approvedCommitOid: null, handledAt: null, broughtBackAt: null, ...overrides };
+  return { prKey: 'PostHog/posthog#1', approvedAt: null, approvedCommitOid: null, handledAt: null, ...overrides };
 }
 
 export function singleTile(pr: Pr, pinged = true): Tile {

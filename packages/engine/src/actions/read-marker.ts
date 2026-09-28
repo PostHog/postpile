@@ -8,8 +8,6 @@ import { WRITES_OFF_DETAIL } from '../writes/github-writes.ts';
 interface LocalChange {
   eventIds: string[];
   handledKeys: PrKey[];
-  /** PRs whose bring-back the mark-read ended, with the old time. */
-  broughtBack: { key: PrKey; at: string }[];
 }
 
 /**
@@ -48,7 +46,7 @@ export class ReadMarker {
 
   private applyLocally(keys: PrKey[], handleKeys: PrKey[]): LocalChange {
     const at = this.now().toISOString();
-    const change: LocalChange = { eventIds: [], handledKeys: [], broughtBack: [] };
+    const change: LocalChange = { eventIds: [], handledKeys: [] };
     this.store.transaction(() => {
       for (const events of this.store.events.listForPrs(keys).values()) {
         change.eventIds.push(...events.filter((e) => e.seenAt === null).map((e) => e.id));
@@ -58,13 +56,6 @@ export class ReadMarker {
       change.handledKeys = handleKeys.filter((key) => !states.get(key)?.handledAt);
       for (const key of change.handledKeys) {
         this.store.userPrStates.markHandled(key, at);
-      }
-      for (const key of keys) {
-        const broughtBackAt = states.get(key)?.broughtBackAt ?? null;
-        if (broughtBackAt !== null) {
-          change.broughtBack.push({ key, at: broughtBackAt });
-          this.store.userPrStates.setBroughtBack(key, null);
-        }
       }
     });
     return change;
@@ -113,7 +104,7 @@ export class ReadMarker {
       return this.markRead([key], [key], origin);
     }
     this.forgetSent();
-    const change: LocalChange = { eventIds: [], handledKeys: [], broughtBack: [] };
+    const change: LocalChange = { eventIds: [], handledKeys: [] };
     const threads = thread.unread ? [{ id: thread.id, updatedAt: thread.updatedAt, prKey: key }] : [];
     return this.queueAndRemember(threads, [], change, origin);
   }
@@ -131,9 +122,6 @@ export class ReadMarker {
         this.store.events.clearSeen(change.eventIds);
         for (const key of change.handledKeys) {
           this.store.userPrStates.clearHandled(key);
-        }
-        for (const entry of change.broughtBack) {
-          this.store.userPrStates.setBroughtBack(entry.key, entry.at);
         }
       });
     }

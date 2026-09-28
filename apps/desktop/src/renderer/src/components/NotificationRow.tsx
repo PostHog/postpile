@@ -19,9 +19,6 @@ const TONE: Record<ActionTone, string> = {
   outside: 'text-faint',
 };
 
-const BRING_BACK_TITLE =
-  'GitHub has no API to mark a notification unread. This only resets the app: the tile turns unread again ("brought back by you") until you mark it read. Nothing changes on GitHub.';
-
 /** Hover text for "Mark read", or why it is disabled. */
 function markReadTitle(row: NotificationDebugRow, writes: GitHubWritesStatus | undefined): { title: string; disabled: boolean } {
   const hasPr = row.landing.kind !== 'not_pr' && row.landing.kind !== 'pr_not_synced';
@@ -40,15 +37,14 @@ function markReadTitle(row: NotificationDebugRow, writes: GitHubWritesStatus | u
   return { title: 'Marks the thread read on GitHub after the 6s undo window (and its PR read here). Logged.', disabled: false };
 }
 
-/** Mark read (through the queue, lock and log) and bring back (app state only). */
+/** Mark read, through the queue, lock and log. GitHub has no mark-unread, so there is no way back after the undo window. */
 function RowActions(props: { row: NotificationDebugRow }) {
   const actions = useActions();
   const { row } = props;
   const markRead = markReadTitle(row, actions.writes);
-  const canBringBack = row.prKey !== null && row.landing.kind !== 'pr_not_synced';
   const button = 'rounded px-1.5 py-0.5 text-[11px] text-ink-2 hover:bg-subtle hover:text-ink disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent';
   return (
-    <div className="flex w-[142px] shrink-0 items-center justify-end gap-0.5 pr-1">
+    <div className="flex w-[80px] shrink-0 items-center justify-end gap-0.5 pr-1">
       <button
         type="button"
         className={button}
@@ -57,15 +53,6 @@ function RowActions(props: { row: NotificationDebugRow }) {
         onClick={() => void actions.markThreadRead(row.thread.id)}
       >
         Mark read
-      </button>
-      <button
-        type="button"
-        className={button}
-        disabled={!canBringBack || actions.isBusy(`bringBack:${row.prKey ?? ''}`)}
-        title={canBringBack ? BRING_BACK_TITLE : 'Only a synced PR has a tile to bring back.'}
-        onClick={() => row.prKey && void actions.bringBack(row.prKey)}
-      >
-        Bring back
       </button>
     </div>
   );

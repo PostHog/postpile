@@ -13,7 +13,7 @@ const CONTROL = 'h-7 rounded-control border border-control bg-surface px-2 text-
  * Debug pane: the stored GitHub notification threads, newest first, as
  * GitHub sent them, with where each landed in the app and the app's last
  * logged action on it. Opening a row never marks anything read; the row's
- * "Mark read" and "Bring back" buttons are the only actions here.
+ * "Mark read" button is the only action here.
  */
 export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void }) {
   const notifications = useDebugNotifications(LIMIT);
@@ -26,7 +26,7 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Notifications</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
           The raw GitHub notification threads as the last sync stored them, where each one landed, and what the app last did to it. A click opens its
-          tile. "Mark read" goes through the same queue, undo and footer lock as a tile; "Bring back" only resets the app, GitHub cannot mark unread.
+          tile. "Mark read" goes through the same queue, undo and footer lock as a tile. GitHub has no mark-unread, so nothing brings a read thread back.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2.5">

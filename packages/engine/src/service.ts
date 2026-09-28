@@ -74,7 +74,7 @@ export interface EngineService {
    * threads with where each landed in the app. Read only, never marks anything read.
    */
   debugNotifications(limit: number): Promise<NotificationDebugRow[]>;
-  /** The newest `limit` action log entries: every GitHub-affecting action, local mark-reads and bring-backs. */
+  /** The newest `limit` action log entries: every GitHub-affecting action and local mark-reads. */
   actionLog(limit: number): Promise<ActionLogEntry[]>;
 
   /** The footer lock: are GitHub writes on, and is read-only forced by the env. */
@@ -102,12 +102,6 @@ export interface EngineService {
   markRead(tileId: string): Promise<ActionResult>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
   markThreadRead(threadId: string): Promise<ActionResult>;
-  /**
-   * "Bring back" in the debug view: GitHub has no mark-unread, so this resets
-   * the app's own state only. The PR is not handled any more and its tiles
-   * read as unread ("brought back by you") until the next mark-read.
-   */
-  bringBack(prKey: PrKey): Promise<ActionResult>;
   /** undoToken null undoes the most recent pending mark-read batch. Memory correction tokens undo that correction. */
   undo(undoToken: string | null): Promise<ActionResult>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult>;

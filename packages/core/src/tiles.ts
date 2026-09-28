@@ -93,25 +93,9 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewerLogin?: st
   return approvedHeadOnGitHub(pr, viewerLogin);
 }
 
-/** The unread reason a "bring back" leaves on a PR until the next mark-read. */
-export function broughtBackReason(prKey: PrKey, at: IsoTime, viewerLogin: string | undefined): UnreadReason {
-  return {
-    prKey,
-    eventId: `brought_back:${prKey}`,
-    kind: 'brought_back',
-    actor: viewerLogin ?? '',
-    summary: 'brought back by you',
-    at,
-  };
-}
-
 function unreadReasons(input: TileStateInput): UnreadReason[] {
   const reasons: UnreadReason[] = [];
   for (const member of input.tile.members) {
-    const broughtBackAt = input.userStates.get(member.prKey)?.broughtBackAt ?? null;
-    if (broughtBackAt !== null) {
-      reasons.push(broughtBackReason(member.prKey, broughtBackAt, input.viewerLogin));
-    }
     for (const event of input.events.get(member.prKey) ?? []) {
       if (!isUnseenLoud(event)) {
         continue;
@@ -156,8 +140,7 @@ function allPingedDone(input: TileStateInput): boolean {
 /**
  * snoozed: a snooze is active, its condition is not met, and no human made a
  * loud event since it started.
- * unread: some member has an unseen loud event or was brought back by the
- * user; unreadBecause says which.
+ * unread: some member has an unseen loud event; unreadBecause says which.
  * done: every pinged member is done and nothing loud is unseen.
  * open: everything else.
  */

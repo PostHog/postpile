@@ -1,5 +1,5 @@
 // The runtime switch for GitHub writes and the log of every action that
-// could reach GitHub (plus local mark-reads and bring-backs).
+// could reach GitHub (plus local mark-reads).
 
 import type { IsoTime, PrKey } from './types.ts';
 
@@ -22,8 +22,9 @@ export interface GitHubWritesChange {
 }
 
 /**
- * What was done. `undo_mark_read` is the 6s undo, `bring_back` the local
- * "bring back" from the debug view, `writes_on` / `writes_off` the lock.
+ * What was done. `undo_mark_read` is the 6s undo, `writes_on` / `writes_off`
+ * the lock. `bring_back` is gone (GitHub has no mark-unread, so it only split
+ * the state); old rows may still carry it.
  * mark_done, subscribe and unsubscribe get added with their writer methods;
  * nothing sends them today.
  */
@@ -99,7 +100,7 @@ export function indexActionLog(entries: ActionLogEntry[]): ActionLogIndex {
 /**
  * The newest thing the app did to a thread or its PR, and for a send of the
  * deferred queue the click that queued it. The PR counts too, since a
- * bring-back or a local mark-read of a PR without an unread thread carries
+ * local mark-read of a PR without an unread thread carries
  * no thread id.
  */
 export function actionTrail(

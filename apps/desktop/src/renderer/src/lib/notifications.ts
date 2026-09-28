@@ -147,7 +147,8 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
     case 'undo_mark_read':
       return { text: `mark-read undone by ${WHO[last.origin]}`, tone: 'local' };
     case 'bring_back':
-      return { text: `brought back by ${WHO[last.origin]}`, tone: 'local' };
+      // Old rows only: bring back was removed (GitHub has no mark-unread).
+      return { text: `brought back in the app by ${WHO[last.origin]} (removed feature)`, tone: 'local' };
     case 'approve':
       return writeText('approved', last);
     case 'comment':

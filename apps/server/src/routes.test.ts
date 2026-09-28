@@ -160,23 +160,19 @@ describe('server routes over the fake engine', () => {
     expect(detail.userState?.approvedAt).toBeTruthy();
   });
 
-  it('marks a thread read from the debug view, brings its PR back, and logs both', async () => {
+  it('marks a thread read from the debug view and logs it', async () => {
     const app = appWithFake();
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     const row = rows.find((candidate) => candidate.prKey === 'PostHog/posthog#41902' && candidate.thread.unread)!;
     const marked = await post<ActionResult>(app, `/api/notifications/${encodeURIComponent(row.thread.id)}/mark-read`);
     expect(marked.json.message).toMatch(/here only/);
 
-    const back = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41902/bring-back');
-    expect(back.json.ok).toBe(true);
-
     const log = (await (await app.request('/api/debug/actions')).json()) as ActionLogEntry[];
     expect(log.map((entry) => [entry.action, entry.origin, entry.outcome])).toEqual([
-      ['bring_back', 'debug', 'local'],
       ['mark_read', 'debug', 'local'],
     ]);
     const after = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
-    expect(after.find((candidate) => candidate.thread.id === row.thread.id)?.lastAction?.action).toBe('bring_back');
+    expect(after.find((candidate) => candidate.thread.id === row.thread.id)?.lastAction?.action).toBe('mark_read');
     expect((await app.request('/api/debug/actions?limit=0')).status).toBe(400);
   });
 

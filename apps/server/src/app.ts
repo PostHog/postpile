@@ -182,7 +182,7 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   // Debug view of the stored notification threads. Read only: nothing is marked read.
   app.get('/api/debug/notifications', async (c) => c.json(await engine.debugNotifications(debugLimit.parse(c.req.query('limit')))));
   app.get('/api/debug/actions', async (c) => c.json(await engine.actionLog(actionLogLimit.parse(c.req.query('limit')))));
-  // Debug view actions. Mark read goes through the same queue, lock and log as a tile; bring back is local only.
+  // Debug view action. Mark read goes through the same queue, lock and log as a tile.
   app.post('/api/notifications/:threadId/mark-read', async (c) => c.json(await engine.markThreadRead(c.req.param('threadId'))));
   // The footer lock. Turning writes on answers ok: false while POSTPILE_READ_ONLY=1 forces read-only.
   app.get('/api/github-writes', async (c) => c.json(await engine.githubWrites()));
@@ -250,9 +250,6 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   });
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
     return c.json(await engine.approve(prKeyFromParams(c.req.param())));
-  });
-  app.post('/api/prs/:owner/:repo/:number/bring-back', async (c) => {
-    return c.json(await engine.bringBack(prKeyFromParams(c.req.param())));
   });
   app.post('/api/prs/:owner/:repo/:number/draft-ask', async (c) => {
     const body = z.object({ person: z.string(), intent: z.string().default('') }).parse(await c.req.json());

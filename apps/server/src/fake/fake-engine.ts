@@ -53,7 +53,6 @@ import type {
 import {
   compareTopicUrgency,
   actionTrail,
-  broughtBackReason,
   debugEventLines,
   emptyAgentCallStats,
   fixedClaimNote,
@@ -238,7 +237,7 @@ export class FakeEngine implements EngineService {
   private userStateOf(prKey: PrKey): UserPrState {
     let state = this.data.userStates.find((candidate) => candidate.prKey === prKey);
     if (!state) {
-      state = { prKey, approvedAt: null, approvedCommitOid: null, handledAt: null, broughtBackAt: null };
+      state = { prKey, approvedAt: null, approvedCommitOid: null, handledAt: null };
       this.data.userStates.push(state);
     }
     return state;
@@ -268,10 +267,6 @@ export class FakeEngine implements EngineService {
   private tileState(tile: Tile): TileState {
     const unreadBecause: UnreadReason[] = [];
     for (const member of tile.members) {
-      const broughtBackAt = this.data.userStates.find((state) => state.prKey === member.prKey)?.broughtBackAt ?? null;
-      if (broughtBackAt !== null) {
-        unreadBecause.push(broughtBackReason(member.prKey, broughtBackAt, this.data.viewer));
-      }
       for (const event of this.eventsOf(member.prKey).filter(isUnseenLoud)) {
         unreadBecause.push({
           prKey: member.prKey,
@@ -594,7 +589,7 @@ export class FakeEngine implements EngineService {
   }
 
   /**
-   * Events seen, `handleKeys` handled, bring-backs ended; the unread sample
+   * Events seen, `handleKeys` handled; the unread sample
    * threads go through the fake queue, which logs like the real one.
    * `extraThreads` are threads without a stored PR (debug view).
    */
@@ -620,7 +615,6 @@ export class FakeEngine implements EngineService {
         batch.eventIds.push(event.id);
       }
       const state = this.userStateOf(prKey);
-      state.broughtBackAt = null;
       if (handleKeys.includes(prKey) && !state.handledAt) {
         state.handledAt = this.timestamp();
         batch.handledPrKeys.push(prKey);
@@ -660,30 +654,6 @@ export class FakeEngine implements EngineService {
       return this.markPrsRead([key], [key], 'debug', this.tilesHolding(key)[0]?.id ?? null);
     }
     return this.markPrsRead([], [], 'debug', null, [thread]);
-  }
-
-  async bringBack(prKey: PrKey): Promise<ActionResult> {
-    if (!this.data.prs.some((pr) => pr.key === prKey)) {
-      return fail(`${prKey} is not in the store, so it has no tile to bring back`);
-    }
-    const state = this.userStateOf(prKey);
-    state.broughtBackAt = this.timestamp();
-    state.handledAt = null;
-    const tiles = this.tilesHolding(prKey);
-    for (const tile of tiles) {
-      this.snoozes.delete(tile.id);
-    }
-    const threadId = this.threadsOnGitHub().find((thread) => threadPrKey(thread) === prKey)?.id ?? null;
-    this.writes.record({
-      action: 'bring_back',
-      origin: 'debug',
-      outcome: 'local',
-      prKey,
-      threadId,
-      tileId: tiles[0]?.id ?? null,
-      detail: 'unread again in the app; GitHub unchanged (no mark-unread API)',
-    });
-    return ok('Brought back: the tile is unread again here. GitHub is unchanged.');
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

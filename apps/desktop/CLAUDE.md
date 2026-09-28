@@ -67,8 +67,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   stores it.
 - Buttons for guarded actions carry the blocked reason as their `title`.
 - The notifications debug pane has "Mark read" (thread level, same queue,
-  undo, lock and action log as a tile) and "Bring back" (app state only:
-  GitHub has no mark-unread). Each row shows its last action log entry
+  undo, lock and action log as a tile). There is no "bring back": GitHub has
+  no mark-unread, and the app never holds a read state GitHub doesn't have. Each row shows its last action log entry
   (`actionLine` in `lib/notifications.ts`); a read thread without one reads
   as "read on github.com or another client". Keep the tooltips honest about
   what reaches GitHub.

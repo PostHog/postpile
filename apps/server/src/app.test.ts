@@ -28,7 +28,6 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     githubWrites: notImplemented,
     setGitHubWrites: notImplemented,
     markThreadRead: notImplemented,
-    bringBack: notImplemented,
     getChat: notImplemented,
     approve: notImplemented,
     markRead: notImplemented,

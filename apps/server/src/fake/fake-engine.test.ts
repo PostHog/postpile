@@ -227,17 +227,6 @@ describe('FakeEngine rechecks', () => {
       expect(again?.lastAction).toMatchObject({ action: 'mark_read', outcome: 'local' });
     }
   });
-
-  it('brings a PR back: its tile turns unread with "brought back by you"', async () => {
-    const engine = new FakeEngine();
-    await engine.markRead('pr:PostHog/posthog#41822');
-    await engine.bringBack('PostHog/posthog#41822');
-    const topicId = (await engine.getPr('PostHog/posthog#41822'))?.topicId;
-    const topic = await engine.getTopic(topicId!);
-    const view = topic?.tiles.find((candidate) => candidate.tile.id === 'pr:PostHog/posthog#41822');
-    expect(view?.state.kind).toBe('unread');
-    expect(view?.state.unreadBecause[0]).toMatchObject({ kind: 'brought_back', summary: 'brought back by you' });
-  });
 });
 
 describe('FakeEngine queues', () => {

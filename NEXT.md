@@ -39,8 +39,7 @@ now".
   hidden-inset title bar, three panes (see "Three-pane balance" in
   DESIGN.md), status footer,
   toast with Undo. Rules for the renderer are in `apps/desktop/CLAUDE.md`.
-- GitHub writes lock (DESIGN.md "GitHub writes: lock, action log, bring
-  back"): the lock in the status footer switches GitHub writes on and off at
+- GitHub writes lock (DESIGN.md "GitHub writes: lock, action log"): the lock in the status footer switches GitHub writes on and off at
   runtime (`WriteSwitch`, `GET/POST /api/github-writes`), kept in meta,
   read-only on first run, confirm popover to open, instant to close,
   disabled with the reason under `POSTPILE_READ_ONLY=1`. Locked: approve
@@ -48,13 +47,12 @@ now".
   queued while locked never reach GitHub. `CODE_MANAGER_ALLOW_WRITES` is
   gone.
 - Action log (`action_log`, migration 008): every GitHub write, local
-  mark-read, undo, bring-back and lock flip, with origin (tile, debug, queue,
+  mark-read, undo and lock flip, with origin (tile, debug, queue,
   quit, sync, poll, footer) and outcome (queued, github, local, skipped,
   failed, observed). Written by `GitHubWrites`, the only door to the writer,
   plus ReadMarker and the sync's "left the inbox" mirror.
 - Notifications debug view: "Mark read" per thread (same queue, undo, lock
-  and log), "Bring back" (app only: `brought_back_at`, tile unread with
-  "brought back by you"), last logged action per row, filter "Read by this
+  and log), last logged action per row, filter "Read by this
   app". GitHub's capabilities (no mark-unread, no Saved API) are in
   DESIGN.md with doc links.
 - Review fixes, highlights:
@@ -223,8 +221,7 @@ now".
   UI; `POSTPILE_READ_ONLY=1` stays the hard stop (no write client at all).
   Any caller with the token can still open the lock through the API.
 - The lock in fake mode is not persisted (starts locked on every start).
-- Bring back does not touch GitHub and cannot: the GitHub thread keeps its
-  read flag. mark done, subscribe / unsubscribe have no writer methods yet.
+- mark done, subscribe / unsubscribe have no writer methods yet.
 - Mark-reads while locked log one `local` row per PR without an unread
   thread too (pulled-in stack layers), which makes the log a bit chatty.
 - Fake mode (`POSTPILE_FAKE=1`) runs `FakeEngine`, a second
@@ -397,10 +394,6 @@ now".
   still change the app (tile done, GitHub unread) instead of being blocked.
   Opening the lock does not send batches queued while locked. Keep all
   three? Should the lock also be persisted in fake mode?
-- **Bring back**: app state only, no re-subscribe (it does not change read
-  state on GitHub). Should it also clear the PR's seen events (all old
-  reasons come back) instead of one "brought back by you" reason? Should
-  it live on tiles too, not only in the debug view?
 
 ## Later
 
@@ -411,6 +404,11 @@ now".
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **No bring back** (2026-09-28): GitHub is the source of truth for read
+  and unread, and it has no mark-unread (no REST or GraphQL mutation). An
+  app-only bring back split the state, so it is removed (migration 010 drops
+  `brought_back_at`); old `bring_back` log rows stay.
 
 - **Name** (2026-09-28): PostPile. Package scope `@postpile/*`, env vars
   `POSTPILE_*` (old `CODE_MANAGER_*` still read, with a deprecation line),

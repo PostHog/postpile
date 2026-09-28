@@ -212,57 +212,13 @@ describe('action log at every write path', () => {
   });
 });
 
-describe('bring back', () => {
-  it('makes a done tile unread again with "brought back by you", local only', async () => {
+describe('debug view rows', () => {
+  it('show the queue send as the last action and the click that queued it', async () => {
     const h = await synced();
     await h.engine.markRead(tileId);
     await afterUndoWindow(h);
-    expect((await tile(h))?.state.kind).toBe('done');
-
-    const result = await h.engine.bringBack(pr.key);
-
-    expect(result.ok).toBe(true);
-    const view = await tile(h);
-    expect(view?.state.kind).toBe('unread');
-    expect(view?.state.unreadBecause).toEqual([expect.objectContaining({ kind: 'brought_back', summary: 'brought back by you' })]);
-    expect(h.writer.calls).toEqual(['markThreadRead thread-1']);
-    expect(logRows(h).at(-1)).toEqual(['bring_back', 'debug', 'local']);
-  });
-
-  it('ends with the next mark-read, and that mark-read undoes back to brought back', async () => {
-    const h = await synced();
-    await h.engine.bringBack(pr.key);
-
-    const result = await h.engine.markRead(tileId);
-    expect((await tile(h))?.state.kind).toBe('done');
-
-    await h.engine.undo(result.undoToken);
-    expect((await tile(h))?.state.unreadBecause.map((reason) => reason.kind)).toContain('brought_back');
-  });
-
-  it('ends a snooze on the tile', async () => {
-    const h = await synced();
-    await h.engine.snooze(tileId, { kind: 'new_push' });
-    await h.engine.bringBack(pr.key);
-    expect((await tile(h))?.state.kind).toBe('unread');
-  });
-
-  it('refuses a PR the store does not have', async () => {
-    const h = await synced();
-    expect((await h.engine.bringBack('acme/app#99')).ok).toBe(false);
-  });
-
-  it('shows up as the last action on the debug row', async () => {
-    const h = await synced();
-    await h.engine.markRead(tileId);
-    await afterUndoWindow(h);
-    let [row] = await h.engine.debugNotifications(10);
+    const [row] = await h.engine.debugNotifications(10);
     expect(row?.lastAction).toMatchObject({ origin: 'queue', outcome: 'github' });
     expect(row?.decidedBy).toMatchObject({ origin: 'tile', outcome: 'queued' });
-
-    await h.engine.bringBack(pr.key);
-    [row] = await h.engine.debugNotifications(10);
-    expect(row?.lastAction).toMatchObject({ action: 'bring_back' });
-    expect(row?.decidedBy).toBeNull();
   });
 });

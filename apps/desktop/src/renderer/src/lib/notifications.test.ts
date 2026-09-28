@@ -83,7 +83,6 @@ describe('notification debug helpers', () => {
     expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'local', detail: 'GitHub writes are off' }) }, NOW)?.text).toBe(
       'stayed local: read-only · marked read by you in a tile · 3m ago',
     );
-    expect(actionLine({ ...row({}), lastAction: entry({ action: 'bring_back', origin: 'debug', outcome: 'local' }) }, NOW)?.tone).toBe('local');
     expect(actionLine(row({ unread: false }), NOW)?.text).toBe('read on github.com or another client');
     expect(actionLine(row({ unread: true }), NOW)).toBeNull();
     const noticed = entry({ origin: 'sync', outcome: 'observed' });

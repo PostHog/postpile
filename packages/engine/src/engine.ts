@@ -125,7 +125,7 @@ export class Engine implements EngineService {
     this.reads = new ReadModels(store, deps.agent, contexts, now);
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
-    this.tiles = new TileActions(store, readMarker, log, now);
+    this.tiles = new TileActions(store, readMarker, now);
     this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now);
     this.feedback = new FeedbackActions(store, readMarker, now);
     this.chats = new ChatActions(store, deps.agent, contexts, now);
@@ -265,10 +265,6 @@ export class Engine implements EngineService {
 
   async markThreadRead(threadId: string): Promise<ActionResult> {
     return this.tiles.markThreadRead(threadId);
-  }
-
-  async bringBack(prKey: PrKey): Promise<ActionResult> {
-    return this.tiles.bringBack(prKey);
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
