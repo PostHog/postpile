@@ -28,6 +28,7 @@ import type {
   SyncReport,
   TopicDetail,
   TopicListItem,
+  ViewerView,
   NotificationDebugRow,
   Timers,
 } from '@code-manager/core';
@@ -199,6 +200,10 @@ export class Engine implements EngineService {
 
   async listTopics(): Promise<TopicListItem[]> {
     return this.reads.listTopics();
+  }
+
+  async getViewer(): Promise<ViewerView> {
+    return this.reads.viewer();
   }
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {

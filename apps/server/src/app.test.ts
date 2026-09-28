@@ -19,6 +19,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     stopLivePoll: notImplemented,
     livePollStatus: notImplemented,
     listTopics: notImplemented,
+    getViewer: notImplemented,
     getTopic: notImplemented,
     search: notImplemented,
     getPr: notImplemented,

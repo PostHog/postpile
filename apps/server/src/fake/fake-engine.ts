@@ -41,24 +41,34 @@ import type {
   TopicListItem,
   UnreadReason,
   UserPrState,
+  ViewerView,
 } from '@code-manager/core';
 import {
+  compareTopicUrgency,
   debugEventLines,
   emptyAgentCallStats,
   fixedClaimNote,
   OFF_POLL_STATUS,
   systemTimers,
   openThreadCount,
+  personRelation,
   prStatus,
+  prTier,
   searchTopics,
   setIdFromTileId,
   tilePeople,
   threadPrKey,
+  tileTier,
   tileWhy,
+  topicPeople,
+  topicQueues,
+  topicUrgency,
   whoseTurn,
   whyHere,
   type AgentCallStats,
   type Pr,
+  type PrTier,
+  type TileMember,
   type SearchableTopic,
   type SearchResult,
   type Viewer,
@@ -261,6 +271,12 @@ export class FakeEngine implements EngineService {
     return { kind: 'open', unreadBecause };
   }
 
+  /** Same tier rule as the engine; the sample has no threads, so a pinged member's reason stands in. */
+  private tierOf(pr: Pr, member: TileMember | undefined): PrTier {
+    const reason = member?.provenance.kind === 'pinged' ? member.provenance.reason : null;
+    return prTier({ pr, events: this.eventsOf(pr.key), viewer: this.viewer(), reason });
+  }
+
   /** Why-codes, status pills, faces and whose turn come from the same core rules as the engine. */
   private tileView(tile: Tile): TileView {
     const viewer = this.viewer();
@@ -282,6 +298,8 @@ export class FakeEngine implements EngineService {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
+        tier: this.tierOf(pr, member),
+        authorRelation: personRelation(pr.author, viewer),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,
@@ -304,6 +322,7 @@ export class FakeEngine implements EngineService {
       state: this.tileState(tile),
       prs,
       why: tileWhy(prs.map((pr) => pr.why)),
+      tier: tileTier(prs.map((pr) => pr.tier)),
       people: tilePeople(memberPrs, viewer.login),
       turn,
     };
@@ -375,23 +394,48 @@ export class FakeEngine implements EngineService {
     };
   }
 
+  /** Each PR of the tiles once, with the tile member it came from (for the tier's reason). */
+  private topicPrs(tiles: Tile[]): { pr: Pr; member: TileMember }[] {
+    const found = new Map<PrKey, { pr: Pr; member: TileMember }>();
+    for (const member of tiles.flatMap((tile) => tile.members)) {
+      const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
+      if (pr && !found.has(pr.key)) {
+        found.set(pr.key, { pr, member });
+      }
+    }
+    return [...found.values()];
+  }
+
+  /** Same urgency rule and order as the engine; ties keep the sample's order. */
   async listTopics(): Promise<TopicListItem[]> {
+    const viewer = this.viewer();
     const shown = this.data.topics.filter((topic) => topic.status === 'active');
-    return shown.map((topic) => {
-      const views = this.tilesOfTopic(topic.id).map((tile) => this.tileView(tile));
-      const states = views.map((view) => view.state);
-      const unreadTiles = states.filter((state) => state.kind === 'unread').length;
+    const items = shown.map((topic): TopicListItem => {
+      const tiles = this.tilesOfTopic(topic.id);
+      const views = tiles.map((tile) => this.tileView(tile));
+      const urgency = topicUrgency(
+        views.map((view) => ({ state: view.state.kind, prStates: view.prs.map((pr) => pr.state), yourMove: view.turn.kind === 'you' })),
+      );
+      const prs = this.topicPrs(tiles);
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
         placement: this.memory.placement(topic),
-        group: unreadTiles > 0 ? 'needs_you' : 'quiet',
-        unreadTiles,
-        openTiles: states.filter((state) => state.kind === 'open').length,
-        totalTiles: states.length,
-        yourMoveTiles: views.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length,
+        group: urgency.needsYou ? 'needs_you' : 'quiet',
+        unreadTiles: urgency.unreadTiles,
+        urgentUnreadTiles: urgency.urgentUnreadTiles,
+        openTiles: views.filter((view) => view.state.kind === 'open').length,
+        totalTiles: views.length,
+        yourMoveTiles: urgency.yourMoveTiles,
+        queues: topicQueues(prs.map(({ pr, member }) => ({ tier: this.tierOf(pr, member), author: personRelation(pr.author, viewer), state: pr.state }))),
+        people: topicPeople(prs.map(({ pr }) => pr), viewer),
       };
     });
+    return items.sort(compareTopicUrgency);
+  }
+
+  async getViewer(): Promise<ViewerView> {
+    return { login: this.data.viewer, teamMembers: this.data.viewerTeamMembers };
   }
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {

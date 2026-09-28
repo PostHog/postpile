@@ -176,3 +176,33 @@ describe('FakeEngine rechecks', () => {
     expect((await engine.getPr(key))?.facts.map((view) => view.fact.text).sort()).toEqual([...before].sort());
   });
 });
+
+describe('FakeEngine queues', () => {
+  it('fills every queue section and puts some topics in several', async () => {
+    const topics = await new FakeEngine().listTopics();
+    const tiers = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned'] as const;
+    for (const tier of tiers) {
+      expect(topics.some((item) => item.queues.tiers[tier] > 0)).toBe(true);
+    }
+    const depot = topics.find((item) => item.topic.id === 'topic-depot');
+    expect(tiers.filter((tier) => (depot?.queues.tiers[tier] ?? 0) > 0)).toEqual(['needs_reply', 'team', 'to_review']);
+    expect(depot?.people.slice(0, 3).map((person) => person.relation)).toEqual(['team', 'team', 'team']);
+    expect(await new FakeEngine().getViewer()).toEqual({ login: 'you', teamMembers: ['lyra', 'nell', 'rowan', 'sol'] });
+  });
+
+  it('keeps a topic whose only unread tile is merged calm and ranks it below the urgent ones', async () => {
+    const topics = await new FakeEngine().listTopics();
+    const frontend = topics.find((item) => item.topic.id === 'topic-frontend-build');
+    expect(frontend).toMatchObject({ group: 'quiet', unreadTiles: 1, urgentUnreadTiles: 0 });
+    const lastUrgent = topics.findLastIndex((item) => item.group === 'needs_you');
+    expect(topics.indexOf(frontend!)).toBeGreaterThan(lastUrgent);
+  });
+
+  it('gives tiles and PRs their tier', async () => {
+    const depot = (await new FakeEngine().getTopic('topic-depot'))?.tiles ?? [];
+    const set = depot.find((view) => view.tile.id === 'set:turbo-cache');
+    expect(set?.prs.map((pr) => pr.tier)).toEqual(['needs_reply', 'to_review', 'rest']);
+    expect(set?.tier).toBe('needs_reply');
+    expect(set?.prs[0]?.authorRelation).toBe('team');
+  });
+});

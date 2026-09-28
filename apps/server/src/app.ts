@@ -168,6 +168,7 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   app.post('/api/consolidate', async (c) => c.json(await engine.consolidate(consolidateBody.parse(await optionalJson(c)))));
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
+  app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
   // Search bar filter: ?q= is matched term by term (AND); a missing or empty q matches nothing.
   app.get('/api/search', async (c) => c.json(await engine.search(c.req.query('q') ?? '')));
   // Debug view of the stored notification threads. Read only: nothing is marked read.

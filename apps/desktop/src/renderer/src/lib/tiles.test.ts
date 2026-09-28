@@ -13,6 +13,8 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     isDraft: false,
     provenance: { kind: 'pinged', reason: 'review_requested' },
     why: 'RV',
+    tier: 'to_review',
+    authorRelation: 'team',
     status: { lifecycle: 'open', review: 'review', checks: 'ok' },
     openThreads: 0,
     verdict: 'LOOKS_SAFE',
@@ -34,6 +36,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     },
     prs,
     why: 'RV',
+    tier: 'to_review',
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
   };

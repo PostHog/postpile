@@ -28,6 +28,7 @@ import type {
   SyncReport,
   TopicDetail,
   TopicListItem,
+  ViewerView,
 } from '@code-manager/core';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 
@@ -56,6 +57,8 @@ export interface EngineService {
   livePollStatus(): Promise<LivePollStatus>;
 
   listTopics(): Promise<TopicListItem[]>;
+  /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */
+  getViewer(): Promise<ViewerView>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */
   getTopic(topicId: string): Promise<TopicDetail | null>;
   /** Search bar: topics, tiles and PRs matching every term of `query`. Empty query, empty result. */

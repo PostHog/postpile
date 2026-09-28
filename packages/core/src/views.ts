@@ -23,6 +23,8 @@ import type {
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
+import type { PrTier } from './pr-tier.ts';
+import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
 import type { TilePerson } from './tile-people.ts';
 import type { WhoseTurn } from './whose-turn.ts';
 import type { WhyCode } from './why-here.ts';
@@ -66,13 +68,27 @@ export interface TopicListItem {
   placement: TopicPlacement | null;
   /** Null until the topic has a dossier. */
   statusLine: TopicStatusLine | null;
-  /** needs_you when at least one tile is unread. */
+  /** needs_you when an unread tile is still open or it is the user's move (`topicUrgency`). */
   group: TopicGroup;
   unreadTiles: number;
+  /** Unread tiles with at least one open PR. Only these make the unread count coral. */
+  urgentUnreadTiles: number;
   openTiles: number;
   totalTiles: number;
   /** Live (not done) tiles where the turn is the user's ("Your move"). */
   yourMoveTiles: number;
+  /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
+  queues: TopicQueues;
+  /** Authors, reviewers and commenters, no bots; you and your team first. Not capped. */
+  people: TopicPerson[];
+}
+
+/** Who the app works for, for the sidebar's Mine and Team filter buttons. */
+export interface ViewerView {
+  /** Null before the first sync stored the viewer. */
+  login: string | null;
+  /** Everyone else on the viewer's teams; empty until fetched. */
+  teamMembers: string[];
 }
 
 export interface PrSummary {
@@ -85,6 +101,10 @@ export interface PrSummary {
   provenance: Provenance;
   /** Why the PR is in the tile, as a short code (RV, RT, @, ...). */
   why: WhyCode;
+  /** The PR queue it falls into (`prTier`); merged and closed PRs are rest. */
+  tier: PrTier;
+  /** Whether you, a teammate or someone else wrote it. */
+  authorRelation: PersonRelation;
   /** Lifecycle, review and checks for the status pill. */
   status: PrStatus;
   /** Unresolved review threads. */
@@ -106,6 +126,8 @@ export interface TileView {
   prs: PrSummary[];
   /** The most aimed code among the PRs. */
   why: WhyCode;
+  /** The most urgent tier among the PRs (`tileTier`); the topic column sorts by it. */
+  tier: PrTier;
   /** Author(s), the viewer if they reviewed, other reviewers. At most TILE_PEOPLE_MAX. */
   people: TilePerson[];
   /** Whose move it is on the tile. */

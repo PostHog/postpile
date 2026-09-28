@@ -1,21 +1,30 @@
 import {
+  compareTopicUrgency,
   displayState,
   isUnseenLoud,
   openThreadCount,
+  personRelation,
   prStatus,
+  prTier,
   searchTopics,
   TILE_STATE_ORDER,
   tilePeople,
+  tileTier,
   tileWhy,
+  topicPeople,
+  topicQueues,
+  topicUrgency,
   whoseTurn,
   whyHere,
   type FactQuery,
   type FactView,
   type GlanceGap,
   type NotificationDebugRow,
+  type Pr,
   type PrDetail,
   type PrKey,
   type PrSummary,
+  type PrTier,
   type SearchableTopic,
   type SearchResult,
   type Tile,
@@ -23,6 +32,7 @@ import {
   type TopicDetail,
   type TopicListItem,
   type Viewer,
+  type ViewerView,
 } from '@code-manager/core';
 import type { AgentService } from '@code-manager/agent';
 import type { Store } from '@code-manager/store';
@@ -40,11 +50,9 @@ function isUnsortedTopic(topicId: string): boolean {
 }
 
 function compareTopics(a: TopicListItem, b: TopicListItem): number {
-  if (a.group !== b.group) {
-    return a.group === 'needs_you' ? -1 : 1;
-  }
-  if (a.unreadTiles !== b.unreadTiles) {
-    return b.unreadTiles - a.unreadTiles;
+  const byUrgency = compareTopicUrgency(a, b);
+  if (byUrgency !== 0) {
+    return byUrgency;
   }
   // Unsorted goes last within its group so real topics come first.
   if ((a.topic.id === UNSORTED_TOPIC_ID) !== (b.topic.id === UNSORTED_TOPIC_ID)) {
@@ -100,6 +108,15 @@ export class ReadModels {
     return raw === null ? null : (JSON.parse(raw) as GlanceGap);
   }
 
+  /** The PR's queue; without a stored viewer nothing is aimed at anyone yet, so rest. */
+  private tierOf(board: Board, pr: Pr, viewer: Viewer | null): PrTier {
+    if (!viewer) {
+      return 'rest';
+    }
+    const reason = board.threads.get(pr.key)?.reason ?? null;
+    return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, reason });
+  }
+
   private prSummaries(board: Board, tile: Tile, stale: Set<PrKey>, viewer: Viewer | null): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     const summaries: PrSummary[] = [];
@@ -118,6 +135,8 @@ export class ReadModels {
         isDraft: pr.isDraft,
         provenance: member.provenance,
         why: whyHere(member.provenance, pr, viewer),
+        tier: this.tierOf(board, pr, viewer),
+        authorRelation: personRelation(pr.author, viewer),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,
@@ -143,11 +162,24 @@ export class ReadModels {
         state: board.stateOf(tile),
         prs,
         why: tileWhy(prs.map((pr) => pr.why)),
+        tier: tileTier(prs.map((pr) => pr.tier)),
         people: tilePeople(memberPrs, viewer?.login ?? null),
         turn: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }),
       };
     });
     return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
+  }
+
+  /** Each PR of the topic's tiles once, in tile order. A PR can sit in a set tile and a stack tile. */
+  private topicPrs(board: Board, tiles: Tile[]): Pr[] {
+    const prs = new Map<PrKey, Pr>();
+    for (const member of tiles.flatMap((tile) => tile.members)) {
+      const pr = board.prs.get(member.prKey);
+      if (pr && !prs.has(pr.key)) {
+        prs.set(pr.key, pr);
+      }
+    }
+    return [...prs.values()];
   }
 
   listTopics(): TopicListItem[] {
@@ -158,30 +190,41 @@ export class ReadModels {
     const items: TopicListItem[] = [];
     for (const topic of topics) {
       const tiles = board.tilesForTopic(topic.id);
-      const states = tiles.map((tile) => board.stateOf(tile).kind);
-      if (states.length === 0) {
+      if (tiles.length === 0) {
         continue;
       }
-      const yourMoveTiles = tiles.filter(
-        (tile) =>
-          board.stateOf(tile).kind !== 'done' &&
-          whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }).kind === 'you',
-      ).length;
-      const unreadTiles = states.filter((kind) => kind === 'unread').length;
+      const states = tiles.map((tile) => board.stateOf(tile).kind);
+      const urgency = topicUrgency(
+        tiles.map((tile, index) => ({
+          state: states[index] ?? 'open',
+          prStates: tile.members.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
+          yourMove: whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer }).kind === 'you',
+        })),
+      );
+      const prs = this.topicPrs(board, tiles);
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
       items.push({
         topic,
         placement: isUnsortedTopic(topic.id) ? null : placementOf(this.store, topic, latest),
         statusLine: dossier ? { status: dossier.status, note: dossier.statusNote } : null,
-        group: unreadTiles > 0 ? 'needs_you' : 'quiet',
-        unreadTiles,
+        group: urgency.needsYou ? 'needs_you' : 'quiet',
+        unreadTiles: urgency.unreadTiles,
+        urgentUnreadTiles: urgency.urgentUnreadTiles,
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
-        yourMoveTiles,
+        yourMoveTiles: urgency.yourMoveTiles,
+        queues: topicQueues(prs.map((pr) => ({ tier: this.tierOf(board, pr, viewer), author: personRelation(pr.author, viewer), state: pr.state }))),
+        people: topicPeople(prs, viewer),
       });
     }
     return items.sort(compareTopics);
+  }
+
+  /** The stored viewer for the sidebar's filter buttons. */
+  viewer(): ViewerView {
+    const viewer = loadViewer(this.store);
+    return { login: viewer?.login ?? null, teamMembers: viewer?.teamMembers ?? [] };
   }
 
   getTopic(topicId: string): TopicDetail | null {
