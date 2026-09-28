@@ -17,6 +17,8 @@ export * from './pr-status.ts';
 export * from './tile-people.ts';
 export * from './whose-turn.ts';
 export * from './pr-tier.ts';
+export * from './topic-queues.ts';
+export * from './topic-urgency.ts';
 export * from './topics.ts';
 export * from './topic-roles.ts';
 export * from './instructions.ts';
