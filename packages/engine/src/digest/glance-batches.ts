@@ -65,7 +65,7 @@ export class GlanceBatchWriter {
         }
       });
       for (const key of result.missing) {
-        this.lastError.set(key, MISSING_REASON);
+        this.lastError.set(key, result.missingWhy?.[key] ?? MISSING_REASON);
       }
       return result.missing;
     } catch (error) {

@@ -243,6 +243,8 @@ export interface GlanceBatchResult {
   glances: Glance[];
   /** Items missing from the answer or failing their own zod check. They go into the retry batch. */
   missing: PrKey[];
+  /** Why each missing item is missing ("left out of the answer", "verdict \"SHIP_IT\" ..."), for the error line. */
+  missingWhy?: Partial<Record<PrKey, string>>;
   model: string;
 }
 

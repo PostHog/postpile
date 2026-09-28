@@ -477,6 +477,14 @@ the app meanwhile.
 - Live progress in the title bar while syncing: `syncing · agent 34/82 ·
   2m` from `GET /api/sync/progress`. The total is what the sync planned so
   far and grows (glances are planned as dossiers land).
+- Glance "missing or invalid in the answer" (acme/digest#30,
+  posthog#107116): replaying posthog#107116 alone against Sonnet gave a
+  misspelled verdict (`LOOKS_SASAFE`, `LOOKS_SASE`) in 4 of 6 runs, once
+  with the other fields cut to "placeholder", once as broken JSON. The
+  strict enum dropped the entry on both attempts. Verdicts are now repaired
+  when unambiguous, and error lines say why a PR is missing. acme/digest#30
+  answered fine in the replay (no topic dossier or instructions there), so
+  its cause is not confirmed; the next error line will name it.
 - Open: measure the next real sync. The per-kind durations in
   `agent_call` include the time queued in the limiter, so they read longer
   than the model took.

@@ -227,6 +227,23 @@ describe('batched glances', () => {
     expect(h.store.glances.get(pr.key)).toBeNull();
   });
 
+  it("puts the answer's reason for a missing PR in the error line", async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    const badVerdict = (input: { items: { pr: Pr }[] }) => ({
+      glances: [],
+      missing: input.items.map((i) => i.pr.key),
+      missingWhy: { [pr.key]: 'answered with verdict "SHIP_IT", not one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS' },
+      model: FAKE_MODEL,
+    });
+    h.agent.answerGlances(badVerdict).answerGlances(badVerdict);
+
+    const report = await h.engine.sync({ agentJobs: ['glances'] });
+
+    expect(report.errors).toEqual([`glance ${pr.key}: answered with verdict "SHIP_IT", not one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS`]);
+  });
+
   it('leaves claims that fail verification out of the glance prompt', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);

@@ -606,10 +606,20 @@ stored and before a dossier goes into a glance prompt
   The outer object is parsed with `glanceBatchOutput`; each entry on its own
   with `glanceBatchItemOutput`. Entries for PRs not in the batch or
   duplicated are dropped. `GlanceBatchResult.missing` = asked for but absent
-  or invalid.
-- Missing PRs of all first-round batches of a topic go into one retry batch
+  or invalid, with `missingWhy` per PR ("left out of the answer", "answered
+  with verdict \"SHIP_IT\", ...", "the whole answer was unusable (...)").
+  An answered prKey matches its batch key ignoring case and spaces when
+  that still points at one PR.
+- Misspelled verdicts are repaired (`repairVerdict`): Sonnet reproducibly
+  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one real PR (PostHog/posthog#107116),
+  which the strict enum rejected on both attempts. Only unambiguous
+  spellings are read, and anything mentioning "close" wins, so a garbled
+  answer never becomes "looks safe" by accident. The prompt asks for
+  exactly N entries with the verdict spelled as given; the retry prompt
+  adds that the first answer was unusable.
+- Missing PRs of a topic's first-round batches go into one retry batch
   (`retryBatch`, attempt 2). Still missing after that: one error line per PR
-  in the report; the unchanged hash retries it next sync. A batch whose outer
+  in the report with its `missingWhy`; the unchanged hash retries it next sync. A batch whose outer
   JSON does not parse counts all its PRs as missing; so does a runner failure
   (timeout, process error), which the engine catches per batch.
 - `glanceItemInputHash` per PR: v1 snapshot fields, provenance, topic name,

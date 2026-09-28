@@ -274,7 +274,9 @@ export class RunnerAgentService implements AgentService {
       return { ...mapGlanceAnswer(answer.value, input, stamp), model: answer.model };
     } catch (error) {
       if (error instanceof AgentOutputError) {
-        return { glances: [], missing: input.items.map((item) => item.pr.key), model };
+        const missing = input.items.map((item) => item.pr.key);
+        const why = `the whole answer was unusable (${error.message.split(':')[0]})`;
+        return { glances: [], missing, missingWhy: Object.fromEntries(missing.map((key) => [key, why])), model };
       }
       throw error;
     }

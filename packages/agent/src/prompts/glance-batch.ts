@@ -11,6 +11,15 @@ function topicBlock(input: GlanceBatchInput): string {
   return `They all belong to the topic "${input.topic.name}". What is known about that work:\n\n${dossier}`;
 }
 
+/** On the retry batch: the first answer for these PRs could not be used. */
+function retryNote(input: GlanceBatchInput): string {
+  if (input.attempt !== 2) {
+    return '';
+  }
+  return `\nA first answer for these pull requests could not be used: an entry was left out, a field was
+missing, or the verdict was misspelled. Check each entry against the shape below before replying.`;
+}
+
 /**
  * The "approve at a glance" summary for up to GLANCE_BATCH_SIZE PRs of one
  * topic in one call. The dossier and the user's memory are sent once; each PR
@@ -46,5 +55,8 @@ so stay under the word limits:
 
 Judge each PR on its own facts; do not copy one PR's verdict to the next. Be concrete and
 skeptical; say "unclear" rather than invent.
+Give exactly ${input.items.length} ${input.items.length === 1 ? 'entry' : 'entries'}, one per pull request above, also for the user's own
+PRs and drafts. Copy each prKey exactly as it appears after "===", and spell the verdict exactly
+as one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS.${retryNote(input)}
 ${jsonOnly('{"glances": [{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "..."}]}')}`;
 }
