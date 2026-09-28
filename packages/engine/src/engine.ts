@@ -139,7 +139,7 @@ export class Engine implements EngineService {
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
-    const github = new GitHubSync(store, deps.reader, contexts, now, log);
+    const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites);
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue);
     this.consolidationRun = new ConsolidationRun(runDeps);
     const decider = new PingDecider({

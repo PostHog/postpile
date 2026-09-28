@@ -61,6 +61,11 @@ export class PendingWriteRepo {
     run(this.db, 'UPDATE pending_write SET threads = ?, error = ?, tried_at = ? WHERE id = ?', JSON.stringify(threads), error, at, id);
   }
 
+  /** Some threads were read elsewhere: the rest stay, error untouched. */
+  replaceThreads(id: number, threads: PendingThread[]): void {
+    run(this.db, 'UPDATE pending_write SET threads = ? WHERE id = ?', JSON.stringify(threads), id);
+  }
+
   remove(id: number): void {
     run(this.db, 'DELETE FROM pending_write WHERE id = ?', id);
   }

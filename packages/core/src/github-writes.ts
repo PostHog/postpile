@@ -112,8 +112,9 @@ export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll'
  * - github: reached GitHub
  * - local: only changed the app's own state (nothing unread on GitHub, or the action is local by nature;
  *   older rows: writes were off)
- * - skipped: not sent on purpose (already read on GitHub, or activity after the last sync)
- * - failed: GitHub refused or the call broke; `detail` has the error
+ * - skipped: not sent on purpose (activity after the last sync, or writes off at send time);
+ *   the app stays or goes back to unread
+ * - failed: GitHub refused or the call broke; `detail` has the error, a mark-read goes back to unread
  * - observed: GitHub already had it; the app only mirrored it
  */
 export type ActionOutcome = 'queued' | 'pending' | 'discarded' | 'github' | 'local' | 'skipped' | 'failed' | 'observed';

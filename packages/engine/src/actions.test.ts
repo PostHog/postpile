@@ -82,7 +82,7 @@ describe('markRead and undo', () => {
     expect(h.writer.calls).toEqual([]);
     expect(h.store.notifications.list()[0]?.unread).toBe(true);
     const report = await h.engine.sync({ maxAgentCalls: 0 });
-    expect(report.errors).toEqual([expect.stringContaining('left notification thread-1 unread')]);
+    expect(report.errors).toEqual([expect.stringContaining("GitHub didn't take it: activity after the last sync; still unread")]);
     expect(report.prsFetched).toBe(1);
   });
 

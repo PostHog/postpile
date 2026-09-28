@@ -87,6 +87,8 @@ describe('notification debug helpers', () => {
     expect(actionLine(row({ unread: true }), NOW)).toBeNull();
     const noticed = entry({ origin: 'sync', outcome: 'observed' });
     expect(actionLine({ ...row({ unread: false }), lastAction: noticed }, NOW)?.text).toMatch(/^read on github.com or another client · noticed by sync/);
+    const notTaken = entry({ origin: 'queue', outcome: 'failed', detail: "GitHub didn't take it: boom; still unread" });
+    expect(actionLine({ ...row({}), lastAction: notTaken }, NOW)?.text).toBe("GitHub didn't take it: boom; still unread · sent by the deferred queue · 3m ago");
   });
 
   it('filters to threads the app marked read, and to pending ones', () => {

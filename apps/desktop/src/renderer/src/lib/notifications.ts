@@ -119,6 +119,9 @@ export interface ActionLine {
   title: string;
 }
 
+/** Detail of a mark-read GitHub did not take ("GitHub didn't take it: <reason>; still unread"). */
+const NOT_TAKEN_PREFIX = "GitHub didn't take it";
+
 function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { text: string; tone: ActionTone } {
   const who = WHO[last.origin];
   switch (last.outcome) {
@@ -140,10 +143,16 @@ function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): {
       // Older rows: a read-only mark-read changed the app only (before pending writes).
       return { text: `stayed local: read-only · marked read by ${decidedBy ? WHO[decidedBy.origin] : who}`, tone: 'local' };
     case 'skipped':
+      if (last.detail.startsWith(NOT_TAKEN_PREFIX)) {
+        return { text: `${last.detail} · sent by ${who}`, tone: 'problem' };
+      }
       return { text: `left unread by ${who}: ${last.detail}`, tone: 'problem' };
     case 'failed':
       if (last.origin === 'footer') {
         return { text: 'pending mark-read failed to send, still pending', tone: 'problem' };
+      }
+      if (last.detail.startsWith(NOT_TAKEN_PREFIX)) {
+        return { text: `${last.detail} · sent by ${who}`, tone: 'problem' };
       }
       return { text: `mark-read failed (${who})`, tone: 'problem' };
     case 'observed':

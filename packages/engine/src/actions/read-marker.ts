@@ -2,6 +2,7 @@ import { threadPrKey, type NotificationThread, type PrKey } from '@postpile/core
 import type { Store } from '@postpile/store';
 import { NO_LOCAL_CHANGE, type BatchOrigin, type LocalChange, type MarkReadQueue, type PendingBatch, type QueuedThread } from '../mark-read-queue.ts';
 import type { ActionLog } from '../writes/action-log.ts';
+import { putBackLocalChange } from './local-change.ts';
 
 export const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending write after the undo window';
 
@@ -105,12 +106,7 @@ export class ReadMarker {
     if (!batch) {
       return null;
     }
-    this.store.transaction(() => {
-      this.store.events.clearSeen(batch.local.eventIds);
-      for (const key of batch.local.handledKeys) {
-        this.store.userPrStates.clearHandled(key);
-      }
-    });
+    putBackLocalChange(this.store, batch.local);
     const keys = batch.prKeys.length > 0 ? batch.prKeys : [null];
     for (const key of keys) {
       this.log.record({

@@ -11,7 +11,7 @@ import {
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import { errorText } from './errors.ts';
-import type { GitHubWrites } from './writes/github-writes.ts';
+import { notTakenDetail, type GitHubWrites } from './writes/github-writes.ts';
 
 export { UNDO_WINDOW_MS, type Timers };
 
@@ -70,8 +70,18 @@ export type ParkedBatch = BatchOrigin & MarkReadRequest & { batchId: string };
  */
 export type ThreadMarkedRead = (threadId: string, readAt: IsoTime) => void;
 
+/**
+ * Called when GitHub did not take a thread of a batch sent with writes on
+ * (failed, or skipped for newer activity). The app already changed at the
+ * click, so this puts that PR back to unread: the app never holds a read
+ * state GitHub doesn't have.
+ */
+export type ThreadNotTaken = (thread: QueuedThread, local: LocalChange) => void;
+
+export const NEWER_ACTIVITY_REASON = 'activity after the last sync';
+
 /** What one thread's send came to. */
-export type ThreadOutcome = { kind: 'sent' } | { kind: 'observed' } | { kind: 'skipped' } | { kind: 'failed'; error: string };
+export type ThreadOutcome = { kind: 'sent' } | { kind: 'observed' } | { kind: 'skipped'; reason: string } | { kind: 'failed'; error: string };
 
 /** Who sends, for the log: the queue when a window ran out, the quit flush, or the user sending pending writes from the footer. */
 export interface SendContext {
@@ -126,6 +136,7 @@ export class MarkReadQueue {
     delayMs: number = UNDO_WINDOW_MS,
     private readonly onMarked: ThreadMarkedRead = () => {},
     private readonly onParked: (batch: ParkedBatch) => void = () => {},
+    private readonly onNotTaken: ThreadNotTaken = () => {},
   ) {
     this.queue = new DeferredQueue<MarkReadPayload>(
       (payload) => this.send(payload),
@@ -151,9 +162,8 @@ export class MarkReadQueue {
       return { kind: 'observed' };
     }
     if (current.updatedAt > thread.updatedAt) {
-      this.notes.push(`mark-read: left notification ${thread.id} unread, it has activity after the last sync`);
-      log('skipped', 'left unread: activity after the last sync');
-      return { kind: 'skipped' };
+      log('skipped', notTakenDetail(NEWER_ACTIVITY_REASON));
+      return { kind: 'skipped', reason: NEWER_ACTIVITY_REASON };
     }
     const result = await this.writes.markThreadRead(thread.id, logContext);
     if (result === 'off') {
@@ -181,8 +191,9 @@ export class MarkReadQueue {
 
   /**
    * Parks the batch when writes were or are off. Nothing retries a failure of
-   * a batch sent from the queue: it already left the undo queue, and the next
-   * sync report says so.
+   * a batch sent from the queue: it already left the undo queue. A thread
+   * GitHub did not take (failed, or skipped for newer activity) puts its PR
+   * back to unread here, and the next sync report says why.
    */
   private async send(payload: MarkReadPayload): Promise<void> {
     if (payload.threads.length === 0) {
@@ -196,9 +207,13 @@ export class MarkReadQueue {
     const context: SendContext = { origin: this.flushing ? 'quit' : 'queue', tileId: payload.tileId, batchId: payload.batchId };
     const outcomes = await this.markThreads(payload.threads, context);
     outcomes.forEach((outcome, index) => {
-      if (outcome.kind === 'failed') {
-        this.notes.push(`mark-read: notification ${payload.threads[index]?.id} failed: ${outcome.error}`);
+      const thread = payload.threads[index];
+      if (!thread || (outcome.kind !== 'failed' && outcome.kind !== 'skipped')) {
+        return;
       }
+      const reason = outcome.kind === 'failed' ? outcome.error : outcome.reason;
+      this.onNotTaken(thread, payload.local);
+      this.notes.push(`mark-read of ${thread.prKey ?? `notification ${thread.id}`}: ${notTakenDetail(reason)}`);
     });
   }
 

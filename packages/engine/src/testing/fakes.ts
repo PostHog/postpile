@@ -12,6 +12,7 @@ import type {
   TeamMembersResult,
 } from '@postpile/github';
 import { Store } from '@postpile/store';
+import { putBackNotTaken } from '../actions/local-change.ts';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
@@ -194,6 +195,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     undefined,
     (threadId, readAt) => store.notifications.markRead(threadId, readAt),
     (batch) => pendingWrites.park(batch),
+    (thread, local) => putBackNotTaken(store, thread, local),
   );
   const callLog = new AgentCallLog(store, now);
   const agent = new FakeAgent(runner, callLog);

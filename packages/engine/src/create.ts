@@ -2,6 +2,7 @@ import { ClaudeCliRunner, RunnerAgentService } from '@postpile/agent';
 import { systemTimers, UNDO_WINDOW_MS } from '@postpile/core';
 import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@postpile/github';
 import { Store } from '@postpile/store';
+import { putBackNotTaken } from './actions/local-change.ts';
 import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
@@ -57,7 +58,15 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     writes,
     agent: new RunnerAgentService(new ClaudeCliRunner(), { observer: callLog }),
     callLog,
-    markReadQueue: new MarkReadQueue(writes, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally, (batch) => pendingWrites.park(batch)),
+    markReadQueue: new MarkReadQueue(
+      writes,
+      reader,
+      systemTimers,
+      UNDO_WINDOW_MS,
+      markThreadReadLocally,
+      (batch) => pendingWrites.park(batch),
+      (thread, local) => putBackNotTaken(store, thread, local),
+    ),
     pendingWrites,
     instructionsFile: paths.instructionsFile,
     now,

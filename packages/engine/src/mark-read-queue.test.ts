@@ -43,7 +43,7 @@ describe('MarkReadQueue', () => {
 
     expect(writer.calls).toEqual(['markThreadRead thread-2']);
     expect(marked).toEqual(['thread-2']);
-    expect(queue.takeNotes()).toEqual([expect.stringContaining('notification thread-1 failed: boom thread-1')]);
+    expect(queue.takeNotes()).toEqual([expect.stringContaining("GitHub didn't take it: boom thread-1; still unread")]);
     expect(queue.takeNotes()).toEqual([]);
     const log = store.actionLog.listRecent(10).map((entry) => [entry.threadId, entry.origin, entry.outcome, entry.batch]);
     expect(log).toEqual([

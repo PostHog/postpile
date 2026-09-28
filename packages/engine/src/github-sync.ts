@@ -17,6 +17,7 @@ import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
 import { loadViewer, saveViewer } from './viewer-meta.ts';
 import type { ActionLog } from './writes/action-log.ts';
+import { OBSERVED_PENDING_DETAIL, type PendingWrites } from './writes/pending-writes.ts';
 
 const ETAG_KEY = 'notifications_etag';
 const LAST_MODIFIED_KEY = 'notifications_last_modified';
@@ -83,6 +84,7 @@ export class GitHubSync {
     private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
     private readonly log: ActionLog,
+    private readonly pendingWrites: PendingWrites,
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.teamMembers = new TeamMembers(store, reader, now);
@@ -99,7 +101,8 @@ export class GitHubSync {
   /**
    * `origin` is who noticed: a thread that left the inbox was read on
    * github.com or another client, and that lands in the action log as
-   * observed. Nothing here writes to GitHub.
+   * observed. A pending write for such a thread is cleared: GitHub already
+   * has it read. Nothing here writes to GitHub.
    */
   private async syncNotifications(origin: 'sync' | 'poll'): Promise<NotificationsSync> {
     const result = await this.reader.listNotifications({
@@ -115,18 +118,18 @@ export class GitHubSync {
     this.store.transaction(() => {
       this.store.notifications.upsertMany(result.threads);
       // The inbox lists unread threads only. One that dropped out was read somewhere else.
-      for (const stored of this.store.notifications.list()) {
-        if (stored.unread && !fetchedIds.has(stored.id)) {
-          this.store.notifications.markRead(stored.id, at);
-          this.log.record({
-            action: 'mark_read',
-            origin,
-            outcome: 'observed',
-            threadId: stored.id,
-            prKey: threadPrKey(stored),
-            detail: 'left the inbox: read on github.com or another client',
-          });
-        }
+      const readElsewhere = this.store.notifications.list().filter((stored) => stored.unread && !fetchedIds.has(stored.id));
+      const hadPending = this.pendingWrites.observeRead(new Set(readElsewhere.map((thread) => thread.id)), origin);
+      for (const stored of readElsewhere) {
+        this.store.notifications.markRead(stored.id, at);
+        this.log.record({
+          action: 'mark_read',
+          origin,
+          outcome: 'observed',
+          threadId: stored.id,
+          prKey: threadPrKey(stored),
+          detail: hadPending.has(stored.id) ? OBSERVED_PENDING_DETAIL : 'left the inbox: read on github.com or another client',
+        });
       }
       this.setMeta(ETAG_KEY, result.etag);
       this.setMeta(LAST_MODIFIED_KEY, result.lastModified);

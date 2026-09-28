@@ -17,6 +17,11 @@ export type WriteResult = 'sent' | 'off';
 
 export const WRITES_OFF_DETAIL = 'GitHub writes are off';
 
+/** Log and toast text for a mark-read GitHub did not take; the app keeps (or goes back to) unread. */
+export function notTakenDetail(reason: string): string {
+  return `GitHub didn't take it: ${reason}; still unread`;
+}
+
 /**
  * The one door to GitHub writes in the engine. Every call asks the switch,
  * and every call is logged: reached GitHub, failed (then rethrown), or not
@@ -50,24 +55,24 @@ export class GitHubWrites {
 
   /**
    * Runs `call` against the current writer when writes are on. Off: logs
-   * `offOutcome` (a mark-read still changed the app, an approval did nothing)
-   * and returns 'off'.
+   * `skipped` and returns 'off'. `describe` turns the reason (writes off, the
+   * error) into the log detail.
    */
   private async send(
     action: LoggedAction,
     context: WriteContext,
-    offOutcome: 'local' | 'skipped',
     call: () => Promise<void>,
+    describe: (reason: string) => string = (reason) => reason,
   ): Promise<WriteResult> {
     const base = { action, ...context };
     if (!this.writeSwitch.enabled()) {
-      this.log.record({ ...base, outcome: offOutcome, detail: WRITES_OFF_DETAIL });
+      this.log.record({ ...base, outcome: 'skipped', detail: describe(WRITES_OFF_DETAIL) });
       return 'off';
     }
     try {
       await call();
     } catch (error) {
-      this.log.record({ ...base, outcome: 'failed', detail: errorText(error) });
+      this.log.record({ ...base, outcome: 'failed', detail: describe(errorText(error)) });
       throw error;
     }
     this.log.record({ ...base, outcome: 'github' });
@@ -75,14 +80,14 @@ export class GitHubWrites {
   }
 
   markThreadRead(threadId: string, context: WriteContext): Promise<WriteResult> {
-    return this.send('mark_read', { ...context, threadId }, 'local', () => this.writeSwitch.writer().markThreadRead(threadId));
+    return this.send('mark_read', { ...context, threadId }, () => this.writeSwitch.writer().markThreadRead(threadId), notTakenDetail);
   }
 
   approvePr(ref: PrRef, body: string, commitOid: string, context: WriteContext): Promise<WriteResult> {
-    return this.send('approve', context, 'skipped', () => this.writeSwitch.writer().approvePr(ref, body, commitOid));
+    return this.send('approve', context, () => this.writeSwitch.writer().approvePr(ref, body, commitOid));
   }
 
   commentOnPr(ref: PrRef, body: string, context: WriteContext): Promise<WriteResult> {
-    return this.send('comment', context, 'skipped', () => this.writeSwitch.writer().commentOnPr(ref, body));
+    return this.send('comment', context, () => this.writeSwitch.writer().commentOnPr(ref, body));
   }
 }

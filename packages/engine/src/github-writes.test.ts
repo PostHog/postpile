@@ -127,7 +127,7 @@ describe('action log at every write path', () => {
     h.writer.failingThreads.add('thread-1');
     await h.engine.markRead(tileId);
     await afterUndoWindow(h);
-    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({ outcome: 'failed', detail: 'boom thread-1' });
+    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({ outcome: 'failed', detail: "GitHub didn't take it: boom thread-1; still unread" });
   });
 
   it('a thread read elsewhere before the send is logged as observed, not sent', async () => {
@@ -351,6 +351,111 @@ describe('pending writes while locked', () => {
     await h.engine.sendComment(pr.key, 'hi');
     await afterUndoWindow(h);
     expect((await h.engine.githubWrites()).pending).toEqual([]);
+  });
+});
+
+describe('a mark-read GitHub did not take goes back to unread', () => {
+  it('a failed queue send puts the tile back to unread and the sync report says why', async () => {
+    const h = await synced();
+    h.writer.failingThreads.add('thread-1');
+    await h.engine.markRead(tileId);
+    expect((await tile(h))?.state.kind).toBe('done');
+
+    await afterUndoWindow(h);
+
+    expect((await tile(h))?.state.kind).toBe('unread');
+    expect(h.store.userPrStates.get(pr.key)?.handledAt ?? null).toBeNull();
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(report.errors).toContain(`mark-read of ${pr.key}: GitHub didn't take it: boom thread-1; still unread`);
+  });
+
+  it('a queue send skipped for newer activity puts the tile back to unread', async () => {
+    const h = await synced();
+    await h.engine.markRead(tileId);
+    const [thread] = h.reader.threads;
+    h.reader.threads = [{ ...thread!, updatedAt: '2026-09-03T00:00:00Z' }];
+
+    await afterUndoWindow(h);
+
+    expect(h.writer.calls).toEqual([]);
+    expect((await tile(h))?.state.kind).toBe('unread');
+    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({
+      origin: 'queue',
+      outcome: 'skipped',
+      detail: "GitHub didn't take it: activity after the last sync; still unread",
+    });
+  });
+
+  it('a failed quit flush puts the tile back to unread', async () => {
+    const h = await synced();
+    h.writer.failingThreads.add('thread-1');
+    await h.engine.markRead(tileId);
+    await h.engine.flushPendingWrites();
+    expect((await tile(h))?.state.kind).toBe('unread');
+    expect(logRows(h).at(-1)).toEqual(['mark_read', 'quit', 'failed']);
+  });
+
+  it('a pending send skipped for newer activity drops out, stays unread and says why', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+    await h.engine.setGitHubWrites(true);
+    const [thread] = h.reader.threads;
+    h.reader.threads = [{ ...thread!, updatedAt: '2026-09-03T00:00:00Z' }];
+
+    const sent = await h.engine.sendPendingWrites();
+
+    expect(sent.message).toContain(`${pr.title}: GitHub didn't take it: activity after the last sync; still unread`);
+    expect(sent.status.pending).toEqual([]);
+    expect((await tile(h))?.state.kind).toBe('unread');
+  });
+
+  it('a failed pending send says why in the result', async () => {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+    await h.engine.setGitHubWrites(true);
+    h.writer.failingThreads.add('thread-1');
+    const sent = await h.engine.sendPendingWrites();
+    expect(sent.message).toContain("GitHub didn't take it: boom thread-1; still pending");
+  });
+});
+
+describe('a pending write for a thread read elsewhere', () => {
+  async function pendingThenReadElsewhere(): Promise<Harness> {
+    const h = await synced({ writesEnabled: false });
+    await h.engine.markRead(tileId);
+    await afterUndoWindow(h);
+    expect((await h.engine.githubWrites()).pending).toHaveLength(1);
+    h.reader.threads = [];
+    h.reader.etag = 'etag-2';
+    return h;
+  }
+
+  it('is cleared by the sync, and the tile follows GitHub', async () => {
+    const h = await pendingThenReadElsewhere();
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect((await h.engine.githubWrites()).pending).toEqual([]);
+    expect(h.writer.calls).toEqual([]);
+    const view = await tile(h);
+    expect(view?.pendingWrite).toBeNull();
+    expect(view?.state.kind).toBe('done');
+    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({
+      action: 'mark_read',
+      origin: 'sync',
+      outcome: 'observed',
+      threadId: 'thread-1',
+      detail: expect.stringContaining('pending mark-read cleared'),
+    });
+  });
+
+  it('is cleared by the live poll with origin poll', async () => {
+    const h = await pendingThenReadElsewhere();
+    await h.engine.pollOnce();
+    expect((await h.engine.githubWrites()).pending).toEqual([]);
+    expect(logRows(h).at(-1)).toEqual(['mark_read', 'poll', 'observed']);
   });
 });
 

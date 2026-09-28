@@ -999,6 +999,19 @@ make the tile done:
   `discarded`, and changes nothing else: the tiles stay unread, exactly as
   GitHub has them.
 - Pending writes survive restarts (SQLite).
+- A thread with a pending write that the sync or the live poll sees leave
+  the inbox (read on github.com or another client) clears it: the PR turns
+  read here like a send that found it already read, logged `observed` with
+  origin `sync` / `poll` (detail "pending mark-read cleared").
+
+**Not taken by GitHub** (2026-09-28). A batch sent with writes on already
+changed the app at the click. When a thread of it fails or is skipped for
+newer activity (queue send, quit flush, or writes turned off mid-send), that
+PR's local change is put back (`putBackNotTaken`: its events unseen, handled
+cleared), so the tile is unread again. Log detail, sync report note and the
+pending-send result all say "GitHub didn't take it: <reason>; still unread"
+(a failed pending send says "still pending"). A mark-read with writes off
+at send time is now logged `skipped` instead of `local`.
 
 **One door.** `GitHubWrites` is the only thing in the engine that calls the
 writer: approve, comment and the mark-read queue go through it. Every call
@@ -1024,8 +1037,8 @@ queued thread (`queued`; detail says it turns pending when locked) and one
 `local` row per PR without an unread thread that changed right away. At the
 end of the window while locked: one `pending` row per thread. Older rows
 may carry `local` for a read-only mark-read from before pending writes. Rows at send time: `github`, `failed`,
-`skipped` (activity after the last sync), `observed` (already read on
-GitHub). `GET /api/debug/actions?limit=` lists the newest.
+`skipped` (activity after the last sync; the PR goes back to unread),
+`observed` (already read on GitHub). `GET /api/debug/actions?limit=` lists the newest.
 
 **What marks read without a click** (grepped: `markThreadRead`,
 `notifications.markRead`, `markSeen`): nothing writes to GitHub on its own.
