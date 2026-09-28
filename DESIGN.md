@@ -16,8 +16,10 @@ silently; the agent files proposals and the user decides.
 - a real stack, derived from git base/head refs (`stack:<bottom prKey>`)
 - a set: agent-grouped related PRs that are not stacked in git (`set:<setId>`)
 
-A PR can appear in more than one tile. Tile composition is derived on every
-read, never stored.
+A stack is one unit: it shows whole, in one topic, as its own tile or inside
+one set tile, and never split across tiles (see "Stacks as one unit").
+Otherwise a PR is in one tile. Tile composition is derived on every read,
+never stored.
 
 **Provenance** per PR inside a tile:
 
@@ -34,7 +36,8 @@ read, never stored.
   through the batched PR fetch, unchanged ones are skipped. No teammates'-PR
   fetch.
 - `pulled_in`: a stack layer the sync fetched by branch to complete a pinged
-  PR's stack, reason "stack layer below/above #N" (see "Stack completion")
+  or found PR's stack, reason "stack layer below/above #N" (see "Stack
+  completion")
 
 A tile only exists if at least one member is pinged or found (`isTracked`).
 Provenance is derived: a notification thread makes a PR pinged, then a
@@ -46,7 +49,7 @@ queues, but never make a tile unread on their own (their loud events are
 skipped in `unreadReasons`, `unseenLoudEvents` is 0); an owed review still
 says "Your move" and lifts the topic. Quiet repos apply to them too. The why
 badge tooltip says "found: <reason>; not in your inbox, found via GitHub".
-Stack completion still only walks from PRs with a thread. Sets are
+Stack completion walks from pinged and found PRs alike. Sets are
 agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 **Events**: every GitHub activity on a PR becomes an event line. Loudness:
@@ -199,6 +202,7 @@ sets + topic feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active
 sets are not in the hash, they are the agent's own last answer. A set the
 agent keeps under the same title keeps its id (tile id, snooze and chat
 survive); sets it drops are deleted; dissolved sets are never brought back.
+A set holds a stack whole or not at all (see "Stacks as one unit").
 The full job order is in the v2 sync flow below.
 
 A broken agent answer is logged in `SyncReport.errors` and retried next sync.
@@ -320,7 +324,7 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    loudness. Every derived event of a fetched PR goes to `event_log.append`
    in time order; ids already logged are ignored, so events stored before
    the log existed are picked up on the PR's next fetch. Then the missing
-   layers of the fetched PRs' stacks are fetched by branch (see "Stack
+   layers of tracked PRs' stacks are fetched by branch (see "Stack
    completion"); their events are logged but not counted as new.
 2. **verify pass** (no agent): `verifyFact` on every active fact touching a
    fetched PR (`FactRepo.listActiveTouchingPrs`). `invalidate` outcomes are
@@ -780,28 +784,68 @@ Routes: `GET/POST /api/instructions`, `GET/POST /api/instructions/chat`,
 ## Stack completion
 
 Pulled-in PRs exist only to complete stacks, and finding them is
-deterministic: no agent call.
+deterministic: no agent call. Stacks always stay together: every layer of a
+chain shows, whatever its state.
 
-- After the fetch, every pinged PR fetched this sync walks its stack by
-  branch: the layer below has the PR's base as its head, the layer above has
-  its head as its base (`GitHubReader.findPrsByBranch`, read-only GraphQL,
-  30 lookups per query, one query round per layer). At most 6 layers each
-  way (`STACK_DEPTH`). Only open layers and ones merged in the last 14 days
-  (`MERGED_LAYER_DAYS`) count; forks and closed PRs never do; a head lookup
-  on the repo's default branch ends the walk. A walk stops at a PR with a
-  thread: that one is pinged and walks its own stack when it is fetched.
+- **Linking** (`sitsOn` in core, used by the walk and by `buildStacks`): B
+  sits on A when B's base branch is A's head branch, or was until A merged.
+  GitHub moves a stacked PR onto the next branch down when the layer below
+  merges and its branch is deleted, so PR snapshots and branch lookups carry
+  former base branches (`previousBaseRefs`, from `BaseRefChangedEvent`). A
+  merged or closed A only counts below a B opened while A was still open
+  (closed PRs use their last update as the end); this keeps an old PR on a
+  reused branch name out. Several PRs on one head branch: only one is the
+  layer, open over merged over closed, then the newest (`oneLayerPerHead`).
+- **States**: open, draft, merged at any age and closed layers all count.
+  There is no age limit; a stack still needs at least one open PR. A closed
+  layer shows greyed in its row, pill reading "closed".
+- **Walk**: every full sync seeds from the tracked (pinged or found) PRs
+  fetched this sync plus every stored open tracked PR, since a new layer on
+  top (often a draft) does not move the PR below it. Each seed walks its
+  stack by branch: the layer below has the PR's base (or a former base) as
+  its head, the layers above have its head as their base
+  (`GitHubReader.findPrsByBranch`, read-only GraphQL, any state, 30 lookups
+  per query, one query round per layer). At most 6 layers each way
+  (`STACK_DEPTH`); forks never count; a head lookup on the repo's default
+  branch ends the walk (lookups on it dedupe, so seeding every open PR costs
+  about one lookup each). A walk stops at another seed (it walks its own
+  stack) and goes on through a tracked PR that is no seed. Known gap: a
+  merged seed cannot find a layer above that GitHub already moved off its
+  branch; the open layer finds the merged one instead.
 - Found layers go to `pr_pull_in` (migration 006) with the anchor PR and
   the reason "stack layer below/above #N". A layer is refetched only when
   the lookup shows its `updatedAt` moved.
 - A layer gets no topic assignment, glance, dossier or event call and no
-  membership. It shows in the topic of its anchor (`Board.topicIdOf`)
-  through the stack tile, and never makes a tile on its own. Once it gets
-  its own notification it is pinged like any other PR.
-- `buildStacks` keeps layers merged in the last 14 days (given the time),
-  so a merged lower layer still shows at the bottom; a stack needs at least
-  one open PR.
+  membership. It shows through its stack tile and never makes a tile on its
+  own. Once it gets its own notification it is pinged like any other PR.
 - `SyncReport.prsPulledIn` counts the layers fetched. A failed lookup is an
   error line in the report; the rest of the sync goes on.
+
+## Stacks as one unit
+
+A PR that is a stack layer is never shown apart from its stack.
+
+- **One topic** (`stackTopicId`, `Board.stackTopicIds`): a stack shows in
+  the topic of the newest membership among its layers (the latest decision),
+  or in Unsorted while tracked layers wait for a topic. Its layers stay out
+  of every other topic's tiles, `Board.topicIdOf` answers the stack's topic
+  for each layer, and a layer never keeps Unsorted alive on its own.
+- **Topic assignment**: a waiting layer whose stack already has a topic
+  joins it without an agent call (reason "joins its stack"). Of a stack
+  without a topic only the lowest waiting layer is asked about; the other
+  waiting layers follow the answer (or its deferral).
+- **Moves**: "Wrong topic" on one layer moves (or re-sorts) every layer
+  that is tracked or has a topic; an accepted split or new-topic proposal
+  brings whole stacks along (`Board.movesWith`).
+- **Sets**: a set can hold a stack, whole. A proposal member that is a
+  stack layer brings its whole stack, in order; a proposal needs two units
+  (lone PRs or whole stacks), so a set of one stack is dropped; "not
+  related" on a layer takes the whole stack out, and a user rejection of any
+  layer drops the whole stack from later proposals. The tile builder
+  enforces the same on read: a set member that is a layer pulls in the full
+  stack (placed where it first appears), a stack joins one set at most, the
+  stack tile is then not shown separately, and layers of a stack shown in
+  another topic are left out of this topic's sets.
 
 ## Topic placement: relation and area
 
