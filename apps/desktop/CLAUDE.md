@@ -41,7 +41,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`useLastSyncReport`, the stored last sync, which `useActions().lastSync`
   falls back to before this window's first sync; `useSyncProgress`, polled
   every second only while a sync runs, for the title bar's
-  `syncing · agent 34/82 · 2m`, text from `lib/sync-progress.ts`).
+  `syncing · agent 34/82 · 2m`, text from `lib/sync-progress.ts`),
+  `setup.ts` (`useSetupStatus`, `useSetupChecks` (runs gh and claude on
+  the server, so only enabled on the checks screen; "Check again" is its
+  refetch), `useSetupSweep`, polled every second while the job runs).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -115,6 +118,12 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   the scope. A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
+- Setup (`startSetupSweep`, `refineSetup`, `acceptSetup`, `skipSetup`) is
+  local, not on the `GithubWrite` list. Accept is the only write and it
+  writes a new instructions version; a result with `current` means the
+  file changed meanwhile: go back to review with that as the base, never
+  retry blindly. `refineSetup` is one agent call and writes nothing; fire
+  it only from a click.
 - "What you're working on" (`WorkContextSection`, bottom of the instructions
   pane) is agent-written from local Claude Code notes and stays visibly apart
   from the user's instructions (dashed frame, "agent-written"). It is steered
@@ -195,6 +204,23 @@ tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
   "Your move".
 - Coral (`unread`) means "new since you looked" and nothing else on a tile.
   Primary buttons are ink; accent blue is for selection and focus only.
+
+## Setup flow
+
+`App.tsx` shows `SetupFlow` over the middle and right columns (`col-span-2`,
+no detail pane or tile divider) and `SetupSidebar` instead of the topics
+when `useSetupStatus().needed` is true or after "Run setup again"
+(`InstructionsPane`'s `onRunSetup`). Once open it stays open (a latch in
+`App`) until Accept's sync ends or the user closes it: Accept makes the
+server stop saying `needed`, and the screen must not vanish mid-sync. The
+start sync waits for the setup status and is skipped while setup is
+needed; a first-run "Skip for now" runs it. Screens: `SetupChecksStep`,
+`SetupSweepStep`, `SetupReviewStep` (+ `SetupSectionCard` with "Why?",
+`SetupRepoChoices`), `SetupAcceptStep`, with `SetupSteps` (worded step
+chips) and `SetupChip` (OK / Fix this / Working ...). The step lives in
+`App` so the sidebar can name it; the draft, edits and picks live in
+`SetupFlow`. Pure helpers in `lib/setup.ts`, including `draftText`, a copy
+of core's `formatInstructionsSections`: keep them in step.
 
 ## Selection
 

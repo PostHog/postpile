@@ -6,6 +6,18 @@ now".
 
 ## Done
 
+- Setup flow (2026-09-28, DESIGN.md "Setup flow"): a first run (no
+  instructions, no flag in meta `setup_state`) opens on four screens
+  instead of topics: checks (gh, login, notifications, claude, with fix
+  commands), a sweep job (viewer and teams, 30 days of PRs in one GraphQL
+  search, CODEOWNERS of the top 5 repos, the digest, one opus
+  `setup_draft` call), review (editable sections with "Why?" per claim,
+  `setup_refine` shown as a diff, quiet repo toggles, main repo radios)
+  and accept (new instructions version with origin `setup`, quiet repos,
+  scope, done flag, then the first sync). "Skip for now" and "Run setup
+  again" live in the Instructions pane. Fake mode walks it with canned
+  results; `POSTPILE_FAKE_SETUP=1` forces it.
+
 - Code review fixes (2026-09-28):
   - Rules: GitHub verdicts win over the stored approval once GitHub shows
     it; an approved PR with a later ask stays out of Done; snoozed tiles are
@@ -599,6 +611,20 @@ the app meanwhile.
 
 ## Needs Julian's decisions
 
+- **Setup flow**:
+  - Accept sets the repo scope to the suggested main repo by default, so a
+    new user starts with a narrowed sidebar. Prefill "All repos" instead?
+  - The draft has no real-account test yet (opus prompt, reviewed-by
+    search, CODEOWNERS reads); worth one run on a DB copy with
+    `POSTPILE_READ_ONLY=1` before it ships.
+  - A refine re-prefills the quiet toggles and main repo from the new
+    draft, dropping toggles the user changed before. Keep the user's picks
+    instead?
+  - An existing install with instructions never sees the flow; one with an
+    empty file and no flag (e.g. the dev profile) will on its next start.
+  - Skip on a first run syncs right away with empty instructions, as a
+    normal start would.
+
 - **Found PRs**: one request per sync, first page of each alias only (own
   100, searches 50 each, 200 total); a real run returned 18 own, 1 review,
   22 for team-devex and 50 merged (capped), so the first sync after this
@@ -881,5 +907,12 @@ Env switches:
   10, 0 turns it off. `POSTPILE_PING_CAP`: ping decision calls per 24h,
   default 200 (then rules only). `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac
   notifications, the poll still refreshes tiles.
+- `POSTPILE_SETUP_MODEL`: model of the setup draft and refine calls,
+  default `opus`. `POSTPILE_FAKE_SETUP=1` (with `POSTPILE_FAKE=1`): sample
+  data starts with no instructions and the setup flow showing:
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_SETUP=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  ```
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
   `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.

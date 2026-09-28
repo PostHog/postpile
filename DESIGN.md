@@ -835,7 +835,7 @@ anything else.
 
 **Versions** (`instructions_version`, migration 004): `version`, `text`,
 `summary`, `origin` (`chat` / `outside`), `source_chat_message_id`,
-`created_at`. The file stays the source of truth. `InstructionsHistory`
+`created_at` (origin `setup` for the setup flow's Accept). The file stays the source of truth. `InstructionsHistory`
 reads it on every prompt context and stores a text that differs from the
 newest version as "Edited outside the app" (the first one as "Found on
 disk"), so every prompt knows its instructions version. Saving checks the
@@ -864,6 +864,102 @@ head moved since its refs; questions use `verifyDossier`.
 
 Routes: `GET/POST /api/instructions`, `GET/POST /api/instructions/chat`,
 `POST /api/instructions/proposals`, `GET /api/memory/sources`.
+
+## Setup flow
+
+A new user starts with an empty `instructions.md`, and every prompt reads
+it first. Setup has an agent draft it from what GitHub already knows; the
+user reviews and edits it, and nothing is written before Accept. The
+"Memory by author" rule holds: the file only changes through that Accept
+(or a hand edit).
+
+**When it shows.** On start when `instructions.md` is missing or empty and
+meta `setup_state` has no flag (`GET /api/setup` answers `needed`). The
+flow takes the middle and right panes; the sidebar shows a small "Setting
+up" note. The start sync waits: Accept runs the first sync, "Skip for now"
+stores `skipped` and syncs. The Instructions pane has "Run setup again"
+(always) and a honey banner after a skip. `POSTPILE_FAKE_SETUP=1` with
+`POSTPILE_FAKE=1` starts sample data with no instructions, so the flow
+shows. Once open, the renderer keeps it open until Accept's sync finishes
+or the user closes it, even though the server stops asking for it.
+
+**Steps**, one screen each, with a worded step indicator (done sea,
+current ink, next quiet) and word chips, never symbols alone:
+
+1. **Check the basics** (`GET /api/setup/checks`, run fresh each time):
+   `gh --version`, `gh auth token` plus the viewer query (shows the login
+   and team count), `GET /notifications?per_page=1`, `claude --version`
+   (`POSTPILE_CLAUDE_BIN`). Chips: OK, Fix this, Warning, Waiting (an
+   earlier check failed). Each problem carries the exact command
+   (`brew install gh`, `gh auth login`, `gh auth refresh -h github.com -s
+   notifications`, `npm install -g @anthropic-ai/claude-code`) with Copy.
+   Continue needs gh, login and notifications; a missing claude only warns
+   that agent features (and the draft) will not work.
+2. **Sweep**, a job (`POST /api/setup/sweep` starts it and returns, `GET`
+   is polled every second like the sync progress; a start while one runs
+   joins it). Progress lines, each Working / Done / Failed / Skipped:
+   - viewer, teams (`Viewer.teams`) and team members, stored like a sync
+     does (the only required step; failing it ends the sweep);
+   - 30 days of activity in ONE GraphQL request (`recentActivity`): three
+     search aliases, `author:@me updated:>=`, `is:open
+     review-requested:@me`, `reviewed-by:@me -author:@me updated:>=` (40 /
+     20 / 40, about 100 PRs), each PR once (authored first), title plus
+     the top-level folders of its first 50 changed files (`topLevelDirs`);
+   - CODEOWNERS of the 5 busiest repos (`rankActivityRepos`): the first of
+     `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS` through the
+     contents API (raw, read-only; 403/404 read as missing), cut to rules
+     naming `@login` or `@org/team` (`codeownersLines`, 20 per repo);
+   - the latest work context digest (its prompt text), if any;
+   - one `setup_draft` call: opus (`POSTPILE_SETUP_MODEL` overrides it and
+     refine, in `models.ts`), toolless, recorded under the `action` run.
+     PR lines and CODEOWNERS lines are fenced as `<github_data>`; the
+     digest sits in a `<local_context>` section as trusted background; the
+     current instructions (on a re-run) as the user's own words.
+   A failed call leaves `blankSetupDraft`: the five headings empty and the
+   busiest repo as main, so the user can still write it.
+3. **Review the draft.** Sections (About me, What I own, What gets routed
+   to me, What to ignore or keep quiet, Preferences) as one text box each,
+   with "Why?" listing the agent's lines and their sources (team, PR with
+   link, CODEOWNERS lines, digest). "Tell the agent what's off" makes one
+   `setup_refine` call (`POST /api/setup/refine`, same model and material,
+   the edited sections plus the message and earlier messages) and shows
+   the change as a `DiffView` with the changed headings. Lines the user
+   wrote themselves (`userWrittenLines`) come back `fromUser` and need no
+   source. Quiet repo toggles and main repo radios ("All repos" + the
+   busiest 8) come prefilled from the draft; the main repo cannot also be
+   quiet. On a re-run the whole draft shows as a diff against the current
+   file.
+4. **Accept** (`POST /api/setup/accept`) lists what happens, shows the
+   final diff and then: writes `instructions.md` as a new version with
+   origin `setup` ("Written with setup" / "Rewritten with setup"; an
+   unchanged text writes nothing), marks the chosen repos quiet (others
+   untouched), sets the repo scope to the main repo (or All repos), stores
+   `done`, then the renderer runs a normal sync with its progress and
+   lands on the topics. When the file changed since the draft was
+   reviewed (base version mismatch) nothing is written and the answer
+   carries the file as it is now; the review diffs against it again.
+
+**Citations.** Sources get short ids in `setupSources`: `t1..` teams,
+`p1..` PRs, `o1..` CODEOWNERS excerpts, `d1` the digest. Every claim is
+`{text, sources}`; `mapSetupDraft` drops unknown ids (4 per claim at most),
+drops repo suggestions the sweep never saw, keeps a claim with no source
+(the UI says "No source cited: a default the agent suggests" or "Your
+words"), and clips everything (`SETUP_LIMITS`).
+
+**Pure parts in core:** `instructions-sections.ts`
+(`parseInstructionsSections`, `formatInstructionsSections`, `sectionChanges`,
+`changedHeadings`) and `setup-draft.ts` (the rules above). The renderer
+keeps a copy of the section format in `lib/setup.ts` (`draftText`) since it
+imports types only; keep the two in step.
+
+**Fake mode** (`FakeSetup`): canned checks, sweep lines after short delays
+(about 6s in all), a canned draft built with the real `setupSources` and
+`mapSetupDraft`, a refine that files the message under Preferences, and an
+accept into the in-memory instructions and repo settings.
+
+Routes: `GET /api/setup`, `GET /api/setup/checks`, `POST/GET
+/api/setup/sweep`, `POST /api/setup/refine`, `POST /api/setup/accept`,
+`POST /api/setup/skip`.
 
 ## Stack completion
 
