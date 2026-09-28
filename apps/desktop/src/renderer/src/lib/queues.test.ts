@@ -131,7 +131,7 @@ describe('tilesInTierOrder', () => {
   });
 
   it('puts reviews for you before routed team requests inside To review', () => {
-    const routed = { ...tile('routed', 'to_review'), forWhom: { kind: 'team' as const, team: 'team-devex' } };
+    const routed = { ...tile('routed', 'to_review'), forWhom: { kind: 'team' as const, team: 'team-platform' } };
     const views = [routed, tile('personal', 'to_review'), tile('rest', 'rest'), tile('teammate', 'to_review')];
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['personal', 'teammate', 'routed', 'rest']);
   });

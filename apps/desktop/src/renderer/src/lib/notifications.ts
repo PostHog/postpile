@@ -15,7 +15,7 @@ export interface NotificationFilter {
 
 export const NO_NOTIFICATION_FILTER: NotificationFilter = { reason: null, unreadOnly: false, readByApp: false, pendingOnly: false, text: '' };
 
-/** "PostHog/posthog#41902", or just the repo for subjects without a number. */
+/** "acme/app#1902", or just the repo for subjects without a number. */
 export function threadRef(row: NotificationDebugRow): string {
   return row.thread.number === null ? row.thread.repo : `${row.thread.repo}#${row.thread.number}`;
 }

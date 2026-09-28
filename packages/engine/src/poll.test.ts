@@ -114,7 +114,7 @@ describe('Engine.pollOnce', () => {
     const cycle = await h.engine.pollOnce();
 
     if (cycle.kind !== 'done') throw new Error('expected a done cycle');
-    expect(cycle.pings.map((p) => p.title)).toEqual(['@bob asked you something · posthog#1']);
+    expect(cycle.pings.map((p) => p.title)).toEqual(['@bob asked you something · app#1']);
     expect(cycle.errors.some((e) => e.startsWith('ping decision:'))).toBe(true);
     expect(h.store.pingDecisions.listRecent(1)[0]).toMatchObject({ ping: true, source: 'fallback' });
     expect(h.store.pingDecisions.listRecent(1)[0]?.reason).toMatch(/^agent failed; rules: /);

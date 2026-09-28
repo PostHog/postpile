@@ -36,12 +36,12 @@ describe('engine memory routes', () => {
   it('turns fact query params into a FactQuery', async () => {
     const { recorded, request } = setup();
 
-    const res = await request('/api/facts?entity=path:PostHog/posthog:.github/workflows/&since=2026-09-01T10:00:00%2B02:00&includeClosed=true&limit=5');
+    const res = await request('/api/facts?entity=path:acme/app:.github/workflows/&since=2026-09-01T10:00:00%2B02:00&includeClosed=true&limit=5');
 
     expect(res.status).toBe(200);
     expect(recorded.factQueries).toEqual([
       {
-        entity: { kind: 'path', key: 'PostHog/posthog:.github/workflows/' },
+        entity: { kind: 'path', key: 'acme/app:.github/workflows/' },
         changedSince: '2026-09-01T08:00:00.000Z',
         includeClosed: true,
         limit: 5,

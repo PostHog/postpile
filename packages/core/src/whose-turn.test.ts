@@ -40,8 +40,8 @@ describe('whoseTurn: your move', () => {
   });
 
   it('asks for a team review only while no one else reviewed', () => {
-    const pr = makePr({ author: 'rowan', reviewerTeams: ['PostHog/team-devex'] });
-    expect(single(pr)).toMatchObject({ kind: 'you', what: 'Review for team-devex' });
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'] });
+    expect(single(pr)).toMatchObject({ kind: 'you', what: 'Review for team-platform' });
     const taken = { ...pr, reviews: [makeReview({ author: 'lyra', state: 'COMMENTED' })] };
     expect(single(taken)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
     const approved = { ...taken, reviewDecision: 'APPROVED' as const };
@@ -49,22 +49,22 @@ describe('whoseTurn: your move', () => {
   });
 
   it('counts only teammates as picking up a team review once team members are known', () => {
-    const withTeam: Viewer = { ...viewer, teams: ['PostHog/team-devex'], teamMembers: ['lyra'] };
-    const pr = makePr({ author: 'rowan', reviewerTeams: ['PostHog/team-devex'] });
+    const withTeam: Viewer = { ...viewer, teams: ['acme/team-platform'], teamMembers: ['lyra'] };
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'] });
     const outsider = { ...pr, reviews: [makeReview({ author: 'mira', state: 'COMMENTED' })] };
-    expect(turnOf(singleTile(outsider), [outsider], [], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review for team-devex' });
+    expect(turnOf(singleTile(outsider), [outsider], [], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review for team-platform' });
     const teammate = { ...pr, reviews: [makeReview({ author: 'mira', state: 'COMMENTED' }), makeReview({ author: 'lyra', state: 'COMMENTED' })] };
     expect(turnOf(singleTile(teammate), [teammate], [], [], withTeam)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
   });
 
   it('asks for a team review on a teammate\'s PR like a personal one, naming the author', () => {
     const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
-    const pr = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    const pr = makePr({ author: 'lyra', reviewerTeams: ['acme/team-platform'] });
     const turn = (p: Pr) => turnOf(singleTile(p), [p], [], [], withTeam);
-    expect(turn(pr)).toMatchObject({ kind: 'you', what: "Review for team-devex: lyra's PR" });
+    expect(turn(pr)).toMatchObject({ kind: 'you', what: "Review for team-platform: lyra's PR" });
     // A teammate's comment alone does not cover it.
     const commented = { ...pr, reviews: [makeReview({ author: 'rowan', state: 'COMMENTED' })] };
-    expect(turn(commented)).toMatchObject({ kind: 'you', what: "Review for team-devex: lyra's PR" });
+    expect(turn(commented)).toMatchObject({ kind: 'you', what: "Review for team-platform: lyra's PR" });
     const changes = { ...pr, reviews: [makeReview({ author: 'rowan', state: 'CHANGES_REQUESTED' })] };
     expect(turn(changes)).toMatchObject({ kind: 'them', who: 'rowan', what: 'is reviewing' });
     const approved = { ...pr, reviewDecision: 'APPROVED' as const, reviews: [makeReview({ author: 'rowan', state: 'APPROVED' })] };
@@ -73,15 +73,15 @@ describe('whoseTurn: your move', () => {
 
   it('keeps the routed team request wording on a PR from outside the team', () => {
     const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
-    const pr = makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'] });
-    expect(turnOf(singleTile(pr), [pr], [], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review for team-devex' });
+    const pr = makePr({ author: 'ada', reviewerTeams: ['acme/team-platform'] });
+    expect(turnOf(singleTile(pr), [pr], [], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review for team-platform' });
     const commented = { ...pr, reviews: [makeReview({ author: 'rowan', state: 'COMMENTED' })] };
     expect(turnOf(singleTile(commented), [commented], [], [], withTeam)).toMatchObject({ kind: 'them', who: 'rowan', what: 'is reviewing' });
   });
 
   it('adds the review to an ask on a teammate\'s PR with a team request', () => {
     const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
-    const pr = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    const pr = makePr({ author: 'lyra', reviewerTeams: ['acme/team-platform'] });
     const mention = makeEvent({ kind: 'mention', actor: 'lyra', at: at(30) });
     expect(turnOf(singleTile(pr), [pr], [mention], [], withTeam)).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you' });
   });
@@ -148,8 +148,8 @@ describe('whoseTurn: on your own PR', () => {
 
   it('says it waits on the first requested reviewer', () => {
     expect(single({ ...own, reviewerUsers: ['sol', 'lyra'] })).toEqual({ kind: 'them', who: 'sol', what: 'and 1 more', prKey: own.key, lead: 'Waiting on' });
-    expect(single({ ...own, reviewerTeams: ['PostHog/team-devex'] })).toEqual({ kind: 'them', who: 'PostHog/team-devex', what: '', prKey: own.key, lead: 'Waiting on' });
-    expect(single({ ...own, reviewerUsers: ['sol'], reviewerTeams: ['PostHog/team-devex'] })).toMatchObject({ who: 'sol', what: 'and 1 more' });
+    expect(single({ ...own, reviewerTeams: ['acme/team-platform'] })).toEqual({ kind: 'them', who: 'acme/team-platform', what: '', prKey: own.key, lead: 'Waiting on' });
+    expect(single({ ...own, reviewerUsers: ['sol'], reviewerTeams: ['acme/team-platform'] })).toMatchObject({ who: 'sol', what: 'and 1 more' });
   });
 
   it('names the PR on a multi-PR tile while waiting', () => {
@@ -159,13 +159,13 @@ describe('whoseTurn: on your own PR', () => {
       topicId: 'topic-1',
       kind: 'set',
       title: 'set',
-      members: [{ prKey: second.key, provenance: { kind: 'pinged', reason: 'author' } }, { prKey: 'PostHog/posthog#9', provenance: { kind: 'pinged', reason: 'author' } }],
+      members: [{ prKey: second.key, provenance: { kind: 'pinged', reason: 'author' } }, { prKey: 'acme/app#9', provenance: { kind: 'pinged', reason: 'author' } }],
     };
     expect(turnOf(tile, [second])).toMatchObject({ kind: 'them', who: 'sol', what: 'on #2', lead: 'Waiting on' });
   });
 
   it('never asks you to review your own PR, even when your team is requested', () => {
-    const teamAsked = { ...own, reviewerTeams: ['PostHog/team-devex'] };
+    const teamAsked = { ...own, reviewerTeams: ['acme/team-platform'] };
     const requested = makeEvent({ prKey: own.key, kind: 'review_requested', actor: 'github-actions', isBot: true, ruleLoudness: 'loud' });
     const turn = single(teamAsked, [requested]);
     expect(turn.kind).toBe('them');

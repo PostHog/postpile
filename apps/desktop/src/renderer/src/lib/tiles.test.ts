@@ -5,7 +5,7 @@ import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, tileForYou } from 
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
-    key: `PostHog/posthog#${number}`,
+    key: `acme/app#${number}`,
     title: `PR ${number}`,
     url: '',
     author: 'rowan',
@@ -56,10 +56,10 @@ describe('own PR helpers', () => {
   const mine = (number: number) => summary(number, { authorRelation: 'you' });
 
   it('calls news on your own PR FYI unless whose-turn says it is your move', () => {
-    const view = setView([mine(1)], ['PostHog/posthog#1']);
+    const view = setView([mine(1)], ['acme/app#1']);
     expect(isFyiNews(view)).toBe(true);
-    expect(isFyiNews({ ...view, turn: { kind: 'you', who: null, what: 'Answer 1 thread', prKey: 'PostHog/posthog#1' } })).toBe(false);
-    expect(isFyiNews(setView([summary(1)], ['PostHog/posthog#1']))).toBe(false);
+    expect(isFyiNews({ ...view, turn: { kind: 'you', who: null, what: 'Answer 1 thread', prKey: 'acme/app#1' } })).toBe(false);
+    expect(isFyiNews(setView([summary(1)], ['acme/app#1']))).toBe(false);
     expect(isFyiNews(setView([mine(1)]))).toBe(false);
   });
 });
@@ -75,13 +75,13 @@ describe('isDraftTile', () => {
 
 describe('tile helpers', () => {
   it('picks the PR behind the newest unread reason as the lead', () => {
-    const view = setView([summary(1), summary(2), summary(3)], ['PostHog/posthog#1', 'PostHog/posthog#3']);
-    expect(leadPr(view)?.key).toBe('PostHog/posthog#3');
+    const view = setView([summary(1), summary(2), summary(3)], ['acme/app#1', 'acme/app#3']);
+    expect(leadPr(view)?.key).toBe('acme/app#3');
   });
 
   it('falls back to the first open pinged PR', () => {
     const view = setView([summary(1, { provenance: pulled }), summary(2, { state: 'MERGED' }), summary(3)]);
-    expect(leadPr(view)?.key).toBe('PostHog/posthog#3');
+    expect(leadPr(view)?.key).toBe('acme/app#3');
   });
 
   it('labels kinds', () => {
@@ -106,6 +106,6 @@ describe('tile helpers', () => {
     const found = { kind: 'found' as const, via: 'own_open' as const, reason: 'your open PR' };
     const view = setView([summary(1, { provenance: found }), summary(2), summary(3, { provenance: pulled })]);
     expect(countPrs([view])).toEqual({ pinged: 1, found: 1, pulledIn: 1 });
-    expect(leadPr(setView([summary(4, { provenance: pulled, state: 'OPEN' }), summary(5, { provenance: found })]))?.key).toBe('PostHog/posthog#5');
+    expect(leadPr(setView([summary(4, { provenance: pulled, state: 'OPEN' }), summary(5, { provenance: found })]))?.key).toBe('acme/app#5');
   });
 });

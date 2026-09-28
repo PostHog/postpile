@@ -19,7 +19,7 @@ import type {
   Viewer,
 } from './types.ts';
 
-export const viewer: Viewer = { login: 'viewer', teams: ['PostHog/team-devex'] };
+export const viewer: Viewer = { login: 'viewer', teams: ['acme/team-platform'] };
 
 /** Minutes after a fixed base time, as ISO. Keeps test timelines readable. */
 export function at(minutes: number): string {
@@ -27,7 +27,7 @@ export function at(minutes: number): string {
 }
 
 export function makePr(overrides: Partial<Pr> & { number?: number; repo?: string } = {}): Pr {
-  const { number = 1, repo = 'PostHog/posthog', ...rest } = overrides;
+  const { number = 1, repo = 'acme/app', ...rest } = overrides;
   const ref = { repo, number };
   return {
     key: prKey(ref),
@@ -70,7 +70,7 @@ export function makeComment(overrides: Partial<Comment> = {}): Comment {
     body: 'looks fine',
     createdAt: at(10),
     kind: 'comment',
-    url: 'https://github.com/PostHog/posthog/pull/1#issuecomment-1',
+    url: 'https://github.com/acme/app/pull/1#issuecomment-1',
     path: null,
     threadId: null,
     ...overrides,
@@ -123,8 +123,8 @@ export function makeThreadFor(pr: Pr, overrides: Partial<NotificationThread> = {
 
 export function makeEvent(overrides: Partial<PrEvent> = {}): PrEvent {
   return {
-    id: 'PostHog/posthog#1:comment:c1',
-    prKey: 'PostHog/posthog#1',
+    id: 'acme/app#1:comment:c1',
+    prKey: 'acme/app#1',
     kind: 'comment',
     actor: 'bob',
     isBot: false,
@@ -141,7 +141,7 @@ export function makeEvent(overrides: Partial<PrEvent> = {}): PrEvent {
 }
 
 export function makeUserState(overrides: Partial<UserPrState> = {}): UserPrState {
-  return { prKey: 'PostHog/posthog#1', approvedAt: null, approvedCommitOid: null, handledAt: null, ...overrides };
+  return { prKey: 'acme/app#1', approvedAt: null, approvedCommitOid: null, handledAt: null, ...overrides };
 }
 
 export function singleTile(pr: Pr, pinged = true): Tile {
@@ -160,7 +160,7 @@ export function singleTile(pr: Pr, pinged = true): Tile {
 }
 
 export function makeFactRef(overrides: Partial<FactRef> = {}): FactRef {
-  return { kind: 'pr', prKey: 'PostHog/posthog#1', sourceId: null, url: null, at: at(10), headOid: null, ...overrides };
+  return { kind: 'pr', prKey: 'acme/app#1', sourceId: null, url: null, at: at(10), headOid: null, ...overrides };
 }
 
 export function makeFact(overrides: Partial<Fact> = {}): Fact {
@@ -168,8 +168,8 @@ export function makeFact(overrides: Partial<Fact> = {}): Fact {
     id: 'f1',
     subject: { kind: 'person', key: 'alice' },
     predicate: 'works_on',
-    object: { kind: 'pr', key: 'PostHog/posthog#1' },
-    text: 'alice works on PostHog/posthog#1',
+    object: { kind: 'pr', key: 'acme/app#1' },
+    text: 'alice works on acme/app#1',
     topicId: 'topic-1',
     source: 'agent',
     refs: [makeFactRef()],
@@ -190,8 +190,8 @@ export function makeCandidate(overrides: Partial<FactCandidate> = {}): FactCandi
   return {
     subject: { kind: 'person', key: 'alice' },
     predicate: 'works_on',
-    object: { kind: 'pr', key: 'PostHog/posthog#1' },
-    text: 'alice works on PostHog/posthog#1',
+    object: { kind: 'pr', key: 'acme/app#1' },
+    text: 'alice works on acme/app#1',
     refs: [makeFactRef()],
     validFrom: at(20),
     ...overrides,

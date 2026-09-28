@@ -17,7 +17,7 @@ function item(id: string, overrides: Partial<PingDecisionItem> = {}): PingDecisi
     events: [
       {
         id: `e-${id}`,
-        prKey: 'PostHog/posthog#1',
+        prKey: 'acme/app#1',
         kind: 'mention',
         actor: 'bob',
         isBot: false,
@@ -31,8 +31,8 @@ function item(id: string, overrides: Partial<PingDecisionItem> = {}): PingDecisi
         seenAt: null,
       },
     ],
-    rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', who: null, what: 'Reply to @bob', prKey: 'PostHog/posthog#1' }, why: '@' },
-    template: { title: '@bob mentioned you · posthog#1', body: 'Title\nbob: ...' },
+    rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', who: null, what: 'Reply to @bob', prKey: 'acme/app#1' }, why: '@' },
+    template: { title: '@bob mentioned you · app#1', body: 'Title\nbob: ...' },
     ...overrides,
   };
 }
@@ -69,7 +69,7 @@ describe('RunnerAgentService.decidePings', () => {
 
     expect(answers).toEqual([
       { id: 't1', ping: true, title: '@bob needs you on Depot', body: 'Asks about the cache key.', reason: 'direct question' },
-      { id: 't2', ping: false, title: '@bob mentioned you · posthog#1', body: 'Title\nbob: ...', reason: 'just a thank-you' },
+      { id: 't2', ping: false, title: '@bob mentioned you · app#1', body: 'Title\nbob: ...', reason: 'just a thank-you' },
     ]);
     expect(runner.requests).toHaveLength(1);
     expect(runner.requests[0]?.model).toBe('claude-sonnet-5-5');

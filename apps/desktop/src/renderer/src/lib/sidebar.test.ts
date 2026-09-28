@@ -29,7 +29,7 @@ describe('sidebarGroups', () => {
       item('depot', 2, { relation: 'team', area: 'CI' }),
       item('rfc', 1, { relation: 'routed', area: 'CI' }),
       item('ci', 0, { relation: 'team', area: 'CI' }),
-      item('hogli', 0, { relation: 'team', area: 'Dev env' }),
+      item('devbox', 0, { relation: 'team', area: 'Dev env' }),
       item('new', 0, null),
       item('frontend', 0, { relation: 'routed' }),
       item('desktop', 0, { relation: 'fyi' }),
@@ -38,7 +38,7 @@ describe('sidebarGroups', () => {
     expect(groups.needsYou.map((entry) => entry.topic.id)).toEqual(['depot', 'rfc']);
     expect(groups.team.map((group) => [group.area, group.items.map((entry) => entry.topic.id)])).toEqual([
       ['CI', ['ci']],
-      ['Dev env', ['hogli']],
+      ['Dev env', ['devbox']],
       ['Other', ['new']],
     ]);
     expect(groups.routed.map((entry) => entry.topic.id)).toEqual(['frontend']);

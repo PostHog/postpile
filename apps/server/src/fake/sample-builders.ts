@@ -21,17 +21,17 @@ import type {
   Verdict,
 } from '@postpile/core';
 
-export const SAMPLE_REPO = 'PostHog/posthog';
+export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
 
 /**
  * Sample PRs outside the main repo, so the title bar's repo menu has more
- * than one row and the Depot topic shows a repo label on its example-infra tile.
+ * than one row and the Depot topic shows a repo label on its acme/infra tile.
  */
 const OTHER_REPOS: Record<number, string> = {
-  41915: 'PostHog/example-infra',
-  41925: 'PostHog/posthog-python',
-  41940: 'PostHog/posthog-desktop',
+  1915: 'acme/infra',
+  1925: 'acme/python-sdk',
+  1940: 'acme/desktop',
 };
 
 export function sampleRepo(number: number): string {

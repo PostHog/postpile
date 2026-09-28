@@ -16,7 +16,7 @@ export interface WhoseTurn {
   /** them: the login the move waits on. Null for you and none. */
   who: string | null;
   /**
-   * you: the move ("Re-check 2 commits on #41850"). them: the rest of the
+   * you: the move ("Re-check 2 commits on #1850"). them: the rest of the
    * sentence after the name ("to merge"). none: empty.
    */
   what: string;
@@ -52,7 +52,7 @@ interface PrContext {
   events: PrEvent[];
   userState: UserPrState | null;
   viewer: Viewer;
-  /** " on #41850" on multi-PR tiles, "" on a single PR tile. */
+  /** " on #1850" on multi-PR tiles, "" on a single PR tile. */
   where: string;
 }
 
@@ -269,7 +269,7 @@ function draftTurn(ctx: PrContext): WhoseTurn {
   return NO_TURN;
 }
 
-/** "paul addressed your changes: re-review", or "paul replied to your review" when there was no push. */
+/** "pim addressed your changes: re-review", or "pim replied to your review" when there was no push. */
 function changesAnsweredText(author: string, answer: ChangesAnswer): string {
   return answer.pushed ? `${author} addressed your changes: re-review` : `${author} replied to your review`;
 }

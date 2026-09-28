@@ -17,12 +17,12 @@ import {
   type RepoSettings,
 } from './repo-scope.ts';
 
-const settings: RepoSettings = { scope: 'PostHog/posthog', quiet: ['PostHog/example-infra'] };
-const ORGS = ['PostHog'];
+const settings: RepoSettings = { scope: 'acme/app', quiet: ['acme/infra'] };
+const ORGS = ['acme'];
 
 describe('repo scope', () => {
   it('reads the repo from a PR key', () => {
-    expect(repoOfPr('PostHog/posthog#12')).toBe('PostHog/posthog');
+    expect(repoOfPr('acme/app#12')).toBe('acme/app');
   });
 
   it('lists every topic under all repos', () => {
@@ -31,8 +31,8 @@ describe('repo scope', () => {
   });
 
   it('lists a topic when one of its PRs is in the chosen repo, ignoring case', () => {
-    expect(isTopicInScope(['PostHog/example-infra#1', 'posthog/PostHog#2'], settings)).toBe(true);
-    expect(isTopicInScope(['PostHog/example-infra#1'], settings)).toBe(false);
+    expect(isTopicInScope(['acme/infra#1', 'Acme/APP#2'], settings)).toBe(true);
+    expect(isTopicInScope(['acme/infra#1'], settings)).toBe(false);
     expect(isTopicInScope([], settings)).toBe(false);
   });
 
@@ -42,12 +42,12 @@ describe('repo scope', () => {
   });
 
   it('migrates a stored multi-selection', () => {
-    expect(migrateRepoScope(['PostHog/example-infra'])).toBe('PostHog/example-infra');
-    expect(migrateRepoScope(['PostHog/example-infra', 'PostHog/posthog'])).toBeNull();
+    expect(migrateRepoScope(['acme/infra'])).toBe('acme/infra');
+    expect(migrateRepoScope(['acme/infra', 'acme/app'])).toBeNull();
     expect(migrateRepoScope([])).toBeNull();
     expect(migrateRepoScope(null)).toBeNull();
     expect(migrateRepoScope(undefined)).toBeNull();
-    expect(migrateRepoScope('PostHog/posthog')).toBe('PostHog/posthog');
+    expect(migrateRepoScope('acme/app')).toBe('acme/app');
   });
 });
 
@@ -64,39 +64,39 @@ describe('repo labels', () => {
   });
 
   it('drops the org when it is one of the viewer orgs', () => {
-    expect(viewerOrgs(['PostHog/team-devex', 'posthog/infra', 'Other/x'])).toEqual(['PostHog', 'Other']);
-    expect(repoLabel('PostHog/example-tools', ORGS)).toBe('example-tools');
-    expect(repoLabel('posthog/example-infra', ORGS)).toBe('example-infra');
-    expect(repoLabel('acme/tools', ORGS)).toBe('acme/tools');
+    expect(viewerOrgs(['acme/team-platform', 'ACME/infra', 'Other/x'])).toEqual(['acme', 'Other']);
+    expect(repoLabel('acme/tools', ORGS)).toBe('tools');
+    expect(repoLabel('Acme/infra', ORGS)).toBe('infra');
+    expect(repoLabel('other/tools', ORGS)).toBe('other/tools');
   });
 
   it('labels a tile from another repo once, on the tile', () => {
-    expect(tileRepoLabels(['PostHog/example-infra#1', 'PostHog/example-infra#2'], 'PostHog/posthog', ORGS)).toEqual({ tile: 'example-infra', prs: [null, null] });
-    expect(tileRepoLabels(['posthog/PostHog#1'], 'PostHog/posthog', ORGS)).toEqual({ tile: null, prs: [null] });
+    expect(tileRepoLabels(['acme/infra#1', 'acme/infra#2'], 'acme/app', ORGS)).toEqual({ tile: 'infra', prs: [null, null] });
+    expect(tileRepoLabels(['Acme/APP#1'], 'acme/app', ORGS)).toEqual({ tile: null, prs: [null] });
   });
 
   it('labels only the PR rows from another repo in a mixed set', () => {
-    expect(tileRepoLabels(['PostHog/posthog#1', 'PostHog/example-infra#2', 'acme/tools#3'], 'PostHog/posthog', ORGS)).toEqual({
+    expect(tileRepoLabels(['acme/app#1', 'acme/infra#2', 'other/tools#3'], 'acme/app', ORGS)).toEqual({
       tile: null,
-      prs: [null, 'example-infra', 'acme/tools'],
+      prs: [null, 'infra', 'other/tools'],
     });
   });
 
   it('falls back to the base repo org without viewer teams, and labels nothing without a base', () => {
-    expect(tileRepoLabels(['PostHog/example-infra#1'], 'PostHog/posthog', [])).toEqual({ tile: 'example-infra', prs: [null] });
-    expect(tileRepoLabels(['PostHog/example-infra#1'], null, ORGS)).toEqual({ tile: null, prs: [null] });
+    expect(tileRepoLabels(['acme/infra#1'], 'acme/app', [])).toEqual({ tile: 'infra', prs: [null] });
+    expect(tileRepoLabels(['acme/infra#1'], null, ORGS)).toEqual({ tile: null, prs: [null] });
   });
 });
 
 describe('quiet repos', () => {
   it('marks PRs of a quiet repo', () => {
-    expect(isPrInQuietRepo('PostHog/example-infra#3', settings)).toBe(true);
-    expect(isPrInQuietRepo('PostHog/posthog#3', settings)).toBe(false);
+    expect(isPrInQuietRepo('acme/infra#3', settings)).toBe(true);
+    expect(isPrInQuietRepo('acme/app#3', settings)).toBe(false);
   });
 
   it('calls a tile quiet only when every PR is in a quiet repo', () => {
-    expect(isQuietTile(['PostHog/example-infra#1', 'postHog/Example-Infra#2'], settings)).toBe(true);
-    expect(isQuietTile(['PostHog/example-infra#1', 'PostHog/posthog#2'], settings)).toBe(false);
+    expect(isQuietTile(['acme/infra#1', 'aCme/Infra#2'], settings)).toBe(true);
+    expect(isQuietTile(['acme/infra#1', 'acme/app#2'], settings)).toBe(false);
     expect(isQuietTile([], settings)).toBe(false);
   });
 
@@ -122,10 +122,10 @@ describe('repoOverview', () => {
   });
 
   it('marks the chosen repo and keeps named repos without PRs', () => {
-    const overview = repoOverview([['PostHog/posthog#1']], settings);
+    const overview = repoOverview([['acme/app#1']], settings);
     expect(overview.repos).toEqual([
-      { repo: 'PostHog/posthog', topics: 1, prs: 1, quiet: false, selected: true },
-      { repo: 'PostHog/example-infra', topics: 0, prs: 0, quiet: true, selected: false },
+      { repo: 'acme/app', topics: 1, prs: 1, quiet: false, selected: true },
+      { repo: 'acme/infra', topics: 0, prs: 0, quiet: true, selected: false },
     ]);
   });
 });

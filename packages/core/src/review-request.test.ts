@@ -5,7 +5,7 @@ import type { Viewer } from './types.ts';
 
 const me = viewer.login;
 const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
-const team = ['PostHog/team-devex'];
+const team = ['acme/team-platform'];
 
 describe('reviewRequest', () => {
   it('is personal when the viewer is requested, whoever wrote it', () => {
@@ -35,7 +35,7 @@ describe('reviewRequest', () => {
   });
 
   it('is null without a request for the viewer or their teams', () => {
-    expect(reviewRequest(makePr({ reviewerUsers: ['sol'], reviewerTeams: ['PostHog/team-other'] }), withTeam)).toBeNull();
+    expect(reviewRequest(makePr({ reviewerUsers: ['sol'], reviewerTeams: ['acme/team-other'] }), withTeam)).toBeNull();
   });
 
   it('treats personal and teammate team requests as personal', () => {

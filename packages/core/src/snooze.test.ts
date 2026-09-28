@@ -4,7 +4,7 @@ import { breaksSnooze, isSnoozeOver, type SnoozeContext } from './snooze.ts';
 import type { Snooze, SnoozeCondition } from './types.ts';
 
 function snooze(condition: SnoozeCondition): Snooze {
-  return { tileId: 'pr:PostHog/posthog#1', condition, since: at(10) };
+  return { tileId: 'pr:acme/app#1', condition, since: at(10) };
 }
 
 function context(overrides: Partial<SnoozeContext> = {}): SnoozeContext {

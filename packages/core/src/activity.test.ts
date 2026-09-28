@@ -6,7 +6,7 @@ import type { EventDisplayState, PrEvent } from './types.ts';
 import type { EventView } from './views.ts';
 
 const me = viewer.login;
-const team = viewer.teams[0] ?? 'PostHog/team-devex';
+const team = viewer.teams[0] ?? 'acme/team-platform';
 const who = { ...viewer, teams: [team] };
 
 let seq = 0;
@@ -81,7 +81,7 @@ describe('activityList', () => {
 
 describe('reviewRequestSubject', () => {
   it('reads the requested login or team back from the summary', () => {
-    expect(reviewRequestSubject('rowan requested a review from PostHog/team-devex')).toBe('PostHog/team-devex');
+    expect(reviewRequestSubject('rowan requested a review from acme/team-platform')).toBe('acme/team-platform');
     expect(reviewRequestSubject('rowan removed the review request for sol')).toBe('sol');
     expect(reviewRequestSubject('rowan commented')).toBeNull();
   });

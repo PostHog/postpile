@@ -6,7 +6,7 @@ import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { makeTopic } from './testing/topics.ts';
 
-const routed = { kind: 'routed' as const, ownerTeam: 'PostHog/team-infra', whyYou: 'team-devex review requested' };
+const routed = { kind: 'routed' as const, ownerTeam: 'acme/team-infra', whyYou: 'team-platform review requested' };
 
 /** n topics with one PR each; every dossier answer gets the given area and relation. */
 function topics(h: Harness, count: number): string[] {
@@ -31,7 +31,7 @@ describe('topic placement', () => {
     await h.engine.sync({ agentJobs: ['dossiers'] });
 
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === id);
-    expect(item?.placement).toEqual({ relation: 'routed', ownerTeam: 'PostHog/team-infra', whyYou: 'team-devex review requested', area: 'CI', corrected: false });
+    expect(item?.placement).toEqual({ relation: 'routed', ownerTeam: 'acme/team-infra', whyYou: 'team-platform review requested', area: 'CI', corrected: false });
     expect((await h.engine.getTopic(id!))?.placement?.area).toBe('CI');
     expect(h.agent.dossierInputs[0]?.relationSignals.whyYou).toBe('your review requested');
   });

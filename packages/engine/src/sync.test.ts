@@ -283,8 +283,8 @@ describe('Engine.search', () => {
 
     const byTitle = await h.engine.search('depot');
     expect(byTitle.topics).toHaveLength(1);
-    expect(byTitle.topics[0]).toMatchObject({ topicId: UNSORTED_TOPIC_ID, prKeys: ['PostHog/posthog#1'] });
-    expect((await h.engine.search('#2 flaky')).topics[0]?.prKeys).toEqual(['PostHog/posthog#2']);
+    expect(byTitle.topics[0]).toMatchObject({ topicId: UNSORTED_TOPIC_ID, prKeys: ['acme/app#1'] });
+    expect((await h.engine.search('#2 flaky')).topics[0]?.prKeys).toEqual(['acme/app#2']);
     expect((await h.engine.search('nothing-like-this')).topics).toEqual([]);
   });
 });

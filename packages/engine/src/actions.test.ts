@@ -124,7 +124,7 @@ describe('approve', () => {
     const result = await h.engine.approve(pr.key);
 
     expect(result.ok).toBe(true);
-    expect(h.writer.calls).toEqual(['approvePr PostHog/posthog#1@head']);
+    expect(h.writer.calls).toEqual(['approvePr acme/app#1@head']);
     expect(h.store.userPrStates.get(pr.key)?.approvedCommitOid).toBe('head');
     expect(await tileState(h)).toBe('done');
   });
@@ -276,6 +276,6 @@ describe('comments', () => {
     expect(h.writer.calls).toEqual([]);
 
     await h.engine.sendComment(pr.key, draft.body);
-    expect(h.writer.calls).toEqual(['commentOnPr PostHog/posthog#1 @bob can you check the migration?']);
+    expect(h.writer.calls).toEqual(['commentOnPr acme/app#1 @bob can you check the migration?']);
   });
 });

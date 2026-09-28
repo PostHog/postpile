@@ -26,7 +26,7 @@ describe('memory formatting', () => {
         statusNote: 'waiting on the runner image',
         people: [{ login: 'alice', role: 'driver', note: 'owns the rollout' }],
         openQuestions: [{ text: 'Keep GitHub runners for releases?', askedBy: 'carol', refs: [] }],
-        timeline: [{ prKey: 'PostHog/posthog#1', role: 'base image' }],
+        timeline: [{ prKey: 'acme/app#1', role: 'base image' }],
       },
       flags: [{ kind: 'needs_user', text: 'Your review blocks the image PR', prKey: null }],
       staleClaims: [{ path: 'openQuestions[0]', reason: 'thread_resolved' }],
@@ -57,6 +57,6 @@ describe('memory formatting', () => {
 
   it('prints facts with their staleness', () => {
     const lines = formatFacts([{ fact: makeFact(), stale: 'head_moved', recheckable: false }]);
-    expect(lines).toEqual(['facts:', '  alice works on PostHog/posthog#1  (works_on, since 2026-09-01, stale: head_moved)']);
+    expect(lines).toEqual(['facts:', '  alice works on acme/app#1  (works_on, since 2026-09-01, stale: head_moved)']);
   });
 });

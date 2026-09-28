@@ -28,7 +28,7 @@ const NOW = new Date('2026-09-28T10:00:00.000Z');
 
 describe('work context labels', () => {
   it('names the source kind before its ref', () => {
-    expect(sourceLabel({ kind: 'session', ref: 'posthog · 2026-09-27 10:01' })).toBe('Session · posthog · 2026-09-27 10:01');
+    expect(sourceLabel({ kind: 'session', ref: 'app · 2026-09-27 10:01' })).toBe('Session · app · 2026-09-27 10:01');
     expect(sourceLabel({ kind: 'memory', ref: '~/.claude/projects/p/memory/a.md' })).toBe('Memory file · ~/.claude/projects/p/memory/a.md');
   });
 

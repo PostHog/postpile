@@ -56,7 +56,7 @@ const memoryRecheckBody = z.object({
   prKey: z.string().nullable().default(null),
 });
 
-/** "PostHog/posthog". */
+/** "acme/app". */
 const repoName = z.string().regex(/^[^/\s]+\/[^/\s]+$/, 'repo must look like owner/name');
 
 const debugLimit = z.coerce.number().int().positive().max(DEBUG_NOTIFICATIONS_MAX_LIMIT).default(DEBUG_NOTIFICATIONS_DEFAULT_LIMIT);
@@ -77,7 +77,7 @@ const consolidateBody = z
   })
   .default({});
 
-/** "person:alice" or "path:PostHog/posthog:.github/workflows/". Only the first ":" separates kind and key. */
+/** "person:alice" or "path:acme/app:.github/workflows/". Only the first ":" separates kind and key. */
 const entityParam = z
   .string()
   .regex(/^(person|path|initiative|pr):.+/, 'entity must look like kind:key')

@@ -147,7 +147,7 @@ describe('recheckMemory', () => {
     expect(prompt).toContain(`Glance: the agent's whole assessment of ${pr.key}`);
     expect(prompt).toContain(pr.key);
     expect(prompt).not.toContain(other.key);
-    expect(await h.engine.recheckMemory({ factId: null, topicId: null, text: 'x', target: null, prKey: 'PostHog/posthog#999' })).toMatchObject({ reason: 'not_found' });
+    expect(await h.engine.recheckMemory({ factId: null, topicId: null, text: 'x', target: null, prKey: 'acme/app#999' })).toMatchObject({ reason: 'not_found' });
   });
 
   it('says so when the agent fails, the fact is gone, or the daily cap is reached', async () => {

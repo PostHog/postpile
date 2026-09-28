@@ -12,9 +12,9 @@ describe('buildStacks', () => {
     ];
     expect(buildStacks(prs)).toEqual([
       {
-        id: 'stack:PostHog/posthog#1',
-        repo: 'PostHog/posthog',
-        prKeys: ['PostHog/posthog#1', 'PostHog/posthog#2', 'PostHog/posthog#3'],
+        id: 'stack:acme/app#1',
+        repo: 'acme/app',
+        prKeys: ['acme/app#1', 'acme/app#2', 'acme/app#3'],
       },
     ]);
   });
@@ -25,8 +25,8 @@ describe('buildStacks', () => {
 
   it('does not chain across repos', () => {
     const prs = [
-      makePr({ number: 1, repo: 'PostHog/a', headRef: 'feat' }),
-      makePr({ number: 2, repo: 'PostHog/b', baseRef: 'feat', headRef: 'feat-2' }),
+      makePr({ number: 1, repo: 'acme/a', headRef: 'feat' }),
+      makePr({ number: 2, repo: 'acme/b', baseRef: 'feat', headRef: 'feat-2' }),
     ];
     expect(buildStacks(prs)).toEqual([]);
   });
@@ -39,7 +39,7 @@ describe('buildStacks', () => {
       makePr({ number: 7, headRef: 'b7', state: 'MERGED', mergedAt: '2026-09-18T00:00:00.000Z' }),
       makePr({ number: 8, baseRef: 'b7', headRef: 'b8', state: 'MERGED', mergedAt: '2026-09-19T00:00:00.000Z' }),
     ];
-    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['PostHog/posthog#1', 'PostHog/posthog#2', 'PostHog/posthog#3']]);
+    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['acme/app#1', 'acme/app#2', 'acme/app#3']]);
   });
 
   it('keeps a merged layer after GitHub moved the PR above onto the next branch down', () => {
@@ -48,7 +48,7 @@ describe('buildStacks', () => {
       makePr({ number: 2, baseRef: 'master', headRef: 'b2', previousBaseRefs: ['b1'], createdAt: at(10) }),
       makePr({ number: 3, baseRef: 'b2', headRef: 'b3', createdAt: at(20) }),
     ];
-    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['PostHog/posthog#1', 'PostHog/posthog#2', 'PostHog/posthog#3']]);
+    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['acme/app#1', 'acme/app#2', 'acme/app#3']]);
   });
 
   it('does not follow a former base to a PR that is still open', () => {
@@ -75,7 +75,7 @@ describe('buildStacks', () => {
       makePr({ number: 2, headRef: 'b1' }),
       makePr({ number: 3, baseRef: 'b1', headRef: 'b3' }),
     ];
-    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['PostHog/posthog#2', 'PostHog/posthog#3']]);
+    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['acme/app#2', 'acme/app#3']]);
   });
 
   it('continues a fork with the lowest number; the other branch stands alone', () => {
@@ -86,8 +86,8 @@ describe('buildStacks', () => {
       makePr({ number: 6, baseRef: 'b5', headRef: 'b6' }),
     ];
     expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([
-      ['PostHog/posthog#1', 'PostHog/posthog#2'],
-      ['PostHog/posthog#5', 'PostHog/posthog#6'],
+      ['acme/app#1', 'acme/app#2'],
+      ['acme/app#5', 'acme/app#6'],
     ]);
   });
 

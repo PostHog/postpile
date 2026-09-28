@@ -5,17 +5,17 @@ import { buildFoundQuery, foundRefs } from './found.ts';
 
 describe('buildFoundQuery', () => {
   it('asks for own open PRs, review requests per person and team, and recent merges in one query', () => {
-    const { query, aliases } = buildFoundQuery(['PostHog/team-devex', 'PostHog/team-infra'], '2026-09-21');
+    const { query, aliases } = buildFoundQuery(['acme/team-platform', 'acme/team-infra'], '2026-09-21');
     expect(aliases.map((alias) => [alias.alias, alias.via, alias.team])).toEqual([
       ['own', 'own_open', null],
       ['review', 'review_requested', null],
-      ['team0', 'team_review_requested', 'PostHog/team-devex'],
-      ['team1', 'team_review_requested', 'PostHog/team-infra'],
+      ['team0', 'team_review_requested', 'acme/team-platform'],
+      ['team1', 'team_review_requested', 'acme/team-infra'],
       ['merged', 'involved_merged', null],
     ]);
     expect(query).toContain('pullRequests(states: OPEN, first: 100, orderBy: { field: UPDATED_AT, direction: DESC })');
     expect(query).toContain('"is:pr is:open user-review-requested:@me"');
-    expect(query).toContain('"is:pr is:open team-review-requested:PostHog/team-infra"');
+    expect(query).toContain('"is:pr is:open team-review-requested:acme/team-infra"');
     expect(query).toContain('"is:pr involves:@me is:merged merged:>=2026-09-21"');
   });
 });

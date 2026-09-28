@@ -4,7 +4,7 @@ import { forWhomLabel, personTitle, turnTitle, whyTitle } from './why.ts';
 describe('why helpers', () => {
   it('puts for whom into words', () => {
     expect(forWhomLabel({ kind: 'you' })).toBe('For you');
-    expect(forWhomLabel({ kind: 'team', team: 'team-devex' })).toBe('For team-devex');
+    expect(forWhomLabel({ kind: 'team', team: 'team-platform' })).toBe('For team-platform');
     expect(forWhomLabel({ kind: 'own' })).toBe('Your PR');
     expect(forWhomLabel({ kind: 'none' })).toBe('');
   });
@@ -21,7 +21,7 @@ describe('why helpers', () => {
     expect(turnTitle({ kind: 'you', who: null, what: 'Review', prKey: 'a#1' })).toBe('Your move: Review');
     expect(turnTitle({ kind: 'them', who: 'sol', what: 'to merge', prKey: 'a#1' })).toBe('Waiting on sol: sol to merge');
     expect(turnTitle({ kind: 'them', who: 'sol', what: 'and 1 more', prKey: 'a#1', lead: 'Waiting on' })).toBe('Waiting on sol and 1 more');
-    expect(turnTitle({ kind: 'them', who: 'PostHog/team-devex', what: '', prKey: 'a#1', lead: 'Waiting on' })).toBe('Waiting on PostHog/team-devex');
+    expect(turnTitle({ kind: 'them', who: 'acme/team-platform', what: '', prKey: 'a#1', lead: 'Waiting on' })).toBe('Waiting on acme/team-platform');
     expect(turnTitle({ kind: 'none', who: null, what: '', prKey: null })).toBe('');
     expect(personTitle('rowan', 'author')).toBe('rowan (author)');
   });

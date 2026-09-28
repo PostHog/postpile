@@ -11,7 +11,7 @@ function row(thread: Partial<NotificationThread>, landing: NotificationLanding =
       updatedAt: '2026-09-27T10:00:00Z',
       lastReadAt: null,
       subjectType: 'PullRequest',
-      repo: 'PostHog/posthog',
+      repo: 'acme/app',
       number: 1,
       title: 'Title',
       ...thread,
@@ -54,8 +54,8 @@ const TILE: NotificationLanding = {
 
 describe('notification debug helpers', () => {
   it('labels refs and landings', () => {
-    expect(threadRef(row({ number: 12 }))).toBe('PostHog/posthog#12');
-    expect(threadRef(row({ number: null, subjectType: 'Release' }))).toBe('PostHog/posthog');
+    expect(threadRef(row({ number: 12 }))).toBe('acme/app#12');
+    expect(threadRef(row({ number: null, subjectType: 'Release' }))).toBe('acme/app');
     expect(landingLabel(TILE)).toBe('Move CI to Depot › Turbo caches');
     expect(landingLabel({ ...TILE, unsorted: true })).toBe('Unsorted › Turbo caches');
     expect(noTileReason(TILE)).toBeNull();

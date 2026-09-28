@@ -6,7 +6,7 @@ import { topicWithPrs } from './testing/topics.ts';
 
 function harnessWithTeam() {
   const h = makeHarness();
-  h.reader.teams.set('PostHog/team-devex', ['lyra']);
+  h.reader.teams.set('acme/team-platform', ['lyra']);
   return h;
 }
 

@@ -52,17 +52,17 @@ describe('isPrDone', () => {
   });
 
   it('is not done after mark-read while a team review is pending on a teammate\'s PR', () => {
-    const pr = makePr({ author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    const pr = makePr({ author: 'lyra', reviewerTeams: ['acme/team-platform'] });
     expect(isPrDone(pr, handled, teamViewer)).toBe(false);
   });
 
   it('is not done after mark-read while a routed team review is pending without your review', () => {
-    const pr = makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'] });
+    const pr = makePr({ author: 'ada', reviewerTeams: ['acme/team-platform'] });
     expect(isPrDone(pr, handled, teamViewer)).toBe(false);
   });
 
   it('is done after mark-read once a teammate took the routed team request', () => {
-    const pr = makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'], reviews: [makeReview({ author: 'lyra' })] });
+    const pr = makePr({ author: 'ada', reviewerTeams: ['acme/team-platform'], reviews: [makeReview({ author: 'lyra' })] });
     expect(isPrDone(pr, handled, teamViewer)).toBe(true);
   });
 
@@ -72,7 +72,7 @@ describe('isPrDone', () => {
   });
 
   it('is done once you approved, and once it merged, even with the request still listed', () => {
-    const pr = makePr({ author: 'lyra', reviewerUsers: [viewer.login], reviewerTeams: ['PostHog/team-devex'] });
+    const pr = makePr({ author: 'lyra', reviewerUsers: [viewer.login], reviewerTeams: ['acme/team-platform'] });
     const approved = { ...pr, reviews: [makeReview({ author: viewer.login, commitOid: 'old' })] };
     expect(isPrDone(approved, null, teamViewer)).toBe(true);
     expect(isPrDone({ ...pr, state: 'MERGED' }, null, teamViewer)).toBe(true);
@@ -135,7 +135,7 @@ describe('deriveTileState', () => {
       kind: 'unread',
       unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', actor: 'bob', summary: 'bob mentioned you', at: loud.at }],
     });
-    expect(explainTileState(state)).toBe('unread (PostHog/posthog#1: bob mentioned you)');
+    expect(explainTileState(state)).toBe('unread (acme/app#1: bob mentioned you)');
   });
 
   it('lists every unseen loud event, oldest first, and skips seen and quiet ones', () => {
@@ -235,7 +235,7 @@ describe('buildTopicTiles', () => {
       pullInReasons: new Map([[a.key, 'stack layer below #2']]),
     });
     expect(tiles.map((t) => [t.id, t.kind, t.title])).toEqual([
-      ['stack:PostHog/posthog#1', 'stack', 'PR 1 (stack of 2)'],
+      ['stack:acme/app#1', 'stack', 'PR 1 (stack of 2)'],
       ['set:s1', 'set', 'Depot runners'],
     ]);
     expect(tiles[0]?.members.map((m) => m.provenance)).toEqual([
@@ -254,7 +254,7 @@ describe('buildTopicTiles', () => {
       stacks: [],
       sets: [],
     });
-    expect(tiles.map((t) => t.id)).toEqual(['pr:PostHog/posthog#3']);
+    expect(tiles.map((t) => t.id)).toEqual(['pr:acme/app#3']);
   });
 
   it('shows a pulled-in set member as pinged once it gets a mention', () => {
@@ -286,7 +286,7 @@ describe('buildTopicTiles with stacks as units', () => {
   const all = [bottom, middle, top, other];
   const prs = new Map(all.map((pr) => [pr.key, pr]));
   const stacks = buildStacks(all);
-  const stackId = 'stack:PostHog/posthog#1';
+  const stackId = 'stack:acme/app#1';
 
   function setOf(keys: string[]): PrSet {
     return {
@@ -316,7 +316,7 @@ describe('buildTopicTiles with stacks as units', () => {
   it('shows a stack only in its own topic, and keeps its layers out of other topics', () => {
     const stackTopicIds = new Map([[stackId, 'topic-2']]);
     const here = buildTopicTiles({ topicId: 'topic-1', memberKeys: [middle.key, other.key], prs, threads, stacks, stackTopicIds, sets: [] });
-    expect(here.map((t) => t.id)).toEqual(['pr:PostHog/posthog#4']);
+    expect(here.map((t) => t.id)).toEqual(['pr:acme/app#4']);
     const home = buildTopicTiles({ topicId: 'topic-2', memberKeys: [], prs, threads, stacks, stackTopicIds, sets: [] });
     expect(home.map((t) => [t.id, t.members.length])).toEqual([[stackId, 3]]);
   });
@@ -358,8 +358,8 @@ describe('buildTopicTiles with stacks as units', () => {
 describe('tile ids', () => {
   it('parses the set id back out of a set tile id only', () => {
     expect(setIdFromTileId(setTileId('s1'))).toBe('s1');
-    expect(setIdFromTileId(singleTileId('PostHog/posthog#1'))).toBeNull();
-    expect(setIdFromTileId('stack:PostHog/posthog#1')).toBeNull();
+    expect(setIdFromTileId(singleTileId('acme/app#1'))).toBeNull();
+    expect(setIdFromTileId('stack:acme/app#1')).toBeNull();
   });
 });
 

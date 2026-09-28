@@ -30,8 +30,8 @@ function makeTopic(overrides: Partial<Topic> = {}): Topic {
   };
 }
 
-const pr1 = 'PostHog/posthog#1';
-const pr2 = 'PostHog/posthog#2';
+const pr1 = 'acme/app#1';
+const pr2 = 'acme/app#2';
 
 function event(prKey: string, sourceId: string, minutes: number) {
   return makeEvent({ id: `${prKey}:comment:${sourceId}`, prKey, sourceId, at: at(minutes) });
@@ -245,7 +245,7 @@ describe('FactRepo', () => {
 
   it('moves pinned heads of refs, and leaves unpinned refs alone', () => {
     store.facts.add(makeFact({ refs: [makeFactRef({ headOid: 'h0' }), makeFactRef({ kind: 'comment', sourceId: 'c1' })] }));
-    store.facts.reanchorRefs('f1', new Map([['PostHog/posthog#1', 'h1']]));
+    store.facts.reanchorRefs('f1', new Map([['acme/app#1', 'h1']]));
     expect(store.facts.get('f1')?.refs.map((ref) => [ref.kind, ref.headOid])).toEqual([
       ['comment', null],
       ['pr', 'h1'],
@@ -268,9 +268,9 @@ describe('FactRepo', () => {
   });
 });
 
-describe('Depot: a push on #41902 after approval', () => {
-  it('closes "Alice approved #41902" with the new status as its successor', () => {
-    const key = 'PostHog/posthog#41902';
+describe('Depot: a push on #1902 after approval', () => {
+  it('closes "Alice approved #1902" with the new status as its successor', () => {
+    const key = 'acme/app#1902';
     const approved = makeFact({
       id: 'approved',
       subject: { kind: 'pr', key },

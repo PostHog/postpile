@@ -151,7 +151,7 @@ export interface MemorySource {
   kind: MemorySourceKind;
   /** GitHub login of who said or did it; null for the user's own words. */
   who: string | null;
-  /** One short line: "commented on #41902", "Your instructions, version 3". */
+  /** One short line: "commented on #1902", "Your instructions, version 3". */
   title: string;
   /** Short copy of the source text; empty when there is none. */
   excerpt: string;

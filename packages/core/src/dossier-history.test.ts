@@ -8,7 +8,7 @@ const first = {
   status: 'active' as const,
   people: [{ login: 'rowan', role: 'driver' as const, note: '' }],
   openQuestions: [{ text: 'Keep GitHub runners for releases?', askedBy: 'lyra', refs: [] }],
-  timeline: [{ prKey: 'PostHog/posthog#1', role: 'config' }],
+  timeline: [{ prKey: 'acme/app#1', role: 'config' }],
 };
 
 const second = {
@@ -16,7 +16,7 @@ const second = {
   status: 'blocked' as const,
   people: [...first.people, { login: 'lyra', role: 'reviewer' as const, note: '' }],
   openQuestions: [],
-  timeline: [...first.timeline, { prKey: 'PostHog/posthog#2', role: 'cache' }],
+  timeline: [...first.timeline, { prKey: 'acme/app#2', role: 'cache' }],
 };
 
 describe('dossierChanges', () => {
@@ -25,7 +25,7 @@ describe('dossierChanges', () => {
       'Status: active → blocked',
       'Person added: @lyra (reviewer)',
       'Question closed: Keep GitHub runners for releases?',
-      'PR joined: PostHog/posthog#2',
+      'PR joined: acme/app#2',
     ]);
   });
 

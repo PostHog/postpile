@@ -48,7 +48,7 @@ function listsName(list: string[], name: string): boolean {
   return list.some((entry) => sameName(entry, name));
 }
 
-/** "PostHog/posthog#12" -> "PostHog/posthog". */
+/** "acme/app#12" -> "acme/app". */
 export function repoOfPr(key: PrKey): string {
   return parsePrKey(key).repo;
 }
@@ -120,7 +120,7 @@ export function mainRepoOf(topicPrKeys: PrKey[]): string | null {
   return main?.repo ?? null;
 }
 
-/** ["PostHog/team-devex"] -> ["PostHog"]: the orgs a repo label leaves out. Works on repo names too. */
+/** ["acme/team-platform"] -> ["acme"]: the orgs a repo label leaves out. Works on repo names too. */
 export function viewerOrgs(teams: string[]): string[] {
   const orgs: string[] = [];
   for (const team of teams) {
@@ -132,7 +132,7 @@ export function viewerOrgs(teams: string[]): string[] {
   return orgs;
 }
 
-/** "PostHog/example-infra" -> "example-infra" when PostHog is one of the viewer's orgs, else the full name. */
+/** "acme/infra" -> "infra" when acme is one of the viewer's orgs, else the full name. */
 export function repoLabel(repo: string, orgs: string[]): string {
   const slash = repo.indexOf('/');
   if (slash < 0) {

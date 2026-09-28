@@ -29,7 +29,7 @@ function depotDossier(): Dossier {
     statusNote: '',
     people: [],
     openQuestions: [],
-    timeline: [{ prKey: 'PostHog/posthog#1', role: 'first step' }],
+    timeline: [{ prKey: 'acme/app#1', role: 'first step' }],
     earlier: '',
     userCares: [],
     recentChanges: [],
@@ -252,7 +252,7 @@ describe('batched glances', () => {
     const dossier = {
       ...depotDossier(),
       openQuestions: [gone],
-      timeline: [...depotDossier().timeline, { prKey: 'PostHog/posthog#9', role: 'left' }],
+      timeline: [...depotDossier().timeline, { prKey: 'acme/app#9', role: 'left' }],
     };
     h.store.dossiers.add({ topicId: 'depot', version: 1, dossier, flags: [], inputHash: 'h', throughSeq: 0, model: FAKE_MODEL, createdAt: at(0) });
 
@@ -287,7 +287,7 @@ describe('facts', () => {
     expect(report.facts.added).toBe(1);
     const facts = (await h.engine.getPr(pr.key))?.facts ?? [];
     expect(facts.map((view) => [view.fact.text, view.fact.topicId, view.stale])).toEqual([
-      ['alice works on PostHog/posthog#1', 'depot', null],
+      ['alice works on acme/app#1', 'depot', null],
     ]);
     const byPerson = await h.engine.listFacts({ entity: { kind: 'person', key: 'alice' } });
     expect(byPerson).toHaveLength(1);
@@ -489,7 +489,7 @@ describe('pushes after the viewer approved', () => {
     const state = (await h.engine.getTopic('depot'))?.tiles[0]?.state;
     expect(state?.kind).toBe('unread');
     expect(state?.unreadBecause.map((reason) => reason.kind)).toEqual(['commits_after_approval']);
-    const push = h.store.events.listForPr('PostHog/posthog#1').find((event) => event.kind === 'commits_after_approval');
+    const push = h.store.events.listForPr('acme/app#1').find((event) => event.kind === 'commits_after_approval');
     expect(push?.override).toMatchObject({ loudness: 'loud', reason: 'Changes the CI runner image you approved.', by: 'agent' });
   });
 });

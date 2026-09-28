@@ -299,7 +299,7 @@ export type Provenance =
 export interface FoundPr {
   prKey: PrKey;
   via: FoundVia;
-  /** "your open PR", "review requested from you", "review requested from PostHog/team-devex", "involves you, merged 2026-09-24". */
+  /** "your open PR", "review requested from you", "review requested from acme/team-platform", "involves you, merged 2026-09-24". */
   reason: string;
   foundAt: IsoTime;
 }
@@ -314,7 +314,7 @@ export interface PullIn {
   prKey: PrKey;
   /** The pinged PR whose stack it completes. */
   anchorPrKey: PrKey;
-  /** "stack layer below #41902" / "stack layer above #41902". */
+  /** "stack layer below #1902" / "stack layer above #1902". */
   reason: string;
   pulledAt: IsoTime;
 }

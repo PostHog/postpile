@@ -31,7 +31,7 @@ export function staleLabel(reason: StaleReason): string {
   return STALE_LABELS[reason];
 }
 
-/** "#41902", "#41902 comment", "#41902 review", ... */
+/** "#1902", "#1902 comment", "#1902 review", ... */
 export function refLabel(ref: FactRef): string {
   const number = `#${prNumber(ref.prKey)}`;
   return ref.kind === 'pr' || ref.kind === 'event' ? number : `${number} ${ref.kind}`;

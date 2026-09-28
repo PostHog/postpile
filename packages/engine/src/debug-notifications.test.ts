@@ -13,7 +13,7 @@ function storedThread(overrides: Partial<NotificationThread>): NotificationThrea
     updatedAt: '2030-01-01T00:00:00.000Z',
     lastReadAt: null,
     subjectType: 'Issue',
-    repo: 'PostHog/posthog',
+    repo: 'acme/app',
     number: 900,
     title: 'An issue',
     ...overrides,
@@ -35,7 +35,7 @@ describe('Engine.debugNotifications', () => {
 
     expect(rows.map((row) => row.thread.id)).toEqual(['issue', 'unsynced', makeThreadFor(pr).id]);
     expect(rows[0]).toMatchObject({ prKey: null, landing: { kind: 'not_pr' }, recentEvents: [] });
-    expect(rows[1]).toMatchObject({ prKey: 'PostHog/posthog#901', landing: { kind: 'pr_not_synced' } });
+    expect(rows[1]).toMatchObject({ prKey: 'acme/app#901', landing: { kind: 'pr_not_synced' } });
     expect(rows[2]).toMatchObject({
       prKey: pr.key,
       landing: { kind: 'tile', topicId: UNSORTED_TOPIC_ID, unsorted: true, tileState: 'unread' },

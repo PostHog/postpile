@@ -49,7 +49,7 @@ describe('FakeEngine', () => {
   it('refuses undo after the 6s window', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });
-    const marked = await engine.markRead('pr:PostHog/example-infra#41915');
+    const marked = await engine.markRead('pr:acme/infra#1915');
     now = new Date(now.getTime() + 7000);
     const undone = await engine.undo(marked.undoToken);
     expect(undone).toEqual({ ok: false, message: 'undo window closed', undoToken: null });
@@ -58,8 +58,8 @@ describe('FakeEngine', () => {
   it('undoes the newest batch when no token is given', async () => {
     const engine = new FakeEngine();
     await engine.setGitHubWrites(true);
-    await engine.markRead('pr:PostHog/example-infra#41915');
-    await engine.markRead('pr:PostHog/posthog#41790');
+    await engine.markRead('pr:acme/infra#1915');
+    await engine.markRead('pr:acme/app#1790');
     await engine.undo(null);
     const topics = await engine.listTopics();
     expect(topics.find((item) => item.topic.id === 'topic-ci-tests')?.unreadTiles).toBe(2);
@@ -69,7 +69,7 @@ describe('FakeEngine', () => {
   it('wakes a time snooze once the time has passed', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });
-    const tileId = 'pr:PostHog/posthog#41822';
+    const tileId = 'pr:acme/app#1822';
     await engine.setGitHubWrites(true);
     await engine.markRead(tileId);
     await engine.snooze(tileId, { kind: 'until_time', until: '2026-09-27T11:00:00.000Z' });
@@ -93,11 +93,11 @@ describe('FakeEngine tile faces', () => {
     const engine = new FakeEngine();
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
     const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
-    // #41911 was approved before the pushes; approvals stand on any commit, so the move is on #41902.
-    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you on #41902' });
+    // #1911 was approved before the pushes; approvals stand on any commit, so the move is on #1902.
+    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you on #1902' });
     expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV', 'ST']);
     expect(stack?.prs.map((pr) => pr.status.lifecycle)).toEqual(['merged', 'merged', 'open', 'open', 'closed']);
-    expect(depot.find((view) => view.tile.id === 'pr:PostHog/posthog#41899')?.turn).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
+    expect(depot.find((view) => view.tile.id === 'pr:acme/app#1899')?.turn).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
     const desktop = (await engine.getTopic('topic-desktop-release'))?.tiles[0];
     expect(desktop).toMatchObject({ why: 'FW', turn: { kind: 'none' } });
   });
@@ -118,15 +118,15 @@ describe('FakeEngine memory', () => {
 
   it('forgets a fact marked wrong and remembers a dossier line marked wrong', async () => {
     const engine = new FakeEngine();
-    const prKey = 'PostHog/posthog#41902';
+    const prKey = 'acme/app#1902';
     const facts = (await engine.getPr(prKey))?.facts ?? [];
     expect(facts.some((view) => view.stale === 'head_moved')).toBe(true);
 
-    await engine.correctMemory({ kind: 'wrong', factId: 'fact-lyra-reviews-41902', topicId: null, text: '' });
+    await engine.correctMemory({ kind: 'wrong', factId: 'fact-lyra-reviews-1902', topicId: null, text: '' });
     await engine.correctMemory({ kind: 'forget', factId: null, topicId: 'topic-depot', text: 'Storybook build time' });
 
     const after = (await engine.getPr(prKey))?.facts ?? [];
-    expect(after.map((view) => view.fact.id)).not.toContain('fact-lyra-reviews-41902');
+    expect(after.map((view) => view.fact.id)).not.toContain('fact-lyra-reviews-1902');
     expect((await engine.getTopic('topic-depot'))?.dossier?.correctedClaims).toContain('Storybook build time');
   });
 
@@ -152,7 +152,7 @@ describe('FakeEngine memory', () => {
     const engine = new FakeEngine();
     const placements = new Map((await engine.listTopics()).map((item) => [item.topic.id, item.placement]));
     expect(placements.get('topic-depot')).toMatchObject({ relation: 'team', area: 'CI' });
-    expect(placements.get('topic-ingestion-runners')).toMatchObject({ relation: 'routed', ownerTeam: 'PostHog/team-ingestion' });
+    expect(placements.get('topic-ingestion-runners')).toMatchObject({ relation: 'routed', ownerTeam: 'acme/team-ingestion' });
     expect(placements.get('topic-desktop-release')).toMatchObject({ relation: 'fyi', area: 'Desktop' });
 
     await engine.correctMemory({ kind: 'wrong', factId: null, topicId: 'topic-desktop-release', text: 'FYI', relation: 'routed' });
@@ -187,10 +187,10 @@ describe('FakeEngine rechecks', () => {
 
   it('replaces a fact on an accepted fix and undoes it', async () => {
     const engine = new FakeEngine();
-    const key = 'PostHog/posthog#41902';
+    const key = 'acme/app#1902';
     const before = (await engine.getPr(key))?.facts.map((view) => view.fact.text) ?? [];
-    const fixed = await engine.correctMemory({ kind: 'fix', factId: 'fact-lyra-reviews-41902', topicId: null, text: '', fixedText: 'lyra and nell review #41902.' });
-    expect((await engine.getPr(key))?.facts.map((view) => view.fact.text)).toContain('lyra and nell review #41902.');
+    const fixed = await engine.correctMemory({ kind: 'fix', factId: 'fact-lyra-reviews-1902', topicId: null, text: '', fixedText: 'lyra and nell review #1902.' });
+    expect((await engine.getPr(key))?.facts.map((view) => view.fact.text)).toContain('lyra and nell review #1902.');
     await engine.undo(fixed.undoToken);
     expect((await engine.getPr(key))?.facts.map((view) => view.fact.text).sort()).toEqual([...before].sort());
   });
@@ -286,7 +286,7 @@ describe('FakeEngine queues', () => {
   it('counts merging your approved PR as a move without making the topic urgent', async () => {
     const engine = new FakeEngine();
     const migrations = (await engine.getTopic('topic-migrations'))?.tiles ?? [];
-    const approved = migrations.find((view) => view.tile.id === 'pr:PostHog/posthog#41808');
+    const approved = migrations.find((view) => view.tile.id === 'pr:acme/app#1808');
     expect(approved?.turn).toMatchObject({ kind: 'you', what: 'Merge, it is approved' });
     // An agent's approval counts like any other; the pill only names who gave it.
     expect(approved?.prs[0]?.status).toMatchObject({ review: 'approved', agentApprovers: ['reviewbot'] });
@@ -318,8 +318,8 @@ describe('FakeEngine queues', () => {
 describe('FakeEngine addressed your changes', () => {
   it('lists a PR whose author pushed after your changes request under To review, for you', async () => {
     const devEnv = (await new FakeEngine().getTopic('topic-dev-env'))?.tiles ?? [];
-    const view = devEnv.find((item) => item.tile.id === 'pr:PostHog/posthog#41960');
-    expect(view?.turn).toMatchObject({ kind: 'you', what: 'paul addressed your changes: re-review' });
+    const view = devEnv.find((item) => item.tile.id === 'pr:acme/app#1960');
+    expect(view?.turn).toMatchObject({ kind: 'you', what: 'pim addressed your changes: re-review' });
     expect(view?.prs[0]?.tier).toBe('to_review');
     expect(view?.forWhom).toEqual({ kind: 'you' });
   });
@@ -330,10 +330,10 @@ describe('FakeEngine found PRs', () => {
     const engine = new FakeEngine();
     const detail = await engine.getTopic('topic-ci-tests');
     const byKey = new Map(detail!.tiles.map((view) => [view.prs[0]!.key, view]));
-    const review = byKey.get('PostHog/posthog#41955');
+    const review = byKey.get('acme/app#1955');
     expect(review).toMatchObject({ state: { kind: 'open' }, why: 'RV', turn: { kind: 'you' } });
     expect(review?.prs[0]?.provenance).toEqual({ kind: 'found', via: 'review_requested', reason: 'review requested from you' });
-    expect(byKey.get('PostHog/posthog#41950')?.why).toBe('AU');
+    expect(byKey.get('acme/app#1950')?.why).toBe('AU');
   });
 });
 

@@ -1,7 +1,7 @@
 import type { PrSet, PrSummary, TileView, UnreadReason } from '@postpile/core';
 import { newest } from './time.ts';
 
-/** "PostHog/posthog#41902" -> "41902". */
+/** "acme/app#1902" -> "1902". */
 export function prNumber(key: string): string {
   return key.split('#')[1] ?? key;
 }

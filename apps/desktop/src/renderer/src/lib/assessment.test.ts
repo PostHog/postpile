@@ -64,7 +64,7 @@ describe('assessment', () => {
   });
 
   it('tags by for whom, and never on not-yours', () => {
-    expect(assessment(glance, { kind: 'team', team: 'team-devex' }, false).tag).toBe('· for team-devex');
+    expect(assessment(glance, { kind: 'team', team: 'team-platform' }, false).tag).toBe('· for team-platform');
     expect(assessment(glance, { kind: 'own' }, false).tag).toBe('· your PR');
     expect(assessment(glance, { kind: 'none' }, false).tag).toBe('');
     expect(assessment({ ...glance, verdict: 'NOT_YOURS' }, { kind: 'you' }, false)).toMatchObject({ title: 'NOT YOURS', tag: '' });

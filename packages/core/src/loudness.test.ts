@@ -57,8 +57,8 @@ describe('ruleLoudness', () => {
 
   it('makes a review request loud only when it is for the viewer or their team', () => {
     expect(ruleLoudness(input({ kind: 'review_requested', subject: 'viewer' })).loudness).toBe('loud');
-    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'PostHog/team-devex' })).loudness).toBe('loud');
-    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'team-devex' })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'acme/team-platform' })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'team-platform' })).loudness).toBe('loud');
     expect(ruleLoudness(input({ kind: 'review_requested', subject: 'carol' })).loudness).toBe('quiet');
     expect(ruleLoudness(input({ kind: 'review_requested', subject: null })).loudness).toBe('quiet');
   });
@@ -119,6 +119,6 @@ describe('ruleLoudness on drafts', () => {
     const ready = makePr({ author: 'rowan', reviewerUsers: [viewer.login] });
     expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: ready }))).toEqual({ loudness: 'loud', reason: 'ready for your review' });
     expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: makePr({ author: 'rowan' }) })).loudness).toBe('quiet');
-    expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: makePr({ author: 'rowan', reviewerTeams: ['PostHog/team-devex'] }) })).loudness).toBe('loud');
+    expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'] }) })).loudness).toBe('loud');
   });
 });

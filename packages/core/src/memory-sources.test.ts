@@ -63,7 +63,7 @@ describe('dossierLineIssue', () => {
   it('flags deleted sources and PRs that are not synced', () => {
     const deleted = dossier({ userCares: [{ text: 'x', source: 'observed', refs: [makeFactRef({ kind: 'comment', prKey: pr.key, sourceId: 'gone' })] }] });
     expect(dossierLineIssue(deleted, 'userCares[0]', world())).toBe('source_deleted');
-    const missing = dossier({ goalSources: { refs: [makeFactRef({ prKey: 'PostHog/posthog#77' })], userRefs: [] } });
+    const missing = dossier({ goalSources: { refs: [makeFactRef({ prKey: 'acme/app#77' })], userRefs: [] } });
     expect(dossierLineIssue(missing, 'goal', world())).toBe('pr_missing');
   });
 });
@@ -95,7 +95,7 @@ describe('describeFactRef', () => {
       title: 'mention on #1',
     });
     expect(describeFactRef(makeFactRef({ kind: 'comment', prKey: pr.key, sourceId: 'gone' }), pr, []).missing).toBe(true);
-    expect(describeFactRef(makeFactRef({ prKey: 'PostHog/posthog#77' }), undefined, [])).toMatchObject({ title: '#77, not synced', missing: true });
+    expect(describeFactRef(makeFactRef({ prKey: 'acme/app#77' }), undefined, [])).toMatchObject({ title: '#77, not synced', missing: true });
   });
 });
 

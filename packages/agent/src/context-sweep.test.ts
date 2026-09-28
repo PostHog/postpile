@@ -116,7 +116,7 @@ function sweepInput(overrides: Partial<ContextSweepInput> = {}): ContextSweepInp
     items: [
       { id: 'c1', kind: 'claude_md', ref: '~/.claude/CLAUDE.md', text: 'I work on DevEx.' },
       { id: 'm1', kind: 'memory', ref: '~/.claude/projects/-Users-me-workspace-depot/memory/MEMORY.md', text: '- Depot CI cost tracking' },
-      { id: 's1', kind: 'session', ref: 'depot · 2026-09-27 10:00 · "Depot rollout"', text: 'First prompts:\n- roll depot out to posthog' },
+      { id: 's1', kind: 'session', ref: 'depot · 2026-09-27 10:00 · "Depot rollout"', text: 'First prompts:\n- roll depot out to the app' },
     ],
     instructions: 'I review CI changes.',
     topics: [{ id: 'topic-1', name: 'Move CI to Depot', about: 'Goal: all CI on Depot.' }],
@@ -169,7 +169,7 @@ describe('sweepContext', () => {
     runner.answer('context_sweep', {
       summary: 'Alice drives the Depot CI move.',
       threads: [
-        { title: 'Depot rollout', detail: 'Rolling out to posthog.', topicIds: ['topic-1', 'topic-x'], sources: ['s1', 'm1', 'zz', 's1'] },
+        { title: 'Depot rollout', detail: 'Rolling out to the app.', topicIds: ['topic-1', 'topic-x'], sources: ['s1', 'm1', 'zz', 's1'] },
         { title: 'kitchen renovation', detail: 'Should never come back.', topicIds: [], sources: [] },
       ],
       lastSeenAt: '1999-01-01T00:00:00Z',
@@ -182,7 +182,7 @@ describe('sweepContext', () => {
       threads: [
         {
           title: 'Depot rollout',
-          detail: 'Rolling out to posthog.',
+          detail: 'Rolling out to the app.',
           topicIds: ['topic-1'],
           sources: [
             { kind: 'session', ref: 'depot · 2026-09-27 10:00 · "Depot rollout"' },

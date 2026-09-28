@@ -118,7 +118,7 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     knownFacts: [],
     staleFacts: [],
     chatTurns: [],
-    relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-devex review requested', notes: ['review requested from the user team'] },
+    relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-platform review requested', notes: ['review requested from the user team'] },
     areas: [{ name: 'CI', topics: 3 }],
     currentArea: null,
     viewer,

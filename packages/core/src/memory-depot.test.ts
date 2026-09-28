@@ -13,7 +13,7 @@ function world(prs: Pr[]): VerifyWorld {
 }
 
 const approvedPr = makePr({
-  number: 41902,
+  number: 1902,
   title: 'chore(ci): move docker builds to depot',
   headOid: 'c1',
   commits: [makeCommit({ oid: 'c1', committedAt: at(1) })],
@@ -21,7 +21,7 @@ const approvedPr = makePr({
 });
 
 const aliceApproved: Fact = makeFact({
-  id: 'approved-41902',
+  id: 'approved-1902',
   subject: { kind: 'pr', key: approvedPr.key },
   predicate: 'status',
   object: null,
@@ -37,11 +37,11 @@ const pushedAfterApproval: Pr = {
 };
 
 describe('Depot memory examples', () => {
-  it('"Alice approved #41902" holds while the head is unchanged', () => {
+  it('"Alice approved #1902" holds while the head is unchanged', () => {
     expect(verifyFact(aliceApproved, world([approvedPr]))).toEqual({ kind: 'ok' });
   });
 
-  it('a push on #41902 after approval makes the approval fact stale at once', () => {
+  it('a push on #1902 after approval makes the approval fact stale at once', () => {
     expect(verifyFact(aliceApproved, world([pushedAfterApproval]))).toEqual({ kind: 'stale', reason: 'head_moved' });
   });
 
@@ -57,7 +57,7 @@ describe('Depot memory examples', () => {
     const { actions, ambiguous } = preReconcile([candidate], [aliceApproved]);
     expect(ambiguous).toEqual([]);
     expect(actions).toEqual([
-      { kind: 'update', factId: 'approved-41902', candidate, reason: 'replaced by a newer status fact' },
+      { kind: 'update', factId: 'approved-1902', candidate, reason: 'replaced by a newer status fact' },
     ]);
   });
 

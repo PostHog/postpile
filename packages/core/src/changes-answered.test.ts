@@ -97,7 +97,7 @@ describe('addressed your changes: the #4521 timeline', () => {
     const newOnes = events.filter((event) => event.at > changesRequested.submittedAt);
     const rule = pingRule(newOnes, pr, viewer, false);
     expect(rule.class).toBe('addressed');
-    expect(pingTemplate(rule.event!, pr).title).toBe('@bob addressed your changes · posthog#4521');
+    expect(pingTemplate(rule.event!, pr).title).toBe('@bob addressed your changes · app#4521');
   });
 });
 

@@ -3,14 +3,14 @@ import { isBot, isMachineComment, parsePrKey, prKey } from './index.ts';
 
 describe('prKey', () => {
   it('round-trips through parsePrKey', () => {
-    const ref = { repo: 'PostHog/posthog', number: 123 };
-    expect(prKey(ref)).toBe('PostHog/posthog#123');
-    expect(parsePrKey('PostHog/posthog#123')).toEqual(ref);
+    const ref = { repo: 'acme/app', number: 123 };
+    expect(prKey(ref)).toBe('acme/app#123');
+    expect(parsePrKey('acme/app#123')).toEqual(ref);
   });
 
   it('rejects malformed keys', () => {
-    expect(() => parsePrKey('posthog#1')).toThrow();
-    expect(() => parsePrKey('PostHog/posthog#abc')).toThrow();
+    expect(() => parsePrKey('app#1')).toThrow();
+    expect(() => parsePrKey('acme/app#abc')).toThrow();
   });
 });
 

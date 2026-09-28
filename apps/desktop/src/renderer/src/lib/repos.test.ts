@@ -16,7 +16,7 @@ describe('repo menu', () => {
     expect(scopeLabel(undefined)).toBe('All repos');
     expect(scopeLabel(overview(null))).toBe('All repos');
     expect(scopeLabel(overview('a/two'))).toBe('two');
-    expect(shortRepo('PostHog/posthog')).toBe('posthog');
+    expect(shortRepo('acme/app')).toBe('app');
   });
 
   it('words the counts', () => {

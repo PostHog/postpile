@@ -17,7 +17,7 @@ describe('verifyFact', () => {
   });
 
   it('is stale when a referenced PR is not in the store', () => {
-    const fact = makeFact({ refs: [makeFactRef({ prKey: 'PostHog/posthog#99' })] });
+    const fact = makeFact({ refs: [makeFactRef({ prKey: 'acme/app#99' })] });
     expect(verifyFact(fact, world([pr1]))).toEqual({ kind: 'stale', reason: 'pr_missing' });
   });
 
@@ -106,7 +106,7 @@ describe('verifyDossier', () => {
   it('flags questions in resolved threads, deleted comments and missing PRs', () => {
     const dossier: Dossier = {
       ...emptyDossier(),
-      openQuestions: [question('c1'), question('rc1'), question('gone'), question('c1', 'PostHog/posthog#99'), { text: 'no refs', askedBy: null, refs: [] }],
+      openQuestions: [question('c1'), question('rc1'), question('gone'), question('c1', 'acme/app#99'), { text: 'no refs', askedBy: null, refs: [] }],
     };
     expect(verifyDossier(dossier, world([pr], [pr.key]))).toEqual([
       { path: 'openQuestions[1]', reason: 'thread_resolved' },
@@ -120,7 +120,7 @@ describe('verifyDossier', () => {
       ...emptyDossier(),
       timeline: [
         { prKey: pr.key, role: 'base image' },
-        { prKey: 'PostHog/posthog#2', role: 'moved away' },
+        { prKey: 'acme/app#2', role: 'moved away' },
       ],
     };
     expect(verifyDossier(dossier, world([pr], [pr.key]))).toEqual([{ path: 'timeline[1]', reason: 'left_topic' }]);
@@ -132,7 +132,7 @@ describe('verifyDossier', () => {
       openQuestions: [question('c1'), question('rc1'), { text: 'no refs', askedBy: null, refs: [] }],
       timeline: [
         { prKey: pr.key, role: 'base image' },
-        { prKey: 'PostHog/posthog#2', role: 'moved away' },
+        { prKey: 'acme/app#2', role: 'moved away' },
       ],
     };
     const clean = withoutStaleClaims(dossier, world([pr], [pr.key]));

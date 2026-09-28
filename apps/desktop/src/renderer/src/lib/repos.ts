@@ -1,6 +1,6 @@
 import type { RepoOverview } from '@postpile/core';
 
-/** "PostHog/posthog" -> "posthog". */
+/** "acme/app" -> "app". */
 export function shortRepo(repo: string): string {
   const slash = repo.indexOf('/');
   return slash >= 0 ? repo.slice(slash + 1) : repo;

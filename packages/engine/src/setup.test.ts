@@ -24,7 +24,7 @@ function activity(repo: string, number: number, role: ActivityPr['role']): Activ
 const DRAFT_ANSWER = {
   summary: 'From your PRs and CODEOWNERS.',
   sections: [
-    { heading: 'About me', claims: [{ text: 'I am on PostHog/team-devex.', sources: ['t1'] }] },
+    { heading: 'About me', claims: [{ text: 'I am on acme/team-platform.', sources: ['t1'] }] },
     { heading: 'What I own', claims: [{ text: 'CI workflows in acme/app.', sources: ['o1', 'p1'] }] },
   ],
   quietRepos: [{ repo: 'acme/docs', why: 'One review.', sources: ['p3'] }],
@@ -39,9 +39,9 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'postpile-setup-'));
   file = join(dir, 'instructions.md');
   h = makeHarness({ instructionsFile: file });
-  h.reader.teams.set('PostHog/team-devex', ['viewer', 'bob']);
+  h.reader.teams.set('acme/team-platform', ['viewer', 'bob']);
   h.reader.activity = [activity('acme/app', 1, 'authored'), activity('acme/app', 2, 'reviewed'), activity('acme/docs', 3, 'reviewed')];
-  h.reader.files.set('acme/app:.github/CODEOWNERS', '* @acme/all\n/.github/ @PostHog/team-devex\n');
+  h.reader.files.set('acme/app:.github/CODEOWNERS', '* @acme/all\n/.github/ @acme/team-platform\n');
 });
 
 afterEach(() => {
@@ -133,7 +133,7 @@ describe('setup sweep', () => {
     expect(loadViewer(h.store)?.teamMembers).toEqual(['bob']);
 
     const prompt = h.runner.promptsFor('setup_draft')[0] ?? '';
-    expect(prompt).toContain('/.github/ @PostHog/team-devex');
+    expect(prompt).toContain('/.github/ @acme/team-platform');
     expect(prompt).not.toContain('@acme/all');
     expect(view.draft?.sections.map((section) => section.heading)).toEqual(['About me', 'What I own']);
     expect(view.draft?.mainRepo?.repo).toBe('acme/app');
@@ -143,8 +143,8 @@ describe('setup sweep', () => {
 
   it('reads owners.yaml at the root and in the folders the PRs touch, only where the root has one', async () => {
     h.runner.answer('setup_draft', DRAFT_ANSWER);
-    h.reader.files.set('acme/app:owners.yaml', "rules:\n  - match: '/bin/'\n    owners: team-devex\n  - match: '/web/'\n    owners: team-web\n");
-    h.reader.files.set('acme/app:.github/owners.yaml', "rules:\n  - match: ['/workflows/', '/actions/']\n    owners: [team-devex, team-security]\n");
+    h.reader.files.set('acme/app:owners.yaml', "rules:\n  - match: '/bin/'\n    owners: team-platform\n  - match: '/web/'\n    owners: team-web\n");
+    h.reader.files.set('acme/app:.github/owners.yaml', "rules:\n  - match: ['/workflows/', '/actions/']\n    owners: [team-platform, team-security]\n");
     const view = await sweepToEnd();
 
     expect(view.lines[2]?.text).toBe(
@@ -152,8 +152,8 @@ describe('setup sweep', () => {
     );
     expect(h.reader.fileCalls).not.toContain('acme/docs:.github/owners.yaml');
     const prompt = h.runner.promptsFor('setup_draft')[0] ?? '';
-    expect(prompt).toContain('/bin/ -> owners: team-devex');
-    expect(prompt).toContain('/.github/workflows/, /.github/actions/ -> owners: team-devex, team-security');
+    expect(prompt).toContain('/bin/ -> owners: team-platform');
+    expect(prompt).toContain('/.github/workflows/, /.github/actions/ -> owners: team-platform, team-security');
     expect(prompt).not.toContain('team-web');
   });
 
@@ -175,14 +175,14 @@ describe('setup refine', () => {
       ...DRAFT_ANSWER,
       reply: 'Added the docs line.',
       sections: [
-        { heading: 'About me', claims: [{ text: 'I am on PostHog/team-devex.', sources: ['t1'] }, { text: 'I also help with docs.', sources: [] }] },
+        { heading: 'About me', claims: [{ text: 'I am on acme/team-platform.', sources: ['t1'] }, { text: 'I also help with docs.', sources: [] }] },
         { heading: 'What I own', claims: [{ text: 'CI workflows in acme/app.', sources: ['o1', 'p1'] }] },
       ],
     });
 
     const result = await h.engine.refineSetup({
       sections: [
-        { heading: 'About me', body: '- I am on PostHog/team-devex.\n- I also help with docs.' },
+        { heading: 'About me', body: '- I am on acme/team-platform.\n- I also help with docs.' },
         { heading: 'What I own', body: '- CI workflows in acme/app.' },
       ],
       message: 'Keep my docs line',
@@ -200,7 +200,7 @@ describe('setup refine', () => {
 
 describe('setup accept', () => {
   const sections = [
-    { heading: 'About me', body: '- I am on PostHog/team-devex.' },
+    { heading: 'About me', body: '- I am on acme/team-platform.' },
     { heading: 'Preferences', body: '' },
   ];
 
@@ -208,7 +208,7 @@ describe('setup accept', () => {
     const result = await h.engine.acceptSetup({ sections, quietRepos: ['acme/docs'], mainRepo: 'acme/app', baseVersion: null });
 
     expect(result).toMatchObject({ ok: true, savedVersion: 1 });
-    expect(readFileSync(file, 'utf8')).toBe('# About me\n- I am on PostHog/team-devex.\n');
+    expect(readFileSync(file, 'utf8')).toBe('# About me\n- I am on acme/team-platform.\n');
     expect(h.store.instructions.latest()).toMatchObject({ version: 1, origin: 'setup', summary: 'Written with setup', sourceChatMessageId: null });
     expect(loadRepoSettings(h.store)).toEqual({ scope: 'acme/app', quiet: ['acme/docs'] });
     expect(await h.engine.setupStatus()).toMatchObject({ needed: false, flag: 'done' });

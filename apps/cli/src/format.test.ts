@@ -12,10 +12,10 @@ describe('format over the fake engine', () => {
     expect(topic).not.toBeNull();
     const topicText = formatTopic(topic!);
     expect(topicText).toContain('[unread] set: Three PRs change how Turbo caches');
-    expect(topicText).toContain('! PostHog/posthog#41902: lyra mentioned you');
+    expect(topicText).toContain('! acme/app#1902: lyra mentioned you');
 
-    const pr = await engine.getPr('PostHog/posthog#41921');
-    expect(formatPr(pr!)).toContain('LOOKS_SAFE: Landing it apart from #41902');
+    const pr = await engine.getPr('acme/app#1921');
+    expect(formatPr(pr!)).toContain('LOOKS_SAFE: Landing it apart from #1902');
   });
 
   it('prints a poll cycle with its ping decisions', async () => {
@@ -25,7 +25,7 @@ describe('format over the fake engine', () => {
     now = new Date(now.getTime() + 45_000);
     const text = formatPoll(await engine.pollOnce());
     expect(text).toContain('PRs updated 1');
-    expect(text).toMatch(/PING PostHog\/posthog#\d+ \(rules\): fake decision/);
+    expect(text).toMatch(/PING acme\/app#\d+ \(rules\): fake decision/);
     expect(formatPoll({ kind: 'blocked', reason: 'full sync running' })).toBe('poll blocked: full sync running');
   });
 });

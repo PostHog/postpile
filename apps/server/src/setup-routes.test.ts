@@ -42,8 +42,8 @@ describe('setup routes on sample data', () => {
     expect(sweep.current).toEqual({ text: '', version: null });
     const draft = sweep.draft!;
     expect(draft.sections.map((section) => section.heading)).toEqual(['About me', 'What I own', 'What gets routed to me', 'What to ignore or keep quiet', 'Preferences']);
-    expect(draft.mainRepo?.repo).toBe('PostHog/posthog');
-    expect(draft.quietRepos.map((repo) => repo.repo)).toEqual(['PostHog/posthog-desktop', 'PostHog/posthog-python']);
+    expect(draft.mainRepo?.repo).toBe('acme/app');
+    expect(draft.quietRepos.map((repo) => repo.repo)).toEqual(['acme/desktop', 'acme/python-sdk']);
     // Every cited id resolves to a source the "Why?" panel can show.
     const ids = new Set(draft.sources.map((source) => source.id));
     expect(draft.sections.flatMap((section) => section.claims.flatMap((claim) => claim.sourceIds)).every((id) => ids.has(id))).toBe(true);
@@ -55,8 +55,8 @@ describe('setup routes on sample data', () => {
 
     const accept = {
       sections: refined.draft!.sections.map((section) => ({ heading: section.heading, body: section.body })),
-      quietRepos: ['PostHog/posthog-desktop'],
-      mainRepo: 'PostHog/posthog',
+      quietRepos: ['acme/desktop'],
+      mainRepo: 'acme/app',
       baseVersion: null,
     };
     const accepted = (await call<SetupAcceptResult>('/api/setup/accept', { method: 'POST', body: accept })).json;
@@ -66,8 +66,8 @@ describe('setup routes on sample data', () => {
     expect(instructions.versions[0]).toMatchObject({ version: 1, origin: 'setup', summary: 'Written with setup' });
     expect(instructions.text).toContain('# About me\n- I work on developer experience');
     const repos = (await call<RepoOverview>('/api/repos')).json;
-    expect(repos.scope).toBe('PostHog/posthog');
-    expect(repos.repos.filter((repo) => repo.quiet).map((repo) => repo.repo)).toEqual(['PostHog/posthog-desktop']);
+    expect(repos.scope).toBe('acme/app');
+    expect(repos.repos.filter((repo) => repo.quiet).map((repo) => repo.repo)).toEqual(['acme/desktop']);
     expect((await call<SetupStatus>('/api/setup')).json).toMatchObject({ needed: false, flag: 'done', hasInstructions: true });
   });
 

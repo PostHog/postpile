@@ -24,8 +24,8 @@ function view(overrides: Partial<DossierView> = {}): DossierView {
 
 describe('refLabel', () => {
   it('names the PR and, for comments, reviews and commits, the kind', () => {
-    expect(refLabel(makeFactRef({ prKey: 'PostHog/posthog#41902' }))).toBe('#41902');
-    expect(refLabel(makeFactRef({ kind: 'review', prKey: 'PostHog/posthog#41902' }))).toBe('#41902 review');
+    expect(refLabel(makeFactRef({ prKey: 'acme/app#1902' }))).toBe('#1902');
+    expect(refLabel(makeFactRef({ kind: 'review', prKey: 'acme/app#1902' }))).toBe('#1902 review');
   });
 });
 

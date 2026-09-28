@@ -11,14 +11,14 @@ describe('pr helpers', () => {
   it('lists pending requests first, then newest reviews, teams last', () => {
     const pr = makePr({
       reviewerUsers: ['viewer'],
-      reviewerTeams: ['PostHog/team-devex'],
+      reviewerTeams: ['acme/team-platform'],
       reviews: [review('lyra', 'APPROVED', 10), review('lyra', 'COMMENTED', 20), review('nell', 'COMMENTED', 15)],
     });
     expect(reviewRows(pr)).toEqual([
       { login: 'viewer', status: 'requested', at: null },
       { login: 'nell', status: 'commented', at: at(15) },
       { login: 'lyra', status: 'approved', at: at(10) },
-      { login: 'PostHog/team-devex', status: 'requested', at: null },
+      { login: 'acme/team-platform', status: 'requested', at: null },
     ]);
   });
 

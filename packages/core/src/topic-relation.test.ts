@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { makePr, makeThreadFor, viewer } from './fixtures.ts';
 import { relationSignals, topicPlacement } from './topic-relation.ts';
 
-const devex = { ...viewer, teams: ['PostHog/team-devex'] };
+const devex = { ...viewer, teams: ['acme/team-platform'] };
 
 describe('relationSignals', () => {
   it('is team when the user authors or drives the work', () => {
     const pr = makePr({ author: devex.login });
     expect(relationSignals({ viewer: devex, prs: [pr], threads: [], driver: null })).toMatchObject({
       relation: 'team',
-      ownerTeam: 'PostHog/team-devex',
+      ownerTeam: 'acme/team-platform',
       whyYou: 'you author PRs here',
     });
     expect(relationSignals({ viewer: devex, prs: [makePr()], threads: [], driver: devex.login }).whyYou).toBe('you drive it');
@@ -24,11 +24,11 @@ describe('relationSignals', () => {
   it('leaves a team review request to the agent, with where it lands', () => {
     const pr = makePr({
       reviewerUsers: [],
-      reviewerTeams: ['PostHog/team-devex'],
+      reviewerTeams: ['acme/team-platform'],
       files: [{ path: '.github/workflows/ci.yml', additions: 1, deletions: 0 }],
     });
     const result = relationSignals({ viewer: devex, prs: [pr], threads: [makeThreadFor(pr, { reason: 'review_requested' })], driver: 'alice' });
-    expect(result).toMatchObject({ relation: null, whyYou: 'team-devex review requested on .github/workflows' });
+    expect(result).toMatchObject({ relation: null, whyYou: 'team-platform review requested on .github/workflows' });
   });
 
   it('leaves a direct review request or a mention to the agent too', () => {
@@ -41,13 +41,13 @@ describe('relationSignals', () => {
 });
 
 describe('topicPlacement', () => {
-  const relation = { kind: 'routed' as const, ownerTeam: 'PostHog/team-infra', whyYou: 'team-devex review requested' };
+  const relation = { kind: 'routed' as const, ownerTeam: 'acme/team-infra', whyYou: 'team-platform review requested' };
 
   it('uses the dossier relation and the topic area', () => {
     expect(topicPlacement(relation, 'CI', null, 0)).toEqual({
       relation: 'routed',
-      ownerTeam: 'PostHog/team-infra',
-      whyYou: 'team-devex review requested',
+      ownerTeam: 'acme/team-infra',
+      whyYou: 'team-platform review requested',
       area: 'CI',
       corrected: false,
     });

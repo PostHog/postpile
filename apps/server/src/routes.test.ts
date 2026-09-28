@@ -73,35 +73,35 @@ describe('server routes over the fake engine', () => {
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
     expect(repos.scope).toBeNull();
     expect(repos.repos.map((entry) => [entry.repo, entry.topics])).toEqual([
-      ['PostHog/posthog', 6],
-      ['PostHog/example-infra', 1],
-      ['PostHog/posthog-desktop', 1],
-      ['PostHog/posthog-python', 1],
+      ['acme/app', 6],
+      ['acme/desktop', 1],
+      ['acme/infra', 1],
+      ['acme/python-sdk', 1],
     ]);
 
     // All repos: the Depot topic labels its tile outside its main repo.
     const depot = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
     const tileLabels = depot.tiles.flatMap((view) => (view.repoLabel ? [view.repoLabel] : []));
-    expect(tileLabels).toEqual(['example-infra']);
+    expect(tileLabels).toEqual(['infra']);
 
-    const scoped = await post<RepoOverview>(app, '/api/repos/scope', { repo: 'PostHog/example-infra' });
-    expect(scoped.json.scope).toBe('PostHog/example-infra');
-    expect(scoped.json.repos.find((entry) => entry.selected)?.repo).toBe('PostHog/example-infra');
+    const scoped = await post<RepoOverview>(app, '/api/repos/scope', { repo: 'acme/infra' });
+    expect(scoped.json.scope).toBe('acme/infra');
+    expect(scoped.json.repos.find((entry) => entry.selected)?.repo).toBe('acme/infra');
     const topics = (await (await app.request('/api/topics')).json()) as TopicListItem[];
     expect(topics.map((item) => item.topic.id)).toEqual(['topic-depot']);
-    // The opened topic keeps every tile; now the posthog ones carry the label.
+    // The opened topic keeps every tile; now the acme/app ones carry the label.
     const narrowed = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
     expect(narrowed.tiles.length).toBe(depot.tiles.length);
-    expect(narrowed.tiles.find((view) => view.prs.some((pr) => pr.key === 'PostHog/example-infra#41915'))?.repoLabel).toBeNull();
-    expect(narrowed.tiles.find((view) => view.tile.kind === 'stack')?.repoLabel).toBe('posthog');
+    expect(narrowed.tiles.find((view) => view.prs.some((pr) => pr.key === 'acme/infra#1915'))?.repoLabel).toBeNull();
+    expect(narrowed.tiles.find((view) => view.tile.kind === 'stack')?.repoLabel).toBe('app');
 
-    const quiet = await post<RepoOverview>(app, '/api/repos/quiet', { repo: 'PostHog/posthog-desktop', quiet: true });
-    expect(quiet.json.repos.find((entry) => entry.repo === 'PostHog/posthog-desktop')?.quiet).toBe(true);
+    const quiet = await post<RepoOverview>(app, '/api/repos/quiet', { repo: 'acme/desktop', quiet: true });
+    expect(quiet.json.repos.find((entry) => entry.repo === 'acme/desktop')?.quiet).toBe(true);
     const detail = (await (await app.request('/api/topics/topic-desktop-release')).json()) as TopicDetail;
     expect(detail.tiles[0]?.quietRepo).toBe(true);
 
     expect((await post(app, '/api/repos/quiet', { repo: 'not a repo', quiet: true })).status).toBe(400);
-    expect((await post(app, '/api/repos/scope', { repos: ['PostHog/example-infra'] })).status).toBe(400);
+    expect((await post(app, '/api/repos/scope', { repos: ['acme/infra'] })).status).toBe(400);
     expect((await post<RepoOverview>(app, '/api/repos/scope', { repo: null })).json.scope).toBeNull();
   });
 
@@ -131,7 +131,7 @@ describe('server routes over the fake engine', () => {
     expect(times).toEqual([...times].sort().reverse());
     const kinds = new Set(rows.map((row) => row.landing.kind));
     expect(kinds).toEqual(new Set(['tile', 'not_pr', 'pr_not_synced']));
-    const depot = rows.find((row) => row.prKey === 'PostHog/posthog#41902');
+    const depot = rows.find((row) => row.prKey === 'acme/app#1902');
     expect(depot?.landing).toMatchObject({ kind: 'tile', topicId: 'topic-depot', tileId: 'set:turbo-cache' });
     expect(depot?.recentEvents.length).toBeGreaterThan(0);
 
@@ -150,9 +150,9 @@ describe('server routes over the fake engine', () => {
 
   it('filters topics and tiles by a search query', async () => {
     const app = appWithFake();
-    const res = await app.request(`/api/search?q=${encodeURIComponent('turbo #41921')}`);
+    const res = await app.request(`/api/search?q=${encodeURIComponent('turbo #1921')}`);
     const result = (await res.json()) as SearchResult;
-    expect(result.topics).toEqual([{ topicId: 'topic-depot', tileIds: ['set:turbo-cache'], prKeys: ['PostHog/posthog#41921'] }]);
+    expect(result.topics).toEqual([{ topicId: 'topic-depot', tileIds: ['set:turbo-cache'], prKeys: ['acme/app#1921'] }]);
     const empty = (await (await app.request('/api/search')).json()) as SearchResult;
     expect(empty.topics).toEqual([]);
   });
@@ -162,28 +162,28 @@ describe('server routes over the fake engine', () => {
     const detail = (await res.json()) as TopicDetail;
     const set = detail.tiles.find((view) => view.tile.id === 'set:turbo-cache');
     expect(set?.state.kind).toBe('unread');
-    expect(set?.state.unreadBecause[0]?.prKey).toBe('PostHog/posthog#41902');
-    expect(detail.tiles.find((view) => view.tile.id === 'pr:PostHog/posthog#41899')?.state.kind).toBe('done');
+    expect(set?.state.unreadBecause[0]?.prKey).toBe('acme/app#1902');
+    expect(detail.tiles.find((view) => view.tile.id === 'pr:acme/app#1899')?.state.kind).toBe('done');
     expect(detail.pendingProposals).toEqual([]);
   });
 
   it('answers 404 for unknown topics and PRs', async () => {
     const app = appWithFake();
     expect((await app.request('/api/topics/nope')).status).toBe(404);
-    expect((await app.request('/api/prs/PostHog/posthog/1')).status).toBe(404);
+    expect((await app.request('/api/prs/acme/app/1')).status).toBe(404);
   });
 
   it('returns a PR with glance and events', async () => {
-    const res = await appWithFake().request('/api/prs/PostHog/posthog/41902');
+    const res = await appWithFake().request('/api/prs/acme/app/1902');
     const detail = (await res.json()) as PrDetail;
     expect(detail.glance?.verdict).toBe('LOOK_CLOSER');
-    expect(detail.tileIds).toEqual(['set:turbo-cache', 'stack:PostHog/posthog#41851']);
+    expect(detail.tileIds).toEqual(['set:turbo-cache', 'stack:acme/app#1851']);
     expect(detail.events[0]?.display).toBe('loud');
   });
 
   it('rejects bad input with 400', async () => {
     const app = appWithFake();
-    expect((await app.request('/api/prs/PostHog/posthog/abc')).status).toBe(400);
+    expect((await app.request('/api/prs/acme/app/abc')).status).toBe(400);
     expect((await post(app, `/api/tiles/${setTile}/snooze`, { condition: { kind: 'someday' } })).status).toBe(400);
     const res = await app.request('/api/feedback', { method: 'POST', body: '{not json' });
     expect(res.status).toBe(400);
@@ -213,21 +213,21 @@ describe('server routes over the fake engine', () => {
 
   it('refuses to approve while GitHub writes are off, approves once the lock is open', async () => {
     const app = appWithFake();
-    const refused = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41911/approve');
+    const refused = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve');
     expect(refused.json.ok).toBe(false);
     const change = await post<GitHubWritesChange>(app, '/api/github-writes', { enabled: true });
     expect(change.json.status.enabled).toBe(true);
     expect(await (await app.request('/api/github-writes')).json()).toEqual({ enabled: true, forcedOffReason: null, pending: [] });
-    const res = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41911/approve');
+    const res = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve');
     expect(res.json.ok).toBe(true);
-    const detail = (await (await app.request('/api/prs/PostHog/posthog/41911')).json()) as PrDetail;
+    const detail = (await (await app.request('/api/prs/acme/app/1911')).json()) as PrDetail;
     expect(detail.userState?.approvedAt).toBeTruthy();
   });
 
   it('marks a thread read from the debug view and logs it', async () => {
     const app = appWithFake();
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
-    const row = rows.find((candidate) => candidate.prKey === 'PostHog/posthog#41902' && candidate.thread.unread)!;
+    const row = rows.find((candidate) => candidate.prKey === 'acme/app#1902' && candidate.thread.unread)!;
     const marked = await post<ActionResult>(app, `/api/notifications/${encodeURIComponent(row.thread.id)}/mark-read`);
     expect(marked.json.message).toMatch(/pending until you unlock/);
 
@@ -242,23 +242,23 @@ describe('server routes over the fake engine', () => {
 
   it('snoozes and unsnoozes a tile', async () => {
     const app = appWithFake();
-    const tile = encodeURIComponent('pr:PostHog/posthog#41822');
+    const tile = encodeURIComponent('pr:acme/app#1822');
     await post(app, '/api/github-writes', { enabled: true });
     await post(app, `/api/tiles/${tile}/mark-read`);
     await post(app, `/api/tiles/${tile}/snooze`, { condition: { kind: 'new_push' } });
     let topic = (await (await app.request('/api/topics/topic-ci-tests')).json()) as TopicDetail;
-    expect(topic.tiles.find((view) => view.tile.id === 'pr:PostHog/posthog#41822')?.state.kind).toBe('snoozed');
+    expect(topic.tiles.find((view) => view.tile.id === 'pr:acme/app#1822')?.state.kind).toBe('snoozed');
     await app.request(`/api/tiles/${tile}/snooze`, { method: 'DELETE' });
     topic = (await (await app.request('/api/topics/topic-ci-tests')).json()) as TopicDetail;
-    expect(topic.tiles.find((view) => view.tile.id === 'pr:PostHog/posthog#41822')?.state.kind).not.toBe('snoozed');
+    expect(topic.tiles.find((view) => view.tile.id === 'pr:acme/app#1822')?.state.kind).not.toBe('snoozed');
   });
 
   it('drops a set member on "not related" feedback', async () => {
     const app = appWithFake();
-    await post(app, '/api/feedback', { kind: 'not_related', tileId: 'set:turbo-cache', prKey: 'PostHog/posthog#41855' });
+    await post(app, '/api/feedback', { kind: 'not_related', tileId: 'set:turbo-cache', prKey: 'acme/app#1855' });
     const topic = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
     const set = topic.tiles.find((view) => view.tile.id === 'set:turbo-cache');
-    expect(set?.prs.map((pr) => pr.key)).toEqual(['PostHog/posthog#41902', 'PostHog/posthog#41921']);
+    expect(set?.prs.map((pr) => pr.key)).toEqual(['acme/app#1902', 'acme/app#1921']);
   });
 
   it('turns a lasting chat point into tailoring once confirmed', async () => {
@@ -303,7 +303,7 @@ describe('server routes over the fake engine', () => {
 
   it('answers "Why?" for facts and dossier lines', async () => {
     const app = appWithFake();
-    const fact = (await (await app.request('/api/memory/sources?fact=fact-41902-status')).json()) as MemorySources;
+    const fact = (await (await app.request('/api/memory/sources?fact=fact-1902-status')).json()) as MemorySources;
     expect(fact.check).toMatchObject({ state: 'stale', reason: 'head_moved' });
     const line = (await (await app.request('/api/memory/sources?topic=topic-depot&version=3&path=openQuestions%5B0%5D')).json()) as MemorySources;
     expect(line.claim).toBe('Does the Turbo cache warm-up need a feature flag?');
@@ -314,25 +314,25 @@ describe('server routes over the fake engine', () => {
 
   it('drafts an ask and keeps the sent comment local', async () => {
     const app = appWithFake();
-    const draft = await post<{ body: string }>(app, '/api/prs/PostHog/posthog/41915/draft-ask', { person: 'rowan', intent: 'why not the org secret?' });
+    const draft = await post<{ body: string }>(app, '/api/prs/acme/app/1915/draft-ask', { person: 'rowan', intent: 'why not the org secret?' });
     expect(draft.json.body).toMatch(/^@rowan why not the org secret\?/);
     await post(app, '/api/github-writes', { enabled: true });
-    const sent = await post<ActionResult>(app, '/api/prs/PostHog/posthog/41915/comment', { body: draft.json.body });
+    const sent = await post<ActionResult>(app, '/api/prs/acme/app/1915/comment', { body: draft.json.body });
     expect(sent.json.message).toContain('nothing sent to GitHub');
   });
 
   it('unmutes an event and decides a proposal', async () => {
     const app = appWithFake();
-    const pr = (await (await app.request('/api/prs/PostHog/posthog/41899')).json()) as PrDetail;
+    const pr = (await (await app.request('/api/prs/acme/app/1899')).json()) as PrDetail;
     const muted = pr.events.find((view) => view.display === 'muted');
     expect(muted).toBeDefined();
     await post(app, `/api/events/${encodeURIComponent(muted?.event.id ?? '')}/unmute`);
-    const after = (await (await app.request('/api/prs/PostHog/posthog/41899')).json()) as PrDetail;
+    const after = (await (await app.request('/api/prs/acme/app/1899')).json()) as PrDetail;
     expect(after.events.find((view) => view.event.id === muted?.event.id)?.display).toBe('quiet');
 
     const decided = await post<ActionResult>(app, '/api/proposals/proposal-rename-dev-env', { accept: true });
     expect(decided.json.ok).toBe(true);
     const topic = (await (await app.request('/api/topics/topic-dev-env')).json()) as TopicDetail;
-    expect(topic.topic.name).toBe('Dev env and hogli');
+    expect(topic.topic.name).toBe('Dev env and devbox');
   });
 });

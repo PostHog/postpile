@@ -22,7 +22,7 @@ describe('preReconcile', () => {
   it('1: the same statement again is a noop that merges refs', () => {
     const existing = makeFact({ id: 'f1' });
     const ref = makeFactRef({ kind: 'comment', sourceId: 'c9' });
-    const result = preReconcile([makeCandidate({ text: 'Alice works on PostHog/posthog#1.', refs: [ref] })], [existing]);
+    const result = preReconcile([makeCandidate({ text: 'Alice works on acme/app#1.', refs: [ref] })], [existing]);
     expect(result).toEqual({ actions: [{ kind: 'noop', factId: 'f1', refs: [ref] }], ambiguous: [] });
   });
 
@@ -86,7 +86,7 @@ describe('preReconcile', () => {
   it('4: nothing in the way is an add, also for another object of a non-unique predicate', () => {
     const existing = makeFact({ id: 'f1' });
     const first = makeCandidate({ subject: { kind: 'person', key: 'bob' } });
-    const second = makeCandidate({ object: { kind: 'pr', key: 'PostHog/posthog#2' }, text: 'alice works on #2' });
+    const second = makeCandidate({ object: { kind: 'pr', key: 'acme/app#2' }, text: 'alice works on #2' });
     const result = preReconcile([first, second], [existing]);
     expect(result.actions).toEqual([
       { kind: 'add', candidate: first },
@@ -96,7 +96,7 @@ describe('preReconcile', () => {
 
   it('merges duplicate candidates of one answer before deciding', () => {
     const a = makeCandidate({ refs: [makeFactRef({ kind: 'comment', sourceId: 'c1' })], validFrom: at(20) });
-    const b = makeCandidate({ text: 'alice works on posthog/posthog#1', refs: [makeFactRef({ kind: 'comment', sourceId: 'c2' })], validFrom: at(15) });
+    const b = makeCandidate({ text: 'alice works on ACME/App#1', refs: [makeFactRef({ kind: 'comment', sourceId: 'c2' })], validFrom: at(15) });
     const { actions } = preReconcile([a, b], []);
     expect(actions).toHaveLength(1);
     expect(actions[0]).toMatchObject({

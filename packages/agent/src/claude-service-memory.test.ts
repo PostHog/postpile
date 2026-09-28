@@ -44,7 +44,7 @@ function dossierInput(): DossierUpdateInput {
     knownFacts: [makeFact()],
     staleFacts: [makeFact({ id: 'fact-2', staleReason: 'head_moved' })],
     chatTurns: [],
-    relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-devex review requested', notes: ['review requested from the user team'] },
+    relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-platform review requested', notes: ['review requested from the user team'] },
     areas: [{ name: 'CI', topics: 3 }],
     currentArea: null,
     viewer,
@@ -156,7 +156,7 @@ describe('RunnerAgentService.updateDossier line sources', () => {
 });
 
 describe('RunnerAgentService.updateDossier relation and area', () => {
-  const routed = { kind: 'routed', ownerTeam: 'PostHog/team-infra', whyYou: 'infra asked devex about CI', refs: ['e1'] };
+  const routed = { kind: 'routed', ownerTeam: 'acme/team-infra', whyYou: 'infra asked devex about CI', refs: ['e1'] };
 
   it('takes the answer when the rules could not decide, rules otherwise', async () => {
     const { runner, service } = setup();
@@ -165,9 +165,9 @@ describe('RunnerAgentService.updateDossier relation and area', () => {
     runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, relation: routed } });
 
     const open = await service.updateDossier(dossierInput());
-    const decided = await service.updateDossier({ ...dossierInput(), relationSignals: { relation: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you drive it', notes: [] } });
+    const decided = await service.updateDossier({ ...dossierInput(), relationSignals: { relation: 'team', ownerTeam: 'acme/team-platform', whyYou: 'you drive it', notes: [] } });
 
-    expect(open.dossier.relation).toMatchObject({ kind: 'routed', ownerTeam: 'PostHog/team-infra', whyYou: 'infra asked devex about CI' });
+    expect(open.dossier.relation).toMatchObject({ kind: 'routed', ownerTeam: 'acme/team-infra', whyYou: 'infra asked devex about CI' });
     expect(open.dossier.relation?.refs?.[0]).toMatchObject({ kind: 'comment', sourceId: 'c1' });
     expect(open.area).toBe('CI');
     expect(decided.dossier.relation).toMatchObject({ kind: 'team', whyYou: 'you drive it' });
@@ -403,7 +403,7 @@ describe('RunnerAgentService.glanceBatch', () => {
   });
 
   it('repairs a misspelled verdict and says why the rest is missing', async () => {
-    // Real answers for PostHog/posthog#107116, reproducible on the same PR: "LOOKS_SASAFE", "LOOKS_SASE".
+    // Real answers for acme/app#107116, reproducible on the same PR: "LOOKS_SASAFE", "LOOKS_SASE".
     const { runner, service } = setup();
     runner.answer('glance_batch', {
       glances: [

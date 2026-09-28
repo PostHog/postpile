@@ -50,7 +50,7 @@ function viewerLastWord(pr: Pr, viewer: Viewer): IsoTime | null {
 
 /**
  * A push counts from any human but the viewer: a commit's author can be a
- * git name ("Bob Laptop") rather than the login, and bots only rebase.
+ * git name ("Pim Laptop") rather than the login, and bots only rebase.
  */
 function isPusher(login: string, viewer: Viewer): boolean {
   return !isBot(login) && !sameLogin(login, viewer.login);

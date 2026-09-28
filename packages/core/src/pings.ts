@@ -200,7 +200,7 @@ function headline(event: PrEvent): string {
   }
 }
 
-/** "PostHog/posthog#41850" -> "posthog#41850". */
+/** "acme/app#1850" -> "app#1850". */
 function shortKey(prKey: PrKey): string {
   const slash = prKey.indexOf('/');
   return slash >= 0 ? prKey.slice(slash + 1) : prKey;

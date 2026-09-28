@@ -83,9 +83,9 @@ describe('found PRs', () => {
 
   it('keeps a found PR in a quiet repo out of the urgency', async () => {
     const h = makeHarness();
-    const pr = reviewRequestedPr(9, { repo: 'PostHog/example-infra', reviewerUsers: [viewer.login] });
+    const pr = reviewRequestedPr(9, { repo: 'acme/infra', reviewerUsers: [viewer.login] });
     h.reader.addFoundPr(pr, 'review_requested', 'review requested from you');
-    await h.engine.setRepoQuiet('PostHog/example-infra', true);
+    await h.engine.setRepoQuiet('acme/infra', true);
     await h.engine.sync({ maxAgentCalls: 0 });
     expect((await h.engine.listTopics())[0]).toMatchObject({ group: 'quiet', queues: { tiers: { to_review: 0 } } });
   });

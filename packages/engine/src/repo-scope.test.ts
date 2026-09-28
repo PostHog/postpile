@@ -4,7 +4,7 @@ import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { topicWithPrs } from './testing/topics.ts';
 
-const OTHER_REPO = 'PostHog/example-infra';
+const OTHER_REPO = 'acme/infra';
 
 describe('repo scope', () => {
   it('lists repos with topic counts and keeps only the topics with a PR in the chosen repo', async () => {
@@ -20,15 +20,15 @@ describe('repo scope', () => {
       topics: 2,
       repos: [
         { repo: OTHER_REPO, topics: 2, prs: 2, quiet: false, selected: false },
-        { repo: 'PostHog/posthog', topics: 1, prs: 1, quiet: false, selected: false },
+        { repo: 'acme/app', topics: 1, prs: 1, quiet: false, selected: false },
       ],
     });
 
-    const overview = await h.engine.setRepoScope('PostHog/posthog');
-    expect(overview.scope).toBe('PostHog/posthog');
+    const overview = await h.engine.setRepoScope('acme/app');
+    expect(overview.scope).toBe('acme/app');
     expect(overview.repos.map((entry) => [entry.repo, entry.selected])).toEqual([
       [OTHER_REPO, false],
-      ['PostHog/posthog', true],
+      ['acme/app', true],
     ]);
     const items = await h.engine.listTopics();
     expect(items.map((item) => item.topic.id)).toEqual(['mixed']);
@@ -56,17 +56,17 @@ describe('repo scope', () => {
     };
 
     // All repos: compared against the topic's main repo (most PRs).
-    expect(await labels()).toEqual({ [main.key]: null, [second.key]: null, [other.key]: 'example-infra' });
+    expect(await labels()).toEqual({ [main.key]: null, [second.key]: null, [other.key]: 'infra' });
 
     await h.engine.setRepoScope(OTHER_REPO);
-    expect(await labels()).toEqual({ [main.key]: 'posthog', [second.key]: 'posthog', [other.key]: null });
+    expect(await labels()).toEqual({ [main.key]: 'app', [second.key]: 'app', [other.key]: null });
   });
 
   it('reads an old multi-selection: one repo stays chosen, several become all repos', async () => {
     const h = makeHarness();
     h.store.meta.set('repo_settings', JSON.stringify({ scope: [OTHER_REPO], quiet: [] }));
     expect((await h.engine.listRepos()).scope).toBe(OTHER_REPO);
-    h.store.meta.set('repo_settings', JSON.stringify({ scope: [OTHER_REPO, 'PostHog/posthog'], quiet: [OTHER_REPO] }));
+    h.store.meta.set('repo_settings', JSON.stringify({ scope: [OTHER_REPO, 'acme/app'], quiet: [OTHER_REPO] }));
     const overview = await h.engine.listRepos();
     expect(overview.scope).toBeNull();
     expect(overview.repos).toEqual([{ repo: OTHER_REPO, topics: 0, prs: 0, quiet: true, selected: false }]);

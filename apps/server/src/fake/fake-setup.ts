@@ -39,21 +39,21 @@ function samplePr(repo: string, number: number, role: ActivityPr['role'], title:
 
 /** Invented activity for the sample viewer: CI work in the main repo, a few drive-by reviews elsewhere. */
 const SAMPLE_ACTIVITY: ActivityPr[] = [
-  samplePr('PostHog/posthog', 41850, 'authored', 'Run backend tests on Depot runners', ['.github/', 'bin/']),
-  samplePr('PostHog/posthog', 41862, 'authored', 'Turbo remote cache for the frontend build', ['.github/', 'frontend/'], 'OPEN'),
-  samplePr('PostHog/posthog', 41871, 'authored', 'Split the backend suite into even shards', ['.github/', 'posthog/']),
-  samplePr('PostHog/posthog', 41903, 'review_requested', 'Playwright shards on Depot', ['.github/', 'playwright/'], 'OPEN'),
-  samplePr('PostHog/posthog', 41790, 'reviewed', 'Bump the Node version in CI', ['.github/']),
-  samplePr('PostHog/posthog', 41802, 'reviewed', 'Cache pnpm store between jobs', ['.github/']),
-  samplePr('PostHog/example-infra', 41915, 'reviewed', 'DEPOT_TOKEN as repo secret', ['terraform/']),
-  samplePr('PostHog/example-infra', 41918, 'reviewed', 'Runner pool sizing', ['terraform/']),
-  samplePr('PostHog/posthog-python', 41925, 'reviewed', 'Release workflow cleanup', ['.github/']),
-  samplePr('PostHog/posthog-desktop', 41940, 'reviewed', 'Fix a typo in the README', ['(root)']),
+  samplePr('acme/app', 1850, 'authored', 'Run backend tests on Depot runners', ['.github/', 'bin/']),
+  samplePr('acme/app', 1862, 'authored', 'Turbo remote cache for the frontend build', ['.github/', 'frontend/'], 'OPEN'),
+  samplePr('acme/app', 1871, 'authored', 'Split the backend suite into even shards', ['.github/', 'backend/']),
+  samplePr('acme/app', 1903, 'review_requested', 'Playwright shards on Depot', ['.github/', 'playwright/'], 'OPEN'),
+  samplePr('acme/app', 1790, 'reviewed', 'Bump the Node version in CI', ['.github/']),
+  samplePr('acme/app', 1802, 'reviewed', 'Cache pnpm store between jobs', ['.github/']),
+  samplePr('acme/infra', 1915, 'reviewed', 'DEPOT_TOKEN as repo secret', ['terraform/']),
+  samplePr('acme/infra', 1918, 'reviewed', 'Runner pool sizing', ['terraform/']),
+  samplePr('acme/python-sdk', 1925, 'reviewed', 'Release workflow cleanup', ['.github/']),
+  samplePr('acme/desktop', 1940, 'reviewed', 'Fix a typo in the README', ['(root)']),
 ];
 
 const SAMPLE_CODEOWNERS = [
-  { repo: 'PostHog/posthog', path: '.github/CODEOWNERS', lines: ['/.github/workflows/ @PostHog/team-devex', '/bin/ci/ @PostHog/team-devex'] },
-  { repo: 'PostHog/example-infra', path: 'CODEOWNERS', lines: ['/terraform/runners/ @PostHog/team-devex'] },
+  { repo: 'acme/app', path: '.github/CODEOWNERS', lines: ['/.github/workflows/ @acme/team-platform', '/bin/ci/ @acme/team-platform'] },
+  { repo: 'acme/infra', path: 'CODEOWNERS', lines: ['/terraform/runners/ @acme/team-platform'] },
 ];
 
 const SAMPLE_DIGEST = {
@@ -69,22 +69,22 @@ const SAMPLE_ANSWER: SetupDraftAnswer = {
     {
       heading: 'About me',
       claims: [
-        { text: 'I work on developer experience on PostHog/team-devex: CI, build tooling, local dev.', sources: ['t1', 'p1', 'p3'] },
+        { text: 'I work on developer experience on acme/team-platform: CI, build tooling, local dev.', sources: ['t1', 'p1', 'p3'] },
         { text: 'Right now I am moving the monorepo CI to Depot.', sources: ['d1', 'p1'] },
       ],
     },
     {
       heading: 'What I own',
       claims: [
-        { text: 'GitHub workflows and CI scripts in PostHog/posthog (.github/workflows/, bin/ci/).', sources: ['o1', 'p1', 'p3'] },
-        { text: 'Runner config in PostHog/example-infra (terraform/runners/).', sources: ['o2', 'p8'] },
+        { text: 'GitHub workflows and CI scripts in acme/app (.github/workflows/, bin/ci/).', sources: ['o1', 'p1', 'p3'] },
+        { text: 'Runner config in acme/infra (terraform/runners/).', sources: ['o2', 'p8'] },
         { text: 'The Turbo cache and test sharding setup.', sources: ['p2', 'p3', 'd1'] },
       ],
     },
     {
       heading: 'What gets routed to me',
       claims: [
-        { text: 'Reviews for team-devex on CI and workflow changes; I look at cost, cache keys and flakiness.', sources: ['p4', 'p5', 'p6'] },
+        { text: 'Reviews for team-platform on CI and workflow changes; I look at cost, cache keys and flakiness.', sources: ['p4', 'p5', 'p6'] },
         { text: 'Infra PRs that touch runners or CI secrets.', sources: ['p7', 'p8'] },
       ],
     },
@@ -101,10 +101,10 @@ const SAMPLE_ANSWER: SetupDraftAnswer = {
     },
   ],
   quietRepos: [
-    { repo: 'PostHog/posthog-desktop', why: 'One README review, nothing you own.', sources: ['p10'] },
-    { repo: 'PostHog/posthog-python', why: 'A single drive-by review of a release workflow.', sources: ['p9'] },
+    { repo: 'acme/desktop', why: 'One README review, nothing you own.', sources: ['p10'] },
+    { repo: 'acme/python-sdk', why: 'A single drive-by review of a release workflow.', sources: ['p9'] },
   ],
-  mainRepo: { repo: 'PostHog/posthog', why: 'All your own PRs and most reviews are here.', sources: ['p1', 'p2', 'p3'] },
+  mainRepo: { repo: 'acme/app', why: 'All your own PRs and most reviews are here.', sources: ['p1', 'p2', 'p3'] },
 };
 
 interface FakeLine {
@@ -115,7 +115,7 @@ interface FakeLine {
 }
 
 const SWEEP_SCRIPT: FakeLine[] = [
-  { step: 'viewer', running: 'Reading your GitHub profile and teams…', done: 'Signed in as @you · teams PostHog/team-devex · 4 teammates', state: 'done' },
+  { step: 'viewer', running: 'Reading your GitHub profile and teams…', done: 'Signed in as @you · teams acme/team-platform · 4 teammates', state: 'done' },
   {
     step: 'activity',
     running: 'Searching your PRs of the last 30 days…',
@@ -124,8 +124,8 @@ const SWEEP_SCRIPT: FakeLine[] = [
   },
   {
     step: 'codeowners',
-    running: 'Reading CODEOWNERS and owners.yaml in PostHog/posthog, PostHog/example-infra, PostHog/posthog-python, PostHog/posthog-desktop…',
-    done: 'Ownership files: 3 rules name you or your teams (PostHog/posthog .github/CODEOWNERS, PostHog/example-infra CODEOWNERS)',
+    running: 'Reading CODEOWNERS and owners.yaml in acme/app, acme/infra, acme/python-sdk, acme/desktop…',
+    done: 'Ownership files: 3 rules name you or your teams (acme/app .github/CODEOWNERS, acme/infra CODEOWNERS)',
     state: 'done',
   },
   { step: 'digest', running: 'Looking for your work context digest…', done: 'Using your work context digest v3 (2026-09-27)', state: 'done' },

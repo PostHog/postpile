@@ -40,9 +40,9 @@ function makeSet(overrides: Partial<PrSet> = {}): PrSet {
     title: 'Runner moves',
     take: 'all move jobs to depot',
     members: [
-      { prKey: 'PostHog/posthog#1', reason: 'build job' },
-      { prKey: 'PostHog/posthog#2', reason: 'test job' },
-      { prKey: 'PostHog/posthog#3', reason: 'lint job' },
+      { prKey: 'acme/app#1', reason: 'build job' },
+      { prKey: 'acme/app#2', reason: 'test job' },
+      { prKey: 'acme/app#3', reason: 'lint job' },
     ],
     removedKeys: [],
     status: 'active',
@@ -78,14 +78,14 @@ describe('NotificationRepo', () => {
     const release = { ...makeThreadFor(makePr()), id: 'rel', subjectType: 'Release', number: null };
     store.notifications.upsertMany([release]);
     expect(store.notifications.list()).toHaveLength(1);
-    expect(store.notifications.getByPrKey('PostHog/posthog#1')).toBeNull();
+    expect(store.notifications.getByPrKey('acme/app#1')).toBeNull();
   });
 
   it('mirrors a mark-read locally', () => {
     const thread = makeThreadFor(makePr());
     store.notifications.upsertMany([thread]);
     store.notifications.markRead(thread.id, at(5));
-    expect(store.notifications.getByPrKey('PostHog/posthog#1')).toMatchObject({ unread: false, lastReadAt: at(5) });
+    expect(store.notifications.getByPrKey('acme/app#1')).toMatchObject({ unread: false, lastReadAt: at(5) });
   });
 });
 
@@ -94,19 +94,19 @@ describe('PrRepo', () => {
     const pr = makePr({ number: 2, labels: ['devex'], checks: { rollup: 'SUCCESS', contexts: [] } });
     store.prs.upsert(pr, at(1));
     store.prs.upsert(makePr({ number: 1 }), at(1));
-    store.prs.upsert(makePr({ number: 9, repo: 'PostHog/other' }), at(1));
+    store.prs.upsert(makePr({ number: 9, repo: 'acme/other' }), at(1));
     expect(store.prs.get(pr.key)).toEqual(pr);
     expect(store.prs.get('nope/nope#1')).toBeNull();
-    expect(store.prs.listByRepo('PostHog/posthog').map((p) => p.ref.number)).toEqual([1, 2]);
-    expect(store.prs.getMany([pr.key, 'PostHog/other#9']).size).toBe(2);
+    expect(store.prs.listByRepo('acme/app').map((p) => p.ref.number)).toEqual([1, 2]);
+    expect(store.prs.getMany([pr.key, 'acme/other#9']).size).toBe(2);
     expect(store.prs.listAll()).toHaveLength(3);
   });
 
   it('replaces the snapshot and reports updated_at per key', () => {
     store.prs.upsert(makePr({ updatedAt: at(1) }), at(1));
     store.prs.upsert(makePr({ updatedAt: at(2), title: 'renamed' }), at(2));
-    expect(store.prs.get('PostHog/posthog#1')?.title).toBe('renamed');
-    expect(store.prs.updatedAtByKey()).toEqual(new Map([['PostHog/posthog#1', at(2)]]));
+    expect(store.prs.get('acme/app#1')?.title).toBe('renamed');
+    expect(store.prs.updatedAtByKey()).toEqual(new Map([['acme/app#1', at(2)]]));
   });
 
   it('serves a new snapshot after an upsert with the same fetched_at', () => {
@@ -114,7 +114,7 @@ describe('PrRepo', () => {
     expect(store.prs.listAll()[0]?.title).toBe('first');
     store.prs.upsert(makePr({ title: 'second' }), at(1));
     expect(store.prs.listAll()[0]?.title).toBe('second');
-    expect(store.prs.getMany(['PostHog/posthog#1']).get('PostHog/posthog#1')?.title).toBe('second');
+    expect(store.prs.getMany(['acme/app#1']).get('acme/app#1')?.title).toBe('second');
   });
 
   it('sees snapshots written by another connection', () => {
@@ -146,7 +146,7 @@ describe('PullInRepo', () => {
 });
 
 describe('EventRepo', () => {
-  const key = 'PostHog/posthog#1';
+  const key = 'acme/app#1';
 
   it('returns only new ids and keeps seen and override state across re-derivation', () => {
     const first = makeEvent({ id: 'e1', at: at(1) });
@@ -192,15 +192,15 @@ describe('EventRepo', () => {
 
   it('lists events for many PRs, oldest first, with empty lists for PRs without events', () => {
     store.events.upsertDerived(key, [makeEvent({ id: 'b', at: at(5) }), makeEvent({ id: 'a', at: at(1) })]);
-    const map = store.events.listForPrs([key, 'PostHog/posthog#2']);
+    const map = store.events.listForPrs([key, 'acme/app#2']);
     expect(map.get(key)?.map((e) => e.id)).toEqual(['a', 'b']);
-    expect(map.get('PostHog/posthog#2')).toEqual([]);
+    expect(map.get('acme/app#2')).toEqual([]);
   });
 });
 
 describe('UserPrStateRepo', () => {
   it('tracks approval and handled state independently', () => {
-    const key = 'PostHog/posthog#1';
+    const key = 'acme/app#1';
     store.userPrStates.markHandled(key, at(1));
     store.userPrStates.markApproved(key, 'abc', at(2));
     expect(store.userPrStates.get(key)).toEqual({
@@ -257,24 +257,24 @@ describe('TopicRepo and memberships', () => {
     store.prs.upsert(makePr({ number: 1 }), at(0));
     store.prs.upsert(makePr({ number: 2 }), at(0));
     store.memberships.assign({
-      prKey: 'PostHog/posthog#1',
+      prKey: 'acme/app#1',
       topicId: 'topic-1',
       assignedBy: 'agent',
       reason: 'depot',
       createdAt: at(1),
     });
-    expect(store.memberships.listUnassignedPrKeys()).toEqual(['PostHog/posthog#2']);
+    expect(store.memberships.listUnassignedPrKeys()).toEqual(['acme/app#2']);
     store.memberships.assign({
-      prKey: 'PostHog/posthog#1',
+      prKey: 'acme/app#1',
       topicId: 'topic-2',
       assignedBy: 'user',
       reason: 'moved',
       createdAt: at(2),
     });
-    expect(store.memberships.get('PostHog/posthog#1')).toMatchObject({ topicId: 'topic-2', assignedBy: 'user' });
+    expect(store.memberships.get('acme/app#1')).toMatchObject({ topicId: 'topic-2', assignedBy: 'user' });
     store.memberships.moveAll('topic-2', 'topic-1');
-    expect(store.memberships.listForTopic('topic-1').map((m) => m.prKey)).toEqual(['PostHog/posthog#1']);
-    store.memberships.remove('PostHog/posthog#1');
+    expect(store.memberships.listForTopic('topic-1').map((m) => m.prKey)).toEqual(['acme/app#1']);
+    store.memberships.remove('acme/app#1');
     expect(store.memberships.listAll()).toEqual([]);
   });
 
@@ -294,7 +294,7 @@ describe('TopicProposalRepo', () => {
       name: 'Flaky tests',
       intoTopicId: null,
       fromArea: null,
-      prKeys: ['PostHog/posthog#1'],
+      prKeys: ['acme/app#1'],
       reason: 'three PRs fix flakes',
       status: 'pending',
       createdAt: at(0),
@@ -313,7 +313,7 @@ describe('TopicProposalRepo', () => {
       createdAt: at(1),
       decidedAt: null,
     });
-    expect(store.proposals.get('p1')?.prKeys).toEqual(['PostHog/posthog#1']);
+    expect(store.proposals.get('p1')?.prKeys).toEqual(['acme/app#1']);
     expect(store.proposals.listPendingForTopic('topic-1').map((p) => p.id)).toEqual(['p2']);
     store.proposals.decide('p1', 'accepted', at(2));
     store.proposals.decide('p1', 'rejected', at(3));
@@ -330,19 +330,19 @@ describe('PrSetRepo', () => {
   it('saves a set with ordered members and replaces them on save', () => {
     store.sets.save(makeSet());
     expect(store.sets.get('set-1')?.members.map((m) => m.reason)).toEqual(['build job', 'test job', 'lint job']);
-    store.sets.save(makeSet({ members: [{ prKey: 'PostHog/posthog#3', reason: 'lint' }], inputHash: 'h2' }));
-    expect(store.sets.get('set-1')).toMatchObject({ inputHash: 'h2', members: [{ prKey: 'PostHog/posthog#3' }] });
+    store.sets.save(makeSet({ members: [{ prKey: 'acme/app#3', reason: 'lint' }], inputHash: 'h2' }));
+    expect(store.sets.get('set-1')).toMatchObject({ inputHash: 'h2', members: [{ prKey: 'acme/app#3' }] });
   });
 
   it('drops a member on "not related" and dissolves the set below two members', () => {
     store.sets.save(makeSet());
-    store.sets.removeMember('set-1', 'PostHog/posthog#2', at(1));
-    expect(store.sets.get('set-1')).toMatchObject({ status: 'active', removedKeys: ['PostHog/posthog#2'] });
-    expect(store.sets.get('set-1')?.members.map((m) => m.prKey)).toEqual(['PostHog/posthog#1', 'PostHog/posthog#3']);
+    store.sets.removeMember('set-1', 'acme/app#2', at(1));
+    expect(store.sets.get('set-1')).toMatchObject({ status: 'active', removedKeys: ['acme/app#2'] });
+    expect(store.sets.get('set-1')?.members.map((m) => m.prKey)).toEqual(['acme/app#1', 'acme/app#3']);
     // A save that lists the removed PR again does not bring it back.
     store.sets.save(makeSet({ inputHash: 'h2' }));
-    expect(store.sets.get('set-1')?.members.map((m) => m.prKey)).toEqual(['PostHog/posthog#1', 'PostHog/posthog#3']);
-    store.sets.removeMember('set-1', 'PostHog/posthog#3', at(2));
+    expect(store.sets.get('set-1')?.members.map((m) => m.prKey)).toEqual(['acme/app#1', 'acme/app#3']);
+    store.sets.removeMember('set-1', 'acme/app#3', at(2));
     expect(store.sets.get('set-1')).toMatchObject({ status: 'dissolved', updatedAt: at(2) });
     expect(store.sets.listActiveForTopic('topic-1')).toEqual([]);
     expect(store.sets.listForTopic('topic-1')).toHaveLength(1);
@@ -350,9 +350,9 @@ describe('PrSetRepo', () => {
 
   it('keeps dissolved sets, and finds active sets by PR', () => {
     store.sets.save(makeSet());
-    store.sets.save(makeSet({ id: 'set-2', members: [{ prKey: 'PostHog/posthog#1', reason: 'x' }] }));
+    store.sets.save(makeSet({ id: 'set-2', members: [{ prKey: 'acme/app#1', reason: 'x' }] }));
     store.sets.dissolve('set-2', at(1));
-    expect(store.sets.listActiveForPr('PostHog/posthog#1').map((s) => s.id)).toEqual(['set-1']);
+    expect(store.sets.listActiveForPr('acme/app#1').map((s) => s.id)).toEqual(['set-1']);
     expect(store.sets.get('set-2')?.members).toHaveLength(1);
   });
 });
@@ -360,7 +360,7 @@ describe('PrSetRepo', () => {
 describe('GlanceRepo', () => {
   it('keeps the latest glance per PR', () => {
     const glance = {
-      prKey: 'PostHog/posthog#1',
+      prKey: 'acme/app#1',
       verdict: 'LOOKS_SAFE' as const,
       forYou: 'Runner label change only.',
       does: 'Moves tests to depot',
@@ -455,7 +455,7 @@ describe('Store.transaction', () => {
       }),
     ).toThrow('stop');
     expect(store.meta.get('a')).toBeNull();
-    expect(store.prs.get('PostHog/posthog#1')).toBeNull();
+    expect(store.prs.get('acme/app#1')).toBeNull();
     expect(store.db.isTransaction).toBe(false);
   });
 
@@ -464,12 +464,12 @@ describe('Store.transaction', () => {
     expect(() =>
       store.transaction(() => {
         store.sets.save(makeSet());
-        store.events.upsertDerived('PostHog/posthog#1', [makeEvent({ id: 'e1' })]);
+        store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'e1' })]);
         throw new Error('stop');
       }),
     ).toThrow('stop');
     expect(store.sets.get('set-1')).toBeNull();
-    expect(store.events.listForPr('PostHog/posthog#1')).toEqual([]);
+    expect(store.events.listForPr('acme/app#1')).toEqual([]);
   });
 
   it('commits and returns the value on success', () => {
@@ -484,7 +484,7 @@ describe('Store.transaction', () => {
 
 describe('PingDecisionRepo', () => {
   it('stores decisions and lists them newest first', () => {
-    const base = { threadId: 't1', prKey: 'PostHog/posthog#1', title: 'T', body: 'B', at: at(1) };
+    const base = { threadId: 't1', prKey: 'acme/app#1', title: 'T', body: 'B', at: at(1) };
     store.pingDecisions.add({ ...base, ping: true, source: 'agent', reason: 'asked for your review' });
     store.pingDecisions.add({ ...base, ping: false, source: 'rules', reason: 'bot activity', at: at(2) });
 

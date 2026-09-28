@@ -37,8 +37,8 @@ describe('stack layers', () => {
     expect(h.store.pullIns.get(below.key)).toMatchObject({ anchorPrKey: pinged.key, reason: 'stack layer below #11' });
     expect(h.store.pullIns.get(above.key)).toMatchObject({ anchorPrKey: pinged.key, reason: 'stack layer above #11' });
     expect(h.reader.branchLookups[0]).toEqual([
-      { repo: 'PostHog/posthog', branch: 'l10', side: 'head' },
-      { repo: 'PostHog/posthog', branch: 'l11', side: 'base' },
+      { repo: 'acme/app', branch: 'l10', side: 'head' },
+      { repo: 'acme/app', branch: 'l11', side: 'base' },
     ]);
 
     const topic = await h.engine.getTopic('depot');
@@ -117,15 +117,15 @@ describe('stack layers', () => {
     expect(stacks.map((view) => view.prs.map((pr) => [pr.key, pr.status.lifecycle]))).toEqual([
       [
         [recent.key, 'merged'],
-        ['PostHog/posthog#31', 'open'],
+        ['acme/app#31', 'open'],
       ],
       [
         [old.key, 'merged'],
-        ['PostHog/posthog#41', 'open'],
+        ['acme/app#41', 'open'],
       ],
       [
         [closed.key, 'closed'],
-        ['PostHog/posthog#51', 'open'],
+        ['acme/app#51', 'open'],
       ],
     ]);
   });

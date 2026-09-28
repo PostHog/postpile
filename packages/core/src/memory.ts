@@ -279,7 +279,7 @@ export type TopicRelation = 'team' | 'routed' | 'fyi';
 
 export interface DossierRelation {
   kind: TopicRelation;
-  /** "PostHog/team-devex", when known. */
+  /** "acme/team-platform", when known. */
   ownerTeam: string | null;
   /** Short: "team-devex review requested", "CODEOWNERS on .github/workflows", "subscribed". */
   whyYou: string;

@@ -22,7 +22,7 @@ describe('deriveEvents: comments', () => {
     const pr = makePr({ comments: [makeComment({ id: 'c9', body: 'cc @viewer for devex' })] });
     const [event] = deriveEvents(pr, viewer, null);
     expect(event).toMatchObject({
-      id: 'PostHog/posthog#1:mention:c9',
+      id: 'acme/app#1:mention:c9',
       kind: 'mention',
       actor: 'bob',
       ruleLoudness: 'loud',
@@ -78,8 +78,8 @@ describe('deriveEvents: comments', () => {
   it('flags team mentions without matching longer team slugs', () => {
     const pr = makePr({
       comments: [
-        makeComment({ id: 'c1', body: '@PostHog/team-devex please look' }),
-        makeComment({ id: 'c2', body: '@PostHog/team-devex-other please look' }),
+        makeComment({ id: 'c1', body: '@acme/team-platform please look' }),
+        makeComment({ id: 'c2', body: '@acme/team-platform-other please look' }),
       ],
     });
     const kinds = deriveEvents(pr, viewer, null).map((e) => e.kind);

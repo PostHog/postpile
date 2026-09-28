@@ -13,9 +13,9 @@ describe('whyHere', () => {
   });
 
   it('tells a personal review request from a team one', () => {
-    const personal = makePr({ reviewerUsers: [viewer.login], reviewerTeams: ['PostHog/team-devex'] });
-    const team = makePr({ reviewerTeams: ['PostHog/team-devex'] });
-    const bareSlug = makePr({ reviewerTeams: ['team-devex'] });
+    const personal = makePr({ reviewerUsers: [viewer.login], reviewerTeams: ['acme/team-platform'] });
+    const team = makePr({ reviewerTeams: ['acme/team-platform'] });
+    const bareSlug = makePr({ reviewerTeams: ['team-platform'] });
     expect(whyHere(pinged('review_requested'), personal, viewer)).toBe('RV');
     expect(whyHere(pinged('review_requested'), team, viewer)).toBe('RT');
     expect(whyHere(pinged('review_requested'), bareSlug, viewer)).toBe('RT');
@@ -25,7 +25,7 @@ describe('whyHere', () => {
     const pr = makePr({
       timeline: [
         makeTimelineItem({ id: 't1', subject: viewer.login }),
-        makeTimelineItem({ id: 't2', subject: 'PostHog/team-devex' }),
+        makeTimelineItem({ id: 't2', subject: 'acme/team-platform' }),
       ],
     });
     expect(whyHere(pinged('review_requested'), pr, viewer)).toBe('RT');

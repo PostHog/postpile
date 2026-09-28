@@ -33,7 +33,7 @@ describe('provenanceFor', () => {
 });
 
 describe('found PRs', () => {
-  const found = { prKey: 'PostHog/posthog#1', via: 'review_requested' as const, reason: 'review requested from you', foundAt: '2026-09-28T00:00:00.000Z' };
+  const found = { prKey: 'acme/app#1', via: 'review_requested' as const, reason: 'review requested from you', foundAt: '2026-09-28T00:00:00.000Z' };
 
   it('is found without a thread, even with a review request event', () => {
     const request = makeEvent({ kind: 'review_requested', ruleLoudness: 'loud' });

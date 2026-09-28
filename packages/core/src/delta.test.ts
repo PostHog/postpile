@@ -27,8 +27,8 @@ describe('isEmptyDelta', () => {
   });
 });
 
-const pr1 = 'PostHog/posthog#1';
-const pr2 = 'PostHog/posthog#2';
+const pr1 = 'acme/app#1';
+const pr2 = 'acme/app#2';
 
 function logged(seq: number, prKey: string, overrides: Partial<PrEvent> = {}): LoggedEvent {
   return { seq, event: makeEvent({ id: `${prKey}:comment:${seq}`, prKey, sourceId: String(seq), ...overrides }) };
@@ -90,18 +90,18 @@ describe('selectTopicDelta', () => {
     for (let pr = 1; pr <= 10; pr += 1) {
       for (let i = 0; i < 20; i += 1) {
         seq += 1;
-        many.push(logged(seq, `PostHog/posthog#${pr}`));
+        many.push(logged(seq, `acme/app#${pr}`));
       }
     }
-    const memberKeys = Array.from({ length: 10 }, (_, i) => `PostHog/posthog#${i + 1}`);
+    const memberKeys = Array.from({ length: 10 }, (_, i) => `acme/app#${i + 1}`);
     const delta = selectTopicDelta(input({ memberKeys, logged: many }));
     expect(delta.events).toHaveLength(DELTA_LIMITS.maxEvents);
     expect(delta.omittedEvents).toBe(200 - DELTA_LIMITS.maxEvents);
     expect(delta.toSeq).toBe(210);
-    const perPr = delta.events.filter((event) => event.prKey === 'PostHog/posthog#10');
+    const perPr = delta.events.filter((event) => event.prKey === 'acme/app#10');
     expect(perPr).toHaveLength(DELTA_LIMITS.maxEventsPerPr);
     expect(perPr.at(-1)?.sourceId).toBe('210');
-    expect(delta.events.some((event) => event.prKey === 'PostHog/posthog#1')).toBe(false);
+    expect(delta.events.some((event) => event.prKey === 'acme/app#1')).toBe(false);
   });
 
   it('does not cap a delta under the limit, even when one PR is busy', () => {
@@ -112,14 +112,14 @@ describe('selectTopicDelta', () => {
   });
 
   it('lists joined and left PRs against the previous timeline', () => {
-    const delta = selectTopicDelta(input({ memberKeys: [pr1, 'PostHog/posthog#3'] }));
-    expect(delta.joinedPrKeys).toEqual(['PostHog/posthog#3']);
+    const delta = selectTopicDelta(input({ memberKeys: [pr1, 'acme/app#3'] }));
+    expect(delta.joinedPrKeys).toEqual(['acme/app#3']);
     expect(delta.leftPrKeys).toEqual([pr2]);
   });
 
   it('does not offer a member again that the previous version already knew about', () => {
-    const pr3 = 'PostHog/posthog#3';
-    const pr4 = 'PostHog/posthog#4';
+    const pr3 = 'acme/app#3';
+    const pr4 = 'acme/app#4';
     const memberSince = new Map([
       [pr3, at(40)],
       [pr4, at(60)],
@@ -129,7 +129,7 @@ describe('selectTopicDelta', () => {
   });
 
   it('reads the older history of a joined PR once, next to the new events', () => {
-    const pr3 = 'PostHog/posthog#3';
+    const pr3 = 'acme/app#3';
     const delta = selectTopicDelta(
       input({
         memberKeys: [pr1, pr2, pr3],

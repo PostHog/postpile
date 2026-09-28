@@ -30,7 +30,7 @@ describe('formatSweep', () => {
             {
               index: 0,
               title: 'Depot rollout',
-              detail: 'Runners to posthog.',
+              detail: 'Runners to the app.',
               topics: [{ id: 'depot', name: 'Move CI to Depot' }],
               sources: [{ kind: 'memory', ref: '~/.claude/projects/p/memory/depot.md' }],
               forgotten: false,
@@ -55,7 +55,7 @@ describe('formatSweep', () => {
         '',
         'Alice drives the Depot move.',
         '',
-        '- Depot rollout: Runners to posthog.',
+        '- Depot rollout: Runners to the app.',
         '    topics: Move CI to Depot',
         '    why: memory ~/.claude/projects/p/memory/depot.md',
       ].join('\n'),

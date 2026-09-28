@@ -146,7 +146,7 @@ describe('server app', () => {
       return { ok: true, message: 'Approved', undoToken: null };
     };
     const app = createApp(fakeEngine({ approve }), 'secret', CONFIG);
-    const res = await app.request('/api/prs/PostHog/posthog/1/approve', {
+    const res = await app.request('/api/prs/acme/app/1/approve', {
       method: 'POST',
       headers: { origin: 'https://evil.example' },
     });
@@ -271,9 +271,9 @@ describe('server app', () => {
       return [];
     };
     const app = createApp(fakeEngine({ getChat }), 'secret', CONFIG);
-    await app.request(`/api/tiles/${encodeURIComponent('pr:PostHog/posthog#1')}/chat`, {
+    await app.request(`/api/tiles/${encodeURIComponent('pr:acme/app#1')}/chat`, {
       headers: { [TOKEN_HEADER]: 'secret' },
     });
-    expect(seen).toBe('pr:PostHog/posthog#1');
+    expect(seen).toBe('pr:acme/app#1');
   });
 });

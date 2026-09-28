@@ -58,9 +58,9 @@ now".
   `review-request.ts`); engine and FakeEngine share the rule.
 - Addressed your changes (2026-09-28, from a real PR): after
   the viewer's changes request, an author push or reply hands the move back
-  without a re-request. Whose turn "paul addressed your changes:
+  without a re-request. Whose turn "pim addressed your changes:
   re-review", tier To review, "For you", loud and ping-worthy
-  (`changesAnswered` in core). Fake sample #41960 in Dev env.
+  (`changesAnswered` in core). Fake sample #1960 in Dev env.
 - Live poll keeps up with GitHub between full syncs (2026-09-28, from two
   real PRs that stayed OPEN in the app after a merge on github.com):
   - read-threads watch every cycle (`?all=true&since=<cursor>`, own ETag,
@@ -225,7 +225,8 @@ now".
   `GET /api/search?q=`, in-memory over stored PRs, same matcher in fake mode.
 - GitHub avatars in the renderer (avatars.githubusercontent.com, no API
   call), initials underneath as placeholder and fallback; bots and teams
-  keep initials.
+  keep initials. Fake mode never loads remote avatars (initials only), since
+  an invented sample login can still be someone's real account.
 - "Recheck" replaces "Wrong" on memory lines: one `memory_recheck` agent
   call, then Accept (keep / fix / drop) or tell the agent in the tile chat;
   every memory correction has a 6s Undo. DESIGN.md "Recheck instead of
@@ -354,8 +355,8 @@ now".
   (one repo stays, several become All repos). Per repo "Let it go stale":
   still synced and remembered, never urgent, never pings, out of the queue
   and filter counts, tiles say "quiet repo". Rules in core
-  (`repo-scope.ts`), settings in meta. Fake data has PRs in example-infra (a
-  Depot tile, for the label), posthog-desktop and posthog-python; no
+  (`repo-scope.ts`), settings in meta. Fake data has PRs in acme/infra (a
+  Depot tile, for the label), acme/desktop and acme/python-sdk; no
   mixed-repo set, so PR row labels only show in tests.
 - pnpm instead of npm workspaces (2026-09-28): `pnpm-workspace.yaml`,
   `packageManager: pnpm@12.6.0`, `workspace:*` deps, `pnpm-lock.yaml`
@@ -397,7 +398,7 @@ now".
     quieter title.
   - Drafts: no review / re-check / merge moves, never To review, quiet
     review requests and post-approval pushes, loud mark-ready, pings only
-    for personal asks; Draft chip and dashed frame. Fake #41945 is a draft.
+    for personal asks; Draft chip and dashed frame. Fake #1945 is a draft.
   - Stacks stay whole: every layer shows, open, draft, merged at any age and
     closed (greyed, pill "closed"). The walk seeds from found PRs and every
     stored open tracked PR too, the branch lookup asks for any state, and
@@ -484,8 +485,6 @@ now".
 - Search matches title, number, author, repo, head branch, topic name and
   area only (no PR body, comments or labels) and does not highlight the
   matched text. Filter state and history are not kept across restarts.
-- Sample logins (rowan, lyra, nell, ...) are real GitHub accounts, so fake
-  mode shows strangers' avatars instead of the initials fallback.
 - Recheck: not run against the real agent yet; the fake answers cycle
   holds / fix / drop after 1.5s. The daily cap (40) is a guess. A fix of a
   fact keeps the old refs; no new ref points at the evidence in `why`.

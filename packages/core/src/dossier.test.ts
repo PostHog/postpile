@@ -15,7 +15,7 @@ function bigDossier(): Dossier {
     statusNote: longText(1000),
     people: Array.from({ length: 12 }, (_, i) => ({ login: `p${i}`, role: 'contributor' as const, note: longText(500) })),
     openQuestions: Array.from({ length: 12 }, (_, i) => ({ text: `q${i} ${longText(500)}`, askedBy: null, refs: [] })),
-    timeline: Array.from({ length: 50 }, (_, i) => ({ prKey: `PostHog/posthog#${i}`, role: longText(500) })),
+    timeline: Array.from({ length: 50 }, (_, i) => ({ prKey: `acme/app#${i}`, role: longText(500) })),
     earlier: longText(1000),
     userCares: Array.from({ length: 10 }, (_, i) => ({ text: `c${i} ${longText(500)}`, source: 'observed' as const })),
     recentChanges: Array.from({ length: 20 }, (_, i) => ({ at: at(100 - i), text: `r${i} ${longText(500)}`, refs: [] })),
@@ -51,8 +51,8 @@ describe('clampDossier', () => {
 
   it('keeps the newest timeline entries and the newest recent changes', () => {
     const clamped = clampDossier(bigDossier());
-    expect(clamped.timeline[0]?.prKey).toBe('PostHog/posthog#10');
-    expect(clamped.timeline.at(-1)?.prKey).toBe('PostHog/posthog#49');
+    expect(clamped.timeline[0]?.prKey).toBe('acme/app#10');
+    expect(clamped.timeline.at(-1)?.prKey).toBe('acme/app#49');
     expect(clamped.recentChanges[0]?.text.startsWith('r0 ')).toBe(true);
     expect(clamped.openQuestions[0]?.text.startsWith('q0 ')).toBe(true);
   });

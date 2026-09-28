@@ -10,7 +10,7 @@ function thread(overrides: Partial<NotificationThread>): NotificationThread {
     updatedAt: '2026-09-27T10:00:00Z',
     lastReadAt: null,
     subjectType: 'PullRequest',
-    repo: 'PostHog/posthog',
+    repo: 'acme/app',
     number: 12,
     title: 'Something',
     ...overrides,
@@ -20,7 +20,7 @@ function thread(overrides: Partial<NotificationThread>): NotificationThread {
 function event(id: string, at: string, overrides: Partial<PrEvent> = {}): PrEvent {
   return {
     id,
-    prKey: 'PostHog/posthog#12',
+    prKey: 'acme/app#12',
     kind: 'comment',
     actor: 'lyra',
     isBot: false,
@@ -38,7 +38,7 @@ function event(id: string, at: string, overrides: Partial<PrEvent> = {}): PrEven
 
 describe('threadPrKey', () => {
   it('maps PullRequest threads to a PR key and nothing else', () => {
-    expect(threadPrKey(thread({}))).toBe('PostHog/posthog#12');
+    expect(threadPrKey(thread({}))).toBe('acme/app#12');
     expect(threadPrKey(thread({ subjectType: 'Issue' }))).toBeNull();
     expect(threadPrKey(thread({ subjectType: 'PullRequest', number: null }))).toBeNull();
   });

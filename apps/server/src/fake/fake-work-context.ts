@@ -47,7 +47,7 @@ function sampleThreads(topics: Topic[]): WorkContextThread[] {
       topicIds: ids('Move CI to Depot', 'Frontend build'),
       sources: [
         { kind: 'session', ref: 'app · 2026-09-27 10:01 · "runner pool sizing"' },
-        { kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-posthog/memory/depot.md' },
+        { kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-app/memory/depot.md' },
       ],
     },
     {
@@ -60,11 +60,11 @@ function sampleThreads(topics: Topic[]): WorkContextThread[] {
       title: 'Ingestion runners RFC',
       detail: 'Waiting on the ingestion team to answer the runner sizing questions before approving.',
       topicIds: ids('Ingestion CI runners RFC'),
-      sources: [{ kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-posthog/memory/MEMORY.md' }],
+      sources: [{ kind: 'memory', ref: '~/.claude/projects/-Users-sample-workspace-app/memory/MEMORY.md' }],
     },
     {
       title: 'How reviews should read',
-      detail: 'Short, neutral PR descriptions and conventional commits; devex wording in titles.',
+      detail: 'Short, neutral PR descriptions and conventional commits; platform wording in titles.',
       topicIds: [],
       sources: [{ kind: 'claude_md', ref: '~/.claude/CLAUDE.md' }],
     },

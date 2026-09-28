@@ -19,9 +19,9 @@ let h: Harness;
 
 beforeEach(() => {
   fake = makeFakeClaudeDir();
-  fake.write('.claude/CLAUDE.md', 'I work on DevEx at PostHog.');
+  fake.write('.claude/CLAUDE.md', 'I work on the platform team at Acme.');
   fake.write('.claude/projects/-Users-me-workspace-app/memory/MEMORY.md', '- [Depot](depot.md) moving CI to Depot');
-  fake.session('-Users-me-workspace-app', 'a', [userLine('roll the Depot runners out to posthog', '2026-09-01T10:00:00.000Z')]);
+  fake.session('-Users-me-workspace-app', 'a', [userLine('roll the Depot runners out to the app', '2026-09-01T10:00:00.000Z')]);
   h = makeHarness({ claudeDir: fake.claudeDir });
   h.store.topics.create(makeTopic('depot', { name: 'Move CI to Depot', summary: 'CI runners move to Depot.' }));
 });
@@ -30,7 +30,7 @@ afterEach(() => {
   fake.remove();
 });
 
-function answer(threads: unknown[] = [{ title: 'Depot rollout', detail: 'Runners to posthog.', topicIds: ['depot'], sources: ['s1', 'm1'] }]): void {
+function answer(threads: unknown[] = [{ title: 'Depot rollout', detail: 'Runners to the app.', topicIds: ['depot'], sources: ['s1', 'm1'] }]): void {
   h.runner.answer('context_sweep', { summary: 'Alice drives the Depot CI move.', threads });
 }
 
@@ -61,7 +61,7 @@ describe('the sweep skip list in config.json', () => {
     expect(view).toMatchObject({ skipPatterns: ['taxes', 'app'], skipSource: 'config', skipConfigFile: config.path });
     await withConfig.engine.sweepWorkContext();
     const prompt = withConfig.runner.promptsFor('context_sweep')[0] ?? '';
-    expect(prompt).not.toContain('roll the Depot runners out to posthog');
+    expect(prompt).not.toContain('roll the Depot runners out to the app');
     expect(withConfig.store.workContext.latest()?.inputStats).toMatchObject({ skippedProjects: 1, skipPatterns: ['taxes', 'app'] });
   });
 
@@ -89,8 +89,8 @@ describe('Engine.sweepWorkContext', () => {
 
     expect(result).toMatchObject({ ok: true, version: 1 });
     const prompt = h.runner.promptsFor('context_sweep')[0] ?? '';
-    expect(prompt).toContain('I work on DevEx at PostHog.');
-    expect(prompt).toContain('roll the Depot runners out to posthog');
+    expect(prompt).toContain('I work on the platform team at Acme.');
+    expect(prompt).toContain('roll the Depot runners out to the app');
     expect(prompt).toContain('- id depot: "Move CI to Depot" - CI runners move to Depot.');
     const stored = h.store.workContext.latest();
     expect(stored?.inputSources.map((source) => source.kind)).toEqual(['claude_md', 'session', 'memory']);
@@ -127,12 +127,12 @@ describe('Engine.sweepWorkContext', () => {
 
     const prompt = h.runner.promptsFor('topic_assignment')[0] ?? '';
     expect(prompt).toContain(HEADING);
-    expect(prompt).toContain('- Depot rollout: Runners to posthog. (topics: Move CI to Depot)');
+    expect(prompt).toContain('- Depot rollout: Runners to the app. (topics: Move CI to Depot)');
   });
 
   it('Forget hides the thread from prompts, marks it in the view and tells the next sweep', async () => {
     answer([
-      { title: 'Depot rollout', detail: 'Runners to posthog.', topicIds: [], sources: [] },
+      { title: 'Depot rollout', detail: 'Runners to the app.', topicIds: [], sources: [] },
       { title: 'Runner image bump', detail: 'Waiting on review.', topicIds: [], sources: [] },
     ]);
     await h.engine.sweepWorkContext();

@@ -25,7 +25,7 @@ describe('pingRule', () => {
 
   it('pings for a team review request on a teammate\'s PR like a personal one', () => {
     const withTeam = { ...viewer, teamMembers: ['lyra'] };
-    const byTeammate = makePr({ number: 10, author: 'lyra', reviewerTeams: ['PostHog/team-devex'] });
+    const byTeammate = makePr({ number: 10, author: 'lyra', reviewerTeams: ['acme/team-platform'] });
     const request = makeEvent({ kind: 'review_requested', actor: 'lyra', ruleLoudness: 'loud', ruleReason: 'review requested from you' });
     expect(pingRule([request], byTeammate, withTeam, false)).toMatchObject({ class: 'addressed', event: { id: request.id } });
   });
@@ -75,7 +75,7 @@ describe('pingTemplate', () => {
   it('says who did what on which PR', () => {
     const mention = makeEvent({ kind: 'mention', actor: 'bob', summary: 'bob: @viewer can you check the cache?' });
     expect(pingTemplate(mention, pr)).toEqual({
-      title: '@bob mentioned you · posthog#7',
+      title: '@bob mentioned you · app#7',
       body: 'Move CI to Depot\nbob: @viewer can you check the cache?',
     });
   });

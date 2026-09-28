@@ -38,7 +38,7 @@ describe('workContextPromptText', () => {
     digest: {
       summary: 'Alice drives the Depot CI move.',
       threads: [
-        { title: 'Depot rollout', detail: 'Rolling out to posthog.', topicIds: ['t1', 'gone'], sources: [] },
+        { title: 'Depot rollout', detail: 'Rolling out to the app.', topicIds: ['t1', 'gone'], sources: [] },
         { title: 'Runner image bump', detail: 'Waiting on review.', topicIds: [], sources: [] },
       ],
       lastSeenAt: null,
@@ -50,7 +50,7 @@ describe('workContextPromptText', () => {
       [
         'As of 2026-09-28: Alice drives the Depot CI move.',
         'Threads:',
-        '- Depot rollout: Rolling out to posthog. (topics: Move CI to Depot)',
+        '- Depot rollout: Rolling out to the app. (topics: Move CI to Depot)',
         '- Runner image bump: Waiting on review.',
       ].join('\n'),
     );

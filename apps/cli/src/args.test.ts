@@ -9,7 +9,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['sweep'])).toEqual({ name: 'sweep' });
     expect(parseArgs(['setup-draft'])).toEqual({ name: 'setup-draft' });
     expect(parseArgs(['tools'])).toEqual({ name: 'tools' });
-    expect(parseArgs(['pr', 'PostHog/posthog#1'])).toEqual({ name: 'pr', prKey: 'PostHog/posthog#1' });
+    expect(parseArgs(['pr', 'acme/app#1'])).toEqual({ name: 'pr', prKey: 'acme/app#1' });
     expect(parseArgs(['topic'])).toEqual({ name: 'help' });
     expect(parseArgs([])).toEqual({ name: 'help' });
   });

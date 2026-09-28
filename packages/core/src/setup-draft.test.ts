@@ -42,8 +42,8 @@ const material: SetupMaterial = {
 
 describe('topLevelDirs', () => {
   it('counts top-level folders, most files first, root files as (root)', () => {
-    const paths = ['frontend/a.ts', 'frontend/b.ts', 'posthog/api/x.py', 'README.md', 'frontend/c.ts', 'posthog/y.py'];
-    expect(topLevelDirs(paths)).toEqual(['frontend/', 'posthog/', '(root)']);
+    const paths = ['frontend/a.ts', 'frontend/b.ts', 'backend/api/x.py', 'README.md', 'frontend/c.ts', 'backend/y.py'];
+    expect(topLevelDirs(paths)).toEqual(['frontend/', 'backend/', '(root)']);
     expect(topLevelDirs(paths, 1)).toEqual(['frontend/']);
     expect(topLevelDirs([])).toEqual([]);
   });

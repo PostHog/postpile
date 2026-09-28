@@ -11,14 +11,14 @@ import type { WhyCode } from './why-here.ts';
  * you: asked of or addressed to the viewer personally (RV, @, AS), or a
  * team request on a teammate's PR nobody else on the team covered yet.
  * team: one of their teams is asked or mentioned and nothing is for the
- * viewer personally (RT, @T); `team` is the short slug ("team-devex").
+ * viewer personally (RT, @T); `team` is the short slug ("team-platform").
  * own: the viewer wrote it (AU). none: everything else, no chip, no band.
  */
 export type ForWhom = { kind: 'you' } | { kind: 'team'; team: string } | { kind: 'own' } | { kind: 'none' };
 
 const RANK: Record<ForWhom['kind'], number> = { you: 0, team: 1, own: 2, none: 3 };
 
-/** "PostHog/team-devex" -> "team-devex". */
+/** "acme/team-platform" -> "team-platform". */
 function shortTeam(team: string): string {
   return team.split('/').pop() ?? team;
 }

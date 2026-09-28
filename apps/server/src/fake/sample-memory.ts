@@ -104,23 +104,23 @@ function sampleFact(clock: SampleClock, input: SampleFactInput): Fact {
 
 function depotDossierV1(clock: SampleClock): Dossier {
   return {
-    goal: 'Run PostHog CI on Depot runners to cut queue time and cost.',
-    goalSources: sources([prRef(clock, 41851, 170)]),
+    goal: 'Run CI on Depot runners to cut queue time and cost.',
+    goalSources: sources([prRef(clock, 1851, 170)]),
     summary: 'Project config is in. Backend jobs are next.',
     status: 'starting',
     statusNote: 'Only the Depot project config exists so far.',
-    statusSources: sources([prRef(clock, 41851, 144)]),
+    statusSources: sources([prRef(clock, 1851, 144)]),
     people: [{ login: 'rowan', role: 'driver', note: 'Opened the rowan/depot stack.' }],
     openQuestions: [
-      { text: 'Keep GitHub runners for release builds?', askedBy: 'nell', refs: [ref(clock, 'comment', 41851, 150, 'issuecomment-1')] },
+      { text: 'Keep GitHub runners for release builds?', askedBy: 'nell', refs: [ref(clock, 'comment', 1851, 150, 'issuecomment-1')] },
     ],
-    timeline: [{ prKey: sampleKey(41851), role: 'Adds depot.json, base of the stack.', refs: [prRef(clock, 41851, 170)] }],
+    timeline: [{ prKey: sampleKey(1851), role: 'Adds depot.json, base of the stack.', refs: [prRef(clock, 1851, 170)] }],
     earlier: '',
     userCares: [
       { text: 'Cache keys and Turbo hashing', source: 'tailoring', userRefs: [depotTailoring(clock)] },
       { text: 'CI cost per run', source: 'instructions', userRefs: [userRef(clock, 'instructions', '3', 40, 'Edited outside the app')] },
     ],
-    recentChanges: [{ at: clock.hoursAgo(144), text: 'Depot project config merged (#41851).', refs: [ref(clock, 'pr', 41851, 144)] }],
+    recentChanges: [{ at: clock.hoursAgo(144), text: 'Depot project config merged (#1851).', refs: [ref(clock, 'pr', 1851, 144)] }],
   };
 }
 
@@ -131,18 +131,18 @@ function depotDossierV2(clock: SampleClock): Dossier {
     summary: 'Backend jobs run on Depot. The token went in as a repo secret. Frontend and cache are next.',
     status: 'active',
     statusNote: 'Backend moved, no blockers.',
-    statusSources: sources([prRef(clock, 41862, 72)]),
+    statusSources: sources([prRef(clock, 1862, 72)]),
     people: [...v1.people, { login: 'lyra', role: 'reviewer', note: 'Approves the workflow changes.' }],
     openQuestions: [
       ...v1.openQuestions,
-      { text: 'Repo secret or the existing org secret for DEPOT_TOKEN?', askedBy: null, refs: [ref(clock, 'pr', 41915, 30)] },
+      { text: 'Repo secret or the existing org secret for DEPOT_TOKEN?', askedBy: null, refs: [ref(clock, 'pr', 1915, 30)] },
     ],
     timeline: [
       ...v1.timeline,
-      { prKey: sampleKey(41862), role: 'Moves backend jobs to Depot.', refs: [prRef(clock, 41862, 96)] },
-      { prKey: sampleKey(41915), role: 'Adds DEPOT_TOKEN as a repo secret.', refs: [ref(clock, 'comment', 41915, 25, 'issuecomment-4')] },
+      { prKey: sampleKey(1862), role: 'Moves backend jobs to Depot.', refs: [prRef(clock, 1862, 96)] },
+      { prKey: sampleKey(1915), role: 'Adds DEPOT_TOKEN as a repo secret.', refs: [ref(clock, 'comment', 1915, 25, 'issuecomment-4')] },
       // Written before lines carried sources: shows "no source recorded".
-      { prKey: sampleKey(41899), role: 'Renames workflow files to ci-*.yml.' },
+      { prKey: sampleKey(1899), role: 'Renames workflow files to ci-*.yml.' },
     ],
     userCares: [
       ...v1.userCares,
@@ -153,8 +153,8 @@ function depotDossierV2(clock: SampleClock): Dossier {
       },
     ],
     recentChanges: [
-      { at: clock.hoursAgo(24), text: 'DEPOT_TOKEN merged as a repo secret, though an org secret exists (#41915).', refs: [ref(clock, 'pr', 41915, 24)] },
-      { at: clock.hoursAgo(72), text: 'Backend jobs run on Depot (#41862 merged).', refs: [ref(clock, 'pr', 41862, 72)] },
+      { at: clock.hoursAgo(24), text: 'DEPOT_TOKEN merged as a repo secret, though an org secret exists (#1915).', refs: [ref(clock, 'pr', 1915, 24)] },
+      { at: clock.hoursAgo(72), text: 'Backend jobs run on Depot (#1862 merged).', refs: [ref(clock, 'pr', 1862, 72)] },
       ...v1.recentChanges,
     ],
   };
@@ -167,31 +167,31 @@ function depotDossierV3(clock: SampleClock): Dossier {
     summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
     statusNote: 'Cache and e2e layers wait on reviews; the cache PR fails its warm-up job.',
     // Written against the commit before the latest push, so "Why?" shows it as stale.
-    statusSources: sources([{ ...ref(clock, 'commit', 41902, 4, 'a1b2c3'), headOid: 'a1b2c3' }, ref(clock, 'review', 41902, 1, 'review-41902-0')]),
+    statusSources: sources([{ ...ref(clock, 'commit', 1902, 4, 'a1b2c3'), headOid: 'a1b2c3' }, ref(clock, 'review', 1902, 1, 'review-1902-0')]),
     people: [
       { login: 'rowan', role: 'driver', note: 'Owns the rollout, stacks rowan/depot-*.' },
       { login: 'lyra', role: 'reviewer', note: 'Approves workflow changes, asked about the warm-up.' },
       { login: 'nell', role: 'reviewer', note: 'Asked to keep GitHub runners for releases.' },
-      { login: 'jude', role: 'contributor', note: 'Turned off the Storybook cache in #41855.' },
+      { login: 'jude', role: 'contributor', note: 'Turned off the Storybook cache in #1855.' },
     ],
     openQuestions: [
       {
         text: 'Does the Turbo cache warm-up need a feature flag?',
         askedBy: 'lyra',
-        refs: [ref(clock, 'comment', 41902, 0.3, 'issuecomment-2'), ref(clock, 'event', 41902, 0.3, `${sampleKey(41902)}:mention:s41902-2`)],
+        refs: [ref(clock, 'comment', 1902, 0.3, 'issuecomment-2'), ref(clock, 'event', 1902, 0.3, `${sampleKey(1902)}:mention:s1902-2`)],
       },
       ...v2.openQuestions,
     ],
     timeline: [
       ...v2.timeline,
-      { prKey: sampleKey(41902), role: 'Points the Turbo remote cache at Depot.', refs: [prRef(clock, 41902, 5), ref(clock, 'review', 41902, 1, 'review-41902-1')] },
-      { prKey: sampleKey(41911), role: 'Moves e2e to Depot runners, stacked on the cache PR.', refs: [prRef(clock, 41911, 1)] },
+      { prKey: sampleKey(1902), role: 'Points the Turbo remote cache at Depot.', refs: [prRef(clock, 1902, 5), ref(clock, 'review', 1902, 1, 'review-1902-1')] },
+      { prKey: sampleKey(1911), role: 'Moves e2e to Depot runners, stacked on the cache PR.', refs: [prRef(clock, 1911, 1)] },
     ],
     relation: {
       kind: 'team',
-      ownerTeam: 'PostHog/team-devex',
-      whyYou: 'rowan (team-devex) drives it, your review requested',
-      refs: [prRef(clock, 41851, 170), ref(clock, 'event', 41911, 1, `${sampleKey(41911)}:review_requested:s41911-0`)],
+      ownerTeam: 'acme/team-platform',
+      whyYou: 'rowan (team-platform) drives it, your review requested',
+      refs: [prRef(clock, 1851, 170), ref(clock, 'event', 1911, 1, `${sampleKey(1911)}:review_requested:s1911-0`)],
       userRefs: [depotTailoring(clock)],
     },
     userCares: [
@@ -199,15 +199,15 @@ function depotDossierV3(clock: SampleClock): Dossier {
       {
         text: 'Storybook build time',
         source: 'observed',
-        refs: [ref(clock, 'comment', 41855, 16, 'issuecomment-3')],
+        refs: [ref(clock, 'comment', 1855, 16, 'issuecomment-3')],
         userRefs: [userRef(clock, 'chat', '7', 15, 'Storybook going cold on every PR hurts.')],
       },
     ],
     recentChanges: [
-      { at: clock.hoursAgo(0.3), text: 'lyra asked on #41902 whether the cache warm-up needs a flag.', refs: [ref(clock, 'comment', 41902, 0.3, 'issuecomment-2')] },
-      { at: clock.hoursAgo(1), text: '#41911 opened: e2e moves to Depot runners, stacked on the cache PR.', refs: [ref(clock, 'pr', 41911, 1)] },
-      { at: clock.hoursAgo(5), text: '#41902 opened: Turbo remote cache moves to Depot. CI fails on the warm-up job.', refs: [ref(clock, 'pr', 41902, 5)] },
-      { at: clock.hoursAgo(14), text: 'Storybook turned its Turbo cache off in #41855 (Frontend build).', refs: [ref(clock, 'pr', 41855, 14)] },
+      { at: clock.hoursAgo(0.3), text: 'lyra asked on #1902 whether the cache warm-up needs a flag.', refs: [ref(clock, 'comment', 1902, 0.3, 'issuecomment-2')] },
+      { at: clock.hoursAgo(1), text: '#1911 opened: e2e moves to Depot runners, stacked on the cache PR.', refs: [ref(clock, 'pr', 1911, 1)] },
+      { at: clock.hoursAgo(5), text: '#1902 opened: Turbo remote cache moves to Depot. CI fails on the warm-up job.', refs: [ref(clock, 'pr', 1902, 5)] },
+      { at: clock.hoursAgo(14), text: 'Storybook turned its Turbo cache off in #1855 (Frontend build).', refs: [ref(clock, 'pr', 1855, 14)] },
       ...v2.recentChanges,
     ],
   };
@@ -224,7 +224,7 @@ function frontendDossierV1(clock: SampleClock): Dossier {
     timeline: [],
     earlier: 'The Vite 7 upgrade PR itself is outside what you get notified about.',
     userCares: [{ text: 'Only cache changes', source: 'tailoring' }],
-    recentChanges: [{ at: clock.hoursAgo(30), text: '#41855 opened: skip the Turbo remote cache for Storybook.', refs: [ref(clock, 'pr', 41855, 30)] }],
+    recentChanges: [{ at: clock.hoursAgo(30), text: '#1855 opened: skip the Turbo remote cache for Storybook.', refs: [ref(clock, 'pr', 1855, 30)] }],
   };
 }
 
@@ -235,17 +235,17 @@ function frontendDossierV2(clock: SampleClock): Dossier {
     summary: 'Storybook runs without the Turbo cache now. The Vite 7 upgrade is still in review.',
     people: [...v1.people, { login: 'jude', role: 'contributor', note: 'Turned the Storybook cache off.' }],
     openQuestions: [
-      { text: 'Are the Storybook snapshots stale because of the cache or the Vite upgrade?', askedBy: 'jude', refs: [ref(clock, 'comment', 41855, 16, 'issuecomment-3')] },
+      { text: 'Are the Storybook snapshots stale because of the cache or the Vite upgrade?', askedBy: 'jude', refs: [ref(clock, 'comment', 1855, 16, 'issuecomment-3')] },
     ],
-    timeline: [{ prKey: sampleKey(41855), role: 'Skips the Turbo remote cache for Storybook.' }],
+    timeline: [{ prKey: sampleKey(1855), role: 'Skips the Turbo remote cache for Storybook.' }],
     relation: {
       kind: 'routed',
-      ownerTeam: 'PostHog/team-frontend',
+      ownerTeam: 'acme/team-frontend',
       whyYou: 'touches the Turbo cache config you own',
-      refs: [ref(clock, 'comment', 41855, 16, 'issuecomment-3')],
+      refs: [ref(clock, 'comment', 1855, 16, 'issuecomment-3')],
     },
     recentChanges: [
-      { at: clock.hoursAgo(14), text: 'Storybook cache turned off (#41855 merged), every PR runs it cold.', refs: [ref(clock, 'pr', 41855, 14)] },
+      { at: clock.hoursAgo(14), text: 'Storybook cache turned off (#1855 merged), every PR runs it cold.', refs: [ref(clock, 'pr', 1855, 14)] },
       ...v1.recentChanges,
     ],
   };
@@ -280,51 +280,51 @@ function buildFacts(clock: SampleClock): Fact[] {
     sampleFact(clock, {
       id: 'fact-rowan-drives', subject: person('rowan'), predicate: 'drives', object: { kind: 'initiative', key: DEPOT },
       text: 'rowan drives the move to Depot.', topicId: DEPOT, recordedHoursAgo: 140,
-      refs: [ref(clock, 'pr', 41851, 170), ref(clock, 'pr', 41902, 5)],
+      refs: [ref(clock, 'pr', 1851, 170), ref(clock, 'pr', 1902, 5)],
     }),
     sampleFact(clock, {
-      id: 'fact-41902-part-of', subject: pr(41902), predicate: 'part_of', object: { kind: 'initiative', key: DEPOT },
-      text: '#41902 is the Turbo cache layer of the Depot move.', topicId: DEPOT, recordedHoursAgo: 4,
-      refs: [ref(clock, 'pr', 41902, 5)],
+      id: 'fact-1902-part-of', subject: pr(1902), predicate: 'part_of', object: { kind: 'initiative', key: DEPOT },
+      text: '#1902 is the Turbo cache layer of the Depot move.', topicId: DEPOT, recordedHoursAgo: 4,
+      refs: [ref(clock, 'pr', 1902, 5)],
     }),
     sampleFact(clock, {
-      id: 'fact-lyra-reviews-41902', subject: person('lyra'), predicate: 'reviews', object: pr(41902),
-      text: 'lyra reviews #41902 and approved it.', topicId: DEPOT, recordedHoursAgo: 1,
-      refs: [ref(clock, 'review', 41902, 1, 'review-41902-0')],
+      id: 'fact-lyra-reviews-1902', subject: person('lyra'), predicate: 'reviews', object: pr(1902),
+      text: 'lyra reviews #1902 and approved it.', topicId: DEPOT, recordedHoursAgo: 1,
+      refs: [ref(clock, 'review', 1902, 1, 'review-1902-0')],
     }),
     sampleFact(clock, {
-      id: 'fact-41902-status', subject: pr(41902), predicate: 'status', object: null,
+      id: 'fact-1902-status', subject: pr(1902), predicate: 'status', object: null,
       text: 'The warm-up job fails on the first cold run.', topicId: DEPOT, recordedHoursAgo: 4,
-      refs: [{ ...ref(clock, 'commit', 41902, 4, 'a1b2c3'), headOid: 'a1b2c3' }],
+      refs: [{ ...ref(clock, 'commit', 1902, 4, 'a1b2c3'), headOid: 'a1b2c3' }],
     }),
     sampleFact(clock, {
-      id: 'fact-41911-depends', subject: pr(41911), predicate: 'depends_on', object: pr(41902),
-      text: '#41911 is stacked on #41902 and lands after it.', topicId: DEPOT, recordedHoursAgo: 0.9,
-      refs: [ref(clock, 'pr', 41911, 1)],
+      id: 'fact-1911-depends', subject: pr(1911), predicate: 'depends_on', object: pr(1902),
+      text: '#1911 is stacked on #1902 and lands after it.', topicId: DEPOT, recordedHoursAgo: 0.9,
+      refs: [ref(clock, 'pr', 1911, 1)],
     }),
     sampleFact(clock, {
-      id: 'fact-nell-reviews-41911', subject: person('nell'), predicate: 'reviews', object: pr(41911),
-      text: 'nell is asked to review #41911.', topicId: DEPOT, recordedHoursAgo: 0.9,
-      refs: [ref(clock, 'pr', 41911, 1)],
+      id: 'fact-nell-reviews-1911', subject: person('nell'), predicate: 'reviews', object: pr(1911),
+      text: 'nell is asked to review #1911.', topicId: DEPOT, recordedHoursAgo: 0.9,
+      refs: [ref(clock, 'pr', 1911, 1)],
     }),
     sampleFact(clock, {
-      id: 'fact-41915-decided', subject: pr(41915), predicate: 'decided', object: null,
+      id: 'fact-1915-decided', subject: pr(1915), predicate: 'decided', object: null,
       text: 'DEPOT_TOKEN stays a repo secret for now; moving to the org secret comes later.', topicId: DEPOT, recordedHoursAgo: 24,
-      refs: [ref(clock, 'comment', 41915, 25, 'issuecomment-4')],
+      refs: [ref(clock, 'comment', 1915, 25, 'issuecomment-4')],
     }),
     sampleFact(clock, {
       id: 'fact-lyra-owns-workflows', subject: person('lyra'), predicate: 'owns', object: { kind: 'path', key: `${SAMPLE_REPO}:.github/workflows/` },
       text: 'lyra owns the CI workflow files.', topicId: DEPOT, recordedHoursAgo: 48,
-      refs: [ref(clock, 'review', 41899, 30, 'review-41899-1'), ref(clock, 'review', 41862, 80, 'review-41862-1')],
+      refs: [ref(clock, 'review', 1899, 30, 'review-1899-1'), ref(clock, 'review', 1862, 80, 'review-1862-1')],
     }),
     sampleFact(clock, {
-      id: 'fact-41855-cold', subject: pr(41855), predicate: 'note', object: null,
-      text: 'Storybook runs cold on every PR since #41855.', topicId: FRONTEND, recordedHoursAgo: 13,
-      refs: [ref(clock, 'pr', 41855, 14)],
+      id: 'fact-1855-cold', subject: pr(1855), predicate: 'note', object: null,
+      text: 'Storybook runs cold on every PR since #1855.', topicId: FRONTEND, recordedHoursAgo: 13,
+      refs: [ref(clock, 'pr', 1855, 14)],
     }),
   ];
-  // The head of #41902 moved since the status fact was made, so verify-before-use flags it.
-  const stale = facts.find((fact) => fact.id === 'fact-41902-status')!;
+  // The head of #1902 moved since the status fact was made, so verify-before-use flags it.
+  const stale = facts.find((fact) => fact.id === 'fact-1902-status')!;
   stale.staleAt = clock.hoursAgo(0.5);
   stale.staleReason = 'head_moved';
   return facts;
@@ -342,7 +342,7 @@ function buildFeedback(clock: SampleClock): Feedback[] {
     note: 'bot bump',
     createdAt: clock.hoursAgo(hoursAgo),
   });
-  return [notMine(1, 41640, 300), notMine(2, 41702, 200), notMine(3, 41755, 120), notMine(4, 41810, 50)];
+  return [notMine(1, 1640, 300), notMine(2, 1702, 200), notMine(3, 1755, 120), notMine(4, 1810, 50)];
 }
 
 function buildRuleProposals(clock: SampleClock): RuleProposal[] {
@@ -383,12 +383,12 @@ function buildSeen(clock: SampleClock): Map<string, Cursor> {
 /** Topics without a dossier still get a placement, so the sidebar shows every group. */
 function buildRelations(): Map<string, DossierRelation> {
   return new Map<string, DossierRelation>([
-    [CI, { kind: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you drive it' }],
-    ['topic-migrations', { kind: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you author the PRs' }],
-    ['topic-dev-env', { kind: 'team', ownerTeam: 'PostHog/team-devex', whyYou: 'you drive it' }],
-    ['topic-ingestion-runners', { kind: 'routed', ownerTeam: 'PostHog/team-ingestion', whyYou: 'team-devex review requested on .github/workflows' }],
+    [CI, { kind: 'team', ownerTeam: 'acme/team-platform', whyYou: 'you drive it' }],
+    ['topic-migrations', { kind: 'team', ownerTeam: 'acme/team-platform', whyYou: 'you author the PRs' }],
+    ['topic-dev-env', { kind: 'team', ownerTeam: 'acme/team-platform', whyYou: 'you drive it' }],
+    ['topic-ingestion-runners', { kind: 'routed', ownerTeam: 'acme/team-ingestion', whyYou: 'team-platform review requested on .github/workflows' }],
     ['topic-dependency-bumps', { kind: 'fyi', ownerTeam: null, whyYou: 'subscribed to bot bumps' }],
-    ['topic-desktop-release', { kind: 'fyi', ownerTeam: 'PostHog/team-desktop', whyYou: 'subscribed to the release thread' }],
+    ['topic-desktop-release', { kind: 'fyi', ownerTeam: 'acme/team-desktop', whyYou: 'subscribed to the release thread' }],
   ]);
 }
 

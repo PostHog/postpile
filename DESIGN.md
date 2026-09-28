@@ -495,10 +495,10 @@ People:
 What the user cares about here:
 - CI cost and cache keys (instructions)
 Open questions:
-- Q1 Do we keep GitHub runners for release builds? (asked by @carol, PostHog/posthog#41890)
+- Q1 Do we keep GitHub runners for release builds? (asked by @carol, acme/app#1890)
 PR timeline, oldest first (state from GitHub now, not from memory):
-- PostHog/posthog#41880 merged by @alice: base runner image
-- PostHog/posthog#41899 open, CI failing, @alice: move Docker builds
+- acme/app#1880 merged by @alice: base runner image
+- acme/app#1899 open, CI failing, @alice: move Docker builds
 Earlier: ...
 Recent changes, newest first:
 - 2026-09-19 Docker build PR opened, waits on the image
@@ -1248,7 +1248,7 @@ authors.
      or re-review) the author pushed (any human commit or force push but
      yours; a commit author can be a git name) or replied (comment, review
      or thread reply by the author). No re-request needed: many authors
-     never press it. "paul addressed your changes: re-review", or "paul
+     never press it. "pim addressed your changes: re-review", or "pim
      replied to your review" without a push. `changesAnswered` in
      `changes-answered.ts`. It goes before rule 2 when the open ask is the
      author's own thread reply; an ask from anyone else still goes first.
@@ -1838,7 +1838,7 @@ beyond what the full sync already does for threads that left the inbox).
   team mention, question, reply, and on an open PR: review request, a push
   after approval the agent raised, changes requested on their own PR, and
   on a non-draft PR the author's push or comment after the user's changes
-  request, headline "@paul addressed your changes"). Agent and user
+  request, headline "@pim addressed your changes"). Agent and user
   overrides count.
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
@@ -1850,7 +1850,7 @@ beyond what the full sync already does for threads that left the inbox).
   unseen; a PR read meanwhile does not ping.
 - Fallback when the call fails, skips an item, or the daily cap is spent
   (`POSTPILE_PING_CAP`, default 200 calls per rolling 24h): ping with
-  `pingTemplate` text ("@bob asked you something · posthog#41850").
+  `pingTemplate` text ("@bob asked you something · app#1850").
 - Every decision lands in `ping_decision` (migration 007): thread, PR, ping
   yes/no, source rules / agent / fallback, title, body, reason, time.
 
