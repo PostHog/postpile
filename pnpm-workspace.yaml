@@ -1,0 +1,10 @@
+packages:
+  - packages/*
+  - apps/*
+
+# pnpm refuses to install while a dependency's build script is neither
+# allowed nor denied. esbuild checks its platform binary; electron-winstaller
+# is Windows-only.
+allowBuilds:
+  esbuild: true
+  electron-winstaller: false

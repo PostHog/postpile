@@ -1,4 +1,4 @@
-# macOS app bundle: npm run dist (root) builds with electron-vite, then this.
+# macOS app bundle: pnpm dist (root) builds with electron-vite, then this.
 # Everything the app runs is bundled into out/ by electron-vite (main,
 # preload, renderer, workspace packages, hono, fix-path), so the desktop
 # package has no runtime dependencies and no node_modules go into the app.
@@ -12,8 +12,8 @@ directories:
 files:
   - out/**
   - package.json
-  # electron-builder picks up the workspace root's dependencies; the bundle
-  # in out/ already holds everything, so none of them go in.
+  # The bundle in out/ already holds everything. With pnpm electron-builder
+  # finds no production deps today; this keeps it that way if one is added.
   - "!**/node_modules/**"
 asar: true
 mac:

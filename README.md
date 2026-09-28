@@ -16,25 +16,26 @@ end; the desktop UI is an unstyled placeholder. See [DESIGN.md](DESIGN.md).
 ## Use
 
 ```
-npm install
-npm run typecheck
-npm test
+pnpm install
+pnpm --filter @postpile/desktop exec install-electron   # once, for pnpm desktop
+pnpm typecheck
+pnpm test
 
-npm run cli -- sync            # fetch, digest, derive tiles
-npm run cli -- sync --limit 10 --no-agent            # cheap first look
-npm run cli -- sync --max-agent-calls 5 --agent-jobs topics,glances
-npm run cli -- topics
-npm run cli -- topic <id>
-npm run cli -- pr owner/repo#123
+pnpm cli sync            # fetch, digest, derive tiles
+pnpm cli sync --limit 10 --no-agent            # cheap first look
+pnpm cli sync --max-agent-calls 5 --agent-jobs topics,glances
+pnpm cli topics
+pnpm cli topic <id>
+pnpm cli pr owner/repo#123
 
-npm run server                 # HTTP API on 127.0.0.1:4870, prints its token
-npm run desktop                # Electron dev mode
+pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
+pnpm desktop                # Electron dev mode
 ```
 
 ## App bundle
 
 ```
-npm run dist
+pnpm dist
 ```
 
 Builds with electron-vite, then electron-builder makes an unsigned macOS app
@@ -46,7 +47,7 @@ Builds with electron-vite, then electron-builder makes an unsigned macOS app
 `dist/` is gitignored. Main, preload, renderer, the workspace packages and
 the server are bundled into the app, so it runs without tsx or node_modules.
 The server runs in-process on a random localhost port, the data lives in
-`~/Library/Application Support/PostPile` as with `npm run desktop`.
+`~/Library/Application Support/PostPile` as with `pnpm desktop`.
 
 It is not signed or notarized, so macOS refuses the first open. Right-click
 the app, then Open (once), or clear the quarantine flag:

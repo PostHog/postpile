@@ -228,7 +228,7 @@ history entry, and clearing the filter brings the pick back.
 - The preload hands over only the API URL and token, plus the swipe and
   notification-click listeners. As a plain web page the
   renderer takes `?api=…&token=…` instead.
-- Packaging: `npm run dist` (root) -> `apps/desktop/dist/mac-arm64/PostPile.app`,
+- Packaging: `pnpm dist` (root) -> `apps/desktop/dist/mac-arm64/PostPile.app`,
   config in `electron-builder.yml`. Main must stay self-contained: keep
   runtime packages bundled by electron-vite (the desktop package has only
   devDependencies, and no node_modules go into the app). Don't read files

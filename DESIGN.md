@@ -1228,7 +1228,7 @@ Newest 30 kept. A failure keeps the previous version; the error sits in meta
 
 **Schedule**: the desktop app checks at start and every 30 minutes
 (`startWorkContextSchedule`); `sweepDue` in core: local time 06:00 or later,
-no success in 24h, no failure in the last 2h. Also `npm run cli -- sweep` and
+no success in 24h, no failure in the last 2h. Also `pnpm cli sweep` and
 Refresh in the UI. The sweep runs beside syncs: neither waits for the other.
 
 **Use**: `PromptContext.workContext` carries the latest digest as compact text
@@ -1251,7 +1251,7 @@ digest linked to the sample topics.
 
 ## Architecture
 
-TypeScript everywhere, Node 24, npm workspaces.
+TypeScript everywhere, Node 24, pnpm workspaces (`pnpm-workspace.yaml`, workspace deps as `workspace:*`).
 
 ```
 core  <- store, github, agent  <- engine  <- server, cli
@@ -1278,7 +1278,7 @@ core  <- store, github, agent  <- engine  <- server, cli
   the login shell (`fix-path`), plus `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`,
   so `gh` and `claude` resolve on a GUI launch. Quit (Cmd+Q, SIGTERM, SIGINT) flushes the
   mark-read queue, closes the engine and the server, then `app.exit(0)`.
-  **App bundle** (`npm run dist`): electron-vite bundles main (workspace packages, hono,
+  **App bundle** (`pnpm dist`): electron-vite bundles main (workspace packages, hono,
   fix-path included), preload and renderer into `out/`; electron-builder
   (`apps/desktop/electron-builder.yml`) packs only `out/**` and `package.json` into an asar,
   no node_modules (the desktop package has devDependencies only). macOS, arm64, `dir` + `zip`,
@@ -1324,7 +1324,7 @@ preflight and does not know the token, so CORS stays open.
 ### Build and tooling decisions
 
 - **SQLite: built-in `node:sqlite`, no native module.** Tested: works under Node 24.21 and inside
-  the installed Electron 44.4.5 main process (`ELECTRON_RUN_AS_NODE=1 npx electron -e
+  the installed Electron 44.4.5 main process (`ELECTRON_RUN_AS_NODE=1 pnpm --filter @postpile/desktop exec electron -e
   "require('node:sqlite')"`, Electron embeds Node 24.21, SQLite 3.53). This avoids
   better-sqlite3 and `@electron/rebuild` entirely. The built Electron main bundle keeps
   `node:sqlite` as an external builtin.
@@ -1333,14 +1333,23 @@ preflight and does not know the token, so CORS stays open.
   desktop main bundle inlines workspace packages (`externalizeDeps.exclude`).
 - **Relative imports use `.ts` extensions** (`allowImportingTsExtensions`, `noEmit`). Nothing
   is emitted by tsc.
-- **Typecheck** is `tsc --noEmit` per workspace (`npm run typecheck`), not project references:
+- **Typecheck** is `tsc --noEmit` per workspace (`pnpm typecheck`), not project references:
   simpler with source-first packages. TypeScript 7 (native compiler) is fast enough that the
   repeated work does not matter.
 - **electron-vite 5 caps vite at 7**, so vite is pinned to `^7` and `@vitejs/plugin-react` to
   `^5`. Revisit when electron-vite supports vite 8.
-- **npm 11 install-script gating**: `allowScripts` in the root package.json approves esbuild and
-  denies fsevents. Electron 44 no longer downloads its binary on install; run
-  `npx install-electron` after a fresh `npm install`.
+- **pnpm** (12.6, `packageManager` in the root package.json; moved from npm workspaces
+  2026-09-28). Strict node_modules: every package declares what it imports (server has zod,
+  hono; desktop has electron, electron-vite, vite, react and the rest as devDependencies); the
+  root only holds the shared tools (typescript, vitest, tsx, @types/node), which workspace
+  scripts and test files find by walking up. No `node-linker=hoisted` and no `.npmrc`:
+  electron-builder detects pnpm, finds no production deps for the desktop package and packs
+  only `out/**`.
+- **Install-script gating**: pnpm 12 fails the install while a build script is neither allowed
+  nor denied. `allowBuilds` in `pnpm-workspace.yaml` allows esbuild and denies
+  electron-winstaller. Electron 44 no longer downloads its binary on install; run
+  `pnpm --filter @postpile/desktop exec install-electron` after a fresh `pnpm install` (only
+  needed for `pnpm desktop`; `pnpm dist` downloads its own copy).
 - **Localhost API safety**: binds 127.0.0.1, and a token is always required (per launch in the
   desktop app, per run in the standalone server) so web pages and other local processes cannot
   drive approve/comment/mark-read.

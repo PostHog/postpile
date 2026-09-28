@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
 // Dev CLI, the way to exercise the engine without a UI:
-//   npm run cli -- topics
-//   POSTPILE_FAKE=1 npm run cli -- topics   (Depot sample data)
+//   pnpm cli topics
+//   POSTPILE_FAKE=1 pnpm cli topics   (Depot sample data)
 import { engineFromEnv } from '@postpile/server';
 import { parseArgs, usage, type Command } from './args.ts';
 import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';

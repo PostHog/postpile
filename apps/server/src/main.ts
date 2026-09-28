@@ -1,6 +1,6 @@
 // Standalone server for development and the future web app:
-//   npm start -w @postpile/server
-//   POSTPILE_FAKE=1 npm start -w @postpile/server   (sample data)
+//   pnpm --filter @postpile/server start
+//   POSTPILE_FAKE=1 pnpm --filter @postpile/server start   (sample data)
 //   GitHub writes are off until the footer lock is opened; POSTPILE_READ_ONLY=1 keeps them off
 import { randomBytes } from 'node:crypto';
 import { applyLegacyEnv } from '@postpile/engine';

@@ -10,6 +10,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@postpile/core": "*"
+    "@postpile/core": "workspace:*"
   }
 }

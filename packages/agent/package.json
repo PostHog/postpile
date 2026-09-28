@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@postpile/core": "*",
+    "@postpile/core": "workspace:*",
     "zod": "^4.6.5"
   }
 }

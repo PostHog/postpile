@@ -12,9 +12,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@postpile/core": "*",
-    "@postpile/store": "*",
-    "@postpile/github": "*",
-    "@postpile/agent": "*"
+    "@postpile/core": "workspace:*",
+    "@postpile/store": "workspace:*",
+    "@postpile/github": "workspace:*",
+    "@postpile/agent": "workspace:*"
   }
 }

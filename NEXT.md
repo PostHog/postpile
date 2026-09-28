@@ -203,7 +203,7 @@ now".
   `context_sweep` call (`POSTPILE_SWEEP_MODEL`), versions in
   `work_context_version` (migration 009, last 30). Runs from the desktop app
   once a day from 06:00 (checked at start and every 30 min), on
-  `npm run cli -- sweep` and on Refresh; never blocks a sync. Injected as
+  `pnpm cli sweep` and on Refresh; never blocks a sync. Injected as
   background into topic assignment, dossier updates, glances, ping decisions
   and chat, outside every input hash. "What you're working on" at the bottom
   of "Your instructions": summary, threads with topic links, Why?, Forget
@@ -214,11 +214,18 @@ now".
   stats and the list shows read-only under the digest.
 - Default agent-call cap for app syncs raised from 30 to 150
   (`POSTPILE_MAX_AGENT_CALLS`).
-- App bundle: `npm run dist` makes an unsigned `PostPile.app` (arm64,
+- App bundle: `pnpm dist` makes an unsigned `PostPile.app` (arm64,
   dir + zip) in `apps/desktop/dist/`, everything bundled, no tsx or
   node_modules at runtime. Started in fake mode: window loads, the server
   answers, quit is clean.
 - Tests (vitest) and typecheck green across all workspaces.
+- pnpm instead of npm workspaces (2026-09-28): `pnpm-workspace.yaml`,
+  `packageManager: pnpm@12.6.0`, `workspace:*` deps, `pnpm-lock.yaml`
+  (imported from the npm lock). Each package declares what it imports; the
+  root keeps only typescript, vitest, tsx and @types/node. No hoisting
+  needed, electron-builder works with the strict layout. `allowBuilds` in
+  the workspace file (esbuild yes, electron-winstaller no), since pnpm 12
+  fails the install on unapproved build scripts.
 
 ## Stubbed or thin
 
@@ -283,7 +290,7 @@ now".
   is written on their next dossier update.
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
   consolidation can only propose splits over timeline PRs.
-- The app bundle (`npm run dist`) is unsigned and arm64 only; no Homebrew
+- The app bundle (`pnpm dist`) is unsigned and arm64 only; no Homebrew
   tap, no auto-update, no release pipeline. x64 would be one more arch in
   `electron-builder.yml` (another Electron download, not tried). The
   packaged app was started once in fake mode; a real-data run from Finder
@@ -495,38 +502,38 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
 ## How to run
 
 ```
-npm install
-npx install-electron          # Electron 44 no longer downloads on install
-npm run typecheck
-npm test
+pnpm install
+pnpm --filter @postpile/desktop exec install-electron   # Electron 44 no longer downloads on install
+pnpm typecheck
+pnpm test
 ```
 
 CLI (the main way to test without UI):
 
 ```
-npm run cli -- sync --limit 10 --no-agent     # cheap first look, no claude calls
-npm run cli -- sync                           # full sync with the agent
-npm run cli -- sync --max-agent-calls 5 --agent-jobs topics,dossiers,glances
-npm run cli -- topics
-npm run cli -- topic <id>                     # with the dossier and changes since seen
-npm run cli -- pr owner/repo#123              # with facts
-npm run cli -- consolidate [--if-due] [--max-agent-calls n]
-npm run cli -- poll                           # one live-poll cycle, prints ping decisions
-npm run cli -- sweep                          # "what you're working on" from ~/.claude, one opus call
+pnpm cli sync --limit 10 --no-agent     # cheap first look, no claude calls
+pnpm cli sync                           # full sync with the agent
+pnpm cli sync --max-agent-calls 5 --agent-jobs topics,dossiers,glances
+pnpm cli topics
+pnpm cli topic <id>                     # with the dossier and changes since seen
+pnpm cli pr owner/repo#123              # with facts
+pnpm cli consolidate [--if-due] [--max-agent-calls n]
+pnpm cli poll                           # one live-poll cycle, prints ping decisions
+pnpm cli sweep                          # "what you're working on" from ~/.claude, one opus call
 ```
 
 Smoke run on a throwaway database, read-only:
 
 ```
 POSTPILE_READ_ONLY=1 POSTPILE_DB=/tmp/cm-smoke/db.sqlite \
-  npm run cli -- sync --limit 15 --max-agent-calls 6
+  pnpm cli sync --limit 15 --max-agent-calls 6
 ```
 
 Desktop and server:
 
 ```
-npm run desktop       # Electron dev mode, server in-process on a random port + token
-npm run server        # standalone API on 127.0.0.1:4870, prints its token
+pnpm desktop       # Electron dev mode, server in-process on a random port + token
+pnpm server        # standalone API on 127.0.0.1:4870, prints its token
 ```
 
 The desktop app syncs once on start, then only on "Sync now". Between syncs it
@@ -536,13 +543,13 @@ choice is kept in the database); locked, approve and comment are blocked and
 mark-reads stay in the app:
 
 ```
-npm run build                                 # electron-vite bundle into apps/desktop/out
+pnpm build                                 # electron-vite bundle into apps/desktop/out
 ```
 
 UI check in fake mode as a plain web page (no Electron):
 
 ```
-POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 npm run server
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
 (cd apps/desktop/out/renderer && python3 -m http.server 5177)
 open 'http://127.0.0.1:5177/index.html?api=http://127.0.0.1:4877&token=devtok'
 ```
@@ -554,9 +561,9 @@ POSTPILE_MAX_AGENT_CALLS=0`, or `POSTPILE_SYNC_ON_START=0` to skip it.
 Fake mode (sample "Move CI to Depot" data, no GitHub, no agent, no database):
 
 ```
-POSTPILE_FAKE=1 npm run cli -- topics
-POSTPILE_FAKE=1 npm run desktop
-POSTPILE_FAKE=1 npm run server
+POSTPILE_FAKE=1 pnpm cli topics
+POSTPILE_FAKE=1 pnpm desktop
+POSTPILE_FAKE=1 pnpm server
 ```
 
 Env switches:

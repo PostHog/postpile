@@ -8,9 +8,9 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
-    "@postpile/core": "*",
-    "@postpile/engine": "*",
-    "@postpile/server": "*"
+    "@postpile/core": "workspace:*",
+    "@postpile/engine": "workspace:*",
+    "@postpile/server": "workspace:*"
   },
   "bin": {
     "postpile": "./src/main.ts"
