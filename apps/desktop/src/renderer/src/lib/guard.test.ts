@@ -3,12 +3,12 @@ import { markReadNote, writeBlockedReason } from './guard.ts';
 
 const OFF = { enabled: false, forcedOffReason: null };
 const ON = { enabled: true, forcedOffReason: null };
-const FORCED = { enabled: false, forcedOffReason: 'CODE_MANAGER_READ_ONLY=1 forces read-only.' };
+const FORCED = { enabled: false, forcedOffReason: 'POSTPILE_READ_ONLY=1 forces read-only.' };
 
 describe('writeBlockedReason', () => {
   it('blocks approve and comment while GitHub writes are off', () => {
     expect(writeBlockedReason('approve', OFF)).toMatch(/Open the lock in the footer/);
-    expect(writeBlockedReason('comment', FORCED)).toMatch(/CODE_MANAGER_READ_ONLY=1/);
+    expect(writeBlockedReason('comment', FORCED)).toMatch(/POSTPILE_READ_ONLY=1/);
     expect(writeBlockedReason('approve', ON)).toBeNull();
   });
 

@@ -85,7 +85,7 @@ export function TitleBar(props: TitleBarProps) {
             <span className="h-[18px] w-px bg-frame" />
             <span
               className="flex h-[22px] shrink-0 items-center rounded-full border border-dashed border-frame px-2 text-[11px] text-muted"
-              title="CODE_MANAGER_FAKE=1: built-in sample data, nothing reaches GitHub"
+              title="POSTPILE_FAKE=1: built-in sample data, nothing reaches GitHub"
             >
               Sample data
             </span>

@@ -282,7 +282,7 @@ export interface AppConfig {
   fake: boolean;
   /**
    * Agent-call cap for syncs the app starts (on launch and "Sync now") when
-   * the request names none. CODE_MANAGER_MAX_AGENT_CALLS, default 30. Work
+   * the request names none. POSTPILE_MAX_AGENT_CALLS, default 30. Work
    * over the cap waits for the next sync. The CLI keeps its own flags.
    */
   syncCallCap: number;

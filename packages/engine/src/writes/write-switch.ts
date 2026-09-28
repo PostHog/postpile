@@ -6,7 +6,7 @@ import { ReadOnlyWriter } from './read-only-writer.ts';
 /** Meta key holding the user's choice: "on", anything else (or nothing) is off. */
 export const GITHUB_WRITES_META_KEY = 'github_writes';
 
-export const FORCED_READ_ONLY_REASON = 'CODE_MANAGER_READ_ONLY=1 forces read-only. Restart without it to allow GitHub writes.';
+export const FORCED_READ_ONLY_REASON = 'POSTPILE_READ_ONLY=1 forces read-only. Restart without it to allow GitHub writes.';
 
 /**
  * The runtime on/off switch for GitHub writes, behind the footer lock.
@@ -14,7 +14,7 @@ export const FORCED_READ_ONLY_REASON = 'CODE_MANAGER_READ_ONLY=1 forces read-onl
  * a path that forgets to ask still cannot write. Off until the user turns it
  * on; the choice is kept in meta and survives restarts.
  *
- * `real` is null when CODE_MANAGER_READ_ONLY=1: then the real client is never
+ * `real` is null when POSTPILE_READ_ONLY=1: then the real client is never
  * constructed and the switch cannot be turned on.
  */
 export class WriteSwitch {

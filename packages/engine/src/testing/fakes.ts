@@ -164,7 +164,7 @@ export interface HarnessOptions {
   pingDecisionsPerDay?: number;
   /** GitHub writes on (the default here, so action tests reach FakeWriter) or off, as on a first real run. */
   writesEnabled?: boolean;
-  /** Build the switch with no real writer, like CODE_MANAGER_READ_ONLY=1. */
+  /** Build the switch with no real writer, like POSTPILE_READ_ONLY=1. */
   forcedReadOnly?: boolean;
   /** Reuse a store, e.g. to check what survives a restart. */
   store?: Store;

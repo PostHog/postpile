@@ -9,7 +9,7 @@ import type { MacNotification, PingTarget } from '@postpile/core';
 const KEEP_NOTIFICATIONS = 30;
 
 export interface MacNotifierOptions {
-  /** CODE_MANAGER_MAC_NOTIFICATIONS=0 turns them off; the poll still updates tiles. */
+  /** POSTPILE_MAC_NOTIFICATIONS=0 turns them off; the poll still updates tiles. */
   enabled: boolean;
   onClick: (target: PingTarget | null) => void;
 }

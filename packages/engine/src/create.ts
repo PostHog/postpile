@@ -6,6 +6,7 @@ import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
+import { migrateLegacyData } from './legacy-data.ts';
 import { defaultPaths, type AppPaths } from './paths.ts';
 import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
@@ -16,14 +17,14 @@ export interface CreateEngineOptions {
   paths?: AppPaths;
   /**
    * No GitHub writes at all, whatever the footer lock says: the real write
-   * client is never built. Defaults to CODE_MANAGER_READ_ONLY=1.
+   * client is never built. Defaults to POSTPILE_READ_ONLY=1.
    */
   readOnly?: boolean;
-  /** Daily cap on ping decisions. Defaults to CODE_MANAGER_PING_CAP, else PING_DECISIONS_PER_DAY. */
+  /** Daily cap on ping decisions. Defaults to POSTPILE_PING_CAP, else PING_DECISIONS_PER_DAY. */
   pingDecisionsPerDay?: number;
 }
 
-/** CODE_MANAGER_PING_CAP when it is a whole number >= 0, else the default. */
+/** POSTPILE_PING_CAP when it is a whole number >= 0, else the default. */
 export function pingCapFromEnv(value: string | undefined): number {
   const parsed = Number(value);
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : PING_DECISIONS_PER_DAY;
@@ -31,8 +32,12 @@ export function pingCapFromEnv(value: string | undefined): number {
 
 /** Wires the real dependencies. Tests build Engine directly with fakes instead. */
 export function createEngine(options: CreateEngineOptions = {}): EngineService {
+  if (!options.paths) {
+    // One-time move from the code-manager folders; a no-op once done.
+    migrateLegacyData();
+  }
   const paths = options.paths ?? defaultPaths();
-  const readOnly = options.readOnly ?? process.env.CODE_MANAGER_READ_ONLY === '1';
+  const readOnly = options.readOnly ?? process.env.POSTPILE_READ_ONLY === '1';
   const tokens = new GhCliTokenSource();
   const store = Store.open(paths.databaseFile);
   const reader = new GitHubClient(tokens);
@@ -53,6 +58,6 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     markReadQueue: new MarkReadQueue(writes, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
     instructionsFile: paths.instructionsFile,
     now,
-    pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.CODE_MANAGER_PING_CAP),
+    pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
   });
 }

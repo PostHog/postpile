@@ -39,7 +39,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const INCLUDE = /(?:^|\s)@((?:~\/|\.{1,2}\/|\/)?[\w.\-/]+)/g;
 
 export interface CollectorOptions {
-  /** CODE_MANAGER_CLAUDE_DIR, default ~/.claude. */
+  /** POSTPILE_CLAUDE_DIR, default ~/.claude. */
   claudeDir: string;
   now: Date;
   /** Shown as "~" in refs. */
@@ -63,9 +63,9 @@ interface Candidate {
   text: string;
 }
 
-/** The claude dir from the environment: CODE_MANAGER_CLAUDE_DIR, else ~/.claude. */
+/** The claude dir from the environment: POSTPILE_CLAUDE_DIR, else ~/.claude. */
 export function claudeDirFromEnv(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
-  return env.CODE_MANAGER_CLAUDE_DIR || join(home, '.claude');
+  return env.POSTPILE_CLAUDE_DIR || join(home, '.claude');
 }
 
 function clipBlock(text: string, max: number): string {

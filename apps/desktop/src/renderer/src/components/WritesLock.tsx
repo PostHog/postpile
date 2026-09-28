@@ -18,7 +18,7 @@ function lockTitle(writes: GitHubWritesStatus, fake: boolean): string {
 /**
  * The GitHub writes switch in the status footer. Locked = read-only.
  * Unlocking asks first in a small popover; locking is instant. Disabled with
- * the reason when CODE_MANAGER_READ_ONLY=1 forces read-only.
+ * the reason when POSTPILE_READ_ONLY=1 forces read-only.
  */
 export function WritesLock() {
   const actions = useActions();

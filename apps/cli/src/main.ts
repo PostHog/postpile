@@ -1,13 +1,15 @@
 #!/usr/bin/env -S npx tsx
 // Dev CLI, the way to exercise the engine without a UI:
 //   npm run cli -- topics
-//   CODE_MANAGER_FAKE=1 npm run cli -- topics   (Depot sample data)
+//   POSTPILE_FAKE=1 npm run cli -- topics   (Depot sample data)
 import { engineFromEnv } from '@postpile/server';
 import { parseArgs, usage, type Command } from './args.ts';
 import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
-import type { EngineService } from '@postpile/engine';
+import { applyLegacyEnv, type EngineService } from '@postpile/engine';
+
+applyLegacyEnv();
 
 async function runCommand(engine: EngineService, command: Command): Promise<string> {
   switch (command.name) {

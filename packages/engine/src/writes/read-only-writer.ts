@@ -3,7 +3,7 @@ import type { GitHubWriter } from '@postpile/github';
 
 /**
  * What WriteSwitch hands out while GitHub writes are off: the footer lock is
- * closed, or CODE_MANAGER_READ_ONLY=1 forces it (smoke runs against a real
+ * closed, or POSTPILE_READ_ONLY=1 forces it (smoke runs against a real
  * account). Every write fails loudly instead of reaching GitHub.
  */
 export class ReadOnlyWriter implements GitHubWriter {

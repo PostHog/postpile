@@ -148,12 +148,12 @@ describe('contextSweepPrompt', () => {
 
 describe('sweepContext', () => {
   afterEach(() => {
-    delete process.env.CODE_MANAGER_SWEEP_MODEL;
+    delete process.env.POSTPILE_SWEEP_MODEL;
   });
 
-  it('runs on opus unless CODE_MANAGER_SWEEP_MODEL says otherwise', () => {
+  it('runs on opus unless POSTPILE_SWEEP_MODEL says otherwise', () => {
     expect(modelFor('context_sweep')).toBe('opus');
-    process.env.CODE_MANAGER_SWEEP_MODEL = 'sonnet';
+    process.env.POSTPILE_SWEEP_MODEL = 'sonnet';
     expect(modelFor('context_sweep')).toBe('sonnet');
   });
 

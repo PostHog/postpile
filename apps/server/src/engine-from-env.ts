@@ -2,11 +2,11 @@ import type { AppConfig } from '@postpile/core';
 import { createEngine, type EngineService } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 
-function isFake(): boolean {
-  return process.env.CODE_MANAGER_FAKE === '1';
+export function isFake(): boolean {
+  return process.env.POSTPILE_FAKE === '1';
 }
 
-/** Set CODE_MANAGER_FAKE=1 to run on the Depot sample data: no GitHub, no agent, no database. */
+/** Set POSTPILE_FAKE=1 to run on the Depot sample data: no GitHub, no agent, no database. */
 export function engineFromEnv(): EngineService {
   if (isFake()) {
     return new FakeEngine();
@@ -21,7 +21,7 @@ export function engineFromEnv(): EngineService {
  */
 export const DEFAULT_SYNC_CALL_CAP = 150;
 
-/** CODE_MANAGER_MAX_AGENT_CALLS, when it is a whole number >= 0; the default otherwise. */
+/** POSTPILE_MAX_AGENT_CALLS, when it is a whole number >= 0; the default otherwise. */
 export function syncCallCapFromEnv(value: string | undefined): number {
   const parsed = Number(value);
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_SYNC_CALL_CAP;
@@ -34,14 +34,14 @@ export function syncCallCapFromEnv(value: string | undefined): number {
 export function appConfigFromEnv(): AppConfig {
   return {
     fake: isFake(),
-    syncCallCap: syncCallCapFromEnv(process.env.CODE_MANAGER_MAX_AGENT_CALLS),
+    syncCallCap: syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS),
   };
 }
 
 /** How often the desktop app polls GitHub notifications, as Julian asked for. */
 export const DEFAULT_POLL_SECONDS = 10;
 
-/** CODE_MANAGER_POLL_SECONDS: whole seconds >= 0 (0 turns the poll off); the default otherwise. */
+/** POSTPILE_POLL_SECONDS: whole seconds >= 0 (0 turns the poll off); the default otherwise. */
 export function pollSecondsFromEnv(value: string | undefined): number {
   const parsed = Number(value);
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_POLL_SECONDS;

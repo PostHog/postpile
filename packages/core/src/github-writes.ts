@@ -6,7 +6,7 @@ import type { IsoTime, PrKey } from './types.ts';
 /**
  * Whether the app may write to GitHub right now. Off (read-only) on first run;
  * the user flips it with the lock in the status footer and the choice is kept
- * in the store. CODE_MANAGER_READ_ONLY=1 forces it off: then `forcedOffReason`
+ * in the store. POSTPILE_READ_ONLY=1 forces it off: then `forcedOffReason`
  * says why and turning it on is refused.
  */
 export interface GitHubWritesStatus {

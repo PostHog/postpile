@@ -6,7 +6,7 @@ import { ClaudeCliRunner, claudeArgs, inputHash, parseClaudeOutput } from './ind
 
 /** A stand-in `claude` binary: a shell script, so no real model is ever called. */
 function fakeClaude(script: string): string {
-  const dir = mkdtempSync(join(tmpdir(), 'code-manager-agent-'));
+  const dir = mkdtempSync(join(tmpdir(), 'postpile-agent-'));
   const path = join(dir, 'claude');
   writeFileSync(path, `#!/bin/sh\n${script}\n`);
   chmodSync(path, 0o755);

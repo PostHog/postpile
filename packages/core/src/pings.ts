@@ -63,7 +63,7 @@ export type LivePollState = 'off' | 'waiting' | 'polling' | 'blocked' | 'backoff
 /** The fast notification poll, as the status footer shows it. */
 export interface LivePollStatus {
   state: LivePollState;
-  /** How often the app polls when nothing is wrong. CODE_MANAGER_POLL_SECONDS, default 10. */
+  /** How often the app polls when nothing is wrong. POSTPILE_POLL_SECONDS, default 10. */
   intervalSeconds: number;
   /** GitHub's X-Poll-Interval from the last answer. Shown, not obeyed (see DESIGN.md). */
   githubPollIntervalSeconds: number | null;

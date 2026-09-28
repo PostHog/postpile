@@ -87,7 +87,7 @@ export interface EngineDeps {
   timers?: Timers;
   /** Daily cap on ping_decision calls. Defaults to PING_DECISIONS_PER_DAY. */
   pingDecisionsPerDay?: number;
-  /** Local Claude Code folder the work context sweep reads. Defaults to CODE_MANAGER_CLAUDE_DIR, else ~/.claude. */
+  /** Local Claude Code folder the work context sweep reads. Defaults to POSTPILE_CLAUDE_DIR, else ~/.claude. */
   claudeDir?: string;
 }
 

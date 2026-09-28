@@ -81,7 +81,7 @@ export interface EngineService {
   githubWrites(): Promise<GitHubWritesStatus>;
   /**
    * Flips the lock at runtime and keeps the choice. Refused (ok false) when
-   * CODE_MANAGER_READ_ONLY=1 forces read-only. Mark-reads queued while off
+   * POSTPILE_READ_ONLY=1 forces read-only. Mark-reads queued while off
    * stay local even if writes come on inside their undo window.
    */
   setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange>;

@@ -37,7 +37,7 @@ export interface PingDeciderDeps {
   agent: AgentService;
   contexts: PromptContextSource;
   now: () => Date;
-  /** PING_DECISIONS_PER_DAY unless CODE_MANAGER_PING_CAP says otherwise. */
+  /** PING_DECISIONS_PER_DAY unless POSTPILE_PING_CAP says otherwise. */
   capPerDay: number;
 }
 

@@ -61,7 +61,7 @@ describe('glanceItemInputHash', () => {
     afterEach(() => vi.unstubAllEnvs());
 
     it('changes when the glance model changes', () => {
-      vi.stubEnv('CODE_MANAGER_GLANCE_MODEL', 'claude-sonnet-4-5');
+      vi.stubEnv('POSTPILE_GLANCE_MODEL', 'claude-sonnet-4-5');
       expect(glanceHash()).not.toBe(base);
     });
   });

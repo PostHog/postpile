@@ -14,7 +14,7 @@ function secondsUntil(iso: string | null, now: Date): number {
 /** Footer text for the fast notification poll. */
 export function liveLabel(status: LivePollStatus | undefined, now: Date): LiveLabel {
   if (!status || status.state === 'off') {
-    return { text: 'live poll off', warn: false, title: 'The desktop app polls GitHub notifications; CODE_MANAGER_POLL_SECONDS=0 turns it off' };
+    return { text: 'live poll off', warn: false, title: 'The desktop app polls GitHub notifications; POSTPILE_POLL_SECONDS=0 turns it off' };
   }
   const github = status.githubPollIntervalSeconds === null ? 'no X-Poll-Interval yet' : `GitHub asks for ${status.githubPollIntervalSeconds}s (X-Poll-Interval)`;
   const title = `Polling every ${status.intervalSeconds}s, ${github}. ${status.notificationsShown} Mac notifications so far.`;

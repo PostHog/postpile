@@ -70,7 +70,7 @@ describe('GitHub writes switch', () => {
     expect((await second.engine.githubWrites()).enabled).toBe(true);
   });
 
-  it('refuses to turn on while CODE_MANAGER_READ_ONLY=1 forces read-only', async () => {
+  it('refuses to turn on while POSTPILE_READ_ONLY=1 forces read-only', async () => {
     const h = makeHarness({ forcedReadOnly: true });
 
     const change = await h.engine.setGitHubWrites(true);

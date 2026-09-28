@@ -145,9 +145,9 @@ describe('WorkContextCollector', () => {
 });
 
 describe('claudeDirFromEnv', () => {
-  it('defaults to ~/.claude and takes CODE_MANAGER_CLAUDE_DIR', () => {
+  it('defaults to ~/.claude and takes POSTPILE_CLAUDE_DIR', () => {
     expect(claudeDirFromEnv({}, '/home/j')).toBe('/home/j/.claude');
-    expect(claudeDirFromEnv({ CODE_MANAGER_CLAUDE_DIR: '/tmp/fake' }, '/home/j')).toBe('/tmp/fake');
+    expect(claudeDirFromEnv({ POSTPILE_CLAUDE_DIR: '/tmp/fake' }, '/home/j')).toBe('/tmp/fake');
   });
 });
 

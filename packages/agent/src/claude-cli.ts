@@ -50,16 +50,16 @@ export function parseClaudeOutput(stdout: string): { text: string; costUsd: numb
 }
 
 export interface ClaudeCliRunnerOptions {
-  /** Path or name of the claude binary. Default: CODE_MANAGER_CLAUDE_BIN or "claude" on PATH. */
+  /** Path or name of the claude binary. Default: POSTPILE_CLAUDE_BIN or "claude" on PATH. */
   binary?: string;
-  /** Max claude processes at once. Default: CODE_MANAGER_AGENT_CONCURRENCY or 4. */
+  /** Max claude processes at once. Default: POSTPILE_AGENT_CONCURRENCY or 4. */
   maxConcurrent?: number;
 }
 
 const DEFAULT_MAX_CONCURRENT = 4;
 
 function defaultMaxConcurrent(): number {
-  const fromEnv = Number(process.env.CODE_MANAGER_AGENT_CONCURRENCY);
+  const fromEnv = Number(process.env.POSTPILE_AGENT_CONCURRENCY);
   return Number.isInteger(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_MAX_CONCURRENT;
 }
 
@@ -73,7 +73,7 @@ export class ClaudeCliRunner implements AgentRunner {
   private readonly limiter: ConcurrencyLimiter;
 
   constructor(options: ClaudeCliRunnerOptions = {}) {
-    this.binary = options.binary ?? process.env.CODE_MANAGER_CLAUDE_BIN ?? 'claude';
+    this.binary = options.binary ?? process.env.POSTPILE_CLAUDE_BIN ?? 'claude';
     this.limiter = new ConcurrencyLimiter(options.maxConcurrent ?? defaultMaxConcurrent());
   }
 

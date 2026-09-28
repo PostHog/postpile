@@ -2,13 +2,20 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { app, BrowserWindow, shell } from 'electron';
 import fixPath from 'fix-path';
-import type { EngineService } from '@postpile/engine';
-import { appConfigFromEnv, engineFromEnv, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
+import { applyLegacyEnv, migrateLegacyData, type EngineService } from '@postpile/engine';
+import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { MacNotifier } from './mac-notifier.ts';
 
 // A GUI launch gets launchd's minimal PATH. gh and claude live in
 // /opt/homebrew/bin and ~/.local/bin, so take PATH from the login shell.
 fixPath();
+
+applyLegacyEnv();
+// Before Electron touches userData: it is the same folder as the database, and
+// the one-time move from the code-manager folder wants the new one absent.
+if (!isFake()) {
+  migrateLegacyData();
+}
 
 // Otherwise userData lands under the npm package name, "@postpile/desktop".
 app.setName('code-manager');
@@ -95,14 +102,14 @@ async function openWindow(apiUrl: string, token: string): Promise<BrowserWindow>
 async function start(): Promise<void> {
   // The token keeps other local processes and web pages from driving the API.
   const token = randomBytes(24).toString('hex');
-  // CODE_MANAGER_FAKE=1 runs on sample data, see engineFromEnv.
-  // GitHub writes stay off until the footer lock is opened (kept in the store); CODE_MANAGER_READ_ONLY=1 forces off.
+  // POSTPILE_FAKE=1 runs on sample data, see engineFromEnv.
+  // GitHub writes stay off until the footer lock is opened (kept in the store); POSTPILE_READ_ONLY=1 forces off.
   engine = engineFromEnv();
   server = await startServer({ engine, port: 0, token, config: appConfigFromEnv() });
   mainWindow = await openWindow(server.url, token);
   // A click opens the tile: show the window, then let the renderer navigate.
   const notifier = new MacNotifier({
-    enabled: process.env.CODE_MANAGER_MAC_NOTIFICATIONS !== '0',
+    enabled: process.env.POSTPILE_MAC_NOTIFICATIONS !== '0',
     onClick: (target) => {
       showWindow();
       if (target) {
@@ -112,7 +119,7 @@ async function start(): Promise<void> {
   });
   // The fast notification poll runs as long as the app does, window open or not.
   engine.startLivePoll({
-    intervalSeconds: pollSecondsFromEnv(process.env.CODE_MANAGER_POLL_SECONDS),
+    intervalSeconds: pollSecondsFromEnv(process.env.POSTPILE_POLL_SECONDS),
     onNotify: (notifications) => notifier.show(notifications),
   });
   // "What you're working on": checked now and every 30 minutes, runs once a day from 06:00.

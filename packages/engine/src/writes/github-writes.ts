@@ -36,7 +36,7 @@ export class GitHubWrites {
     return this.writeSwitch.status();
   }
 
-  /** The footer lock. Turning on is refused while CODE_MANAGER_READ_ONLY=1 forces read-only. */
+  /** The footer lock. Turning on is refused while POSTPILE_READ_ONLY=1 forces read-only. */
   set(enabled: boolean): GitHubWritesChange {
     if (!this.writeSwitch.set(enabled)) {
       const status = this.status();
