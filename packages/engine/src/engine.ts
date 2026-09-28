@@ -13,6 +13,7 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  LivePollStatus,
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
@@ -27,7 +28,9 @@ import type {
   SyncReport,
   TopicDetail,
   TopicListItem,
+  Timers,
 } from '@code-manager/core';
+import { OFF_POLL_STATUS, systemTimers } from '@code-manager/core';
 import type { GitHubReader, GitHubWriter } from '@code-manager/github';
 import type { Store } from '@code-manager/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -44,6 +47,10 @@ import { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { InstructionsHistory } from './instructions/history.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
+import { LivePoller } from './live/live-poller.ts';
+import { PING_DECISIONS_PER_DAY, PingDecider } from './live/ping-decider.ts';
+import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
+import { PollRun } from './live/poll-run.ts';
 import { FactWriter } from './memory/fact-writer.ts';
 import { MemoryRechecker } from './memory/memory-recheck.ts';
 import { MemorySourcesReads } from './memory/memory-sources-reads.ts';
@@ -62,6 +69,10 @@ export interface EngineDeps {
   markReadQueue: MarkReadQueue;
   instructionsFile: string;
   now: () => Date;
+  /** Clock for the live poll. Defaults to the system timers. */
+  timers?: Timers;
+  /** Daily cap on ping_decision calls. Defaults to PING_DECISIONS_PER_DAY. */
+  pingDecisionsPerDay?: number;
 }
 
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
@@ -78,8 +89,11 @@ export class Engine implements EngineService {
   private readonly instructions: InstructionsActions;
   private readonly syncRun: SyncRun;
   private readonly consolidationRun: ConsolidationRun;
+  private readonly pollRun: PollRun;
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
+  private polling: Promise<PollCycle> | null = null;
+  private livePoller: LivePoller | null = null;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
@@ -98,17 +112,32 @@ export class Engine implements EngineService {
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
-    this.syncRun = new SyncRun(runDeps, new GitHubSync(store, deps.reader, contexts, now), deps.markReadQueue);
+    const github = new GitHubSync(store, deps.reader, contexts, now);
+    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue);
     this.consolidationRun = new ConsolidationRun(runDeps);
+    const decider = new PingDecider({
+      store,
+      agent: deps.agent,
+      contexts,
+      now,
+      capPerDay: deps.pingDecisionsPerDay ?? PING_DECISIONS_PER_DAY,
+    });
+    this.pollRun = new PollRun(runDeps, github, decider);
+  }
+
+  /** Settles when every run in the list has, whatever the outcome. */
+  private static settled(runs: (Promise<unknown> | null)[]): Promise<void> {
+    return Promise.all(runs.map((run) => run?.catch(() => {}))).then(() => {});
   }
 
   /**
-   * A sync while one is running joins the running one. Sync and consolidation
-   * never overlap: each waits for the other, so agent calls land in the right run.
+   * A sync while one is running joins the running one. Sync, consolidation
+   * and a poll cycle never overlap: sync and consolidation wait for the
+   * others, so agent calls land in the right run.
    */
   sync(options: SyncOptions = {}): Promise<SyncReport> {
     if (!this.syncing) {
-      const before = this.consolidating?.catch(() => {}) ?? Promise.resolve();
+      const before = Engine.settled([this.consolidating, this.polling]);
       this.syncing = before
         .then(() => this.syncRun.run(options))
         .finally(() => {
@@ -120,7 +149,7 @@ export class Engine implements EngineService {
 
   consolidate(options: ConsolidateOptions = {}): Promise<ConsolidationReport> {
     if (!this.consolidating) {
-      const before = this.syncing?.catch(() => {}) ?? Promise.resolve();
+      const before = Engine.settled([this.syncing, this.polling]);
       this.consolidating = before
         .then(() => this.consolidationRun.run(options))
         .finally(() => {
@@ -128,6 +157,43 @@ export class Engine implements EngineService {
         });
     }
     return this.consolidating;
+  }
+
+  /**
+   * One fast-poll cycle. Blocked, not queued, while a full sync or a
+   * consolidation runs: the next cycle comes soon enough. A cycle while one
+   * runs joins it.
+   */
+  pollOnce(): Promise<PollCycle> {
+    if (this.syncing) {
+      return Promise.resolve({ kind: 'blocked', reason: 'full sync running' });
+    }
+    if (this.consolidating) {
+      return Promise.resolve({ kind: 'blocked', reason: 'consolidation running' });
+    }
+    if (!this.polling) {
+      this.polling = this.pollRun.run().finally(() => {
+        this.polling = null;
+      });
+    }
+    return this.polling;
+  }
+
+  startLivePoll(options: LivePollOptions): void {
+    if (this.livePoller) {
+      return;
+    }
+    this.livePoller = new LivePoller(() => this.pollOnce(), this.deps.timers ?? systemTimers, options);
+    this.livePoller.start();
+  }
+
+  stopLivePoll(): void {
+    this.livePoller?.stop();
+    this.livePoller = null;
+  }
+
+  async livePollStatus(): Promise<LivePollStatus> {
+    return this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
   }
 
   async listTopics(): Promise<TopicListItem[]> {
@@ -254,6 +320,8 @@ export class Engine implements EngineService {
   }
 
   async close(): Promise<void> {
+    this.stopLivePoll();
+    await this.polling?.catch(() => {});
     await this.syncing?.catch(() => {});
     await this.consolidating?.catch(() => {});
     this.deps.store.close();

@@ -2,6 +2,35 @@ import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 
 describe('FakeEngine', () => {
+  it('finds a new sample question every ~45s and pings for it', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now });
+    expect(await engine.pollOnce()).toMatchObject({ kind: 'done', notModified: true, pings: [] });
+
+    now = new Date(now.getTime() + 45_000);
+    const cycle = await engine.pollOnce();
+
+    if (cycle.kind !== 'done') throw new Error('expected a done cycle');
+    expect(cycle.notModified).toBe(false);
+    expect(cycle.decisions).toMatchObject([{ ping: true, source: 'rules' }]);
+    const target = cycle.pings[0]!.target;
+    expect(cycle.pings[0]!.title).toMatch(/asked you something/);
+    const topic = await engine.getTopic(target.topicId!);
+    const tile = topic?.tiles.find((view) => view.tile.id === target.tileId);
+    expect(tile?.state.kind).toBe('unread');
+    expect(tile?.state.unreadBecause.some((reason) => reason.kind === 'question_to_user')).toBe(true);
+    expect(await engine.pollOnce()).toMatchObject({ notModified: true });
+  });
+
+  it('reports the live poll as off until it is started', async () => {
+    const engine = new FakeEngine();
+    expect((await engine.livePollStatus()).state).toBe('off');
+    engine.startLivePoll({ intervalSeconds: 10, onNotify: () => {}, log: () => {} });
+    expect((await engine.livePollStatus()).state).toBe('waiting');
+    await engine.close();
+    expect((await engine.livePollStatus()).state).toBe('off');
+  });
+
   it('refuses undo after the 6s window', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });

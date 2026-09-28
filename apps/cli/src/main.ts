@@ -4,7 +4,7 @@
 //   CODE_MANAGER_FAKE=1 npm run cli -- topics   (Depot sample data)
 import { engineFromEnv } from '@code-manager/server';
 import { parseArgs, usage, type Command } from './args.ts';
-import { formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
+import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import { formatConsolidation } from './format-memory.ts';
 import type { EngineService } from '@code-manager/engine';
 
@@ -14,6 +14,8 @@ async function runCommand(engine: EngineService, command: Command): Promise<stri
       return formatSync(await engine.sync(command.options));
     case 'consolidate':
       return formatConsolidation(await engine.consolidate(command.options));
+    case 'poll':
+      return formatPoll(await engine.pollOnce());
     case 'topics':
       return formatTopics(await engine.listTopics());
     case 'topic': {

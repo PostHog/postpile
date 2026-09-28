@@ -1,4 +1,5 @@
 import type { PrDetail, SyncReport, TopicDetail, TopicListItem } from '@code-manager/core';
+import type { PollCycle } from '@code-manager/engine';
 import { formatCallStats, formatDossier, formatFactCounts, formatFacts } from './format-memory.ts';
 
 export function formatSync(report: SyncReport): string {
@@ -17,6 +18,26 @@ export function formatSync(report: SyncReport): string {
     lines.push('notifications unchanged (304)');
   }
   for (const error of report.errors) {
+    lines.push(`error: ${error}`);
+  }
+  return lines.join('\n');
+}
+
+export function formatPoll(cycle: PollCycle): string {
+  if (cycle.kind === 'blocked') {
+    return `poll blocked: ${cycle.reason}`;
+  }
+  const interval = cycle.githubPollIntervalSeconds === null ? 'none' : `${cycle.githubPollIntervalSeconds}s`;
+  const lines = [
+    cycle.notModified ? 'notifications unchanged (304)' : `PRs updated ${cycle.prsUpdated}`,
+    `GitHub X-Poll-Interval: ${interval}`,
+  ];
+  for (const decision of cycle.decisions) {
+    const verdict = decision.ping ? 'PING' : 'no ping';
+    const text = decision.ping ? `  "${decision.title}"` : '';
+    lines.push(`${verdict} ${decision.prKey} (${decision.source}): ${decision.reason}${text}`);
+  }
+  for (const error of cycle.errors) {
     lines.push(`error: ${error}`);
   }
   return lines.join('\n');

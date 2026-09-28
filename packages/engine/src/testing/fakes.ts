@@ -39,11 +39,24 @@ export class FakeReader implements GitHubReader {
     return this.who;
   }
 
+  /** X-Poll-Interval on every answer. */
+  pollIntervalSeconds: number | null = 60;
+  /** Thrown by the next listNotifications, then cleared. */
+  failNext: Error | null = null;
+  notificationCalls = 0;
+
   async listNotifications(conditions: NotificationConditions): Promise<NotificationsResult> {
-    if (conditions.etag === this.etag) {
-      return { notModified: true };
+    this.notificationCalls += 1;
+    if (this.failNext) {
+      const error = this.failNext;
+      this.failNext = null;
+      throw error;
     }
-    return { notModified: false, threads: this.threads, etag: this.etag, lastModified: null };
+    const pollIntervalSeconds = this.pollIntervalSeconds;
+    if (conditions.etag === this.etag) {
+      return { notModified: true, pollIntervalSeconds };
+    }
+    return { notModified: false, threads: this.threads, etag: this.etag, lastModified: null, pollIntervalSeconds };
   }
 
   async getThread(threadId: string): Promise<NotificationThread | null> {
@@ -113,6 +126,7 @@ export interface HarnessOptions {
   instructionsFile?: string;
   /** Clock for the engine; tests move it forward by changing what it returns. */
   now?: () => Date;
+  pingDecisionsPerDay?: number;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -128,6 +142,17 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   );
   const callLog = new AgentCallLog(store, now);
   const agent = new FakeAgent(runner, callLog);
-  const engine = new Engine({ store, reader, writer, agent, callLog, markReadQueue, instructionsFile, now });
+  const engine = new Engine({
+    store,
+    reader,
+    writer,
+    agent,
+    callLog,
+    markReadQueue,
+    instructionsFile,
+    now,
+    timers,
+    pingDecisionsPerDay: options.pingDecisionsPerDay,
+  });
   return { engine, store, reader, writer, runner, agent, timers };
 }

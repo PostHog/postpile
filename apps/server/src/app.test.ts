@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '@code-manager/core';
 import type { EngineService } from '@code-manager/engine';
 import { createApp, TOKEN_HEADER } from './app.ts';
-import { syncCallCapFromEnv } from './engine-from-env.ts';
+import { pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
+import { OFF_POLL_STATUS } from '@code-manager/core';
 
 const CONFIG: AppConfig = { fake: false, writesAllowed: false, syncCallCap: 30 };
 
@@ -13,6 +14,10 @@ function notImplemented(): never {
 function fakeEngine(overrides: Partial<EngineService>): EngineService {
   return {
     sync: notImplemented,
+    pollOnce: notImplemented,
+    startLivePoll: notImplemented,
+    stopLivePoll: notImplemented,
+    livePollStatus: notImplemented,
     listTopics: notImplemented,
     getTopic: notImplemented,
     search: notImplemented,
@@ -107,6 +112,21 @@ describe('server app', () => {
     expect(syncCallCapFromEnv('0')).toBe(0);
     expect(syncCallCapFromEnv('lots')).toBe(30);
     expect(syncCallCapFromEnv('-3')).toBe(30);
+  });
+
+  it('reads the poll interval from the environment, 0 turns it off', () => {
+    expect(pollSecondsFromEnv(undefined)).toBe(10);
+    expect(pollSecondsFromEnv('30')).toBe(30);
+    expect(pollSecondsFromEnv('0')).toBe(0);
+    expect(pollSecondsFromEnv('fast')).toBe(10);
+    expect(pollSecondsFromEnv('2.5')).toBe(10);
+  });
+
+  it('serves the live poll status behind the token', async () => {
+    const app = createApp(fakeEngine({ livePollStatus: async () => OFF_POLL_STATUS }), 'secret', CONFIG);
+    expect((await app.request('/api/live')).status).toBe(401);
+    const res = await app.request('/api/live', { headers: { [TOKEN_HEADER]: 'secret' } });
+    expect(await res.json()).toEqual(OFF_POLL_STATUS);
   });
 
   it('refuses to start without a token', () => {

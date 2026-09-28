@@ -4,6 +4,7 @@ import { GhCliTokenSource, GitHubClient, GitHubWriteClient, type GitHubWriter, t
 import { Store } from '@code-manager/store';
 import { AgentCallLog } from './agent-call-log.ts';
 import { Engine } from './engine.ts';
+import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
 import { defaultPaths, type AppPaths } from './paths.ts';
 import { ReadOnlyWriter } from './read-only-writer.ts';
@@ -13,6 +14,14 @@ export interface CreateEngineOptions {
   paths?: AppPaths;
   /** No GitHub writes at all. Defaults to CODE_MANAGER_READ_ONLY=1. */
   readOnly?: boolean;
+  /** Daily cap on ping decisions. Defaults to CODE_MANAGER_PING_CAP, else PING_DECISIONS_PER_DAY. */
+  pingDecisionsPerDay?: number;
+}
+
+/** CODE_MANAGER_PING_CAP when it is a whole number >= 0, else the default. */
+export function pingCapFromEnv(value: string | undefined): number {
+  const parsed = Number(value);
+  return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : PING_DECISIONS_PER_DAY;
 }
 
 function makeWriter(tokens: TokenSource, readOnly: boolean): GitHubWriter {
@@ -41,5 +50,6 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     markReadQueue: new MarkReadQueue(writer, reader, systemTimers, UNDO_WINDOW_MS, markThreadReadLocally),
     instructionsFile: paths.instructionsFile,
     now,
+    pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.CODE_MANAGER_PING_CAP),
   });
 }

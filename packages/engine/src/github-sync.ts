@@ -13,10 +13,12 @@ import type { Store } from '@code-manager/store';
 import { errorText } from './errors.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { StackLayerFinder } from './stack-layers.ts';
-import { saveViewer } from './viewer-meta.ts';
+import { loadViewer, saveViewer } from './viewer-meta.ts';
 
 const ETAG_KEY = 'notifications_etag';
 const LAST_MODIFIED_KEY = 'notifications_last_modified';
+/** PRs the fast poll fetched since the last full sync, as a JSON list. */
+const POLLED_KEY = 'poll_fetched_since_sync';
 
 export interface GitHubSyncResult {
   viewer: Viewer;
@@ -31,6 +33,25 @@ export interface GitHubSyncResult {
   /** New events on pinged PRs. Events on stack layers are logged but are not new work. */
   newEventIds: string[];
   errors: string[];
+}
+
+/** One fast-poll look at the inbox. Stack layers are left to the full sync. */
+export interface InboxPollResult {
+  notModified: boolean;
+  /** GitHub's X-Poll-Interval. */
+  pollIntervalSeconds: number | null;
+  /** The store had no threads before this poll: everything is new, nothing is news. */
+  firstLook: boolean;
+  /** Null after a 304. */
+  viewer: Viewer | null;
+  fetchedPrKeys: PrKey[];
+  newEventIds: string[];
+}
+
+interface NotificationsSync {
+  notModified: boolean;
+  threads: number;
+  pollIntervalSeconds: number | null;
 }
 
 interface Candidate {
@@ -69,13 +90,14 @@ export class GitHubSync {
     }
   }
 
-  private async syncNotifications(): Promise<{ notModified: boolean; threads: number }> {
+  private async syncNotifications(): Promise<NotificationsSync> {
     const result = await this.reader.listNotifications({
       etag: this.store.meta.get(ETAG_KEY),
       lastModified: this.store.meta.get(LAST_MODIFIED_KEY),
     });
+    const pollIntervalSeconds = result.pollIntervalSeconds;
     if (result.notModified) {
-      return { notModified: true, threads: this.store.notifications.list().filter((t) => t.unread).length };
+      return { notModified: true, threads: this.store.notifications.list().filter((t) => t.unread).length, pollIntervalSeconds };
     }
     const at = this.now().toISOString();
     const fetchedIds = new Set(result.threads.map((t) => t.id));
@@ -90,7 +112,7 @@ export class GitHubSync {
       this.setMeta(ETAG_KEY, result.etag);
       this.setMeta(LAST_MODIFIED_KEY, result.lastModified);
     });
-    return { notModified: false, threads: result.threads.length };
+    return { notModified: false, threads: result.threads.length, pollIntervalSeconds };
   }
 
   /**
@@ -189,6 +211,54 @@ export class GitHubSync {
     return prs;
   }
 
+  /** Remembers what the poll fetched, so the next full sync verifies facts and walks stacks for them too. */
+  private rememberPolled(keys: PrKey[]): void {
+    const known = JSON.parse(this.store.meta.get(POLLED_KEY) ?? '[]') as PrKey[];
+    this.store.meta.set(POLLED_KEY, JSON.stringify([...new Set([...known, ...keys])]));
+  }
+
+  /** PRs the poll fetched since the last full sync, still stored. Clears the list. */
+  private takePolled(skip: Map<PrKey, Pr>): Pr[] {
+    const keys = JSON.parse(this.store.meta.get(POLLED_KEY) ?? '[]') as PrKey[];
+    this.store.meta.delete(POLLED_KEY);
+    return [...this.store.prs.getMany(keys.filter((key) => !skip.has(key))).values()];
+  }
+
+  /** Fetches the PRs and writes snapshots and events. Returns the ids of new events on pinged PRs. */
+  private async fetchAndStore(candidates: Candidate[], viewer: Viewer): Promise<{ fetched: Map<PrKey, Pr>; newEventIds: string[] }> {
+    const fetched = candidates.length > 0 ? await this.reader.fetchPrs(candidates.map((c) => c.ref)) : new Map<PrKey, Pr>();
+    const newEventIds: string[] = [];
+    for (const pr of fetched.values()) {
+      newEventIds.push(...this.storePr(pr, viewer));
+    }
+    return { fetched, newEventIds };
+  }
+
+  /**
+   * The fast poll: a conditional inbox read, and on a change the PRs whose
+   * threads moved since their last fetch, newest first, at most maxPrs. The
+   * rest wait for the next change or the full sync. No stack layers, no
+   * agent. Shares the ETag with the full sync, so whichever reads a change
+   * first stores it and the other gets a 304; the full sync still finds the
+   * events through the event log.
+   */
+  async poll(maxPrs: number): Promise<InboxPollResult> {
+    const firstLook = this.store.notifications.list().length === 0;
+    const notifications = await this.syncNotifications();
+    const { pollIntervalSeconds } = notifications;
+    if (notifications.notModified) {
+      return { notModified: true, pollIntervalSeconds, firstLook, viewer: null, fetchedPrKeys: [], newEventIds: [] };
+    }
+    let viewer = loadViewer(this.store);
+    if (!viewer) {
+      viewer = await this.reader.viewer();
+      saveViewer(this.store, viewer);
+    }
+    const { fetched, newEventIds } = await this.fetchAndStore(this.candidates().slice(0, maxPrs), viewer);
+    this.rememberPolled([...fetched.keys()]);
+    return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds };
+  }
+
   async run(maxPrs: number): Promise<GitHubSyncResult> {
     const viewer = await this.reader.viewer();
     saveViewer(this.store, viewer);
@@ -196,17 +266,14 @@ export class GitHubSync {
 
     const candidates = this.candidates();
     const picked = candidates.slice(0, maxPrs);
-    const fetched = picked.length > 0 ? await this.reader.fetchPrs(picked.map((c) => c.ref)) : new Map<PrKey, Pr>();
-
-    const newEventIds: string[] = [];
-    for (const pr of fetched.values()) {
-      newEventIds.push(...this.storePr(pr, viewer));
-    }
+    const { fetched, newEventIds } = await this.fetchAndStore(picked, viewer);
+    // The poll fetched these already; they still get their stacks walked and facts verified here.
+    const polled = this.takePolled(fetched);
     // A failed stack lookup should not cost the rest of the sync; the next sync tries again.
     const errors: string[] = [];
     let pulledIn: Pr[] = [];
     try {
-      pulledIn = await this.pullInStackLayers([...fetched.values()], viewer);
+      pulledIn = await this.pullInStackLayers([...fetched.values(), ...polled], viewer);
     } catch (error) {
       errors.push(`stack layers: ${errorText(error)}`);
     }
@@ -217,7 +284,7 @@ export class GitHubSync {
       prsFetched: fetched.size,
       prsSkipped: candidates.length - picked.length,
       prsPulledIn: pulledIn.length,
-      fetchedPrKeys: [...fetched.keys(), ...pulledIn.map((pr) => pr.key)],
+      fetchedPrKeys: [...fetched.keys(), ...polled.map((pr) => pr.key), ...pulledIn.map((pr) => pr.key)],
       newEventIds,
       errors,
     };

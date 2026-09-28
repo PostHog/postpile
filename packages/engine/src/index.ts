@@ -4,5 +4,9 @@ export { MarkReadQueue, UNDO_WINDOW_MS, type PendingBatch, type Timers } from '.
 export { defaultPaths, type AppPaths } from './paths.ts';
 export { UNSORTED_TOPIC_ID } from './board.ts';
 export { ReadOnlyWriter } from './read-only-writer.ts';
-export { createEngine, type CreateEngineOptions } from './create.ts';
+export { createEngine, pingCapFromEnv, type CreateEngineOptions } from './create.ts';
 export { AgentCallLog, ACTION_RUN_ID } from './agent-call-log.ts';
+export { LivePoller, MAX_ERROR_BACKOFF_SECONDS, MAX_RATE_LIMIT_BACKOFF_SECONDS, RATE_LIMIT_BACKOFF_SECONDS } from './live/live-poller.ts';
+export { PingThrottle, PING_TILE_WINDOW_MS, PINGS_BEFORE_SUMMARY } from './live/ping-throttle.ts';
+export { PING_DECISIONS_PER_DAY, PING_FRESH_MS } from './live/ping-decider.ts';
+export type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';

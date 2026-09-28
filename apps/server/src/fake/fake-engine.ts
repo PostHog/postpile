@@ -16,6 +16,7 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  LivePollStatus,
   Loudness,
   MemoryCorrection,
   MemoryCorrectionKind,
@@ -42,6 +43,8 @@ import type {
 import {
   emptyAgentCallStats,
   fixedClaimNote,
+  OFF_POLL_STATUS,
+  systemTimers,
   openThreadCount,
   prStatus,
   searchTopics,
@@ -56,8 +59,9 @@ import {
   type SearchResult,
   type Viewer,
 } from '@code-manager/core';
-import { UNDO_WINDOW_MS, type EngineService } from '@code-manager/engine';
+import { LivePoller, UNDO_WINDOW_MS, type EngineService, type LivePollOptions, type PollCycle } from '@code-manager/engine';
 import { FakeInstructions } from './fake-instructions.ts';
+import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -136,6 +140,8 @@ export class FakeEngine implements EngineService {
   private readonly data: SampleData;
   private readonly memory: FakeMemory;
   private readonly instructions: FakeInstructions;
+  private readonly live: FakeLivePoll;
+  private livePoller: LivePoller | null = null;
   private readonly now: () => Date;
   private readonly snoozes = new Map<string, SnoozeCondition>();
   private readonly chats = new Map<string, ChatMessage[]>();
@@ -154,6 +160,7 @@ export class FakeEngine implements EngineService {
     this.data = buildSampleData(this.now());
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
+    this.live = new FakeLivePoll(this.data, this.now);
     this.instructions = new FakeInstructions({
       now: this.now,
       newId: () => this.newId(),
@@ -767,10 +774,38 @@ export class FakeEngine implements EngineService {
     return this.memory.consolidate();
   }
 
+  // -------------------------------------------------------------------------
+  // EngineService: live poll (a new sample question every ~45s)
+  // -------------------------------------------------------------------------
+
+  async pollOnce(): Promise<PollCycle> {
+    return this.live.poll();
+  }
+
+  /** The real scheduler and burst grouping over the fake poll. */
+  startLivePoll(options: LivePollOptions): void {
+    if (this.livePoller) {
+      return;
+    }
+    this.livePoller = new LivePoller(() => this.pollOnce(), systemTimers, options);
+    this.livePoller.start();
+  }
+
+  stopLivePoll(): void {
+    this.livePoller?.stop();
+    this.livePoller = null;
+  }
+
+  async livePollStatus(): Promise<LivePollStatus> {
+    return this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
+  }
+
   async flushPendingWrites(): Promise<void> {
     // Nothing to send: the fake never talks to GitHub.
     this.batches.length = 0;
   }
 
-  async close(): Promise<void> {}
+  async close(): Promise<void> {
+    this.stopLivePoll();
+  }
 }
