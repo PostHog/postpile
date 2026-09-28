@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME } from './data-lock.ts';
+import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, processStartTime } from './data-lock.ts';
 
 const dirs: string[] = [];
 
@@ -23,7 +23,13 @@ describe('DataDirLock', () => {
     const db = tempDb();
     const lock = DataDirLock.acquire(db, 'cli', '2026-09-28T10:00:00.000Z');
     const file = join(db, '..', LOCK_FILE_NAME);
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ pid: process.pid, kind: 'cli', startedAt: '2026-09-28T10:00:00.000Z', databaseFile: db });
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
+      pid: process.pid,
+      kind: 'cli',
+      startedAt: '2026-09-28T10:00:00.000Z',
+      databaseFile: db,
+      processStartedAt: expect.any(String),
+    });
     lock.release();
     lock.release();
     expect(existsSync(file)).toBe(false);
@@ -44,6 +50,33 @@ describe('DataDirLock', () => {
     const db = tempDb();
     // Far above any real pid on macOS and Linux.
     writeFileSync(join(db, '..', LOCK_FILE_NAME), JSON.stringify({ pid: 99_999_999, kind: 'packaged', startedAt: 'x', databaseFile: db }));
+    const lock = DataDirLock.acquire(db, 'dev');
+    expect(lock.info.kind).toBe('dev');
+    lock.release();
+  });
+
+  it('refuses while the holder is the same process it names, by start time', () => {
+    const db = tempDb();
+    const started = processStartTime(process.ppid);
+    expect(started).not.toBeNull();
+    const holder = { pid: process.ppid, kind: 'dev', startedAt: 'x', databaseFile: db, processStartedAt: new Date(started!).toISOString() };
+    writeFileSync(join(db, '..', LOCK_FILE_NAME), JSON.stringify(holder));
+    expect(() => DataDirLock.acquire(db, 'server')).toThrow(DataDirLockedError);
+  });
+
+  it('takes over a lock whose pid now belongs to another process', () => {
+    const db = tempDb();
+    // The pid is alive (the test runner), but it started long after this lock's process.
+    const holder = { pid: process.ppid, kind: 'packaged', startedAt: 'x', databaseFile: db, processStartedAt: '2001-01-01T00:00:00.000Z' };
+    writeFileSync(join(db, '..', LOCK_FILE_NAME), JSON.stringify(holder));
+    const lock = DataDirLock.acquire(db, 'dev');
+    expect(lock.info.kind).toBe('dev');
+    lock.release();
+  });
+
+  it('takes over a lock file that stays unreadable', () => {
+    const db = tempDb();
+    writeFileSync(join(db, '..', LOCK_FILE_NAME), '');
     const lock = DataDirLock.acquire(db, 'dev');
     expect(lock.info.kind).toBe('dev');
     lock.release();

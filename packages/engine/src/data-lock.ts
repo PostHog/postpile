@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -11,7 +12,15 @@ export interface LockInfo {
   kind: LockKind;
   startedAt: string;
   databaseFile: string;
+  /** When the holding process started. Tells a live holder from a new process that got the same pid. Missing in old lock files. */
+  processStartedAt?: string;
 }
+
+/** An unreadable lock file may be one being written right now: read it this often, this far apart, before calling it stale. */
+const UNREADABLE_RETRIES = 5;
+const UNREADABLE_RETRY_MS = 20;
+/** ps reports start times to the second; a holder whose start time differs by more is another process on a reused pid. */
+const START_TIME_SLACK_MS = 2000;
 
 /** Thrown when another live process holds the data folder. The message is meant for the user. */
 export class DataDirLockedError extends Error {
@@ -39,6 +48,52 @@ function readLock(file: string): LockInfo | null {
   } catch {
     return null;
   }
+}
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** readLock, retried briefly: another process may have created the file and not written it yet. */
+function readLockPatiently(file: string): LockInfo | null {
+  for (let attempt = 0; attempt < UNREADABLE_RETRIES; attempt++) {
+    const info = readLock(file);
+    if (info !== null || !existsSync(file)) {
+      return info;
+    }
+    sleepSync(UNREADABLE_RETRY_MS);
+  }
+  return null;
+}
+
+/** When this process started. */
+function ownProcessStart(): string {
+  return new Date(Date.now() - process.uptime() * 1000).toISOString();
+}
+
+/** When a live process started, from `ps`, in ms. Null when ps cannot tell. */
+export function processStartTime(pid: number): number | null {
+  const result = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
+  if (result.status !== 0) {
+    return null;
+  }
+  const parsed = Date.parse(result.stdout.trim());
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * The holder's process is still the one that wrote the lock: alive, and
+ * started when the lock says (when both the lock and ps can tell).
+ */
+function holderAlive(holder: LockInfo): boolean {
+  if (!isProcessAlive(holder.pid)) {
+    return false;
+  }
+  if (holder.processStartedAt === undefined) {
+    return true;
+  }
+  const started = processStartTime(holder.pid);
+  return started === null || Math.abs(started - Date.parse(holder.processStartedAt)) <= START_TIME_SLACK_MS;
 }
 
 /** Creates the file only if it does not exist yet (O_EXCL). False when it does. */
@@ -81,17 +136,18 @@ export class DataDirLock {
     const folder = dirname(databaseFile);
     mkdirSync(folder, { recursive: true });
     const lockFile = join(folder, LOCK_FILE_NAME);
-    const info: LockInfo = { pid: process.pid, kind, startedAt, databaseFile };
-    // Two tries: the second one after removing a stale lock.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (createExclusive(lockFile, info)) {
+    const info: LockInfo = { pid: process.pid, kind, startedAt, databaseFile, processStartedAt: ownProcessStart() };
+    // Three tries: the later ones after removing a stale lock.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // Read back after creating: a process taking over the same stale lock may have replaced ours.
+      if (createExclusive(lockFile, info) && readLock(lockFile)?.pid === process.pid) {
         return new DataDirLock(lockFile, info);
       }
-      const holder = readLock(lockFile);
-      if (holder && holder.pid !== process.pid && isProcessAlive(holder.pid)) {
+      const holder = readLockPatiently(lockFile);
+      if (holder && holder.pid !== process.pid && holderAlive(holder)) {
         throw new DataDirLockedError(holder, lockFile);
       }
-      // Dead holder, our own pid from an earlier run, or an unreadable file: stale.
+      // Dead holder, a reused pid, our own pid from an earlier run, or a file that stayed unreadable: stale.
       rmSync(lockFile, { force: true });
     }
     throw new Error(`could not take the lock ${lockFile}`);
