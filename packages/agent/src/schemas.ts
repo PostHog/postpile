@@ -62,6 +62,22 @@ export const pingDecisionOutput = z.object({
   ),
 });
 
+export const contextSweepOutput = z.object({
+  summary: text.min(1),
+  threads: z
+    .array(
+      z.object({
+        title: text.min(1),
+        detail: text.default(''),
+        topicIds: z.array(text).default([]),
+        /** Item ids from the prompt ("m3", "s7"). */
+        sources: z.array(text).default([]),
+      }),
+    )
+    .default([]),
+  lastSeenAt: text.nullable().optional(),
+});
+
 export const instructionsChangeOutput = z.object({
   reply: text.default(''),
   change: z.object({ text: text.min(1), summary: text.min(1) }).nullable(),

@@ -10,6 +10,7 @@ import { modelFor } from './models.ts';
 import { chatPrompt } from './prompts/chat.ts';
 import { draftCommentPrompt } from './prompts/comment.ts';
 import { consolidationPrompt } from './prompts/consolidation.ts';
+import { contextSweepPrompt } from './prompts/context-sweep.ts';
 import { INSTRUCTIONS_MAX_CHARS, INSTRUCTIONS_SUMMARY_MAX, instructionsChangePrompt } from './prompts/instructions.ts';
 import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
@@ -24,6 +25,7 @@ import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
 import {
   chatOutput,
   consolidationOutput,
+  contextSweepOutput,
   dossierUpdateOutput,
   draftCommentOutput,
   eventBatchOutput,
@@ -41,6 +43,8 @@ import type {
   ChatInput,
   ConsolidationInput,
   ConsolidationResult,
+  ContextSweepInput,
+  ContextSweepResult,
   DossierUpdateInput,
   DossierUpdateResult,
   DraftCommentInput,
@@ -61,6 +65,7 @@ import type {
   TopicAssignment,
   TopicAssignmentInput,
 } from './service.ts';
+import { WORK_THREADS_MAX } from './service.ts';
 
 // Most calls look at a whole topic; drafts and chat answer one question.
 const timeouts: Record<AgentPurpose, number> = {
@@ -77,7 +82,15 @@ const timeouts: Record<AgentPurpose, number> = {
   memory_recheck: 120_000,
   // A ping that arrives minutes late is worth little; the rules take over after this.
   ping_decision: 60_000,
+  // Opus over up to ~60k chars of notes; nobody waits on it.
+  context_sweep: 300_000,
 };
+
+/** Bounds for the work context digest, so a runaway answer cannot bloat every prompt. */
+const SWEEP_SUMMARY_MAX = 1200;
+const SWEEP_TITLE_MAX = 80;
+const SWEEP_DETAIL_MAX = 400;
+const SWEEP_SOURCES_MAX = 6;
 
 /** Keeps a corrected line about as short as a dossier line or fact. */
 const RECHECK_TEXT_MAX = 300;
@@ -331,6 +344,35 @@ export class RunnerAgentService implements AgentService {
       });
     }
     return result;
+  }
+
+  /**
+   * Source ids map back to the collected items; unknown ones, unknown topic
+   * ids and threads whose title matches a forgotten one are dropped. The
+   * digest's lastSeenAt is the collector's, which knows the session times.
+   */
+  async sweepContext(input: ContextSweepInput): Promise<ContextSweepResult> {
+    const { value, model } = await this.ask('context_sweep', contextSweepPrompt(input), contextSweepOutput);
+    const items = new Map(input.items.map((item) => [item.id, item]));
+    const topicIds = new Set(input.topics.map((topic) => topic.id));
+    const forgotten = new Set(input.forgotten.map((thread) => thread.title.trim().toLowerCase()));
+    const threads = value.threads
+      .filter((thread) => !forgotten.has(thread.title.toLowerCase()))
+      .slice(0, WORK_THREADS_MAX)
+      .map((thread) => ({
+        title: clipText(thread.title, SWEEP_TITLE_MAX),
+        detail: clipText(thread.detail, SWEEP_DETAIL_MAX),
+        topicIds: [...new Set(thread.topicIds.filter((id) => topicIds.has(id)))],
+        sources: [...new Set(thread.sources)]
+          .map((id) => items.get(id))
+          .filter((item) => item !== undefined)
+          .slice(0, SWEEP_SOURCES_MAX)
+          .map((item) => ({ kind: item.kind, ref: item.ref })),
+      }));
+    return {
+      digest: { summary: clipText(value.summary, SWEEP_SUMMARY_MAX), threads, lastSeenAt: input.lastSeenAt },
+      model,
+    };
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

@@ -41,6 +41,7 @@ const feedbackLabels: Record<FeedbackKind, string> = {
   memory_forget: 'said they do not care about this, stop assuming it',
   memory_confirmed: 'checked this line of the topic memory and confirmed it is right, keep it',
   memory_fixed: 'replaced a line of the topic memory with a corrected one (old line, then the new one)',
+  work_context_forget: 'asked to forget this item of the "what you are working on" digest',
 };
 
 /** "said this line of the topic memory is wrong", for prompts and source quotes. */
@@ -79,6 +80,21 @@ export function contextBlock(context: PromptContext): string {
     parts.push(`Standing rules the user accepted. Always follow them:\n\n${rules}`);
   }
   return parts.length === 0 ? '' : `\n${parts.join('\n\n')}\n`;
+}
+
+/**
+ * The daily digest of the user's local Claude Code notes, for the prompts that
+ * judge relevance (topic assignment, dossiers, glances, pings, chat). Written
+ * by an agent from the user's own files, so not fenced like GitHub text, but
+ * it is background and may be stale: the user's instructions win.
+ */
+export function workContextBlock(context: PromptContext): string {
+  const text = context.workContext?.trim() ?? '';
+  if (text === '') {
+    return '';
+  }
+  return `\nWhat the user is working on (from their local Claude Code notes; may be stale). Background
+only: use it to tell what matters to them now, never over their instructions above:\n\n${text}\n`;
 }
 
 export function viewerLine(viewer: Viewer): string {

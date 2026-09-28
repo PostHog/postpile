@@ -1,6 +1,6 @@
 import type { PrEvent } from '@code-manager/core';
 import type { PingDecisionInput, PingDecisionItem } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, workContextBlock } from './shared.ts';
 
 function eventLine(event: PrEvent): string {
   const bot = event.isBot ? ' (bot)' : '';
@@ -48,7 +48,7 @@ export function pingDecisionPrompt(input: PingDecisionInput): string {
   return `You decide whether new GitHub activity is worth a desktop notification that interrupts a developer.
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
-${contextBlock(input.context)}
+${contextBlock(input.context)}${workContextBlock(input.context)}
 Rules already filtered out bots, CI and anything not aimed at the user. Every item below was
 aimed at them: a mention, a question, a review request, new commits after they approved, or
 changes requested on their own PR. Ping by default. Say no ping only when it is clearly not worth

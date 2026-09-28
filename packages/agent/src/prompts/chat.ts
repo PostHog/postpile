@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@code-manager/core';
 import type { ChatInput } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail, workContextBlock } from './shared.ts';
 
 function historyLine(message: ChatMessage): string {
   const who = message.role === 'user' ? 'User' : 'You';
@@ -18,7 +18,7 @@ export function chatPrompt(input: ChatInput): string {
   return `You are the assistant inside a developer's code review inbox, chatting about one tile
 ("${input.tile.title}") in the topic "${input.topic.name}". ${input.topic.summary}
 ${GITHUB_DATA_RULE}
-${contextBlock(input.context)}
+${contextBlock(input.context)}${workContextBlock(input.context)}
 Pull requests on this tile:
 
 ${prs}

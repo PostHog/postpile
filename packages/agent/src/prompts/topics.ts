@@ -1,5 +1,5 @@
 import type { TopicAssignmentInput, TopicChoice } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail, viewerLine } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, jsonOnly, prDetails, shortDetail, viewerLine, workContextBlock } from './shared.ts';
 
 /** The dossier brief (goal, status, driver) says far more than a name; the summary is the fallback. */
 function topicLine(topic: TopicChoice): string {
@@ -20,7 +20,7 @@ export function topicAssignmentPrompt(input: TopicAssignmentInput): string {
 ongoing work that spans PRs, like "Move CI to Depot" or "Session replay ingestion rewrite".
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
-${contextBlock(input.context)}
+${contextBlock(input.context)}${workContextBlock(input.context)}
 Existing topics:
 ${topics}
 

@@ -16,6 +16,7 @@ export {
   FACTS_IN_DOSSIER_PROMPT,
   PRS_IN_RECHECK,
   STALE_FACTS_IN_DOSSIER_PROMPT,
+  WORK_THREADS_MAX,
 } from './service.ts';
 export { INSTRUCTIONS_MAX_CHARS } from './prompts/instructions.ts';
 export { RunnerAgentService } from './claude-service.ts';

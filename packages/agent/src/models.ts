@@ -7,10 +7,17 @@ import type { AgentPurpose } from './runner.ts';
 // the "haiku" alias, which ghatchup saw resolve to Sonnet with user settings).
 const GLANCE_MODEL = 'sonnet';
 const DEFAULT_MODEL = 'sonnet';
+// The daily work context sweep reads a lot of loose notes and has to judge
+// what is work and what is private; Julian is on a subscription, so it gets
+// the strongest model. CODE_MANAGER_SWEEP_MODEL overrides it.
+const SWEEP_MODEL = 'opus';
 
 export function modelFor(purpose: AgentPurpose): string {
   if (purpose === 'glance_batch') {
     return process.env.CODE_MANAGER_GLANCE_MODEL || GLANCE_MODEL;
+  }
+  if (purpose === 'context_sweep') {
+    return process.env.CODE_MANAGER_SWEEP_MODEL || SWEEP_MODEL;
   }
   return process.env.CODE_MANAGER_MODEL || DEFAULT_MODEL;
 }
