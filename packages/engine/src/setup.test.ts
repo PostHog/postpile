@@ -127,7 +127,7 @@ describe('setup sweep', () => {
       ['draft', 'done'],
     ]);
     expect(view.lines[1]?.text).toBe('Found 3 PRs in 30 days: 1 you wrote, 2 you reviewed, 0 waiting on your review · 2 repos');
-    expect(view.lines[2]?.text).toBe('CODEOWNERS: 1 line names you or your teams (acme/app)');
+    expect(view.lines[2]?.text).toBe('Ownership files: 1 rule names you or your teams (acme/app .github/CODEOWNERS)');
     expect(h.reader.activityCalls).toEqual(['2026-08-03']);
     expect(h.reader.fileCalls).toContain('acme/docs:docs/CODEOWNERS');
     expect(loadViewer(h.store)?.teamMembers).toEqual(['bob']);
@@ -139,6 +139,22 @@ describe('setup sweep', () => {
     expect(view.draft?.mainRepo?.repo).toBe('acme/app');
     expect(view.draft?.quietRepos.map((repo) => repo.repo)).toEqual(['acme/docs']);
     expect(view).toMatchObject({ error: null, current: { text: '', version: null } });
+  });
+
+  it('reads owners.yaml at the root and in the folders the PRs touch, only where the root has one', async () => {
+    h.runner.answer('setup_draft', DRAFT_ANSWER);
+    h.reader.files.set('acme/app:owners.yaml', "rules:\n  - match: '/bin/'\n    owners: team-devex\n  - match: '/web/'\n    owners: team-web\n");
+    h.reader.files.set('acme/app:.github/owners.yaml', "rules:\n  - match: ['/workflows/', '/actions/']\n    owners: [team-devex, team-security]\n");
+    const view = await sweepToEnd();
+
+    expect(view.lines[2]?.text).toBe(
+      'Ownership files: 3 rules name you or your teams (acme/app .github/CODEOWNERS, acme/app owners.yaml, acme/app .github/owners.yaml)',
+    );
+    expect(h.reader.fileCalls).not.toContain('acme/docs:.github/owners.yaml');
+    const prompt = h.runner.promptsFor('setup_draft')[0] ?? '';
+    expect(prompt).toContain('/bin/ -> owners: team-devex');
+    expect(prompt).toContain('/.github/workflows/, /.github/actions/ -> owners: team-devex, team-security');
+    expect(prompt).not.toContain('team-web');
   });
 
   it('falls back to the blank template when the agent fails', async () => {

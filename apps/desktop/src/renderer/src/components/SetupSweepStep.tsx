@@ -8,7 +8,7 @@ import { SetupChip } from './SetupChip.tsx';
 const STEP_WORDS: Record<SetupSweepView['lines'][number]['step'], string> = {
   viewer: 'You and your teams',
   activity: 'Your last 30 days',
-  codeowners: 'CODEOWNERS',
+  codeowners: 'Ownership files',
   digest: 'Work context',
   draft: 'Draft',
 };
@@ -38,7 +38,7 @@ export function SetupSweepStep(props: {
       </div>
       <p className="text-xs text-ink-2">
         Reads your GitHub profile, teams, the PRs you wrote, reviewed or were asked to review in the last 30 days (titles and folders only), and the CODEOWNERS
-        lines that name you. Then one agent call writes a draft. GitHub is only read.
+        and owners.yaml rules that name you or your teams. Then one agent call writes a draft. GitHub is only read.
       </p>
       <ul className="flex flex-col">
         {(view?.lines ?? []).map((line, index) => {

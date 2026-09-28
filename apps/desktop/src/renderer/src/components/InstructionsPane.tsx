@@ -50,7 +50,7 @@ export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void
           <Button
             className="ml-auto"
             onClick={props.onRunSetup}
-            title="The agent drafts your instructions from your recent GitHub activity, CODEOWNERS and work context. Shown as a diff; nothing changes until you accept."
+            title="The agent drafts your instructions from your recent GitHub activity, ownership files and work context. Shown as a diff; nothing changes until you accept."
           >
             Run setup again
           </Button>

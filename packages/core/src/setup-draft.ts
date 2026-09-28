@@ -26,6 +26,12 @@ export const SETUP_CODEOWNERS_REPOS = 5;
 export const SETUP_CODEOWNERS_LINES = 20;
 /** Where GitHub looks for CODEOWNERS, in its order. */
 export const CODEOWNERS_PATHS = ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS'];
+/**
+ * owners.yaml files (the owners-yaml format): the repo root's, then one per
+ * top-level folder the user's PRs touch most, at most this many folders.
+ */
+export const SETUP_OWNERS_YAML_DIRS = 6;
+export const OWNERS_YAML_FILE = 'owners.yaml';
 
 /** The sections a draft is written in, the same shape as a hand-written instructions.md. */
 export const SETUP_HEADINGS = ['About me', 'What I own', 'What gets routed to me', 'What to ignore or keep quiet', 'Preferences'];
@@ -97,6 +103,124 @@ export function codeownersLines(text: string, handles: string[]): string[] {
     if (owners.some((owner) => wanted.has(owner.toLowerCase()))) {
       kept.push(line);
     }
+    if (kept.length >= SETUP_CODEOWNERS_LINES) {
+      break;
+    }
+  }
+  return kept;
+}
+
+/**
+ * The top-level folders the user's PRs in `repo` touch, most PRs first, at
+ * most SETUP_OWNERS_YAML_DIRS; "(root)" is left out. Each may hold an owners.yaml.
+ */
+export function busiestDirs(prs: ActivityPr[], repo: string): string[] {
+  const counts = new Map<string, number>();
+  for (const pr of prs) {
+    if (pr.repo !== repo) {
+      continue;
+    }
+    for (const dir of pr.dirs) {
+      if (dir !== '(root)') {
+        counts.set(dir, (counts.get(dir) ?? 0) + 1);
+      }
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, SETUP_OWNERS_YAML_DIRS)
+    .map(([dir]) => dir);
+}
+
+/**
+ * How owners.yaml names the viewer: "@alice", a team as "@acme/devex" or,
+ * inside its own org, as the bare slug "devex". Lowercased.
+ */
+export function ownersYamlHandles(viewer: Viewer): string[] {
+  const slugs = viewer.teams.map((team) => team.slice(team.indexOf('/') + 1));
+  return [...ownerHandles(viewer), ...slugs].map((handle) => handle.toLowerCase());
+}
+
+/** "[a, 'b']", "'c'" or "d" as plain values. */
+function yamlValues(text: string): string[] {
+  return text
+    .replace(/^\[|\]$/g, '')
+    .split(',')
+    .map((value) => value.trim().replace(/^['"]|['"]$/g, ''))
+    .filter((value) => value !== '');
+}
+
+/** The rules under "rules:" as raw line groups, one per list item, comments and blank lines dropped. */
+function ownersYamlItems(text: string): string[][] {
+  const lines = text.split('\n').map((line) => line.replace(/\s+#.*$/, '').trimEnd());
+  const start = lines.findIndex((line) => /^\s*rules:\s*$/.test(line));
+  if (start === -1) {
+    return [];
+  }
+  const rulesIndent = lines[start]!.search(/\S/);
+  const items: string[][] = [];
+  let itemIndent = -1;
+  for (const line of lines.slice(start + 1)) {
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      continue;
+    }
+    const indent = line.search(/\S/);
+    if (indent <= rulesIndent && !trimmed.startsWith('-')) {
+      break;
+    }
+    if (trimmed.startsWith('- ') && (itemIndent === -1 || indent === itemIndent)) {
+      itemIndent = indent;
+      items.push([trimmed.slice(2).trim()]);
+    } else if (items.length > 0) {
+      items[items.length - 1]!.push(trimmed);
+    }
+  }
+  return items;
+}
+
+/** One rule's fields: "match" and owner keys ("owners", "additions", ...) with their values. */
+function ownersYamlFields(item: string[]): Map<string, string[]> {
+  const fields = new Map<string, string[]>();
+  let key = '';
+  for (const line of item) {
+    const field = /^([A-Za-z_]+):\s*(.*)$/.exec(line);
+    if (field) {
+      key = field[1]!;
+      fields.set(key, yamlValues(field[2]!));
+    } else if (line.startsWith('- ') && key !== '') {
+      fields.get(key)!.push(...yamlValues(line.slice(2)));
+    }
+  }
+  return fields;
+}
+
+/** A pattern as seen from the repo root: "/workflows/" in ".github/" is "/.github/workflows/". */
+function rootPattern(folder: string, pattern: string): string {
+  if (folder === '') {
+    return pattern;
+  }
+  return pattern.startsWith('/') ? `/${folder}${pattern.slice(1)}` : `/${folder}**/${pattern}`;
+}
+
+/**
+ * The owners.yaml rules (in `folder`, "" for the root, else "tools/") that
+ * name one of `handles`, one line each: "/tools/hogli/, /bin/ -> owners:
+ * team-devex". Patterns read from the repo root. At most SETUP_CODEOWNERS_LINES.
+ */
+export function ownersYamlLines(text: string, folder: string, handles: string[]): string[] {
+  const wanted = new Set(handles.map((handle) => handle.toLowerCase()));
+  const kept: string[] = [];
+  for (const item of ownersYamlItems(text)) {
+    const fields = ownersYamlFields(item);
+    const patterns = fields.get('match') ?? [];
+    const owners = [...fields.entries()].filter(([key]) => key !== 'match');
+    const named = owners.some(([, values]) => values.some((value) => wanted.has(value.toLowerCase())));
+    if (patterns.length === 0 || !named) {
+      continue;
+    }
+    const who = owners.map(([key, values]) => `${key}: ${values.join(', ')}`).join('; ');
+    kept.push(`${patterns.map((pattern) => rootPattern(folder, pattern)).join(', ')} -> ${who}`);
     if (kept.length >= SETUP_CODEOWNERS_LINES) {
       break;
     }

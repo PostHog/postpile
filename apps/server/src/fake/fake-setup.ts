@@ -124,8 +124,8 @@ const SWEEP_SCRIPT: FakeLine[] = [
   },
   {
     step: 'codeowners',
-    running: 'Reading CODEOWNERS in PostHog/posthog, PostHog/example-infra, PostHog/posthog-python, PostHog/posthog-desktop…',
-    done: 'CODEOWNERS: 3 lines name you or your teams (PostHog/posthog, PostHog/example-infra)',
+    running: 'Reading CODEOWNERS and owners.yaml in PostHog/posthog, PostHog/example-infra, PostHog/posthog-python, PostHog/posthog-desktop…',
+    done: 'Ownership files: 3 rules name you or your teams (PostHog/posthog .github/CODEOWNERS, PostHog/example-infra CODEOWNERS)',
     state: 'done',
   },
   { step: 'digest', running: 'Looking for your work context digest…', done: 'Using your work context digest v3 (2026-09-27)', state: 'done' },

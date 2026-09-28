@@ -1,9 +1,13 @@
 import { modelFor, type AgentService } from '@postpile/agent';
 import {
   blankSetupDraft,
+  busiestDirs,
   CODEOWNERS_PATHS,
   codeownersLines,
+  OWNERS_YAML_FILE,
   ownerHandles,
+  ownersYamlHandles,
+  ownersYamlLines,
   rankActivityRepos,
   SETUP_ACTIVITY_DAYS,
   SETUP_CODEOWNERS_REPOS,
@@ -75,7 +79,7 @@ function activityLine(prs: ActivityPr[], repos: SetupRepoCount[]): string {
 /**
  * Step 2 of the setup flow, run as a job the UI polls: viewer and teams,
  * the last 30 days of PR activity (one GraphQL request), CODEOWNERS lines
- * of the busiest repos, the work context digest, then one setup_draft
+ * and owners.yaml rules of the busiest repos, the work context digest, then one setup_draft
  * call. Each step writes a progress line. Only the viewer is required; a
  * failed later step is noted and the draft uses what came back. A failed
  * agent call leaves the blank template, so the user can still write it.
@@ -181,31 +185,58 @@ export class SetupSweep {
     return null;
   }
 
-  private async codeowners(job: SweepJob, repos: SetupRepoCount[], viewer: Viewer): Promise<CodeownersExcerpt[]> {
+  /** One owners.yaml (`folder` "" for the root, else "tools/"), cut to the rules naming the user or their teams. */
+  private async ownersYamlOf(repo: string, folder: string, handles: string[]): Promise<CodeownersExcerpt | null> {
+    const path = `${folder}${OWNERS_YAML_FILE}`;
+    const text = await this.deps.reader.readRepoFile(repo, path);
+    if (text === null) {
+      return null;
+    }
+    const lines = ownersYamlLines(text, folder, handles);
+    return lines.length > 0 ? { repo, path, lines } : null;
+  }
+
+  /**
+   * owners.yaml rules: the root file, and when the repo has one, the files in
+   * the top-level folders the user's PRs touch most. A repo without a root
+   * owners.yaml does not use the format, so its folders are not asked.
+   */
+  private async ownersYamlFiles(repo: string, prs: ActivityPr[], viewer: Viewer): Promise<CodeownersExcerpt[]> {
+    const handles = ownersYamlHandles(viewer);
+    const rootText = await this.deps.reader.readRepoFile(repo, OWNERS_YAML_FILE);
+    if (rootText === null) {
+      return [];
+    }
+    const rootLines = ownersYamlLines(rootText, '', handles);
+    const root: CodeownersExcerpt[] = rootLines.length > 0 ? [{ repo, path: OWNERS_YAML_FILE, lines: rootLines }] : [];
+    const folders = await Promise.all(busiestDirs(prs, repo).map((dir) => this.ownersYamlOf(repo, dir, handles)));
+    return [...root, ...folders.filter((excerpt) => excerpt !== null)];
+  }
+
+  private async codeowners(job: SweepJob, repos: SetupRepoCount[], prs: ActivityPr[], viewer: Viewer): Promise<CodeownersExcerpt[]> {
     const top = repos.slice(0, SETUP_CODEOWNERS_REPOS).map((repo) => repo.repo);
     if (top.length === 0) {
       const skipped = this.line(job, 'codeowners', '');
-      SetupSweep.finish(skipped, 'skipped', 'CODEOWNERS: no repos to read');
+      SetupSweep.finish(skipped, 'skipped', 'Ownership files: no repos to read');
       return [];
     }
-    const line = this.line(job, 'codeowners', `Reading CODEOWNERS in ${top.join(', ')}…`);
+    const line = this.line(job, 'codeowners', `Reading CODEOWNERS and owners.yaml in ${top.join(', ')}…`);
     const handles = ownerHandles(viewer);
     const excerpts: CodeownersExcerpt[] = [];
     const failed: string[] = [];
     for (const repo of top) {
       try {
-        const excerpt = await this.codeownersOf(repo, handles);
-        if (excerpt) {
-          excerpts.push(excerpt);
-        }
+        const codeowners = await this.codeownersOf(repo, handles);
+        excerpts.push(...(codeowners ? [codeowners] : []), ...(await this.ownersYamlFiles(repo, prs, viewer)));
       } catch {
         failed.push(repo);
       }
     }
     const lines = excerpts.reduce((sum, excerpt) => sum + excerpt.lines.length, 0);
-    const found = excerpts.length > 0 ? `${plural(lines, 'line')} ${lines === 1 ? 'names' : 'name'} you or your teams (${excerpts.map((excerpt) => excerpt.repo).join(', ')})` : `nothing names you or your teams in ${plural(top.length, 'repo')}`;
+    const files = excerpts.map((excerpt) => `${excerpt.repo} ${excerpt.path}`);
+    const found = excerpts.length > 0 ? `${plural(lines, 'rule')} ${lines === 1 ? 'names' : 'name'} you or your teams (${files.join(', ')})` : `nothing names you or your teams in ${plural(top.length, 'repo')}`;
     const problems = failed.length > 0 ? ` · could not read ${failed.join(', ')}` : '';
-    SetupSweep.finish(line, 'done', `CODEOWNERS: ${found}${problems}`);
+    SetupSweep.finish(line, 'done', `Ownership files: ${found}${problems}`);
     return excerpts;
   }
 
@@ -243,7 +274,7 @@ export class SetupSweep {
     const since = new Date(this.deps.now().getTime() - SETUP_ACTIVITY_DAYS * DAY_MS).toISOString();
     const prs = await this.activity(job, since);
     const repos = rankActivityRepos(prs);
-    const codeowners = await this.codeowners(job, repos, viewer);
+    const codeowners = await this.codeowners(job, repos, prs, viewer);
     const digest = this.digest(job);
     const material: SetupMaterial = { viewer, since, prs, codeowners, digest };
     const sources = setupSources(material);

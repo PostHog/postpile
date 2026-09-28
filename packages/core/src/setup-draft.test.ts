@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { ActivityPr, SetupMaterial } from './setup.ts';
 import {
   blankSetupDraft,
+  busiestDirs,
   claimKey,
   codeownersLines,
   mapSetupDraft,
   ownerHandles,
+  ownersYamlHandles,
+  ownersYamlLines,
   rankActivityRepos,
   setupSources,
   topLevelDirs,
@@ -57,6 +60,56 @@ describe('rankActivityRepos', () => {
     ]);
     expect(repos.map((repo) => repo.repo)).toEqual(['acme/app', 'acme/docs', 'acme/infra']);
     expect(repos[1]).toEqual({ repo: 'acme/docs', prs: 2, authored: 0, reviewed: 1, requested: 1 });
+  });
+});
+
+describe('ownersYamlLines', () => {
+  const file = `version: 1
+owners: []
+teams:
+    devex:
+        slack: '#devex'
+rules:
+    - match: Dockerfile
+      owners: frontend
+    # Every owners.yaml routes to devex
+    - match:
+          - '/bin/'
+          - owners.yaml # unanchored
+      owners: devex
+    - match: ['/workflows/', '/actions/']
+      owners: [devex, '@carol']
+    - match: '/products/*'
+      additions: devex
+    - match: '/scripts/'
+      owners: '@Alice'
+other: true
+`;
+
+  it('keeps the rules naming the user or a team, patterns from the repo root', () => {
+    expect(ownersYamlLines(file, '', ownersYamlHandles(viewer))).toEqual([
+      '/bin/, owners.yaml -> owners: devex',
+      "/workflows/, /actions/ -> owners: devex, @carol",
+      '/products/* -> additions: devex',
+      '/scripts/ -> owners: @Alice',
+    ]);
+    expect(ownersYamlLines(file, '.github/', ['devex'])[0]).toBe('/.github/bin/, /.github/**/owners.yaml -> owners: devex');
+  });
+
+  it('keeps nothing without rules or matches', () => {
+    expect(ownersYamlLines('version: 1\nowners: [devex]\n', '', ['devex'])).toEqual([]);
+    expect(ownersYamlLines(file, '', ['@zed'])).toEqual([]);
+  });
+});
+
+describe('busiestDirs', () => {
+  it("ranks one repo's folders by PRs, without (root)", () => {
+    const prs = [
+      activity('acme/app', 1, 'authored', ['tools/', '.github/', '(root)']),
+      activity('acme/app', 2, 'reviewed', ['.github/']),
+      activity('acme/docs', 3, 'reviewed', ['content/']),
+    ];
+    expect(busiestDirs(prs, 'acme/app')).toEqual(['.github/', 'tools/']);
   });
 });
 

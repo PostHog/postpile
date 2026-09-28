@@ -47,7 +47,7 @@ function reposBlock(input: SetupDraftInput): string {
 
 function codeownersBlock(input: SetupDraftInput): string {
   const excerpts = sourcesOf(input, 'codeowners').map((source) => `[${source.id}] ${source.label}\n${source.detail}`);
-  return excerpts.length === 0 ? '(no CODEOWNERS rule names them or their teams in their busiest repos)' : githubData(excerpts.join('\n\n'));
+  return excerpts.length === 0 ? '(no ownership rule names them or their teams in their busiest repos)' : githubData(excerpts.join('\n\n'));
 }
 
 function digestBlock(input: SetupDraftInput): string {
@@ -70,7 +70,7 @@ their voice and order, and change only what the material clearly contradicts or 
 ${fence('instructions', clip(current, 12000))}`;
 }
 
-/** The material both setup calls share: who the user is, their PRs, repos, CODEOWNERS, digest, current text. */
+/** The material both setup calls share: who the user is, their PRs, repos, ownership rules, digest, current text. */
 function materialBlock(input: SetupDraftInput): string {
   return `About the user:
 ${aboutBlock(input)}
@@ -84,7 +84,9 @@ ${prsBlock(input)}
 Repos by their activity:
 ${reposBlock(input)}
 
-CODEOWNERS rules in their busiest repos that name them or one of their teams:
+Ownership rules in their busiest repos that name them or one of their teams, per file. CODEOWNERS
+lines are "pattern owners". owners.yaml rules read "patterns -> owners: ..." with patterns from
+the repo root; "additions: <team>" means that team decides when new folders are added there:
 ${codeownersBlock(input)}
 
 ${digestBlock(input)}
@@ -97,11 +99,17 @@ const ANSWER_SHAPE = `{"summary": "...", "sections": [{"heading": "About me", "c
 const DRAFT_RULES = `How to write it:
 - "sections", in this order and only where there is something real to say:
   "${SETUP_HEADINGS[0]}": who they are, their role and team.
-  "${SETUP_HEADINGS[1]}": areas, repos and paths they own or drive.
+  "${SETUP_HEADINGS[1]}": the areas they own or drive, a few lines, each an area with its paths
+  (for example "CI workflows and actions (.github/workflows/, .github/actions/)"). Build them
+  from the ownership rules first, then from folders and themes that recur across many of their
+  PRs. Group by theme; never one line per PR or per small feature. Say "my team owns" for
+  ownership rules and "I work on" or "I drive" for what only their own PRs show. Leave out
+  single-file rules unless the file is clearly central.
   "${SETUP_HEADINGS[2]}": what reaches them and from which angle (reviews for their team,
-  CODEOWNERS paths, PRs they get pulled into), and what they want to hear about.
+  paths in the ownership rules, PRs they get pulled into), and what they want to hear about.
   "${SETUP_HEADINGS[3]}": repos, bots or kinds of PRs they do not need to hear about.
-  "${SETUP_HEADINGS[4]}": how they like to be told things.
+  "${SETUP_HEADINGS[4]}": how they like to be told things. Only what the digest or their
+  current instructions say, or a plain default; never infer a preference from PR titles.
 - Each claim is one short line in the first person, as they would write it ("I own the CI
   workflows in acme/app"). No bullets or "#" in the text; the app adds them.
 - Every claim cites, in "sources", the bracket ids it rests on. A claim without a source is only
@@ -115,7 +123,7 @@ const DRAFT_RULES = `How to write it:
 
 /**
  * The setup flow's first draft of instructions.md: one toolless call over
- * the user's recent GitHub activity (fenced as untrusted), CODEOWNERS lines
+ * the user's recent GitHub activity (fenced as untrusted), CODEOWNERS and owners.yaml rules
  * (fenced), the work context digest (local, trusted background) and any
  * instructions they already have. Every claim cites the sources it rests on.
  */
