@@ -60,10 +60,24 @@ export class GitHubHttp {
     private readonly apiUrl: string = API_URL,
   ) {}
 
-  /** Returns the raw response, whatever its status. Paths are relative to the API URL; full URLs pass through. */
+  /**
+   * A path relative to the API URL, or a full URL on it (pagination links).
+   * Any other full URL throws: the bearer token only ever goes to the API.
+   */
+  private resolveUrl(pathOrUrl: string): string {
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(pathOrUrl)) {
+      return `${this.apiUrl}/${pathOrUrl}`;
+    }
+    if (pathOrUrl === this.apiUrl || pathOrUrl.startsWith(`${this.apiUrl}/`) || pathOrUrl.startsWith(`${this.apiUrl}?`)) {
+      return pathOrUrl;
+    }
+    throw new Error(`refusing to send the GitHub token to ${pathOrUrl}: not under ${this.apiUrl}`);
+  }
+
+  /** Returns the raw response, whatever its status. */
   async request(method: string, pathOrUrl: string, options: RequestOptions = {}): Promise<Response> {
+    const url = this.resolveUrl(pathOrUrl);
     const token = await this.tokens.token();
-    const url = pathOrUrl.startsWith('https://') ? pathOrUrl : `${this.apiUrl}/${pathOrUrl}`;
     const headers: Record<string, string> = {
       accept: 'application/vnd.github+json',
       authorization: `Bearer ${token}`,
