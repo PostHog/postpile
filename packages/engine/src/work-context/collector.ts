@@ -98,6 +98,18 @@ function listDir(path: string): string[] {
   }
 }
 
+/**
+ * The file's text, or null when it cannot be read: a directory, a broken
+ * symlink, no permission, gone meanwhile. One bad file never stops the sweep.
+ */
+function readTextFile(path: string): string | null {
+  try {
+    return statSync(path).isFile() ? readFileSync(path, 'utf8') : null;
+  } catch {
+    return null;
+  }
+}
+
 function mtimeMs(path: string): number {
   try {
     return statSync(path).mtimeMs;
@@ -222,7 +234,10 @@ export class WorkContextCollector {
         return;
       }
       seen.add(real);
-      const text = readFileSync(path, 'utf8');
+      const text = readTextFile(path);
+      if (text === null) {
+        return;
+      }
       found.push({ kind: 'claude_md', ref: this.display(path), text: clipBlock(text, CLAUDE_MD_MAX) });
       if (depth >= INCLUDE_DEPTH) {
         return;
@@ -262,11 +277,13 @@ export class WorkContextCollector {
       }
     }
     files.sort((a, b) => a.group - b.group || b.mtime - a.mtime);
-    return files.map((file) => ({
-      kind: 'memory' as const,
-      ref: this.display(file.path),
-      text: clipBlock(readFileSync(file.path, 'utf8'), file.index ? MEMORY_INDEX_MAX : MEMORY_FILE_MAX),
-    }));
+    return files.flatMap((file) => {
+      const text = readTextFile(file.path);
+      if (text === null) {
+        return [];
+      }
+      return [{ kind: 'memory' as const, ref: this.display(file.path), text: clipBlock(text, file.index ? MEMORY_INDEX_MAX : MEMORY_FILE_MAX) }];
+    });
   }
 
   // -- sessions --------------------------------------------------------------

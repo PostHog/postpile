@@ -1,3 +1,4 @@
+import { chmodSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeFakeClaudeDir, userLine, type FakeClaudeDir } from './testing/claude-dir.ts';
 import { claudeDirFromEnv, WorkContextCollector, type CollectBudget } from './work-context/collector.ts';
@@ -66,6 +67,19 @@ describe('WorkContextCollector', () => {
     ]);
     expect(items.map((item) => item.text).join('\n')).not.toContain('Never read');
     expect(stats.claudeMdFiles).toBe(3);
+  });
+
+  it('skips memory files it cannot read: directories, broken symlinks, no permission', async () => {
+    fake.write('.claude/projects/-Users-me-workspace-app/memory/depot.md', 'Depot move notes', RECENT);
+    fake.write('.claude/projects/-Users-me-workspace-app/memory/folder.md/inner.txt', 'not a file', RECENT);
+    fake.link('.claude/projects/-Users-me-workspace-app/memory/broken.md', `${fake.home}/nowhere.md`);
+    const locked = fake.write('.claude/projects/-Users-me-workspace-app/memory/locked.md', 'secret', RECENT);
+    chmodSync(locked, 0o000);
+
+    const { items } = await collector().collect();
+
+    chmodSync(locked, 0o600);
+    expect(items.map((item) => item.text)).toEqual(['Depot move notes']);
   });
 
   it('takes memory indexes first, with the project folder in the ref', async () => {
