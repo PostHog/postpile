@@ -29,6 +29,8 @@ import type {
   Viewer,
   WhoseTurn,
   WhyCode,
+  WorkContextDigest,
+  WorkContextSourceKind,
 } from '@code-manager/core';
 
 /**
@@ -44,6 +46,13 @@ export interface PromptContext {
   recentFeedback: Feedback[];
   /** Accepted global rules from consolidation, oldest first. Part of every input hash. */
   standingRules: string[];
+  /**
+   * The latest "what you're working on" digest as compact text, '' or absent
+   * when there is none. Only some prompts show it (workContextBlock), and it
+   * is in no input hash: a new digest must not regenerate every glance and
+   * dossier, it applies on their next natural update.
+   */
+  workContext?: string;
 }
 
 export interface TopicChoice {
@@ -387,6 +396,50 @@ export interface PingDecisionAnswer {
   reason: string;
 }
 
+/** Threads a context sweep keeps at most. */
+export const WORK_THREADS_MAX = 12;
+
+/** One piece of collected local material, with the short id the answer cites. */
+export interface ContextSweepItem {
+  /** "c1" (CLAUDE.md), "m3" (memory file), "s7" (session). */
+  id: string;
+  kind: WorkContextSourceKind;
+  /** Readable: a file path, or "project · date · title" for a session. */
+  ref: string;
+  /** Already masked and trimmed to the budget. */
+  text: string;
+}
+
+export interface ContextSweepTopic {
+  id: string;
+  name: string;
+  /** Dossier brief or topic summary; '' when neither exists yet. */
+  about: string;
+}
+
+/**
+ * The daily "what you're working on" sweep. Everything here is the user's
+ * own local material (CLAUDE.md, Claude Code memory files, their first prompts
+ * of recent sessions), plus their instructions and the topic list.
+ */
+export interface ContextSweepInput {
+  items: ContextSweepItem[];
+  instructions: string;
+  topics: ContextSweepTopic[];
+  /** Threads the user said Forget on. They must not come back. */
+  forgotten: { title: string; detail: string }[];
+  /** The last stored digest, so threads stay stable from day to day. */
+  previous: WorkContextDigest | null;
+  /** Newest session activity in the input; becomes the digest's lastSeenAt. */
+  lastSeenAt: IsoTime | null;
+  now: IsoTime;
+}
+
+export interface ContextSweepResult {
+  digest: WorkContextDigest;
+  model: string;
+}
+
 /**
  * Every digesting job the agent does. Implementations build the prompt,
  * call the AgentRunner and parse the answer. Caching by input hash is the
@@ -414,4 +467,6 @@ export interface AgentService {
   recheckMemory(input: MemoryRecheckInput): Promise<MemoryRecheckAnswer>;
   /** Ping or not, per item. Items the answer skipped or invented are left out; the engine falls back to rules for them. */
   decidePings(input: PingDecisionInput): Promise<PingDecisionAnswer[]>;
+  /** The daily digest of local Claude Code notes. Unknown topic ids and source ids are dropped, forgotten threads too. */
+  sweepContext(input: ContextSweepInput): Promise<ContextSweepResult>;
 }

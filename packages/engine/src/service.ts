@@ -31,6 +31,9 @@ import type {
   SyncReport,
   TopicDetail,
   TopicListItem,
+  WorkContextSweepResult,
+  WorkContextView,
+  WorkThreadForget,
   ViewerView,
 } from '@code-manager/core';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
@@ -163,6 +166,19 @@ export interface EngineService {
    * A consolidation while one is running joins the running one.
    */
   consolidate(options?: ConsolidateOptions): Promise<ConsolidationReport>;
+
+  /** "What you're working on": the newest digest of local Claude Code notes, the last error, whether a sweep runs. */
+  getWorkContext(): Promise<WorkContextView>;
+  /**
+   * Runs the work context sweep now (Refresh, CLI). Joins a running one.
+   * Never throws: a failure keeps the previous version and is reported.
+   */
+  sweepWorkContext(): Promise<WorkContextSweepResult>;
+  /** Forget on a digest thread: logged as feedback, dropped by the next sweep. Undo token for UNDO_WINDOW_MS. */
+  forgetWorkThread(input: WorkThreadForget): Promise<ActionResult>;
+  /** The daily sweep on a timer (desktop app): at start, then every 30 minutes if due. A second call is ignored. */
+  startWorkContextSchedule(): void;
+  stopWorkContextSchedule(): void;
 
   /** Sends every queued mark-read now. Call on quit: the user meant to clear them. */
   flushPendingWrites(): Promise<void>;

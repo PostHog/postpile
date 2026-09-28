@@ -137,7 +137,7 @@ export function App() {
   if (pane === 'inbox') {
     main = <InboxPane proposals={proposals.data} topics={items} error={proposals.error?.message ?? null} />;
   } else if (pane === 'instructions') {
-    main = <InstructionsPane />;
+    main = <InstructionsPane onOpenTopic={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })} />;
   } else if (pane === 'notifications') {
     // A jump goes through go(), so back returns to this list.
     main = <NotificationsPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;

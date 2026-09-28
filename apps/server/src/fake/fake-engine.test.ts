@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 
 describe('FakeEngine', () => {
+  it('shows a sample work context linked to sample topics, with Forget, Undo and Refresh', async () => {
+    const engine = new FakeEngine({ sweepDelayMs: 0 });
+    const view = await engine.getWorkContext();
+    const threads = view.current?.threads ?? [];
+    expect(threads.length).toBeGreaterThan(2);
+    expect(threads[0]?.topics.map((topic) => topic.name)).toContain('Move CI to Depot');
+
+    const forgotten = await engine.forgetWorkThread({ version: view.current!.version, index: 1 });
+    expect((await engine.getWorkContext()).current?.threads[1]?.forgotten).toBe(true);
+    await engine.undo(forgotten.undoToken);
+    expect((await engine.getWorkContext()).current?.threads[1]?.forgotten).toBe(false);
+
+    expect(await engine.sweepWorkContext()).toMatchObject({ ok: true, version: view.current!.version + 1 });
+  });
+
   it('finds a new sample question every ~45s and pings for it', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });

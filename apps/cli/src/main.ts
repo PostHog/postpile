@@ -6,6 +6,7 @@ import { engineFromEnv } from '@code-manager/server';
 import { parseArgs, usage, type Command } from './args.ts';
 import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './format.ts';
 import { formatConsolidation } from './format-memory.ts';
+import { formatSweep } from './format-work-context.ts';
 import type { EngineService } from '@code-manager/engine';
 
 async function runCommand(engine: EngineService, command: Command): Promise<string> {
@@ -16,6 +17,10 @@ async function runCommand(engine: EngineService, command: Command): Promise<stri
       return formatConsolidation(await engine.consolidate(command.options));
     case 'poll':
       return formatPoll(await engine.pollOnce());
+    case 'sweep': {
+      const result = await engine.sweepWorkContext();
+      return formatSweep(result, await engine.getWorkContext());
+    }
     case 'topics':
       return formatTopics(await engine.listTopics());
     case 'topic': {

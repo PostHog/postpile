@@ -1,6 +1,6 @@
 import type { GlanceBatchInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { batchDetail, contextBlock, GITHUB_DATA_RULE, howItReached, jsonOnly, prDetails, viewerLine } from './shared.ts';
+import { batchDetail, contextBlock, GITHUB_DATA_RULE, howItReached, jsonOnly, prDetails, viewerLine, workContextBlock } from './shared.ts';
 
 function topicBlock(input: GlanceBatchInput): string {
   if (!input.topic) {
@@ -23,7 +23,7 @@ export function glanceBatchPrompt(input: GlanceBatchInput): string {
   return `You are helping a developer decide, at a glance, what to do about each of ${input.items.length} GitHub pull requests.
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
-${contextBlock(input.context)}
+${contextBlock(input.context)}${workContextBlock(input.context)}
 ${topicBlock(input)}
 
 The pull requests, each headed by its key:

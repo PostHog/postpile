@@ -76,6 +76,16 @@ export class FeedbackRepo {
     );
   }
 
+  /** Newest first, one kind across topics. */
+  listByKind(kind: FeedbackKind, limit: number): Feedback[] {
+    return all<FeedbackRow>(
+      this.db,
+      'SELECT * FROM feedback WHERE kind = ? ORDER BY created_at DESC, id DESC LIMIT ?',
+      kind,
+      limit,
+    ).map(toFeedback);
+  }
+
   /** Everything said about one PR, e.g. "not mine" before re-offering it. */
   listForPr(prKey: string): Feedback[] {
     return all<FeedbackRow>(this.db, 'SELECT * FROM feedback WHERE pr_key = ? ORDER BY created_at, id', prKey).map(

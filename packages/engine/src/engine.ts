@@ -34,6 +34,9 @@ import type {
   ViewerView,
   NotificationDebugRow,
   Timers,
+  WorkContextSweepResult,
+  WorkContextView,
+  WorkThreadForget,
 } from '@code-manager/core';
 import { OFF_POLL_STATUS, systemTimers } from '@code-manager/core';
 import type { GitHubReader } from '@code-manager/github';
@@ -63,6 +66,10 @@ import { PromptContextSource } from './prompt-context.ts';
 import { ReadModels } from './read-models.ts';
 import type { EngineService } from './service.ts';
 import { SyncRun } from './sync-run.ts';
+import { claudeDirFromEnv } from './work-context/collector.ts';
+import { WorkContextSchedule } from './work-context/schedule.ts';
+import { WorkContextSweeper } from './work-context/sweeper.ts';
+import { WorkContextMemory } from './work-context/work-context.ts';
 import type { GitHubWrites } from './writes/github-writes.ts';
 
 export interface EngineDeps {
@@ -80,6 +87,8 @@ export interface EngineDeps {
   timers?: Timers;
   /** Daily cap on ping_decision calls. Defaults to PING_DECISIONS_PER_DAY. */
   pingDecisionsPerDay?: number;
+  /** Local Claude Code folder the work context sweep reads. Defaults to CODE_MANAGER_CLAUDE_DIR, else ~/.claude. */
+  claudeDir?: string;
 }
 
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
@@ -97,6 +106,9 @@ export class Engine implements EngineService {
   private readonly syncRun: SyncRun;
   private readonly consolidationRun: ConsolidationRun;
   private readonly pollRun: PollRun;
+  private readonly sweeper: WorkContextSweeper;
+  private readonly workContext: WorkContextMemory;
+  private readonly sweepSchedule: WorkContextSchedule;
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
@@ -106,7 +118,10 @@ export class Engine implements EngineService {
     const { store, now } = deps;
     const history = new InstructionsHistory(store, deps.instructionsFile, now);
     const proposer = new InstructionsProposer(store, deps.agent, history);
-    const contexts = new PromptContextSource(store, history);
+    this.sweeper = new WorkContextSweeper({ store, agent: deps.agent, history, claudeDir: deps.claudeDir ?? claudeDirFromEnv(), now });
+    this.workContext = new WorkContextMemory(store, this.sweeper, now);
+    this.sweepSchedule = new WorkContextSchedule(this.sweeper, deps.timers ?? systemTimers, now);
+    const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
     this.reads = new ReadModels(store, deps.agent, contexts, now);
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
@@ -257,6 +272,9 @@ export class Engine implements EngineService {
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
+    if (undoToken !== null && this.workContext.isUndo(undoToken)) {
+      return this.workContext.undo(undoToken);
+    }
     if (undoToken !== null && this.memoryActions.isMemoryUndo(undoToken)) {
       return this.memoryActions.undo(undoToken);
     }
@@ -351,12 +369,35 @@ export class Engine implements EngineService {
     return this.instructions.save(decision);
   }
 
+  async getWorkContext(): Promise<WorkContextView> {
+    return this.workContext.view();
+  }
+
+  /** Runs beside syncs on purpose: a sync never waits for the sweep, nor the sweep for a sync. */
+  sweepWorkContext(): Promise<WorkContextSweepResult> {
+    return this.sweeper.sweep();
+  }
+
+  async forgetWorkThread(input: WorkThreadForget): Promise<ActionResult> {
+    return this.workContext.forget(input);
+  }
+
+  startWorkContextSchedule(): void {
+    this.sweepSchedule.start();
+  }
+
+  stopWorkContextSchedule(): void {
+    this.sweepSchedule.stop();
+  }
+
   flushPendingWrites(): Promise<void> {
     return this.deps.markReadQueue.flush();
   }
 
   async close(): Promise<void> {
     this.stopLivePoll();
+    // A running sweep is not awaited (it can take minutes); its late write fails quietly.
+    this.stopWorkContextSchedule();
     await this.polling?.catch(() => {});
     await this.syncing?.catch(() => {});
     await this.consolidating?.catch(() => {});

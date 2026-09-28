@@ -96,6 +96,11 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   the scope. A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
+- "What you're working on" (`WorkContextSection`, bottom of the instructions
+  pane) is agent-written from local Claude Code notes and stays visibly apart
+  from the user's instructions (dashed frame, "agent-written"). It is steered
+  by Forget (`forgetWorkThread`, local, undo token with the `memory:` prefix)
+  and Refresh (`refreshWorkContext`, one agent call); never add an edit box.
 - Agent-derived memory is steered only by chat, Recheck and Forget, never by
   editing its text. Every memory line takes a `why` target
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
@@ -139,6 +144,7 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
   `InstructionsProposalCard` (tile chat and the instructions view),
+  `WorkContextSection` (instructions pane only),
   `RelationBadge` (in `pills.tsx`).
   Something used in three places goes here; two call
   sites can stay duplicated.

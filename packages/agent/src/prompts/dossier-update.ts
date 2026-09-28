@@ -3,7 +3,7 @@ import type { Fact, PrEvent } from '@code-manager/core';
 import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine } from './shared.ts';
+import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, workContextBlock } from './shared.ts';
 
 function factLine(fact: Fact, shortId: string, staleNote: string): string {
   const since = fact.validFrom.slice(0, 10);
@@ -171,7 +171,7 @@ export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs
 only what happened since. Rewrite the dossier so it is true now.
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
-${contextBlock(input.context)}
+${contextBlock(input.context)}${workContextBlock(input.context)}
 Previous dossier:
 ${previous}
 ${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${placementBlock(input)}${factsBlocks(input, refs)}${block('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}

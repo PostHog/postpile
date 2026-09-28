@@ -500,7 +500,9 @@ export type FeedbackKind =
   /** The user accepted a recheck that found the line still right: keep it. The note holds the line. */
   | 'memory_confirmed'
   /** The user accepted a recheck's corrected line. The note is fixedClaimNote(). */
-  | 'memory_fixed';
+  | 'memory_fixed'
+  /** A thread of the "what you're working on" digest the user asked to forget. The note holds its title, then its detail. */
+  | 'work_context_forget';
 
 /** A user correction. The newest few per topic go back into prompts. */
 export interface Feedback {

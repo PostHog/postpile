@@ -5,6 +5,9 @@ import type { Store } from '@code-manager/store';
 /** Run id for calls made outside a sync or consolidation: chat, drafts and instructions proposals. */
 export const ACTION_RUN_ID = 'action';
 
+/** Run id for the daily work context sweep, which runs beside syncs and never counts toward one. */
+export const SWEEP_RUN_ID = 'sweep';
+
 /** Calls the user asks for directly; they never count toward a sync or consolidation. */
 const ACTION_KINDS = new Set<ObservedCall['purpose']>(['chat', 'draft_comment', 'instructions_change', 'memory_recheck']);
 
@@ -38,7 +41,7 @@ export class AgentCallLog implements AgentCallObserver {
   }
 
   private runFor(call: ObservedCall): ActiveRun | null {
-    if (ACTION_KINDS.has(call.purpose)) {
+    if (ACTION_KINDS.has(call.purpose) || call.purpose === 'context_sweep') {
       return null;
     }
     return this.active;
@@ -47,7 +50,7 @@ export class AgentCallLog implements AgentCallObserver {
   onCall(call: ObservedCall): void {
     const run = this.runFor(call);
     this.store.agentCalls.add({
-      runId: run?.id ?? ACTION_RUN_ID,
+      runId: call.purpose === 'context_sweep' ? SWEEP_RUN_ID : (run?.id ?? ACTION_RUN_ID),
       kind: call.purpose,
       topicId: call.topicId,
       model: call.model,

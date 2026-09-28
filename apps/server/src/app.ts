@@ -230,6 +230,15 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     return c.json(await engine.proposeInstructions(body.sourceChatMessageId));
   });
 
+  // "What you're working on": agent-written from local Claude Code notes, local only.
+  app.get('/api/work-context', async (c) => c.json(await engine.getWorkContext()));
+  // One agent call (a minute or more); the answer comes back when it is stored.
+  app.post('/api/work-context/sweep', async (c) => c.json(await engine.sweepWorkContext()));
+  app.post('/api/work-context/forget', async (c) => {
+    const body = z.object({ version: z.number().int().positive(), index: z.number().int().min(0) }).parse(await c.req.json());
+    return c.json(await engine.forgetWorkThread(body));
+  });
+
   app.get('/api/facts', async (c) => {
     const { since, ...query } = factQuery.parse(c.req.query());
     return c.json(await engine.listFacts({ ...query, changedSince: since }));
