@@ -105,6 +105,11 @@ describe('queue filters', () => {
     expect(prMatchesFilter(pr({ tier: 'to_review' }), 'reply')).toBe(false);
     expect(tileMatchesFilter(tile('t', 'rest', [pr({}), pr({ tier: 'to_review' })]), 'review')).toBe(true);
   });
+
+  it('never matches a pulled-in stack layer', () => {
+    const layer = pr({ authorRelation: 'team', provenance: { kind: 'pulled_in', reason: 'stack layer below #2' } });
+    expect(prMatchesFilter(layer, 'team')).toBe(false);
+  });
 });
 
 describe('tilesInTierOrder', () => {

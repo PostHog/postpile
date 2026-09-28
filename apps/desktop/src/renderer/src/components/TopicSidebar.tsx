@@ -69,7 +69,17 @@ function FaceStack(props: { people: TopicPerson[]; active: boolean }) {
   );
 }
 
-/** One topic: name, unread mark, faces and the section's PR count, then a one-line summary. */
+/** "2 your move" in the warm-reach honey: live tiles where whose-turn says it's the user's move. */
+function YourMoveChip(props: { count: number }) {
+  const label = `${props.count} ${props.count === 1 ? 'tile waits' : 'tiles wait'} on you`;
+  return (
+    <span title={label} className="flex h-[15px] shrink-0 items-center gap-1 rounded bg-honey-soft px-1 text-[9.5px] font-semibold whitespace-nowrap text-honey-ink">
+      <span className="font-mono">{props.count}</span> your move
+    </span>
+  );
+}
+
+/** One topic: name, unread mark, faces and the section's PR count, then a one-line summary with the "your move" chip at its end. */
 function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; count: number | null; countClass: string }) {
   const { item } = props;
   const weight = props.active || unreadLook(item) === 'urgent' ? 'font-semibold' : 'font-medium';
@@ -89,8 +99,12 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
           <span className={`w-[18px] shrink-0 text-right font-mono text-[10.5px] font-semibold ${props.countClass}`}>{props.count}</span>
         )}
       </span>
-      <span title={topicSnippet(item)} className="w-full truncate text-[11px] leading-[1.4] text-muted">
-        {topicSnippet(item)}
+      {/* The chip sits under the count; at 1100px row one has no room left, so the summary gives way first. */}
+      <span className="flex w-full min-w-0 items-center gap-[7px]">
+        <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
+          {topicSnippet(item)}
+        </span>
+        {item.yourMoveTiles > 0 && <YourMoveChip count={item.yourMoveTiles} />}
       </span>
     </button>
   );

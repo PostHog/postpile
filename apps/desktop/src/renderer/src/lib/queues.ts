@@ -8,8 +8,14 @@ export type QueueFilter = 'mine' | 'team' | 'reply' | 'review';
 
 export const QUEUE_FILTERS: QueueFilter[] = ['mine', 'team', 'reply', 'review'];
 
-/** Mine / Team: open PRs you or a teammate wrote. Reply / Review: that tier. */
+/**
+ * Mine / Team: open PRs you or a teammate wrote. Reply / Review: that tier.
+ * A pulled-in stack layer never matches: it is context, outside the queues.
+ */
 export function prMatchesFilter(pr: PrSummary, filter: QueueFilter): boolean {
+  if (pr.provenance.kind === 'pulled_in') {
+    return false;
+  }
   if (filter === 'mine') {
     return pr.authorRelation === 'you' && pr.state === 'OPEN';
   }

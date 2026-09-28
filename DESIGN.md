@@ -878,16 +878,26 @@ avatars and filters", QueuesB2).
   Routed, FYI; Routed and FYI folded). Section tint: honey for reply and
   review, ink for mine, sea for team and team mentioned, grey for other.
 - **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
-  per tier over the PRs in the topic's tiles (each PR once, stack layers
-  included), plus open PRs by you / by a teammate. Only open PRs get a real
-  tier; merged and closed ones are `rest`.
+  per tier over the PRs in the topic's tiles (each PR once), plus open PRs
+  by you / by a teammate. Only open PRs get a real tier; merged and closed
+  ones are `rest`.
+- **Pulled-in stack layers** (provenance `pulled_in`, no tile holds them
+  pinged; `pingedPrKeys`) sit outside the tiers: they add to no section, no
+  queue count and no filter count, their `PrSummary.tier` is `rest`
+  (`memberTier`) and filters never match them. They stay on their stack
+  tile as context.
 - **Rows**: name, unread mark, face stack, the section's count, then a
-  one-line summary. Faces are `TopicListItem.people` (`topicPeople`):
+  one-line summary with a honey "N your move" chip at its end, right under
+  the count (`yourMoveTiles`: live tiles where whose-turn says it's your
+  move, merging your approved PR included). At 1100px row one has no room
+  for the chip, so the summary truncates first and the chip stays. Faces are `TopicListItem.people` (`topicPeople`):
   authors, reviewers (submitted, then requested) and commenters, no bots,
   you and your team first with a sea ring, four at most then "+N".
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
-  tile. Only then is its unread mark a coral dot and does it rank as
+  tile and that move is more than "Merge, it is approved" on your own PR
+  (`isMergeApprovedMove`). That move still shows on the tile footer and in
+  the chip count, it just doesn't make the topic urgent. Only then is its unread mark a coral dot and does it rank as
   `needs_you`. When every unread tile is merged or closed the row shows a
   grey dot and count ("merged since you looked") and ranks below the urgent
   ones (`compareTopicUrgency`: needs you, then open unread tiles, then any
