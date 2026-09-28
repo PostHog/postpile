@@ -10,7 +10,7 @@ interface PrRowProps {
   selected: boolean;
   /** The PR the tile is unread about; drawn a little stronger. */
   strong: boolean;
-  /** Done tiles grey the why badge. */
+  /** Done tiles grey the why badge, the status pill and the thread count. */
   greyed: boolean;
   first: boolean;
   onClick: () => void;
@@ -40,11 +40,11 @@ export function PrRow(props: PrRowProps) {
       <span className={`font-mono text-[10.5px] ${props.selected ? 'text-accent' : 'text-muted'}`}>#{prNumber(pr.key)}</span>
       <span className={`truncate ${weight} ${titleTone}`}>{pr.title}</span>
       <span className="flex items-center gap-1">
-        <StatusPill status={pr.status} />
+        <StatusPill status={pr.status} greyed={props.greyed} />
         {pr.openThreads > 0 && (
           <span
             title={`${pr.openThreads} open review thread${pr.openThreads === 1 ? '' : 's'}`}
-            className="flex items-center gap-0.5 font-mono text-[10px] text-muted"
+            className={`flex items-center gap-0.5 font-mono text-[10px] ${props.greyed ? 'text-faint' : 'text-muted'}`}
           >
             <Glyph glyph="bubble" size={10} strokeWidth={1.8} />
             {pr.openThreads}

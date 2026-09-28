@@ -138,7 +138,8 @@ tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
   done tiles.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), coral dot, age.
-- PR status: `StatusPill`, one segment pill; open threads after it.
+- PR status: `StatusPill`, one segment pill; open threads after it. Both
+  go grey on done tiles, like the why badge.
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for
   "Your move".
 - Coral (`unread`) means "new since you looked" and nothing else on a tile.

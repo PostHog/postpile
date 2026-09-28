@@ -73,8 +73,11 @@ const STATUS_TONES: Record<StatusTone, string> = {
   queued: 'bg-status-queued-soft text-status-queued',
 };
 
-/** One segment pill: lifecycle, then review and checks when they apply. */
-export function StatusPill(props: { status: PrStatus; size?: 'sm' | 'md' }) {
+/** Same neutral grey as the why badge on done tiles: every segment loses its tint. */
+const STATUS_GREYED = 'bg-why-done text-muted';
+
+/** One segment pill: lifecycle, then review and checks when they apply. Greyed on done tiles. */
+export function StatusPill(props: { status: PrStatus; size?: 'sm' | 'md'; greyed?: boolean }) {
   const parts = statusParts(props.status);
   const height = props.size === 'md' ? 'h-[21px] text-[11px]' : 'h-[18px] text-[9.5px]';
   return (
@@ -82,7 +85,7 @@ export function StatusPill(props: { status: PrStatus; size?: 'sm' | 'md' }) {
       {parts.map((part, index) => (
         <span
           key={part.text}
-          className={`flex items-center px-[5px] font-semibold whitespace-nowrap ${index > 0 ? 'border-l border-surface' : ''} ${STATUS_TONES[part.tone]}`}
+          className={`flex items-center px-[5px] font-semibold whitespace-nowrap ${index > 0 ? 'border-l border-surface' : ''} ${props.greyed ? STATUS_GREYED : STATUS_TONES[part.tone]}`}
         >
           {part.text}
         </span>
