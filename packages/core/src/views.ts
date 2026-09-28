@@ -280,6 +280,17 @@ export interface SyncReport {
   errors: string[];
   /** Missing on reports stored before phase timings existed. */
   phaseMs?: SyncPhaseTimings;
+  /**
+   * Set when the sync did not run because gh cannot be used (the gh status
+   * headline, e.g. "GitHub CLI (gh) not found"). Such a report is not stored.
+   */
+  blockedBy?: string | null;
+  /**
+   * Set when the agent was off for this sync (the claude status headline):
+   * the fetch and the rules ran, the agent jobs did not. Replaces one error
+   * line per skipped call.
+   */
+  agentOff?: string | null;
 }
 
 export interface ActionResult {

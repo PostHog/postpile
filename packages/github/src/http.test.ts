@@ -22,4 +22,15 @@ describe('GitHubHttp', () => {
     }
     expect(fake.requests).toEqual([]);
   });
+
+  it('forgets the token after a 401, so a fresh gh login is read next time', async () => {
+    const fake = new FakeFetch([{ status: 401, body: { message: 'Bad credentials' } }, { body: {} }]);
+    let forgotten = 0;
+    const http = new GitHubHttp({ token: async () => 'old-token', forget: () => (forgotten += 1) }, fake.fn);
+
+    await expect(http.requestOk('GET', 'user')).rejects.toMatchObject({ status: 401 });
+    await http.request('GET', 'user');
+
+    expect(forgotten).toBe(1);
+  });
 });

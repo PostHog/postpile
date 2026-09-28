@@ -41,6 +41,8 @@ export interface PingDeciderDeps {
   now: () => Date;
   /** PING_DECISIONS_PER_DAY unless POSTPILE_PING_CAP says otherwise. */
   capPerDay: number;
+  /** The claude headline while the agent is off: the rules decide then, like over the cap. Missing: always on. */
+  agentOff?: () => string | null;
 }
 
 export interface PingDecisions {
@@ -151,6 +153,10 @@ export class PingDecider {
   private async askAgent(board: Board, addressed: Candidate[], viewer: Viewer, errors: string[]): Promise<PingDecision[]> {
     if (this.overCap()) {
       return addressed.map((c) => this.fallback(c, `daily cap of ${this.deps.capPerDay} ping decisions reached`));
+    }
+    const agentOff = this.deps.agentOff?.() ?? null;
+    if (agentOff !== null) {
+      return addressed.map((c) => this.fallback(c, agentOff));
     }
     let answers: PingDecisionAnswer[];
     try {

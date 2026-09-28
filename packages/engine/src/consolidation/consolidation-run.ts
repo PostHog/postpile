@@ -26,6 +26,11 @@ export class ConsolidationRun {
     const { now, callLog } = this.deps;
     const startedAt = now().toISOString();
     const report = emptyReport(startedAt);
+    // Consolidation is agent work only.
+    if (this.deps.agentOff() !== null) {
+      report.skipped = 'agent_off';
+      return report;
+    }
     report.agentCallStats = callLog.begin(`consolidate:${startedAt}`);
     try {
       const consolidator = new Consolidator({

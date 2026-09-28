@@ -13,6 +13,10 @@ import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
 import { PendingWrites } from './writes/pending-writes.ts';
+import { systemCommands } from './setup/setup-checks.ts';
+import { GatedRunner } from './tools/gated-runner.ts';
+import { ToolHealth } from './tools/tool-health.ts';
+import { WatchedTokenSource, watchedFetch } from './tools/watched-github.ts';
 import { UserConfigFile } from './user-config.ts';
 import { WriteSwitch } from './writes/write-switch.ts';
 
@@ -53,7 +57,14 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const readOnly = options.withoutLock === true || (options.readOnly ?? process.env.POSTPILE_READ_ONLY === '1');
   // Before the store opens: a second process on the same database refuses here.
   const lock = options.withoutLock ? null : DataDirLock.acquire(paths.databaseFile, options.lockKind ?? 'server');
-  const tokens = new GhCliTokenSource();
+  const now = (): Date => new Date();
+  // gh and claude behind one status: a missing or logged-out tool stops the
+  // calls that need it (no process per call, no log line per call) and the UI
+  // shows the fix. Real failures report back into it.
+  const ghTokens = new GhCliTokenSource();
+  const tools = new ToolHealth({ commands: systemCommands, now, forgetToken: () => ghTokens.forget() });
+  const tokens = new WatchedTokenSource(ghTokens, tools);
+  const fetchFn = watchedFetch(tools);
   let store: Store;
   try {
     // Without the lock the app may be writing: open read-only, no migrations, no WAL pragma.
@@ -62,10 +73,9 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     lock?.release();
     throw error;
   }
-  const reader = new GitHubClient(tokens);
-  const now = (): Date => new Date();
+  const reader = new GitHubClient(tokens, fetchFn);
   // Off until the user opens the footer lock; the choice is kept in meta.
-  const writeSwitch = new WriteSwitch(store, readOnly ? null : new GitHubWriteClient(tokens));
+  const writeSwitch = new WriteSwitch(store, readOnly ? null : new GitHubWriteClient(tokens, fetchFn));
   const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const markThreadReadLocally = (threadId: string, readAt: string): void => {
     store.notifications.markRead(threadId, readAt);
@@ -76,7 +86,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     store,
     reader,
     writes,
-    agent: new RunnerAgentService(new ClaudeCliRunner(), { observer: callLog }),
+    agent: new RunnerAgentService(new GatedRunner(new ClaudeCliRunner(), tools), { observer: callLog }),
     callLog,
     markReadQueue: new MarkReadQueue(
       writes,
@@ -93,5 +103,6 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
     dataLock: lock,
     userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
+    tools,
   });
 }

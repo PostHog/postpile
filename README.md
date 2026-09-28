@@ -55,8 +55,8 @@ The first sync then takes a few minutes while the agent sorts your pull requests
 Requirements:
 
 - macOS 12 or later on Apple silicon (arm64)
-- [GitHub CLI](https://cli.github.com) (`gh`), logged in: `gh auth login`
-- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), logged in. PostPile uses it for every agent call, on your own Claude plan or API key.
+- [GitHub CLI](https://cli.github.com) (`gh`), logged in: `brew install gh`, then `gh auth login`. Without it nothing syncs.
+- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), logged in: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude auth login`. PostPile uses it for every agent call, on your own Claude plan or API key. Without it the app runs on rules only: tiles, whose turn and notifications work, and topics, dossiers, glances and chat do not.
 
 With Homebrew:
 
@@ -79,6 +79,16 @@ The app is ad-hoc signed. It is not signed with an Apple Developer ID and not no
 - Open the app once, then go to System Settings › Privacy & Security and click Open Anyway. On macOS 14 and older, right-click the app and choose Open.
 
 On the first launch, macOS asks for permission to show notifications. The first sync takes a few minutes while the agent sorts your PRs into topics.
+
+## Troubleshooting
+
+PostPile checks `gh` and `claude` on start. When one is missing, the window says what is wrong, shows the command to run, and has a Check again button. While something is wrong, the app checks again by itself every few minutes.
+
+- **"GitHub CLI (gh) not found"**: run `brew install gh`, then `gh auth login`. Nothing syncs until then. Topics you already have stay.
+- **"gh is not logged in"** or **"GitHub did not accept the gh login"**: run `gh auth login`, then click Check again. No restart is needed.
+- **"Agent features are off: claude not found"** or **"claude is not logged in"**: install Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`) and run `claude auth login`. Until then the app runs on rules only.
+- **"Agent features are paused: Claude usage limit reached"**: the app tries the agent again when the limit resets. The rules keep working.
+- **It works in a terminal but not from Finder**: a Finder launch gets a minimal PATH. The app reads PATH from your login shell and also looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local`. Put a binary from another folder on the PATH your login shell exports, or set `POSTPILE_CLAUDE_BIN` for claude. The log (Help › Reveal Logs) shows the PATH at start and every tool state change.
 
 ## Privacy
 

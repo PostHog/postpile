@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
+import { useTools } from '../api/tools.ts';
 import { statusLabel } from '../lib/memory.ts';
 import { queueLayout, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { type SearchFilter } from '../lib/search.ts';
@@ -220,6 +221,7 @@ function FilterHint(props: { topics: number; tiles: number; onClear: () => void 
 
 export function TopicSidebar(props: TopicSidebarProps) {
   const [folded, setFolded] = useState<SectionKey[]>(FOLDED_BY_DEFAULT);
+  const tools = useTools().data;
   const filter = props.filter;
   const narrowed = filter !== null || props.queueFilter !== null;
   const layout = queueLayout(props.shown);
@@ -248,7 +250,9 @@ export function TopicSidebar(props: TopicSidebarProps) {
         <p className="px-2.5 text-xs leading-relaxed text-muted">No topic has a PR that matches.</p>
       )}
       {!props.error && !props.loading && props.topics.length === 0 && (
-        <p className="px-2.5 text-xs leading-relaxed text-muted">No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.</p>
+        <p className="px-2.5 text-xs leading-relaxed text-muted">
+          {tools && !tools.canSync ? 'No topics yet. Sync starts once gh works.' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'}
+        </p>
       )}
       {layout.sections.map((section) => (
         <div key={section.tier} className="flex flex-col gap-px">

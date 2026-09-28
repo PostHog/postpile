@@ -57,6 +57,7 @@ import type {
   TileRepoLabels,
   TileState,
   TileView,
+  ToolsView,
   Topic,
   TopicDetail,
   TopicListItem,
@@ -117,6 +118,7 @@ import {
 import { LivePoller, type EngineService, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
+import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
@@ -144,6 +146,8 @@ export interface FakeEngineOptions {
   forceSetup?: boolean;
   /** Base delay of the canned setup checks, sweep lines and refine. Tests pass 0. */
   setupStepMs?: number;
+  /** POSTPILE_FAKE_MISSING: gh or claude problems to simulate (see FakeTools). */
+  missingTools?: FakeToolProblem[];
 }
 
 /** One step of the fake sync: what runs, calls it plans, calls that come back by its end. */
@@ -219,6 +223,8 @@ export class FakeEngine implements EngineService {
   private readonly live: FakeLivePoll;
   private readonly workContext: FakeWorkContext;
   private readonly setup: FakeSetup;
+  private readonly toolStatus: FakeTools;
+  private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
   private readonly now: () => Date;
@@ -248,6 +254,8 @@ export class FakeEngine implements EngineService {
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
     this.data = buildSampleData(this.now());
+    this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);
+    this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
     this.live = new FakeLivePoll(this.data, this.now, (prKey) => isPrInQuietRepo(prKey, this.repoSettings));
@@ -485,8 +493,34 @@ export class FakeEngine implements EngineService {
     return this.progress ? { ...this.progress, running: [...this.progress.running] } : null;
   }
 
+  /** Like the engine: without gh the sync is skipped with the reason and nothing is stored. */
+  private blockedSync(reason: string): SyncReport {
+    const at = this.timestamp();
+    return {
+      startedAt: at,
+      finishedAt: at,
+      notificationsNotModified: false,
+      threads: 0,
+      prsFetched: 0,
+      prsSkipped: 0,
+      prsPulledIn: 0,
+      prsFound: 0,
+      newEvents: 0,
+      agentCalls: 0,
+      agentCallStats: emptyAgentCallStats(),
+      dossiersUpdated: 0,
+      facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
+      errors: [],
+      blockedBy: reason,
+    };
+  }
+
   /** Like the engine: a sync while one runs joins it. */
   sync(): Promise<SyncReport> {
+    const ghOff = this.toolStatus.ghOff();
+    if (ghOff !== null) {
+      return Promise.resolve(this.blockedSync(ghOff));
+    }
     if (!this.syncing) {
       this.syncing = this.runFakeSync().finally(() => {
         this.syncing = null;
@@ -500,7 +534,9 @@ export class FakeEngine implements EngineService {
     const startedAt = this.timestamp();
     const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0 };
     this.progress = progress;
-    for (const step of FAKE_SYNC_STEPS) {
+    // Without claude only the fetch runs, like the engine skipping its agent jobs.
+    const agentOff = this.toolStatus.agentOff();
+    for (const step of agentOff === null ? FAKE_SYNC_STEPS : FAKE_SYNC_STEPS.slice(0, 1)) {
       progress.running = step.running;
       progress.agentCallsPlanned += step.plan;
       await new Promise((resolve) => setTimeout(resolve, this.syncStepMs));
@@ -516,12 +552,13 @@ export class FakeEngine implements EngineService {
       prsPulledIn: 0,
       prsFound: 0,
       newEvents: 0,
-      agentCalls: 4,
-      agentCallStats: sampleSyncStats(),
-      dossiersUpdated: 2,
+      agentCalls: agentOff === null ? 4 : 0,
+      agentCallStats: agentOff === null ? sampleSyncStats() : emptyAgentCallStats(),
+      dossiersUpdated: agentOff === null ? 2 : 0,
       facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
-      phaseMs: { fetch: 2100, topics: 0, dossiers: 38000, facts: 0, sets: 0, glances: 47000, events: 6000 },
+      phaseMs: agentOff === null ? { fetch: 2100, topics: 0, dossiers: 38000, facts: 0, sets: 0, glances: 47000, events: 6000 } : { fetch: 2100 },
+      agentOff,
     };
     return this.lastSync;
   }
@@ -540,6 +577,10 @@ export class FakeEngine implements EngineService {
 
   /** Same urgency rule and order as the engine; ties keep the sample's order. */
   async listTopics(): Promise<TopicListItem[]> {
+    // A first run without gh: nothing synced yet, so the empty state shows.
+    if (this.toolStatus.neverSynced()) {
+      return [];
+    }
     this.writes.settle();
     const viewer = this.viewer();
     const items = this.listedTopics().map((topic): TopicListItem => {
@@ -602,10 +643,12 @@ export class FakeEngine implements EngineService {
     const threads = this.threadsOnGitHub();
     const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14), this.baseline);
     const hiddenUntil = this.cleanupHiddenUntil !== null && this.cleanupHiddenUntil > now ? this.cleanupHiddenUntil : null;
+    // Without gh nothing is known about the GitHub inbox.
+    const look = this.toolStatus.ghOff() !== null ? 'none' : cleanupLook({ unreadOlderThan14, prominent: this.cleanupProminent, hiddenUntil }, now);
     return {
       unreadOlderThan14,
       unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30), this.baseline),
-      look: cleanupLook({ unreadOlderThan14, prominent: this.cleanupProminent, hiddenUntil }, now),
+      look,
       baseline: this.baseline,
       hiddenUntil,
       pendingCutoff: this.writes.pendingCleanupCutoff(),
@@ -907,7 +950,16 @@ export class FakeEngine implements EngineService {
     return ok('unsnoozed');
   }
 
+  /** Agent actions fail with the headline while the agent is off, as the engine's do. */
+  private refuseWithoutAgent(): void {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      throw new Error(agentOff);
+    }
+  }
+
   async draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }> {
+    this.refuseWithoutAgent();
     const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
     const question = intent || 'could you say a bit more about this change?';
     const context = glance ? `\n\n${glance.forYou}` : '';
@@ -984,6 +1036,7 @@ export class FakeEngine implements EngineService {
   }
 
   async chat(tileId: string, message: string): Promise<ChatReply> {
+    this.refuseWithoutAgent();
     const tile = this.findTile(tileId);
     if (!tile) {
       throw new Error(`no tile ${tileId}`);
@@ -1158,6 +1211,10 @@ export class FakeEngine implements EngineService {
    * dialog state can be seen. No agent, no cap.
    */
   async recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult> {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      return { status: 'unavailable', reason: 'failed', message: `The agent could not check it: ${agentOff}` };
+    }
     await new Promise((resolve) => setTimeout(resolve, this.recheckDelayMs));
     const outcome = RECHECK_CYCLE[this.recheckCount % RECHECK_CYCLE.length] ?? 'holds';
     this.recheckCount += 1;
@@ -1181,6 +1238,7 @@ export class FakeEngine implements EngineService {
   }
 
   async instructionsChat(message: string): Promise<InstructionsChatReply> {
+    this.refuseWithoutAgent();
     return this.instructions.chatMessage(message);
   }
 
@@ -1197,6 +1255,10 @@ export class FakeEngine implements EngineService {
   }
 
   sweepWorkContext(): Promise<WorkContextSweepResult> {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      return Promise.resolve({ ok: false, message: `Work context sweep skipped. ${agentOff}.`, version: null, stats: null });
+    }
     return this.workContext.sweep();
   }
 
@@ -1226,6 +1288,10 @@ export class FakeEngine implements EngineService {
   // -------------------------------------------------------------------------
 
   async pollOnce(): Promise<PollCycle> {
+    const ghOff = this.toolStatus.ghOff();
+    if (ghOff !== null) {
+      return { kind: 'blocked', reason: ghOff };
+    }
     return this.live.poll();
   }
 
@@ -1262,8 +1328,18 @@ export class FakeEngine implements EngineService {
     return this.setup.status();
   }
 
-  setupChecks(): Promise<SetupChecksView> {
-    return this.setup.checks();
+  async setupChecks(): Promise<SetupChecksView> {
+    return this.toolStatus.setupChecks(await this.setup.checks());
+  }
+
+  async tools(): Promise<ToolsView> {
+    return this.toolStatus.view();
+  }
+
+  /** Waits a moment like a real check, then finds the same simulated problems. */
+  async checkTools(): Promise<ToolsView> {
+    await new Promise((resolve) => setTimeout(resolve, this.checkDelayMs));
+    return this.toolStatus.check();
   }
 
   async startSetupSweep(): Promise<SetupSweepView> {
@@ -1275,6 +1351,10 @@ export class FakeEngine implements EngineService {
   }
 
   refineSetup(request: SetupRefineRequest): Promise<SetupRefineResult> {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      return Promise.resolve({ ok: false, message: `The agent could not change the draft: ${agentOff}`, draft: null, changedSections: [] });
+    }
     return this.setup.refine(request);
   }
 

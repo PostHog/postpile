@@ -3,6 +3,9 @@ import type { PollCycle } from '@postpile/engine';
 import { formatCallStats, formatDossier, formatFactCounts, formatFacts } from './format-memory.ts';
 
 export function formatSync(report: SyncReport): string {
+  if (report.blockedBy) {
+    return `sync skipped: ${report.blockedBy} (pnpm cli tools shows the fix)`;
+  }
   const lines = [
     `threads ${report.threads}, PRs fetched ${report.prsFetched}, new events ${report.newEvents}, dossiers updated ${report.dossiersUpdated}`,
     `agent: ${formatCallStats(report.agentCallStats)}`,
@@ -19,6 +22,9 @@ export function formatSync(report: SyncReport): string {
   }
   if (report.notificationsNotModified) {
     lines.push('notifications unchanged (304)');
+  }
+  if (report.agentOff) {
+    lines.push(`rules only: ${report.agentOff}`);
   }
   for (const error of report.errors) {
     lines.push(`error: ${error}`);

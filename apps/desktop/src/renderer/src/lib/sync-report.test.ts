@@ -56,6 +56,12 @@ describe('syncReportDetail', () => {
     expect(detail).toContain('No agent calls');
     expect(detail).not.toContain('Errors');
   });
+
+  it('says once that the agent was off instead of an error per call', () => {
+    const detail = syncReportDetail(report({ agentOff: 'Agent features are off: claude not found' }));
+    expect(detail).toContain('Rules only: Agent features are off: claude not found');
+    expect(detail).not.toContain('Errors');
+  });
 });
 
 describe('phaseTimingsLine', () => {

@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ActivityPr, SetupSweepView } from '@postpile/core';
+import { TOOL_FIXES, type ActivityPr, type SetupSweepView } from '@postpile/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadRepoSettings } from './repo-settings.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -109,7 +109,7 @@ describe('setup checks', () => {
   it('only warns about a missing claude', async () => {
     h.commands.missing.add('claude');
     const view = await h.engine.setupChecks();
-    expect(view.checks[3]).toMatchObject({ state: 'warn', fix: 'npm install -g @anthropic-ai/claude-code' });
+    expect(view.checks[3]).toMatchObject({ state: 'warn', fix: TOOL_FIXES.installClaude });
     expect(view).toMatchObject({ canContinue: true, agentAvailable: false });
   });
 });

@@ -6,6 +6,7 @@ export type Command =
   | { name: 'poll' }
   | { name: 'sweep' }
   | { name: 'setup-draft' }
+  | { name: 'tools' }
   | { name: 'topics' }
   | { name: 'topic'; topicId: string }
   | { name: 'pr'; prKey: string }
@@ -24,11 +25,12 @@ export const usage = `usage: postpile <command>
   poll                 one fast-poll cycle: inbox check, changed PRs, ping decisions (no Mac notification)
   sweep                write "what you're working on" from ~/.claude (POSTPILE_CLAUDE_DIR), one agent call
   setup-draft          run the setup checks, sweep and draft; prints the draft with its sources, writes no instructions
+  tools                check gh and claude: found where, logged in, and the exact fix when not
   topics               list topics with unread counts
   topic <id>           show a topic: dossier, changes since seen, tiles
   pr <owner/repo#n>    show one PR: glance, facts and events
 
-  --read-only          (topics, topic, pr) read the database while the app holds it; no GitHub writes
+  --read-only          (topics, topic, pr, tools) read the database while the app holds it; no GitHub writes
 
 POSTPILE_FAKE=1 runs on built-in sample data (no GitHub, no agent).
 From the repo (pnpm cli) the dev database is used; POSTPILE_PROFILE=default pnpm cli ... reads the real one.`;
@@ -112,7 +114,7 @@ export function parseArgs(argv: string[]): Command {
     const options = parseConsolidateFlags(argv.slice(1));
     return options ? { name, options } : { name: 'help' };
   }
-  if ((name === 'topics' || name === 'poll' || name === 'sweep' || name === 'setup-draft') && arg === undefined) {
+  if ((name === 'topics' || name === 'poll' || name === 'sweep' || name === 'setup-draft' || name === 'tools') && arg === undefined) {
     return { name };
   }
   if (name === 'topic' && arg && rest.length === 0) {
@@ -125,7 +127,7 @@ export function parseArgs(argv: string[]): Command {
 }
 
 /** Commands that only read the store, so they may run next to the app with --read-only. */
-const READ_COMMANDS: Command['name'][] = ['topics', 'topic', 'pr', 'help'];
+const READ_COMMANDS: Command['name'][] = ['topics', 'topic', 'pr', 'tools', 'help'];
 
 export interface Invocation {
   command: Command;
@@ -139,7 +141,7 @@ export interface Invocation {
 export function parseInvocation(argv: string[]): Invocation {
   const readOnly = argv.includes('--read-only');
   const command = parseArgs(argv.filter((arg) => arg !== '--read-only'));
-  const error = readOnly && !READ_COMMANDS.includes(command.name) ? `--read-only only works with topics, topic and pr, not ${command.name}` : null;
+  const error = readOnly && !READ_COMMANDS.includes(command.name) ? `--read-only only works with topics, topic, pr and tools, not ${command.name}` : null;
   return { command, readOnly, error };
 }
 

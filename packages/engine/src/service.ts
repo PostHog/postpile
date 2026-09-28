@@ -41,6 +41,7 @@ import type {
   SnoozeCondition,
   SyncOptions,
   SyncReport,
+  ToolsView,
   TopicDetail,
   TopicListItem,
   WorkContextSweepResult,
@@ -236,6 +237,15 @@ export interface EngineService {
   /** The daily sweep on a timer (desktop app): at start, then every 30 minutes if due. A second call is ignored. */
   startWorkContextSchedule(): void;
   stopWorkContextSchedule(): void;
+
+  /**
+   * gh and claude: found, logged in, usable, with the exact fix commands.
+   * Checked on the first ask, then again only while something is wrong, on
+   * a backoff (1 minute doubling to 30). Never runs a check when none is due.
+   */
+  tools(): Promise<ToolsView>;
+  /** "Check again": checks gh and claude now, whatever the backoff says. */
+  checkTools(): Promise<ToolsView>;
 
   /** Setup flow: whether it shows on start (first run: no instructions, never accepted or skipped) and the stored flag. */
   setupStatus(): Promise<SetupStatus>;

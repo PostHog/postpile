@@ -20,6 +20,7 @@ import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
+import { ToolHealth } from '../tools/tool-health.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
 import { ActionLog } from '../writes/action-log.ts';
 import { GitHubWrites } from '../writes/github-writes.ts';
@@ -243,27 +244,39 @@ export class FakeWriter implements GitHubWriter {
 }
 
 /**
- * gh and claude for the setup checks, without running anything: every
- * program answers ok with "<name> version 1.0" unless listed in `missing`
- * or `failing`. Calls are recorded as "gh auth token".
+ * gh and claude for the setup checks and the tool status, without running
+ * anything: every program answers ok with "<name> version 1.0" unless listed
+ * in `missing` or `failing`, or given a canned stdout in `answers`. Programs
+ * are matched by name, so "/usr/bin/gh auth token" counts as "gh auth token",
+ * and calls are recorded that way too.
  */
 export class FakeCommands {
   readonly calls: string[] = [];
   readonly missing = new Set<string>();
   /** "gh auth token" style command lines that fail. */
   readonly failing = new Set<string>();
+  /** "claude --version" style command lines with their stdout. */
+  readonly answers = new Map<string, string>();
 
   readonly run: CommandRunner = async (command, args): Promise<CommandResult> => {
-    const line = [command, ...args].join(' ');
+    const name = command.split('/').pop() ?? command;
+    const line = [name, ...args].join(' ');
     this.calls.push(line);
-    if (this.missing.has(command)) {
+    if (this.missing.has(name)) {
       return { ok: false, missing: true, stdout: '', stderr: '' };
     }
     if (this.failing.has(line)) {
-      return { ok: false, missing: false, stdout: '', stderr: 'not logged in' };
+      return { ok: false, missing: false, stdout: this.answers.get(line) ?? '', stderr: 'not logged in' };
     }
-    return { ok: true, missing: false, stdout: args.includes('token') ? 'gho_test\n' : `${command} version 1.0\n`, stderr: '' };
+    const answer = this.answers.get(line);
+    if (answer !== undefined) {
+      return { ok: true, missing: false, stdout: answer, stderr: '' };
+    }
+    return { ok: true, missing: false, stdout: args.includes('token') ? 'gho_test\n' : `${name} version 1.0\n`, stderr: '' };
   };
+
+  /** For the tool status: a program counts as on PATH unless it is in `missing`. */
+  readonly isExecutable = (file: string): boolean => !this.missing.has(file.split('/').pop() ?? file);
 }
 
 export const NOW = new Date('2026-09-02T12:00:00Z');
@@ -285,6 +298,7 @@ export interface Harness {
   agent: FakeAgent;
   timers: FakeTimers;
   commands: FakeCommands;
+  tools: ToolHealth;
 }
 
 export interface HarnessOptions {
@@ -332,6 +346,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const callLog = new AgentCallLog(store, now);
   const agent = new FakeAgent(runner, callLog);
   const commands = new FakeCommands();
+  const tools = new ToolHealth({ commands: commands.run, now, path: () => '/usr/bin', isExecutable: commands.isExecutable, claudeBinary: 'claude', log: () => {} });
   const engine = new Engine({
     store,
     reader,
@@ -348,6 +363,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     syncLog: options.syncLog ?? (() => {}),
     userConfig: options.userConfig ?? null,
     setupCommands: commands.run,
+    tools,
   });
-  return { engine, store, reader, writer, writes, runner, agent, timers, commands };
+  return { engine, store, reader, writer, writes, runner, agent, timers, commands, tools };
 }

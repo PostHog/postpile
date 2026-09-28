@@ -8,6 +8,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['poll', '--now'])).toEqual({ name: 'help' });
     expect(parseArgs(['sweep'])).toEqual({ name: 'sweep' });
     expect(parseArgs(['setup-draft'])).toEqual({ name: 'setup-draft' });
+    expect(parseArgs(['tools'])).toEqual({ name: 'tools' });
     expect(parseArgs(['pr', 'PostHog/posthog#1'])).toEqual({ name: 'pr', prKey: 'PostHog/posthog#1' });
     expect(parseArgs(['topic'])).toEqual({ name: 'help' });
     expect(parseArgs([])).toEqual({ name: 'help' });
@@ -46,7 +47,7 @@ describe('parseInvocation', () => {
   it('takes --read-only for read commands only', () => {
     expect(parseInvocation(['topics', '--read-only'])).toEqual({ command: { name: 'topics' }, readOnly: true, error: null });
     expect(parseInvocation(['pr', 'a/b#1'])).toMatchObject({ readOnly: false, error: null });
-    expect(parseInvocation(['sync', '--read-only']).error).toBe('--read-only only works with topics, topic and pr, not sync');
+    expect(parseInvocation(['sync', '--read-only']).error).toBe('--read-only only works with topics, topic, pr and tools, not sync');
     expect(parseInvocation(['poll', '--read-only']).error).toMatch(/not poll/);
   });
 });

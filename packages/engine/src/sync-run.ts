@@ -1,4 +1,4 @@
-import { ALL_AGENT_JOBS, type AgentCallStats, type SyncOptions, type SyncProgress, type SyncReport } from '@postpile/core';
+import { ALL_AGENT_JOBS, splitAgentOffErrors, type AgentCallStats, type SyncOptions, type SyncProgress, type SyncReport } from '@postpile/core';
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { reviveRetiredTopics } from './consolidation/revive.ts';
@@ -94,6 +94,12 @@ export class SyncRun {
 
       new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, tally.facts);
       reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
+      // Without claude the fetch and the rules still ran; the agent jobs would only fail one by one.
+      const agentOff = this.deps.agentOff();
+      if (agentOff !== null) {
+        report.agentOff = agentOff;
+        this.log(`sync: agent jobs skipped: ${agentOff}`);
+      }
       const digester = new Digester({
         store,
         agent: this.deps.agent,
@@ -105,7 +111,7 @@ export class SyncRun {
         tally,
         now,
       }, phases);
-      await digester.run(options.agentJobs ?? ALL_AGENT_JOBS);
+      await digester.run(agentOff === null ? (options.agentJobs ?? ALL_AGENT_JOBS) : []);
       // After the digest, so dossier changes about events already read on GitHub count as seen too.
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
     } catch (error) {
@@ -118,6 +124,12 @@ export class SyncRun {
     }
     // Mark-reads run in the background; the sync report is where the user hears about them.
     errors.push(...this.markReadQueue.takeNotes());
+    // The agent can turn off mid-sync (a usage limit): one line in agentOff, not one error per call.
+    const split = splitAgentOffErrors(errors);
+    if (split.agentOff) {
+      errors.splice(0, errors.length, ...split.errors);
+      report.agentOff ??= this.deps.agentOff() ?? 'Agent features are off';
+    }
     report.agentCalls = report.agentCallStats.total;
     report.dossiersUpdated = tally.dossiersUpdated;
     report.finishedAt = now().toISOString();

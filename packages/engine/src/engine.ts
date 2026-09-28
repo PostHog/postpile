@@ -41,6 +41,7 @@ import type {
   SnoozeCondition,
   SyncOptions,
   SyncReport,
+  ToolsView,
   TopicDetail,
   TopicListItem,
   ViewerView,
@@ -50,7 +51,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
 } from '@postpile/core';
-import { normalizeRepoScope, OFF_POLL_STATUS, parsePrKey, systemTimers, withQuietRepo } from '@postpile/core';
+import { emptyAgentCallStats, normalizeRepoScope, OFF_POLL_STATUS, parsePrKey, systemTimers, withQuietRepo } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -73,7 +74,7 @@ import { LivePoller } from './live/live-poller.ts';
 import { PING_DECISIONS_PER_DAY, PingDecider } from './live/ping-decider.ts';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 import { PollRun } from './live/poll-run.ts';
-import { FactWriter } from './memory/fact-writer.ts';
+import { emptyFactCounts, FactWriter } from './memory/fact-writer.ts';
 import { MemoryRechecker } from './memory/memory-recheck.ts';
 import { MemorySourcesReads } from './memory/memory-sources-reads.ts';
 import { PromptContextSource } from './prompt-context.ts';
@@ -86,6 +87,7 @@ import { SetupFlow } from './setup/setup-flow.ts';
 import { SetupSweep } from './setup/setup-sweep.ts';
 import { SyncRun } from './sync-run.ts';
 import { TeamMembers } from './team-members.ts';
+import { ToolHealth } from './tools/tool-health.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
 import { WorkContextSweeper } from './work-context/sweeper.ts';
@@ -121,6 +123,12 @@ export interface EngineDeps {
   syncLog?: (line: string) => void;
   /** Runs gh and claude for the setup checks. Defaults to the real programs; tests pass a fake. */
   setupCommands?: CommandRunner;
+  /**
+   * gh and claude status. Must be the one the token source, fetch and agent
+   * runner report to (createEngine wires that). Missing: everything counts as
+   * working, for tests that do not care.
+   */
+  tools?: ToolHealth;
 }
 
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
@@ -143,6 +151,7 @@ export class Engine implements EngineService {
   private readonly sweepSchedule: WorkContextSchedule;
   private readonly cleanup: InboxCleanup;
   private readonly setup: SetupFlow;
+  private readonly toolHealth: ToolHealth;
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
@@ -153,6 +162,8 @@ export class Engine implements EngineService {
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
+    this.toolHealth = deps.tools ?? ToolHealth.assumeOk(now);
+    const agentOff = (): string | null => this.toolHealth.agentOffReason();
     const history = new InstructionsHistory(store, deps.instructionsFile, now);
     const proposer = new InstructionsProposer(store, deps.agent, history);
     this.sweeper = new WorkContextSweeper({
@@ -162,6 +173,7 @@ export class Engine implements EngineService {
       claudeDir: deps.claudeDir ?? claudeDirFromEnv(),
       now,
       config: deps.userConfig ?? null,
+      agentOff,
     });
     this.workContext = new WorkContextMemory(store, this.sweeper, now);
     this.sweepSchedule = new WorkContextSchedule(this.sweeper, deps.timers ?? systemTimers, now);
@@ -178,7 +190,7 @@ export class Engine implements EngineService {
     this.memorySources = new MemorySourcesReads(store, now);
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
-    const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now };
+    const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff };
     const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, deps.syncLog);
@@ -189,6 +201,7 @@ export class Engine implements EngineService {
       contexts,
       now,
       capPerDay: deps.pingDecisionsPerDay ?? PING_DECISIONS_PER_DAY,
+      agentOff,
     });
     this.pollRun = new PollRun(runDeps, github, decider);
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
@@ -248,11 +261,46 @@ export class Engine implements EngineService {
    * and a poll cycle never overlap: sync and consolidation wait for the
    * others, so agent calls land in the right run.
    */
+  /**
+   * Without a usable gh (missing, logged out, token refused) a sync would only
+   * fail: it is skipped with blockedBy set and nothing stored, so the last
+   * real sync stays the one the footer shows.
+   */
+  private async syncIfGhWorks(options: SyncOptions): Promise<SyncReport> {
+    const tools = await this.toolHealth.ensureFresh();
+    if (!tools.canSync) {
+      return this.blockedSyncReport(tools.gh.headline);
+    }
+    return this.syncRun.run(options);
+  }
+
+  private blockedSyncReport(reason: string): SyncReport {
+    const at = this.deps.now().toISOString();
+    (this.deps.syncLog ?? console.log)(`sync: skipped: ${reason}`);
+    return {
+      startedAt: at,
+      finishedAt: at,
+      notificationsNotModified: false,
+      threads: 0,
+      prsFetched: 0,
+      prsSkipped: 0,
+      prsPulledIn: 0,
+      prsFound: 0,
+      newEvents: 0,
+      agentCalls: 0,
+      agentCallStats: emptyAgentCallStats(),
+      dossiersUpdated: 0,
+      facts: emptyFactCounts(),
+      errors: [],
+      blockedBy: reason,
+    };
+  }
+
   sync(options: SyncOptions = {}): Promise<SyncReport> {
     if (!this.syncing) {
       const before = Engine.settled([this.consolidating, this.polling]);
       this.syncing = before
-        .then(() => this.syncRun.run(options))
+        .then(() => this.syncIfGhWorks(options))
         .finally(() => {
           this.syncing = null;
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
@@ -285,6 +333,12 @@ export class Engine implements EngineService {
     }
     if (this.consolidating) {
       return Promise.resolve({ kind: 'blocked', reason: 'consolidation running' });
+    }
+    // Paused, not failing: no gh process and no request until a due recheck finds gh working again.
+    const ghOff = this.toolHealth.ghOffReason();
+    if (ghOff !== null) {
+      this.toolHealth.recheckIfDue();
+      return Promise.resolve({ kind: 'blocked', reason: ghOff });
     }
     if (!this.polling) {
       const focus = this.focus;
@@ -568,8 +622,18 @@ export class Engine implements EngineService {
     return this.setup.status();
   }
 
-  setupChecks(): Promise<SetupChecksView> {
+  /** Also refreshes the tool status, so fixing gh or claude during setup counts everywhere. */
+  async setupChecks(): Promise<SetupChecksView> {
+    await this.toolHealth.check();
     return this.setup.runChecks();
+  }
+
+  tools(): Promise<ToolsView> {
+    return this.toolHealth.ensureFresh();
+  }
+
+  checkTools(): Promise<ToolsView> {
+    return this.toolHealth.check();
   }
 
   async startSetupSweep(): Promise<SetupSweepView> {

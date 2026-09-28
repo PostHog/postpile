@@ -8,6 +8,7 @@ import { formatPoll, formatPr, formatSync, formatTopic, formatTopics } from './f
 import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
 import { formatSetupDraft } from './format-setup.ts';
+import { formatTools } from './format-tools.ts';
 import { applyLegacyEnv, type EngineService } from '@postpile/engine';
 
 applyLegacyEnv();
@@ -42,6 +43,8 @@ async function runCommand(engine: EngineService, command: Command): Promise<stri
     }
     case 'setup-draft':
       return setupDraft(engine);
+    case 'tools':
+      return formatTools(await engine.checkTools());
     case 'topics':
       return formatTopics(await engine.listTopics());
     case 'topic': {

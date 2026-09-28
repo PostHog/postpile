@@ -30,6 +30,8 @@ export interface WorkContextSweeperDeps {
   /** Read for POSTPILE_SWEEP_SKIP. Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
   log?: (message: string) => void;
+  /** The claude headline while the agent is off, else null. Missing: always on (tests). */
+  agentOff?: () => string | null;
 }
 
 /** The skip list in use and where it comes from. */
@@ -113,6 +115,11 @@ export class WorkContextSweeper {
 
   private async run(): Promise<WorkContextSweepResult> {
     const { store, agent, now } = this.deps;
+    // Not a failure: nothing is recorded, so the digest pane shows no error and the schedule just looks again later.
+    const agentOff = this.deps.agentOff?.() ?? null;
+    if (agentOff !== null) {
+      return { ok: false, message: `Work context sweep skipped. ${agentOff}.`, version: null, stats: null };
+    }
     const collector = new WorkContextCollector({
       claudeDir: this.deps.claudeDir,
       now: now(),

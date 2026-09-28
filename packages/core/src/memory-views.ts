@@ -122,8 +122,8 @@ export interface ConsolidateOptions {
 export interface ConsolidationReport {
   startedAt: IsoTime;
   finishedAt: IsoTime;
-  /** Set when the run did nothing because it was not due. */
-  skipped: 'not_due' | null;
+  /** Set when the run did nothing: not due, or agent_off (claude missing, logged out or limited). */
+  skipped: 'not_due' | 'agent_off' | null;
   topicProposalsFiled: number;
   ruleProposalsFiled: number;
   factsMerged: number;

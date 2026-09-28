@@ -897,9 +897,13 @@ current ink, next quiet) and word chips, never symbols alone:
    (`POSTPILE_CLAUDE_BIN`). Chips: OK, Fix this, Warning, Waiting (an
    earlier check failed). Each problem carries the exact command
    (`brew install gh`, `gh auth login`, `gh auth refresh -h github.com -s
-   notifications`, `npm install -g @anthropic-ai/claude-code`) with Copy.
+   notifications`, `curl -fsSL https://claude.ai/install.sh | bash`,
+   `claude auth login`) with Copy; the commands come from `TOOL_FIXES` in
+   core, shared with "Missing tools" below. From claude 2.x the check also
+   asks `claude auth status --json` and warns when it is not logged in.
    Continue needs gh, login and notifications; a missing claude only warns
-   that agent features (and the draft) will not work.
+   that agent features (and the draft) will not work. The checks refresh
+   the tool status too, so a fix made during setup counts everywhere.
 2. **Sweep**, a job (`POST /api/setup/sweep` starts it and returns, `GET`
    is polled every second like the sync progress; a start while one runs
    joins it). Progress lines, each Working / Done / Failed / Skipped:
@@ -979,6 +983,94 @@ accept into the in-memory instructions and repo settings.
 Routes: `GET /api/setup`, `GET /api/setup/checks`, `POST/GET
 /api/setup/sweep`, `POST /api/setup/refine`, `POST /api/setup/accept`,
 `POST /api/setup/skip`.
+
+## Missing tools (gh, claude)
+
+PostPile needs two programs it does not ship: `gh` for every GitHub read
+and write (the token comes from `gh auth token`) and `claude` for every
+agent call. Either can be missing, logged out or failing. The rule: detect
+it once, say it plainly with the exact fix, keep working on what does not
+need it, and never retry per call.
+
+**Status** (`ToolHealth` in the engine, wire type `ToolsView` in core):
+
+| gh state | means | sync | poll |
+| --- | --- | --- | --- |
+| `ok` / `unchecked` | works, or not looked at yet | runs | runs |
+| `missing` | not on PATH | skipped | paused |
+| `logged_out` | `gh auth token` gave nothing | skipped | paused |
+| `rejected` | GitHub answered 401 to the token | skipped | paused |
+| `offline` | network or GitHub down | runs (fails) | backs off by itself |
+
+| claude state | means | agent |
+| --- | --- | --- |
+| `ok` / `unchecked` | works, or the first call finds out | on |
+| `missing` | not on PATH | off, rules only |
+| `logged_out` | `claude auth status` or a call said so | off, rules only |
+| `limited` | usage or rate limit | paused until `retryAt` |
+
+- **Detection.** Programs are looked up on `PATH` (`findTool`), so a missing
+  binary costs no spawn. The check runs `gh --version`, `gh auth token`,
+  `claude --version` and, from claude 2.x, `claude auth status --json`
+  (older versions would take `auth status` as a prompt). It reads nothing
+  from GitHub. Real calls report back: the token read (ENOENT, no login),
+  every GitHub response (401 is `rejected`, a 2xx clears `rejected` and
+  `offline`, a thrown fetch is `offline`) and every claude failure
+  (`claudeFailure` matches the CLI's wording for a missing binary, a
+  missing login and usage/rate limits; unknown text stays an ordinary
+  failure).
+- **When it looks again.** Once on the first ask. Then only while
+  something needs a fix from outside (install, login): 1 minute, doubling
+  to 30. A check that finds everything fine does not reset the backoff,
+  only a call that works does, because an expired token still looks fine
+  to `gh auth token`. "Check again" (`POST /api/tools/check`) checks now.
+  A usage limit holds until its reset time (from the CLI's
+  `limit reached|<epoch>`, else 30 minutes); a check cannot see it.
+- **Gates.** `WatchedTokenSource` throws `GhOffError` without running gh
+  while gh is broken; `watchedFetch` reports responses; `GatedRunner`
+  throws `AgentOffError` without spawning claude while the agent is off,
+  and turns the first claude failure that means "tool problem" into one.
+  The token is forgotten on a 401 and before each check, so a fresh
+  `gh auth login` works without a restart. Logs name state changes only.
+- **Without gh.** `sync` returns a report with `blockedBy` (the headline),
+  no errors, and stores nothing, so the last real sync stays in the title
+  bar. `pollOnce` returns `blocked` with the headline. GitHub writes fail
+  with the headline.
+- **Without claude.** The sync fetches and runs the rules, skips every
+  agent job and sets `agentOff` once instead of an error per call (lines
+  containing `AGENT_OFF_MARK` are folded out, for an agent that turns off
+  mid-sync). The poll skips topic assignment, and ping decisions fall back
+  to the rules like over the daily cap. Consolidation reports
+  `skipped: 'agent_off'`. The work context sweep returns "skipped" without
+  recording a failure. Chat, Recheck, drafts and refine fail with the
+  headline.
+- **PATH.** A Finder launch gets launchd's minimal PATH. Desktop main takes
+  PATH from the login shell (`fix-path`) and appends `extraToolDirs`:
+  `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` (native Claude Code
+  installer) and `~/.claude/local` (older local install). The check looks
+  on that same PATH, so what it finds is what runs.
+
+**UI** (renderer, words from the server, placement in `lib/tools.ts`):
+
+- gh broken, no topics yet: the middle column's empty state is the note
+  ("Fix this" chip, headline, what it means, numbered fix steps with Copy,
+  "Check again", when it last looked and looks again). Topics exist: the
+  same note as a banner above them. Sync is disabled with the headline as
+  its title, the title bar says "sync off · gh needs a fix", the start
+  sync is skipped quietly.
+- claude off: one line above the topics, "Rules only" chip and
+  "Agent features are off: claude not found. Tiles, whose turn and
+  notifications run on rules.", with "How to fix" folding out the install
+  and login commands. Limited: "Paused" and the time it is tried again.
+- Footer: "sync off", "rules only", "agent paused" or "GitHub unreachable"
+  with the headlines as tooltip. Offline gets no note: it fixes itself.
+
+`pnpm cli tools` prints the same status. Sample data simulates each state
+with `POSTPILE_FAKE_MISSING` (comma separated: `gh`, `gh-auth`, `gh-token`,
+`gh-offline`, `claude`, `claude-auth`, `claude-limit`); `gh` and `gh-auth`
+read as a first run (no topics), `gh-token` keeps the topics.
+
+Routes: `GET /api/tools`, `POST /api/tools/check`.
 
 ## Stack completion
 
