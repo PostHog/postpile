@@ -5,58 +5,81 @@ import type { Pr, PrLifecycle, Review } from '@postpile/core';
 import type { EventGlyph } from './events.ts';
 
 export interface ApproveButtonInput {
-  /** From core (`PrSummary.primaryAction`): approved = the viewer's approval covers the head. */
-  primary: 'approve' | 'approved';
   isDraft: boolean;
   /** Null before the first sync stored the viewer; every approval then counts as someone else's. */
   viewerLogin: string | null;
   reviews: Review[];
   /** The app's own record of the viewer's approval (any commit). */
   viewerApprovedAt: string | null;
+  /** Head commit at the app's approval, null when the app has no record. */
+  viewerApprovedCommitOid: string | null;
+  headOid: string;
 }
 
 export interface ApproveButtonLook {
   label: string;
-  /** Ink primary, or outlined secondary on drafts. */
+  /** Ink primary, or outlined secondary (drafts, already approved). */
   variant: 'primary' | 'secondary';
+  /** The viewer approved on some commit; the tooltip says so. */
+  viewerApproved: boolean;
+  /** Commits came after the viewer's approval (the head moved). */
+  headMoved: boolean;
 }
 
-/** The viewer approved this PR at some point, on any commit (app or github.com). */
-function viewerApprovedEver(input: ApproveButtonInput): boolean {
-  if (input.viewerApprovedAt !== null) {
-    return true;
+/** The viewer's newest approving review on GitHub, any commit. */
+function viewerApproval(input: ApproveButtonInput): Review | null {
+  let newest: Review | null = null;
+  for (const review of input.reviews) {
+    if (review.state === 'APPROVED' && review.author === input.viewerLogin && (!newest || review.submittedAt > newest.submittedAt)) {
+      newest = review;
+    }
   }
-  return input.reviews.some((review) => review.state === 'APPROVED' && review.author === input.viewerLogin);
+  return newest;
 }
 
 function othersApproved(input: ApproveButtonInput): boolean {
   return input.reviews.some((review) => review.state === 'APPROVED' && review.author !== input.viewerLogin);
 }
 
+/** The commit the viewer's approval was for: the app record first, else the newest review. Null when unknown. */
+function approvedCommit(input: ApproveButtonInput, review: Review | null): string | null {
+  return input.viewerApprovedCommitOid ?? review?.commitOid ?? null;
+}
+
 /**
- * Label and look of the Approve button:
+ * Label and look of the Approve button. Approvals do not depend on the
+ * commit (2026-09-28): an approval on any commit counts.
  *
- * - "Approved ✓" (ink, disabled by the caller) while the viewer's approval
- *   covers the head. Unchanged from before.
+ * - "Approve again", outlined, once the viewer approved (app record or a
+ *   non-dismissed approving review, any commit). A harmless re-approve,
+ *   never nagging; the tooltip says he approved and whether commits came
+ *   after. Wins over draft: the viewer is done either way.
  * - "Approve draft", outlined, on a draft. Draft wins over "as well": that
  *   the PR is not ready yet is the bigger caveat, and the review glyph in
  *   front of the label already shows the other approvals.
- * - "Approve as well" when others approved and the viewer never did, on any
- *   commit. A viewer whose approval is for an older commit gets plain
- *   "Approve" (the "commits after your approval" event covers that case).
+ * - "Approve as well" when others approved and the viewer never did.
  * - Else "Approve".
  */
 export function approveButton(input: ApproveButtonInput): ApproveButtonLook {
-  if (input.primary === 'approved') {
-    return { label: 'Approved ✓', variant: 'primary' };
+  const review = viewerApproval(input);
+  const viewerApproved = input.viewerApprovedAt !== null || review !== null;
+  if (viewerApproved) {
+    const commit = approvedCommit(input, review);
+    return { label: 'Approve again', variant: 'secondary', viewerApproved, headMoved: commit !== null && commit !== input.headOid };
   }
+  const base = { viewerApproved: false, headMoved: false };
   if (input.isDraft) {
-    return { label: 'Approve draft', variant: 'secondary' };
+    return { label: 'Approve draft', variant: 'secondary', ...base };
   }
-  if (othersApproved(input) && !viewerApprovedEver(input)) {
-    return { label: 'Approve as well', variant: 'primary' };
+  if (othersApproved(input)) {
+    return { label: 'Approve as well', variant: 'primary', ...base };
   }
-  return { label: 'Approve', variant: 'primary' };
+  return { label: 'Approve', variant: 'primary', ...base };
+}
+
+/** The viewer's newest approval time: the app record or the newest approving review. */
+export function viewerApprovedAt(input: ApproveButtonInput): string | null {
+  return input.viewerApprovedAt ?? viewerApproval(input)?.submittedAt ?? null;
 }
 
 export interface StateGlyph {

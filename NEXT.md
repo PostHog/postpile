@@ -331,6 +331,7 @@ now".
 - Approve button (2026-09-28): "Approve as well" when others approved and you
   never did, outlined "Approve draft" on drafts (draft wins), lifecycle and
   review glyphs in front of the label with worded tooltips (`lib/approve.ts`).
+  An approval on any commit counts: outlined "Approve again" after that.
 
 ## Stubbed or thin
 

@@ -1,23 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import type { Review } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { approveButton, approveStateGlyphs, type ApproveButtonInput } from './approve.ts';
+import { approveButton, approveStateGlyphs, viewerApprovedAt, type ApproveButtonInput } from './approve.ts';
 
 function review(author: string, state: Review['state'], commitOid: string | null = null): Review {
   return { id: `${author}-${state}`, author, state, body: '', submittedAt: at(10), commitOid };
 }
 
 function input(overrides: Partial<ApproveButtonInput> = {}): ApproveButtonInput {
-  return { primary: 'approve', isDraft: false, viewerLogin: 'viewer', reviews: [], viewerApprovedAt: null, ...overrides };
+  return {
+    isDraft: false,
+    viewerLogin: 'viewer',
+    reviews: [],
+    viewerApprovedAt: null,
+    viewerApprovedCommitOid: null,
+    headOid: 'head',
+    ...overrides,
+  };
 }
+
+const fresh = { viewerApproved: false, headMoved: false };
 
 describe('approveButton', () => {
   it('reads plain Approve when nobody approved yet', () => {
-    expect(approveButton(input({ reviews: [review('lyra', 'COMMENTED')] }))).toEqual({ label: 'Approve', variant: 'primary' });
+    expect(approveButton(input({ reviews: [review('lyra', 'COMMENTED')] }))).toEqual({ label: 'Approve', variant: 'primary', ...fresh });
   });
 
   it('reads Approve as well when others approved and the viewer never did', () => {
-    expect(approveButton(input({ reviews: [review('lyra', 'APPROVED')] }))).toEqual({ label: 'Approve as well', variant: 'primary' });
+    expect(approveButton(input({ reviews: [review('lyra', 'APPROVED')] }))).toEqual({ label: 'Approve as well', variant: 'primary', ...fresh });
   });
 
   it('ignores dismissed approvals from others', () => {
@@ -25,30 +35,46 @@ describe('approveButton', () => {
   });
 
   it('reads Approve draft, outlined, on a draft', () => {
-    expect(approveButton(input({ isDraft: true }))).toEqual({ label: 'Approve draft', variant: 'secondary' });
+    expect(approveButton(input({ isDraft: true }))).toEqual({ label: 'Approve draft', variant: 'secondary', ...fresh });
   });
 
   it('lets draft win over as well', () => {
-    expect(approveButton(input({ isDraft: true, reviews: [review('lyra', 'APPROVED')] }))).toEqual({
-      label: 'Approve draft',
-      variant: 'secondary',
-    });
+    expect(approveButton(input({ isDraft: true, reviews: [review('lyra', 'APPROVED')] })).label).toBe('Approve draft');
   });
 
-  it('keeps Approved while the viewer approval covers the head', () => {
-    expect(approveButton(input({ primary: 'approved', reviews: [review('lyra', 'APPROVED')] }))).toEqual({
-      label: 'Approved ✓',
-      variant: 'primary',
-    });
+  it('reads Approve again, outlined, when the viewer approved the head', () => {
+    const reviews = [review('lyra', 'APPROVED'), review('viewer', 'APPROVED', 'head')];
+    expect(approveButton(input({ reviews }))).toEqual({ label: 'Approve again', variant: 'secondary', viewerApproved: true, headMoved: false });
   });
 
-  it('reads plain Approve when the viewer approved an older commit on github.com', () => {
-    const reviews = [review('lyra', 'APPROVED', 'new'), review('viewer', 'APPROVED', 'old')];
-    expect(approveButton(input({ reviews })).label).toBe('Approve');
+  it('counts an approval on an older commit and flags the moved head', () => {
+    const reviews = [review('lyra', 'APPROVED', 'head'), review('viewer', 'APPROVED', 'old')];
+    expect(approveButton(input({ reviews }))).toEqual({ label: 'Approve again', variant: 'secondary', viewerApproved: true, headMoved: true });
   });
 
-  it('reads plain Approve when the app recorded an older approval', () => {
-    expect(approveButton(input({ reviews: [review('lyra', 'APPROVED')], viewerApprovedAt: at(5) })).label).toBe('Approve');
+  it('counts the app record of an approval on any commit', () => {
+    const look = approveButton(input({ reviews: [review('lyra', 'APPROVED')], viewerApprovedAt: at(5), viewerApprovedCommitOid: 'old' }));
+    expect(look).toEqual({ label: 'Approve again', variant: 'secondary', viewerApproved: true, headMoved: true });
+  });
+
+  it('does not count a dismissed approval by the viewer', () => {
+    expect(approveButton(input({ reviews: [review('viewer', 'DISMISSED')] })).label).toBe('Approve');
+  });
+
+  it('lets an earlier approval win over draft', () => {
+    expect(approveButton(input({ isDraft: true, reviews: [review('viewer', 'APPROVED', 'head')] })).label).toBe('Approve again');
+  });
+
+  it('does not flag a moved head when the approved commit is unknown', () => {
+    expect(approveButton(input({ reviews: [review('viewer', 'APPROVED')] })).headMoved).toBe(false);
+  });
+});
+
+describe('viewerApprovedAt', () => {
+  it('prefers the app record, else the newest approving review', () => {
+    expect(viewerApprovedAt(input({ viewerApprovedAt: at(5), reviews: [review('viewer', 'APPROVED')] }))).toBe(at(5));
+    expect(viewerApprovedAt(input({ reviews: [review('viewer', 'APPROVED')] }))).toBe(at(10));
+    expect(viewerApprovedAt(input())).toBeNull();
   });
 });
 

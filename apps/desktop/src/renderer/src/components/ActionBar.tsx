@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { PrDetail, PrLifecycle, PrPrimaryAction, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useViewer } from '../api/viewer.ts';
-import { approveButton, approveStateGlyphs } from '../lib/approve.ts';
+import { approveButton, approveStateGlyphs, viewerApprovedAt, type ApproveButtonInput, type ApproveButtonLook } from '../lib/approve.ts';
 import { isBotLogin } from '../lib/people.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -21,13 +21,15 @@ interface ActionBarProps {
   onToggleChat: () => void;
 }
 
-/** Why Approve is disabled or what it does, for the hover title. */
-function approveTitle(props: ActionBarProps, blocked: string | null, now: Date): string {
-  const approvedAt = props.detail.userState?.approvedAt;
-  if (approvedAt && props.detail.userState?.approvedCommitOid === props.detail.pr.headOid) {
-    return `You approved ${ageLabel(approvedAt, now)} ago`;
+/** What Approve does, why it is blocked, or that you already approved, for the hover title. */
+function approveTitle(input: ApproveButtonInput, look: ApproveButtonLook, blocked: string | null, now: Date): string {
+  const action = blocked ?? 'Approves on GitHub right away. Cannot be undone.';
+  const approvedAt = viewerApprovedAt(input);
+  if (!look.viewerApproved || !approvedAt) {
+    return action;
   }
-  return blocked ?? 'Approves on GitHub right away. Cannot be undone.';
+  const after = look.headMoved ? '; commits came after, but your approval still counts' : '';
+  return `You already approved ${ageLabel(approvedAt, now)} ago${after}. Approving again is harmless. ${action}`;
 }
 
 /** The primary action from core (`PrSummary.primaryAction`); Approve when the summary is missing. */
@@ -44,8 +46,10 @@ function lifecycleOf(props: ActionBarProps): PrLifecycle {
 
 /**
  * Primary, ask, mark read, snooze, chat. The primary button comes from core:
- * Approve (or a disabled Approved) on someone else's open PR, label and look
- * from `approveButton` ("Approve as well", outlined "Approve draft"); on your own
+ * Approve on someone else's open PR, label and look from `approveButton`
+ * ("Approve as well", outlined "Approve draft" / "Approve again"). Core's
+ * "approved" still shows the button: an approval on any commit counts, and
+ * re-approving is harmless. On your own
  * PR, or a merged or closed one, Mark read while the tile is unread, else
  * Open on GitHub. Approve acts on the PR, the rest on the tile.
  */
@@ -57,13 +61,15 @@ export function ActionBar(props: ActionBarProps) {
   const primary = primaryActionOf(props);
   const [recheckOpen, setRecheckOpen] = useState(false);
   const viewer = useViewer();
-  const approve = approveButton({
-    primary: primary === 'approved' ? 'approved' : 'approve',
+  const approveInput: ApproveButtonInput = {
     isDraft: pr.isDraft,
     viewerLogin: viewer.data?.login ?? null,
     reviews: pr.reviews,
     viewerApprovedAt: props.detail.userState?.approvedAt ?? null,
-  });
+    viewerApprovedCommitOid: props.detail.userState?.approvedCommitOid ?? null,
+    headOid: pr.headOid,
+  };
+  const approve = approveButton(approveInput);
   const glance = props.detail.glance;
   const markReadTitle = props.view.pendingWrite
     ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
@@ -79,8 +85,8 @@ export function ActionBar(props: ActionBarProps) {
         <Button
           variant={approve.variant}
           size="md"
-          disabled={primary === 'approved' || actions.isBusy(`approve:${pr.key}`)}
-          title={approveTitle(props, actions.blockedReason('approve'), now)}
+          disabled={actions.isBusy(`approve:${pr.key}`)}
+          title={approveTitle(approveInput, approve, actions.blockedReason('approve'), now)}
           onClick={() => void actions.approve(pr.key)}
         >
           {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}

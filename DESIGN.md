@@ -1051,11 +1051,14 @@ any review ask; on top of that:
   `approveButton` / `approveStateGlyphs` in the renderer's `lib/approve.ts`):
   the lifecycle glyph (draft / ready) and the review glyph (approved /
   changes requested / review required, also on drafts) sit in front of the
-  label, words in their tooltips. The label is "Approve as well" when others
-  approved and you never did (any commit); an older approval of yours keeps
-  plain "Approve". Drafts get an outlined "Approve draft"; draft wins over
-  "as well", since not-ready is the bigger caveat and the review glyph
-  already shows the approvals.
+  label, words in their tooltips. Approvals do not depend on the commit:
+  once you approved (app record or an approving review, any commit) the
+  button stays usable but calm, an outlined "Approve again" whose tooltip
+  says you already approved and whether commits came after; no ink, no nag.
+  It wins over draft. Else "Approve as well" when others approved and you
+  never did. Drafts get an outlined "Approve draft"; draft wins over "as
+  well", since not-ready is the bigger caveat and the review glyph already
+  shows the approvals.
 - Tiles whose tracked PRs are all yours carry a neutral "Your PR" marker
   (the own/ink look of the AU badge, in words) next to the kind label.
 - News on your own PR that asks nothing of you (a bot, a finished review;
