@@ -93,6 +93,7 @@ import {
   threadPrKey,
   tileTier,
   tileWhy,
+  topicFaces,
   topicPeople,
   topicQueues,
   topicUrgency,
@@ -541,7 +542,7 @@ export class FakeEngine implements EngineService {
             quiet: isPrInQuietRepo(pr.key, this.repoSettings),
           })),
         ),
-        people: topicPeople(prs.map(({ pr }) => pr), viewer),
+        people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
       };
     });
     return items.sort(compareTopicUrgency);

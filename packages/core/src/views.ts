@@ -79,7 +79,10 @@ export interface TopicListItem {
   yourMoveTiles: number;
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
-  /** Authors, reviewers and commenters, no bots; you and your team first. Not capped. */
+  /**
+   * The row's faces (`topicFaces` over `topicPeople`): you and your teammates
+   * when involved, else the other people; three at most.
+   */
   people: TopicPerson[];
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
-import { memberTier, personRelation, pingedPrKeys, tileTier, topicPeople, topicQueues } from './topic-queues.ts';
+import { memberTier, personRelation, pingedPrKeys, tileTier, topicFaces, topicPeople, topicQueues } from './topic-queues.ts';
 import type { Tile, Viewer } from './types.ts';
 
 const me = viewer.login;
@@ -39,6 +39,37 @@ describe('topicPeople', () => {
       { login: 'ada', relation: 'other' },
       { login: 'bob', relation: 'other' },
     ]);
+  });
+});
+
+describe('topicFaces', () => {
+  const person = (login: string, relation: 'you' | 'team' | 'other') => ({ login, relation });
+
+  it('shows only you and your team when either is involved, you first', () => {
+    const people = [person('lyra', 'team'), person('ada', 'other'), person(me, 'you'), person('bob', 'other')];
+    expect(topicFaces(people)).toEqual([person(me, 'you'), person('lyra', 'team')]);
+  });
+
+  it('shows teammates alone when you are not involved', () => {
+    expect(topicFaces([person('ada', 'other'), person('rowan', 'team')])).toEqual([person('rowan', 'team')]);
+  });
+
+  it('shows only you when nobody from your team is involved', () => {
+    expect(topicFaces([person('ada', 'other'), person(me, 'you')])).toEqual([person(me, 'you')]);
+  });
+
+  it('falls back to the others, at most three', () => {
+    const others = ['a', 'b', 'c', 'd'].map((login) => person(login, 'other'));
+    expect(topicFaces(others)).toEqual(others.slice(0, 3));
+  });
+
+  it('caps you and teammates at three faces', () => {
+    const people = [person('t1', 'team'), person('t2', 'team'), person('t3', 'team'), person(me, 'you')];
+    expect(topicFaces(people).map((face) => face.login)).toEqual([me, 't1', 't2']);
+  });
+
+  it('shows nobody for a topic without people', () => {
+    expect(topicFaces([])).toEqual([]);
   });
 });
 

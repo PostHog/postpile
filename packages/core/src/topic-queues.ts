@@ -48,6 +48,23 @@ export function topicPeople(prs: Pr[], viewer: Viewer | null): TopicPerson[] {
   return [...ours, ...people.filter((person) => person.relation === 'other')];
 }
 
+/** At most this many faces on a sidebar row. */
+export const MAX_TOPIC_FACES = 3;
+
+/**
+ * The faces a sidebar row shows. When the viewer or teammates are involved,
+ * only they show (viewer first, then teammates); everyone else is dropped,
+ * since "am I or my team in this?" is what the row answers. Only when neither
+ * is involved do the other people show. At most three, no "+N".
+ */
+export function topicFaces(people: TopicPerson[]): TopicPerson[] {
+  const you = people.filter((person) => person.relation === 'you');
+  const team = people.filter((person) => person.relation === 'team');
+  const ours = [...you, ...team];
+  const faces = ours.length > 0 ? ours : people.filter((person) => person.relation === 'other');
+  return faces.slice(0, MAX_TOPIC_FACES);
+}
+
 /** What the sidebar needs to know about one PR of a topic. */
 export interface QueuedPr {
   tier: PrTier;

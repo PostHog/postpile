@@ -20,6 +20,7 @@ import {
   tilePeople,
   tileTier,
   tileWhy,
+  topicFaces,
   topicPeople,
   topicQueues,
   topicUrgency,
@@ -275,7 +276,7 @@ export class ReadModels {
             quiet: isPrInQuietRepo(pr.key, settings),
           })),
         ),
-        people: topicPeople(prs, viewer),
+        people: topicFaces(topicPeople(prs, viewer)),
       });
     }
     return items.sort(compareTopics);

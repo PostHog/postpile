@@ -11,7 +11,7 @@ function harnessWithTeam() {
 }
 
 describe('topic list queues', () => {
-  it('counts PRs per tier and lists the people, team first and no bots', async () => {
+  it('counts PRs per tier and shows only you and your team as faces', async () => {
     const h = harnessWithTeam();
     const review = reviewRequestedPr(1, { reviewerUsers: [viewer.login] });
     const mine = makePr({
@@ -34,8 +34,6 @@ describe('topic list queues', () => {
     expect(item?.people).toEqual([
       { login: viewer.login, relation: 'you' },
       { login: 'lyra', relation: 'team' },
-      { login: 'alice', relation: 'other' },
-      { login: 'ada', relation: 'other' },
     ]);
     const detail = await h.engine.getTopic('queues');
     const tiers = Object.fromEntries((detail?.tiles ?? []).map((view) => [view.prs[0]?.key, view.tier]));
