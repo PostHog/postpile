@@ -63,11 +63,11 @@ describe('ruleLoudness', () => {
     expect(ruleLoudness(input({ kind: 'review_requested', subject: null })).loudness).toBe('quiet');
   });
 
-  it('makes new commits after approval loud', () => {
+  it('keeps new commits after approval quiet; only the agent may raise them', () => {
     const decision = ruleLoudness(
       input({ kind: 'commits_after_approval', actor: 'alice', userState: makeUserState({ approvedAt: 'x' }) }),
     );
-    expect(decision).toEqual({ loudness: 'loud', reason: 'new commits after you approved' });
+    expect(decision).toEqual({ loudness: 'quiet', reason: 'new commits after you approved' });
   });
 
   it('makes merged without review loud only when the user cares', () => {

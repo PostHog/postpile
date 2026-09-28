@@ -12,7 +12,7 @@ import {
   labelBaseRepo,
   memberTier,
   openThreadCount,
-  isHeadApproved,
+  isApprovedByViewer,
   personRelation,
   prPrimaryAction,
   pingedPrKeys,
@@ -166,7 +166,7 @@ export class ReadModels {
       const glance = glances.get(pr.key);
       const quietRepo = isPrInQuietRepo(pr.key, settings);
       const authorRelation = personRelation(pr.author, viewer);
-      const approvedHead = isHeadApproved(pr, board.userStates.get(pr.key) ?? null, viewer?.login);
+      const approved = isApprovedByViewer(pr, board.userStates.get(pr.key) ?? null, viewer?.login);
       summaries.push({
         key: pr.key,
         title: pr.title,
@@ -179,7 +179,7 @@ export class ReadModels {
         forWhom: forWhom(whyHere(member.provenance, pr, viewer), pr, viewer),
         tier: memberTier(this.tierOf(board, pr, viewer), member.provenance, quietRepo),
         authorRelation,
-        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approvedHead, tileUnread }),
+        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approved, tileUnread }),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,

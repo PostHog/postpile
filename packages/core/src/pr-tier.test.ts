@@ -34,13 +34,15 @@ describe('prTier', () => {
     expect(tier({ pr: makePr({ author: 'lyra' }), viewer })).toBe('rest');
   });
 
-  it('asks for review until you reviewed the head', () => {
+  it('asks for review until you reviewed the head or approved any commit', () => {
     expect(tier({ pr: makePr({ author: 'ada', reviewerUsers: [me] }) })).toBe('to_review');
     expect(tier({ pr: makePr({ author: 'ada', reviewerTeams: ['PostHog/team-devex'] }) })).toBe('to_review');
     const reviewed = makePr({ author: 'ada', reviewerUsers: [me], reviews: [makeReview({ author: me, commitOid: 'head' })] });
     expect(tier({ pr: reviewed })).toBe('rest');
-    const olderHead = makePr({ author: 'ada', reviewerUsers: [me], reviews: [makeReview({ author: me, commitOid: 'old' })] });
-    expect(tier({ pr: olderHead })).toBe('to_review');
+    const approvedOlder = makePr({ author: 'ada', reviewerUsers: [me], reviews: [makeReview({ author: me, commitOid: 'old' })] });
+    expect(tier({ pr: approvedOlder })).toBe('rest');
+    const commentedOlder = makePr({ author: 'ada', reviewerUsers: [me], reviews: [makeReview({ author: me, state: 'COMMENTED', commitOid: 'old' })] });
+    expect(tier({ pr: commentedOlder })).toBe('to_review');
   });
 
   it('uses the team_mention reason too, and leaves closed PRs out', () => {

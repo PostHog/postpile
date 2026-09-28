@@ -49,20 +49,21 @@ describe('whoseTurn: your move', () => {
     expect(turnOf(singleTile(teammate), [teammate], [], [], withTeam)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
   });
 
-  it('asks to re-check commits that landed after your approval', () => {
+  it('never asks to re-check commits that landed after your approval', () => {
     const pr = makePr({
       author: 'rowan',
+      reviewerUsers: [me],
       headOid: 'c3',
       commits: [makeCommit({ oid: 'c1' }), makeCommit({ oid: 'c2' }), makeCommit({ oid: 'c3' })],
     });
     const approved = makeUserState({ prKey: pr.key, approvedAt: at(1), approvedCommitOid: 'c1' });
-    expect(single(pr, [], [approved])).toMatchObject({ kind: 'you', what: 'Re-check 2 commits' });
+    expect(single(pr, [], [approved])).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
   });
 
-  it('counts a github.com approval of an older head too', () => {
+  it('counts a github.com approval of an older head as standing', () => {
     const pr = makePr({ author: 'rowan', headOid: 'c2', commits: [makeCommit({ oid: 'c1' }), makeCommit({ oid: 'c2' })] });
     const withReview = { ...pr, reviews: [makeReview({ author: me, commitOid: 'c1' })] };
-    expect(single(withReview)).toMatchObject({ kind: 'you', what: 'Re-check 1 commit' });
+    expect(single(withReview)).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
   });
 
   it('asks you to answer a mention or question you have not replied to', () => {
@@ -199,7 +200,8 @@ describe('whoseTurn: multi-PR tiles', () => {
     expect(turnOf(tile, [approved, asked, pulled])).toEqual({ kind: 'you', who: null, what: 'Review on #2', prKey: asked.key });
     const pushedOnFirst = { ...approved, headOid: 'c2', commits: [makeCommit({ oid: 'head' }), makeCommit({ oid: 'c2' })] };
     const news = makeEvent({ prKey: approved.key, kind: 'commits_after_approval', ruleLoudness: 'loud', at: at(50) });
-    expect(turnOf(tile, [pushedOnFirst, asked, pulled], [news])).toMatchObject({ what: 'Re-check 1 commit on #1' });
+    // A push after the approval (even one the agent raised) is not a re-check move; the review on #2 is.
+    expect(turnOf(tile, [pushedOnFirst, asked, pulled], [news])).toMatchObject({ what: 'Review on #2' });
     expect(turnOf(tile, [approved, { ...asked, state: 'MERGED' }, pulled])).toEqual({
       kind: 'them',
       who: 'rowan',

@@ -208,6 +208,16 @@ describe('eventBatchPrompt', () => {
     expect(prompt).toContain('- id b |');
     expect(prompt).toContain('topic "Move CI to Depot"');
   });
+
+  it('says plain pushes after approval stay quiet and shows the files for PRs with one', () => {
+    const withFiles = { ...pr1, files: [{ path: '.github/workflows/ci.yml', additions: 3, deletions: 1 }] };
+    const push = makeEvent({ id: 'p', kind: 'commits_after_approval', ruleLoudness: 'quiet' });
+    const prompt = eventBatchPrompt({ topic: makeTopic(), items: [{ pr: withFiles, events: [push] }], viewer, context: fullContext });
+    expect(prompt).toContain('Plain follow-up pushes');
+    expect(prompt).toContain('normally\nnot worth their attention');
+    expect(prompt).toContain('  files: .github/workflows/ci.yml');
+    expect(prompt).not.toContain('new commits after\n  they approved');
+  });
 });
 
 describe('consolidationPrompt', () => {

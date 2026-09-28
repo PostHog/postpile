@@ -93,7 +93,8 @@ describe('FakeEngine tile faces', () => {
     const engine = new FakeEngine();
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
     const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
-    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Re-check 2 commits on #41911' });
+    // #41911 was approved before the pushes; approvals stand on any commit, so the move is on #41902.
+    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you on #41902' });
     expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV', 'ST']);
     expect(stack?.prs.map((pr) => pr.status.lifecycle)).toEqual(['merged', 'merged', 'open', 'open', 'closed']);
     expect(depot.find((view) => view.tile.id === 'pr:PostHog/posthog#41899')?.turn).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });

@@ -97,8 +97,8 @@ export const OFF_POLL_STATUS: LivePollStatus = {
 
 /**
  * Loud events that are about the user in person: someone talks to them,
- * or, on an open PR, asks for their review, pushes after their approval, or
- * blocks their own PR. Other loud events (a comment or an approval on their PR, a merge
+ * or, on an open PR, asks for their review, blocks their own PR, or pushes
+ * after their approval when the agent raised that push (it starts quiet). Other loud events (a comment or an approval on their PR, a merge
  * without their review) stay unread tiles but never ping.
  */
 export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {

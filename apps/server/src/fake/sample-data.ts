@@ -296,8 +296,15 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 41911, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 6, rule: 'loud', seen: true },
       { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 4, rule: 'quiet', seen: true },
-      { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Bump Playwright shard count to 6" after your approval', hoursAgo: 0.25, rule: 'loud' },
-      { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Pin the Depot runner image" after your approval', hoursAgo: 0.15, rule: 'loud' },
+      { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Bump Playwright shard count to 6" after your approval', hoursAgo: 0.25, rule: 'quiet' },
+      {
+        kind: 'commits_after_approval',
+        actor: 'rowan',
+        text: 'pushed "Pin the Depot runner image" after your approval',
+        hoursAgo: 0.15,
+        rule: 'quiet',
+        raisedBecause: 'Changes the CI runner image you approved, not a plain follow-up.',
+      },
       { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 0.1, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 41862, [

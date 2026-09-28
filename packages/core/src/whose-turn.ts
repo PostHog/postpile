@@ -3,6 +3,7 @@
 import { isBot } from './bots.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
+import { isApprovedByViewer } from './tiles.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
@@ -118,24 +119,6 @@ function viewerReviews(ctx: PrContext): Review[] {
 function headReview(ctx: PrContext): Review | null {
   const onHead = viewerReviews(ctx).filter((r) => r.commitOid === ctx.pr.headOid);
   return onHead[onHead.length - 1] ?? null;
-}
-
-/**
- * Commits that landed after the viewer's approval of an older head, or 0.
- * The app's own approval record wins; a github.com approval counts too.
- */
-function commitsAfterApproval(ctx: PrContext): number {
-  const approvals = viewerReviews(ctx).filter((r) => r.state === 'APPROVED');
-  const lastApproval = approvals[approvals.length - 1];
-  const oid = ctx.userState?.approvedCommitOid ?? lastApproval?.commitOid ?? null;
-  const approvedAt = ctx.userState?.approvedAt ?? lastApproval?.submittedAt ?? null;
-  if (oid === null || approvedAt === null || oid === ctx.pr.headOid) {
-    return 0;
-  }
-  const index = ctx.pr.commits.findIndex((commit) => commit.oid === oid);
-  const after = index >= 0 ? ctx.pr.commits.length - index - 1 : ctx.pr.commits.filter((c) => c.committedAt > approvedAt).length;
-  // The head moved, so at least one commit is new even when the snapshot lacks the list.
-  return Math.max(after, 1);
 }
 
 /** Who asked the viewer (or their team) for a review, from the newest request event. */
@@ -265,11 +248,11 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
 function othersPrTurn(ctx: PrContext): WhoseTurn {
   const { pr } = ctx;
   const ask = reviewAsk(ctx);
-  const reviewed = headReview(ctx);
-  const commits = commitsAfterApproval(ctx);
-  if (reviewed === null && commits > 0) {
-    return you(ctx, `Re-check ${plural(commits, 'commit')}`);
+  // An approval on any commit stands; a push after it is not the viewer's move.
+  if (isApprovedByViewer(pr, ctx.userState, ctx.viewer.login)) {
+    return them(ctx, pr.author, 'to merge');
   }
+  const reviewed = headReview(ctx);
   if (reviewed === null && (ask === 'you' || ask === 'team')) {
     return you(ctx, reviewText(ctx, ask));
   }
@@ -326,7 +309,9 @@ function prTurn(ctx: PrContext): WhoseTurn {
   }
   const ask = openAsk(ctx);
   if (ask) {
-    const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login) ? false : reviewAsk(ctx) === 'you' && headReview(ctx) === null;
+    const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login)
+      ? false
+      : reviewAsk(ctx) === 'you' && headReview(ctx) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
     return you(ctx, askText(ask, reviewToo));
   }
   return sameLogin(ctx.pr.author, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);

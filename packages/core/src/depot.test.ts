@@ -59,15 +59,15 @@ describe('Depot examples', () => {
     ]);
   });
 
-  it('a push after approval is loud and the tile is no longer done', () => {
+  it('a push after approval is quiet and the tile stays done', () => {
     const pr: Pr = {
       ...depotPr,
       headOid: 'c2',
       commits: [...depotPr.commits, makeCommit({ oid: 'c2', headline: 'bump runner size', committedAt: at(20) })],
     };
-    const { state } = tileState(pr, approved);
-    expect(state.kind).toBe('unread');
-    expect(state.unreadBecause[0]).toMatchObject({ kind: 'commits_after_approval', summary: 'alice pushed: bump runner size' });
+    const { events, state } = tileState(pr, approved);
+    expect(events.find((e) => e.sourceId === 'c2')).toMatchObject({ kind: 'commits_after_approval', ruleLoudness: 'quiet' });
+    expect(state.kind).toBe('done');
   });
 
   it('a bot rebase on a draft is muted and changes nothing', () => {

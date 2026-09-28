@@ -118,10 +118,8 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
       }
       return decide('quiet', 'review requested from someone else');
     case 'commits_after_approval':
-      if (isOpenDraft(input)) {
-        return decide('quiet', 'new commits on a draft after you approved');
-      }
-      return decide('loud', 'new commits after you approved');
+      // An approval stands on any commit; the agent may raise a push that changes what was approved.
+      return decide('quiet', 'new commits after you approved');
     case 'ready_for_review':
       if (!isViewersPr(input) && reviewAskedOfViewer(input)) {
         return decide('loud', 'ready for your review');

@@ -140,7 +140,7 @@ describe('deriveEvents: reviews, commits, timeline, CI', () => {
     expect(events.map((e) => [e.sourceId, e.kind, e.ruleLoudness])).toEqual([
       ['c1', 'commits_pushed', 'quiet'],
       ['c2', 'commits_pushed', 'quiet'],
-      ['c3', 'commits_after_approval', 'loud'],
+      ['c3', 'commits_after_approval', 'quiet'],
     ]);
   });
 

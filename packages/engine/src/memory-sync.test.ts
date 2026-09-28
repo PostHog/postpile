@@ -1,5 +1,5 @@
 import type { Dossier, Pr } from '@postpile/core';
-import { at, makeCandidate, makeComment, makeFact, makeFactRef, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';
@@ -453,6 +453,44 @@ describe('event classification', () => {
     expect(h.agent.eventInputs[0]?.topic?.id).toBe('depot');
     const overridden = h.store.events.listForPr(h.agent.eventInputs[0]!.items[0]!.pr.key)[0];
     expect(overridden?.override).toMatchObject({ loudness: 'quiet', by: 'agent' });
+  });
+});
+
+describe('pushes after the viewer approved', () => {
+  function pushedAfterApproval(): Pr {
+    return reviewRequestedPr(1, {
+      headOid: 'c2',
+      commits: [makeCommit({ oid: 'c1', committedAt: at(5) }), makeCommit({ oid: 'c2', headline: 'switch the runner image', committedAt: at(20) })],
+      reviews: [makeReview({ id: 'mine', author: viewer.login, commitOid: 'c1', submittedAt: at(10) })],
+    });
+  }
+
+  it('stay quiet and the tile done unless the agent raises them', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [pushedAfterApproval()]);
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    const pushes = h.agent.eventInputs[0]?.items[0]?.events.map((event) => [event.kind, event.ruleLoudness]);
+    expect(pushes).toContainEqual(['commits_after_approval', 'quiet']);
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.state.kind).toBe('done');
+  });
+
+  it('turn the tile unread with the agent reason when it raises one', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [pushedAfterApproval()]);
+    h.agent.answerEvents((input) => {
+      const push = input.items[0]!.events.find((event) => event.kind === 'commits_after_approval')!;
+      return [{ eventId: push.id, loudness: 'loud', reason: 'Changes the CI runner image you approved.' }];
+    });
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    const state = (await h.engine.getTopic('depot'))?.tiles[0]?.state;
+    expect(state?.kind).toBe('unread');
+    expect(state?.unreadBecause.map((reason) => reason.kind)).toEqual(['commits_after_approval']);
+    const push = h.store.events.listForPr('PostHog/posthog#1').find((event) => event.kind === 'commits_after_approval');
+    expect(push?.override).toMatchObject({ loudness: 'loud', reason: 'Changes the CI runner image you approved.', by: 'agent' });
   });
 });
 

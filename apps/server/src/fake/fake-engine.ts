@@ -88,7 +88,7 @@ import {
   OFF_POLL_STATUS,
   systemTimers,
   openThreadCount,
-  isHeadApproved,
+  isApprovedByViewer,
   personRelation,
   prPrimaryAction,
   pingedPrKeys,
@@ -315,12 +315,11 @@ export class FakeEngine implements EngineService {
     return state;
   }
 
-  /** A push after the approval makes the PR not done again, like the real rule. */
+  /** An approval on any commit makes the PR done, like the real rule. */
   private isPrDone(prKey: PrKey): boolean {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     const state = this.data.userStates.find((candidate) => candidate.prKey === prKey);
-    const approvedHead = Boolean(state?.approvedAt) && (state?.approvedCommitOid ?? pr?.headOid) === pr?.headOid;
-    return Boolean(approvedHead || state?.handledAt || pr?.state !== 'OPEN');
+    return Boolean(state?.approvedAt || state?.handledAt || pr?.state !== 'OPEN');
   }
 
   private viewer(): Viewer {
@@ -390,7 +389,7 @@ export class FakeEngine implements EngineService {
       const glance = this.data.glances.find((candidate) => candidate.prKey === pr.key);
       const quietRepo = isPrInQuietRepo(pr.key, this.repoSettings);
       const authorRelation = personRelation(pr.author, viewer);
-      const approvedHead = isHeadApproved(pr, this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null, viewer.login);
+      const approved = isApprovedByViewer(pr, this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null, viewer.login);
       prs.push({
         key: pr.key,
         title: pr.title,
@@ -403,7 +402,7 @@ export class FakeEngine implements EngineService {
         forWhom: forWhom(whyHere(member.provenance, pr, viewer), pr, viewer),
         tier: memberTier(this.tierOf(pr, member), member.provenance, quietRepo),
         authorRelation,
-        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approvedHead, tileUnread: tileState.kind === 'unread' }),
+        primaryAction: prPrimaryAction({ state: pr.state, authorRelation, approved, tileUnread: tileState.kind === 'unread' }),
         status: prStatus(pr),
         openThreads: openThreadCount(pr),
         verdict: glance?.verdict ?? null,

@@ -19,13 +19,22 @@ interface EventGroup {
   prKeys: PrKey[];
 }
 
+/**
+ * Loud events get a second opinion (demote or mute). A push after the
+ * viewer's approval starts quiet and goes to the agent too, which may raise
+ * it when the push changes what was approved.
+ */
 function needsOpinion(event: PrEvent): boolean {
-  return event.ruleLoudness === 'loud' && event.seenAt === null && event.override === null;
+  if (event.seenAt !== null || event.override !== null) {
+    return false;
+  }
+  return event.ruleLoudness === 'loud' || event.kind === 'commits_after_approval';
 }
 
 /**
- * Second opinion on loud events only: a wrong "loud" costs the user an
- * unread tile, a wrong "quiet" is still visible as a dot. One call per topic
+ * Second opinion on loud events, plus pushes after the viewer's approval: a
+ * wrong "loud" costs the user an unread tile, a wrong "quiet" is still
+ * visible as a dot. One call per topic
  * (20 PRs at most). The agent may demote (or mute) with a reason; the
  * override is stored on the event.
  *
@@ -51,7 +60,7 @@ export class EventBatchClassifier {
     return [...topics, unsorted];
   }
 
-  /** Loud, unseen events without an override, logged after afterSeq, per PR. */
+  /** Unseen events without an override that need an opinion (needsOpinion), logged after afterSeq, per PR. */
   private items(prKeys: PrKey[], afterSeq: number): EventItem[] {
     const byPr = new Map<PrKey, PrEvent[]>();
     for (const { event } of this.deps.store.eventLog.listSince(prKeys, afterSeq)) {

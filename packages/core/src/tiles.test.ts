@@ -42,15 +42,25 @@ describe('isPrDone', () => {
     expect(isPrDone(pr, makeUserState({ approvedAt: at(1), approvedCommitOid: 'h2' }))).toBe(true);
   });
 
-  it('is not done once someone pushed after the approval', () => {
+  it('stays done when someone pushed after the approval', () => {
     const pr = makePr({ headOid: 'h3' });
-    expect(isPrDone(pr, makeUserState({ approvedAt: at(1), approvedCommitOid: 'h2' }))).toBe(false);
+    expect(isPrDone(pr, makeUserState({ approvedAt: at(1), approvedCommitOid: 'h2' }))).toBe(true);
   });
 
-  it('counts an approval of the current head made on github.com', () => {
-    const pr = makePr({ headOid: 'h2', reviews: [makeReview({ author: 'viewer', commitOid: 'h2' })] });
+  it('counts an approval made on github.com, on any commit', () => {
+    const pr = makePr({ headOid: 'h3', reviews: [makeReview({ author: 'viewer', commitOid: 'h2' })] });
     expect(isPrDone(pr, null, 'viewer')).toBe(true);
     expect(isPrDone(pr, null)).toBe(false);
+  });
+
+  it('is not done when the newer review of the viewer asks for changes', () => {
+    const pr = makePr({
+      reviews: [
+        makeReview({ id: 'a', author: 'viewer', state: 'APPROVED', submittedAt: at(1) }),
+        makeReview({ id: 'b', author: 'viewer', state: 'CHANGES_REQUESTED', submittedAt: at(2) }),
+      ],
+    });
+    expect(isPrDone(pr, null, 'viewer')).toBe(false);
   });
 });
 

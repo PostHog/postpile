@@ -2,6 +2,7 @@
 // open PR belongs to. Rules only, no agent. The sidebar's queue sections
 // are built on it (`topicQueues`).
 import { isOwnTeam, sameLogin } from './mentions.ts';
+import { isApprovedByViewer } from './tiles.ts';
 import type { EventKind, NotificationReason, Pr, PrEvent, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';
 
@@ -32,8 +33,10 @@ function isTeammate(login: string, viewer: Viewer): boolean {
   return (viewer.teamMembers ?? []).some((member) => sameLogin(member, login));
 }
 
+/** The viewer reviewed the current head, or approved on any commit (an approval does not follow the head). */
 function reviewedHead(pr: Pr, viewer: Viewer): boolean {
-  return pr.reviews.some((review) => sameLogin(review.author, viewer.login) && review.state !== 'PENDING' && review.commitOid === pr.headOid);
+  const onHead = pr.reviews.some((review) => sameLogin(review.author, viewer.login) && review.state !== 'PENDING' && review.commitOid === pr.headOid);
+  return onHead || isApprovedByViewer(pr, null, viewer.login);
 }
 
 function reviewAsked(pr: Pr, viewer: Viewer): boolean {

@@ -194,6 +194,8 @@ export interface SampleEventInput {
   isBot?: boolean;
   /** Set when the agent muted the event, with its reason. */
   mutedBecause?: string;
+  /** The agent raised a quiet event to loud with this reason (e.g. a push after approval that matters). */
+  raisedBecause?: string;
 }
 
 export function sampleEvents(clock: SampleClock, number: number, inputs: SampleEventInput[]): PrEvent[] {
@@ -213,7 +215,11 @@ export function sampleEvents(clock: SampleClock, number: number, inputs: SampleE
       sourceId,
       ruleLoudness: input.rule,
       ruleReason: 'sample data',
-      override: input.mutedBecause ? { loudness: 'muted', reason: input.mutedBecause, by: 'agent' } : null,
+      override: input.mutedBecause
+        ? { loudness: 'muted', reason: input.mutedBecause, by: 'agent' }
+        : input.raisedBecause
+          ? { loudness: 'loud', reason: input.raisedBecause, by: 'agent' }
+          : null,
       seenAt: input.seen ? at : null,
     };
   });

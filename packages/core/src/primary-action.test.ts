@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canApprove, prPrimaryAction, type PrimaryActionInput } from './primary-action.ts';
 
-const base: PrimaryActionInput = { state: 'OPEN', authorRelation: 'other', approvedHead: false, tileUnread: false };
+const base: PrimaryActionInput = { state: 'OPEN', authorRelation: 'other', approved: false, tileUnread: false };
 
 describe('prPrimaryAction', () => {
   it('offers Approve on an open PR someone else wrote', () => {
@@ -10,8 +10,8 @@ describe('prPrimaryAction', () => {
   });
 
   it('shows Approved once the head is approved, Approve again after a push', () => {
-    expect(prPrimaryAction({ ...base, approvedHead: true })).toBe('approved');
-    expect(prPrimaryAction({ ...base, approvedHead: false })).toBe('approve');
+    expect(prPrimaryAction({ ...base, approved: true })).toBe('approved');
+    expect(prPrimaryAction({ ...base, approved: false })).toBe('approve');
   });
 
   it('never offers Approve on your own PR', () => {

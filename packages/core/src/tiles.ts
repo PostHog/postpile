@@ -75,29 +75,30 @@ export function setIdFromTileId(tileId: string): string | null {
   return tileId.startsWith(SET_TILE_PREFIX) ? tileId.slice(SET_TILE_PREFIX.length) : null;
 }
 
-function approvedHeadOnGitHub(pr: Pr, viewerLogin: string | undefined): boolean {
-  if (viewerLogin === undefined) {
-    return false;
+/**
+ * The viewer approved the PR, on any commit: from the app (the stored
+ * approval) or on github.com (their newest approve-or-request-changes
+ * review is an approval). Approvals do not follow the head: a push after
+ * approval does not undo it (Julian, 2026-09-28).
+ */
+export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
+  const decisive = viewerLogin === undefined
+    ? []
+    : pr.reviews
+        .filter((r) => (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED' || r.state === 'DISMISSED') && sameLogin(r.author, viewerLogin))
+        .sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
+  const newest = decisive[decisive.length - 1];
+  const approvedInApp = userState?.approvedAt ?? null;
+  if (approvedInApp !== null && (!newest || approvedInApp >= newest.submittedAt)) {
+    return true;
   }
-  return pr.reviews.some(
-    (r) => r.state === 'APPROVED' && sameLogin(r.author, viewerLogin) && r.commitOid === pr.headOid,
-  );
-}
-
-/** The viewer's approval, from the app or github.com, covers the PR's current head. */
-export function isHeadApproved(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
-  if (userState?.approvedAt) {
-    const oid = userState.approvedCommitOid;
-    if (oid === null || oid === pr.headOid) {
-      return true;
-    }
-  }
-  return approvedHeadOnGitHub(pr, viewerLogin);
+  return newest?.state === 'APPROVED';
 }
 
 /**
  * A pinged PR is done once it is merged/closed, the user handled it, or the
- * user approved its current head. A push after approval makes it not done.
+ * user approved it (on any commit). A later push stays quiet unless someone
+ * pings again or the agent raises it.
  */
 export function isPrDone(pr: Pr, userState: UserPrState | null, viewerLogin?: string): boolean {
   if (pr.state !== 'OPEN') {
@@ -106,7 +107,7 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewerLogin?: st
   if (userState?.handledAt) {
     return true;
   }
-  return isHeadApproved(pr, userState, viewerLogin);
+  return isApprovedByViewer(pr, userState, viewerLogin);
 }
 
 /** A found PR (no notification thread) never makes its tile unread; its events are there for whose turn and memory. */
