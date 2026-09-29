@@ -629,7 +629,11 @@ stored and before a dossier goes into a glance prompt
   context block once, then one section per PR (`batchDetail` limits, smaller
   than v1's `fullDetail`: body 1500, 15 files, last 8 human comments at 300
   chars), each headed by its PrKey and how it reached the user.
-- Answer: `{"glances": [{prKey, verdict, forYou, does, risk, othersSaid}, ...]}`.
+- Answer: `{"glances": [{prKey, verdict, forYou, does, risk, othersSaid, keyFiles}, ...]}`.
+  `keyFiles` (2026-09-29, optional, default []): up to 3 `{path, why}`, the
+  changed files to open first; `keyFilesFor` keeps only paths among the PR's
+  files (a leading "./" is forgiven), drops repeats and caps at 3. Stored as
+  JSON in `pr_glance.key_files` (migration 015).
   The outer object is parsed with `glanceBatchOutput`; each entry on its own
   with `glanceBatchItemOutput`. Entries for PRs not in the batch or
   duplicated are dropped. `GlanceBatchResult.missing` = asked for but absent
@@ -657,8 +661,9 @@ stored and before a dossier goes into a glance prompt
   (timeout, process error), which the engine catches per batch.
 - `glanceItemInputHash` per PR: v1 snapshot fields, provenance, topic name,
   **dossier version**, instructions, tailoring, standing rules, feedback on
-  that PR, model. Never the other PRs in the batch. Stored glances get
-  `dossierVersion`.
+  that PR, model, and `GLANCE_PROMPT_VERSION` (g2 since key files, so every
+  glance regenerates once; sets and topic summaries keep their hashes).
+  Never the other PRs in the batch. Stored glances get `dossierVersion`.
 - Model: the glance model (`claude-sonnet-5-5` by default, `POSTPILE_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
@@ -1197,7 +1202,8 @@ team request on it -> "Your PR" (neutral chip, neutral grey band). CM, FW,
 ST -> no chip, no band. A PR whose author addressed your changes (see
 whose turn) is "For you" whatever its code. A tile takes the most aimed of
 its PRs (you, team, own). PR rows in multi-PR tiles (and the detail pane's PR list) show the
-same words as a small chip without a band. The chip's tooltip keeps the
+same words as a small chip without a band, only when the row's differs from the tile's
+(2026-09-29). The chip's tooltip keeps the
 long why-here reason. The table below is still the rule behind it.
 
 | code | meaning | from |
@@ -1214,6 +1220,33 @@ long why-here reason. The table below is still the rule behind it.
 while the newest merge-queue timeline entry is an add, merged, closed), review
 from `reviewDecision`, checks from the rollup. Merged and closed PRs drop
 review and checks, drafts drop review. Open threads = unresolved review threads.
+
+How it shows (2026-09-29, design 3a; `LIFECYCLE_WORDS`, `reviewWord`,
+`rowStateWord` in the renderer's `lib/pr.ts`): the lifecycle is a
+GitHub-style icon (open: green pull request, draft: dashed grey circle,
+merged: purple merge, closed: red closed pull request, queued: amber pull
+request), words in its tooltip. The review state is an icon + word: "Needs
+review" (eye, honey), "Approved" (green check; "Approved by agent" when only
+agents approved), "Changes requested" (red). On a PR row drafts show an
+outlined "DRAFT" chip with a pencil and merged / closed PRs show the colored
+word ("Merged" purple, "Closed" red) in place of the review. State colors
+stay on done tiles; only titles and counts go grey. **CI shows only in the
+detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
+or the RISK box. `PrStatus.checks` stays in the view model for whose turn
+("Fix failing CI") and the agent can still mention CI in its own text.
+
+**PR rows** (`PrRow`): state icon, mono number, bold title, (for-whom chip
+when it differs, repo label), then the state word, open threads (bubble +
+count) and the author's avatar. A single PR sits in a white bordered box; a
+stack or set's rows sit in one tinted rounded box, the selected row
+highlighted, drafts and closed layers on a grey row.
+
+**Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
+"Stack · 2"; dashed square + "Set · 3"; blue only while selected), the
+verdict pill with an icon ("Look closer" ring-dot on a honey ring, "Looks
+safe" check, "Not yours" dash, dashed "No glance yet"), then avatars and age
+on the right. Then the title, the agent's one-to-three-line take, the PR
+rows and the footer.
 
 **People** (`tilePeople`): authors, the viewer if they submitted a review,
 other reviewers (submitted, then requested), four at most, bots only as
@@ -1296,7 +1329,7 @@ it won't merge soon. Rules in core:
   mention or reply.
 - UI: a tile whose open tracked PRs are all drafts gets a grey "Draft" chip,
   a dashed frame (a dashed left band when it has a for-whom band) and a
-  muted title; the status pill already says "draft".
+  muted title; the row's DRAFT chip already says so.
 
 **Own PRs never ask for a review** (2026-09-28, Julian got asked to
 approve his own PRs). The rules above already route own PRs to rule 3 before
@@ -1342,7 +1375,7 @@ worth seeing, so the app says who approved instead of a bare "approved".
   renderer never imports it; it gets the result as data.
 - `PrStatus.agentApprovers` / `PrDetail.agentApprovers` (`agentOnlyApprovers`)
   hold the agent names ("reviewbot") only when no person approved. The
-  status pill then reads "approved by agent" (tooltip "Approved by reviewbot
+  review word then reads "Approved by agent" (tooltip "Approved by reviewbot
   (agent)"), the detail's "To merge" says "approved by reviewbot (agent)",
   and the Approve button's review glyph says the same in its tooltip. Same
   calm green as any approval, no warning colors. Once a person approved it
@@ -1408,8 +1441,9 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   SAFE · for you", green; "NOT YOURS", grey; the tag follows the PR's for
   whom) and holds the glance's for-you text as short marked lines: "!" the
   main point, "?" a later sentence that asks for a check. Box 2 "RISK ·
-  <level>" (red) holds the risk text (▲) and a failing CI (✕), only when
-  there is risk content. Then plain lines "→ Does:" and "“ Others:". Each
+  <level>" (red) holds the risk text (▲), only when there is risk content.
+  The renderer no longer adds a failing CI line (2026-09-29: CI only in
+  the facts). Then plain lines "→ Does:" and "“ Others:". Each
   box caps at 3 lines. Nothing repeats: no verdict pill or for-whom chip in
   the pane, the risk level only in box 2's title. The glance schema stays
   prose; sentences split into lines in the renderer (a dot followed by a
@@ -1417,6 +1451,24 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   The action bar (primary, Ask, Mark read, Snooze, then Recheck and chat at
   the end) sits right under the assessment, above the PR facts and the
   activity list; the ask composer opens under it.
+- **Detail pane top** (2026-09-29, design 3a): the tinted header repeats
+  the tile (kind, title, "PR 1 of 2", ‹ ›) and lists its PRs like tile rows,
+  the open one boxed in accent. The body starts with a state line: big
+  state icon + lifecycle word ("Open" green, "Draft", "Merged", ...), the
+  review word, the mono `owner/repo#num` and the GitHub button. Then the
+  title and `head → base · layer 1 of 2`, then the assessment.
+- **Look at first** (2026-09-29, `KeyFiles`): the glance's `keyFiles`, up to
+  3 changed files a reviewer should open first with the agent's why (max 12
+  words), under Does / Others. Mono path middle-truncated (full path in the
+  tooltip), +/- from `pr.files`, each row opens `<pr url>/files`. The agent
+  may only pick listed changed files; others are dropped when the answer is
+  mapped. Empty for trivial PRs and glances from before g2.
+- **Description** (2026-09-29, `PrDescription`): the PR body under the
+  action bar, above the facts. A 160px scroll box with a fade while more is
+  below, and Expand / Collapse. GitHub markdown (react-markdown +
+  remark-gfm), raw HTML skipped, template `<!-- -->` comments stripped,
+  only absolute http(s) / mailto links, remote images never load (shown as
+  an "[image: alt]" link). An empty or template-only body leaves it out.
 - **Detail pane activity** (`activityList` in core `activity.ts`, shipped
   as `PrDetail.activity`; 2026-09-28, the full event list was too long and
   noisy). Shown by default: human comments and reviews, mentions, review

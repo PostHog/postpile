@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
 
+## 0.1.0-alpha.1 (unreleased)
+
+- PR state reads like GitHub: rows show a state icon (open, draft, merged, closed, queued) and the review state in words ("Needs review", "Approved", "Changes requested"), drafts get a DRAFT chip. CI status moved out of rows and tiles; it only shows in the detail pane's Checks fact.
+- The PR description shows in the detail pane, in a small scroll box with Expand. Markdown is rendered without raw HTML, PR template comments are hidden and remote images are not loaded.
+- Glances name up to three files to look at first, with why and +/- counts, linking to the PR's files on GitHub. FYI: existing glances regenerate once on the next sync to get them.
+- No more stray focus borders on tiles after going back and forward.
+
 ## 0.1.0-alpha.0 (2026-09-28)
 
 First public build. macOS arm64 only, ad-hoc signed, not notarized.
