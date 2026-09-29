@@ -63,6 +63,22 @@ describe('a stack is one unit in topic assignment', () => {
     expect(h.runner.promptsFor('topic_assignment')).toEqual([]);
     expect(h.store.memberships.get(top.key)).toMatchObject({ topicId: 'depot', reason: 'joins its stack' });
   });
+
+  it('brings a retired stack topic back when a new layer joins it', async () => {
+    const h = makeHarness();
+    const { bottom, middle, top } = stackOfThree();
+    topicWithPrs(h, 'depot', [bottom, middle]);
+    h.reader.addStackPr(top);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.topics.setStatus('depot', 'retired', at(20));
+
+    h.reader.addPr(top, makeThreadFor(top, { reason: 'mention', updatedAt: at(30) }));
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(top.key)).toMatchObject({ topicId: 'depot', reason: 'joins its stack' });
+    expect(h.store.topics.get('depot')?.status).toBe('active');
+  });
 });
 
 describe('a stack is one unit on the board', () => {
@@ -80,6 +96,21 @@ describe('a stack is one unit on the board', () => {
     expect(await tileMembers(h, 'depot')).toEqual([]);
     expect(await tileMembers(h, 'billing')).toEqual([[stackId, [bottom.key, middle.key, top.key]]]);
     expect((await h.engine.getPr(bottom.key))?.topicId).toBe('billing');
+  });
+
+  it('shows the stack in the active topic when the newest membership is in a retired one', async () => {
+    const h = makeHarness();
+    const { bottom, middle, top, stackId } = stackOfThree();
+    topicWithPrs(h, 'depot', [bottom]);
+    topicWithPrs(h, 'billing', []);
+    h.reader.addPr(middle, makeThreadFor(middle));
+    h.store.memberships.assign({ prKey: middle.key, topicId: 'billing', assignedBy: 'agent', reason: '', createdAt: at(5) });
+    h.reader.addStackPr(top);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.topics.setStatus('billing', 'retired', at(10));
+
+    expect(await tileMembers(h, 'depot')).toEqual([[stackId, [bottom.key, middle.key, top.key]]]);
+    expect((await h.engine.getPr(middle.key))?.topicId).toBe('depot');
   });
 });
 
@@ -107,6 +138,8 @@ describe('a stack is one unit in sets', () => {
     const sets = h.store.sets.listActiveForTopic('depot');
     expect(sets.map((set) => [set.title, set.members.map((m) => m.prKey)])).toEqual([['Runner switch', [lone.key, bottom.key, middle.key, top.key]]]);
     expect(await tileMembers(h, 'depot')).toEqual([[`set:${sets[0]!.id}`, [lone.key, bottom.key, middle.key, top.key]]]);
+    const view = (await h.engine.getTopic('depot'))?.tiles[0];
+    expect(view?.tile.stacks).toEqual([{ id: prs.stackId, prKeys: [bottom.key, middle.key, top.key] }]);
   });
 
   it('takes the whole stack out on "not related" for one layer', async () => {

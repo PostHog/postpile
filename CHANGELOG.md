@@ -2,6 +2,11 @@
 
 Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
 
+## 0.1.0-alpha.1 (unreleased)
+
+- Stacks no longer go missing. A stack whose bottom layer merged (GitHub moved the next PR down by itself) now stays one stack, a closed attempt no longer pushes the open layers that replaced it out of the stack, and a stack with a layer in a retired topic still shows in its active topic. PRs from forks never join a stack by branch name.
+- Tiles now carry which PRs form a stack, bottom first, also for a stack inside a set, so the UI can draw it as a stack.
+
 ## 0.1.0-alpha.0 (2026-09-28)
 
 First public build. macOS arm64 only, ad-hoc signed, not notarized.

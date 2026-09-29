@@ -109,7 +109,7 @@ function toPrState(state: string): PrState {
 function previousBaseRefs(changes: RawBaseRefChanges | undefined): string[] {
   const refs: string[] = [];
   for (const node of changes?.nodes ?? []) {
-    const ref = node?.previousRefName;
+    const ref = node?.previousRefName ?? node?.oldBase;
     if (ref && !refs.includes(ref)) {
       refs.push(ref);
     }
@@ -319,5 +319,6 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     mergedAt: isoTimeOrNull(raw.mergedAt),
     mergedBy: raw.mergedBy ? actorLogin(raw.mergedBy) : null,
     previousBaseRefs: previousBaseRefs(raw.baseRefChanges),
+    isCrossRepository: raw.isCrossRepository ?? false,
   };
 }

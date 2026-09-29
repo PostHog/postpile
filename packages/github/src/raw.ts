@@ -107,6 +107,8 @@ export interface RawPullRequest {
   baseRefName: string;
   headRefName: string;
   headRefOid: string;
+  /** Missing in fixtures written before it was asked for. */
+  isCrossRepository?: boolean;
   baseRefChanges?: RawBaseRefChanges;
   additions: number;
   deletions: number;
@@ -129,9 +131,13 @@ export interface RawPullRequest {
 }
 
 /** A PR node from a branch lookup (queries.ts buildBranchQuery). */
-/** timelineItems filtered to BaseRefChangedEvent; missing in fixtures written before it was asked for. */
+/**
+ * timelineItems filtered to BaseRefChangedEvent (previousRefName) and
+ * AutomaticBaseChangeSucceededEvent (oldBase); missing in fixtures written
+ * before it was asked for.
+ */
 export interface RawBaseRefChanges {
-  nodes: ({ previousRefName?: string } | null)[];
+  nodes: ({ previousRefName?: string; oldBase?: string } | null)[];
 }
 
 export interface RawBranchPr {

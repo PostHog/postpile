@@ -34,9 +34,15 @@ const simpleTimelineSelections = SIMPLE_TIMELINE_EVENTS.map(
   (type) => `... on ${type} { id createdAt actor { ...actor } }`,
 ).join('\n        ');
 
-/** Former base branches, so a PR GitHub moved down after the layer below merged still finds that layer. */
+/**
+ * Former base branches, so a PR GitHub moved down after the layer below
+ * merged still finds that layer. A base changed by hand is a
+ * BaseRefChangedEvent; the move GitHub makes itself when the layer below
+ * merges and its branch goes away is an AutomaticBaseChangeSucceededEvent.
+ */
 const BASE_REF_CHANGES =
-  'baseRefChanges: timelineItems(last: 10, itemTypes: [BASE_REF_CHANGED_EVENT]) { nodes { ... on BaseRefChangedEvent { previousRefName } } }';
+  'baseRefChanges: timelineItems(last: 10, itemTypes: [BASE_REF_CHANGED_EVENT, AUTOMATIC_BASE_CHANGE_SUCCEEDED_EVENT]) { nodes { ' +
+  '... on BaseRefChangedEvent { previousRefName } ... on AutomaticBaseChangeSucceededEvent { oldBase } } }';
 
 const FRAGMENTS = `
 fragment actor on Actor { __typename login }
@@ -51,7 +57,7 @@ fragment comment on Comment { author { ...actor } body createdAt }
 
 fragment prData on PullRequest {
   number title url body state isDraft
-  baseRefName headRefName headRefOid
+  baseRefName headRefName headRefOid isCrossRepository
   additions deletions changedFiles reviewDecision
   createdAt updatedAt mergedAt
   ${BASE_REF_CHANGES}

@@ -108,7 +108,7 @@ describe('topicQueues', () => {
 
 describe('pingedPrKeys', () => {
   it('counts a PR as pinged when any tile holds it pinged', () => {
-    const tile = (id: string, members: Tile['members']): Tile => ({ id, topicId: 't', kind: 'stack', title: id, members });
+    const tile = (id: string, members: Tile['members']): Tile => ({ id, topicId: 't', kind: 'stack', title: id, members, stacks: [] });
     const keys = pingedPrKeys([
       tile('stack', [
         { prKey: 'o/r#1', provenance: { kind: 'pulled_in', reason: 'stack layer below #2' } },

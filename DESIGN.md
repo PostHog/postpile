@@ -1082,11 +1082,25 @@ chain shows, whatever its state.
   sits on A when B's base branch is A's head branch, or was until A merged.
   GitHub moves a stacked PR onto the next branch down when the layer below
   merges and its branch is deleted, so PR snapshots and branch lookups carry
-  former base branches (`previousBaseRefs`, from `BaseRefChangedEvent`). A
+  former base branches (`previousBaseRefs`, from `BaseRefChangedEvent` for
+  a base changed by hand and `AutomaticBaseChangeSucceededEvent` for the
+  move GitHub makes itself; before 2026-09-29 only the first was read, so a
+  merged bottom layer fell off and the open layers above it were left as
+  a chain of pulled-in PRs no tile shows). A
   merged or closed A only counts below a B opened while A was still open
   (closed PRs use their last update as the end); this keeps an old PR on a
   reused branch name out. Several PRs on one head branch: only one is the
   layer, open over merged over closed, then the newest (`oneLayerPerHead`).
+  A PR from a fork (`isCrossRepository`) never links: its head branch lives
+  in the fork, so a name like main or patch-1 would take a real layer's
+  place or chain it to an unrelated PR. Snapshots stored before the field
+  existed read as same-repo.
+- **Forks in a stack**: stacks are linear. When two PRs sit on one parent,
+  the open one continues the stack (open over merged over closed, then the
+  lowest number) and the other starts its own chain without the parent.
+  Before 2026-09-29 the lowest number won alone, so a closed attempt could
+  keep the open layers that replaced it out of the stack, and those showed
+  nowhere.
 - **States**: open, draft, merged at any age and closed layers all count.
   There is no age limit; a stack still needs at least one open PR. A closed
   layer shows greyed in its row, pill reading "closed".
@@ -1117,12 +1131,18 @@ chain shows, whatever its state.
 A PR that is a stack layer is never shown apart from its stack.
 
 - **One topic** (`stackTopicId`, `Board.stackTopicIds`): a stack shows in
-  the topic of the newest membership among its layers (the latest decision),
-  or in Unsorted while tracked layers wait for a topic. Its layers stay out
+  the topic of the newest membership among its layers (the latest decision)
+  whose topic is active, or in Unsorted while tracked layers wait for a
+  topic. A retired topic lists no tiles, so a newer membership there must
+  not hide a stack that has a layer in an active topic. With every layer in
+  retired topics the stack stays with the newest one, like any other PR of
+  a retired topic, and comes back when that topic is revived. Its layers stay out
   of every other topic's tiles, `Board.topicIdOf` answers the stack's topic
   for each layer, and a layer never keeps Unsorted alive on its own.
 - **Topic assignment**: a waiting layer whose stack already has a topic
-  joins it without an agent call (reason "joins its stack"). Of a stack
+  joins it without an agent call (reason "joins its stack"). A retired
+  stack topic becomes active again then, the same as when the agent
+  assigns a PR to a retired topic. Of a stack
   without a topic only the lowest waiting layer is asked about; the other
   waiting layers follow the answer (or its deferral).
 - **Moves**: "Wrong topic" on one layer moves (or re-sorts) every layer
@@ -1137,6 +1157,12 @@ A PR that is a stack layer is never shown apart from its stack.
   stack (placed where it first appears), a stack joins one set at most, the
   stack tile is then not shown separately, and layers of a stack shown in
   another topic are left out of this topic's sets.
+- **Stack structure on tiles** (`Tile.stacks`, `TileStack`): every tile
+  says which of its members form a stack, bottom first: one entry for a
+  stack tile, one per stack a set holds (in the order they appear), none
+  for a single. `kind` stays `single`, `stack` or `set`; a set holding a
+  stack is still `set`, and the UI draws the stack inside it from
+  `stacks` so it reads as a stack, not as loose set rows.
 
 ## Topic placement: relation and area
 

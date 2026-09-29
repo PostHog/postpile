@@ -160,6 +160,7 @@ describe('whoseTurn: on your own PR', () => {
       kind: 'set',
       title: 'set',
       members: [{ prKey: second.key, provenance: { kind: 'pinged', reason: 'author' } }, { prKey: 'acme/app#9', provenance: { kind: 'pinged', reason: 'author' } }],
+      stacks: [],
     };
     expect(turnOf(tile, [second])).toMatchObject({ kind: 'them', who: 'sol', what: 'on #2', lead: 'Waiting on' });
   });
@@ -233,6 +234,7 @@ describe('whoseTurn: multi-PR tiles', () => {
         { prKey: asked.key, provenance: { kind: 'pinged', reason: 'review_requested' } },
         { prKey: pulled.key, provenance: { kind: 'pulled_in', reason: 'stack layer above #2' } },
       ],
+      stacks: [{ id: 'stack:x', prKeys: [approved.key, asked.key, pulled.key] }],
     };
     expect(turnOf(tile, [approved, asked, pulled])).toEqual({ kind: 'you', who: null, what: 'Review on #2', prKey: asked.key });
     const pushedOnFirst = { ...approved, headOid: 'c2', commits: [makeCommit({ oid: 'head' }), makeCommit({ oid: 'c2' })] };
