@@ -2,6 +2,21 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- The detail pane acts on the PR you look at: on a stack or set, Mark read and Mark done mark only the selected PR (with its own undo), the label follows that PR, and there is no mark button while that PR is still your move. Snooze stays in the tile footer for sets and stacks. Single-PR tiles behave as before, and the tile footer still acts on the whole tile.
+- The coral dot marks every PR that keeps a tile from being done ("Not done yet"), on read tiles too, so an open set says which PR still holds it. Mark a dotted PR done and its dot goes.
+- Opening a PR in PostPile also marks it done there when nothing is asked of you on that PR (checked per PR now, not for the whole tile), not only read on GitHub. A visit on github.com still only marks it read.
+- The verdict pill on a multi-PR tile talks about the PR the footer names.
+- Whose turn names the re-reviewer: once the author pushed after a change request and requested that reviewer again, it says "ada to re-review" instead of "rowan to address ada's changes". Also on your own PRs.
+- Your own merged or closed PRs are marked read on GitHub when only bots came after your last read or touch (the own-PR exception now only applies while the PR is open). Your own review after the last read no longer counts as someone else's activity.
+
+### Added
+
+- "Remove <team>" in the detail pane on PRs with a pending review request for one of your teams: removes the team's review request, unsubscribes you from the PR's notifications and marks the PR done. Asks once, cannot be undone, blocked while GitHub writes are locked.
+
 ## 0.10.0 (2026-09-29)
 
 ### Changed
