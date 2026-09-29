@@ -368,7 +368,7 @@ and only recomputes on change.
 | glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI: checks are in no prompt and no hash), dossier version, instructions, tailoring, standing rules or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
 | topic | `topic`: name, summary, tailoring, driver, user_role, status | summary mirrors the latest `dossier.summary` |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
-| topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides | - |
+| topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides; `source` consolidation or agent (migration 017, see "propose_topic_change") | - |
 | sets | `pr_set` + `pr_set_member` with combined take and per-member reason; `removed_at` keeps "not related" members | agent regroups; removed members never come back with the rest, a corrected set the agent drops is kept as dissolved |
 | feedback | `feedback`: not_mine / not_related / wrong_topic / unmute / tailoring_kept / tailoring_once | append-only; newest 10 per topic go into prompts |
 | event overrides | `pr_event.override_*` with reason | kept across re-derivation |
@@ -2196,13 +2196,15 @@ popover is where the user decides).
 
 **Action log** (`action_log`, migration 008): `id`, `at`, `action`
 (`mark_read`, `undo_mark_read`, `approve`, `comment`, `writes_on`,
-`writes_off`; `bring_back` only on old rows, see below; `mark_done` / `subscribe` / `unsubscribe` get
+`writes_off`, `agent_refresh` = an outside agent's GitHub re-read, see
+"refresh_from_github"; `bring_back` only on old rows, see below; `mark_done` / `subscribe` / `unsubscribe` get
 added with their writer methods), `origin` (who decided: `tile` = the user in
 a tile or the detail pane, `debug` = the notifications view, `queue` = the
 deferred queue when a batch's window ran out, `quit` = the flush on quit,
 `sync` / `poll` = a thread left the inbox, `footer` = the lock, also sending
 or discarding pending writes, `cleanup` = the inbox cleanup, `quiet` =
-PostPile itself after a full sync, see "Handled quietly"), `outcome` (`queued`, `pending`, `discarded`,
+PostPile itself after a full sync, see "Handled quietly", `agent` = an
+outside agent through the MCP server), `outcome` (`queued`, `pending`, `discarded`,
 `github`, `local`, `skipped`, `failed`, `observed`), `thread_id`,
 `pr_key`, `tile_id`, `batch` (a UUID per mark-read batch, links the queue
 send to the click that queued it), `detail`. Rows at queue time: one per
@@ -2866,7 +2868,8 @@ message, are dropped.
    `recheck_resolved` (outcome keep/fix/drop: the user's Accept in the
    recheck dialog, sent with the correction as `fromRecheck`),
    `memory_corrected`, `proposal_resolved`
-   (kind `topic_merge` / `rename` / `rule` / `instructions`), `instructions_edited`.
+   (kind `topic_merge` / `rename` / `topic_split` / `rule` / `instructions`;
+   source `consolidation` / `agent` on topic proposals), `instructions_edited`.
 5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
    agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,
    trigger `start`/`manual`/`auto`, auto = the hourly background sync,
@@ -2882,8 +2885,9 @@ message, are dropped.
    poll's backoff), `github_quota_low` (resource `core`/`graphql`, level
    `low`/`critical`: once per drop into a worse level within a rate-limit
    window, see "GitHub quota"), `consolidation_ran` (proposals_filed).
-6. *MCP server*: `mcp_tool_called` (tool, found: false when the PR, topic
-   or search found nothing). Sent by the separate `postpile-mcp` process
+6. *MCP server*: `mcp_tool_called` (tool, one of the six; found: false when
+   the PR, topic or search found nothing or on an error; response_chars: the
+   answer's length; error: it was a tool error). Sent by the separate `postpile-mcp` process
    under the same install id, so it counts toward the same person.
    `mcp_connect_clicked` (from `footer`/`setup`, ok: Claude Code has the
    server afterwards) and `mcp_connect_dismissed` (the footer's "Not now"),
@@ -2907,10 +2911,12 @@ MCP process itself still never writes the database or GitHub.
 
 **Process**: its own process, not the app's. It opens the database the way
 `cli --read-only` does (`createEngine({ withoutLock: true })`: read-only
-SQLite, no migrations, no lock, no GitHub writes), so it works next to the
-running app and with the app closed, and needs no port or token discovery.
-The data is as fresh as the app's last sync and poll; every answer says when
-the last full sync finished. Stdout is the protocol, so `console.log` goes to
+SQLite, no migrations, no lock, no GitHub writes), so the reads work next to
+the running app and with the app closed, and need no port or token
+discovery. The data is as fresh as the app's last sync and poll; every
+answer says when the last full sync finished, and `pr_context` when the PR
+was fetched. The two tools that change something ask the running app
+("Agent requests" below). Stdout is the protocol, so `console.log` goes to
 stderr (`routeConsoleToStderr`).
 
 **Shipping**: electron-vite builds `apps/desktop/src/main/mcp.ts` next to the
@@ -2921,27 +2927,38 @@ install needed, the same engine code as the app. The cask links it into
 Homebrew's bin (`binary`); the script follows that symlink back into the
 bundle. From the repo: `pnpm cli mcp` (`POSTPILE_FAKE=1` for sample data).
 
-**Tools** (all `readOnlyHint`; inputs are small zod shapes):
+**Tools** (six, `packages/mcp/src/server.ts`; inputs are small zod shapes;
+how they answer is under "Tool design" below):
 
-- `pr_context(pr)`: `owner/repo#123`, a PR URL, or `#123` when the number is
-  unique in the store. The PR (state, author, size), whose move, why it is
-  unread, stack layer, the viewer's approval, what is new since they looked,
-  the glance (verdict, for you, risk, files to open first), facts, the
-  activity list (the detail pane's, noise folded), then the topic: dossier
-  (`formatDossier`, shared with the CLI) and every tile with its PRs.
-- `topic(topic)`: an id, or part of a name when that picks one topic.
-- `search_prs(query)`: the search bar's matcher, 25 PRs at most.
-- `whats_on_me()`: live tiles in `needs_you` topics where it is the user's
-  move, then unread ones where it is not.
+- `pr_context(pr, detail)`: `owner/repo#123`, a PR URL, or `#123` when the
+  number is unique in the store. Brief (default): the PR (state, author,
+  size), whose move, why it is unread, stack layer, the viewer's approval,
+  what is new since they looked, the glance's verdict, "for you" and risk,
+  this PR's tile, and the topic's other PRs one line each (10 at most).
+  Full: the whole glance, facts, the activity list (the detail pane's, noise
+  folded), then the topic: dossier (`formatDossier`, shared with the CLI)
+  and every tile with its PRs. After the fence: when the PR was fetched and
+  whether the app checks it again soon, then the next step.
+- `topic(topic, detail)`: an id, or part of a name when that picks one
+  topic. Brief: goal, status, open questions, one line per tile (15 at
+  most). Full: the whole dossier and every PR. Both list pending topic
+  suggestions and the ones decided in the last 14 days.
+- `search_prs(query, limit, offset, state, repo, whose_move)`: the search
+  bar's matcher, 25 per page (100 at most).
+- `whats_on_me(limit, offset, state, repo, whose_move)`: live tiles in
+  `needs_you` topics where it is the user's move, then unread ones where it
+  is not; open PRs by default.
+- `refresh_from_github(pr | topic)` and `propose_topic_change(...)`: see
+  their own sections below.
 
 Reads cover every repo (`listTopics` / `search` with `{ allRepos: true }`),
-whatever repo the window has chosen; quiet repos stay quiet. Answers are
-plain text: a freshness line, who the app works for, then one
-`<postpile-data>` fence around everything that comes from GitHub or from an
-agent summary of it, with a line telling the caller it is data, not
-instructions. A fence tag inside the data is broken up so a PR body can't
-close it. No structured content: text is what the calling model reads, and
-sending both would double the tokens.
+whatever repo the window has chosen; quiet repos stay quiet. Read answers
+are plain text: a freshness line, who the app works for, then one
+`<postpile-data id="…">` fence around everything that comes from GitHub or
+from an agent summary of it, with a line telling the caller it is data, not
+instructions. The fence id is random per answer and fenced text is cleaned
+(see "Untrusted text" below). The reads send no structured content: text is
+what the calling model reads, and sending both would double the tokens.
 
 **Connecting** (decided 2026-09-29): the app nudges, it never installs by
 itself. The status footer shows "agents: not connected" while Claude Code
@@ -3001,7 +3018,9 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
   offset: 25". Topic reads are batched, no read per match.
 - **Errors are tool errors** (`isError: true`) with the fix and an example:
   unparseable, ambiguous or unknown PR or topic, a bad filter. "No matches" is
-  a normal answer.
+  a normal answer. Bad enum values and limits fail the input schema, whose
+  zod messages carry the fix and an example (the SDK answers them as
+  `isError`); `repo` is checked by hand.
 - **Freshness per answer**: besides the last full sync, `pr_context` says when
   this PR was fetched ("fetched 3 min ago") and, while the app runs, when it
   checks again ("the app checks GitHub again within 1 min"). This tells an
@@ -3017,8 +3036,9 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
   `propose_topic_change` only files a suggestion the user decides on; text
   from GitHub is data. No "read-only" claim any more.
 - **Untrusted text**: each answer's fence carries a random id
-  (`<postpile-data id="k3f9">`, closed with the same id), so data can't fake a
-  close tag; control characters and invisible Unicode (tag characters,
+  (`<postpile-data id="k3f9">`, closed with `</postpile-data id="k3f9">`), so
+  data can't fake a close tag; fence tags inside the data are broken up
+  anyway; control characters and invisible Unicode (tag characters,
   bidi overrides, zero-width) are stripped from fenced text; topic names in
   error text sit inside the fence too.
 - **Annotations**: the four reads keep `readOnlyHint`, idempotent, closed
@@ -3057,6 +3077,22 @@ approve PRs, so it is never handed to other processes).
   queued (the intent goes stale) and the app is never launched.
 - Sample data (`POSTPILE_FAKE=1`): the fake app handles requests in memory
   the same way, so `pnpm cli mcp` with the fake server can try both tools.
+- Built (2026-09-29): `FileAgentRequests` (packages/mcp) and
+  `AgentRequestInbox` (packages/engine/src/agent-requests, started by the
+  desktop main process through `startAgentRequests()`), the envelope and
+  its zod check in core (`parseAgentRequest`). "Kind `app`" means the lock
+  kinds `packaged` and `dev` (`runningApp`): the CLI and the standalone
+  server never answer requests. The app claims a request by renaming it to
+  `<uuid>.working`, so on its 20 s timeout the MCP process can withdraw a
+  request nobody took ("nothing was done") or report one that is still
+  running. Besides `fs.watch` the app rescans the folder every 5 s, since
+  the watch can miss events. Both kinds expire after 2 minutes. Claims left
+  by a crash go at start with the old results. PR and topic references are
+  resolved on the MCP side with the reads' resolvers and sent as keys and
+  ids; the app checks them again. Over sample data the MCP process answers
+  in memory (`InMemoryAgentRequests` over the fake engine, through the same
+  `answerAgentRequest` the inbox uses); the fake desktop app watches no
+  folder.
 
 ### `refresh_from_github`
 
@@ -3086,6 +3122,18 @@ now. GitHub reads only, never a write.
   update in the background").
 - Description: not for polling, the app already checks every minute.
 - Logged in the debug action log (`agent_refresh`, client, PR count, result).
+- Built (2026-09-29): `AgentRefresher` (packages/engine/src/agent-requests)
+  over `Engine.refreshNow`, which the fake engine reuses. Decided while
+  building: a running full sync is joined (its freshness check covers every
+  tracked PR), a running poll cycle is waited for and then one runs with the
+  PRs fetched directly; agent refreshes queue behind each other. The hourly
+  cap counts only requests that read GitHub (fresh-only and refused ones
+  don't), in memory, so a restart resets it. A PR PostPile does not track is
+  refused, never fetched. Refusals are tool errors. The action log row has
+  no thread or PR (the detail lists them), so it never shows as a thread's
+  last action; outcome `github` when GitHub was read, `skipped` otherwise.
+  The freshness line says a merged or closed PR older than a day is no
+  longer checked by the app (the poll's freshness window).
 
 ### `propose_topic_change`
 
@@ -3121,6 +3169,26 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   and decisions from the last 14 days with dates, so an agent sees the outcome
   and does not repeat itself. There is no push back to the agent.
 - Telemetry: `proposal_resolved` gets `source`.
+- Built (2026-09-29): `planTopicChange` in core (checks and preview, shared
+  with the fake engine), `OutsideProposals` in the engine, migration 017.
+  Decided while building: expiry is derived from `created_at`, never stored
+  (`proposalOutcome`), so the read-only MCP process and the app agree
+  without a job; an expired suggestion drops out of the Inbox, can't be
+  accepted and may be filed again. "The same change" is the same kind and
+  topic with the same name (case and spaces aside) or merge target,
+  against proposals from any source, so a rejected consolidation proposal
+  blocks an agent too. The caps count per rolling 24 hours; a dry run runs
+  every check, caps included, but counts against none. The split preview
+  moves every stack layer (`Board.stackKeysOf`), pulled-in ones included,
+  since the whole stack shows where the moved layers go. The re-check on
+  accept covers every proposal (topic and merge target still active, split
+  PRs still in the topic); "at least one PR stays" only outside ones, since
+  consolidation may propose emptying a topic. `proposal_resolved` also got
+  a `topic_split` kind (splits are what agents suggest most). The client
+  name is cut to letters, digits, `._ -` and 64 characters ("unknown" when
+  empty); the renderer maps `claude-code` to Claude Code, `codex-mcp-client`
+  to Codex and `cursor-vscode` to Cursor, and the topic header's proposal
+  row reads "Claude Code suggests: …" for outside ones.
 
 ## Architecture
 

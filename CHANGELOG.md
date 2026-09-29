@@ -2,6 +2,20 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### New
+
+- MCP `refresh_from_github`: an agent can have the running app re-read a PR, or a topic's open PRs, from GitHub now. It only reads, skips PRs fetched in the last minute, allows 20 refreshes an hour across all agents, and only single PRs while your GitHub quota is low. Each one is in the action log.
+- MCP `propose_topic_change`: an agent can suggest splitting PRs out of a topic, renaming it or merging it into another. The suggestion shows in the Inbox as "suggested by Claude Code", with the agent's reason, and nothing changes until you accept it. It comes with a preview of what accepting would do (a stack moves as a whole), at most 3 per topic, 10 in total and 20 a day, and expires after 14 days. The MCP `topic` tool shows agents what became of their suggestions.
+
+### Changed
+
+- MCP answers are short by default: `pr_context` and `topic` take `detail: "full"` for everything. `search_prs` and `whats_on_me` page (`limit`, `offset`) and filter (`state`, `repo`, `whose_move`). Unknown PRs and topics, and bad filters, come back as errors with an example.
+- `pr_context` says when PostPile last fetched the PR and whether the running app checks it again within a minute.
+- Accepting a topic proposal that no longer fits (its topic was merged or retired, or a split's PRs moved elsewhere) is refused with the reason instead of moving PRs from other topics.
+- GitHub text in MCP answers sits in a fence with a random id, with control characters and invisible Unicode removed.
+
 ## 0.9.0 (2026-09-29)
 
 ### Changed
