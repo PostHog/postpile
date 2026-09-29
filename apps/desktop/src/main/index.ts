@@ -163,15 +163,13 @@ function reportWindowFocused(): void {
 }
 
 /**
- * Back from the browser: one poll cycle plus a direct look at the PRs the
- * user opened from here in the last 30 minutes, so an approve, merge or
- * comment made on github.com shows on the tile right away.
+ * Back in the app: one poll cycle now (the engine skips it when one started
+ * in the last 15 seconds), plus a direct look at the PRs the user opened
+ * from here in the last 30 minutes, so an approve, merge or comment made on
+ * github.com shows on the tile right away.
  */
-function refreshOpenedPrs(): void {
-  const keys = openedPrs.active(Date.now());
-  if (keys.length > 0 && engine) {
-    engine.refreshOnFocus(keys).catch((error: unknown) => console.error('refresh on focus failed:', error));
-  }
+function refreshOnFocus(): void {
+  engine?.refreshOnFocus(openedPrs.active(Date.now())).catch((error: unknown) => console.error('refresh on focus failed:', error));
 }
 
 /**
@@ -271,7 +269,7 @@ async function openWindow(): Promise<BrowserWindow> {
     },
   });
   window.once('ready-to-show', () => window.show());
-  window.on('focus', refreshOpenedPrs);
+  window.on('focus', refreshOnFocus);
   window.on('focus', reportWindowFocused);
   // Links (e.g. "GitHub") open in the browser; the app window never navigates away.
   window.webContents.setWindowOpenHandler(({ url }) => {

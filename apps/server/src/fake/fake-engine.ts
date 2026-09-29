@@ -1435,7 +1435,7 @@ export class FakeEngine implements EngineService {
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUp.changes(),
-      githubQuota: this.quota.view(poll.intervalSeconds),
+      githubQuota: this.quota.view(poll.everySeconds),
     };
   }
 
@@ -1465,11 +1465,9 @@ export class FakeEngine implements EngineService {
     return this.catchUp.retry(prKey);
   }
 
-  /** Sample data never changes on GitHub; one poll cycle keeps the flow the same as the real engine. */
-  async refreshOnFocus(prKeys: PrKey[]): Promise<void> {
-    if (prKeys.length > 0) {
-      await this.livePoller?.runCycle();
-    }
+  /** Sample data never changes on GitHub; one poll cycle (debounced) keeps the flow the same as the real engine. */
+  async refreshOnFocus(): Promise<void> {
+    await this.livePoller?.runOnFocus();
   }
 
   // -------------------------------------------------------------------------

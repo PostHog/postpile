@@ -100,10 +100,12 @@ export interface EngineService {
    */
   retryGlance(prKey: PrKey): Promise<ActionResult>;
   /**
-   * The window got focus back after the user opened these PRs on github.com
-   * from the app: one poll cycle now, with a direct thread lookup for each
-   * (and a direct fetch for PRs without a thread), so their tiles follow
-   * GitHub right away. Skipped while a full sync or consolidation runs.
+   * The window got focus: one poll cycle now, unless one started less than
+   * 15s ago, none ran yet, or the poll is off or paused by the quota. prKeys are the PRs the
+   * user opened on github.com from the app lately: that cycle (or the next,
+   * when debounced) also looks each up directly (a direct fetch for PRs
+   * without a thread), so their tiles follow GitHub right away. Skipped while
+   * a full sync or consolidation runs.
    */
   refreshOnFocus(prKeys: PrKey[]): Promise<void>;
 

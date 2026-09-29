@@ -18,15 +18,15 @@ export function liveLabel(status: LivePollStatus | undefined, now: Date): LiveLa
     return { text: 'live poll off', warn: false, title: 'The desktop app polls GitHub notifications; POSTPILE_POLL_SECONDS=0 turns it off' };
   }
   const github = status.githubPollIntervalSeconds === null ? 'no X-Poll-Interval yet' : `GitHub asks for ${status.githubPollIntervalSeconds}s (X-Poll-Interval)`;
-  const title = `Polling every ${status.intervalSeconds}s, ${github}. ${status.notificationsShown} Mac notifications so far.`;
+  // A low GitHub quota slows the poll; the engine says to what.
+  const every = status.githubQuota?.pollSeconds ?? status.everySeconds;
+  const title = `Polling every ${every}s (set to ${status.intervalSeconds}s, ${github}) and when you switch to the app. ${status.notificationsShown} Mac notifications so far.`;
   if (status.state === 'backoff') {
     return { text: `live · backing off, retry in ${secondsUntil(status.backoffUntil, now)}s`, warn: true, title: `${status.note ?? ''}. ${title}` };
   }
   if (status.state === 'blocked') {
     return { text: `live · paused: ${status.note ?? 'busy'}`, warn: false, title };
   }
-  // A low GitHub quota slows the poll; the engine says to what.
-  const every = status.githubQuota?.pollSeconds ?? status.intervalSeconds;
   return { text: `live · every ${every}s`, warn: false, title };
 }
 

@@ -12,6 +12,8 @@ export const MAX_RATE_LIMIT_BACKOFF_SECONDS = 15 * 60;
 export const MAX_ERROR_BACKOFF_SECONDS = 5 * 60;
 /** The footer's "live · paused: ..." while the GitHub quota is nearly used. */
 export const QUOTA_PAUSE_NOTE = 'GitHub quota nearly used';
+/** Window focus runs no cycle when the last one started less than this ago. */
+export const FOCUS_DEBOUNCE_SECONDS = 15;
 
 function isoAt(ms: number): string {
   return new Date(ms).toISOString();
@@ -22,10 +24,11 @@ function isoAt(ms: number): string {
  * one scheduled when the last one is done. Backs off on rate limits (Retry-
  * After or X-RateLimit-Reset when GitHub says, doubling from a minute when
  * not) and on errors, waits while a full sync runs, and hands grouped pings
- * to onNotify. GitHub's X-Poll-Interval is logged and shown, not obeyed:
- * the configured interval wins (a 304 costs no rate limit). The GitHub
- * quota slows it to once a minute when low and pauses it until the reset
- * when critical (DESIGN.md "GitHub quota").
+ * to onNotify. GitHub's X-Poll-Interval is obeyed: the next cycle waits the
+ * configured interval or the last X-Poll-Interval, whichever is longer. The
+ * GitHub quota slows it to once a minute when low and pauses it until the
+ * reset when critical (DESIGN.md "GitHub quota"); the slower rule wins.
+ * Window focus runs one cycle right away (runOnFocus), debounced.
  */
 export class LivePoller {
   private readonly throttle = new PingThrottle();
@@ -35,8 +38,10 @@ export class LivePoller {
   private running: Promise<void> | null = null;
   private stopped = true;
   private failures = 0;
-  /** Seconds between cycles the quota allowed last; logged when it changes. */
+  /** Seconds between cycles last time, header and quota applied; logged when it changes. */
   private pace: number;
+  /** Epoch ms when the last cycle started, for the focus debounce. */
+  private lastStartMs: number | null = null;
 
   constructor(
     private readonly poll: () => Promise<PollCycle>,
@@ -46,7 +51,7 @@ export class LivePoller {
     private readonly quota: GitHubQuota | null = null,
   ) {
     this.log = options.log ?? ((message) => console.log(message));
-    this.status = { ...OFF_POLL_STATUS, intervalSeconds: options.intervalSeconds };
+    this.status = { ...OFF_POLL_STATUS, intervalSeconds: options.intervalSeconds, everySeconds: options.intervalSeconds };
     this.pace = options.intervalSeconds;
   }
 
@@ -81,6 +86,25 @@ export class LivePoller {
     return this.running;
   }
 
+  /**
+   * The window got focus: one cycle now, so what happened while the user was
+   * away shows up without waiting for the timer. Skipped while the poll is
+   * off, the quota pauses it or a backoff runs (the retry timer stays),
+   * before the first cycle (the app's start sync goes first), and when a
+   * cycle started less than FOCUS_DEBOUNCE_SECONDS ago, so switching windows
+   * back and forth does not hammer GitHub.
+   */
+  runOnFocus(): Promise<void> {
+    const pausedUntil = this.quota?.pollPausedUntil() ?? null;
+    if (this.stopped || pausedUntil !== null || this.status.state === 'backoff' || this.lastStartMs === null) {
+      return Promise.resolve();
+    }
+    if (this.timers.now() - this.lastStartMs < FOCUS_DEBOUNCE_SECONDS * 1000) {
+      return Promise.resolve();
+    }
+    return this.runCycle();
+  }
+
   private clearTimer(): void {
     if (this.timer !== null) {
       this.timers.clearTimeout(this.timer);
@@ -99,7 +123,7 @@ export class LivePoller {
 
   /** The quota is nearly used: no request until it resets. Logged once per pause. */
   private waitForQuota(untilMs: number): void {
-    const seconds = Math.max(this.options.intervalSeconds, Math.ceil((untilMs - this.timers.now()) / 1000));
+    const seconds = Math.max(this.status.everySeconds, Math.ceil((untilMs - this.timers.now()) / 1000));
     if (this.status.note !== QUOTA_PAUSE_NOTE) {
       this.log(`live poll: paused until ${isoAt(untilMs)}, GitHub quota nearly used (${this.quota?.describe() ?? 'unknown'})`);
     }
@@ -112,11 +136,14 @@ export class LivePoller {
     }
   }
 
-  /** Seconds to the next cycle when nothing failed: the interval, or longer while the quota is low. */
+  /** Seconds to the next cycle when nothing failed: interval or X-Poll-Interval, or longer while the quota is low. */
   private nextDelay(): number {
-    const seconds = this.quota?.pollSeconds(this.options.intervalSeconds) ?? this.options.intervalSeconds;
+    const every = this.status.everySeconds;
+    const seconds = this.quota?.pollSeconds(every) ?? every;
     if (seconds !== this.pace) {
-      this.log(`live poll: every ${seconds}s, GitHub quota ${this.quota?.describe() ?? 'unknown'}`);
+      const github = this.status.githubPollIntervalSeconds === null ? 'none' : `${this.status.githubPollIntervalSeconds}s`;
+      const quota = this.quota?.describe() ?? 'unknown';
+      this.log(`live poll: every ${seconds}s (interval ${this.options.intervalSeconds}s, X-Poll-Interval ${github}, GitHub quota ${quota})`);
       this.pace = seconds;
     }
     return seconds;
@@ -131,6 +158,7 @@ export class LivePoller {
     }
     this.status.state = 'polling';
     this.status.nextPollAt = null;
+    this.lastStartMs = this.timers.now();
     let delay: number;
     try {
       this.record(await this.poll());
@@ -157,9 +185,12 @@ export class LivePoller {
     this.status.state = 'waiting';
     this.status.backoffUntil = null;
     this.status.note = null;
-    if (result.githubPollIntervalSeconds !== this.status.githubPollIntervalSeconds) {
-      this.log(`live poll: GitHub asks for X-Poll-Interval ${result.githubPollIntervalSeconds ?? 'none'}s, polling every ${this.options.intervalSeconds}s`);
-      this.status.githubPollIntervalSeconds = result.githubPollIntervalSeconds;
+    // An answer without the header keeps the last one: never poll faster than GitHub asked.
+    const github = result.githubPollIntervalSeconds;
+    if (github !== null && github !== this.status.githubPollIntervalSeconds) {
+      this.log(`live poll: GitHub sent X-Poll-Interval ${github}s`);
+      this.status.githubPollIntervalSeconds = github;
+      this.status.everySeconds = Math.max(this.options.intervalSeconds, github);
     }
     if (!result.notModified) {
       this.status.lastChangeAt = isoAt(now);
@@ -184,18 +215,18 @@ export class LivePoller {
     }
   }
 
-  /** Returns the delay before the next try, in seconds. */
+  /** Returns the delay before the next try, in seconds: never shorter than the interval, X-Poll-Interval included. */
   private backOff(error: unknown): number {
     this.failures += 1;
-    const interval = this.options.intervalSeconds;
+    const interval = this.status.everySeconds;
     let delay: number;
     let note: string;
     if (error instanceof GitHubError && error.rateLimited) {
       const doubling = Math.min(RATE_LIMIT_BACKOFF_SECONDS * 2 ** (this.failures - 1), MAX_RATE_LIMIT_BACKOFF_SECONDS);
-      delay = error.retryAfterSeconds !== null ? Math.max(error.retryAfterSeconds, interval) : doubling;
+      delay = Math.max(error.retryAfterSeconds ?? doubling, interval);
       note = `rate limited (${error.status}), next try in ${delay}s`;
     } else {
-      delay = Math.min(interval * 2 ** this.failures, MAX_ERROR_BACKOFF_SECONDS);
+      delay = Math.max(Math.min(interval * 2 ** this.failures, MAX_ERROR_BACKOFF_SECONDS), interval);
       note = `error: ${errorText(error)}`;
     }
     const now = this.timers.now();
