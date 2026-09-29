@@ -74,6 +74,7 @@ import {
 } from '@postpile/core';
 import type { AutoSyncOptions } from './auto-sync.ts';
 import { isPostHogMember } from '@postpile/core/telemetry-identity';
+import { PingSummary } from './telemetry/ping-summary.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
 import { loadViewer } from './viewer-meta.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
@@ -233,6 +234,7 @@ export class Engine implements EngineService {
   private readonly catchUps: CatchUpQueue;
   private readonly github: GitHubSync;
   private readonly telemetry: Telemetry;
+  private readonly pingSummary: PingSummary;
   private readonly quota: GitHubQuota;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
@@ -240,6 +242,7 @@ export class Engine implements EngineService {
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
     this.telemetry = deps.telemetry ?? new NoopTelemetry();
+    this.pingSummary = new PingSummary(store, this.telemetry, now);
     this.toolHealth = deps.tools ?? ToolHealth.assumeOk(now);
     const timers = deps.timers ?? systemTimers;
     this.quota = deps.quota ?? new GitHubQuota(() => timers.now());
@@ -363,6 +366,15 @@ export class Engine implements EngineService {
     }
   }
 
+  /** The hourly pings_summarized event, when one is due. Never throws: telemetry never breaks a sync or a poll. */
+  private summarizePings(): void {
+    try {
+      this.pingSummary.sendIfDue();
+    } catch (error) {
+      (this.deps.syncLog ?? console.log)(`ping summary failed: ${errorText(error)}`);
+    }
+  }
+
   /** After a cleanup reached GitHub: one poll cycle, so the threads it read show up as read. */
   private async rereadInbox(): Promise<void> {
     await this.pollOnce();
@@ -452,6 +464,7 @@ export class Engine implements EngineService {
         })
         .finally(() => {
           this.syncing = null;
+          this.summarizePings();
           this.autoSync?.reschedule(backlog);
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
           void this.livePoller?.runCycle();
@@ -500,6 +513,10 @@ export class Engine implements EngineService {
       this.focus = NO_FOCUS;
       this.polling = this.pollRun
         .run(focus)
+        .then((cycle) => {
+          this.summarizePings();
+          return cycle;
+        })
         .catch((error: unknown) => {
           this.reportPollRateLimit(error);
           throw error;
