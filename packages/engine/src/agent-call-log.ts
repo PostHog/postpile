@@ -10,7 +10,7 @@ export const ACTION_RUN_ID = 'action';
 export const SWEEP_RUN_ID = 'sweep';
 
 /** Calls the user asks for directly; they never count toward a sync or consolidation. */
-const ACTION_KINDS = new Set<ObservedCall['purpose']>(['chat', 'draft_comment', 'instructions_change', 'memory_recheck', 'setup_draft', 'setup_refine']);
+const ACTION_KINDS = new Set<ObservedCall['purpose']>(['chat', 'draft_comment', 'instructions_change', 'memory_recheck', 'setup_draft', 'setup_refine', 'setup_fit']);
 
 interface ActiveRun {
   id: string;

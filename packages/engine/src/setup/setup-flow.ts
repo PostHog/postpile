@@ -9,6 +9,8 @@ import {
   type SetupAcceptRequest,
   type SetupAcceptResult,
   type SetupChecksView,
+  type SetupFitRequest,
+  type SetupFitResult,
   type SetupRefineRequest,
   type SetupRefineResult,
   type SetupStatus,
@@ -88,6 +90,22 @@ export class SetupFlow {
       return { ok: true, message: answer.reply || 'Changed the draft.', draft: answer.draft, changedSections: changedHeadings(before, after) };
     } catch (error) {
       return { ok: false, message: `The agent could not change the draft: ${errorText(error)}`, draft: null, changedSections: [] };
+    }
+  }
+
+  /**
+   * One setup_fit call over the text the user is about to accept: notes on
+   * lines PostPile cannot act on, lines under the wrong heading and vague
+   * ones. Writes nothing; the user decides what to change.
+   */
+  async checkFit(request: SetupFitRequest): Promise<SetupFitResult> {
+    if (formatInstructionsSections(request.sections).trim() === '') {
+      return { ok: true, message: '', notes: [] };
+    }
+    try {
+      return { ok: true, message: '', notes: await this.agent.checkSetupFit({ sections: request.sections }) };
+    } catch (error) {
+      return { ok: false, message: `The agent could not check the text: ${errorText(error)}`, notes: [] };
     }
   }
 

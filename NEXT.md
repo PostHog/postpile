@@ -6,6 +6,22 @@ now".
 
 ## Done
 
+- Setup fit check (2026-09-29, DESIGN.md "Setup flow" › Fit check): a
+  tester's Preferences came out as rules for coding agents ("don't push
+  write-ups onto PR branches", "signed PRs land only with my approval"),
+  taken from the work context digest. The draft and refine prompts now
+  say what PostPile does and keep such rules out of Preferences. The
+  Accept step runs one `setup_fit` call (Sonnet, toolless, only the
+  user's text) and lists notes per line: no effect, other section, too
+  vague, each with Remove / Move / Use the suggestion / Keep as is
+  (`mapSetupFit` in core, `applyFitFix` in the renderer). Review cards
+  say what each section is for (`SECTION_HINTS`). The live poll now
+  answers `blocked: setup not finished` while first-run setup is open:
+  the same tester's install ran about 40 catch-up runs during setup,
+  before any instructions existed. Telemetry: `setup_fit_checked`,
+  `setup_fit_fixed`. Checked in fake mode with a headless walk through
+  all four steps.
+
 - Selection stays put (2026-09-29, DESIGN.md "Queue sections" › Selection stays
   put): after an approve the view no longer jumps to the next topic or
   tile. `lib/selection.ts` keeps what was on screen per nav entry and

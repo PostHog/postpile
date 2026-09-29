@@ -26,6 +26,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     startSetupSweep: notImplemented,
     setupSweep: notImplemented,
     refineSetup: notImplemented,
+    checkSetupFit: notImplemented,
     acceptSetup: notImplemented,
     skipSetup: notImplemented,
     lastSyncReport: notImplemented,

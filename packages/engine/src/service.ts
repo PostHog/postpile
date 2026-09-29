@@ -38,6 +38,8 @@ import type {
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupChecksView,
+  SetupFitRequest,
+  SetupFitResult,
   SetupRefineRequest,
   SetupRefineResult,
   SetupStatus,
@@ -298,6 +300,8 @@ export interface EngineService {
   setupSweep(): Promise<SetupSweepView | null>;
   /** "Tell the agent what's off": one setup_refine call over the sweep's material. Writes nothing. */
   refineSetup(request: SetupRefineRequest): Promise<SetupRefineResult>;
+  /** Setup's fit check on the Accept step: one setup_fit call over the user's text. Writes nothing. */
+  checkSetupFit(request: SetupFitRequest): Promise<SetupFitResult>;
   /**
    * Accept: writes instructions.md as a new version (origin setup), sets the
    * quiet repos and the repo scope, stores the done flag. Refused when the

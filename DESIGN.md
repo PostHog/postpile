@@ -974,7 +974,12 @@ stores `skipped` and syncs. The Instructions pane has "Run setup again"
 (always) and a honey banner after a skip. `POSTPILE_FAKE_SETUP=1` with
 `POSTPILE_FAKE=1` starts sample data with no instructions, so the flow
 shows. Once open, the renderer keeps it open until Accept's sync finishes
-or the user closes it, even though the server stops asking for it.
+or the user closes it, even though the server stops asking for it. While
+first-run setup is needed the live poll answers `blocked: setup not
+finished` (`Engine.pollOnce`): no fetch, topic calls, catch-ups or Mac
+pings before the user has instructions. It used to run from launch, so
+setup's Opus calls queued behind dozens of catch-up runs that were
+written without any instructions.
 
 **Steps**, one screen each, with a worded step indicator (done sea,
 current ink, next quiet) and word chips, never symbols alone:
@@ -1024,7 +1029,9 @@ current ink, next quiet) and word chips, never symbols alone:
    busiest repo as main, so the user can still write it.
 3. **Review the draft.** Sections (About me, What I own, What gets routed
    to me, What to ignore or keep quiet, Preferences) as one text box each,
-   with "Why?" listing the agent's lines and their sources (team, PR with
+   a line under each usual heading saying what it is for
+   (`SECTION_HINTS`; Preferences says PostPile never pushes, merges or
+   reviews code), with "Why?" listing the agent's lines and their sources (team, PR with
    link, ownership rules, digest). "Tell the agent what's off" makes one
    `setup_refine` call (`POST /api/setup/refine`, same model and material,
    the edited sections plus the message and earlier messages) and shows
@@ -1040,7 +1047,7 @@ current ink, next quiet) and word chips, never symbols alone:
    renderer's `lib/setup.ts`). On a re-run the whole draft shows as a diff against the current
    file.
 4. **Accept** (`POST /api/setup/accept`) lists what happens, shows the
-   final diff and then: writes `instructions.md` as a new version with
+   fit check (below) and the final diff and then: writes `instructions.md` as a new version with
    origin `setup` ("Written with setup" / "Rewritten with setup"; an
    unchanged text writes nothing), marks the chosen repos quiet (others
    untouched), sets the repo scope to the main repo (or All repos), stores
@@ -1048,6 +1055,36 @@ current ink, next quiet) and word chips, never symbols alone:
    lands on the topics. When the file changed since the draft was
    reviewed (base version mismatch) nothing is written and the answer
    carries the file as it is now; the review diffs against it again.
+
+**What the draft may say.** The draft, refine and fit prompts share one
+paragraph on what PostPile does with the instructions (topics,
+summaries, whose turn, loud or quiet, Mac pings, comment drafts; approve,
+comment and mark read only on a click) and what it never does (write,
+commit or push code, merge, review diffs, run CI, post by itself). The
+work context digest comes from Claude Code notes, which are full of rules
+for coding agents; the draft rules keep those out of Preferences
+(2026-09-29, after a tester's draft carried "don't push write-ups onto PR
+branches" and "signed PRs land only with my approval").
+
+**Fit check.** Entering Accept sends the text as it is to `POST
+/api/setup/fit`: one `setup_fit` call (the default Sonnet, toolless, 90s,
+recorded under the `action` run). Its input is only the user's own text,
+no GitHub data. The agent writes a note only for a line that has no
+effect (asks for something PostPile never does), sits under the wrong
+heading (`moveTo`), or is too vague to act on, with an optional
+`rewrite`; it never judges whether a preference is a good one.
+`mapSetupFit` (core) keeps a note only when its line is in the text
+(`claimKey` match, the named heading first), its kind is known and a move
+names another known heading; line and heading come from the text, one
+note per line, at most 12. The panel "Does it fit PostPile?" shows
+Checking / All lines fit / N to look at, and per note Remove line, Move
+to <heading> (to the end of that section, a new section when missing),
+Use the suggestion, Keep as is (`applyFitFix` in the renderer's
+`lib/setup.ts`). A fix or keep drops the note without asking again; the
+check reruns only when the text changed since (back to review and
+edit) or after a failed call ("Check again"). Accept is never blocked by
+it, and a failed call shows in the panel, not as a toast. Fake mode
+answers by keywords (`FakeSetup.checkFit`).
 
 **Citations.** Sources get short ids in `setupSources`: `t1..` teams,
 `p1..` PRs, `o1..` ownership file excerpts (CODEOWNERS or owners.yaml),
@@ -1069,7 +1106,7 @@ imports types only; keep the two in step.
 accept into the in-memory instructions and repo settings.
 
 Routes: `GET /api/setup`, `GET /api/setup/checks`, `POST/GET
-/api/setup/sweep`, `POST /api/setup/refine`, `POST /api/setup/accept`,
+/api/setup/sweep`, `POST /api/setup/refine`, `POST /api/setup/fit`, `POST /api/setup/accept`,
 `POST /api/setup/skip`.
 
 ## Missing tools (gh, claude)
@@ -2439,7 +2476,9 @@ message, are dropped.
 `TELEMETRY_EVENTS` in `packages/core/src/telemetry-events.ts`):
 
 1. *Activation*: `app_launched` (first_launch), `setup_step_viewed` (step),
-   `setup_completed`, `setup_skipped`, `first_sync_completed` (prs, topics,
+   `setup_completed`, `setup_skipped`, `setup_fit_checked` (notes, ok),
+   `setup_fit_fixed` (kind, fix: the renderer's, one per fix taken),
+   `first_sync_completed` (prs, topics,
    duration_ms, agent_calls — fires once ever, a meta flag), `tool_missing`
    (tool, reason — once per state change, from `ToolHealth`).
 2. *Retention*: `app_active` (once per calendar day), `window_focused`

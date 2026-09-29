@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import type { SetupCurrentInstructions, SetupSectionEdit } from '@postpile/core';
+import type { SetupCurrentInstructions, SetupFitNote, SetupSectionEdit } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useMcpConnection } from '../api/mcp.ts';
 import { useSyncProgress } from '../api/sync.ts';
-import { acceptPlan, draftText } from '../lib/setup.ts';
+import { acceptPlan, draftText, type SetupFitFix, type SetupFitState } from '../lib/setup.ts';
 import { syncProgressDetail, syncProgressText } from '../lib/sync-progress.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { DiffView } from './DiffView.tsx';
 import { McpConnectOffer } from './McpConnectOffer.tsx';
 import { SetupChip } from './SetupChip.tsx';
+import { SetupFitPanel } from './SetupFitPanel.tsx';
 
 type Phase = 'review' | 'syncing';
 
@@ -46,8 +47,8 @@ function McpOfferBox() {
 }
 
 /**
- * Step 4: what Accept does, the final text (as a diff against the current
- * file, or all new), then Accept: writes a new instructions version, quiet
+ * Step 4: what Accept does, the agent's fit check with its fixes, the final
+ * text (as a diff against the current file, or all new), then Accept: writes a new instructions version, quiet
  * repos, scope and the done flag, runs the first sync and hands over to the
  * topics. A file changed on disk meanwhile sends the user back to review.
  * Below it, the optional MCP offer (its own button, never part of Accept).
@@ -57,6 +58,10 @@ export function SetupAcceptStep(props: {
   base: SetupCurrentInstructions;
   quiet: string[];
   mainRepo: string | null;
+  fit: SetupFitState | null;
+  onFitFix: (note: SetupFitNote, fix: SetupFitFix) => void;
+  onFitKeep: (note: SetupFitNote) => void;
+  onFitRetry: () => void;
   onBaseChanged: (current: SetupCurrentInstructions) => void;
   onDone: () => void;
   onBack: () => void;
@@ -88,6 +93,7 @@ export function SetupAcceptStep(props: {
           <li key={line}>{line}</li>
         ))}
       </ol>
+      {phase === 'review' && <SetupFitPanel fit={props.fit} onFix={props.onFitFix} onKeep={props.onFitKeep} onRetry={props.onFitRetry} />}
       <DiffView before={props.base.text} after={text} context={props.base.text.trim() === '' ? 1000 : 2} />
       {phase === 'syncing' && <SyncingNote />}
       <div className="flex flex-wrap items-center gap-1.5 pt-1">

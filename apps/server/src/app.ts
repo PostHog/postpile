@@ -132,6 +132,10 @@ const setupRefineBody = z.object({
   message: z.string().min(1).max(4000),
 });
 
+const setupFitBody = z.object({
+  sections: z.array(setupSection).max(20),
+});
+
 const setupAcceptBody = z.object({
   sections: z.array(setupSection).max(20),
   quietRepos: z.array(repoName).max(50).default([]),
@@ -337,8 +341,8 @@ export function createApp(
     return c.json(await engine.setSweepSkip(body.patterns));
   });
 
-  // Setup flow. Checks and the sweep only read GitHub; refine is one agent call and writes
-  // nothing; accept writes instructions.md (a new version), quiet repos, scope and the done flag.
+  // Setup flow. Checks and the sweep only read GitHub; refine and fit are one agent call each and
+  // write nothing; accept writes instructions.md (a new version), quiet repos, scope and the done flag.
   // gh and claude status with the fix commands; the check is local and reads nothing from GitHub.
   app.get('/api/tools', async (c) => c.json(await engine.tools()));
   app.post('/api/tools/check', async (c) => c.json(await engine.checkTools()));
@@ -348,6 +352,7 @@ export function createApp(
   app.post('/api/setup/sweep', async (c) => c.json(await engine.startSetupSweep()));
   app.get('/api/setup/sweep', async (c) => c.json(await engine.setupSweep()));
   app.post('/api/setup/refine', async (c) => c.json(await engine.refineSetup(setupRefineBody.parse(await c.req.json()))));
+  app.post('/api/setup/fit', async (c) => c.json(await engine.checkSetupFit(setupFitBody.parse(await c.req.json()))));
   app.post('/api/setup/accept', async (c) => c.json(await engine.acceptSetup(setupAcceptBody.parse(await c.req.json()))));
   app.post('/api/setup/skip', async (c) => c.json(await engine.skipSetup()));
 

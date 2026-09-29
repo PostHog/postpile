@@ -51,6 +51,8 @@ import type {
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupChecksView,
+  SetupFitRequest,
+  SetupFitResult,
   SetupRefineRequest,
   SetupRefineResult,
   SetupStatus,
@@ -1466,6 +1468,14 @@ export class FakeEngine implements EngineService {
       return Promise.resolve({ ok: false, message: `The agent could not change the draft: ${agentOff}`, draft: null, changedSections: [] });
     }
     return this.setup.refine(request);
+  }
+
+  checkSetupFit(request: SetupFitRequest): Promise<SetupFitResult> {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      return Promise.resolve({ ok: false, message: `The agent could not check the text: ${agentOff}`, notes: [] });
+    }
+    return this.setup.checkFit(request);
   }
 
   async acceptSetup(request: SetupAcceptRequest): Promise<SetupAcceptResult> {

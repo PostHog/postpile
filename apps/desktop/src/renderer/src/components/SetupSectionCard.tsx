@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { SetupDraftSection, SetupSource } from '@postpile/core';
-import { sourceKindWord, sourcesFor } from '../lib/setup.ts';
+import { SECTION_HINTS, sourceKindWord, sourcesFor } from '../lib/setup.ts';
 
 const chip = 'inline-flex h-[18px] shrink-0 items-center gap-1 rounded border border-hairline bg-surface px-1.5 text-[10.5px] text-muted';
 
@@ -82,6 +82,7 @@ export function SetupSectionCard(props: { section: SetupDraftSection | undefined
           </button>
         )}
       </div>
+      {SECTION_HINTS[props.heading] && <p className="text-[11.5px] text-muted">{SECTION_HINTS[props.heading]}</p>}
       <textarea
         className="w-full resize-y rounded-control border border-control bg-surface px-2 py-1.5 font-mono text-[11.5px] leading-[1.6] outline-none select-text focus:border-accent"
         rows={rows}

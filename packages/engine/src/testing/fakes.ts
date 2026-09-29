@@ -21,6 +21,7 @@ import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
+import { loadSetupFlag, saveSetupFlag } from '../setup/setup-flag.ts';
 import { ToolHealth } from '../tools/tool-health.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
 import { ActionLog } from '../writes/action-log.ts';
@@ -353,6 +354,8 @@ export interface HarnessOptions {
   userConfig?: UserConfigFile;
   /** Defaults to a fresh FakeTelemetry, exposed on the harness either way. */
   telemetry?: FakeTelemetry;
+  /** No setup flag, as on a first run: setup shows and the poll waits. Off by default, so tests start past setup. */
+  firstRun?: boolean;
   /** How Claude Code starts the MCP server; none by default, so nothing runs claude mcp. */
   mcpLauncher?: McpLauncher;
 }
@@ -361,6 +364,9 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const instructionsFile = options.instructionsFile ?? '/nonexistent/instructions.md';
   const now = options.now ?? (() => NOW);
   const store = options.store ?? Store.open(':memory:');
+  if (!options.firstRun && loadSetupFlag(store) === null) {
+    saveSetupFlag(store, 'done', now().toISOString());
+  }
   const reader = new FakeReader();
   const writer = new FakeWriter();
   const writeSwitch = new WriteSwitch(store, options.forcedReadOnly ? null : writer);

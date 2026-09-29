@@ -185,6 +185,41 @@ export interface SetupRefineResult {
   changedSections: string[];
 }
 
+/**
+ * Why a line does not fit PostPile's instructions:
+ * - no_effect: nothing PostPile does can follow it (a rule for a coding agent, pushing, merging).
+ * - wrong_section: it would work, but under another heading.
+ * - unclear: too vague for the agent to apply.
+ */
+export type SetupFitKind = 'no_effect' | 'wrong_section' | 'unclear';
+
+/** One of the agent's notes from the fit check, pinned to a line the user has. */
+export interface SetupFitNote {
+  /** The section the line is in now. */
+  heading: string;
+  /** The line as the user wrote it, without its bullet. */
+  line: string;
+  kind: SetupFitKind;
+  why: string;
+  /** For wrong_section: the heading it belongs under. */
+  moveTo: string | null;
+  /** A wording that would fit, when the agent has one. */
+  rewrite: string | null;
+}
+
+/** "Does this fit?" over the text the user is about to accept. */
+export interface SetupFitRequest {
+  sections: SetupSectionEdit[];
+}
+
+export interface SetupFitResult {
+  ok: boolean;
+  /** What went wrong, when not ok. */
+  message: string;
+  /** Empty when every line fits. */
+  notes: SetupFitNote[];
+}
+
 export interface SetupAcceptRequest {
   sections: SetupSectionEdit[];
   /** Repos to make quiet. Repos left out are not touched. */

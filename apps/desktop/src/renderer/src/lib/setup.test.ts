@@ -1,6 +1,6 @@
-import type { SetupDraft } from '@postpile/core';
+import type { SetupDraft, SetupFitNote } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
-import { acceptPlan, draftText, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
+import { acceptPlan, applyFitFix, draftText, fitAfterAnswer, fitFixes, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
 
 function repo(name: string, prs: number) {
   return { repo: name, prs, authored: prs > 2 ? 2 : 0, reviewed: prs > 2 ? prs - 2 : prs, requested: 0 };
@@ -96,5 +96,57 @@ describe('acceptPlan', () => {
       'Keeps all repos in the sidebar.',
       'Then syncs your GitHub notifications and opens your topics.',
     ]);
+  });
+});
+
+describe('fit fixes', () => {
+  const edits = [
+    { heading: 'About me', body: '- DevEx.\n- Ignore the docs bot\n- Be nice' },
+    { heading: 'Preferences', body: "- Keep summaries short\n- Don't push write-ups onto PR branches" },
+  ];
+
+  function note(overrides: Partial<SetupFitNote>): SetupFitNote {
+    return { heading: 'About me', line: 'Be nice', kind: 'unclear', why: '', moveTo: null, rewrite: null, ...overrides };
+  }
+
+  it('offers the fixes that fit the note', () => {
+    expect(fitFixes(note({ kind: 'no_effect' }))).toEqual(['remove']);
+    expect(fitFixes(note({ kind: 'unclear', rewrite: 'Lead with what needs me' }))).toEqual(['rewrite', 'remove']);
+    expect(fitFixes(note({ kind: 'wrong_section', moveTo: 'Preferences' }))).toEqual(['move']);
+  });
+
+  it('removes and rewords the line in place', () => {
+    const push = note({ heading: 'Preferences', line: "Don't push write-ups onto PR branches", kind: 'no_effect' });
+    expect(applyFitFix(edits, push, 'remove')[1]).toEqual({ heading: 'Preferences', body: '- Keep summaries short' });
+    const vague = note({ rewrite: 'Lead every summary with what needs me' });
+    expect(applyFitFix(edits, vague, 'rewrite')[0]?.body).toBe('- DevEx.\n- Ignore the docs bot\n- Lead every summary with what needs me');
+    expect(edits[0]?.body).toContain('Be nice');
+  });
+
+  it('moves a line to the end of its section, or to a new section at the end', () => {
+    const ignore = note({ line: 'Ignore the docs bot', kind: 'wrong_section', moveTo: 'Preferences' });
+    expect(applyFitFix(edits, ignore, 'move')).toEqual([
+      { heading: 'About me', body: '- DevEx.\n- Be nice' },
+      { heading: 'Preferences', body: "- Keep summaries short\n- Don't push write-ups onto PR branches\n- Ignore the docs bot" },
+    ]);
+    const quiet = applyFitFix(edits, { ...ignore, moveTo: 'What to ignore or keep quiet' }, 'move');
+    expect(quiet.at(-1)).toEqual({ heading: 'What to ignore or keep quiet', body: '- Ignore the docs bot' });
+  });
+});
+
+describe('fitAfterAnswer', () => {
+  const answer = { ok: true, message: '', notes: [] };
+
+  it('keeps the answer when the text did not change', () => {
+    expect(fitAfterAnswer({ text: 'a', result: null }, 'a', 'a', answer)).toEqual({ text: 'a', result: answer });
+  });
+
+  it('drops a pending check whose text moved on, so the next visit asks again', () => {
+    expect(fitAfterAnswer({ text: 'a', result: null }, 'b', 'a', answer)).toBeNull();
+  });
+
+  it('leaves a newer check alone', () => {
+    const newer = { text: 'b', result: null };
+    expect(fitAfterAnswer(newer, 'b', 'a', answer)).toBe(newer);
   });
 });

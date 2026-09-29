@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InstructionsView, RepoOverview, SetupAcceptResult, SetupChecksView, SetupRefineResult, SetupStatus, SetupSweepView } from '@postpile/core';
+import type { InstructionsView, RepoOverview, SetupAcceptResult, SetupChecksView, SetupFitResult, SetupRefineResult, SetupStatus, SetupSweepView } from '@postpile/core';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { FakeEngine } from './fake/fake-engine.ts';
 
@@ -86,11 +86,26 @@ describe('setup routes on sample data', () => {
     expect(accepted).toMatchObject({ ok: true, savedVersion: 4 });
   });
 
+  it('checks fit on sample data by keywords', async () => {
+    const call = appWith(new FakeEngine({ forceSetup: true, setupStepMs: 0 }));
+    const sections = [
+      { heading: 'About me', body: '- I work on CI\n- Ignore the docs bot' },
+      { heading: 'Preferences', body: "- Short summaries; tell me what needs me first.\n- Don't push write-ups onto PR branches" },
+    ];
+    const fit = (await call<SetupFitResult>('/api/setup/fit', { method: 'POST', body: { sections } })).json;
+    expect(fit.ok).toBe(true);
+    expect(fit.notes.map((note) => [note.heading, note.kind, note.moveTo])).toEqual([
+      ['About me', 'wrong_section', 'What to ignore or keep quiet'],
+      ['Preferences', 'no_effect', null],
+    ]);
+  });
+
   it('skips, and refuses bad bodies', async () => {
     const call = appWith(new FakeEngine({ forceSetup: true, setupStepMs: 0 }));
     expect((await call('/api/setup/skip', { method: 'POST' })).json).toMatchObject({ ok: true });
     expect((await call<SetupStatus>('/api/setup')).json).toMatchObject({ needed: false, flag: 'skipped' });
     expect((await call('/api/setup/accept', { method: 'POST', body: { sections: [], quietRepos: ['nope'], baseVersion: null } })).status).toBe(400);
     expect((await call('/api/setup/refine', { method: 'POST', body: { sections: [], message: '' } })).status).toBe(400);
+    expect((await call('/api/setup/fit', { method: 'POST', body: { sections: 'nope' } })).status).toBe(400);
   });
 });
