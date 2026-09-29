@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileAfterRead, TileStateKind, TileView, WhoseTurn } from '@postpile/core';
-import { detailPrimary, githubLink, markButtonLabel, markReadNotice, moveWords, tileFooterAction } from './mark-read.ts';
+import { detailMarkLabel, detailPr, detailPrimary, githubLink, markButtonLabel, markReadNotice, moveWords, prMarkAction, tileFooterAction, type DetailPrRow } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -40,26 +40,26 @@ describe('tileFooterAction and markButtonLabel', () => {
 
 describe('detailPrimary', () => {
   it('keeps Approve in the lead while it is due', () => {
-    expect(detailPrimary({ view: view('unread', NONE, doneAfter), prAction: 'approve', approveVariant: 'primary' })).toBe('approve');
+    expect(detailPrimary({ view: view('unread', NONE, doneAfter), pr: null, prAction: 'approve', approveVariant: 'primary' })).toBe('approve');
   });
 
   it('leads with the tile action next to an outlined Approve again', () => {
     // Someone else's PR you approved, unread: the tile leads with Mark read, so does the pane.
-    expect(detailPrimary({ view: view('unread', NONE, doneAfter), prAction: 'approved', approveVariant: 'secondary' })).toBe('mark_read');
-    expect(detailPrimary({ view: view('open', NONE, doneAfter), prAction: 'approved', approveVariant: 'secondary' })).toBe('mark_done');
-    expect(detailPrimary({ view: view('open', REREVIEW, stillYours), prAction: 'approved', approveVariant: 'secondary' })).toBe('snooze');
+    expect(detailPrimary({ view: view('unread', NONE, doneAfter), pr: null, prAction: 'approved', approveVariant: 'secondary' })).toBe('mark_read');
+    expect(detailPrimary({ view: view('open', NONE, doneAfter), pr: null, prAction: 'approved', approveVariant: 'secondary' })).toBe('mark_done');
+    expect(detailPrimary({ view: view('open', REREVIEW, stillYours), pr: null, prAction: 'approved', approveVariant: 'secondary' })).toBe('snooze');
   });
 
   it('leads with the tile action next to an outlined Approve draft', () => {
-    expect(detailPrimary({ view: view('unread', NONE, doneAfter), prAction: 'approve', approveVariant: 'secondary' })).toBe('mark_read');
+    expect(detailPrimary({ view: view('unread', NONE, doneAfter), pr: null, prAction: 'approve', approveVariant: 'secondary' })).toBe('mark_read');
   });
 
   it('follows the tile on your own PR too', () => {
-    expect(detailPrimary({ view: view('open', REREVIEW, stillYours), prAction: 'open_on_github', approveVariant: 'primary' })).toBe('snooze');
+    expect(detailPrimary({ view: view('open', REREVIEW, stillYours), pr: null, prAction: 'open_on_github', approveVariant: 'primary' })).toBe('snooze');
   });
 
   it('opens GitHub from a done tile, whose footer Open means nothing in the pane', () => {
-    expect(detailPrimary({ view: view('done', NONE, doneAfter), prAction: 'open_on_github', approveVariant: 'primary' })).toBe('open_on_github');
+    expect(detailPrimary({ view: view('done', NONE, doneAfter), pr: null, prAction: 'open_on_github', approveVariant: 'primary' })).toBe('open_on_github');
   });
 });
 
@@ -76,6 +76,58 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
 function tileWith(prs: PrSummary[], turn: WhoseTurn): TileView {
   return { prs, turn } as TileView;
 }
+
+describe('the detail pane on a stack or set: acts on the selected PR', () => {
+  const pinged = { kind: 'pinged', reason: 'subscribed' } as const;
+  function row(overrides: Partial<DetailPrRow> = {}): DetailPrRow {
+    return { provenance: pinged, done: false, turn: NONE, afterRead: doneAfter, unseenLoudEvents: 0, ...overrides };
+  }
+  const openSet = view('open', REREVIEW, stillYours);
+
+  it('picks the selected PR on a stack or set, none on a single-PR tile', () => {
+    const prs = [{ key: 'acme/app#1' }, { key: 'acme/app#2' }] as PrSummary[];
+    const members = prs.map((pr) => ({ prKey: pr.key, provenance: pinged }));
+    const tile = { id: 'set:s1', topicId: 't', kind: 'set' as const, title: 'Set', members, stacks: [] };
+    expect(detailPr({ tile, prs }, 'acme/app#2')).toBe(prs[1]);
+    expect(detailPr({ tile: { ...tile, kind: 'single', members: members.slice(0, 1) }, prs: prs.slice(0, 1) }, 'acme/app#1')).toBeNull();
+  });
+
+  it('says Mark done for a read PR a mark-read makes done, whatever the rest of the set asks', () => {
+    // The tile is still your move on another PR; this PR asks nothing.
+    expect(prMarkAction(openSet, row())).toBe('mark_done');
+    expect(detailMarkLabel(openSet, row())).toBe('Mark done');
+    expect(detailPrimary({ view: openSet, pr: row(), prAction: 'approved', approveVariant: 'secondary' })).toBe('mark_done');
+  });
+
+  it('says Mark read for a PR with news, and for one a mark-read leaves asking', () => {
+    expect(detailMarkLabel(openSet, row({ unseenLoudEvents: 1, turn: REREVIEW }))).toBe('Mark read');
+    expect(detailMarkLabel(openSet, row({ afterRead: { done: false, turn: NONE } }))).toBe('Mark read');
+  });
+
+  it('shows no mark button while that PR is still your move; Open on GitHub leads', () => {
+    const yours = row({ turn: REREVIEW, afterRead: stillYours });
+    expect(detailMarkLabel(openSet, yours)).toBeNull();
+    expect(detailPrimary({ view: openSet, pr: yours, prAction: 'approved', approveVariant: 'secondary' })).toBe('open_on_github');
+    // Never Snooze for one PR of a set: that lives in the tile footer.
+    expect(detailPrimary({ view: openSet, pr: yours, prAction: 'open_on_github', approveVariant: 'primary' })).not.toBe('snooze');
+  });
+
+  it('has nothing to mark on a PR that is done, a quiet pulled-in layer or a done tile', () => {
+    expect(detailMarkLabel(openSet, row({ done: true }))).toBeNull();
+    expect(detailMarkLabel(openSet, row({ provenance: { kind: 'pulled_in', reason: 'stack layer' } }))).toBeNull();
+    expect(detailMarkLabel(openSet, row({ provenance: { kind: 'pulled_in', reason: 'stack layer' }, unseenLoudEvents: 1 }))).toBe('Mark read');
+    expect(detailMarkLabel(view('done', NONE, doneAfter), row())).toBeNull();
+  });
+
+  it('keeps Approve in the lead while it is due', () => {
+    expect(detailPrimary({ view: openSet, pr: row(), prAction: 'approve', approveVariant: 'primary' })).toBe('approve');
+  });
+
+  it('behaves as the tile on a single-PR tile', () => {
+    expect(detailMarkLabel(openSet, null)).toBeNull();
+    expect(detailMarkLabel(view('open', NONE, doneAfter), null)).toBe('Mark done');
+  });
+});
 
 describe('githubLink', () => {
   it('opens the files tab of the PR the move is about', () => {

@@ -12,7 +12,7 @@ import { RecheckDialog } from './RecheckDialog.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { markReadNote } from '../lib/guard.ts';
 import { glanceClaim } from '../lib/glance.ts';
-import { type DetailPrimary, detailPrimary, markButtonLabel } from '../lib/mark-read.ts';
+import { type DetailPrimary, detailMarkLabel, detailPr, detailPrimary } from '../lib/mark-read.ts';
 
 interface ActionBarProps {
   detail: PrDetail;
@@ -58,17 +58,20 @@ function leadSlot(lead: DetailPrimary): Slot {
 }
 
 /**
- * Approve, open, ask, mark read, snooze, chat. One ink button, the same one
- * the tile leads with (`detailPrimary`): Approve while it is due, else the
- * tile's Mark read / Mark done / Snooze, or Open on GitHub on a done tile.
- * It sits first. Approve shows on someone else's open PR, label and look
- * from `approveButton` ("Approve as well", outlined "Approve draft" /
+ * Approve, open, ask, mark read, snooze, chat. One ink button
+ * (`detailPrimary`): Approve while it is due, else Mark read / Mark done,
+ * Snooze on a single-PR tile that is read and still your move, or Open on
+ * GitHub. It sits first. Approve shows on someone else's open PR, label and
+ * look from `approveButton` ("Approve as well", outlined "Approve draft" /
  * "Approve again"); core's "approved" still shows it: an approval on any
  * commit counts, and re-approving is harmless. Open on GitHub shows where
- * there is nothing to approve. Approve acts on the PR, the rest on the tile.
- * The mark button says "Mark done" only where a mark-read makes the tile
- * done, and is left out while the tile is read and still your move
- * (`markButtonLabel`).
+ * there is nothing to approve.
+ * Everything here acts on the selected PR (2026-09-29, `detailPr`): on a
+ * stack or set, Mark read / Mark done mark only that PR, the label follows
+ * that PR (`detailMarkLabel`: "Mark done" only where a mark-read makes it
+ * done, none while it is still your move), and Snooze is left to the tile
+ * footer. On a single-PR tile the tile and the PR are the same, so the
+ * buttons behave as the tile's.
  */
 export function ActionBar(props: ActionBarProps) {
   const actions = useActions();
@@ -86,13 +89,17 @@ export function ActionBar(props: ActionBarProps) {
     headOid: pr.headOid,
   };
   const approve = approveButton(approveInput);
-  const lead = detailPrimary({ view: props.view, prAction: primary, approveVariant: approve.variant });
+  const selected = detailPr(props.view, pr.key);
+  const lead = detailPrimary({ view: props.view, pr: selected, prAction: primary, approveVariant: approve.variant });
   const variantOf = (slot: Slot) => (leadSlot(lead) === slot ? 'primary' : 'secondary');
   const glance = props.detail.glance;
   const markReadTitle = props.view.pendingWrite
     ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
-    : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks the whole tile read; GitHub follows after 6s');
-  const markLabel = markButtonLabel(props.view);
+    : (actions.blockedReason('markRead') ??
+      markReadNote(actions.writes) ??
+      (selected ? `Marks only #${pr.ref.number} read; GitHub follows after 6s` : 'Marks the PR read; GitHub follows after 6s'));
+  const markLabel = detailMarkLabel(props.view, selected);
+  const markRead = () => (selected ? actions.markPrRead(tileId, pr.key, selected.afterRead) : actions.markRead(tileId, props.view.afterRead));
   const canAsk = !isBotLogin(pr.author) && props.view.prs.find((candidate) => candidate.key === pr.key)?.authorRelation !== 'you';
   const slots: Record<Slot, ReactNode> = {
     approve: (primary === 'approve' || primary === 'approved') && (
@@ -129,13 +136,14 @@ export function ActionBar(props: ActionBarProps) {
         variant={variantOf('mark')}
         size="md"
         title={markReadTitle}
-        disabled={props.view.pendingWrite !== null}
-        onClick={() => void actions.markRead(tileId, props.view.afterRead)}
+        disabled={props.view.pendingWrite !== null || actions.isBusy(selected ? `markPr:${tileId}:${pr.key}` : `markRead:${tileId}`)}
+        onClick={() => void markRead()}
       >
         {markLabel}
       </Button>
     ),
-    snooze: <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" variant={variantOf('snooze')} />,
+    // A set or stack is snoozed from its tile footer; here only a single-PR tile, where tile and PR are one.
+    snooze: selected === null && <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" variant={variantOf('snooze')} />,
   };
   const order = [leadSlot(lead), ...SLOT_ORDER.filter((slot) => slot !== leadSlot(lead))];
   return (

@@ -46,7 +46,7 @@ import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
 import { useLastSyncReport } from './sync.ts';
 import { useGitHubWrites } from './writes.ts';
-import { prPath, request, tilePath } from './client.ts';
+import { prPath, request, tilePath, tilePrPath } from './client.ts';
 import { queryKeys } from './keys.ts';
 import { sendTelemetry } from './telemetry.ts';
 
@@ -121,6 +121,13 @@ export interface Actions {
   retryGlance(prKey: PrKey): Promise<void>;
   /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
   markRead(tileId: string, afterRead?: TileAfterRead): Promise<void>;
+  /**
+   * The detail pane's Mark read / Mark done on a stack or set: only `prKey`.
+   * Same queue, lock and undo as markRead, undo brings back that PR only.
+   * `afterRead` is the PR's (`PrSummary.afterRead`); the toast never offers
+   * Snooze here, since snoozing is for the whole tile.
+   */
+  markPrRead(tileId: string, prKey: PrKey, afterRead: TileAfterRead): Promise<void>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
   unsnooze(tileId: string): Promise<void>;
   undo(undoToken: string): Promise<void>;
@@ -581,6 +588,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
           }
         : null;
       await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`), shape);
+    },
+    markPrRead: async (tileId, prKey, afterRead) => {
+      const shape: NoticeShape = (result) => {
+        const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead });
+        return { message: notice.message, snoozeTileId: null };
+      };
+      await run(`markPr:${tileId}:${prKey}`, 'markRead', () => request('POST', `${tilePrPath(tileId, prKey)}/mark-read`), shape);
     },
     snooze: async (tileId, condition) => {
       await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }));
