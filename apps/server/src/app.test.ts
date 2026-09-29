@@ -66,6 +66,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     approve: notImplemented,
     markRead: notImplemented,
     markPrRead: notImplemented,
+    removeTeamRequest: notImplemented,
     undo: notImplemented,
     snooze: notImplemented,
     unsnooze: notImplemented,

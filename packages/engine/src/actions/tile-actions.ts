@@ -55,7 +55,7 @@ export class TileActions {
       return failed(`${key} is not in tile ${tileId}`);
     }
     const handle = isTracked(member.provenance) ? [key] : [];
-    const batch = this.readMarker.markRead([key], handle, { origin: 'tile', tileId });
+    const batch = this.readMarker.markRead([key], handle, { origin: 'detail', tileId });
     return ok(readMessage('Marked read', batch), batch.token);
   }
 

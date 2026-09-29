@@ -128,6 +128,8 @@ import {
   type Viewer,
   botsFromQuietDetail,
   openedReadCheck,
+  ownTeamRequests,
+  teamSlug,
   quietReasonDetail,
   quietReasonFromDetail,
   HANDLED_QUIETLY_DAYS,
@@ -938,6 +940,37 @@ export class FakeEngine implements EngineService {
   }
 
   /**
+   * Like PrActions.removeTeamRequest, in memory: the team leaves the PR's
+   * requested teams, the sample thread is unsubscribed (logged only) and the
+   * PR is marked done through the fake queue. Nothing leaves the process.
+   */
+  async removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
+    const pr = this.data.prs[index];
+    if (!pr) {
+      return fail(`${prKey} is not an open PR in the sample`);
+    }
+    if (!ownTeamRequests(pr, this.viewer()).includes(team)) {
+      return fail(`${team} has no pending review request of your team on ${prKey}`);
+    }
+    const slug = teamSlug(team);
+    if (!this.writes.isEnabled()) {
+      this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'skipped', prKey, detail: `team ${slug}: GitHub writes are off` });
+      return fail('GitHub writes are off (lock in the footer): nothing was removed');
+    }
+    this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'github', prKey, detail: `team ${slug}` });
+    this.data.prs[index] = { ...pr, reviewerTeams: pr.reviewerTeams.filter((candidate) => candidate !== team) };
+    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
+    let unsubscribed = 'no notification thread known, so not unsubscribed';
+    if (thread) {
+      this.writes.record({ action: 'unsubscribe', origin: 'detail', outcome: 'github', prKey, threadId: thread.id, detail: 'sample data: nothing left the process' });
+      unsubscribed = 'unsubscribed';
+    }
+    this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
+    return ok(`Removed ${slug}'s review request, ${unsubscribed}`);
+  }
+
+  /**
    * Events seen, `handleKeys` handled; the unread sample
    * threads go through the fake queue, which logs like the real one.
    * `extraThreads` are threads without a stored PR (debug view).
@@ -981,7 +1014,7 @@ export class FakeEngine implements EngineService {
   private markPrsRead(
     prKeys: PrKey[],
     handleKeys: PrKey[],
-    origin: 'tile' | 'debug',
+    origin: 'tile' | 'detail' | 'debug',
     tileId: string | null,
     extraThreads: NotificationThread[] = [],
   ): ActionResult {
@@ -1029,7 +1062,7 @@ export class FakeEngine implements EngineService {
     if (!member) {
       return fail(`${prKey} is not in tile ${tileId}`);
     }
-    return this.markPrsRead([prKey], member.provenance.kind === 'pulled_in' ? [] : [prKey], 'tile', tileId);
+    return this.markPrsRead([prKey], member.provenance.kind === 'pulled_in' ? [] : [prKey], 'detail', tileId);
   }
 
   private tilesHolding(prKey: PrKey): Tile[] {

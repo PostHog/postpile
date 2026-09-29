@@ -191,6 +191,13 @@ export interface EngineService {
   /** Immediate and final: GitHub approvals cannot be undone. */
   approve(prKey: PrKey): Promise<ActionResult>;
   /**
+   * "Remove <team>": removes the review request of one of the viewer's teams
+   * (`team` as GitHub lists it, "acme/team-devex"), unsubscribes from the
+   * PR's thread and marks the PR done here. Final, no undo; refused while
+   * GitHub writes are locked.
+   */
+  removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult>;
+  /**
    * Marks the tile's events seen and queues the GitHub mark-read behind the
    * undo window. With GitHub writes locked nothing changes in the app: after
    * the window it becomes a pending write (the tile shows a marker).

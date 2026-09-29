@@ -319,6 +319,32 @@ describe('FakeEngine markPrRead', () => {
   });
 });
 
+describe('FakeEngine removeTeamRequest', () => {
+  async function teamRequested(engine: FakeEngine) {
+    const topics = await engine.listTopics();
+    const details = await Promise.all(topics.map((item) => engine.getTopic(item.topic.id)));
+    return details.flatMap((detail) => detail?.tiles ?? []).flatMap((view) => view.prs.filter((pr) => pr.ownTeamRequests.length > 0).map((pr) => ({ view, pr })));
+  }
+
+  it('offers it on sample PRs with a pending team request, refuses while locked, then removes and logs both writes', async () => {
+    const engine = new FakeEngine();
+    const [found] = await teamRequested(engine);
+    expect(found).toBeDefined();
+    const team = found!.pr.ownTeamRequests[0]!;
+
+    expect((await engine.removeTeamRequest(found!.pr.key, team)).ok).toBe(false);
+    await engine.setGitHubWrites(true);
+    const removed = await engine.removeTeamRequest(found!.pr.key, team);
+
+    expect(removed).toMatchObject({ ok: true, undoToken: null });
+    const log = (await engine.actionLog(10)).map((entry) => `${entry.action} ${entry.outcome}`);
+    expect(log).toContain('remove_team_request github');
+    expect(log).toContain('remove_team_request skipped');
+    expect((await teamRequested(engine)).some((entry) => entry.pr.key === found!.pr.key)).toBe(false);
+    expect((await engine.removeTeamRequest(found!.pr.key, team)).ok).toBe(false);
+  });
+});
+
 describe('FakeEngine queues', () => {
   it('fills every queue section and gives some topics PRs in several tiers', async () => {
     const topics = await new FakeEngine().listTopics();

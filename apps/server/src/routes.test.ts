@@ -305,6 +305,17 @@ describe('server routes over the fake engine', () => {
     expect((await post(app, `/api/tiles/${setTile}/prs/acme/app/0/mark-read`)).status).toBe(400);
   });
 
+  it('removes a team review request only with a team, and refuses it while writes are locked', async () => {
+    const app = appWithFake();
+    const rows = await allRows(app);
+    const row = rows.find((pr) => pr.ownTeamRequests.length > 0)!;
+    const path = `/api/prs/${row.key.replace('#', '/')}/remove-team-request`;
+    expect((await post(app, path, {})).status).toBe(400);
+    expect((await post<ActionResult>(app, path, { team: row.ownTeamRequests[0] })).json.ok).toBe(false);
+    await post(app, '/api/github-writes', { enabled: true });
+    expect((await post<ActionResult>(app, path, { team: row.ownTeamRequests[0] })).json.ok).toBe(true);
+  });
+
   it('refuses to approve while GitHub writes are off, approves once the lock is open', async () => {
     const app = appWithFake();
     const refused = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve');

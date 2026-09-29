@@ -45,4 +45,24 @@ export class GitHubWriteClient implements GitHubWriter {
   async commentOnPr(ref: PrRef, body: string): Promise<void> {
     await this.http.requestOk('POST', `repos/${ref.repo}/issues/${ref.number}/comments`, { body: { body } });
   }
+
+  /**
+   * https://docs.github.com/en/rest/pulls/review-requests#remove-requested-reviewers-from-a-pull-request
+   * Only the team's request goes; personal requests stay. Re-adding the team
+   * notifies every member again, so there is no undo.
+   */
+  async removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void> {
+    await this.http.requestOk('DELETE', `repos/${ref.repo}/pulls/${ref.number}/requested_reviewers`, {
+      body: { reviewers: [], team_reviewers: [teamSlug] },
+    });
+  }
+
+  /**
+   * https://docs.github.com/en/rest/activity/notifications#delete-a-thread-subscription
+   * 204. Mutes the thread until the viewer comments or is @mentioned; direct
+   * review requests still arrive.
+   */
+  async unsubscribeThread(threadId: string): Promise<void> {
+    await this.http.requestOk('DELETE', `notifications/threads/${encodeURIComponent(threadId)}/subscription`);
+  }
 }

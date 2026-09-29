@@ -26,6 +26,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     glanceState: 'ready',
     unseenLoudEvents: 0,
     done: false,
+    ownTeamRequests: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     whatsNew: null,

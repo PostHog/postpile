@@ -740,6 +740,14 @@ export class Engine implements EngineService {
     return result;
   }
 
+  async removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult> {
+    const result = await this.prActions.removeTeamRequest(prKey, team);
+    if (result.ok) {
+      this.telemetry.capture('team_request_removed', {});
+    }
+    return result;
+  }
+
   async markRead(tileId: string): Promise<ActionResult> {
     const result = await this.tiles.markRead(tileId);
     if (result.ok) {

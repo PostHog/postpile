@@ -98,8 +98,9 @@ export interface GitHubWritesChange {
  * the lock. `bring_back` is gone (GitHub has no mark-unread, so it only split
  * the state); old rows may still carry it.
  * `mark_all_read_before` is the inbox cleanup (PUT /notifications).
- * mark_done, subscribe and unsubscribe get added with their writer methods;
- * nothing sends them today.
+ * `remove_team_request` and `unsubscribe` are the detail pane's "Remove
+ * <team>" (2026-09-29). mark_done and subscribe get added with their writer
+ * methods; nothing sends them today.
  */
 export type LoggedAction =
   | 'mark_read'
@@ -107,13 +108,16 @@ export type LoggedAction =
   | 'undo_mark_read'
   | 'approve'
   | 'comment'
+  | 'remove_team_request'
+  | 'unsubscribe'
   | 'bring_back'
   | 'writes_on'
   | 'writes_off';
 
 /**
  * Who decided it.
- * - tile: the user in a tile or the detail pane
+ * - tile: the user in a tile (and, before 2026-09-29, the detail pane)
+ * - detail: the user in the detail pane (PR-scoped mark read, removing a team review request)
  * - debug: the user in the notifications debug view
  * - queue: the deferred mark-read queue, when a batch's undo window ran out
  * - quit: the queue flushed on quit
@@ -124,7 +128,7 @@ export type LoggedAction =
  * - quiet: PostPile itself, after a full sync: a thread the user had read
  *   turned unread only because of bots ("Handled quietly")
  */
-export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet';
+export type ActionOrigin = 'tile' | 'detail' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet';
 
 /**
  * What came of it.

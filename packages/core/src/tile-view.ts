@@ -7,7 +7,7 @@ import { isUnseenLoud } from './loudness.ts';
 import { prStatus, openThreadCount } from './pr-status.ts';
 import { prTier } from './pr-tier.ts';
 import { prPrimaryAction } from './primary-action.ts';
-import { isApprovedByViewer } from './review-request.ts';
+import { isApprovedByViewer, ownTeamRequests } from './review-request.ts';
 import { tilePeople } from './tile-people.ts';
 import { isTracked } from './provenance.ts';
 import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
@@ -72,6 +72,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
     done: isPrDone(pr, userState, viewer, events, notYours),
+    ownTeamRequests: viewer ? ownTeamRequests(pr, viewer) : [],
     turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours }) : NO_TURN,
     afterRead: prAfterMarkRead({ pr, events, userState, viewer, notYours, tracked: isTracked(member.provenance), readAt: input.now }),
     whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),

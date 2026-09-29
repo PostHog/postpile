@@ -160,6 +160,8 @@ export interface PrSummary {
    * are not (DESIGN.md "Actions act on what you look at").
    */
   done: boolean;
+  /** The viewer's teams with a pending review request here (`ownTeamRequests`), for "Remove <team>" in the detail pane. */
+  ownTeamRequests: string[];
   /** Whose move it is on this PR alone (`prWhoseTurn`), for the detail pane's buttons. */
   turn: WhoseTurn;
   /**

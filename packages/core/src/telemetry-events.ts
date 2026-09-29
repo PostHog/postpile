@@ -94,6 +94,8 @@ export const TELEMETRY_EVENTS = {
   snoozed: z.object({ duration_bucket: snoozeDurationBucket }).strict(),
   opened_on_github: NO_PROPS,
   ask_sent: NO_PROPS,
+  // "Remove <team>" in the detail pane: a team review request removed. No PR, no team slug.
+  team_request_removed: NO_PROPS,
   chat_message_sent: NO_PROPS,
   mac_ping_shown: z.object({ count }).strict(),
   mac_ping_clicked: NO_PROPS,

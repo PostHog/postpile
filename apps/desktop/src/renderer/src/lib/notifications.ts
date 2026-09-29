@@ -95,6 +95,7 @@ export function filterNotifications(rows: NotificationDebugRow[], filter: Notifi
 
 const WHO: Record<ActionOrigin, string> = {
   tile: 'you in a tile',
+  detail: 'you in the detail pane',
   debug: 'you in this view',
   queue: 'the deferred queue',
   quit: 'the queue on quit',
@@ -198,6 +199,10 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
       return writeText('approved', last);
     case 'comment':
       return writeText('commented', last);
+    case 'remove_team_request':
+      return writeText('team review request removed', last);
+    case 'unsubscribe':
+      return writeText('unsubscribed', last);
     case 'writes_on':
     case 'writes_off':
       return { text: last.action === 'writes_on' ? 'GitHub writes turned on' : 'GitHub writes turned off', tone: 'local' };
