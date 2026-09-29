@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
+import { FakeTelemetry } from '@postpile/engine/testing';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { appConfigFromEnv, pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
 import { OFF_POLL_STATUS } from '@postpile/core';
@@ -275,5 +276,74 @@ describe('server app', () => {
       headers: { [TOKEN_HEADER]: 'secret' },
     });
     expect(seen).toBe('pr:acme/app#1');
+  });
+});
+
+describe('POST /api/telemetry', () => {
+  const headers = { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' };
+
+  it('forwards an allow-listed event with valid props', async () => {
+    const telemetry = new FakeTelemetry();
+    const app = createApp(fakeEngine({}), 'secret', CONFIG, telemetry);
+    const res = await app.request('/api/telemetry', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'search_used', props: { query_length_bucket: 'short' } }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(telemetry.events).toEqual([{ event: 'search_used', props: { query_length_bucket: 'short' } }]);
+  });
+
+  it('refuses an event outside the renderer allow-list, even a real engine event', async () => {
+    const telemetry = new FakeTelemetry();
+    const app = createApp(fakeEngine({}), 'secret', CONFIG, telemetry);
+    const res = await app.request('/api/telemetry', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'sync_completed', props: {} }),
+    });
+    expect(res.status).toBe(400);
+    expect(telemetry.events).toEqual([]);
+  });
+
+  it('refuses an unknown event name', async () => {
+    const telemetry = new FakeTelemetry();
+    const app = createApp(fakeEngine({}), 'secret', CONFIG, telemetry);
+    const res = await app.request('/api/telemetry', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'made_up_event', props: {} }),
+    });
+    expect(res.status).toBe(400);
+    expect(telemetry.events).toEqual([]);
+  });
+
+  it('refuses props that do not match the event (extra or wrong-typed fields)', async () => {
+    const telemetry = new FakeTelemetry();
+    const app = createApp(fakeEngine({}), 'secret', CONFIG, telemetry);
+    const extra = await app.request('/api/telemetry', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'search_used', props: { query_length_bucket: 'short', repo: 'acme/app' } }),
+    });
+    expect(extra.status).toBe(400);
+    const wrongType = await app.request('/api/telemetry', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'search_used', props: { query_length_bucket: 'a whole title here' } }),
+    });
+    expect(wrongType.status).toBe(400);
+    expect(telemetry.events).toEqual([]);
+  });
+
+  it('requires the token like every other route', async () => {
+    const app = createApp(fakeEngine({}), 'secret', CONFIG);
+    const res = await app.request('/api/telemetry', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ event: 'search_used', props: { query_length_bucket: 'short' } }),
+    });
+    expect(res.status).toBe(401);
   });
 });

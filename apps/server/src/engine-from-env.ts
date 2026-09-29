@@ -1,10 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AppConfig } from '@postpile/core';
-import { createEngine, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
+import { createEngine, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind, type Telemetry } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
 
 export function isFake(): boolean {
   return process.env.POSTPILE_FAKE === '1';
+}
+
+/** Always run from source (tsx), never bundled, so reading this file at runtime is safe. */
+export function readOwnVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '../package.json'), 'utf8')) as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 export interface EngineFromEnvOptions {
@@ -18,6 +30,8 @@ export interface EngineFromEnvOptions {
    * creates its userData folder.
    */
   migrateLegacy?: boolean;
+  /** Reuse a Telemetry the caller already built (the desktop app's main process); defaults to building one from env. */
+  telemetry?: Telemetry;
 }
 
 /**
@@ -36,7 +50,12 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
     // A no-op once done, and in dev.
     migrateLegacyData();
   }
-  return createEngine({ lockKind: options.lockKind ?? 'server', withoutLock: options.withoutLock });
+  return createEngine({
+    lockKind: options.lockKind ?? 'server',
+    withoutLock: options.withoutLock,
+    appVersion: readOwnVersion(),
+    telemetry: options.telemetry,
+  });
 }
 
 /**
