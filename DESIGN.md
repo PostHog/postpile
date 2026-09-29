@@ -1843,7 +1843,9 @@ threads moved since their last fetch, newest first, at most 24 (two GraphQL
 batches; the rest wait for the next change or the full sync). Snapshots,
 events with rule loudness and the event log are written exactly as in the
 full sync (`GitHubSync.poll`), retired topics revive, and PRs new to the app
-get a topic (one `topic_assignment` call at most). Tiles are derived on read,
+get a topic (one `topic_assignment` call at most, asking only about the
+PRs that cycle fetched; the backlog without a topic stays with the full
+sync, and the poll never runs the retry batch). Tiles are derived on read,
 so they update by themselves; the renderer refetches when `changeCount` in
 `GET /api/live` moves. Dossiers, glances, sets, stack layers and the event
 second opinion stay with the full sync, which still finds the new events

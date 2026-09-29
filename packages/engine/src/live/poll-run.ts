@@ -1,4 +1,4 @@
-import { splitAgentOffErrors, type AgentCallStats, type Viewer } from '@postpile/core';
+import { splitAgentOffErrors, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { reviveRetiredTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';
@@ -30,7 +30,8 @@ export class PollRun {
     private readonly decider: PingDecider,
   ) {}
 
-  private async assignTopics(viewer: Viewer, stats: AgentCallStats, errors: string[]): Promise<void> {
+  /** Only the PRs this cycle fetched: the backlog without a topic is the full sync's job. */
+  private async assignTopics(fetchedPrKeys: PrKey[], viewer: Viewer, stats: AgentCallStats, errors: string[]): Promise<void> {
     const { store, agent, contexts, facts, now } = this.deps;
     const assigner = new TopicAssigner({
       store,
@@ -43,7 +44,7 @@ export class PollRun {
       tally: { dossiersUpdated: 0, facts: emptyFactCounts() },
       now,
     });
-    await assigner.run();
+    await assigner.run(fetchedPrKeys);
   }
 
   async run(focus: PollFocus = NO_FOCUS): Promise<PollCycle> {
@@ -63,7 +64,7 @@ export class PollRun {
       // Without the agent new PRs wait in Unsorted for a sync with it; the rules still ping.
       if (this.deps.agentOff() === null) {
         try {
-          await this.assignTopics(inbox.viewer, stats, errors);
+          await this.assignTopics(inbox.fetchedPrKeys, inbox.viewer, stats, errors);
         } catch (error) {
           errors.push(`topics: ${errorText(error)}`);
         }

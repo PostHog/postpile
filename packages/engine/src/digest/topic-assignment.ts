@@ -193,8 +193,15 @@ export class TopicAssigner {
     return missing;
   }
 
-  async run(): Promise<void> {
-    const split = this.splitByStack(this.unassignedKeys());
+  /**
+   * onlyKeys: ask only about these PRs (the live poll passes the PRs it just
+   * fetched, so its one call is spent on them; the backlog stays with full
+   * syncs). Null asks about every PR without a topic.
+   */
+  async run(onlyKeys: PrKey[] | null = null): Promise<void> {
+    const only = onlyKeys === null ? null : new Set(onlyKeys);
+    const keys = this.unassignedKeys().filter((key) => only === null || only.has(key));
+    const split = this.splitByStack(keys);
     this.joinStacks(split.join);
     this.followers = split.followers;
     const asked = [...this.deps.store.prs.getMany(split.ask).values()].sort(askOrder);
