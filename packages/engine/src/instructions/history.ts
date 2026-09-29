@@ -13,18 +13,27 @@ export interface CurrentInstructions {
  * truth and the user may edit it by hand at any time, so every read first
  * stores a text that differs from the newest version as "edited outside
  * the app". Nothing the user wrote is ever lost to a later save.
+ *
+ * Read-only (the MCP process, which opens the store without the lock) never
+ * stores anything: `current()` gives the file's text with the newest stored
+ * version, so a glance made with the older text reads as stale until the
+ * app records the edit.
  */
 export class InstructionsHistory {
   constructor(
     private readonly store: Store,
     readonly file: string,
     private readonly now: () => Date,
+    private readonly readOnly = false,
   ) {}
 
   current(): CurrentInstructions {
     const text = readInstructions(this.file);
     const latest = this.store.instructions.latest();
     if (latest !== null && latest.text === text) {
+      return { text, version: latest };
+    }
+    if (this.readOnly) {
       return { text, version: latest };
     }
     if (latest === null && text.trim() === '') {
