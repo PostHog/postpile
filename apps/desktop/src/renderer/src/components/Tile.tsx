@@ -18,7 +18,7 @@ import { TileMenu } from './TileMenu.tsx';
 import { TurnLine } from './TurnLine.tsx';
 import { UnreadStrip, UnseenMergeStrip } from './UnreadStrip.tsx';
 import { markReadNote } from '../lib/guard.ts';
-import { githubLink, markButtonLabel, tileFooterAction } from '../lib/mark-read.ts';
+import { filesTabUrl } from '../lib/key-files.ts';
 
 interface TileProps {
   view: TileView;
@@ -144,10 +144,10 @@ export function Tile(props: TileProps) {
   const menuPrKey = props.selected ? props.selectedPrKey : (lead?.key ?? null);
   const yourMove = view.turn.kind === 'you' && !done;
   const footer = yourMove ? 'border-t border-move-line bg-move' : `border-t ${done ? 'border-hairline-done' : 'border-hairline-soft'}`;
-  // Never "Mark done" where a mark-read leaves the tile your move; read and still your move, Snooze leads.
-  const footerAction = tileFooterAction(view);
-  const markLabel = markButtonLabel(view);
-  const github = footerAction === 'snooze' ? githubLink(view) : null;
+  // From core (`tileOffers`): never "Mark done" where a mark-read leaves the tile your move; read and still your move, Snooze leads.
+  const footerAction = view.offers.footer;
+  const markLabel = view.offers.markLabel;
+  const github = view.offers.github;
 
   function selectLead() {
     if (lead) {
@@ -240,7 +240,7 @@ export function Tile(props: TileProps) {
           )}
           {footerAction !== 'open' && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : 'secondary'} />}
           {github && (
-            <a href={github.href} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={buttonClasses('secondary', 'sm')}>
+            <a href={github.filesTab ? filesTabUrl(github.url) : github.url} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={buttonClasses('secondary', 'sm')}>
               {github.label}
             </a>
           )}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, PrTier, TileView, Topic, TopicListItem } from '@postpile/core';
-import { at } from '@postpile/core/fixtures';
+import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { holdPlace, placeIn } from './hold-place.ts';
 import {
   applyQueueFilter,
@@ -62,6 +62,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     ownTeamRequests: [],
     pendingWrite: null,
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     whatsNew: null,
     updatedAt: at(0),
@@ -72,7 +73,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
 }
 
 function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
-  return {
+  return withOffers({
     tile: { id, topicId: 't', kind: 'single', title: id, members: [], stacks: [] },
     state: { kind: 'open', unreadBecause: [] },
     prs,
@@ -85,7 +86,7 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
-  };
+  });
 }
 
 function withAddressed(entry: TopicListItem, changesAddressed: number): TopicListItem {

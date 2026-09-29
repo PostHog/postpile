@@ -29,6 +29,7 @@ export * from './read-plan.ts';
 export * from './pending-write.ts';
 export * from './glance-pings.ts';
 export * from './primary-action.ts';
+export * from './offers.ts';
 export * from './pr-tier.ts';
 export * from './topic-queues.ts';
 export * from './topic-urgency.ts';

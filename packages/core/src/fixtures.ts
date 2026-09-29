@@ -4,6 +4,8 @@
 import type { Timers } from './deferred-queue.ts';
 import { emptyDossier } from './dossier.ts';
 import { prKey } from './keys.ts';
+import { tileOffers } from './offers.ts';
+import type { PrFacts, TileView } from './views.ts';
 import type { DossierVersion, Fact, FactCandidate, FactRef } from './memory.ts';
 import type {
   Comment,
@@ -242,4 +244,12 @@ export class FakeTimers implements Timers {
       }
     }
   }
+}
+
+/** PR facts with nothing aimed at anyone, for hand-built `PrSummary` rows. */
+export const NO_PR_FACTS: PrFacts = { authorIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
+
+/** A hand-built tile view with the offers core would give it (`tileOffers`). */
+export function withOffers(view: Omit<TileView, 'offers'>): TileView {
+  return { ...view, offers: tileOffers(view) };
 }

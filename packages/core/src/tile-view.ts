@@ -2,21 +2,24 @@
 // engine and FakeEngine only collect the inputs (store or sample data); the
 // rules that turn them into a view live here, once.
 import { prAfterMarkRead, tileAfterMarkRead } from './after-read.ts';
+import { isBot } from './bots.ts';
 import { forWhom, tileForWhom } from './for-whom.ts';
+import { lastTouch } from './last-touch.ts';
 import { isUnseenLoud } from './loudness.ts';
+import { tileOffers } from './offers.ts';
 import { prStatus, openThreadCount } from './pr-status.ts';
 import { prTier } from './pr-tier.ts';
 import { prPrimaryAction } from './primary-action.ts';
-import { isApprovedByViewer, ownTeamRequests } from './review-request.ts';
+import { isApprovedByViewer, ownTeamRequests, reviewRequest } from './review-request.ts';
 import { tilePeople } from './tile-people.ts';
 import { isTracked } from './provenance.ts';
 import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
 import { memberTier, personRelation, tileTier } from './topic-queues.ts';
 import type { Glance, IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
 import type { GlanceState } from './glance-state.ts';
-import type { GlanceGap, PrSummary, TilePendingWrite, TileView } from './views.ts';
+import type { GlanceGap, PrFacts, PrSummary, TilePendingWrite, TileView } from './views.ts';
 import { whatsNew } from './whats-new.ts';
-import { NO_TURN, prWhoseTurn, whoseTurn } from './whose-turn.ts';
+import { NO_TURN, prWhoseTurn, unansweredAsk, whoseTurn } from './whose-turn.ts';
 import { tileWhy, whyHere } from './why-here.ts';
 
 export interface PrSummaryInput {
@@ -40,6 +43,17 @@ export interface PrSummaryInput {
   now: IsoTime;
   /** A mark-read of this PR waiting for the writes lock, or null. */
   pendingWrite: TilePendingWrite | null;
+}
+
+/** The PR facts every consumer reads (`PrFacts`); without a viewer nothing is aimed at anyone. */
+export function prFacts(pr: Pr, events: PrEvent[], viewer: Viewer | null): PrFacts {
+  const ask = viewer ? unansweredAsk(pr, events, viewer) : null;
+  return {
+    authorIsAutomation: isBot(pr.author),
+    reviewRequest: viewer ? reviewRequest(pr, viewer) : null,
+    lastTouch: viewer ? lastTouch(pr, events, viewer) : null,
+    openAsk: ask ? { id: ask.id, kind: ask.kind, actor: ask.actor, summary: ask.summary, at: ask.at } : null,
+  };
 }
 
 /** One PR row of a tile. */
@@ -77,6 +91,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     ownTeamRequests: viewer ? ownTeamRequests(pr, viewer) : [],
     pendingWrite: input.pendingWrite,
     turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours }) : NO_TURN,
+    facts: prFacts(pr, events, viewer),
     afterRead: prAfterMarkRead({ pr, events, userState, viewer, notYours, tracked: isTracked(member.provenance), readAt: input.now }),
     whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),
     updatedAt: pr.updatedAt,
@@ -108,6 +123,16 @@ export interface TileViewInput {
 export function buildTileView(input: TileViewInput): TileView {
   const { tile, prs, viewer } = input;
   const memberPrs = tile.members.flatMap((member) => input.prsByKey.get(member.prKey) ?? []);
+  const turn = whoseTurn({ tile, prs: input.prsByKey, events: input.events, userStates: input.userStates, viewer, notYours: input.notYours });
+  const afterRead = tileAfterMarkRead({
+    tile,
+    prs: input.prsByKey,
+    events: input.events,
+    userStates: input.userStates,
+    viewer,
+    notYours: input.notYours,
+    readAt: input.now,
+  });
   return {
     tile,
     state: input.state,
@@ -116,17 +141,10 @@ export function buildTileView(input: TileViewInput): TileView {
     forWhom: tileForWhom(prs.map((pr) => pr.forWhom)),
     tier: tileTier(prs.map((pr) => pr.tier)),
     people: tilePeople(memberPrs, viewer?.login ?? null),
-    turn: whoseTurn({ tile, prs: input.prsByKey, events: input.events, userStates: input.userStates, viewer, notYours: input.notYours }),
-    afterRead: tileAfterMarkRead({
-      tile,
-      prs: input.prsByKey,
-      events: input.events,
-      userStates: input.userStates,
-      viewer,
-      notYours: input.notYours,
-      readAt: input.now,
-    }),
+    turn,
+    afterRead,
     pendingWrite: input.pendingWrite,
+    offers: tileOffers({ tile, state: input.state, turn, afterRead, prs, pendingWrite: input.pendingWrite }),
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
   };

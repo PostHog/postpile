@@ -36,7 +36,6 @@ import {
   topicQueues,
   topicUrgency,
   viewerOrgs,
-  whoseTurn,
   type FactQuery,
   type FactView,
   type FinishedTopic,
@@ -280,7 +279,7 @@ export class ReadModels {
       const states = tiles.map((tile) => board.stateOf(tile).kind);
       const urgency = topicUrgency(
         tiles.map((tile, index) => {
-          const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer, notYours: board.notYours });
+          const turn = board.turnOf(tile);
           const loudMembers = tile.members.filter((member) => !isPrInQuietRepo(member.prKey, settings));
           return {
             state: states[index] ?? 'open',

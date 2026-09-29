@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileState, TileView, Topic, TopicListItem } from '@postpile/core';
-import { at } from '@postpile/core/fixtures';
+import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import type { NavEntry } from './history.ts';
 import { applyQueueFilter } from './queues.ts';
 import { visibleTopic } from './search.ts';
@@ -49,6 +49,7 @@ function pr(key: string): PrSummary {
     ownTeamRequests: [],
     pendingWrite: null,
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     whatsNew: null,
     updatedAt: at(0),
@@ -58,7 +59,7 @@ function pr(key: string): PrSummary {
 }
 
 function tile(id: string, prKeys: string[], state: TileState = { kind: 'open', unreadBecause: [] }): TileView {
-  return {
+  return withOffers({
     tile: { id, topicId: 't', kind: 'single', title: id, members: [], stacks: [] },
     state,
     prs: prKeys.map(pr),
@@ -71,7 +72,7 @@ function tile(id: string, prKeys: string[], state: TileState = { kind: 'open', u
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
-  };
+  });
 }
 
 function entry(topicId: string | null, tileId: string | null = null, prKey: string | null = null): NavEntry {
@@ -182,7 +183,7 @@ describe('grid helpers', () => {
 
 describe('autoTile and the auto selection', () => {
   const UNREAD: TileState = { kind: 'unread', unreadBecause: [] };
-  const SNOOZED = { kind: 'snoozed' } as unknown as TileState;
+  const SNOOZED = { kind: 'snoozed', unreadBecause: [] } as unknown as TileState;
 
   it('selects the first unread tile', () => {
     const tiles = [tile('open', ['o/r#1']), tile('unread', ['o/r#2'], UNREAD), tile('done', ['o/r#3'], DONE)];

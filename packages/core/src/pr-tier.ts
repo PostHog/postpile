@@ -23,10 +23,17 @@ import { unansweredAsk } from './whose-turn.ts';
 export type PrTier = 'needs_reply' | 'changes_requested' | 'mine' | 'team' | 'to_review' | 'team_mentioned' | 'rest';
 
 /**
+ * The one tier order, as a type: the renderer imports types only, so its
+ * copy of the order is typed `PrTierOrder` and fails to compile if it ever
+ * differs from this one.
+ */
+export type PrTierOrder = readonly ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
+
+/**
  * First match wins, in this order. The one tier order: the sidebar's queue
  * sections and a topic's priority follow it.
  */
-export const PR_TIER_ORDER: PrTier[] = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
+export const PR_TIER_ORDER: PrTierOrder = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
 
 export interface PrTierInput {
   pr: Pr;

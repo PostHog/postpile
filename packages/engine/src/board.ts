@@ -6,6 +6,7 @@ import {
   stackTopicId,
   deriveTileState,
   newTopic,
+  whoseTurn,
   prKey,
   type NotificationThread,
   type Pr,
@@ -21,6 +22,7 @@ import {
   type TopicMembership,
   type UserPrState,
   type Viewer,
+  type WhoseTurn,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { loadBaseline } from './baseline-meta.ts';
@@ -68,6 +70,9 @@ export class Board {
   readonly stackTopicIds: Map<string, string>;
   private readonly stackOf: Map<PrKey, Stack>;
   private readonly tileCache = new Map<string, Tile[]>();
+  /** Tile state and whose turn by tile id, worked out once per Board (one snapshot). */
+  private readonly stateCache = new Map<string, TileState>();
+  private readonly turnCache = new Map<string, WhoseTurn>();
 
   private constructor(
     private readonly store: Store,
@@ -221,7 +226,11 @@ export class Board {
   }
 
   stateOf(tile: Tile): TileState {
-    return deriveTileState({
+    const cached = this.stateCache.get(tile.id);
+    if (cached) {
+      return cached;
+    }
+    const state = deriveTileState({
       tile,
       prs: this.prs,
       events: this.events,
@@ -231,6 +240,18 @@ export class Board {
       viewer: this.viewer,
       notYours: this.notYours,
     });
+    this.stateCache.set(tile.id, state);
+    return state;
+  }
+
+  turnOf(tile: Tile): WhoseTurn {
+    const cached = this.turnCache.get(tile.id);
+    if (cached) {
+      return cached;
+    }
+    const turn = whoseTurn({ tile, prs: this.prs, events: this.events, userStates: this.userStates, viewer: this.viewer, notYours: this.notYours });
+    this.turnCache.set(tile.id, turn);
+    return turn;
   }
 
   /**
