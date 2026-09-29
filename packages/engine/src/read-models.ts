@@ -12,7 +12,7 @@ import {
   compareTopicUrgency,
   displayState,
   FINISHED_TOPICS_MS,
-  isMergeApprovedMove,
+  topicMove,
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
@@ -272,8 +272,7 @@ export class ReadModels {
           return {
             state: states[index] ?? 'open',
             prStates: loudMembers.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
-            yourMove: turn.kind === 'you',
-            mergeApproved: isMergeApprovedMove(turn),
+            move: topicMove(turn),
             quiet: isQuietTile(memberKeys(tile), settings),
           };
         }),
@@ -291,7 +290,7 @@ export class ReadModels {
         urgentUnreadTiles: urgency.urgentUnreadTiles,
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
-        yourMoveTiles: urgency.yourMoveTiles,
+        yourMoves: urgency.yourMoves,
         unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
         queues: topicQueues(
           prs.map((pr) => ({

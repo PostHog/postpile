@@ -3,7 +3,7 @@ import type { PrSummary, TileAfterRead, TileStateKind, TileView, WhoseTurn } fro
 import { githubLink, markButtonLabel, markReadNotice, moveWords, tileFooterAction } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
-const REREVIEW: WhoseTurn = { kind: 'you', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
+const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
 
 function view(kind: TileStateKind, turn: WhoseTurn, afterRead: TileAfterRead): Pick<TileView, 'state' | 'turn' | 'afterRead'> {
   return { state: { kind, unreadBecause: [] }, turn, afterRead };

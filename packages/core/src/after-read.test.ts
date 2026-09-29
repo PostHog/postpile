@@ -67,7 +67,7 @@ describe('tileAfterMarkRead', () => {
 });
 
 describe('tileListRank', () => {
-  const you = { kind: 'you' as const, who: null, what: 'Review', prKey: null };
+  const you = { kind: 'you' as const, move: 'review' as const, who: null, what: 'Review', prKey: null };
 
   it('keeps a read tile that is still your move with the unread ones', () => {
     const unread = tileListRank({ state: { kind: 'unread', unreadBecause: [] }, turn: you });

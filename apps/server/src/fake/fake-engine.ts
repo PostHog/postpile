@@ -105,7 +105,7 @@ import {
   emptyAgentCallStats,
   FINISHED_TOPICS_MS,
   fixedClaimNote,
-  isMergeApprovedMove,
+  topicMove,
   OFF_POLL_STATUS,
   systemTimers,
   personRelation,
@@ -639,8 +639,7 @@ export class FakeEngine implements EngineService {
         views.map((view) => ({
           state: view.state.kind,
           prStates: view.prs.filter((pr) => !pr.quietRepo).map((pr) => pr.state),
-          yourMove: view.turn.kind === 'you',
-          mergeApproved: isMergeApprovedMove(view.turn),
+          move: topicMove(view.turn),
           quiet: view.quietRepo,
         })),
       );
@@ -655,7 +654,7 @@ export class FakeEngine implements EngineService {
         urgentUnreadTiles: urgency.urgentUnreadTiles,
         openTiles: views.filter((view) => view.state.kind === 'open').length,
         totalTiles: views.length,
-        yourMoveTiles: urgency.yourMoveTiles,
+        yourMoves: urgency.yourMoves,
         unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
         queues: topicQueues(
           prs.map(({ pr, member }) => ({

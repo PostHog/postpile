@@ -67,7 +67,19 @@ describe('topic list queues', () => {
     const detail = await h.engine.getTopic('approved');
     expect(detail?.tiles[0]).toMatchObject({ state: { kind: 'open' }, turn: { kind: 'you', what: 'Merge, it is approved' } });
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'approved');
-    expect(item).toMatchObject({ group: 'quiet', yourMoveTiles: 1 });
+    expect(item).toMatchObject({ group: 'quiet', yourMoves: [{ move: 'merge', text: 'Merge, it is approved' }] });
+  });
+
+  it('lists your moves most urgent first, whatever the tile order', async () => {
+    const h = harnessWithTeam();
+    const approved = makePr({ number: 7, author: viewer.login, reviewDecision: 'APPROVED', reviews: [makeReview({ author: 'lyra' })] });
+    const review = reviewRequestedPr(8, { author: 'ada', reviewerUsers: [viewer.login] });
+    topicWithPrs(h, 'moves', [approved, review]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'moves');
+    expect(item?.yourMoves.map((entry) => entry.move)).toEqual(['review', 'merge']);
   });
 
   it('keeps pulled-in stack layers out of the queue counts and tiers', async () => {

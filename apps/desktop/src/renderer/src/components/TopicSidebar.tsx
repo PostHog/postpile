@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
+import type { PrTier, TopicListItem, TopicMove, TopicPerson, ViewerView } from '@postpile/core';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
@@ -8,6 +8,7 @@ import { type SearchFilter } from '../lib/search.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
+import { yourMoveChip } from '../lib/your-move.ts';
 import { Avatar } from './Avatar.tsx';
 import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
@@ -77,12 +78,19 @@ function FaceStack(props: { people: TopicPerson[]; active: boolean }) {
   );
 }
 
-/** "2 your move" in the warm-reach honey: live tiles where whose-turn says it's the user's move. */
-function YourMoveChip(props: { count: number }) {
-  const label = `${props.count} ${props.count === 1 ? 'tile waits' : 'tiles wait'} on you`;
+/**
+ * "Reply +2" in the warm-reach honey: the most urgent of the user's moves on
+ * live tiles, plus how many more; the tooltip lists them all. Each topic
+ * shows once, so the chip is where the row hints at what else is inside.
+ */
+function YourMoveChip(props: { moves: TopicMove[] }) {
+  const chip = yourMoveChip(props.moves);
+  if (chip === null) {
+    return null;
+  }
   return (
-    <span title={label} className="flex h-[15px] shrink-0 items-center gap-1 rounded bg-honey-soft px-1 text-[9.5px] font-semibold whitespace-nowrap text-honey-ink">
-      <span className="font-mono">{props.count}</span> your move
+    <span title={chip.title} className="flex h-[15px] shrink-0 items-center rounded bg-honey-soft px-1 text-[9.5px] font-semibold whitespace-nowrap text-honey-ink">
+      {chip.label}
     </span>
   );
 }
@@ -100,7 +108,7 @@ function UnseenMergeChip(props: { count: number }) {
   );
 }
 
-/** One topic: name, faces and the unread bubble, then a one-line summary with the "your move" and "merged without you" chips at its end. */
+/** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
 function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
   const { item } = props;
   // Unread rows: bold ink name, the bubble and a light warm row. Read rows: regular, muted, no bubble.
@@ -128,7 +136,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
         <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
           {topicSnippet(item)}
         </span>
-        {item.yourMoveTiles > 0 && <YourMoveChip count={item.yourMoveTiles} />}
+        <YourMoveChip moves={item.yourMoves} />
         {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
       </span>
     </button>

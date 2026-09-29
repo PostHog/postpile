@@ -157,7 +157,7 @@ describe('Engine.sync with the agent', () => {
     expect(item?.topic.userRole).toBe('reviewer');
     expect(item?.statusLine).toEqual({ status: 'active', note: '' });
     const tiles = (await h.engine.getTopic(item!.topic.id))?.tiles ?? [];
-    expect(item?.yourMoveTiles).toBe(tiles.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
+    expect(item?.yourMoves.length).toBe(tiles.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
     expect((await h.engine.getPr(pr.key))?.glance).toMatchObject({ verdict: 'LOOKS_SAFE', dossierVersion: 1 });
 
     h.reader.etag = 'etag-2';

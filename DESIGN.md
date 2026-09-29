@@ -1498,7 +1498,11 @@ other reviewers (submitted, then requested), four at most, bots only as
 authors.
 
 **Whose turn** (`whoseTurn` in `whose-turn.ts`): `{ kind: 'you' | 'them' |
-'none', who, what, prKey }`. Rules per pinged PR, first match wins:
+'none', who, what, prKey }`. A `you` turn also carries `move` (2026-09-29),
+the kind of move for the sidebar row's chip: `reply` (rule 2, drafts too),
+`re_review` (addressed your changes), `review` (review request, personal or
+team), `address_changes` (threads or a change request on your own PR or
+draft), `fix_ci`, `merge`. Rules per pinged PR, first match wins:
 
 1. merged or closed: none.
 2. you: a human mentioned you, your team, replied to you or asked you a
@@ -1876,10 +1880,19 @@ avatars and filters", QueuesB2).
   (`memberTier`) and filters never match them. They stay on their stack
   tile as context.
 - **Rows**: name, face stack, one count bubble, then a one-line summary
-  with a honey "N your move" chip at its end, right under the bubble
-  (`yourMoveTiles`: live tiles, not done and not snoozed, where whose-turn
-  says it's your move, merging your approved PR included). At 1100px row one has no room for the
-  chip, so the summary truncates first and the chip stays.
+  with the honey your-move chip at its end, right under the bubble
+  (`TopicListItem.yourMoves`: live tiles, not done and not snoozed, where
+  whose-turn says it's your move, merging your approved PR included). At
+  1100px row one has no room for the chip, so the summary truncates first
+  and the chip stays.
+- **Your move chip** (2026-09-29): names the most urgent move in words
+  ("Reply", "Re-review", "Review", "Address changes", "Fix CI", "Merge", in
+  that order of urgency, the order of the sections) plus how many more
+  ("Reply +2"); the tooltip lists every move's footer text joined by " · "
+  (`yourMoveChip` in `lib/your-move.ts`, from `WhoseTurn.move`). Was "N your
+  move". Because each topic now shows once, the chip is where the row hints
+  at what else is inside. The grey "merged without you" chip stays next to
+  it.
 - **No counts on section headers** (2026-09-28, later the same day):
   Julian read the PR counts on headers and rows as unread counts, and how
   many PRs a queue holds does not matter. Section and group headers show

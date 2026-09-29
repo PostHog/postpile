@@ -71,7 +71,7 @@ describe('addressed your changes: the #4521 timeline', () => {
 
   it('hands the move back to the viewer', () => {
     expect(changesAnswered(pr, viewer)).toEqual({ pushed: true, replied: true, since: changesRequested.submittedAt });
-    expect(turn(pr)).toEqual({ kind: 'you', who: null, what: 'bob addressed your changes: re-review', prKey: pr.key });
+    expect(turn(pr)).toEqual({ kind: 'you', move: 're_review', who: null, what: 'bob addressed your changes: re-review', prKey: pr.key });
   });
 
   it('files the PR under Changes you requested, even when the author is a teammate', () => {

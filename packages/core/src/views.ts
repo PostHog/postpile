@@ -30,6 +30,7 @@ import type { PrPrimaryAction } from './primary-action.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { ViewerApproval } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
+import type { TopicMove } from './topic-urgency.ts';
 import type { TilePerson } from './tile-people.ts';
 import type { WhoseTurn } from './whose-turn.ts';
 import type { WhatsNew } from './whats-new.ts';
@@ -83,8 +84,11 @@ export interface TopicListItem {
   urgentUnreadTiles: number;
   openTiles: number;
   totalTiles: number;
-  /** Live (not done) tiles where the turn is the user's ("Your move"). */
-  yourMoveTiles: number;
+  /**
+   * The user's move on each live (not done, not snoozed) tile, most urgent
+   * first (`topicUrgency`). The row's chip names the first and counts the rest.
+   */
+  yourMoves: TopicMove[];
   /** Tiles with a merge without the user's review they have not seen (`TileState.unseenMerges`): the grey "merged without you" count. */
   unseenMergeTiles: number;
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */

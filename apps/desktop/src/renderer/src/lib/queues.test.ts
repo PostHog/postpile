@@ -25,7 +25,7 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): Top
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,
-    yourMoveTiles: 0, unseenMergeTiles: 0,
+    yourMoves: [], unseenMergeTiles: 0,
     queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0, changesAddressed: 0 },
     people: [],
     ...extra,
@@ -166,7 +166,7 @@ describe('tilesInTierOrder', () => {
 
   it('puts your move before tiles waiting on the author inside Changes you requested', () => {
     const waiting = { ...tile('waiting', 'changes_requested'), turn: { kind: 'them' as const, who: 'ada', what: 'to address 1 thread', prKey: 'o/r#1' } };
-    const addressed = { ...tile('addressed', 'changes_requested'), turn: { kind: 'you' as const, who: null, what: 'ada addressed your changes: re-review', prKey: 'o/r#2' } };
+    const addressed = { ...tile('addressed', 'changes_requested'), turn: { kind: 'you' as const, move: 're_review' as const, who: null, what: 'ada addressed your changes: re-review', prKey: 'o/r#2' } };
     const views = [tile('mine', 'mine'), waiting, addressed];
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['addressed', 'waiting', 'mine']);
   });

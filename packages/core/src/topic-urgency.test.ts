@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { compareTopicUrgency, topicUrgency, type RankedTopic, type UrgencyTile } from './topic-urgency.ts';
+import { compareTopicUrgency, topicMove, topicUrgency, type RankedTopic, type TopicMove, type UrgencyTile } from './topic-urgency.ts';
 
 function tile(overrides: Partial<UrgencyTile>): UrgencyTile {
-  return { state: 'open', prStates: ['OPEN'], yourMove: false, mergeApproved: false, quiet: false, ...overrides };
+  return { state: 'open', prStates: ['OPEN'], move: null, quiet: false, ...overrides };
 }
+
+const review: TopicMove = { move: 'review', text: 'Review, rowan asked' };
+const merge: TopicMove = { move: 'merge', text: 'Merge, it is approved' };
 
 describe('topicUrgency', () => {
   it('needs you while an unread tile is still open', () => {
     const urgency = topicUrgency([tile({ state: 'unread' }), tile({ state: 'unread', prStates: ['MERGED'] })]);
-    expect(urgency).toEqual({ unreadTiles: 2, urgentUnreadTiles: 1, yourMoveTiles: 0, needsYou: true });
+    expect(urgency).toEqual({ unreadTiles: 2, urgentUnreadTiles: 1, yourMoves: [], needsYou: true });
   });
 
   it('stays calm when every unread tile is merged or closed', () => {
@@ -23,24 +26,42 @@ describe('topicUrgency', () => {
   });
 
   it('needs you when it is your move, even with nothing unread', () => {
-    expect(topicUrgency([tile({ yourMove: true })]).needsYou).toBe(true);
-    expect(topicUrgency([tile({ state: 'unread', prStates: ['MERGED'] }), tile({ yourMove: true })]).needsYou).toBe(true);
+    expect(topicUrgency([tile({ move: review })]).needsYou).toBe(true);
+    expect(topicUrgency([tile({ state: 'unread', prStates: ['MERGED'] }), tile({ move: review })]).needsYou).toBe(true);
   });
 
   it('does not lift a topic for merging your own approved PR, but still counts the move', () => {
-    expect(topicUrgency([tile({ yourMove: true, mergeApproved: true })])).toEqual({
+    expect(topicUrgency([tile({ move: merge })])).toEqual({
       unreadTiles: 0,
       urgentUnreadTiles: 0,
-      yourMoveTiles: 1,
+      yourMoves: [merge],
       needsYou: false,
     });
-    expect(topicUrgency([tile({ yourMove: true, mergeApproved: true }), tile({ yourMove: true })]).needsYou).toBe(true);
-    expect(topicUrgency([tile({ state: 'unread', yourMove: true, mergeApproved: true })]).needsYou).toBe(true);
+    expect(topicUrgency([tile({ move: merge }), tile({ move: review })]).needsYou).toBe(true);
+    expect(topicUrgency([tile({ state: 'unread', move: merge })]).needsYou).toBe(true);
   });
 
   it('ignores your move on done and snoozed tiles', () => {
-    expect(topicUrgency([tile({ state: 'done', yourMove: true })])).toMatchObject({ yourMoveTiles: 0, needsYou: false });
-    expect(topicUrgency([tile({ state: 'snoozed', yourMove: true })])).toMatchObject({ yourMoveTiles: 0, needsYou: false });
+    expect(topicUrgency([tile({ state: 'done', move: review })])).toMatchObject({ yourMoves: [], needsYou: false });
+    expect(topicUrgency([tile({ state: 'snoozed', move: review })])).toMatchObject({ yourMoves: [], needsYou: false });
+  });
+});
+
+describe('topicUrgency: your moves', () => {
+  it('lists the moves on live tiles, most urgent first, tile order on a tie', () => {
+    const reply: TopicMove = { move: 'reply', text: "Answer lyra's question" };
+    const fix: TopicMove = { move: 'fix_ci', text: 'Fix failing CI' };
+    const other: TopicMove = { move: 'review', text: 'Review for team-platform' };
+    const tiles = [tile({ move: merge }), tile({ move: review }), tile({ move: fix }), tile({ move: reply }), tile({ move: other }), tile({ state: 'snoozed', move: reply })];
+    expect(topicUrgency(tiles).yourMoves).toEqual([reply, review, other, fix, merge]);
+  });
+
+  it('takes the move from a turn that is yours only', () => {
+    expect(topicMove({ kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1' })).toEqual({
+      move: 're_review',
+      text: 'pim addressed your changes: re-review',
+    });
+    expect(topicMove({ kind: 'them', who: 'pim', what: 'to merge', prKey: 'acme/app#1' })).toBeNull();
   });
 });
 
@@ -62,8 +83,8 @@ describe('compareTopicUrgency', () => {
 
 describe('quiet repos', () => {
   it('never makes a topic urgent from a quiet tile', () => {
-    const urgency = topicUrgency([tile({ state: 'unread', quiet: true }), tile({ yourMove: true, quiet: true })]);
-    expect(urgency).toEqual({ unreadTiles: 1, urgentUnreadTiles: 0, yourMoveTiles: 1, needsYou: false });
+    const urgency = topicUrgency([tile({ state: 'unread', quiet: true }), tile({ move: review, quiet: true })]);
+    expect(urgency).toEqual({ unreadTiles: 1, urgentUnreadTiles: 0, yourMoves: [review], needsYou: false });
   });
 
   it('lets a mixed tile count only its PRs outside quiet repos', () => {

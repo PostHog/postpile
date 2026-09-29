@@ -90,13 +90,22 @@ describe('FakeEngine', () => {
 });
 
 describe('FakeEngine tile faces', () => {
-  it('counts live "your move" tiles per topic in the topic list', async () => {
+  it('lists the moves of live "your move" tiles per topic in the topic list', async () => {
     const engine = new FakeEngine();
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
-    const expected = depot.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length;
+    const expected = depot.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').map((view) => view.turn.what);
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-depot');
-    expect(expected).toBeGreaterThan(0);
-    expect(item?.yourMoveTiles).toBe(expected);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(item?.yourMoves.map((move) => move.text).toSorted()).toEqual(expected.toSorted());
+  });
+
+  it('names the most urgent move first', async () => {
+    const topics = await new FakeEngine().listTopics();
+    const devEnv = topics.find((entry) => entry.topic.id === 'topic-dev-env');
+    expect(devEnv?.yourMoves).toEqual([
+      { move: 're_review', text: 'pim addressed your changes: re-review' },
+      { move: 'review', text: "Review for team-platform: sol's PR" },
+    ]);
   });
 
   it('shows all three turn kinds with the core rules', async () => {
@@ -301,7 +310,7 @@ describe('FakeEngine queues', () => {
     // An agent's approval counts like any other; the pill only names who gave it.
     expect(approved?.prs[0]?.status).toMatchObject({ review: 'approved', agentApprovers: ['reviewbot'] });
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-migrations');
-    expect(item?.yourMoveTiles).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
+    expect(item?.yourMoves.length).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
   });
 
   it('keeps pulled-in stack layers out of the queues', async () => {
