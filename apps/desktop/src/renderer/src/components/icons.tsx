@@ -315,3 +315,14 @@ export function DashIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** A file, for the "Look at first" list. */
+export function FileIcon(props: IconProps) {
+  const size = props.size ?? 13;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" className={props.className} aria-hidden="true">
+      <path d="M4 1.8h5.2L12.5 5v9.2H4z" />
+      <path d="M9 1.8V5h3.5" />
+    </svg>
+  );
+}

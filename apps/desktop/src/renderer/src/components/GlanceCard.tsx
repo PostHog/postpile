@@ -3,6 +3,7 @@ import { useActions } from '../api/actions.tsx';
 import { assessment, type AssessmentLine, type AssessmentMark } from '../lib/assessment.ts';
 import { glanceGapText } from '../lib/glance.ts';
 import { Button } from './Button.tsx';
+import { KeyFiles } from './KeyFiles.tsx';
 
 interface GlanceCardProps {
   detail: PrDetail;
@@ -87,6 +88,7 @@ export function GlanceCard(props: GlanceCardProps) {
           <PlainLine mark="“" label="Others:" text={view.others} />
         </div>
       )}
+      {glance && <KeyFiles keyFiles={glance.keyFiles} pr={props.detail.pr} />}
       {!glance && !stackLayer && <p className="text-xs text-muted">{glanceGapText(glanceGap).card}</p>}
       {stackLayer && (
         <p className="text-xs text-muted">Pulled in to complete the stack. Stack layers get no glance until GitHub pings you about them.</p>
