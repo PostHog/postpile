@@ -64,10 +64,10 @@ const quotaLevel = z.enum(['low', 'critical']);
 const percent = z.number().int().min(0).max(100);
 
 // -----------------------------------------------------------------------
-// 6. MCP server (postpile-mcp, a separate read-only process)
+// 6. MCP server (postpile-mcp, a separate process that reads the database and asks the app for the rest)
 // -----------------------------------------------------------------------
 
-const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me']);
+const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me', 'refresh_from_github', 'propose_topic_change']);
 const mcpConnectFrom = z.enum(['footer', 'setup']);
 
 /** No props: an empty object, so every event has a stable shape to validate against. */

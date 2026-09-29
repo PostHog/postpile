@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { FakeEngine } from '@postpile/server';
 import { describe, expect, it } from 'vitest';
+import { InMemoryAgentRequests } from './agent-requests.ts';
 import type { PostPileReader } from './reads.ts';
 import { createMcpServer, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
 
@@ -9,7 +10,7 @@ import { createMcpServer, type McpServerOptions, type McpToolName, type ToolCall
 const CLAUDE_CODE_CUT = 2048;
 
 async function connected(reader: PostPileReader = new FakeEngine(), options: Partial<McpServerOptions> = {}): Promise<Client> {
-  const server = createMcpServer(reader, { version: 'test', appRunning: () => true, ...options });
+  const server = createMcpServer(reader, { version: 'test', appRunning: () => true, requests: new InMemoryAgentRequests(new FakeEngine()), ...options });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await server.connect(serverSide);
   const client = new Client({ name: 'test', version: 'test' });
@@ -42,12 +43,17 @@ function fencedPart(text: string): string {
 }
 
 describe('PostPile MCP server', () => {
-  it('lists four read-only tools with short descriptions that say when to use them', async () => {
+  it('lists six tools with short descriptions that say when to use them', async () => {
     const client = await connected();
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['pr_context', 'search_prs', 'topic', 'whats_on_me']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['pr_context', 'propose_topic_change', 'refresh_from_github', 'search_prs', 'topic', 'whats_on_me']);
+    const annotations = Object.fromEntries(tools.map((tool) => [tool.name, tool.annotations]));
+    for (const read of ['pr_context', 'topic', 'search_prs', 'whats_on_me']) {
+      expect(annotations[read]).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    }
+    expect(annotations.refresh_from_github).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+    expect(annotations.propose_topic_change).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     for (const tool of tools) {
-      expect(tool.annotations?.readOnlyHint).toBe(true);
       expect(tool.description?.length ?? 0).toBeLessThan(CLAUDE_CODE_CUT);
       expect(tool.description).toContain('Use when:');
       expect(tool.description).toContain('Not for:');

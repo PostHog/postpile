@@ -1,6 +1,20 @@
 // The four read tools, as plain functions over the engine's read methods.
 // Nothing here writes, syncs or calls an agent.
-import { formatDossier, formatFacts, parsePrKey, type PrDetail, type PrKey, type PrSummary, type TileView, type TopicDetail, type TopicListItem } from '@postpile/core';
+import {
+  formatDossier,
+  formatFacts,
+  OUTSIDE_PROPOSAL_DAYS,
+  parsePrKey,
+  proposalOutcome,
+  proposalOutcomeAt,
+  type PrDetail,
+  type PrKey,
+  type PrSummary,
+  type TileView,
+  type TopicDetail,
+  type TopicListItem,
+  type TopicProposal,
+} from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
 import { parsePrInput } from './pr-input.ts';
 import { ago, answer, briefGlanceLines, day, echo, fenced, freshness, glanceLines, prSummaryLine, stateWord, tileLine, turnText, whatsNewText, withActor } from './text.ts';
@@ -344,6 +358,44 @@ export async function prContext(ctx: ReadContext, input: string, detail: Detail)
   return { text: answer(await header(reader), data, [prFreshnessLine(pr, ctx), next]), found: true };
 }
 
+/** What the proposal would change, in a few words. */
+function proposalWords(proposal: TopicProposal): string {
+  if (proposal.kind === 'rename') {
+    return `rename to "${proposal.name ?? ''}"`;
+  }
+  if (proposal.kind === 'merge') {
+    return `merge into ${proposal.intoTopicId ?? 'another topic'}`;
+  }
+  if (proposal.kind === 'split') {
+    return `split "${proposal.name ?? ''}" out (${proposal.prKeys.join(', ')})`;
+  }
+  if (proposal.kind === 'area_merge') {
+    return `fold area "${proposal.fromArea ?? ''}" into "${proposal.name ?? ''}"`;
+  }
+  return `new topic "${proposal.name ?? ''}"`;
+}
+
+function proposalLine(proposal: TopicProposal, now: string): string {
+  const outcome = proposalOutcome(proposal, now);
+  const when = outcome === 'pending' ? `pending since ${day(proposal.createdAt)}` : `${outcome} on ${day(proposalOutcomeAt(proposal, now) ?? proposal.createdAt)}`;
+  const who = proposal.source === 'agent' ? `suggested by ${proposal.client ?? 'an outside agent'}` : "from PostPile's consolidation";
+  return `  ${when}: ${proposalWords(proposal)}, ${who}. Reason: ${proposal.reason}`;
+}
+
+/**
+ * Pending topic suggestions and the ones decided in the last 14 days, so an
+ * outside agent sees what became of its suggestions and does not repeat
+ * itself. Empty when there are none.
+ */
+function suggestionLines(detail: TopicDetail, now: Date): string[] {
+  const iso = now.toISOString();
+  const proposals = [...detail.pendingProposals, ...detail.decidedProposals];
+  if (proposals.length === 0) {
+    return [];
+  }
+  return ['', `Topic suggestions (pending, and decided in the last ${OUTSIDE_PROPOSAL_DAYS} days):`, ...proposals.map((proposal) => proposalLine(proposal, iso))];
+}
+
 export async function topicOverview(ctx: ReadContext, input: string, detail: Detail): Promise<ToolAnswer> {
   const { reader } = ctx;
   const match = await resolveTopic(reader, input);
@@ -354,7 +406,7 @@ export async function topicOverview(ctx: ReadContext, input: string, detail: Det
   if (!topic) {
     return toolError([`Topic ${match.item.topic.id} is gone. Look it up again with whats_on_me or search_prs.`]);
   }
-  const data = detail === 'full' ? fullTopicLines(topic, null) : briefTopicLines(topic);
+  const data = [...(detail === 'full' ? fullTopicLines(topic, null) : briefTopicLines(topic)), ...suggestionLines(topic, ctx.now())];
   const footer = detail === 'brief' ? ['Next: detail: "full" adds people, timeline, recent changes and every PR; pr_context for one PR.'] : [];
   return { text: answer(await header(reader), data, footer), found: true };
 }
