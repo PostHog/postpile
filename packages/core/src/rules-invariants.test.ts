@@ -108,10 +108,11 @@ describe('a done tile or done PR offers only Open', () => {
     expect(paneOf(view, handledPr.key)).toMatchObject({ lead: 'mark_read', markLabel: 'Mark read', approve: false, ask: false, removeTeams: [] });
   });
 
-  it('on a snoozed tile whose PR is done: Open, and Snooze to take the snooze back', () => {
+  it('on a snoozed tile whose PR is done: footer and pane lead with Open, and Snooze takes the snooze back', () => {
     const snooze: Snooze = { prKey: handledPr.key, condition: { kind: 'until_time', until: at(500) }, since: at(55) };
     const view = tileView({ prs: [handledPr], userStates: [handled], snoozes: [snooze] });
     expect(view.state.kind).toBe('snoozed');
+    expect(view.offers).toMatchObject({ footer: 'open', markLabel: null, snooze: true });
     expect(paneOf(view, handledPr.key)).toMatchObject({ ...ONLY_OPEN, snooze: true });
   });
 });

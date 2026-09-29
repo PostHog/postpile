@@ -13,6 +13,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - A finished topic's retired time no longer moves when the topic is renamed.
 - A mention the agent turns quiet no longer brings back a finished topic when the full sync is first to see it.
 - A done PR in the detail pane offers only Open on GitHub, like a done tile, also on a snoozed tile. A handled PR by someone else with nothing asked still led with Approve.
+- A snoozed tile whose PRs are all done shows Open in its footer, like the detail pane, instead of "Mark done". Snooze stays to take the snooze back.
 - "Ask <author>" is hidden for every automation account PostPile knows, not only `[bot]` logins.
 - MCP `pr_context` and `search_prs` name the move of the PR itself, not of its tile, so they match the detail pane on stacks and sets.
 - The MCP server says so, and asks for a reconnect, when the app was updated while it kept running.

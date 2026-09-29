@@ -63,7 +63,15 @@ describe('tile footer', () => {
 
   it('opens a done tile and offers nothing else', () => {
     expect(tileFooterAction(view('done', NONE, doneAfter))).toBe('open');
-    expect(tileOffers(view('done', NONE, { done: false, turn: NONE })).markLabel).toBeNull();
+    expect(tileOffers(view('done', NONE, { done: false, turn: NONE }))).toMatchObject({ markLabel: null, snooze: false });
+  });
+
+  // Bug fixed 2026-09-29: the footer still said "Mark done" where the pane led with Open.
+  it('opens a snoozed tile whose tracked PRs are all done, keeping Snooze to take it back', () => {
+    const offers = tileOffers(view('snoozed', NONE, doneAfter, [row(1, { done: true }), row(2, { provenance: pulled })]));
+    expect(offers).toMatchObject({ footer: 'open', markLabel: null, snooze: true, github: null });
+    const news = tileOffers(view('snoozed', NONE, doneAfter, [row(1, { done: true, unseenLoudEvents: 1 })]));
+    expect(news).toMatchObject({ footer: 'mark_done', snooze: true });
   });
 });
 

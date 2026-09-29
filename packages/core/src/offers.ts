@@ -3,13 +3,16 @@
 // depend on more than a PR's facts: PR or whole tile, snooze, pending writes,
 // the PR's primary action. Worked out here once, shipped as
 // `TileView.offers`; the renderer only displays them.
+import { isTracked } from './provenance.ts';
 import type { PrKey, TileState } from './types.ts';
 import type { PrSummary, TilePendingWrite, TileView } from './views.ts';
 
 /**
  * The tile footer's main action:
  * - open: the tile is done, the button opens it. Nothing else is offered
- *   on a done tile: no mark button, no Snooze.
+ *   on a done tile: no mark button, no Snooze. Also on a snoozed tile whose
+ *   tracked PRs are all done with their news seen, like its detail pane;
+ *   Snooze stays there so the snooze can be taken back.
  * - mark_read: "Mark read". The tile is unread, or a mark-read leaves something asked.
  * - mark_done: "Mark done". The tile is read and a mark-read makes it done.
  * - snooze: the tile is read and still your move. Marking read changes
@@ -78,6 +81,8 @@ export interface TileOffers {
   footer: TileFooterAction;
   /** The footer's mark button label; null when it shows none (done, or read and still your move). */
   markLabel: MarkLabel | null;
+  /** Show the footer's Snooze menu: on every tile that is not done, also a snoozed one that leads with Open. */
+  snooze: boolean;
   /** Next to Snooze when the footer leads with it; null otherwise. */
   github: GitHubLinkOffer | null;
   /** The detail pane's buttons, by PR key. */
@@ -106,8 +111,18 @@ export type OfferPr = Pick<
   | 'facts'
 >;
 
-export function tileFooterAction(view: Pick<TileView, 'state' | 'turn' | 'afterRead'>): TileFooterAction {
+/** Every tracked PR of the tile is done and its news seen: nothing is left to mark. */
+function everyTrackedPrDoneAndSeen(view: Pick<TileView, 'prs'>): boolean {
+  const tracked = view.prs.filter((pr) => isTracked(pr.provenance));
+  return tracked.length > 0 && tracked.every((pr) => pr.done && pr.unseenLoudEvents === 0);
+}
+
+export function tileFooterAction(view: Pick<TileView, 'state' | 'turn' | 'afterRead' | 'prs'>): TileFooterAction {
   if (view.state.kind === 'done') {
+    return 'open';
+  }
+  // A snoozed tile with nothing left to mark leads with Open, like its pane (2026-09-29).
+  if (view.state.kind === 'snoozed' && everyTrackedPrDoneAndSeen(view)) {
     return 'open';
   }
   if (view.state.kind === 'unread') {
@@ -232,6 +247,7 @@ export function tileOffers(view: OfferView): TileOffers {
     leadPrKey: lead,
     footer,
     markLabel: markLabelOf(footer),
+    snooze: view.state.kind !== 'done',
     github: footer === 'snooze' ? githubLink(view, lead) : null,
     pane,
   };

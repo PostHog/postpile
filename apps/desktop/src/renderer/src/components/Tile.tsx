@@ -238,7 +238,7 @@ export function Tile(props: TileProps) {
               {markLabel}
             </Button>
           )}
-          {footerAction !== 'open' && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : 'secondary'} />}
+          {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : 'secondary'} />}
           {github && (
             <a href={github.filesTab ? filesTabUrl(github.url) : github.url} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={buttonClasses('secondary', 'sm')}>
               {github.label}

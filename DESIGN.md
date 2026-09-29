@@ -1965,7 +1965,9 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   footer and in the detail pane (2026-09-29: a done tile still offered
   "Mark read" in the pane and Snooze in the footer, both leftovers that did
   nothing visible; a user debugging a finished topic read them as "something
-  is still open here").
+  is still open here"). A snoozed tile whose tracked PRs are all done, their
+  news seen, leads with "Open" too, like its pane, and keeps Snooze so the
+  snooze can be taken back (2026-09-29: the footer said "Mark done" there).
 - Detail pane action bar (changed 2026-09-29, "Actions act on what you
   look at"): on a single-PR tile, same label rule as the footer; the mark
   button is left out while the tile is read and still your move (Snooze
