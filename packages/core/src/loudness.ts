@@ -33,10 +33,6 @@ const machineKinds: EventKind[] = ['ci', 'deploy', 'merge_queue', 'bot_comment']
 
 const reviewKinds: EventKind[] = ['review_approved', 'review_changes_requested', 'review_commented'];
 
-function decide(loudness: Loudness, reason: string): LoudnessDecision {
-  return { loudness, reason };
-}
-
 function isViewersPr(input: LoudnessInput): boolean {
   return sameLogin(input.pr.author, input.viewer.login);
 }
@@ -45,92 +41,184 @@ function isOpenDraft(input: LoudnessInput): boolean {
   return input.pr.isDraft && input.pr.state === 'OPEN';
 }
 
-function machineLoudness(input: LoudnessInput): LoudnessDecision {
-  // A bot rebasing or updating a draft is pure churn; nobody reviews drafts.
-  if (input.isBot && PUSH_KINDS.includes(input.kind) && input.pr.isDraft) {
-    return decide('muted', 'bot pushed to a draft');
-  }
-  return decide('quiet', 'bot activity');
+function isMachineActivity(input: LoudnessInput): boolean {
+  return isAutomation(input, input.subject ?? null, input.viewer) || machineKinds.includes(input.kind);
 }
 
-function addressedLoudness(input: LoudnessInput): LoudnessDecision {
-  if (input.userRepliedAfter) {
-    return decide('quiet', 'you already replied');
-  }
-  switch (input.kind) {
-    case 'mention':
-      return decide('loud', 'mentions you');
-    case 'team_mention':
-      return decide('loud', 'mentions your team');
-    case 'reply_to_user':
-      return decide('loud', 'replies to you');
-    default:
-      return decide('loud', 'asks you a question');
-  }
+function isRequestForViewer(input: LoudnessInput): boolean {
+  return input.kind === 'review_requested' && isViewerSubject(input.subject, input.viewer);
 }
 
-function reviewLoudness(input: LoudnessInput): LoudnessDecision {
-  if (isViewersPr(input)) {
-    return decide('loud', 'review on your PR');
-  }
-  return decide('quiet', 'review by someone else');
+/** One row of the loudness table: a named condition, what it decides, and why. */
+export interface LoudnessRow {
+  name: string;
+  when: (input: LoudnessInput) => boolean;
+  loudness: Loudness;
+  reason: string | ((input: LoudnessInput) => string);
 }
 
 /**
- * Rule-based classification, relative to the viewer. The agent may override
- * later, with a reason. Order matters: who did it first, then what happened.
- * The bot shortcut is `isAutomation`: it skips review requests aimed at the
+ * The loudness decision as a table. Read top to bottom, first match wins, so
+ * the order is the precedence: who did it first, then what happened. The last
+ * row matches everything, so there is always an answer.
+ * The machine rows use `isAutomation`: it skips review requests aimed at the
  * viewer or their team, whoever clicked them.
  */
+export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
+  {
+    name: 'own activity',
+    when: (input) => input.actor !== '' && sameLogin(input.actor, input.viewer.login),
+    loudness: 'quiet',
+    reason: 'your own activity',
+  },
+  {
+    // A bot rebasing or updating a draft is pure churn; nobody reviews drafts.
+    name: 'bot push to a draft',
+    when: (input) => isMachineActivity(input) && input.isBot && PUSH_KINDS.includes(input.kind) && input.pr.isDraft,
+    loudness: 'muted',
+    reason: 'bot pushed to a draft',
+  },
+  {
+    name: 'machine activity',
+    when: isMachineActivity,
+    loudness: 'quiet',
+    reason: 'bot activity',
+  },
+  {
+    name: 'addressed, already replied',
+    when: (input) => ADDRESSED_KINDS.includes(input.kind) && input.userRepliedAfter === true,
+    loudness: 'quiet',
+    reason: 'you already replied',
+  },
+  {
+    name: 'mention',
+    when: (input) => input.kind === 'mention',
+    loudness: 'loud',
+    reason: 'mentions you',
+  },
+  {
+    name: 'team mention',
+    when: (input) => input.kind === 'team_mention',
+    loudness: 'loud',
+    reason: 'mentions your team',
+  },
+  {
+    name: 'reply to you',
+    when: (input) => input.kind === 'reply_to_user',
+    loudness: 'loud',
+    reason: 'replies to you',
+  },
+  {
+    name: 'question to you',
+    when: (input) => ADDRESSED_KINDS.includes(input.kind),
+    loudness: 'loud',
+    reason: 'asks you a question',
+  },
+  {
+    // The author pushed or replied after the viewer asked for changes: that is aimed at the viewer.
+    name: 'author answered your changes request',
+    when: (input) =>
+      input.at !== undefined &&
+      isChangesAnswerEvent({ kind: input.kind, actor: input.actor, at: input.at }, input.pr, input.viewer),
+    loudness: 'loud',
+    reason: CHANGES_ANSWERED_REASON,
+  },
+  {
+    name: 'review on your PR',
+    when: (input) => reviewKinds.includes(input.kind) && isViewersPr(input),
+    loudness: 'loud',
+    reason: 'review on your PR',
+  },
+  {
+    name: 'review on someone else\'s PR',
+    when: (input) => reviewKinds.includes(input.kind),
+    loudness: 'quiet',
+    reason: 'review by someone else',
+  },
+  {
+    // A draft is not up for review yet; marking it ready is what calls for a look.
+    name: 'review requested from you on a draft',
+    when: (input) => isRequestForViewer(input) && isOpenDraft(input),
+    loudness: 'quiet',
+    reason: 'review requested on a draft',
+  },
+  {
+    name: 'review request already answered',
+    when: (input) => isRequestForViewer(input) && input.requestAnswered === true,
+    loudness: 'quiet',
+    reason: 'review request already answered or removed',
+  },
+  {
+    name: 'review requested from you',
+    when: isRequestForViewer,
+    loudness: 'loud',
+    reason: 'review requested from you',
+  },
+  {
+    name: 'review requested from someone else',
+    when: (input) => input.kind === 'review_requested',
+    loudness: 'quiet',
+    reason: 'review requested from someone else',
+  },
+  {
+    // An approval stands on any commit; the agent may raise a push that changes what was approved.
+    name: 'commits after your approval',
+    when: (input) => input.kind === 'commits_after_approval',
+    loudness: 'quiet',
+    reason: 'new commits after you approved',
+  },
+  {
+    name: 'ready for review, you were asked',
+    when: (input) => input.kind === 'ready_for_review' && !isViewersPr(input) && viewerAskedToReview(input.pr, input.viewer),
+    loudness: 'loud',
+    reason: 'ready for your review',
+  },
+  {
+    name: 'ready for review',
+    when: (input) => input.kind === 'ready_for_review',
+    loudness: 'quiet',
+    reason: 'ready for review',
+  },
+  {
+    // Never loud: the done rule keeps the tile open until the user saw it (DESIGN "Merged without your review").
+    name: 'merged without your review',
+    when: (input) => input.kind === 'merged_without_review',
+    loudness: 'quiet',
+    reason: 'merged without your review',
+  },
+  {
+    name: 'comment on your PR',
+    when: (input) => input.kind === 'comment' && isViewersPr(input),
+    loudness: 'loud',
+    reason: 'comment on your PR',
+  },
+  {
+    name: 'other comment',
+    when: (input) => input.kind === 'comment',
+    loudness: 'quiet',
+    reason: 'comment',
+  },
+  {
+    name: 'anything else',
+    when: () => true,
+    loudness: 'quiet',
+    reason: (input) => input.kind.replaceAll('_', ' '),
+  },
+];
+
+/** The first row that matches, or undefined when the table has a gap. */
+export function findLoudnessRow(input: LoudnessInput): LoudnessRow | undefined {
+  return LOUDNESS_TABLE.find((row) => row.when(input));
+}
+
+/** Rule-based classification, relative to the viewer. The agent may override later, with a reason. */
 export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
-  if (input.actor !== '' && sameLogin(input.actor, input.viewer.login)) {
-    return decide('quiet', 'your own activity');
+  const row = findLoudnessRow(input);
+  if (!row) {
+    throw new Error(`loudness table has no row for ${input.kind}`);
   }
-  if (isAutomation(input, input.subject ?? null, input.viewer) || machineKinds.includes(input.kind)) {
-    return machineLoudness(input);
-  }
-  if (ADDRESSED_KINDS.includes(input.kind)) {
-    return addressedLoudness(input);
-  }
-  // The author pushed or replied after the viewer asked for changes: that is aimed at the viewer.
-  if (input.at !== undefined && isChangesAnswerEvent({ kind: input.kind, actor: input.actor, at: input.at }, input.pr, input.viewer)) {
-    return decide('loud', CHANGES_ANSWERED_REASON);
-  }
-  if (reviewKinds.includes(input.kind)) {
-    return reviewLoudness(input);
-  }
-  switch (input.kind) {
-    case 'review_requested':
-      // A draft is not up for review yet; marking it ready is what calls for a look.
-      if (isViewerSubject(input.subject, input.viewer) && isOpenDraft(input)) {
-        return decide('quiet', 'review requested on a draft');
-      }
-      if (isViewerSubject(input.subject, input.viewer)) {
-        if (input.requestAnswered) {
-          return decide('quiet', 'review request already answered or removed');
-        }
-        return decide('loud', 'review requested from you');
-      }
-      return decide('quiet', 'review requested from someone else');
-    case 'commits_after_approval':
-      // An approval stands on any commit; the agent may raise a push that changes what was approved.
-      return decide('quiet', 'new commits after you approved');
-    case 'ready_for_review':
-      if (!isViewersPr(input) && viewerAskedToReview(input.pr, input.viewer)) {
-        return decide('loud', 'ready for your review');
-      }
-      return decide('quiet', 'ready for review');
-    case 'merged_without_review':
-      // Never loud: the done rule keeps the tile open until the user saw it (DESIGN "Merged without your review").
-      return decide('quiet', 'merged without your review');
-    case 'comment':
-      if (isViewersPr(input)) {
-        return decide('loud', 'comment on your PR');
-      }
-      return decide('quiet', 'comment');
-    default:
-      return decide('quiet', input.kind.replaceAll('_', ' '));
-  }
+  const reason = typeof row.reason === 'function' ? row.reason(input) : row.reason;
+  return { loudness: row.loudness, reason };
 }
 
 export function effectiveLoudness(event: PrEvent): Loudness {
