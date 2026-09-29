@@ -3830,6 +3830,112 @@ Julian under "Open questions".
   accepting such a stored proposal is refused. Existing names are cleaned once
   by a migration ("Untitled topic" when nothing is left).
 
+## Rules layer: one home per fact (2026-09-29)
+
+Since 28 Sept most fixes were two parts of the app deciding the same thing
+differently: a bot-made review request didn't ping while the tile said "your
+move", MCP said "your move" where the pane said "their move", a done tile
+still offered Mark read, a done tile stayed in the Unread list. Julian asked
+whether the decisions about pings, alerts and state transitions could live in
+"kind of a state machine or something", so rules stay maintainable as
+features are added. A mapping of the rules layer (published as "PostPile
+Rules Architecture") was cross-checked by Codex (gpt-6-astra) against
+v0.11.1; Julian: "I like all the suggestions", all of it in one batch.
+
+**Two kinds of rules, two shapes.**
+
+- Facts worked out from a PR's history (loudness, seen, whose move, tile
+  state, tier, done, dots, labels, ping or not) are a projection, not a state
+  machine. Each fact is computed in one place in `packages/core` and every
+  consumer (renderer, pings, quiet reads, MCP, the fake engine) reads the
+  result. The seam is the existing `buildPrSummary` / `buildTileView`, not a
+  second read-model system; Board caches them per snapshot. The fake engine
+  calls the same pure core functions.
+- Lifecycles with side effects (a PR being read, a snooze, a topic's status,
+  a waiting GitHub write) are small transition functions:
+  `(state, cause) -> (next state, effects)`, effects returned as data and
+  carried out in one place under the writes lock, like topic proposals.
+- No XState, no rule engine, no policy language: tile state is itself a
+  projection of five lifecycles, so a statechart over it would be a second
+  copy that can disagree with the history.
+
+**One home per predicate family.** "Is it automation", "who does this review
+request ask" (by target, not by who clicked), "did you act after X", and
+"which event kinds are asks" each get one module. Narrow variants become
+parameters, not copies. Distinctions that are on purpose stay: reading
+touches leave out pushes and merges; snooze reply kinds include ordinary
+comments; "routed" for Look-closer pings still ignores a teammate's review
+(see "Look closer pings").
+
+**Actions are a separate projection.** What the buttons say and do depends on
+more than PR facts (PR vs whole tile, snooze, lock, pending writes), so
+offers come from their own core function with that context passed in, and
+the renderer only displays them. Consequences:
+
+- A done PR in the detail pane offers only Open, like a done tile (a handled
+  PR by someone else with no ask still got a primary Approve).
+- Whether a person is automation comes from core (the renderer's `[bot]`
+  check missed the other automation accounts and decided whether Ask shows).
+
+**Reading a PR is one planner.** Every way a PR becomes read goes through one
+local read-change planner: which events turn seen (up to which cutoff), which
+PRs turn handled, and how to undo it. Each cause keeps its own eligibility
+and write path:
+
+- Button (PR or tile): seen, handled for tracked members; unlocked it is an
+  optimistic change with undo, locked with unread threads it becomes pending.
+- Opened in PostPile: seen and handled after the existing checks (no
+  snoozed tile, done after read, unlocked, fresh untruncated snapshot).
+- Read on GitHub: seen up to GitHub's read time, not handled; completing a
+  pending intent may handle.
+- Quiet reads (bots only, you acted after): seen, never handled.
+- Inbox cleanup stays a bulk write outside the per-PR planner.
+- After-read runs the planner's success branch on a copy instead of a
+  hand-written simulation, so a button never promises more than the action
+  does.
+
+**Handled is not reset by new activity (decided 2026-09-29).** Handled means
+"you dealt with this once", not "complete now". New loud activity already
+makes the tile unread before done is checked; once seen, done needs no move
+left for you. Resetting it would make a GitHub visit or quiet read leave the
+PR open with nothing asked.
+
+**Snoozes belong to PRs.** A snooze was keyed by the tile id, which changes
+when a PR joins a stack or set, so the snooze was lost (and could come back
+if the old tile returned). Snoozing a tile now writes one snooze per tracked
+PR with the same condition; a tile is snoozed while every tracked PR in it
+has an active snooze, so a new unsnoozed PR joining a snoozed tile shows the
+tile. Existing snoozes are carried over by a migration. A snooze waiting for
+a push or for green CI ends when the PR is merged or closed; it could never
+finish before and kept the topic from retiring. The human-only wake rule is
+unchanged: the app's own Look-closer event does not break a snooze (its
+ping already skips snoozed tiles).
+
+**Topic status has one writer.** All status changes (retire, revive,
+archive, restore) go through one transition function, and retiring records
+its own `retiredAt` instead of reading `updatedAt` (any rename moved it).
+Revive runs after new events are classified and reads effective loudness,
+so an event the agent turned quiet does not bring a retired topic back.
+
+**Consumers agree.** MCP `pr_context` prints the move of the PR asked about,
+not of its tile. The MCP process runs as long as the Claude session; when the
+app was updated underneath it, its answers say so and ask for a reconnect.
+Tier "To review" and whose move "Review" agree for the dismissed-review case
+(a dismissed review no longer counts as reviewed for the tier either).
+
+**Decision tables for loudness and pings.** Plain TypeScript arrays, first
+match wins. Pings keep choosing the newest qualifying event within the
+winning class. Freshness, dedup, agent veto and delivery stay outside the
+tables. Tests cover input partitions and precedence collisions, not every
+combination.
+
+**Tests across rules.** Invariants over the sample boards and real-shaped
+fixtures: a done tile or PR offers only Open, the lead PR is the turn's PR,
+MCP and the pane name the same move, same events twice give the same facts.
+Where rules differ on purpose (routed team requests, team coverage) the
+invariant says so instead of asserting equality. One scenario test per bug
+fixed.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, pnpm workspaces (`pnpm-workspace.yaml`, workspace deps as `workspace:*`).

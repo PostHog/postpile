@@ -1283,6 +1283,13 @@ the app meanwhile.
   app-only bring back split the state, so it is removed (migration 010 drops
   `brought_back_at`); old `bring_back` log rows stay.
 
+- **Rules layer** (2026-09-29): facts from a PR's history are one
+  projection in core read by every consumer; real lifecycles (read, snooze,
+  topic status, pending write) are transition functions. No XState, no rule
+  engine. Handled is not reset by new loud activity. Snoozes belong to PRs;
+  a tile is snoozed while all its tracked PRs are. See DESIGN.md "Rules
+  layer: one home per fact".
+
 - **Name** (2026-09-28): PostPile. Package scope `@postpile/*`, env vars
   `POSTPILE_*` (old `CODE_MANAGER_*` still read, with a deprecation line),
   data in `~/Library/Application Support/PostPile` and
