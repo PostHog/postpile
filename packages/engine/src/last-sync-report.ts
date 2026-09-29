@@ -19,7 +19,7 @@ export function syncReportLogLines(report: SyncReport): string[] {
   const seconds = ((new Date(report.finishedAt).getTime() - new Date(report.startedAt).getTime()) / 1000).toFixed(1);
   const summary =
     `sync: done in ${seconds}s, threads ${report.threads}, PRs fetched ${report.prsFetched}, found ${report.prsFound}, ` +
-    `pulled in ${report.prsPulledIn}, new events ${report.newEvents}, agent calls ${report.agentCalls}, errors ${report.errors.length}`;
+    `pulled in ${report.prsPulledIn}, new events ${report.newEvents}, agent calls ${report.agentCalls}, topics retired ${report.topicsRetired ?? 0}, errors ${report.errors.length}`;
   const phases = phaseTimingsText(report.phaseMs ?? {});
   return [phases === '' ? summary : `${summary}; phases ${phases}`, ...report.errors.map((error) => `sync error: ${error}`)];
 }

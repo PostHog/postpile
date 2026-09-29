@@ -117,7 +117,7 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
       <div className="flex items-center gap-1.5 text-[11.5px] text-faint">
         <span>Topics</span>
         <span>›</span>
-        <span className="text-muted">{props.group === 'needs_you' ? 'Needs you' : 'Quiet'}</span>
+        <span className="text-muted">{topic.status === 'retired' ? 'Finished' : props.group === 'needs_you' ? 'Needs you' : 'Quiet'}</span>
         {placement?.area && (
           <>
             <span>›</span>

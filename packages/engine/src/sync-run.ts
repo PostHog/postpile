@@ -11,6 +11,7 @@ import {
 } from '@postpile/core';
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
+import { retireFinishedTopics } from './consolidation/retire.ts';
 import { reviveRetiredTopics } from './consolidation/revive.ts';
 import type { DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
@@ -42,6 +43,7 @@ function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): S
     dossiersUpdated: 0,
     facts: tally.facts,
     errors,
+    topicsRetired: 0,
   };
 }
 
@@ -53,7 +55,7 @@ interface LiveSync {
   stats: AgentCallStats;
 }
 
-/** One sync: fetch -> verify facts -> agent digest. Tiles are derived on read. */
+/** One sync: fetch -> verify facts -> agent digest -> retire finished topics. Tiles are derived on read. */
 export class SyncRun {
   private live: LiveSync | null = null;
   /** The first sync in this process is "start" (the app's own auto-sync); every later one is "manual" ("Sync now"). */
@@ -130,6 +132,8 @@ export class SyncRun {
       await digester.run(agentOff === null ? (options.agentJobs ?? ALL_AGENT_JOBS) : []);
       // After the digest, so dossier changes about events already read on GitHub count as seen too.
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
+      // Last, so the new events and what was read on GitHub both count.
+      report.topicsRetired = retireFinishedTopics(store, now().toISOString());
     } catch (error) {
       crashed = true;
       errors.push(`sync: ${errorText(error)}`);

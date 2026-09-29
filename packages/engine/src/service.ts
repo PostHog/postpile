@@ -8,6 +8,7 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  FinishedTopic,
   GitHubWritesChange,
   GitHubWritesStatus,
   CleanupAge,
@@ -105,6 +106,8 @@ export interface EngineService {
 
   /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
   listTopics(scope?: ListScope): Promise<TopicListItem[]>;
+  /** Topics retired in the last 30 days, newest first, for the sidebar's Finished drawer. getTopic opens any of them. */
+  listFinishedTopics(): Promise<FinishedTopic[]>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */
   getViewer(): Promise<ViewerView>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */

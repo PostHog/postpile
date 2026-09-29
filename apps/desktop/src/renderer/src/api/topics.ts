@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { TopicDetail, TopicListItem } from '@postpile/core';
+import type { FinishedTopic, TopicDetail, TopicListItem } from '@postpile/core';
 import { request } from './client.ts';
 import { queryKeys } from './keys.ts';
 
@@ -8,6 +8,14 @@ export function useTopics() {
   return useQuery({
     queryKey: queryKeys.topics,
     queryFn: () => request<TopicListItem[]>('GET', '/api/topics'),
+  });
+}
+
+/** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. */
+export function useFinishedTopics() {
+  return useQuery({
+    queryKey: queryKeys.finishedTopics,
+    queryFn: () => request<FinishedTopic[]>('GET', '/api/topics/finished'),
   });
 }
 

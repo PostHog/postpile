@@ -7,7 +7,7 @@ import { useSearch } from './api/search.ts';
 import { useSetupStatus } from './api/setup.ts';
 import { sendTelemetry } from './api/telemetry.ts';
 import { useTools } from './api/tools.ts';
-import { useTopic, useTopics } from './api/topics.ts';
+import { useFinishedTopics, useTopic, useTopics } from './api/topics.ts';
 import { useViewer } from './api/viewer.ts';
 import { DetailPane } from './components/DetailPane.tsx';
 import { InboxCleanup } from './components/InboxCleanup.tsx';
@@ -54,6 +54,7 @@ function EmptyMain(props: { text: string }) {
 export function App() {
   const actions = useActions();
   const topics = useTopics();
+  const finished = useFinishedTopics();
   const proposals = useProposals();
   const live = useLivePoll();
   const viewer = useViewer();
@@ -102,8 +103,9 @@ export function App() {
   };
 
   const items = topics.data ?? [];
+  const finishedIds = new Set((finished.data ?? []).map((entry) => entry.id));
   // Navigation is a back / forward history; the current entry is what the user picked.
-  const nav = useNavHistory(new Set(items.map((item) => item.topic.id)));
+  const nav = useNavHistory(new Set([...items.map((item) => item.topic.id), ...finishedIds]));
   useNavShortcuts(nav.back, nav.forward);
   const pane = nav.current.pane;
   // A blank query filters nothing, even while react-query still holds the last answer.
@@ -120,15 +122,20 @@ export function App() {
   const [kept, setKept] = useState<KeptView | null>(null);
   const currentFilterKey = filterKey(queueFilter, filter ? (search.data?.query ?? null) : null);
   const keptNow = keptFor(kept, nav.current, currentFilterKey);
-  const activeItem = visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null, keptNow?.topicId ?? null);
-  const topic = useTopic(activeItem?.topic.id ?? null);
+  // A topic picked in the Finished drawer is not in the list, so it opens by id.
+  // Search and the queue filters cover live topics only: while they narrow, their first match shows.
+  const pickedFinishedId = nav.current.topicId !== null && finishedIds.has(nav.current.topicId) ? nav.current.topicId : null;
+  const finishedId = narrowed ? null : pickedFinishedId;
+  const activeItem = finishedId === null ? visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null, keptNow?.topicId ?? null) : null;
+  const activeTopicId = finishedId ?? activeItem?.topic.id ?? null;
+  const topic = useTopic(activeTopicId);
   const matchingTileIds = activeItem && filter ? (filter.tilesByTopic.get(activeItem.topic.id) ?? new Set<string>()) : null;
   const allTiles = topic.data?.tiles ?? [];
   const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
-  const keptTile = keptNow && keptNow.topicId === activeItem?.topic.id ? keptNow : null;
+  const keptTile = keptNow && keptNow.topicId === activeTopicId ? keptNow : null;
   const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
-  const shown: NavEntry = { pane, topicId: activeItem?.topic.id ?? null, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
+  const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
   const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown);
   useEffect(() => {
     if (keptAfter !== kept) {
@@ -159,7 +166,7 @@ export function App() {
     if (view) {
       sendTelemetry('tile_opened', tileOpenedProps(view));
     }
-    go({ pane: 'topic', topicId: activeItem?.topic.id ?? null, tileId, prKey });
+    go({ pane: 'topic', topicId: activeTopicId, tileId, prKey });
   };
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 
@@ -168,8 +175,8 @@ export function App() {
   // "since you last looked" block stays put while they are still reading it.
   // This follows the picked topic, not the shown one, so a search filter that
   // hides the topic for a moment does not mark it seen.
-  const shownTopicId = pane === 'topic' ? (activeItem?.topic.id ?? null) : null;
-  const pickedTopicId = pane === 'topic' ? (visibleTopic(items, nav.current.topicId, null, null)?.topic.id ?? null) : null;
+  const shownTopicId = pane === 'topic' ? activeTopicId : null;
+  const pickedTopicId = pane === 'topic' ? (pickedFinishedId ?? visibleTopic(items, nav.current.topicId, null, null)?.topic.id ?? null) : null;
   const lastPickedTopicId = useRef<string | null>(null);
   useEffect(() => {
     const left = lastPickedTopicId.current;
@@ -223,14 +230,14 @@ export function App() {
     main = <NotificationsPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
   } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
-  } else if (!topics.isPending && items.length === 0 && toolsNotice(tools.data).gh) {
+  } else if (!topics.isPending && items.length === 0 && finishedId === null && toolsNotice(tools.data).gh) {
     // Without gh nothing can sync: the fix is the empty state, not an error.
     main = (
       <MainPane>
         <ToolsNotice place="empty" />
       </MainPane>
     );
-  } else if (!topics.isPending && items.length === 0) {
+  } else if (!topics.isPending && items.length === 0 && finishedId === null) {
     main = (
       <MainPane>
         <InboxCleanup place="banner" />
@@ -245,12 +252,12 @@ export function App() {
     main = <EmptyMain text="No topic has a PR that matches the filter. Click the filter again to clear it." />;
   } else if (topic.error) {
     main = <EmptyMain text={`Could not load the topic: ${topic.error.message}`} />;
-  } else if (activeItem && topic.data) {
+  } else if (activeTopicId && topic.data) {
     main = (
       <MainPane>
         <ToolsNotice place="banner" />
         <InboxCleanup place="banner" />
-        <TopicHeader detail={topic.data} group={activeItem.group} topics={items} />
+        <TopicHeader detail={topic.data} group={activeItem?.group ?? 'quiet'} topics={items} />
         <TileGrid
           detail={topic.data}
           topics={items}
@@ -326,7 +333,7 @@ export function App() {
             error={topics.error?.message ?? null}
             filter={filter}
             onClearFilter={() => setQuery('')}
-            shown={listedTopics(items, shownItems, activeItem?.topic.id ?? null)}
+            shown={listedTopics(items, shownItems, activeTopicId)}
             queueFilter={queueFilter}
             onQueueFilter={changeQueueFilter}
             filterCounts={filterCounts(items)}

@@ -37,6 +37,20 @@ a direct follow-up; anything else gets a new topic. There is no catch-all
 preference let unrelated PRs pile into one topic. The user's instructions may
 set a finer or coarser grain.
 
+**Topic status**: `active`, `retired` (finished) or `archived` (merged
+away, never comes back). Every full sync ends by retiring each active topic
+that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR
+merged or closed, no events for 3 days, no unread or snoozed tile. No agent
+verdict is needed, and Unsorted never retires. It runs after the digest, so
+the sync's own events count; the sync log line and `SyncReport.topicsRetired`
+say how many. Retiring is reversible: a new loud event on a member PR
+(`reviveRetiredTopics`, full sync and live poll) or a new PR assigned to it
+(retired topics stay on offer for 30 days) makes it active again. Retired
+topics leave the sidebar list and wait in its Finished drawer (see "Queue
+sections"). Until 2026-09-29 only the daily consolidation retired topics,
+and only when the agent said finished and 14 quiet days had passed; most
+topics with every PR merged never left the sidebar.
+
 **Tiles** are the unit of attention inside a topic. A tile holds one of:
 
 - a single PR (`pr:<prKey>`)
@@ -757,7 +771,7 @@ Output and what happens:
 | `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1. Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
 | `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
 | `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
-| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 14 days, no unread or snoozed tile. Retiring is reversible |
+| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 3 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
 
 Also deterministic, in the same run: retire topics that pass the gate and
 whose dossier status is `finished`. Dossier versions are pruned on every
@@ -1708,6 +1722,14 @@ avatars and filters", QueuesB2).
   `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
   Routed, FYI; Routed and FYI folded). Section tint: honey for reply and
   review, ink for mine, sea for team and team mentioned, grey for other.
+- **Finished drawer** (2026-09-29): under the sections, a folded "Finished"
+  group header lists topics retired in the last 30 days, newest first
+  (`GET /api/topics/finished`, `FinishedTopic`: name and how long ago it
+  retired, PR count in the tooltip). Quiet on purpose: muted names, no
+  bubble, no faces, no count on the header. A row opens the topic like any
+  other (`getTopic` and `tilesForTopic` work for a retired topic; the
+  breadcrumb says "Finished"). Search and the queue filters cover live
+  topics only, so the drawer hides while they narrow. Hidden when empty.
 - **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
   per tier over the PRs in the topic's tiles (each PR once), plus open PRs
   by you / by a teammate. Only open PRs get a real tier; merged and closed
@@ -2735,7 +2757,8 @@ preflight and does not know the token, so CORS stays open.
   - when "seen" moves: explicit `markTopicSeen` when leaving a topic, or on opening it
     [explicit, the UI calls it when the user leaves the topic]
   - retiring finished topics: automatic behind the deterministic gate (all PRs merged/closed,
-    14 quiet days, nothing unread or snoozed) or a proposal like merges [automatic, reversible]
+    3 quiet days since 2026-09-29, was 14; nothing unread or snoozed) or a proposal like merges
+    [automatic on every full sync, reversible]
   - accepted global rules: kept in the database and added to every prompt, or appended to
     instructions.md [database; instructions.md stays the user's own file]
   - fold set grouping into the dossier update to save one call per topic [not yet, sets stay a

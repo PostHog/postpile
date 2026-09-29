@@ -11,6 +11,7 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  FinishedTopic,
   GitHubWritesChange,
   GitHubWritesStatus,
   CleanupAge,
@@ -564,6 +565,10 @@ export class Engine implements EngineService {
 
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     return this.reads.listTopics(scope);
+  }
+
+  async listFinishedTopics(): Promise<FinishedTopic[]> {
+    return this.reads.listFinishedTopics();
   }
 
   async listRepos(): Promise<RepoOverview> {

@@ -9,6 +9,7 @@ export const queryKeys = {
   lastSync: ['last-sync'] as const,
   syncProgress: ['sync-progress'] as const,
   topics: ['topics'] as const,
+  finishedTopics: ['finished-topics'] as const,
   viewer: ['viewer'] as const,
   repos: ['repos'] as const,
   inboxCleanup: ['inbox-cleanup'] as const,
