@@ -3764,6 +3764,54 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   ("merged in from <source>"), and the propose answer for a merge points
   at the target's `topic(...)` for the outcome.
 
+## Fixes from the codebase review (2026-09-29)
+
+A Codex CLI review of v0.11.0 found nine issues; eight were confirmed in the
+code and are fixed here. One (a snooze broken by a mention comes back once the
+mention is read) is behaviour a test asserts on purpose and stays open for
+Julian under "Open questions".
+
+- **An unsubmitted review is not a reply.** GitHub shows the viewer's own
+  pending review (and its pending inline comments) to them. Normalization
+  turned a pending review with a body into a comment, and `viewerSpokeAfter`
+  counted even an empty pending review, so an ask went quiet exactly while the
+  answer was still unsent, and the touched read could mark the thread read on
+  GitHub. Pending reviews and pending review comments never count as the
+  viewer's reply, touch or comment anywhere.
+- **Approve pins the commit on screen.** The approval used the stored head,
+  which a poll can move a few seconds before the renderer refreshes. The
+  renderer now sends the head it showed; if the stored head differs, the
+  approval is refused with "New commits since you looked; take another look".
+- **A cut-off snapshot never qualifies for a quiet read.** The PR query takes
+  the last 50 review threads and the first 30 comments of each, so a reply past
+  those caps never arrived while the freshness check still passed, and the
+  bot-only read could clear an unread human reply. The query now also asks for
+  the total counts; a PR whose threads or comments were cut off is marked
+  truncated, and `snapshotCoversThread` treats it as not covering the thread
+  (no bot-only, touched or opened mark-read on GitHub for it).
+- **The MCP process never writes, instructions included.** Reading a glance's
+  freshness recorded a new instructions version when `instructions.md` had
+  changed while the app was closed, and the read-only MCP process threw
+  instead of answering. In read-only mode the instructions history only reads:
+  the glance shows as stale until the app records the edit.
+- **Every standing change request counts.** With two reviewers asking for
+  changes, only the first was looked at, so "Bob to re-review" could hide the
+  author's open work for Carol. The author's move comes first while any change
+  request has no re-review asked since the author's last push; "X to
+  re-review" only when every one of them has.
+- **A pending inbox cleanup survives a lock during Send.** Closing the lock
+  while pending writes were being sent dropped a pending "mark all read before"
+  cleanup as if sent. It now stays pending with "GitHub writes are off".
+- **Stale lock takeover re-checks before removing.** Two processes finding the
+  same stale `postpile.lock` could delete each other's fresh lock. The lock is
+  removed only when it is still the exact holder judged stale (pid and start
+  time).
+- **Topic names are cleaned where they are stored.** Topic names are written by
+  the agent from PR text and six prompts used them outside the data fence. On
+  storing a name: newlines and control characters collapse to spaces, and the
+  name is capped at 80 characters. Existing names are cleaned once by a
+  migration.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, pnpm workspaces (`pnpm-workspace.yaml`, workspace deps as `workspace:*`).
