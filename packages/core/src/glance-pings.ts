@@ -4,9 +4,8 @@
 // pings once, when the PR's glance is written with verdict LOOK_CLOSER, and
 // that ping marks the tile unread through an app-made `look_closer` event.
 // Rules only, no IO.
-import { reviewRequestSubject } from './events.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
-import { isTeammate, reviewedHead, teamSlug } from './review-request.ts';
+import { isTeammate, reviewedHead, reviewRequestTarget, teamSlug } from './review-request.ts';
 import type { Glance, IsoTime, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
 /** The PR is from outside the viewer's team (not theirs, not a teammate's): a team request on it is routed. */
@@ -14,12 +13,17 @@ function fromOutsideTeam(pr: Pr, viewer: Viewer): boolean {
   return !sameLogin(pr.author, viewer.login) && !isTeammate(pr.author, viewer);
 }
 
-/** A review request event for one of the viewer's teams on a PR from outside the team. */
+/**
+ * A review request event for one of the viewer's teams on a PR from outside
+ * the team. Routed on purpose ignores a teammate's review: a Look closer
+ * verdict pings anyway (DESIGN.md "Routed team requests ping when the glance
+ * says Look closer").
+ */
 export function isRoutedTeamRequestEvent(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
   if (event.kind !== 'review_requested' || !fromOutsideTeam(pr, viewer)) {
     return false;
   }
-  const subject = reviewRequestSubject(event.summary);
+  const subject = reviewRequestTarget(event, pr);
   return subject !== null && !sameLogin(subject, viewer.login) && isOwnTeam(subject, viewer.teams);
 }
 

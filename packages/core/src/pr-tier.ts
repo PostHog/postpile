@@ -2,9 +2,10 @@
 // open PR belongs to. Rules only, no agent. The sidebar's queue sections
 // are built on it (`topicQueues`).
 import { changesAnswered } from './changes-answered.ts';
+import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
 import { isPersonalRequest, isTeammate, newestVerdictBy, reviewedHead, reviewRequest } from './review-request.ts';
-import type { EventKind, NotificationReason, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
+import type { NotificationReason, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';
 
 /**
@@ -21,11 +22,11 @@ import { unansweredAsk } from './whose-turn.ts';
  */
 export type PrTier = 'needs_reply' | 'changes_requested' | 'mine' | 'team' | 'to_review' | 'team_mentioned' | 'rest';
 
-/** First match wins, in this order. */
+/**
+ * First match wins, in this order. The one tier order: the sidebar's queue
+ * sections and a topic's priority follow it.
+ */
 export const PR_TIER_ORDER: PrTier[] = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
-
-/** Asks that want an answer from the viewer. Team mentions have their own tier. */
-const REPLY_KINDS: EventKind[] = ['question_to_user', 'mention', 'reply_to_user'];
 
 export interface PrTierInput {
   pr: Pr;
@@ -63,7 +64,8 @@ export function prTier(input: PrTierInput): PrTier {
   if (pr.state !== 'OPEN') {
     return 'rest';
   }
-  const ask = unansweredAsk(pr, input.events, viewer, REPLY_KINDS);
+  // Personal asks only: team mentions have their own tier.
+  const ask = unansweredAsk(pr, input.events, viewer, PERSONAL_ASK_KINDS);
   // Addressed your changes: the author's thread replies are part of it, so
   // they stay under Changes you requested; an ask from anyone else still wins.
   const answered = changesAnswered(pr, viewer) !== null;

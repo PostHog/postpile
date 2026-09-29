@@ -1,6 +1,8 @@
+import { isAutomation } from './bots.ts';
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isViewerSubject, sameLogin } from './mentions.ts';
+import { viewerAskedToReview } from './review-request.ts';
 import type { EventDisplayState, EventKind, IsoTime, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
 export interface LoudnessInput {
@@ -43,13 +45,6 @@ function isOpenDraft(input: LoudnessInput): boolean {
   return input.pr.isDraft && input.pr.state === 'OPEN';
 }
 
-/** A review of the viewer or one of their teams is pending, or was asked in the timeline. */
-function reviewAskedOfViewer(input: LoudnessInput): boolean {
-  const pending = [...input.pr.reviewerUsers, ...input.pr.reviewerTeams].some((subject) => isViewerSubject(subject, input.viewer));
-  const asked = input.pr.timeline.some((item) => item.kind === 'review_requested' && isViewerSubject(item.subject, input.viewer));
-  return pending || asked;
-}
-
 function machineLoudness(input: LoudnessInput): LoudnessDecision {
   // A bot rebasing or updating a draft is pure churn; nobody reviews drafts.
   if (input.isBot && PUSH_KINDS.includes(input.kind) && input.pr.isDraft) {
@@ -82,24 +77,16 @@ function reviewLoudness(input: LoudnessInput): LoudnessDecision {
 }
 
 /**
- * A review request aimed at the viewer or one of their teams. It counts by
- * whom it asks, not who clicked it (2026-09-29): a bot that assigns
- * reviewers asks as much as a person does.
- */
-function isRequestForViewer(input: LoudnessInput): boolean {
-  return input.kind === 'review_requested' && isViewerSubject(input.subject, input.viewer);
-}
-
-/**
  * Rule-based classification, relative to the viewer. The agent may override
  * later, with a reason. Order matters: who did it first, then what happened.
- * The bot shortcut skips review requests aimed at the viewer or their team.
+ * The bot shortcut is `isAutomation`: it skips review requests aimed at the
+ * viewer or their team, whoever clicked them.
  */
 export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
   if (input.actor !== '' && sameLogin(input.actor, input.viewer.login)) {
     return decide('quiet', 'your own activity');
   }
-  if ((input.isBot && !isRequestForViewer(input)) || machineKinds.includes(input.kind)) {
+  if (isAutomation(input, input.subject ?? null, input.viewer) || machineKinds.includes(input.kind)) {
     return machineLoudness(input);
   }
   if (ADDRESSED_KINDS.includes(input.kind)) {
@@ -129,7 +116,7 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
       // An approval stands on any commit; the agent may raise a push that changes what was approved.
       return decide('quiet', 'new commits after you approved');
     case 'ready_for_review':
-      if (!isViewersPr(input) && reviewAskedOfViewer(input)) {
+      if (!isViewersPr(input) && viewerAskedToReview(input.pr, input.viewer)) {
         return decide('loud', 'ready for your review');
       }
       return decide('quiet', 'ready for review');

@@ -1,4 +1,5 @@
-import type { Comment } from './types.ts';
+import { isViewerSubject } from './mentions.ts';
+import type { Comment, EventKind, Viewer } from './types.ts';
 
 // Bots account for well over half of all @-mentions in a busy repo: CI nags,
 // merge-queue chatter, review bots. List carried over from ghatchup.
@@ -24,4 +25,38 @@ export function isBot(login: string): boolean {
 
 export function isMachineComment(comment: Pick<Comment, 'author' | 'body'>): boolean {
   return isBot(comment.author) || botBody.test(comment.body);
+}
+
+/** What `isAutomation` reads of an event. */
+export interface AutomationSubject {
+  kind: EventKind;
+  actor: string;
+  isBot: boolean;
+}
+
+/**
+ * Who clicked was automation: a bot account (`isBot` when the event was
+ * built), or no actor at all. CI results carry an empty actor and are
+ * flagged as bots already; the empty check keeps any other actor-less
+ * event on the safe side.
+ */
+export function isMadeByAutomation(event: Pick<AutomationSubject, 'actor' | 'isBot'>): boolean {
+  return event.isBot || event.actor === '';
+}
+
+/**
+ * The one rule for "is this event automation", for every rule about what
+ * reaches a person: loudness, pings, provenance, snooze wake-ups and quiet
+ * reads. Automation made it, unless it is a review request that asks the
+ * viewer or one of their teams: a request counts by whom it asks, not who
+ * clicked it (2026-09-29). `requestTarget` is the login or "org/team" a
+ * review request names (`reviewRequestTarget`), null for other events.
+ * The app's own Look closer event is automation: it never wakes a snooze.
+ */
+export function isAutomation(event: AutomationSubject, requestTarget: string | null, viewer: Viewer | null): boolean {
+  if (!isMadeByAutomation(event)) {
+    return false;
+  }
+  const asksViewer = event.kind === 'review_requested' && viewer !== null && isViewerSubject(requestTarget, viewer);
+  return !asksViewer;
 }

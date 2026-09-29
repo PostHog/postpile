@@ -1,8 +1,10 @@
-// The viewer's last touch on a PR: the newest of their own actions on it.
-// One definition for "New since you looked" (`whatsNew`'s anchor), for
-// "You already dealt with it" (events before the touch count as seen) and
-// for the quiet mark-read after it. Rules only, no IO. DESIGN.md "You
-// already dealt with it".
+// "Did you act after X": the viewer's last touch on a PR, the newest of their
+// own actions on it. One definition for "New since you looked" (`whatsNew`'s
+// anchor), for "You already dealt with it" (events before the touch count as
+// seen), for the quiet mark-read after it and for an ask being answered.
+// Narrower questions pass options (`kinds`, `before`, `reviewsOnly`) instead
+// of keeping their own copy. Rules only, no IO. DESIGN.md "You already dealt
+// with it".
 import { PUSH_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
 import type { IsoTime, Pr, PrEvent, Viewer } from './types.ts';
@@ -128,4 +130,33 @@ export function eventsSeenByTouch(pr: Pr, events: PrEvent[], viewer: Viewer): { 
   }
   const ids = events.filter((event) => event.seenAt === null && event.at <= touch.at).map((event) => event.id);
   return { ids, touch };
+}
+
+export interface SpokeOptions {
+  /** Count only submitted reviews, not comments. */
+  reviewsOnly?: boolean;
+}
+
+/**
+ * When `login` last spoke on the PR: their newest comment or submitted
+ * review (a pending review is their unsent draft and says nothing). Read
+ * from the snapshot, not from events, so it also works while events are
+ * being derived (loudness asks it). Null when they never spoke.
+ */
+export function lastSpokeAt(pr: Pr, login: string, options: SpokeOptions = {}): IsoTime | null {
+  const reviews = pr.reviews.filter((review) => sameLogin(review.author, login) && review.state !== 'PENDING').map((review) => review.submittedAt);
+  const comments = options.reviewsOnly ? [] : pr.comments.filter((comment) => sameLogin(comment.author, login)).map((comment) => comment.createdAt);
+  let newest: IsoTime | null = null;
+  for (const time of [...comments, ...reviews]) {
+    if (newest === null || time > newest) {
+      newest = time;
+    }
+  }
+  return newest;
+}
+
+/** `login` spoke on the PR after `at` (`lastSpokeAt`). */
+export function spokeAfter(pr: Pr, login: string, at: IsoTime, options: SpokeOptions = {}): boolean {
+  const spoke = lastSpokeAt(pr, login, options);
+  return spoke !== null && spoke > at;
 }

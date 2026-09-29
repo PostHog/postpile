@@ -5,6 +5,7 @@
 // DESIGN.md "Whose turn" has the rule.
 import { isBot } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
+import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { sameLogin } from './mentions.ts';
 import { changesRequestedByAll, newestVerdictBy } from './review-request.ts';
 import type { EventKind, IsoTime, Pr, Viewer } from './types.ts';
@@ -31,23 +32,6 @@ const ANSWER_KINDS: readonly EventKind[] = [
   'mention',
 ];
 
-function newest(times: IsoTime[]): IsoTime | null {
-  let best: IsoTime | null = null;
-  for (const time of times) {
-    if (best === null || time > best) {
-      best = time;
-    }
-  }
-  return best;
-}
-
-/** When the viewer last spoke on the PR (comment or submitted review), or null. */
-function viewerLastWord(pr: Pr, viewer: Viewer): IsoTime | null {
-  const comments = pr.comments.filter((c) => sameLogin(c.author, viewer.login)).map((c) => c.createdAt);
-  const reviews = pr.reviews.filter((r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING').map((r) => r.submittedAt);
-  return newest([...comments, ...reviews]);
-}
-
 /**
  * A push counts from any human but the reviewer: a commit's author can be a
  * git name ("Pim Laptop") rather than the login, and bots only rebase.
@@ -61,12 +45,6 @@ function pushedAfter(pr: Pr, reviewer: string, since: IsoTime): boolean {
   const commit = pr.commits.some((c) => c.committedAt > since && isPusher(c.author, reviewer));
   const forcePush = pr.timeline.some((item) => item.kind === 'head_ref_force_pushed' && item.at > since && isPusher(item.actor, reviewer));
   return commit || forcePush;
-}
-
-function repliedAfter(pr: Pr, since: IsoTime): boolean {
-  const comment = pr.comments.some((c) => sameLogin(c.author, pr.author) && c.createdAt > since);
-  const review = pr.reviews.some((r) => sameLogin(r.author, pr.author) && r.state !== 'PENDING' && r.submittedAt > since);
-  return comment || review;
 }
 
 /**
@@ -84,9 +62,10 @@ export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
   if (verdict === null || verdict.state !== 'CHANGES_REQUESTED') {
     return null;
   }
-  const since = newest([verdict.submittedAt, viewerLastWord(pr, viewer) ?? verdict.submittedAt])!;
+  // The verdict is a submitted review, so the viewer's last word is never older than it.
+  const since = lastSpokeAt(pr, viewer.login) ?? verdict.submittedAt;
   const pushed = pushedAfter(pr, viewer.login, since);
-  const replied = repliedAfter(pr, since);
+  const replied = spokeAfter(pr, pr.author, since);
   if (!pushed && !replied) {
     return null;
   }

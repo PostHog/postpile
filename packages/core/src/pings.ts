@@ -1,15 +1,15 @@
 // Mac pings: which new activity may interrupt the user, and what the
 // notification says when the agent does not write it. Rules only, no IO.
 // DESIGN.md "Live poll and Mac pings" has the whole flow.
+import { isAutomation } from './bots.ts';
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { clipText } from './dossier.ts';
 import type { GitHubQuotaView } from './github-quota.ts';
-import { reviewRequestSubject } from './events.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isRoutedTeamRequestEvent } from './glance-pings.ts';
 import { effectiveLoudness } from './loudness.ts';
-import { isViewerSubject, sameLogin } from './mentions.ts';
-import { teamSlug } from './review-request.ts';
+import { sameLogin } from './mentions.ts';
+import { reviewRequestTarget, teamSlug } from './review-request.ts';
 import type { Glance, IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
 
 /**
@@ -160,18 +160,6 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
   }
 }
 
-/**
- * The event counts as a bot's for the bot-only shortcut: a bot did it and it
- * is not a review request aimed at the viewer or their team (a request
- * counts by whom it asks, not who clicked it, 2026-09-29).
- */
-function isBotOnly(event: PrEvent, viewer: Viewer): boolean {
-  if (!event.isBot) {
-    return false;
-  }
-  return !(event.kind === 'review_requested' && isViewerSubject(reviewRequestSubject(event.summary), viewer));
-}
-
 function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {
   const reason = event.override?.reason ?? event.ruleReason;
   return { class: pingClass, loudness: effectiveLoudness(event), reason, event };
@@ -191,7 +179,8 @@ export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: b
   if (quietRepo) {
     return { ...ruleFrom('quiet_repo', newestFirst[0]!), reason: 'quiet repo (let it go stale)' };
   }
-  if (newestFirst.every((event) => isBotOnly(event, viewer))) {
+  // Bot-only: a review request aimed at the viewer or their team is no bot's, whoever clicked it (`isAutomation`).
+  if (newestFirst.every((event) => isAutomation(event, reviewRequestTarget(event, pr), viewer))) {
     return ruleFrom('bot', newestFirst[0]!);
   }
   const aimed = newestFirst.filter((event) => isAddressedToViewer(event, pr, viewer));
@@ -219,15 +208,15 @@ export const PING_TITLE_MAX = 80;
 export const PING_BODY_MAX = 200;
 
 /** "Review requested for team-devex", or "Review requested from you" for a personal request. */
-function requestHeadline(event: PrEvent): string {
-  const subject = reviewRequestSubject(event.summary);
+function requestHeadline(event: PrEvent, pr: Pr): string {
+  const subject = reviewRequestTarget(event, pr);
   if (subject === null || !subject.includes('/')) {
     return 'Review requested from you';
   }
   return `Review requested for ${subject.split('/').pop()}`;
 }
 
-function headline(event: PrEvent): string {
+function headline(event: PrEvent, pr: Pr): string {
   const who = `@${event.actor}`;
   // Replies keep their own reason ("replies to you"); only pushes and plain comments carry this one.
   if (event.ruleReason === CHANGES_ANSWERED_REASON) {
@@ -244,7 +233,7 @@ function headline(event: PrEvent): string {
       return `${who} replied to you`;
     case 'review_requested':
       // A bot's request says what it asks, not which bot clicked it.
-      return event.isBot ? requestHeadline(event) : `${who} asked for your review`;
+      return event.isBot ? requestHeadline(event, pr) : `${who} asked for your review`;
     case 'commits_after_approval':
       return 'New commits after your approval';
     case 'review_changes_requested':
@@ -263,7 +252,7 @@ function shortKey(prKey: PrKey): string {
 /** The text a ping gets when the agent does not write it (fallback, fake mode). */
 export function pingTemplate(event: PrEvent, pr: Pr): { title: string; body: string } {
   return {
-    title: clipText(`${headline(event)} · ${shortKey(pr.key)}`, PING_TITLE_MAX),
+    title: clipText(`${headline(event, pr)} · ${shortKey(pr.key)}`, PING_TITLE_MAX),
     body: clipText(`${pr.title}\n${event.summary}`, PING_BODY_MAX),
   };
 }
