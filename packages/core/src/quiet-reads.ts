@@ -35,12 +35,14 @@ export function isBotEvent(event: PrEvent): boolean {
 }
 
 /**
- * The events after the thread's last read, when every one of them is
- * automation. Null when a person took part, or when nothing after the read
- * is known (the thread turned unread for a reason the app cannot see).
+ * The events by someone else after the thread's last read, when every one of
+ * them is automation. The viewer's own events (a review from the CLI) are not
+ * someone else's activity and are left out. Null when a person took part, or
+ * when nothing by someone else after the read is known (the thread turned
+ * unread for a reason the app cannot see).
  */
-export function botOnlySinceRead(events: PrEvent[], lastReadAt: IsoTime): PrEvent[] | null {
-  const since = events.filter((event) => event.at > lastReadAt);
+export function botOnlySinceRead(events: PrEvent[], lastReadAt: IsoTime, viewer: Viewer): PrEvent[] | null {
+  const since = events.filter((event) => event.at > lastReadAt && !isOwnEvent(event, viewer));
   if (since.length === 0 || !since.every(isBotEvent)) {
     return null;
   }
@@ -58,8 +60,8 @@ export function botNames(events: PrEvent[]): string[] {
  * - never_read: the user never read it (no last_read_at), so it is not "back" because of bots
  * - stale_snapshot: the stored PR snapshot is older than the thread's last update (a PR the
  *   sync left out at its cap, or whose fetch failed), so a person's comment may be missing
- * - human_activity: a person did something since the last read, or nothing known happened
- * - own_pr: bot reviews and CI on the user's own PR can mean work for them
+ * - human_activity: someone else did something since the last read, or nothing known happened
+ * - own_pr: bot reviews and CI on the user's own open PR can mean work for them (merged or closed: they can't)
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
  * - tile_unread: the tile shows something new for the user
  * - your_move: whose turn is the user's
@@ -94,6 +96,16 @@ export function snapshotCoversThread(input: Pick<QuietReadInput, 'thread' | 'prF
   return input.prFetchedAt !== null && input.prFetchedAt >= input.thread.updatedAt;
 }
 
+/**
+ * The user's own PR while it is open. Bots there (a failing check, a review
+ * bot's finding) can mean work, so their activity keeps the thread unread.
+ * Once merged or closed they can't: every own PR merges through a queue bot
+ * after the last comment (2026-09-29).
+ */
+function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
+  return pr.state === 'OPEN' && sameLogin(pr.author, viewer.login);
+}
+
 /** Whether PostPile may mark this PR thread read on GitHub by itself, and if not, the first reason why not. */
 export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   const { thread, pr, events, viewer } = input;
@@ -106,11 +118,11 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (!snapshotCoversThread(input)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const botEvents = botOnlySinceRead(events, thread.lastReadAt);
+  const botEvents = botOnlySinceRead(events, thread.lastReadAt, viewer);
   if (botEvents === null) {
     return { kind: 'skip', why: 'human_activity' };
   }
-  if (sameLogin(pr.author, viewer.login)) {
+  if (isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (events.some(isUnseenMergeWithoutReview)) {
@@ -148,7 +160,7 @@ export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'repli
  * - no_touch: the user never reviewed or commented on the PR (a push, merge or close does not count here)
  * - nothing_known: no event by someone else since the last read, so the thread is unread for a reason the app cannot see
  * - activity_after: a person did something after the user's touch
- * - own_pr: bots acted after the touch on the user's own PR, which can mean work
+ * - own_pr: bots acted after the touch on the user's own open PR, which can mean work
  * - unseen_merge: a merge without the user's review came after their touch
  * - tile_unread: the tile shows something new for the user
  * - grace: the touch or the newest activity is less than QUIET_GRACE_MS old
@@ -178,7 +190,7 @@ function touchReason(kind: TouchKind): TouchReason {
  * reviewed or commented after every unread event (DESIGN.md "You already
  * dealt with it"). Unread means after `last_read_at`, or everything when the
  * thread was never read. Bots after the touch are fine as in the bot-only
- * rule, except on the user's own PR. Whose turn is not checked: the
+ * rule, except on the user's own open PR. Whose turn is not checked: the
  * mark-read changes nothing PostPile shows (the events before the touch are
  * seen already), so a move that is still theirs stays on the tile.
  */
@@ -203,7 +215,7 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   if (!late.every(isBotEvent)) {
     return { kind: 'skip', why: 'activity_after' };
   }
-  if (late.length > 0 && sameLogin(pr.author, viewer.login)) {
+  if (late.length > 0 && isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (events.some((event) => isUnseenMergeWithoutReview(event) && event.at > touch.at)) {

@@ -47,20 +47,27 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
 describe('botOnlySinceRead', () => {
   it('returns the events after the read when every one is a bot, CI results without an actor included', () => {
     const events = [humanComment(5), botComment(30), ciResult(31)];
-    expect(botOnlySinceRead(events, at(20))?.map((event) => event.id)).toEqual(['bot-30', 'ci-31']);
+    expect(botOnlySinceRead(events, at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30', 'ci-31']);
   });
 
   it('is null once a person took part after the read', () => {
-    expect(botOnlySinceRead([botComment(30), humanComment(32)], at(20))).toBeNull();
+    expect(botOnlySinceRead([botComment(30), humanComment(32)], at(20), viewer)).toBeNull();
   });
 
   it('is null when nothing known happened after the read', () => {
-    expect(botOnlySinceRead([humanComment(5)], at(20))).toBeNull();
+    expect(botOnlySinceRead([humanComment(5)], at(20), viewer)).toBeNull();
   });
 
   it('counts an actor-less event as a bot even when it was not flagged', () => {
     const deploy = makeEvent({ id: 'deploy', kind: 'deploy', actor: '', isBot: false, at: at(30) });
-    expect(botOnlySinceRead([deploy], at(20))).toHaveLength(1);
+    expect(botOnlySinceRead([deploy], at(20), viewer)).toHaveLength(1);
+  });
+
+  it('leaves the viewer own events out: their review after the read is not someone else activity', () => {
+    const ownReview = makeEvent({ id: 'own-review', prKey: pr.key, kind: 'review_approved', actor: viewer.login, at: at(25) });
+    expect(botOnlySinceRead([ownReview, botComment(30)], at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30']);
+    // Only the viewer since the read: nothing by someone else is known.
+    expect(botOnlySinceRead([ownReview], at(20), viewer)).toBeNull();
   });
 });
 
@@ -91,9 +98,21 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ events: [botComment(30), humanComment(33)] }))).toEqual({ kind: 'skip', why: 'human_activity' });
   });
 
-  it('never marks the user own PR: bot reviews there can mean work', () => {
+  it('never marks the user own open PR: bot reviews there can mean work', () => {
     const own = { ...pr, author: viewer.login };
     expect(quietReadCheck(input({ pr: own }))).toEqual({ kind: 'skip', why: 'own_pr' });
+  });
+
+  it('marks the user own merged or closed PR when only bots came after the read', () => {
+    const merged = { ...pr, author: viewer.login, state: 'MERGED' as const, mergedAt: at(30) };
+    expect(quietReadCheck(input({ pr: merged }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'CI'] });
+    const closed = { ...pr, author: viewer.login, state: 'CLOSED' as const };
+    expect(quietReadCheck(input({ pr: closed })).kind).toBe('mark');
+  });
+
+  it('does not take the viewer own review after the read for a person', () => {
+    const ownReview = makeEvent({ id: 'own-review', prKey: pr.key, kind: 'review_approved', actor: viewer.login, at: at(25), seenAt: at(25) });
+    expect(quietReadCheck(input({ events: [humanComment(5), ownReview, botComment(30), ciResult(31)] }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'CI'] });
   });
 
   it('never marks a PR with an unseen merge without the user review, even when a bot merged it', () => {
@@ -168,6 +187,12 @@ describe('touchedReadCheck', () => {
     const ownPr = { ...pr, author: viewer.login };
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30)] }))).toEqual({ kind: 'mark', reason: 'replied' });
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), ciResult(35)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+  });
+
+  it('lets bots after the touch pass on the user own PR once it is merged', () => {
+    const merged = { ...pr, author: viewer.login, state: 'MERGED' as const, mergedAt: at(36) };
+    const events = [humanComment(25), own('comment', 30), ciResult(35), botComment(36, 'trunk-io[bot]')];
+    expect(touchedReadCheck(touched({ pr: merged, events }))).toEqual({ kind: 'mark', reason: 'replied' });
   });
 
   it('tolerates bots after the touch on someone else PR, and waits the grace after them', () => {
