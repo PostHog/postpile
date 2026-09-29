@@ -1,6 +1,19 @@
 import { SETUP_ACTIVITY_DAYS, SETUP_HEADINGS, formatInstructionsSections, type SetupSource } from '@postpile/core';
-import type { SetupDraftInput, SetupRefineInput } from '../service.ts';
+import type { SetupDraftInput, SetupFitInput, SetupRefineInput } from '../service.ts';
 import { clip, GITHUB_DATA_RULE, githubData, jsonOnly } from './shared.ts';
+
+/**
+ * What the app does with the instructions, so a draft, a refine and the fit
+ * check only keep lines it can act on. A work context digest built from
+ * Claude Code notes is full of rules for coding agents; without this they
+ * end up under Preferences.
+ */
+const WHAT_POSTPILE_DOES = `What PostPile does with the instructions: it reads their GitHub notifications and pull
+requests, sorts the PRs into topics, writes short summaries of each topic and PR (what happened,
+whose turn it is, what needs them), decides which news is loud or quiet and whether to ping their
+Mac, and drafts a comment for them to edit when they ask. It marks threads read, approves a PR
+or posts a comment only when they click. It never writes, commits or pushes code, never merges,
+never reviews diffs, never runs CI and never posts anything by itself.`;
 
 /** Teammate logins named in the prompt; the rest are counted. */
 const TEAMMATES_SHOWN = 30;
@@ -108,8 +121,11 @@ const DRAFT_RULES = `How to write it:
   "${SETUP_HEADINGS[2]}": what reaches them and from which angle (reviews for their team,
   paths in the ownership rules, PRs they get pulled into), and what they want to hear about.
   "${SETUP_HEADINGS[3]}": repos, bots or kinds of PRs they do not need to hear about.
-  "${SETUP_HEADINGS[4]}": how they like to be told things. Only what the digest or their
-  current instructions say, or a plain default; never infer a preference from PR titles.
+  "${SETUP_HEADINGS[4]}": how they like PostPile to tell them things: summaries, pings, the
+  comments it drafts. Only what the digest or their current instructions say, or a plain
+  default; never infer a preference from PR titles. Leave out rules for coding agents or other
+  tools (how to write code, commit, push, merge or review), even when the digest has them:
+  PostPile does none of that.
 - Each claim is one short line in the first person, as they would write it ("I own the CI
   workflows in acme/app"). No bullets or "#" in the text; the app adds them.
 - Every claim cites, in "sources", the bracket ids it rests on. A claim without a source is only
@@ -132,6 +148,8 @@ export function setupDraftPrompt(input: SetupDraftInput): string {
 request notifications into topics and tells them what needs them. The instructions say who they are
 and how they work; every later prompt of the app reads them first. Write a first draft they will
 review and edit.
+
+${WHAT_POSTPILE_DOES}
 
 ${materialBlock(input)}
 
@@ -157,6 +175,8 @@ export function setupRefinePrompt(input: SetupRefineInput): string {
 request notifications into topics and tells them what needs them. They are reviewing a draft you
 wrote and tell you what is off.
 
+${WHAT_POSTPILE_DOES}
+
 ${materialBlock(input)}
 
 The draft as they left it. Their edits win over anything the material says:
@@ -172,4 +192,50 @@ message is about quiet repos or the main repo, change those suggestions too.
 ${DRAFT_RULES}
 - "reply": one short sentence on what you changed.
 ${jsonOnly(`{"reply": "...", ${ANSWER_SHAPE.slice(1)}`)}`;
+}
+
+const SECTION_PURPOSES = `The sections and what each one is for:
+- "${SETUP_HEADINGS[0]}": who they are, their role and team.
+- "${SETUP_HEADINGS[1]}": the areas, repos and paths they or their team own or drive.
+- "${SETUP_HEADINGS[2]}": what should reach them and from which angle, what they want to hear about.
+- "${SETUP_HEADINGS[3]}": repos, bots or kinds of PRs they do not need to hear about.
+- "${SETUP_HEADINGS[4]}": how PostPile should tell them things: summaries, pings, drafted comments.`;
+
+const FIT_SHAPE = `{"notes": [{"heading": "...", "line": "...", "kind": "no_effect", "why": "...", "moveTo": null, "rewrite": null}]}`;
+
+/**
+ * Setup's fit check: the instructions the user is about to accept, with a
+ * note on each line PostPile cannot act on, that sits under the wrong
+ * heading, or that is too vague to apply. The text is the user's own; there
+ * is no GitHub text in this prompt.
+ */
+export function setupFitPrompt(input: SetupFitInput): string {
+  const text = formatInstructionsSections(input.sections).trim() || '(empty)';
+  return `You check the instructions a developer is about to save for PostPile, the app that sorts their
+GitHub pull request notifications into topics and tells them what needs them. Every later prompt of
+the app reads these instructions first, so a line PostPile cannot act on only takes up room.
+
+${WHAT_POSTPILE_DOES}
+
+${SECTION_PURPOSES}
+
+Their instructions, in their own words:
+${fence('instructions', clip(text, 12000))}
+
+Write a note only for a line that is one of these:
+- "no_effect": it asks for something PostPile never does, so no prompt can follow it. Typical:
+  rules for coding agents or other tools (how to write code or tests, commits, branches, pushing,
+  merging, signing, CI).
+- "wrong_section": PostPile can follow it, but it belongs under another heading. Name that
+  heading in "moveTo".
+- "unclear": too vague for an agent to act on ("be helpful"). Give a concrete wording in "rewrite"
+  when you can tell what they mean.
+Leave every other line alone. Never judge whether a preference is a good one; they decide what
+they want. Most lines fit, and an empty list is a fine answer.
+- "heading": the heading the line is under now. "line": the line exactly as written, without the
+  bullet.
+- "why": one short sentence to them, in plain words ("PostPile never pushes to branches.").
+- "rewrite": a wording PostPile could act on, in their voice, when one keeps what they meant (a
+  comment rule can often stay as a rule for the comments PostPile drafts); otherwise null.
+${jsonOnly(FIT_SHAPE)}`;
 }

@@ -2,6 +2,18 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### New
+
+- Setup checks your instructions before you accept them. The Accept step says which lines PostPile can't act on (rules for coding agents, like pushing or merging), which sit under the wrong heading, and which are too vague. Each note has a fix: remove the line, move it, or use a suggested wording. These are only suggestions: Accept saves the text as it is.
+- Each section in setup's review step says what it is for. Preferences says that PostPile never pushes, merges or reviews code.
+
+### Changed
+
+- The setup draft leaves rules for coding agents out of Preferences, even when your Claude Code notes have them.
+- No live poll, Mac notifications or agent catch-ups while first-run setup is open. They start once you accept or skip setup, so setup's own agent calls don't wait behind them.
+
 ## 0.2.1 (2026-09-29)
 
 ### Fixed

@@ -38,7 +38,7 @@ let h: Harness;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'postpile-setup-'));
   file = join(dir, 'instructions.md');
-  h = makeHarness({ instructionsFile: file });
+  h = makeHarness({ instructionsFile: file, firstRun: true });
   h.reader.teams.set('acme/team-platform', ['viewer', 'bob']);
   h.reader.activity = [activity('acme/app', 1, 'authored'), activity('acme/app', 2, 'reviewed'), activity('acme/docs', 3, 'reviewed')];
   h.reader.files.set('acme/app:.github/CODEOWNERS', '* @acme/all\n/.github/ @acme/team-platform\n');
@@ -164,6 +164,37 @@ describe('setup sweep', () => {
     expect(view.draft?.model).toBeNull();
     expect(view.draft?.sections.every((section) => section.body === '')).toBe(true);
     expect(view.draft?.mainRepo?.repo).toBe('acme/app');
+  });
+});
+
+describe('setup fit check', () => {
+  const sections = [{ heading: 'Preferences', body: "- Keep summaries short\n- Don't push write-ups onto PR branches" }];
+
+  it('sends the text and keeps the notes on lines it has', async () => {
+    h.runner.answer('setup_fit', {
+      notes: [{ heading: 'Preferences', line: "Don't push write-ups onto PR branches", kind: 'no_effect', why: 'PostPile never pushes.' }],
+    });
+    const result = await h.engine.checkSetupFit({ sections });
+    expect(result).toMatchObject({ ok: true, notes: [{ heading: 'Preferences', kind: 'no_effect' }] });
+    expect(h.runner.promptsFor('setup_fit')[0]).toContain('- Keep summaries short');
+    expect(h.telemetry.events.at(-1)).toEqual({ event: 'setup_fit_checked', props: { notes: 1, ok: true } });
+  });
+
+  it('asks nothing for an empty text, and says so when the call fails', async () => {
+    expect(await h.engine.checkSetupFit({ sections: [{ heading: 'Preferences', body: '  ' }] })).toEqual({ ok: true, message: '', notes: [] });
+    expect(h.runner.promptsFor('setup_fit')).toHaveLength(0);
+    // Nothing queued: the fake runner fails the call.
+    const result = await h.engine.checkSetupFit({ sections });
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('The agent could not check the text');
+  });
+});
+
+describe('the live poll during first-run setup', () => {
+  it('waits until setup is accepted or skipped', async () => {
+    expect(await h.engine.pollOnce()).toEqual({ kind: 'blocked', reason: 'setup not finished' });
+    await h.engine.skipSetup();
+    expect((await h.engine.pollOnce()).kind).not.toBe('blocked');
   });
 });
 

@@ -3,6 +3,7 @@ import {
   claimKey,
   formatInstructionsSections,
   mapSetupDraft,
+  mapSetupFit,
   rankActivityRepos,
   setupSources,
   userWrittenLines,
@@ -13,6 +14,9 @@ import {
   type SetupChecksView,
   type SetupDraft,
   type SetupDraftAnswer,
+  type SetupFitAnswer,
+  type SetupFitRequest,
+  type SetupFitResult,
   type SetupMaterial,
   type SetupRefineRequest,
   type SetupRefineResult,
@@ -266,6 +270,30 @@ export class FakeSetup {
     this.sweep!.draft = draft;
     const changedSections = changedHeadings(formatInstructionsSections(request.sections), formatInstructionsSections(draft.sections));
     return { ok: true, message: 'Added your point under Preferences (sample data).', draft, changedSections };
+  }
+
+  /**
+   * Stand-in for setup_fit, by keywords: a line about pushing, merging or
+   * committing has no effect, an "ignore ..." line outside the quiet
+   * section belongs there, and a line of two words or fewer is too vague.
+   */
+  async checkFit(request: SetupFitRequest): Promise<SetupFitResult> {
+    await delay(this.deps.stepMs * 2);
+    const answer: SetupFitAnswer = { notes: [] };
+    for (const section of request.sections) {
+      for (const raw of section.body.split('\n')) {
+        const line = raw.replace(/^[-*]\s*/, '').trim();
+        const words = line.toLowerCase();
+        if (/\b(push|pushes|merge|merges|commit|commits|branch|branches)\b/.test(words)) {
+          answer.notes.push({ heading: section.heading, line, kind: 'no_effect', why: 'PostPile never pushes, commits or merges.', moveTo: null, rewrite: null });
+        } else if (words.startsWith('ignore') && section.heading !== 'What to ignore or keep quiet') {
+          answer.notes.push({ heading: section.heading, line, kind: 'wrong_section', why: 'This is about what to keep quiet.', moveTo: 'What to ignore or keep quiet', rewrite: null });
+        } else if (line !== '' && line.split(/\s+/).length <= 2) {
+          answer.notes.push({ heading: section.heading, line, kind: 'unclear', why: 'Too short to act on.', moveTo: null, rewrite: 'Lead each summary with what needs me' });
+        }
+      }
+    }
+    return { ok: true, message: '', notes: mapSetupFit(answer, request.sections) };
   }
 
   accept(request: SetupAcceptRequest): SetupAcceptResult {

@@ -1,8 +1,21 @@
 import { useState } from 'react';
-import type { SetupCurrentInstructions, SetupDraft, SetupSectionEdit } from '@postpile/core';
+import type { SetupCurrentInstructions, SetupDraft, SetupFitNote, SetupSectionEdit } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useSetupSweep } from '../api/setup.ts';
-import { editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, toggleQuiet, type SetupPicks, type SetupStepKey } from '../lib/setup.ts';
+import { sendTelemetry } from '../api/telemetry.ts';
+import {
+  applyFitFix,
+  draftText,
+  editsFromDraft,
+  pickMainRepo,
+  picksAfterRefine,
+  picksFromDraft,
+  toggleQuiet,
+  type SetupFitFix,
+  type SetupFitState,
+  type SetupPicks,
+  type SetupStepKey,
+} from '../lib/setup.ts';
 import { SetupAcceptStep } from './SetupAcceptStep.tsx';
 import { SetupChecksStep } from './SetupChecksStep.tsx';
 import { SetupReviewStep } from './SetupReviewStep.tsx';
@@ -15,10 +28,20 @@ interface Review {
   edits: SetupSectionEdit[];
   picks: SetupPicks;
   base: SetupCurrentInstructions;
+  /** The fit check of the text as it was when the user went to Accept; kept so going back and forth does not ask again. */
+  fit: SetupFitState | null;
 }
 
 function reviewFrom(draft: SetupDraft, base: SetupCurrentInstructions): Review {
-  return { draft, edits: editsFromDraft(draft), picks: picksFromDraft(draft), base };
+  return { draft, edits: editsFromDraft(draft), picks: picksFromDraft(draft), base, fit: null };
+}
+
+/** The fit check without one note, now matching `edits` (a fix changed the text, a keep did not). */
+function fitWithout(fit: SetupFitState | null, note: SetupFitNote, edits: SetupSectionEdit[]): SetupFitState | null {
+  if (!fit?.result) {
+    return fit;
+  }
+  return { text: draftText(edits), result: { ...fit.result, notes: fit.result.notes.filter((entry) => entry !== note) } };
 }
 
 /**
@@ -78,6 +101,42 @@ export function SetupFlow(props: {
     setReview((current) => current && { ...current, draft, edits: editsFromDraft(draft), picks: picksAfterRefine(current.picks, draft) });
   }
 
+  /**
+   * The fit check for the text as it is now, unless it was already checked.
+   * The answer is dropped when the text changed while it ran.
+   */
+  async function checkFit(edits: SetupSectionEdit[]) {
+    const text = draftText(edits);
+    if (review?.fit?.text === text && review.fit.result?.ok !== false) {
+      return;
+    }
+    setReview((current) => current && { ...current, fit: { text, result: null } });
+    const result = await actions.checkSetupFit({ sections: edits });
+    setReview((current) => (current && draftText(current.edits) === text ? { ...current, fit: { text, result } } : current));
+  }
+
+  function toAccept() {
+    onStep('accept');
+    if (review) {
+      void checkFit(review.edits);
+    }
+  }
+
+  function fixFit(note: SetupFitNote, fix: SetupFitFix) {
+    setReview((current) => {
+      if (!current) {
+        return current;
+      }
+      const edits = applyFitFix(current.edits, note, fix);
+      return { ...current, edits, fit: fitWithout(current.fit, note, edits) };
+    });
+    sendTelemetry('setup_fit_fixed', { kind: note.kind, fix });
+  }
+
+  function keepFit(note: SetupFitNote) {
+    setReview((current) => current && { ...current, fit: fitWithout(current.fit, note, current.edits) });
+  }
+
   function setQuiet(repo: string, quiet: boolean) {
     setReview((current) => current && { ...current, picks: toggleQuiet(current.picks, repo, quiet) });
   }
@@ -111,7 +170,7 @@ export function SetupFlow(props: {
         onQuiet={setQuiet}
         mainRepo={review.picks.mainRepo}
         onMainRepo={setMainRepo}
-        onContinue={() => onStep('accept')}
+        onContinue={toAccept}
         onBack={() => onStep('sweep')}
       />
     );
@@ -122,6 +181,10 @@ export function SetupFlow(props: {
         base={review.base}
         quiet={review.picks.quiet}
         mainRepo={review.picks.mainRepo}
+        fit={review.fit}
+        onFitFix={fixFit}
+        onFitKeep={keepFit}
+        onFitRetry={() => void checkFit(review.edits)}
         onBaseChanged={(base) => {
           setReview({ ...review, base });
           onStep('review');

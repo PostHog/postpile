@@ -24,6 +24,8 @@ import type {
   RepoOverview,
   SetupAcceptRequest,
   SetupAcceptResult,
+  SetupFitRequest,
+  SetupFitResult,
   SetupRefineRequest,
   SetupRefineResult,
   SetupSweepView,
@@ -162,6 +164,8 @@ export interface Actions {
   startSetupSweep(): Promise<void>;
   /** "Tell the agent what's off": one agent call, nothing written. Null when the request itself failed. */
   refineSetup(body: SetupRefineRequest): Promise<SetupRefineResult | null>;
+  /** Setup's fit check: one agent call over the text about to be accepted, nothing written. A failed request comes back as ok: false. */
+  checkSetupFit(body: SetupFitRequest): Promise<SetupFitResult>;
   /** Setup's Accept: writes instructions.md as a new version, quiet repos, scope and the done flag. Local, not a GitHub write. */
   acceptSetup(body: SetupAcceptRequest): Promise<SetupAcceptResult | null>;
   /** "Skip for now": stores the skipped flag. Local. */
@@ -489,6 +493,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  /** A failed check shows in the fit panel itself, not as a toast: it never blocks the accept. */
+  async function checkSetupFit(body: SetupFitRequest): Promise<SetupFitResult> {
+    try {
+      return await withBusy('setup:fit', () => request<SetupFitResult>('POST', '/api/setup/fit', body));
+    } catch (error) {
+      return { ok: false, message: `Could not check the text: ${errorText(error)}`, notes: [] };
+    }
+  }
+
   /** A refused accept (the file changed meanwhile) is not an error: the result carries the new text to diff against. */
   async function acceptSetup(body: SetupAcceptRequest): Promise<SetupAcceptResult | null> {
     try {
@@ -585,6 +598,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     saveSweepSkip: (patterns) => run('workContext:skip', null, () => request('PUT', '/api/work-context/skip-list', { patterns })),
     startSetupSweep,
     refineSetup,
+    checkSetupFit,
     acceptSetup,
     skipSetup: () => run('setup:skip', null, () => request('POST', '/api/setup/skip')),
   };

@@ -16,6 +16,8 @@ const count = z.number().int().min(0);
 // -----------------------------------------------------------------------
 
 const setupStep = z.enum(['checks', 'sweep', 'review', 'accept']);
+const setupFitKind = z.enum(['no_effect', 'wrong_section', 'unclear']);
+const setupFitFix = z.enum(['remove', 'move', 'rewrite']);
 const toolName = z.enum(['gh', 'claude']);
 const toolMissingReason = z.enum(['missing', 'logged_out', 'rejected', 'offline', 'limited']);
 
@@ -62,6 +64,9 @@ export const TELEMETRY_EVENTS = {
   setup_step_viewed: z.object({ step: setupStep }).strict(),
   setup_completed: NO_PROPS,
   setup_skipped: NO_PROPS,
+  // The fit check on the Accept step: how many notes it had, and each fix the user took.
+  setup_fit_checked: z.object({ notes: count, ok: z.boolean() }).strict(),
+  setup_fit_fixed: z.object({ kind: setupFitKind, fix: setupFitFix }).strict(),
   first_sync_completed: z.object({ prs: count, topics: count, duration_ms: durationMs, agent_calls: count }).strict(),
   tool_missing: z.object({ tool: toolName, reason: toolMissingReason }).strict(),
 
@@ -140,6 +145,7 @@ export function isTelemetryEventName(name: string): name is TelemetryEventName {
  */
 export const RENDERER_TELEMETRY_EVENTS = [
   'setup_step_viewed',
+  'setup_fit_fixed',
   'tile_opened',
   'search_used',
   'queue_filter_changed',

@@ -125,6 +125,22 @@ export const setupDraftOutput = z.object({
 
 export const setupRefineOutput = setupDraftOutput.extend({ reply: text.default('') });
 
+/** Setup's fit check. Kinds, lines and headings are checked against the user's text by mapSetupFit. */
+export const setupFitOutput = z.object({
+  notes: z
+    .array(
+      z.object({
+        heading: text.default(''),
+        line: text,
+        kind: text,
+        why: text.default(''),
+        moveTo: text.nullable().default(null),
+        rewrite: text.nullable().default(null),
+      }),
+    )
+    .default([]),
+});
+
 export const instructionsChangeOutput = z.object({
   reply: text.default(''),
   change: z.object({ text: text.min(1), summary: text.min(1) }).nullable(),

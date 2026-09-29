@@ -1,4 +1,4 @@
-import { clipText, mapSetupDraft, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction } from '@postpile/core';
+import { clipText, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction, type SetupFitNote } from '@postpile/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
@@ -19,7 +19,7 @@ import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
-import { setupDraftPrompt, setupRefinePrompt } from './prompts/setup.ts';
+import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
 import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
@@ -37,6 +37,7 @@ import {
   pingDecisionOutput,
   setGroupingOutput,
   setupDraftOutput,
+  setupFitOutput,
   setupRefineOutput,
   topicAssignmentOutput,
 } from './schemas.ts';
@@ -67,6 +68,7 @@ import type {
   SetProposal,
   SetupDraftInput,
   SetupDraftResult,
+  SetupFitInput,
   SetupRefineInput,
   TopicAssignment,
   TopicAssignmentInput,
@@ -93,6 +95,8 @@ const timeouts: Record<AgentPurpose, number> = {
   // Opus over about 100 PR lines; the user watches the sweep's progress lines meanwhile.
   setup_draft: 300_000,
   setup_refine: 180_000,
+  // Sonnet over the user's own short text, while they look at the Accept step.
+  setup_fit: 90_000,
 };
 
 /** Bounds for the work context digest, so a runaway answer cannot bloat every prompt. */
@@ -401,6 +405,11 @@ export class RunnerAgentService implements AgentService {
     const { value, model } = await this.ask('setup_refine', setupRefinePrompt(input), setupRefineOutput);
     const draft = mapSetupDraft({ answer: value, sources: input.sources, repos: input.repos, model, userLines: new Set(input.userLines) });
     return { draft, reply: clipText(value.reply, RECHECK_WHY_MAX) };
+  }
+
+  async checkSetupFit(input: SetupFitInput): Promise<SetupFitNote[]> {
+    const { value } = await this.ask('setup_fit', setupFitPrompt(input), setupFitOutput);
+    return mapSetupFit(value, input.sections);
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

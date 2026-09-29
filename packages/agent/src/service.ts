@@ -23,6 +23,7 @@ import type {
   RelationSignals,
   RuleProposal,
   SetupDraft,
+  SetupFitNote,
   SetupMaterial,
   SetupRepoCount,
   SetupSectionEdit,
@@ -477,6 +478,11 @@ export interface SetupDraftResult {
   reply: string;
 }
 
+/** Setup's fit check over the text the user is about to accept. Only their own words; no GitHub text. */
+export interface SetupFitInput {
+  sections: SetupSectionEdit[];
+}
+
 /**
  * Every digesting job the agent does. Implementations build the prompt,
  * call the AgentRunner and parse the answer. Caching by input hash is the
@@ -510,4 +516,6 @@ export interface AgentService {
   draftSetup(input: SetupDraftInput): Promise<SetupDraftResult>;
   /** Setup: the draft changed as the user asked. Lines the user wrote come back marked fromUser. */
   refineSetup(input: SetupRefineInput): Promise<SetupDraftResult>;
+  /** Setup: notes on lines PostPile cannot act on, under the wrong heading, or too vague. Lines the text lacks are dropped. */
+  checkSetupFit(input: SetupFitInput): Promise<SetupFitNote[]>;
 }

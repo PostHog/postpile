@@ -35,6 +35,8 @@ import type {
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupChecksView,
+  SetupFitRequest,
+  SetupFitResult,
   SetupRefineRequest,
   SetupRefineResult,
   SetupStatus,
@@ -434,6 +436,11 @@ export class Engine implements EngineService {
     }
     if (this.consolidating) {
       return Promise.resolve({ kind: 'blocked', reason: 'consolidation running' });
+    }
+    // First-run setup is open: no fetch, topic calls, catch-ups or Mac pings before the user has
+    // instructions (or skips). Accept's sync, and the start sync after a skip, take over from there.
+    if (this.setup.status().needed) {
+      return Promise.resolve({ kind: 'blocked', reason: 'setup not finished' });
     }
     // Paused, not failing: no gh process and no request until a due recheck finds gh working again.
     const ghOff = this.toolHealth.ghOffReason();
@@ -858,6 +865,12 @@ export class Engine implements EngineService {
 
   refineSetup(request: SetupRefineRequest): Promise<SetupRefineResult> {
     return this.setup.refine(request);
+  }
+
+  async checkSetupFit(request: SetupFitRequest): Promise<SetupFitResult> {
+    const result = await this.setup.checkFit(request);
+    this.telemetry.capture('setup_fit_checked', { notes: result.notes.length, ok: result.ok });
+    return result;
   }
 
   async acceptSetup(request: SetupAcceptRequest): Promise<SetupAcceptResult> {

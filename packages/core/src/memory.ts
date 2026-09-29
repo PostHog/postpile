@@ -392,7 +392,9 @@ export type AgentCallKind =
   /** The setup flow's draft of instructions.md from the user's GitHub activity. */
   | 'setup_draft'
   /** "Tell the agent what's off" on the setup draft. */
-  | 'setup_refine';
+  | 'setup_refine'
+  /** Setup's fit check: lines of the draft PostPile cannot act on or that sit under the wrong heading. */
+  | 'setup_fit';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {
