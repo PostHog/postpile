@@ -3982,7 +3982,11 @@ fixtures: a done tile or PR offers only Open, the lead PR is the turn's PR,
 MCP and the pane name the same move, same events twice give the same facts.
 Where rules differ on purpose (routed team requests, team coverage) the
 invariant says so instead of asserting equality. One scenario test per bug
-fixed.
+fixed. Landed in `core/rules-invariants.test.ts` (real-shaped boards: a done
+PR on a live or snoozed tile, routed team requests),
+`apps/server/src/fake/rules-invariants.test.ts` (every sample tile) and
+`mcp/move-agreement.test.ts` (pr_context against the pane for every sample
+PR).
 
 ## Architecture
 
