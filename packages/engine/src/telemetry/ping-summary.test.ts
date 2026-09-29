@@ -59,13 +59,13 @@ describe('PingSummary', () => {
     s.summary.sendIfDue();
     s.summary.sendIfDue();
     expect(s.telemetry.events).toEqual([
-      { event: 'pings_summarized', props: { pinged: 2, withheld_rules: 1, withheld_agent: 1, handled_quietly: 1 } },
+      { event: 'pings_summarized', props: { pinged: 2, withheld_rules: 1, withheld_agent: 1, pinged_glance: 0, handled_quietly: 1 } },
     ]);
 
     s.store.pingDecisions.add(decision(70, false, 'rules'));
     s.at(125);
     s.summary.sendIfDue();
-    expect(s.telemetry.events[1]).toEqual({ event: 'pings_summarized', props: { pinged: 0, withheld_rules: 1, withheld_agent: 0, handled_quietly: 0 } });
+    expect(s.telemetry.events[1]).toEqual({ event: 'pings_summarized', props: { pinged: 0, withheld_rules: 1, withheld_agent: 0, pinged_glance: 0, handled_quietly: 0 } });
   });
 
   it('sends nothing for an hour without decisions or quiet mark-reads, and counts the next hour on its own', () => {
@@ -79,6 +79,6 @@ describe('PingSummary', () => {
     s.store.pingDecisions.add(decision(90, true, 'agent'));
     s.at(122);
     s.summary.sendIfDue();
-    expect(s.telemetry.events).toEqual([{ event: 'pings_summarized', props: { pinged: 1, withheld_rules: 0, withheld_agent: 0, handled_quietly: 0 } }]);
+    expect(s.telemetry.events).toEqual([{ event: 'pings_summarized', props: { pinged: 1, withheld_rules: 0, withheld_agent: 0, pinged_glance: 0, handled_quietly: 0 } }]);
   });
 });

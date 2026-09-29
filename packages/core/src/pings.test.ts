@@ -129,11 +129,13 @@ describe('a review request counts by whom it asks, not who clicked it', () => {
     expect(pingTemplate(event, pr).title).toBe('Review requested for team-platform · app#21');
   });
 
-  it('sends a bot-made routed team request the way a human-made one goes today (the agent decides)', () => {
+  it('sends a bot-made routed team request the way a human-made one goes: no poll ping, the glance decides', () => {
     const pr = makePr({ number: 22, author: 'rowan', reviewerTeams: ['acme/team-platform'], timeline: [request('acme/team-platform')] });
     const event = requestEvent(pr);
     expect(event.ruleLoudness).toBe('loud');
-    expect(pingRule([event], pr, withTeam, false).class).toBe('addressed');
+    expect(pingRule([event], pr, withTeam, false).class).toBe('routed');
+    const human = { ...event, actor: 'rowan', isBot: false };
+    expect(pingRule([human], pr, withTeam, false).class).toBe('routed');
   });
 
   it('keeps a bot-made request to another team quiet bot activity', () => {

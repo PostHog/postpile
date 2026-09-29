@@ -13,6 +13,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The verdict pill on a multi-PR tile talks about the PR the footer names.
 - Whose turn names the re-reviewer: once the author pushed after a change request and requested that reviewer again, it says "ada to re-review" instead of "rowan to address ada's changes". Also on your own PRs.
 - A review request a bot made for you or your team counts like one a person made: it makes the tile unread and pings the same way. Before, a reviewer-assigning bot's request to your team was taken for bot activity and never pinged.
+- Reviews routed to your team on PRs from outside the team no longer go through the ping check on every event. They ping once, when the PR's assessment says "Look closer" (even if a teammate reviewed already), and the tile turns unread with "Look closer: review routed to <team>". "Looks safe" and "Not yours" never ping for them.
 - Your own merged or closed PRs are marked read on GitHub when only bots came after your last read or touch (the own-PR exception now only applies while the PR is open). Your own review after the last read no longer counts as someone else's activity.
 
 ### Added

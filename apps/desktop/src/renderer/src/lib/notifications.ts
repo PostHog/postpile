@@ -233,6 +233,7 @@ const DECIDED_BY: Record<PingDecision['source'], string> = {
   rules: 'the rules',
   agent: 'the agent',
   fallback: 'the fallback (agent unavailable)',
+  glance: 'the glance (Look closer on a routed review)',
 };
 
 export interface PingDecisionLine {

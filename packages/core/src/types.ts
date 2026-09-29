@@ -245,7 +245,9 @@ export type EventKind =
   | 'ci'
   | 'deploy'
   | 'merge_queue'
-  | 'bot_comment';
+  | 'bot_comment'
+  /** App-made, not from GitHub: the glance said Look closer on a review routed to the viewer's team (see glance-pings.ts). */
+  | 'look_closer';
 
 /**
  * How much an event should grab attention.

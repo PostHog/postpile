@@ -73,6 +73,7 @@ export class GlanceBatchWriter {
           store.meta.delete(glanceGapKey(glance.prKey));
         }
       });
+      this.deps.onGlancesStored?.(result.glances.map((glance) => glance.prKey));
       for (const key of result.missing) {
         this.lastError.set(key, result.missingWhy?.[key] ?? MISSING_REASON);
       }

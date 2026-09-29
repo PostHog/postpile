@@ -62,7 +62,14 @@ export class PollRun {
     await assigner.run(fetchedPrKeys);
   }
 
+  /** One cycle, plus the Look closer pings glances wrote since the last one (they wait for the poll to reach the Mac). */
   async run(focus: PollFocus = NO_FOCUS): Promise<PollCycle> {
+    const cycle = await this.runCycle(focus);
+    const glancePings = this.deps.glancePings?.drain() ?? [];
+    return cycle.kind === 'done' && glancePings.length > 0 ? { ...cycle, pings: [...cycle.pings, ...glancePings] } : cycle;
+  }
+
+  private async runCycle(focus: PollFocus): Promise<PollCycle> {
     const { store, now, callLog } = this.deps;
     const inbox = await this.github.poll(POLL_MAX_PRS, focus);
     const done = { kind: 'done' as const, notModified: inbox.notModified, githubPollIntervalSeconds: inbox.pollIntervalSeconds };

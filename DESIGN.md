@@ -2971,6 +2971,10 @@ beyond what the full sync already does for threads that left the inbox).
   on a non-draft PR the author's push or comment after the user's changes
   request, headline "@pim addressed your changes"). Agent and user
   overrides count.
+- `routed` (2026-09-29): a review request routed to the viewer's team on a
+  PR from outside the team (not theirs, not a teammate's), made by a person
+  or a bot. It never pings from the poll and never reaches the agent; it
+  pings when the glance says Look closer (below).
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
   instructions, topic tailoring, dossier brief, glance, the new events (fenced
@@ -2984,6 +2988,47 @@ beyond what the full sync already does for threads that left the inbox).
   `pingTemplate` text ("@bob asked you something · app#1850").
 - Every decision lands in `ping_decision` (migration 007): thread, PR, ping
   yes/no, source rules / agent / fallback, title, body, reason, time.
+
+**Routed team requests ping when the glance says Look closer** (decided
+2026-09-29). Data from Julian's last week: about 120 routed team-devex PRs,
+only 6 of the 63 glanced ones were NOT_YOURS, so "ping all unless not yours"
+would be 30-40 pings a day; LOOK_CLOSER was 27 a week. Julian: "'Look
+closer' is exactly what I want on these, and the minutes delay doesn't
+matter at all because currently I might look in the evening or the next
+day." And on teammates: "if the verdict was look closer we can ignore
+teammate even".
+
+- A routed team request (class `routed` above) pings when the PR's glance is
+  written or rewritten with verdict LOOK_CLOSER while that team request is
+  still pending (not removed), the viewer has not reviewed the head (or
+  approved), and no tile holding the PR is snoozed. A teammate's review
+  does not stop it, and whose turn does not have to be the viewer's.
+- Hooked where glances are stored (`GlanceBatchWriter` tells
+  `DigestDeps.onGlancesStored`, in a full sync's digest and in a catch-up
+  run), not in the poll. Rule in core `lookCloserPingCheck`
+  (`glance-pings.ts`), engine `GlancePings`.
+- Once per request: the request is the newest timeline request for the team
+  (`teamRequestId`), kept in meta `look_closer_ping:<pr>`. A rewritten glance
+  does not ping again for the same request; a new request after a removal
+  can.
+- Recorded as a `ping_decision` row with source `glance` and reason "Look
+  closer: review routed to team-devex"; the debug view shows it ("pinged by
+  the glance"). Text like other review pings: "Look closer: review for
+  team-devex · app#1850", body the PR title and the glance's first for-you
+  sentence (`lookCloserPingText`).
+- A ping must lead to something visible: it adds an app-made loud event
+  (kind `look_closer`, summary "Look closer: review routed to team-devex",
+  `lookCloserEvent`), so the tile is unread with that reason even when a
+  teammate reviewed; a mark-read clears it as usual. Snapshot stores keep
+  app-made events (`APP_EVENT_KINDS` in the store's `upsertDerived`).
+- Delivery: the ping waits in `GlancePings` and goes out with the next poll
+  cycle's pings (`PollRun` drains it), through the same throttle.
+- Other verdicts (LOOKS_SAFE, NOT_YOURS) never ping for routed requests; the
+  tile still shows in To review as before. Personal requests and team
+  requests on a teammate's PR keep pinging from the poll (class
+  `addressed`).
+- `pings_summarized` counts these as `pinged_glance`, apart from the poll's
+  decisions.
 
 **Mac notifications** (desktop main, `MacNotifier`):
 
@@ -3351,7 +3396,8 @@ message, are dropped.
    CI green — or a time bucket for `until_time`), `opened_on_github`,
    `ask_sent` (AskComposer's send), `chat_message_sent`, `mac_ping_shown` /
    `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
-   withheld_agent, handled_quietly: counts since the last summary, from
+   withheld_agent, pinged_glance (Look closer on routed reviews),
+   handled_quietly: counts since the last summary, from
    `ping_decision` and the action log's `quiet` mark-reads; the engine sends
    it at most once an hour after a sync or a poll cycle, window end kept in
    meta `pings_summarized_at`; nothing when every count is 0, the first call

@@ -961,6 +961,15 @@ the app meanwhile.
 
 ## Decided
 
+- **Review requests by whom they ask; routed reviews ping on Look closer**
+  (2026-09-29): a `review_requested` event aimed at the viewer or their team
+  counts whoever made it, bot or person. A routed team request never pings
+  from the poll; it pings once per request when its glance says
+  LOOK_CLOSER, even after a teammate reviewed, and marks the tile unread
+  ("Look closer: review routed to <team>"). "Ping all unless not yours" was
+  turned down (30-40 pings a day). DESIGN.md "Events" and "Live poll and
+  Mac pings".
+
 - **Actions act on what you look at** (2026-09-29): the detail pane's
   Mark read / Mark done / Approve act on the selected PR (per-PR label, per-PR
   undo, Snooze in the pane only on single-PR tiles), the tile footer on the

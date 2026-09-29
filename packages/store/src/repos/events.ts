@@ -50,18 +50,25 @@ export function toEvent(row: EventRow): PrEvent {
   };
 }
 
+/** Events PostPile makes itself, never derived from a GitHub snapshot: a snapshot store keeps them. */
+export const APP_EVENT_KINDS: readonly EventKind[] = ['look_closer'];
+
 export class EventRepo {
   constructor(private readonly db: DatabaseSync) {}
 
   /**
    * Writes freshly derived events for one PR. Keeps seen_at and override_* of
    * events that already exist, and drops events the new snapshot no longer
-   * produces (deleted comments, a kind that changed). Returns the new ids.
+   * produces (deleted comments, a kind that changed). App-made events
+   * (`APP_EVENT_KINDS`, see `addAppEvent`) are not derived and stay. Returns
+   * the new ids.
    */
   upsertDerived(prKey: PrKey, events: PrEvent[]): string[] {
     return inTransaction(this.db, () => {
       const existing = new Set(
-        all<{ id: string }>(this.db, 'SELECT id FROM pr_event WHERE pr_key = ?', prKey).map((row) => row.id),
+        all<{ id: string; kind: string }>(this.db, 'SELECT id, kind FROM pr_event WHERE pr_key = ?', prKey)
+          .filter((row) => !APP_EVENT_KINDS.includes(row.kind as EventKind))
+          .map((row) => row.id),
       );
       const incoming = new Set(events.map((event) => event.id));
       for (const id of existing) {
@@ -98,6 +105,32 @@ export class EventRepo {
       }
       return created;
     });
+  }
+
+  /**
+   * An event PostPile makes itself (a Look closer ping on a routed review).
+   * Inserted once; an existing id is left as it is (seen stays seen).
+   * Returns whether it was new.
+   */
+  addAppEvent(event: PrEvent): boolean {
+    const changes = run(
+      this.db,
+      `INSERT OR IGNORE INTO pr_event
+         (id, pr_key, kind, actor, is_bot, at, summary, url, source_id, rule_loudness, rule_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      event.id,
+      event.prKey,
+      event.kind,
+      event.actor,
+      fromBool(event.isBot),
+      event.at,
+      event.summary,
+      event.url,
+      event.sourceId,
+      event.ruleLoudness,
+      event.ruleReason,
+    );
+    return changes > 0;
   }
 
   /** Oldest first. */

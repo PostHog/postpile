@@ -41,11 +41,12 @@ export class PingSummary {
       pinged: decisions.pinged,
       withheld_rules: decisions.withheldRules,
       withheld_agent: decisions.withheldAgent,
+      pinged_glance: decisions.glance,
       handled_quietly: quiet,
     };
     // The window moves on either way: an empty hour has nothing to add to the next summary.
     this.store.meta.set(PING_SUMMARY_META_KEY, until);
-    if (props.pinged + props.withheld_rules + props.withheld_agent + props.handled_quietly > 0) {
+    if (props.pinged + props.withheld_rules + props.withheld_agent + props.pinged_glance + props.handled_quietly > 0) {
       this.telemetry.capture('pings_summarized', props);
     }
   }

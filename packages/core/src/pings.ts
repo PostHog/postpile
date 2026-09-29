@@ -6,15 +6,20 @@ import { clipText } from './dossier.ts';
 import type { GitHubQuotaView } from './github-quota.ts';
 import { reviewRequestSubject } from './events.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
+import { isRoutedTeamRequestEvent } from './glance-pings.ts';
 import { effectiveLoudness } from './loudness.ts';
 import { isViewerSubject, sameLogin } from './mentions.ts';
-import type { IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
+import { teamSlug } from './review-request.ts';
+import type { Glance, IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
 
 /**
  * What the rules make of a PR's new events, most aimed at the user first.
- * Only `addressed` can ping: the agent sees those and may veto or rephrase.
+ * Only `addressed` can ping here: the agent sees those and may veto or
+ * rephrase. `routed` is a review request routed to the viewer's team on a
+ * PR from outside the team: it never pings from the poll, it pings once when
+ * the glance says Look closer (`lookCloserPingCheck`, 2026-09-29).
  */
-export type PingRuleClass = 'addressed' | 'not_addressed' | 'quiet' | 'muted' | 'bot' | 'quiet_repo';
+export type PingRuleClass = 'addressed' | 'routed' | 'not_addressed' | 'quiet' | 'muted' | 'bot' | 'quiet_repo';
 
 export interface PingRule {
   class: PingRuleClass;
@@ -31,7 +36,8 @@ export interface PingTarget {
   prKey: PrKey;
 }
 
-export type PingDecisionSource = 'rules' | 'agent' | 'fallback';
+/** glance: a routed team request whose glance said Look closer (`lookCloserPingCheck`). */
+export type PingDecisionSource = 'rules' | 'agent' | 'fallback' | 'glance';
 
 /** One decision per PR thread with new activity in a poll cycle. Stored in ping_decision for debugging. */
 export interface PingDecision {
@@ -188,9 +194,14 @@ export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: b
   if (newestFirst.every((event) => isBotOnly(event, viewer))) {
     return ruleFrom('bot', newestFirst[0]!);
   }
-  const addressed = newestFirst.find((event) => isAddressedToViewer(event, pr, viewer));
+  const aimed = newestFirst.filter((event) => isAddressedToViewer(event, pr, viewer));
+  const addressed = aimed.find((event) => !isRoutedTeamRequestEvent(event, pr, viewer));
   if (addressed) {
     return ruleFrom('addressed', addressed);
+  }
+  const routed = aimed[0];
+  if (routed) {
+    return { ...ruleFrom('routed', routed), reason: 'review routed to your team: pings when the glance says Look closer' };
   }
   const loud = newestFirst.find((event) => effectiveLoudness(event) === 'loud');
   if (loud) {
@@ -254,5 +265,19 @@ export function pingTemplate(event: PrEvent, pr: Pr): { title: string; body: str
   return {
     title: clipText(`${headline(event)} · ${shortKey(pr.key)}`, PING_TITLE_MAX),
     body: clipText(`${pr.title}\n${event.summary}`, PING_BODY_MAX),
+  };
+}
+
+/** The first sentence of the glance's for-you line. */
+function firstSentence(text: string): string {
+  const match = /^(.+?[.!?])(\s|$)/.exec(text.trim());
+  return match ? match[1]! : text.trim();
+}
+
+/** "Look closer: review for team-devex · app#1850", then the PR title and the glance's first sentence. */
+export function lookCloserPingText(pr: Pr, team: string, glance: Pick<Glance, 'forYou'>): { title: string; body: string } {
+  return {
+    title: clipText(`Look closer: review for ${teamSlug(team)} · ${shortKey(pr.key)}`, PING_TITLE_MAX),
+    body: clipText(`${pr.title}\n${firstSentence(glance.forYou)}`, PING_BODY_MAX),
   };
 }

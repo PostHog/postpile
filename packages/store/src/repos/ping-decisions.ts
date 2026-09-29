@@ -28,9 +28,12 @@ function toDecision(row: PingDecisionRow): PingDecision {
 
 /** Decisions after a point in time, counted by outcome and who decided. */
 export interface PingDecisionCounts {
+  /** Pings from the poll: rules, agent or fallback. */
   pinged: number;
   withheldRules: number;
   withheldAgent: number;
+  /** Pings from a Look closer glance on a routed review (source `glance`). */
+  glance: number;
 }
 
 /** Append-only log of ping decisions, for debugging and the hourly telemetry summary. */
@@ -81,9 +84,11 @@ export class PingDecisionRepo {
       since,
       until,
     );
-    const counts: PingDecisionCounts = { pinged: 0, withheldRules: 0, withheldAgent: 0 };
+    const counts: PingDecisionCounts = { pinged: 0, withheldRules: 0, withheldAgent: 0, glance: 0 };
     for (const row of rows) {
-      if (toBool(row.ping)) {
+      if (row.source === 'glance') {
+        counts.glance += row.n;
+      } else if (toBool(row.ping)) {
         counts.pinged += row.n;
       } else if (row.source === 'agent') {
         counts.withheldAgent += row.n;

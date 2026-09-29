@@ -101,7 +101,8 @@ export const TELEMETRY_EVENTS = {
   mac_ping_clicked: NO_PROPS,
   // At most hourly, only when a count is above 0: ping decisions since the last summary (pinged, or
   // withheld by the rules or the agent) and threads PostPile marked read itself ("Handled quietly").
-  pings_summarized: z.object({ pinged: count, withheld_rules: count, withheld_agent: count, handled_quietly: count }).strict(),
+  // pinged_glance: routed reviews whose glance said Look closer (their own source, not a poll decision).
+  pings_summarized: z.object({ pinged: count, withheld_rules: count, withheld_agent: count, pinged_glance: count, handled_quietly: count }).strict(),
   search_used: z.object({ query_length_bucket: queryLengthBucket }).strict(),
   queue_filter_changed: z.object({ filter: queueFilter }).strict(),
   topic_opened: z.object({ section: topicSection }).strict(),
