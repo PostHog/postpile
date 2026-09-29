@@ -2,6 +2,10 @@
 
 Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
 
+## 0.1.0-alpha.1 (unreleased)
+
+- Update reminder: when a new release is out, the title bar shows "Update available" with the release notes link and `brew upgrade --cask postpile`. "Later" hides it for that version. The app asks api.github.com for releases every 6 hours, no token; `POSTPILE_UPDATE_CHECK=0` turns it off.
+
 ## 0.1.0-alpha.0 (2026-09-28)
 
 First public build. macOS arm64 only, ad-hoc signed, not notarized.

@@ -6,6 +6,16 @@ now".
 
 ## Done
 
+- Update reminder (2026-09-29): the server asks GitHub for the last 10
+  PostPile releases (unauthenticated, ETag kept in memory, 10s timeout)
+  ~30s after start and every 6 hours, `GET /api/update` serves the last
+  answer (`compareVersions` / `pickUpdate` in core; pre-releases count).
+  The title bar shows a neutral `UpdatePill` ("Update available ·
+  0.1.0-alpha.1") with a popover: date, release notes link, `brew upgrade
+  --cask postpile` with Copy, and "Later" (per version, localStorage).
+  `POSTPILE_UPDATE_CHECK=0` turns it off; sample data shows a sample
+  update unless `POSTPILE_FAKE_UPDATE=0`. Not tried against a real
+  release yet (fake mode and unit tests only).
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as
