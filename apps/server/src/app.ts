@@ -7,9 +7,12 @@ import {
   DEBUG_NOTIFICATIONS_DEFAULT_LIMIT,
   DEBUG_NOTIFICATIONS_MAX_LIMIT,
   prKey,
+  RENDERER_TELEMETRY_EVENTS,
+  TELEMETRY_EVENTS,
   type AppConfig,
+  type TelemetryEventName,
 } from '@postpile/core';
-import type { EngineService } from '@postpile/engine';
+import { NoopTelemetry, type EngineService, type Telemetry } from '@postpile/engine';
 import { UpdatesOff, type UpdateSource } from './update-check.ts';
 
 /** Every /api request must carry the server's token in this header. */
@@ -157,6 +160,13 @@ function isClientError(error: Error): boolean {
   return error instanceof BadRequestError || error instanceof z.ZodError || error instanceof SyntaxError;
 }
 
+const telemetryBody = z.object({ event: z.string(), props: z.record(z.string(), z.unknown()).default({}) });
+
+/** Only the renderer-allowed subset (packages/core/src/telemetry-events.ts), never the whole catalogue: the engine sends its own events directly. */
+function isRendererTelemetryEvent(name: string): name is TelemetryEventName {
+  return (RENDERER_TELEMETRY_EVENTS as readonly string[]).includes(name);
+}
+
 /**
  * JSON API over EngineService. Tile and event ids contain "/", "#" and ":",
  * so clients must encodeURIComponent them in paths.
@@ -166,7 +176,13 @@ function isClientError(error: Error): boolean {
  * POSTs. CORS can stay open because the token travels in a custom header, which
  * a page can only send after a preflight and only if it knows the token.
  */
-export function createApp(engine: EngineService, token: string, config: AppConfig, updates: UpdateSource = new UpdatesOff('')): Hono {
+export function createApp(
+  engine: EngineService,
+  token: string,
+  config: AppConfig,
+  updates: UpdateSource = new UpdatesOff(''),
+  telemetry: Telemetry = new NoopTelemetry(),
+): Hono {
   if (token === '') {
     throw new Error('createApp needs a non-empty token');
   }
@@ -186,6 +202,21 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
   app.get('/api/config', (c) => c.json(config));
   // The title bar's update reminder: the last check's answer, never a live request to GitHub.
   app.get('/api/update', (c) => c.json(updates.status()));
+  // The renderer's only way to PostHog: an allow-listed event name plus props validated
+  // against the same catalogue the engine's own Telemetry class uses. Unknown events and
+  // disallowed props are refused with 400, never silently dropped or forwarded as is.
+  app.post('/api/telemetry', async (c) => {
+    const body = telemetryBody.parse(await c.req.json());
+    if (!isRendererTelemetryEvent(body.event)) {
+      return c.json({ error: `telemetry event not allowed from the renderer: ${body.event}` }, 400);
+    }
+    const props = TELEMETRY_EVENTS[body.event].safeParse(body.props);
+    if (!props.success) {
+      return c.json({ error: `bad props for ${body.event}: ${props.error.message}` }, 400);
+    }
+    telemetry.capture(body.event, props.data);
+    return c.json({ ok: true });
+  });
   // The bodies are optional. A sync without maxAgentCalls gets the app's cap, so
   // opening the app never starts an uncapped (and costly) first sync.
   app.get('/api/sync/last', async (c) => c.json(await engine.lastSyncReport()));

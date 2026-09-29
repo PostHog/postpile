@@ -69,12 +69,13 @@ export class GitHubClient implements GitHubReader {
   }
 
   async viewer(): Promise<Viewer> {
-    const who = await this.http.graphql<{ viewer: { login: string } }>(VIEWER_LOGIN_QUERY);
+    const who = await this.http.graphql<{ viewer: { login: string; databaseId: number | null } }>(VIEWER_LOGIN_QUERY);
     if (!who.data) {
       throw graphqlFailure('viewer query', who.errors);
     }
     const login = who.data.viewer.login;
-    return { login, teams: await this.viewerTeams(login) };
+    const databaseId = who.data.viewer.databaseId;
+    return { login, teams: await this.viewerTeams(login), ...(typeof databaseId === 'number' ? { databaseId } : {}) };
   }
 
   /**

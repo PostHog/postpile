@@ -59,3 +59,11 @@ export * from './setup-draft.ts';
 export * from './tools.ts';
 export * from './mac-privacy.ts';
 export * from './updates.ts';
+export * from './telemetry-events.ts';
+export * from './telemetry-guard.ts';
+export * from './telemetry-errors.ts';
+export * from './telemetry-sync.ts';
+// telemetry-identity.ts is deliberately not re-exported here: it imports
+// node:crypto, and this barrel is also type-checked from the renderer's
+// browser tsconfig (import type only, but tsc still resolves the whole
+// module graph). Import it from '@postpile/core/telemetry-identity' instead.

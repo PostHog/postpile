@@ -10,6 +10,7 @@ describe('defaultPaths', () => {
     const paths = defaultPaths({ env: {}, platform: 'darwin', home: '/Users/me' });
     expect(paths.databaseFile).toBe('/Users/me/Library/Application Support/PostPile/db.sqlite');
     expect(paths.instructionsFile).toBe('/Users/me/.config/postpile/instructions.md');
+    expect(paths.telemetryIdFile).toBe('/Users/me/.config/postpile/telemetry-id');
   });
 
   it('honours XDG dirs elsewhere', () => {

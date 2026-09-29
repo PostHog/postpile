@@ -17,10 +17,13 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./fixtures": "./src/fixtures.ts"
+    "./fixtures": "./src/fixtures.ts",
+    "./telemetry-identity": "./src/telemetry-identity.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
-  "dependencies": {}
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
 }

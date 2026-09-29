@@ -2,6 +2,7 @@ import type { ConsolidateOptions, ConsolidationReport } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { errorText } from '../errors.ts';
 import type { RunDeps } from '../run-deps.ts';
+import { runTelemetry } from '../run-deps.ts';
 import { Consolidator } from './consolidator.ts';
 
 function emptyReport(startedAt: string): ConsolidationReport {
@@ -49,6 +50,9 @@ export class ConsolidationRun {
       callLog.end();
     }
     report.finishedAt = now().toISOString();
+    if (report.skipped === null) {
+      runTelemetry(this.deps).capture('consolidation_ran', { proposals_filed: report.topicProposalsFiled + report.ruleProposalsFiled });
+    }
     return report;
   }
 }

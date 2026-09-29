@@ -45,6 +45,7 @@ import type {
   ToolsView,
   TopicDetail,
   TopicListItem,
+  TopicProposalKind,
   ViewerView,
   NotificationDebugRow,
   Timers,
@@ -52,8 +53,20 @@ import type {
   WorkContextView,
   WorkThreadForget,
 } from '@postpile/core';
-import { emptyAgentCallStats, normalizeRepoScope, OFF_POLL_STATUS, parsePrKey, systemTimers, withQuietRepo } from '@postpile/core';
+import { arch, release } from 'node:os';
+import {
+  emptyAgentCallStats,
+  normalizeRepoScope,
+  OFF_POLL_STATUS,
+  parsePrKey,
+  snoozeTelemetryBucket,
+  systemTimers,
+  withQuietRepo,
+} from '@postpile/core';
 import type { AutoSyncOptions } from './auto-sync.ts';
+import { isPostHogMember } from '@postpile/core/telemetry-identity';
+import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
+import { loadViewer } from './viewer-meta.ts';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -147,6 +160,22 @@ export interface EngineDeps {
    * working, for tests that do not care.
    */
   tools?: ToolHealth;
+  /** Product analytics (DESIGN.md "Usage analytics"). Defaults to a no-op: never required, safe in every test. */
+  telemetry?: Telemetry;
+  /** For the app_version person property; the identify call is skipped without one. */
+  appVersion?: string;
+}
+
+/**
+ * proposal_resolved only tracks a topic merge or a rename (DESIGN.md "Agent
+ * trust"); new_topic and split have no slot in that event's kind enum, so
+ * they are left untracked rather than mapped to something misleading.
+ */
+function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic_merge' | 'rename' | null {
+  if (kind === 'merge' || kind === 'area_merge') {
+    return 'topic_merge';
+  }
+  return kind === 'rename' ? 'rename' : null;
 }
 
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
@@ -178,11 +207,13 @@ export class Engine implements EngineService {
   private readonly catchUpCap: CatchUpCap;
   private readonly catchUps: CatchUpQueue;
   private readonly github: GitHubSync;
+  private readonly telemetry: Telemetry;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
+    this.telemetry = deps.telemetry ?? new NoopTelemetry();
     this.toolHealth = deps.tools ?? ToolHealth.assumeOk(now);
     const agentOff = (): string | null => this.toolHealth.agentOffReason();
     const history = new InstructionsHistory(store, deps.instructionsFile, now);
@@ -214,7 +245,7 @@ export class Engine implements EngineService {
     this.memorySources = new MemorySourcesReads(store, now);
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
-    const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff };
+    const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff, telemetry: this.telemetry };
     const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, deps.syncLog);
@@ -314,12 +345,36 @@ export class Engine implements EngineService {
     if (!tools.canSync) {
       return this.blockedSyncReport(tools.gh.headline);
     }
-    return this.syncRun.run(options);
+    const report = await this.syncRun.run(options);
+    this.reportIdentity();
+    return report;
+  }
+
+  /**
+   * Once the viewer's numeric GitHub id is known: switch telemetry from the
+   * random install id to the hashed id (aliasing the two), and refresh the
+   * person properties. Cheap and idempotent, so it runs after every sync
+   * rather than only the first time.
+   */
+  private reportIdentity(): void {
+    const viewer = loadViewer(this.deps.store);
+    if (!viewer?.databaseId) {
+      return;
+    }
+    this.telemetry.setViewerIdentity(viewer.databaseId);
+    this.telemetry.identifyPerson({
+      appVersion: this.deps.appVersion ?? 'unknown',
+      osVersion: release(),
+      arch: arch(),
+      isPosthogMember: isPostHogMember(viewer),
+      agentAvailable: this.toolHealth.agentOffReason() === null,
+    });
   }
 
   private blockedSyncReport(reason: string): SyncReport {
     const at = this.deps.now().toISOString();
     (this.deps.syncLog ?? console.log)(`sync: skipped: ${reason}`);
+    this.telemetry.capture('sync_failed', { error_kind: 'gh_unavailable' });
     return {
       startedAt: at,
       finishedAt: at,
@@ -578,16 +633,31 @@ export class Engine implements EngineService {
     return this.chats.getChat(tileId);
   }
 
-  approve(prKey: PrKey): Promise<ActionResult> {
-    return this.prActions.approve(prKey);
+  async approve(prKey: PrKey): Promise<ActionResult> {
+    const result = await this.prActions.approve(prKey);
+    if (result.ok) {
+      // Approve only ever runs from the detail pane's action bar (CLAUDE.md
+      // "Approve is final"); was_agent_approved is reserved for a future
+      // agent-driven approve, which does not exist yet.
+      this.telemetry.capture('pr_approved', { from: 'detail', was_agent_approved: false });
+    }
+    return result;
   }
 
   async markRead(tileId: string): Promise<ActionResult> {
-    return this.tiles.markRead(tileId);
+    const result = await this.tiles.markRead(tileId);
+    if (result.ok) {
+      this.telemetry.capture('marked_read', { count: 1, origin: 'tile' });
+    }
+    return result;
   }
 
   async markThreadRead(threadId: string): Promise<ActionResult> {
-    return this.tiles.markThreadRead(threadId);
+    const result = await this.tiles.markThreadRead(threadId);
+    if (result.ok) {
+      this.telemetry.capture('marked_read', { count: 1, origin: 'debug' });
+    }
+    return result;
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
@@ -601,7 +671,11 @@ export class Engine implements EngineService {
   }
 
   async snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult> {
-    return this.tiles.snooze(tileId, condition);
+    const result = await this.tiles.snooze(tileId, condition);
+    if (result.ok) {
+      this.telemetry.capture('snoozed', { duration_bucket: snoozeTelemetryBucket(condition, this.deps.now().getTime()) });
+    }
+    return result;
   }
 
   async unsnooze(tileId: string): Promise<ActionResult> {
@@ -612,20 +686,33 @@ export class Engine implements EngineService {
     return this.prActions.draftAsk(prKey, person, intent);
   }
 
-  sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
-    return this.prActions.sendComment(prKey, body);
+  async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
+    // The only caller is AskComposer (apps/desktop/src/renderer/src/components/AskComposer.tsx).
+    const result = await this.prActions.sendComment(prKey, body);
+    if (result.ok) {
+      this.telemetry.capture('ask_sent', {});
+    }
+    return result;
   }
 
   async giveFeedback(input: FeedbackInput): Promise<ActionResult> {
-    return this.feedback.giveFeedback(input);
+    const result = await this.feedback.giveFeedback(input);
+    if (result.ok && input.kind === 'wrong_topic') {
+      this.telemetry.capture('wrong_topic_marked', {});
+    } else if (result.ok && input.kind === 'not_related') {
+      this.telemetry.capture('not_related_marked', {});
+    }
+    return result;
   }
 
   async unmuteEvent(eventId: string): Promise<ActionResult> {
     return this.feedback.unmuteEvent(eventId);
   }
 
-  chat(tileId: string, message: string): Promise<ChatReply> {
-    return this.chats.chat(tileId, message);
+  async chat(tileId: string, message: string): Promise<ChatReply> {
+    const reply = await this.chats.chat(tileId, message);
+    this.telemetry.capture('chat_message_sent', {});
+    return reply;
   }
 
   async decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult> {
@@ -633,7 +720,13 @@ export class Engine implements EngineService {
   }
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    return this.proposals.decide(proposalId, accept);
+    // Read the kind before deciding: decide() marks the proposal accepted/rejected in place.
+    const kind = topicProposalTelemetryKind(this.deps.store.proposals.get(proposalId)?.kind);
+    const result = await this.proposals.decide(proposalId, accept);
+    if (result.ok && kind) {
+      this.telemetry.capture('proposal_resolved', { kind, accepted: accept });
+    }
+    return result;
   }
 
   async search(query: string): Promise<SearchResult> {
@@ -649,7 +742,11 @@ export class Engine implements EngineService {
   }
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    return this.memoryActions.decideRuleProposal(proposalId, accept);
+    const result = await this.memoryActions.decideRuleProposal(proposalId, accept);
+    if (result.ok) {
+      this.telemetry.capture('proposal_resolved', { kind: 'rule', accepted: accept });
+    }
+    return result;
   }
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {
@@ -657,11 +754,22 @@ export class Engine implements EngineService {
   }
 
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
-    return this.memoryActions.correctMemory(input);
+    const result = await this.memoryActions.correctMemory(input);
+    if (result.ok) {
+      this.telemetry.capture('memory_corrected', {});
+    }
+    return result;
   }
 
-  recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult> {
-    return this.rechecker.recheck(request);
+  async recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult> {
+    this.telemetry.capture('recheck_requested', {});
+    const result = await this.rechecker.recheck(request);
+    // The agent's own answer, not yet the user's accept/fix/drop click (correctMemory does
+    // not know it followed a recheck): a close enough signal for how often rechecks agree.
+    if (result.status === 'answered') {
+      this.telemetry.capture('recheck_resolved', { outcome: result.outcome === 'holds' ? 'keep' : result.outcome });
+    }
+    return result;
   }
 
   async getMemorySources(target: MemoryTarget): Promise<MemorySources | null> {
@@ -684,8 +792,13 @@ export class Engine implements EngineService {
     return this.instructions.propose(sourceChatMessageId);
   }
 
-  saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {
-    return this.instructions.save(decision);
+  async saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {
+    const result = await this.instructions.save(decision);
+    if (result.ok && result.savedVersion !== null) {
+      this.telemetry.capture('instructions_edited', {});
+      this.telemetry.capture('proposal_resolved', { kind: 'instructions', accepted: true });
+    }
+    return result;
   }
 
   async getWorkContext(): Promise<WorkContextView> {
@@ -767,5 +880,7 @@ export class Engine implements EngineService {
     await this.catchUps.settled();
     this.deps.store.close();
     this.deps.dataLock?.release();
+    // Flushes whatever telemetry is still queued; a no-op when telemetry is off.
+    await this.telemetry.shutdown();
   }
 }

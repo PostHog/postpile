@@ -101,12 +101,13 @@ PostPile checks `gh` and `claude` on start. When one is missing, the window says
 
 ## Privacy
 
-PostPile runs on your Mac only. There is no PostPile server and no telemetry.
+PostPile runs on your Mac only. There is no PostPile server.
 
 - **GitHub**: the app calls the GitHub API with the token from `gh auth token`. It reads your notifications and the PRs they point to. It writes (approve, comment, mark read) only after you unlock writes.
 - **Anthropic**: agent calls run through the `claude` CLI on your machine, so PR titles, bodies, comments and review threads go to Anthropic under your Claude account's terms. GitHub text is treated as untrusted input: it is fenced in prompts, and calls that read it run without tools.
 - **Work context sweep**: once a day the app reads your Claude Code folder (`~/.claude`: `CLAUDE.md` and its includes, each project's memory files, and light signals from the last 7 days of sessions), masks secrets, and asks Claude for a short digest of what you are working on. The digest helps rank and phrase things. Project folders on the skip list are never opened. The default list is `personal`, `private`. Your own list is edited under the digest and saved to `~/.config/postpile/config.json` as `{ "sweepSkip": ["taxes", "side-project"] }`; `POSTPILE_SWEEP_SKIP` (comma separated) wins over both. The digest shows under Your instructions, with its sources, and you can forget it.
 - **Update check**: every 6 hours the app asks `api.github.com` for the latest PostPile releases, without a token, to show the update reminder. Turn it off with `POSTPILE_UPDATE_CHECK=0`.
+- **Usage analytics**: on by default, sent to PostHog. What is sent: counts and enums (a sync finished and how long it took, a tile was opened and what kind, a proposal was accepted, a tool went missing, and the like) plus device facts (app version, OS version, arch, whether `claude` is installed). What is never sent: PR titles, bodies, repo or branch names, GitHub logins, prompts, agent text or topic names — every event is also checked in code and drops any prop that looks like a title, a path or a repo. Identity is your GitHub numeric user id, one-way hashed (`sha256`) before it ever leaves your Mac; the login itself never goes over the wire. Turn it off with `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`; there is no UI switch. The full event list is in [DESIGN.md](DESIGN.md#usage-analytics).
 - **Local data**: the database lives in `~/Library/Application Support/PostPile`, logs in `~/Library/Logs/PostPile`, and your instructions for the agent in `~/.config/postpile/instructions.md`.
 
 ## Development

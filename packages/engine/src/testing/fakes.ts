@@ -1,6 +1,6 @@
 // Fakes for engine tests. Nothing here touches GitHub or the claude CLI.
 import { FakeRunner } from '@postpile/agent';
-import type { ActivityPr, NotificationThread, Pr, PrKey, PrRef, Viewer } from '@postpile/core';
+import type { ActivityPr, NotificationThread, Pr, PrKey, PrRef, TelemetryEventName, TelemetryEventProps, Viewer } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
@@ -16,6 +16,7 @@ import type {
 } from '@postpile/github';
 import type { UserConfigFile } from '../user-config.ts';
 import type { CommandResult, CommandRunner } from '../setup/setup-checks.ts';
+import type { Telemetry, TelemetryPersonInfo } from '../telemetry/telemetry.ts';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
 import { AgentCallLog } from '../agent-call-log.ts';
@@ -288,6 +289,35 @@ export function makeWrites(store: Store, writer: GitHubWriter, now: () => Date =
   return new GitHubWrites(writeSwitch, new ActionLog(store, now));
 }
 
+/** Records every call instead of sending anything, so engine tests can assert on what telemetry fired. */
+export class FakeTelemetry implements Telemetry {
+  events: { event: TelemetryEventName; props: unknown }[] = [];
+  personInfo: TelemetryPersonInfo[] = [];
+  aliasedTo: number[] = [];
+  exceptions: unknown[] = [];
+  shutdownCalls = 0;
+
+  capture<K extends TelemetryEventName>(event: K, props: TelemetryEventProps<K>): void {
+    this.events.push({ event, props });
+  }
+
+  identifyPerson(info: TelemetryPersonInfo): void {
+    this.personInfo.push(info);
+  }
+
+  setViewerIdentity(githubDatabaseId: number): void {
+    this.aliasedTo.push(githubDatabaseId);
+  }
+
+  captureException(error: unknown): void {
+    this.exceptions.push(error);
+  }
+
+  async shutdown(): Promise<void> {
+    this.shutdownCalls += 1;
+  }
+}
+
 export interface Harness {
   engine: Engine;
   store: Store;
@@ -299,6 +329,7 @@ export interface Harness {
   timers: FakeTimers;
   commands: FakeCommands;
   tools: ToolHealth;
+  telemetry: FakeTelemetry;
 }
 
 export interface HarnessOptions {
@@ -320,6 +351,8 @@ export interface HarnessOptions {
   syncLog?: (line: string) => void;
   /** The user's config.json; none by default, so tests never read a real one. */
   userConfig?: UserConfigFile;
+  /** Defaults to a fresh FakeTelemetry, exposed on the harness either way. */
+  telemetry?: FakeTelemetry;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -349,6 +382,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const agent = new FakeAgent(runner, callLog);
   const commands = new FakeCommands();
   const tools = new ToolHealth({ commands: commands.run, now, path: () => '/usr/bin', isExecutable: commands.isExecutable, claudeBinary: 'claude', log: () => {} });
+  const telemetry = options.telemetry ?? new FakeTelemetry();
   const engine = new Engine({
     store,
     reader,
@@ -367,6 +401,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     userConfig: options.userConfig ?? null,
     setupCommands: commands.run,
     tools,
+    telemetry,
   });
-  return { engine, store, reader, writer, writes, runner, agent, timers, commands, tools };
+  return { engine, store, reader, writer, writes, runner, agent, timers, commands, tools, telemetry };
 }

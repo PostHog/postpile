@@ -8,6 +8,8 @@ export interface AppPaths {
   databaseFile: string;
   /** The user's settings (config.json). Missing: the engine uses none (tests). */
   configFile?: string;
+  /** Random install id for telemetry before the viewer is known (aliased to the hashed GitHub id once it is). Missing: a fresh id every process (tests, no-lock reads). */
+  telemetryIdFile?: string;
 }
 
 export interface PathEnv {
@@ -24,6 +26,7 @@ export interface DataDirs {
 
 export const DATABASE_FILE_NAME = 'db.sqlite';
 export const USER_CONFIG_FILE_NAME = 'config.json';
+export const TELEMETRY_ID_FILE_NAME = 'telemetry-id';
 
 /**
  * Which data a process uses. dev: a separate folder (PostPile-dev,
@@ -97,6 +100,7 @@ export function defaultPaths(pathEnv: PathEnv = systemPathEnv()): AppPaths {
     instructionsFile: pathEnv.env.POSTPILE_INSTRUCTIONS || join(dirs.configDir, 'instructions.md'),
     databaseFile: pathEnv.env.POSTPILE_DB || join(dataDir, DATABASE_FILE_NAME),
     configFile: join(dirs.configDir, USER_CONFIG_FILE_NAME),
+    telemetryIdFile: join(dirs.configDir, TELEMETRY_ID_FILE_NAME),
   };
 }
 

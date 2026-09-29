@@ -19,6 +19,7 @@ Notable changes per release. Versions follow semver, with `-alpha.N` pre-release
 - New PRs get their glance within a minute or so instead of waiting for a manual sync: when the live poll brings new activity or a PR without a glance, the app updates that topic's dossier and glances right away. Runs are coalesced per topic and capped per day (`POSTPILE_CATCHUP_CAP`, default 300 calls; 0 turns it off).
 - A full sync runs in the background every 60 minutes while the app is open (`POSTPILE_AUTO_SYNC_MINUTES`, 0 turns it off). The title bar shows it like any sync.
 - Clearer glance status instead of "the next sync picks it up": "Writing the glance…", "Glance queued", "Agent features are off", "Waiting: daily agent limit reached, next full sync in N min", and "Glance failed" with a Retry button.
+- Usage analytics, on by default: counts and enums only (syncs, tile opens, proposal decisions, tool health, and the like), never PR titles, bodies, repo/branch names, logins, prompts or agent text. Identity is a sha256-hashed GitHub id, never the login. Turn it off with `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`; see README › Privacy and DESIGN.md › Usage analytics.
 
 ## 0.1.0-alpha.0 (2026-09-28)
 
