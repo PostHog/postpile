@@ -1,6 +1,6 @@
 {
   "name": "@postpile/github",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "PostPile GitHub reader and writer on top of the gh CLI token",
   "private": true,
   "license": "MIT",
