@@ -1,6 +1,6 @@
 # macOS app bundle: pnpm dist (root) builds with electron-vite, then this.
 # Everything the app runs is bundled into out/ by electron-vite (main,
-# preload, renderer, workspace packages, hono, fix-path), so the desktop
+# preload, renderer, workspace packages, hono), so the desktop
 # package has no runtime dependencies and no node_modules go into the app.
 # Local builds are ad-hoc signed (identity "-"): dev machines have no
 # Developer ID certificate. An unsigned or half-signed bundle has an invalid

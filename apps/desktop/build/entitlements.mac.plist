@@ -9,9 +9,8 @@
 	microphone. They only matter under the hardened runtime of a Developer ID
 	build; an ad-hoc build carries them without effect.
 
-	Not needed for child processes: gh, claude, git and the login shell that
-	fix-path runs are separate binaries with their own signatures, and the
-	hardened runtime does not limit what the app may exec. node:sqlite is
+	Not needed for child processes: gh, claude and git are separate binaries
+	with their own signatures, and the hardened runtime does not limit what the app may exec. node:sqlite is
 	built into Electron's Node, so the bundle has no .node files to load.
 	-->
 
