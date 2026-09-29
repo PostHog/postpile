@@ -66,6 +66,7 @@ import type {
 } from '@postpile/core';
 import {
   activityList,
+  whatsNew,
   agentOnlyApprovers,
   standingApprovals,
   UNDO_WINDOW_MS,
@@ -795,10 +796,12 @@ export class FakeEngine implements EngineService {
     const events: EventView[] = this.eventsOf(prKey)
       .toSorted((a, b) => b.at.localeCompare(a.at))
       .map((event) => ({ event, display: displayState(event) }));
+    const news = whatsNew(this.eventsOf(prKey), this.viewer());
     return {
       pr,
       events,
-      activity: activityList(events, this.viewer()),
+      activity: activityList(events, this.viewer(), news?.anchor.at ?? null),
+      whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: false,
       glanceGap: this.glanceGapOf(prKey),

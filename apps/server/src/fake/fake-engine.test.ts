@@ -326,6 +326,27 @@ describe('FakeEngine addressed your changes', () => {
   });
 });
 
+describe('FakeEngine what is new on a revisit', () => {
+  it('summarises the pushes since your changes request on #1960, bots and CI left out', async () => {
+    const engine = new FakeEngine();
+    const devEnv = (await engine.getTopic('topic-dev-env'))?.tiles ?? [];
+    const view = devEnv.find((item) => item.tile.id === 'pr:acme/app#1960');
+    expect(view?.prs[0]?.whatsNew).toMatchObject({ anchor: { kind: 'changes_request' }, lead: { kind: 'push', count: 3, actor: 'pim' }, extraCount: 0 });
+    const detail = await engine.getPr('acme/app#1960');
+    expect(detail?.whatsNew?.anchor.kind).toBe('changes_request');
+    expect(detail?.activity.fresh.map((line) => line.summary)).toEqual(['pim pushed 3 commits']);
+    expect(detail?.activity.freshNoiseLabel).toBe('2 bot comments, CI');
+    expect(detail?.activity.earlier.map((line) => line.summary)).toEqual(['you requested changes']);
+    expect(detail?.activity.noise).toEqual([]);
+  });
+
+  it('keeps a first-time ask plain', async () => {
+    const detail = await new FakeEngine().getPr('acme/app#1801');
+    expect(detail?.activity.fresh).toHaveLength(1);
+    expect(detail?.whatsNew).toBeNull();
+  });
+});
+
 describe('FakeEngine found PRs', () => {
   it('shows found PRs calm, with their turn and a why code', async () => {
     const engine = new FakeEngine();

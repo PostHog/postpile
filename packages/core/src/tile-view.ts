@@ -12,6 +12,7 @@ import { memberTier, personRelation, tileTier } from './topic-queues.ts';
 import type { Glance, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
 import type { GlanceState } from './glance-state.ts';
 import type { GlanceGap, PrSummary, TilePendingWrite, TileView } from './views.ts';
+import { whatsNew } from './whats-new.ts';
 import { whoseTurn } from './whose-turn.ts';
 import { tileWhy, whyHere } from './why-here.ts';
 
@@ -63,6 +64,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     glanceState: input.glanceState,
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
+    whatsNew: member.provenance.kind === 'found' ? null : whatsNew(events, viewer),
     updatedAt: pr.updatedAt,
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,

@@ -1,6 +1,7 @@
 import {
   glanceStateOf,
   activityList,
+  whatsNew,
   agentOnlyApprovers,
   standingApprovals,
   viewerApproval,
@@ -374,12 +375,15 @@ export class ReadModels {
         .map((tile) => tile.id),
     );
     const events = (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) }));
+    const viewer = loadViewer(this.store);
+    const news = whatsNew(board.events.get(key) ?? [], viewer);
     const stale = this.staleGlances(board, [key]).has(key);
     const gap = this.glanceGap(key, glance !== null);
     return {
       pr,
       events,
-      activity: activityList(events, loadViewer(this.store)),
+      activity: activityList(events, viewer, news?.anchor.at ?? null),
+      whatsNew: news,
       glance,
       glanceStale: stale,
       glanceGap: gap,

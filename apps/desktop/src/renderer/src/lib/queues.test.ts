@@ -54,6 +54,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
+    whatsNew: null,
     updatedAt: at(0),
     quietRepo: false,
     repoLabel: null,

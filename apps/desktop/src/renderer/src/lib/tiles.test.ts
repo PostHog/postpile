@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { PrSet, PrSummary, TileView } from '@postpile/core';
+import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, sameForWhom, tileForYou } from './tiles.ts';
+import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -25,6 +25,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
+    whatsNew: null,
     updatedAt: at(number),
     quietRepo: false,
     repoLabel: null,
@@ -115,5 +116,29 @@ describe('tile helpers', () => {
     const view = setView([summary(1, { provenance: found }), summary(2), summary(3, { provenance: pulled })]);
     expect(countPrs([view])).toEqual({ pinged: 1, found: 1, pulledIn: 1 });
     expect(leadPr(setView([summary(4, { provenance: pulled, state: 'OPEN' }), summary(5, { provenance: found })]))?.key).toBe('acme/app#5');
+  });
+});
+
+describe('strip news', () => {
+  const news: WhatsNew = {
+    anchor: { kind: 'changes_request', at: at(0) },
+    lead: { kind: 'push', eventKind: 'commits_pushed', actor: 'pim', count: 3, summary: 'pim pushed' },
+    extraCount: 1,
+    actor: 'pim',
+    newestAt: at(5),
+  };
+
+  it('takes whatsNew of the PR behind the newest unread reason', () => {
+    const view = setView([summary(1), summary(2, { whatsNew: news })], ['acme/app#1', 'acme/app#2']);
+    expect(stripNews(view)).toBe(news);
+    expect(stripNews(setView([summary(1, { whatsNew: news }), summary(2)], ['acme/app#1', 'acme/app#2']))).toBeNull();
+    expect(stripNews(setView([summary(1, { whatsNew: news })]))).toBeNull();
+  });
+
+  it('counts the lead PR\'s extras plus the other PRs\' unread events on a revisit', () => {
+    const view = setView([summary(1), summary(2, { whatsNew: news })], ['acme/app#1', 'acme/app#2', 'acme/app#2', 'acme/app#2']);
+    expect(stripMoreCount(view, news)).toBe(2);
+    expect(stripMoreCount(view, null)).toBe(3);
+    expect(stripMoreCount(setView([summary(1)]), null)).toBe(0);
   });
 });

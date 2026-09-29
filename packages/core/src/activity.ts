@@ -32,10 +32,17 @@ export interface ActivityList {
   fresh: ActivityLine[];
   /** Everything else that matters, newest first. */
   earlier: ActivityLine[];
-  /** Bot and CI events, agent-muted ones and review requests between others, newest first. */
+  /** Bot and CI events, agent-muted ones and review requests between others, newest first. Without `freshNoise`. */
   noise: EventView[];
   /** The folded noise line: "4 bot/CI events". */
   noiseLabel: string;
+  /**
+   * The unseen part of the noise since the viewer's last touch, newest first,
+   * for the "New since you looked" box. Empty while nothing loud is new.
+   */
+  freshNoise: EventView[];
+  /** The box's folded noise line: "10 bot comments, CI". */
+  freshNoiseLabel: string;
   /** Lines to show before "Show all N" (ACTIVITY_LINE_CAP). */
   cap: number;
 }
@@ -144,23 +151,61 @@ export function noiseLabel(noise: EventView[]): string {
   return machine ? `${noise.length} bot/CI ${events}` : `${noise.length} bot/CI and other ${events}`;
 }
 
+function countWord(count: number, word: string, plural = `${word}s`): string {
+  return `${count} ${count === 1 ? word : plural}`;
+}
+
+/**
+ * The noise by what it is, for the "New since you looked" box: "10 bot
+ * comments, CI", "2 bot pushes, a deploy, merge queue, 1 other".
+ */
+export function noiseSummary(noise: EventView[]): string {
+  const count = (test: (view: EventView) => boolean) => noise.filter(test).length;
+  const isKind = (kinds: EventKind[]) => (view: EventView) => kinds.includes(view.event.kind);
+  const comments = count((view) => view.event.kind === 'bot_comment' || (view.event.isBot && HUMAN_TALK.includes(view.event.kind)));
+  const pushes = count((view) => view.event.isBot && PUSH_KINDS.includes(view.event.kind));
+  const ci = count(isKind(['ci']));
+  const deploys = count(isKind(['deploy']));
+  const queue = count(isKind(['merge_queue']));
+  const other = noise.length - comments - pushes - ci - deploys - queue;
+  const parts = [
+    comments > 0 ? countWord(comments, 'bot comment') : '',
+    pushes > 0 ? countWord(pushes, 'bot push', 'bot pushes') : '',
+    ci > 0 ? 'CI' : '',
+    deploys > 0 ? (deploys === 1 ? 'a deploy' : `${deploys} deploys`) : '',
+    queue > 0 ? 'merge queue' : '',
+    other > 0 ? `${other} other` : '',
+  ];
+  return parts.filter((part) => part !== '').join(', ');
+}
+
 /**
  * The activity list for one PR. Meaningful events: human comments and
  * reviews, mentions, review requests naming you or your team, human pushes
  * (a burst by one person is one line), and lifecycle (ready, draft, merged,
  * closed, reopened). The rest (bots, CI, deploys, merge queue, agent-muted
  * events, review requests between others) goes to `noise`.
+ *
+ * While something loud is new, the unseen noise after `since` (the viewer's
+ * last touch, `whatsNew().anchor.at`; null for a first look) moves to
+ * `freshNoise`, so the box and the list below never show it twice.
  */
-export function activityList(events: EventView[], viewer: Viewer | null): ActivityList {
+export function activityList(events: EventView[], viewer: Viewer | null, since: IsoTime | null = null): ActivityList {
   const sorted = events.toSorted(byTime);
   const meaningful = sorted.filter((view) => isMeaningful(view, viewer));
-  const noise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
+  const allNoise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
   const lines = groupBursts(meaningful).map(toLine).toReversed();
+  const fresh = lines.filter((line) => line.isNew);
+  const isFreshNoise = (view: EventView) => fresh.length > 0 && view.display !== 'seen' && (since === null || view.event.at > since);
+  const freshNoise = allNoise.filter(isFreshNoise);
+  const noise = allNoise.filter((view) => !isFreshNoise(view));
   return {
-    fresh: lines.filter((line) => line.isNew),
+    fresh,
     earlier: lines.filter((line) => !line.isNew),
     noise,
     noiseLabel: noiseLabel(noise),
+    freshNoise,
+    freshNoiseLabel: noiseSummary(freshNoise),
     cap: ACTIVITY_LINE_CAP,
   };
 }

@@ -31,6 +31,7 @@ import type { ViewerApproval } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
 import type { TilePerson } from './tile-people.ts';
 import type { WhoseTurn } from './whose-turn.ts';
+import type { WhatsNew } from './whats-new.ts';
 import type { WhyCode } from './why-here.ts';
 import type { ForWhom } from './for-whom.ts';
 
@@ -132,6 +133,8 @@ export interface PrSummary {
   /** Where the glance stands (`glanceStateOf`): ready, queued, writing, failed, agent_off, capped or none. */
   glanceState: GlanceState;
   unseenLoudEvents: number;
+  /** What changed since the viewer's last touch (`whatsNew`), for the why-now strip; null on a first look or with nothing new. */
+  whatsNew: WhatsNew | null;
   updatedAt: IsoTime;
   /** In a quiet repo ("Let it go stale"): tier rest, never urgent, never pings. */
   quietRepo: boolean;
@@ -195,6 +198,8 @@ export interface PrDetail {
   events: EventView[];
   /** The detail pane's list (`activityList`): meaningful events, new first, noise folded. */
   activity: ActivityList;
+  /** What changed since the viewer's last touch (`whatsNew`): the "New since you looked" box's anchor. */
+  whatsNew: WhatsNew | null;
   glance: Glance | null;
   /** True when the glance was made for an older state of the PR or of the instructions. */
   glanceStale: boolean;

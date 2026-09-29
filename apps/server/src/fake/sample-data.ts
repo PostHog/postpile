@@ -333,8 +333,10 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1950, title: 'Cache pnpm store in the devbox CI image', author: SAMPLE_VIEWER, state: 'OPEN',
       size: [34, 8, 2], checks: 'PENDING', openedHoursAgo: 30,
     }),
-    // Addressed your changes: you asked for changes yesterday, pim pushed and
-    // answered your thread, and never re-requested a review. Back to you.
+    // Addressed your changes, seen on a revisit: you asked for changes
+    // yesterday, pim pushed three commits (a review bot and CI chimed in) and
+    // never re-requested a review. Back to you; the strip says
+    // "3 commits since your changes request".
     samplePr(clock, {
       number: 1960, title: 'Split the toolbar into its own bundle', author: 'pim', state: 'OPEN',
       size: [260, 90, 9], checks: 'SUCCESS', openedHoursAgo: 50,
@@ -343,14 +345,13 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         {
           id: 'thread-1960-1',
           path: 'frontend/vite.config.ts',
-          comments: [
-            { author: SAMPLE_VIEWER, body: 'Can these chunk names be stable?', hoursAgo: 30 },
-            { author: 'pim', body: 'Now hashed from the entry path, stable across builds.', hoursAgo: 2 },
-          ],
+          comments: [{ author: SAMPLE_VIEWER, body: 'Can these chunk names be stable?', hoursAgo: 30 }],
         },
       ],
       commits: [
         { oid: 'sha1960-a', headline: 'Split the toolbar bundle', hoursAgo: 48 },
+        { oid: 'sha1960-b', headline: 'Hash chunk names from the entry path', hoursAgo: 3 },
+        { oid: 'sha1960-c', headline: 'Keep the vendor chunk name fixed', hoursAgo: 2.6 },
         { oid: 'sha1960', headline: 'Stable chunk names for the toolbar', hoursAgo: 2.2 },
       ],
     }),
@@ -445,8 +446,12 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 1960, [
       { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 30, rule: 'quiet', seen: true },
+      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Hash chunk names from the entry path', hoursAgo: 3, rule: 'loud' },
+      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Keep the vendor chunk name fixed', hoursAgo: 2.6, rule: 'loud' },
       { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Stable chunk names for the toolbar', hoursAgo: 2.2, rule: 'loud' },
-      { kind: 'reply_to_user', actor: 'pim', text: 'replied to you: "Now hashed from the entry path"', hoursAgo: 2, rule: 'loud' },
+      { kind: 'bot_comment', actor: 'reviewbot[bot]', text: 'commented: "No issues found in 9 files"', hoursAgo: 2.1, rule: 'quiet', isBot: true },
+      { kind: 'bot_comment', actor: 'sizebot[bot]', text: 'commented: "toolbar.js -18 kB"', hoursAgo: 2, rule: 'quiet', isBot: true },
+      { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 1.9, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.

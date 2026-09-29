@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityList, noiseLabel } from './activity.ts';
+import { activityList, noiseLabel, noiseSummary } from './activity.ts';
 import { reviewRequestSubject } from './events.ts';
 import { at, makeEvent, viewer } from './fixtures.ts';
 import type { EventDisplayState, PrEvent } from './types.ts';
@@ -76,6 +76,53 @@ describe('activityList', () => {
     const ci = ev({ kind: 'ci', actor: '', isBot: true, summary: 'CI passed' });
     const deploy = ev({ kind: 'deploy', actor: 'vercel', isBot: true, summary: 'vercel deploy' });
     expect(noiseLabel([ci, deploy])).toBe('2 bot/CI events');
+  });
+});
+
+describe('activityList fresh noise', () => {
+  const bot = (minutes: number, display: EventDisplayState = 'quiet') =>
+    ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, summary: 'greptile commented', at: at(minutes) }, display);
+  const ci = (minutes: number) => ev({ kind: 'ci', actor: '', isBot: true, summary: 'CI passed', at: at(minutes) }, 'quiet');
+
+  it('moves unseen noise after the last touch into freshNoise while something loud is new', () => {
+    const before = bot(1);
+    const seen = bot(6, 'seen');
+    const after = [bot(7), bot(8), ci(9)];
+    const push = ev({ kind: 'commits_pushed', actor: 'pim', summary: 'pim pushed', at: at(10) }, 'loud');
+    const list = activityList([before, seen, ...after, push], who, at(5));
+    expect(list.freshNoise.map((view) => view.event.id)).toEqual(after.map((view) => view.event.id).toReversed());
+    expect(list.freshNoiseLabel).toBe('2 bot comments, CI');
+    expect(list.noise.map((view) => view.event.id)).toEqual([seen.event.id, before.event.id]);
+  });
+
+  it('takes all unseen noise on a first look (no touch)', () => {
+    const mention = ev({ kind: 'mention', actor: 'ada', summary: 'ada mentioned you', at: at(10) }, 'loud');
+    const list = activityList([bot(1), mention], who, null);
+    expect(list.freshNoise).toHaveLength(1);
+    expect(list.noise).toEqual([]);
+  });
+
+  it('keeps all noise in the list while nothing loud is new', () => {
+    const list = activityList([bot(1), ci(2)], who, at(0));
+    expect(list.freshNoise).toEqual([]);
+    expect(list.freshNoiseLabel).toBe('');
+    expect(list.noise).toHaveLength(2);
+  });
+});
+
+describe('noiseSummary', () => {
+  it('says what the noise is', () => {
+    const comments = Array.from({ length: 10 }, (_, n) => ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, at: at(n) }));
+    const ci = ev({ kind: 'ci', actor: '', isBot: true });
+    expect(noiseSummary([...comments, ci, ci])).toBe('10 bot comments, CI');
+  });
+
+  it('names bot pushes, deploys, the merge queue and the rest', () => {
+    const push = ev({ kind: 'force_pushed', actor: 'renovate[bot]', isBot: true });
+    const deploy = ev({ kind: 'deploy', actor: 'vercel', isBot: true });
+    const queue = ev({ kind: 'merge_queue', actor: 'mergify[bot]', isBot: true });
+    const muted = ev({ kind: 'comment', actor: 'lyra' }, 'muted');
+    expect(noiseSummary([push, deploy, queue, muted])).toBe('1 bot push, a deploy, merge queue, 1 other');
   });
 });
 
