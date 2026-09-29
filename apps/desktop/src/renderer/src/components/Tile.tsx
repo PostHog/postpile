@@ -66,7 +66,7 @@ const DASHED_BANDS: Record<ForWhom['kind'], string | null> = {
 };
 
 function dashedBand(color: string): { backgroundImage: string } {
-  return { backgroundImage: `repeating-linear-gradient(to bottom, ${color} 0 6px, transparent 6px 10px)` };
+  return { backgroundImage: `repeating-linear-gradient(to bottom, ${color} 0 5px, transparent 5px 9px)` };
 }
 
 /** The people involved as a small overlapping stack of avatars. */
@@ -152,16 +152,21 @@ export function Tile(props: TileProps) {
           className={`absolute top-1/2 -right-[7px] z-10 -mt-1.5 size-3 rotate-45 border-t-[1.5px] border-r-[1.5px] border-accent ${background}`}
         />
       )}
-      {BANDS[view.forWhom.kind] && !draft && (
-        // The "for whom" band down the left edge, in the chip's color; grey on done tiles.
-        <span aria-hidden="true" className={`absolute inset-y-0 left-0 z-[1] w-1 rounded-l-[11px] ${done ? 'bg-ghost' : BANDS[view.forWhom.kind]}`} />
-      )}
-      {DASHED_BANDS[view.forWhom.kind] && draft && (
-        <span
-          aria-hidden="true"
-          className="absolute inset-y-0 left-0 z-[1] w-1 overflow-hidden rounded-l-[11px]"
-          style={dashedBand(done ? 'var(--color-ghost)' : (DASHED_BANDS[view.forWhom.kind] ?? ''))}
-        />
+      {BANDS[view.forWhom.kind] && (
+        // The "for whom" band down the left edge, in the chip's color; grey on
+        // done tiles, striped on drafts. A 4px strip cannot follow the tile's
+        // 12px corner by itself, so it sits in a full-size layer clipped to the
+        // tile's inner rounding (12px minus the frame) and follows the curve.
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[10.5px]">
+          {draft ? (
+            <span
+              className="absolute inset-y-0 left-0 w-1"
+              style={dashedBand(done ? 'var(--color-ghost)' : (DASHED_BANDS[view.forWhom.kind] ?? ''))}
+            />
+          ) : (
+            <span className={`absolute inset-y-0 left-0 w-1 ${done ? 'bg-ghost' : BANDS[view.forWhom.kind]}`} />
+          )}
+        </span>
       )}
       {unread && <UnreadStrip view={view} />}
       <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pt-3 pb-3">
