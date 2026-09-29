@@ -1,25 +1,32 @@
 # Changelog
 
-Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
+Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## 0.1.0-alpha.1 (unreleased)
+## 0.2.0 (unreleased)
 
-- Fewer macOS permission prompts. The app no longer runs your login shell at launch to find PATH (that ran your whole `.zshrc` in PostPile's name); it reads `/etc/paths` and `/etc/paths.d` instead and adds the usual install folders. Tools elsewhere (mise, asdf) go in `toolPath` in `~/.config/postpile/config.json`. `gh` and `claude` run in an empty app folder, claude calls skip CLAUDE.md, auto memory, skills, the autoupdater and claude.ai connectors, and the work context sweep stays out of Documents, iCloud, cloud drives, other apps' containers and `/Volumes`. FYI: old grants can be cleared with `tccutil reset All com.posthog.postpile`.
-- Every PR now lands in a topic on the sync that sees it: the agent picks an existing topic or starts a new one named after the work. Unsorted only holds PRs the agent could not get to yet (call cap, claude missing, failed call), and the next sync places them. PRs parked in Unsorted by an earlier build are picked up on the next sync.
-- The app runs its daily memory tidy-up (merge proposals for small topics, fact merges, retiring finished topics) by itself when it is due.
-- Stacks no longer go missing. A stack whose bottom layer merged (GitHub moved the next PR down by itself) now stays one stack, a closed attempt no longer pushes the open layers that replaced it out of the stack, and a stack with a layer in a retired topic still shows in its active topic. PRs from forks never join a stack by branch name.
-- Tiles now carry which PRs form a stack, bottom first, also for a stack inside a set, so the UI can draw it as a stack.
-- Update reminder: when a new release is out, the title bar shows "Update available" with the release notes link and `brew upgrade --cask postpile`. "Later" hides it for that version. The app asks api.github.com for releases every 6 hours, no token; `POSTPILE_UPDATE_CHECK=0` turns it off.
-- PR state reads like GitHub: rows show a state icon (open, draft, merged, closed, queued) and the review state in words ("Needs review", "Approved", "Changes requested"), drafts get a DRAFT chip. CI status moved out of rows and tiles; it only shows in the detail pane's Checks fact.
-- The PR description shows in the detail pane, in a small scroll box with Expand. Markdown is rendered without raw HTML, PR template comments are hidden and remote images are not loaded.
-- Glances name up to three files to look at first, with why and +/- counts, linking to the PR's files on GitHub. FYI: existing glances regenerate once on the next sync to get them.
+### New
+
+- Update reminder: when a new release is out, the title bar shows "Update available" with the release notes and the `brew upgrade --cask postpile` command. "Later" hides it until the next version. The app asks api.github.com for releases every 6 hours, without a token. Turn it off with `POSTPILE_UPDATE_CHECK=0`.
+- New PRs get their glance within a minute or so instead of waiting for the next sync. When the live poll brings new activity or a PR without a glance, the app updates that topic and its glances right away. Capped per day with `POSTPILE_CATCHUP_CAP` (default 300 agent calls, 0 turns it off).
+- A full sync runs in the background every 60 minutes while the app is open, shown in the title bar like any sync. Change the interval or turn it off (0) with `POSTPILE_AUTO_SYNC_MINUTES`.
+- Glances name up to three files to look at first, with why and +/- counts, linking to the PR's files on GitHub. FYI: existing glances are written again once on the next sync to get them.
+- The PR description shows in the detail pane, in a small scroll box with Expand. Raw HTML, PR template comments and remote images are left out.
+- Stack layers show where they sit: a small blue tag like "1/3" (1 = bottom) before the PR title, in tiles, in stacks inside sets and in the detail pane. The tooltip names the PR it builds on.
+- Usage analytics, on by default: counts and enums only (syncs, tile opens, proposal decisions, tool health and the like), never PR titles, bodies, repo or branch names, logins, prompts or agent text. Identity is a hashed GitHub id, never the login. Turn it off with `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`. Details in README › Privacy.
+
+### Changed
+
+- Every PR lands in a topic on the sync that sees it: the agent picks an existing topic or starts a new one named after the work. Unsorted only holds PRs the agent could not get to yet (daily limit, `claude` missing, a failed call), and the next sync places them. PRs an earlier version left in Unsorted get placed on the next sync too.
+- The daily memory tidy-up (merge suggestions for small topics, merging duplicate facts, retiring finished topics) runs by itself when it is due.
+- PR state reads like GitHub: rows show a state icon (open, draft, merged, closed, queued) and the review state in words ("Needs review", "Approved", "Changes requested"), and drafts get a DRAFT chip. CI status moved out of rows and tiles; it only shows in the detail pane's Checks line.
+- Clearer glance status instead of "the next sync picks it up": "Writing the glance…", "Glance queued", "Agent features are off", "Waiting: daily agent limit reached", and "Glance failed" with a Retry button.
+- A low-risk glance no longer shows a red RISK box; the verdict already covers it.
+
+### Fixed
+
+- Fewer macOS permission prompts. The app no longer runs your login shell at launch to find tools (that ran your whole `.zshrc` in PostPile's name); it reads `/etc/paths` and `/etc/paths.d` and adds the usual install folders. Tools installed elsewhere (mise, asdf) go in `toolPath` in `~/.config/postpile/config.json`. `gh` and `claude` run in an empty app folder, agent calls leave out your CLAUDE.md, memory, skills and claude.ai connectors, and the work context sweep stays out of Documents, iCloud, cloud drives, other apps' data and `/Volumes`. FYI: old grants can be cleared with `tccutil reset All com.posthog.postpile`.
+- Stacks no longer go missing. A stack whose bottom PR merged stays one stack, a closed attempt no longer pushes the open PRs that replaced it out of the stack, and a stack with a PR in a retired topic still shows in its active topic. Stacks inside a set show as stacks. PRs from forks never join a stack by branch name.
 - No more stray focus borders on tiles after going back and forward.
-- Stack layers show where they sit: a small blue tag like "1/3" (1 = bottom) before the PR title in tiles, in stacks inside sets and in the detail pane. The tooltip names the PR it is built on.
-- A low-risk glance no longer shows a red RISK box; the verdict box already covers it.
-- New PRs get their glance within a minute or so instead of waiting for a manual sync: when the live poll brings new activity or a PR without a glance, the app updates that topic's dossier and glances right away. Runs are coalesced per topic and capped per day (`POSTPILE_CATCHUP_CAP`, default 300 calls; 0 turns it off).
-- A full sync runs in the background every 60 minutes while the app is open (`POSTPILE_AUTO_SYNC_MINUTES`, 0 turns it off). The title bar shows it like any sync.
-- Clearer glance status instead of "the next sync picks it up": "Writing the glance…", "Glance queued", "Agent features are off", "Waiting: daily agent limit reached, next full sync in N min", and "Glance failed" with a Retry button.
-- Usage analytics, on by default: counts and enums only (syncs, tile opens, proposal decisions, tool health, and the like), never PR titles, bodies, repo/branch names, logins, prompts or agent text. Identity is a sha256-hashed GitHub id, never the login. Turn it off with `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`; see README › Privacy and DESIGN.md › Usage analytics.
 
 ## 0.1.0-alpha.0 (2026-09-28)
 

@@ -3,8 +3,8 @@ import type { UpdateSource } from '../update-check.ts';
 
 /** The sample release. Bump it when the app catches up, or the pill stays hidden in sample data. */
 const SAMPLE_RELEASE: ReleaseInfo = {
-  tag: 'v0.1.0-alpha.1',
-  url: 'https://github.com/PostHog/postpile/releases/tag/v0.1.0-alpha.1',
+  tag: 'v0.2.0',
+  url: 'https://github.com/PostHog/postpile/releases/tag/v0.2.0',
   publishedAt: '2026-09-29T09:00:00Z',
   notes: '- Title bar reminder when a new version is out',
   draft: false,

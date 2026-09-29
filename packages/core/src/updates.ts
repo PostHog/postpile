@@ -7,7 +7,7 @@ import type { IsoTime } from './types.ts';
 
 /** One release as the update check sees it (from GitHub's releases list). */
 export interface ReleaseInfo {
-  /** The tag, e.g. "v0.1.0-alpha.1". */
+  /** The tag, e.g. "v0.2.0" (the first build was "v0.1.0-alpha.0"). */
   tag: string;
   url: string;
   publishedAt: IsoTime | null;
@@ -18,7 +18,7 @@ export interface ReleaseInfo {
 
 /** A release newer than the running app. */
 export interface AvailableUpdate {
-  /** Without the "v", e.g. "0.1.0-alpha.1". */
+  /** Without the "v", e.g. "0.2.0". */
   version: string;
   /** The GitHub release page. */
   url: string;
@@ -123,8 +123,9 @@ export function compareVersions(a: string, b: string): number {
 
 /**
  * The newest release newer than `current`, or null. Drafts and tags that are
- * not versions are skipped. Pre-releases count: every release is an alpha
- * for now. Null too when `current` itself is not a version.
+ * not versions are skipped. Pre-releases (with a "-") count too, so a tag
+ * like 0.3.0-beta.1 still shows; since 0.2.0 releases carry no suffix.
+ * Null too when `current` itself is not a version.
  */
 export function pickUpdate(current: string, releases: ReleaseInfo[]): AvailableUpdate | null {
   if (!isVersion(current)) {

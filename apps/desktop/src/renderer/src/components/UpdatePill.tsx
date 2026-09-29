@@ -51,7 +51,7 @@ function UpdatePopover(props: { update: AvailableUpdate; current: string; onLate
 }
 
 /**
- * "Update available · 0.1.0-alpha.1" in the title bar when the server's last
+ * "Update available · 0.2.0" in the title bar when the server's last
  * check found a newer release. Neutral on purpose: coral means "new since you
  * looked". The popover has the release notes link and the brew command;
  * "Later" hides the pill for that version (kept in localStorage).

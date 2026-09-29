@@ -95,7 +95,7 @@ describe('GET /api/update', () => {
   });
 
   it('serves a sample update in fake mode, or none with POSTPILE_FAKE_UPDATE=0', async () => {
-    expect(await getUpdate(new FakeUpdates('0.1.0-alpha.0', true))).toMatchObject({ latest: { version: '0.1.0-alpha.1' } });
+    expect(await getUpdate(new FakeUpdates('0.1.0-alpha.0', true))).toMatchObject({ latest: { version: '0.2.0' } });
     expect(await getUpdate(new FakeUpdates('0.1.0-alpha.0', false))).toMatchObject({ latest: null });
   });
 });

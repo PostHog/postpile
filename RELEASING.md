@@ -23,12 +23,12 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
 
 ## Every release
 
-1. **Pick the version.** Pre-releases are `0.1.0-alpha.N`, `0.1.0-beta.N`; then `0.1.0`.
+1. **Pick the version.** Every release counts the minor up: `0.2.0`, `0.3.0`, … A quick fix on top of a release bumps the patch: `0.2.1`. No `-alpha` suffix (decided 2026-09-29, after `0.1.0-alpha.0`); the app is alpha in words only (README, release notes). A version without a `-` is not marked pre-release on GitHub, which is fine.
 
 2. **Bump it everywhere.** Every `package.json` (root and workspaces) carries the same version; a test fails when they drift. For example:
 
    ```
-   pnpm -r exec npm pkg set version=0.1.0-alpha.1 && npm pkg set version=0.1.0-alpha.1
+   pnpm -r exec npm pkg set version=0.2.0 && npm pkg set version=0.2.0
    ```
 
 3. **Changelog.** Rename `## <version> (unreleased)` to `## <version>` in `CHANGELOG.md`. The release workflow takes this section as the release notes.
@@ -38,8 +38,8 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
 5. **Tag and push** from the merged `main`:
 
    ```
-   git tag -a v0.1.0-alpha.0 -m "PostPile 0.1.0-alpha.0"
-   git push origin v0.1.0-alpha.0
+   git tag -a v0.2.0 -m "PostPile 0.2.0"
+   git push origin v0.2.0
    ```
 
    If the Release workflow does not start (a tag ruleset bypass does not fire the push trigger), run it by hand: Actions › Release › Run workflow, with the tag. Pick the tag under "Use workflow from" as well: the `desktop-signing` and `homebrew-tap` environments only admit `v*` refs, and GitHub rejects a run from `main` there.
@@ -49,7 +49,7 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
    - `publish-homebrew` on ubuntu, in the `homebrew-tap` environment: renders `homebrew/postpile.rb.tmpl` with the version, the sha256 and the right caveats (signed or ad-hoc), mints a tap token from the GitHub App, and commits `Casks/postpile.rb` to PostHog/homebrew-tap `main`.
 
 7. **Verify:**
-   - The GitHub release has the zip and the `.sha256`, marked pre-release for an alpha, with the changelog notes.
+   - The GitHub release has the zip and the `.sha256`, with the changelog notes. It is marked pre-release only for a version with a `-` (like the old `0.1.0-alpha.0`).
    - `shasum -a 256 -c PostPile-<version>-mac-arm64.zip.sha256` passes on the downloaded zip.
    - PostHog/homebrew-tap has a commit "chore: update postpile cask to <version>" with the right version and sha256.
    - The build log says which way the app was signed: a "building an ad-hoc signed, not notarized release" warning, or a green "Verify signing and notarization" step.

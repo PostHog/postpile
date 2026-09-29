@@ -856,6 +856,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Versioning: no `-alpha` suffix, count up minors** (2026-09-29): after
+  `0.1.0-alpha.0` every release is the next minor (`0.2.0`, `0.3.0`),
+  quick fixes bump the patch (`0.2.1`). Alpha is said in words (README,
+  release notes), not in the version. Such releases are not marked
+  pre-release on GitHub; that is fine. The update check already orders
+  `0.1.0-alpha.0` before `0.2.0`. This release is 0.2.0.
+
 - **Usage analytics on by default, no UI opt-out** (2026-09-29): env
   switches only (`POSTPILE_TELEMETRY=0`, `DO_NOT_TRACK=1`). Identity is a
   hashed GitHub id, never the login. No session replay, no autocapture.

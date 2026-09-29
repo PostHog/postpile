@@ -48,6 +48,12 @@ describe('pickUpdate', () => {
     });
   });
 
+  it('offers a plain minor release to the first alpha build', () => {
+    expect(compareVersions('0.1.0-alpha.0', '0.2.0')).toBe(-1);
+    expect(pickUpdate('0.1.0-alpha.0', [release('v0.2.0'), release('v0.1.0-alpha.0')])?.version).toBe('0.2.0');
+    expect(pickUpdate('0.2.0', [release('v0.2.1'), release('v0.2.0')])?.version).toBe('0.2.1');
+  });
+
   it('skips drafts and tags that are not versions', () => {
     expect(pickUpdate('0.1.0-alpha.0', [release('v0.1.0-alpha.1', { draft: true }), release('nightly')])).toBeNull();
   });
