@@ -163,7 +163,7 @@ describe('resolveSelection', () => {
   it('falls back to the first tile when the PR is gone too', () => {
     const tiles = [tile('t1', ['o/r#1'])];
     expect(resolveSelection(entry('t', 'gone', 'o/r#9'), tiles, tiles, null, null).view?.tile.id).toBe('t1');
-    expect(resolveSelection(entry('t'), [], [], null, null)).toEqual({ view: null, prKey: null });
+    expect(resolveSelection(entry('t'), [], [], null, null)).toEqual({ view: null, prKey: null, auto: false });
   });
 });
 
