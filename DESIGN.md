@@ -1584,6 +1584,42 @@ in that, so at which point do we know I am not?" The GitHub count stays
 higher than what PostPile shows as yours; the gap is mostly finished team
 requests, and that is intended.
 
+**Remove a team review request** (decided 2026-09-29). A routed team
+request stayed in To review after the user marked it read (a stack by
+someone outside the team, review routed to team-devex, no teammate
+reviewed). Moving read routed requests down automatically was proposed and
+not taken; instead the user asked for a PR button: "an unassign team button
+... also trigger the unsubscribe on the PR. The button would do both."
+
+- Detail pane only, shown when the selected PR has a pending review request
+  for one of the viewer's teams (`Viewer` teams / reviewerTeams). Label
+  "Remove <team slug>" (e.g. "Remove team-devex"); several teams pending =
+  one button per team, or a small menu; pick the boring option.
+- Confirm once (small popover, one sentence): "Remove the review request
+  for all of <team> and unsubscribe you?" No undo: re-adding the team would
+  notify every teammate again.
+- On confirm, in order: (1) GitHub `DELETE
+  /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` with `{reviewers: [],
+  team_reviewers: ["<slug>"]}`; (2) `DELETE
+  /notifications/threads/{thread_id}/subscription` for the PR's thread
+  (mutes further notifications until the viewer comments or is @mentioned;
+  mentions and direct requests still arrive); (3) the per-PR mark done in
+  PostPile (events seen, handledAt, thread marked read). If (1) fails, stop
+  and show the error; if (2) fails after (1) succeeded, still do (3) and say
+  the unsubscribe failed. No thread known = skip (2) and say so.
+- Goes through the writes lock (`WriteSwitch` / `GitHubWrites`) like
+  Approve: blocked with the reason while writes are locked, never queued as
+  a pending write. Action log entries `remove_team_request` and
+  `unsubscribe` (origin detail pane), telemetry event through the catalogue
+  allowlist (no PR keys, team slug not sent either, just the action).
+- PostPile side: after a sync the removed request is gone from
+  reviewerTeams, so the PR is no longer "your move"; until then the
+  handledAt keeps the tile done. It comes back like any tile when something
+  loud is aimed at the viewer again (a new request, a mention, a question).
+- GitHubWriter gets the two new methods; FakeEngine/fake GitHub handles
+  them in memory; tests for the engine flow (success, request removal
+  fails, unsubscribe fails, locked) and the renderer visibility rule.
+
 ## Tile faces: why it's here, status, whose turn
 
 Every tile answers four questions without opening it. All four are derived in
