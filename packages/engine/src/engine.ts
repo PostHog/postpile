@@ -55,6 +55,7 @@ import type {
   TopicProposalKind,
   ViewerView,
   NotificationDebugRow,
+  QuietReadView,
   Timers,
   WorkContextSweepResult,
   WorkContextView,
@@ -645,6 +646,10 @@ export class Engine implements EngineService {
 
   async debugNotifications(limit: number): Promise<NotificationDebugRow[]> {
     return this.reads.debugNotifications(limit);
+  }
+
+  async handledQuietly(): Promise<QuietReadView[]> {
+    return this.reads.handledQuietly();
   }
 
   async actionLog(limit: number): Promise<ActionLogEntry[]> {

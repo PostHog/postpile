@@ -44,6 +44,22 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     expect(h.store.pendingWrites.list()).toEqual([]);
   });
 
+  it('lists it under Handled quietly with the title and the bots', async () => {
+    const pr = alicePr();
+    const h = await synced(pr);
+
+    expect(await h.engine.handledQuietly()).toEqual([
+      expect.objectContaining({
+        prKey: pr.key,
+        repo: 'acme/app',
+        number: 5,
+        title: 'Speed up the test shards',
+        bots: ['github-actions[bot]'],
+        threadId: threadFor(pr).id,
+      }),
+    ]);
+  });
+
   it('shows the quiet mark-read as the thread last action in the debug view', async () => {
     const pr = alicePr();
     const h = await synced(pr);

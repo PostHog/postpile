@@ -258,6 +258,8 @@ export function createApp(
   // Debug view of the stored notification threads. Read only: nothing is marked read.
   app.get('/api/debug/notifications', async (c) => c.json(await engine.debugNotifications(debugLimit.parse(c.req.query('limit')))));
   app.get('/api/debug/actions', async (c) => c.json(await engine.actionLog(actionLogLimit.parse(c.req.query('limit')))));
+  // "Handled quietly": threads PostPile marked read on GitHub by itself in the last 7 days (bot-only activity).
+  app.get('/api/handled-quietly', async (c) => c.json(await engine.handledQuietly()));
   // Debug view action. Mark read goes through the same queue, lock and log as a tile.
   app.post('/api/notifications/:threadId/mark-read', async (c) => c.json(await engine.markThreadRead(c.req.param('threadId'))));
   // The footer lock. Turning writes on answers ok: false while POSTPILE_READ_ONLY=1 forces read-only.

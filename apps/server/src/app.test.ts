@@ -49,6 +49,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     search: notImplemented,
     getPr: notImplemented,
     debugNotifications: notImplemented,
+    handledQuietly: notImplemented,
     actionLog: notImplemented,
     githubWrites: notImplemented,
     inboxCleanup: notImplemented,
