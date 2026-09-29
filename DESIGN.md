@@ -2373,6 +2373,20 @@ avatars and filters", QueuesB2).
   adds history entries. Why: after an approve the user often moves on to
   the next tile they had in sight; a jump to "the next best item" loses
   their place (2026-09-29). Pure rules in `lib/selection.ts`.
+- **Nothing is selected until there is something to look at**: when a
+  topic opens or a filter changes and the user has not picked a tile, the
+  app selects only an unread tile (the first in tier order); under the
+  grid's All filter, else the first open one; never a snoozed or done
+  tile. Under Unread with nothing unread it selects nothing, and the right
+  pane says "No tile selected" with one line ("Nothing unread in this
+  topic. Pick a tile, or show All."; under All "Pick a tile to see it.").
+  A tile the app picked is not the user's pick: it is not written into
+  history and the Unread list does not keep it once it stops being unread.
+  The keep-visible rule above stays for tiles the user selected. Why: "we
+  should rather not select any tile and show 'none selected' on the right
+  ... then when collapsing all 'done' and having selected 'unread' it would
+  actually make sense" (2026-09-29). Pure rules in `lib/selection.ts`
+  (`autoTile`).
 - **Topic column**: the whole topic, tiles sorted by `TileView.tier` (the
   most urgent tier among its PRs), needs reply first, rest last; inside a
   tier the old order (unread before open; a read tile that is still your
