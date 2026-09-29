@@ -104,6 +104,11 @@ export class PrRepo {
     return new Map(rows.map((row) => [row.key, row.updated_at]));
   }
 
+  /** When this PR's stored snapshot was fetched; null when it is not stored. */
+  fetchedAt(key: PrKey): string | null {
+    return one<{ fetched_at: string }>(this.db, 'SELECT fetched_at FROM pr WHERE key = ?', key)?.fetched_at ?? null;
+  }
+
   /** When each stored snapshot was fetched. */
   fetchedAtByKey(): Map<PrKey, string> {
     const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT key, fetched_at FROM pr');

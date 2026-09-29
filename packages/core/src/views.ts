@@ -219,6 +219,8 @@ export interface EventView {
 
 export interface PrDetail {
   pr: Pr;
+  /** When the stored snapshot was fetched from GitHub; null when unknown (sample data before a fake fetch). */
+  fetchedAt: IsoTime | null;
   /** Every event, unfiltered (search, debug, chat context). */
   events: EventView[];
   /** The detail pane's list (`activityList`): meaningful events, new first, noise folded. */

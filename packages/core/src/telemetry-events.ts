@@ -144,8 +144,9 @@ export const TELEMETRY_EVENTS = {
   // One glance catch-up run after the poll (packages/engine/src/catch-up). Always one topic per run.
   catch_up_ran: z.object({ topics: z.literal(1), agent_calls: count, duration_ms: durationMs, ok: z.boolean() }).strict(),
 
-  // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing.
-  mcp_tool_called: z.object({ tool: mcpTool, found: z.boolean() }).strict(),
+  // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing;
+  // response_chars is the answer's length (are brief answers brief), error whether it was a tool error.
+  mcp_tool_called: z.object({ tool: mcpTool, found: z.boolean(), response_chars: count, error: z.boolean() }).strict(),
   // "Add to Claude Code" in the footer or the last setup step; ok is whether Claude Code has the server afterwards.
   mcp_connect_clicked: z.object({ from: mcpConnectFrom, ok: z.boolean() }).strict(),
   // "Not now" on the footer's offer.

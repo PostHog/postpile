@@ -212,6 +212,9 @@ const FAKE_LINE_MESSAGES: Record<MemoryCorrectionKind, string> = {
 
 const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 
+/** How long before start the sample PRs count as fetched. */
+const SAMPLE_FETCH_AGE_MS = 4 * 60_000;
+
 function ok(message: string, undoToken: string | null = null): ActionResult {
   return { ok: true, message, undoToken };
 }
@@ -258,6 +261,7 @@ export class FakeEngine implements EngineService {
   private readonly catchUp: FakeCatchUp;
   private readonly quota: GitHubQuota;
   private readonly now: () => Date;
+  private readonly startedAt: Date;
   private readonly snoozes = new Map<string, Snooze>();
   private readonly chats = new Map<string, ChatMessage[]>();
   private readonly feedback: Feedback[];
@@ -279,10 +283,13 @@ export class FakeEngine implements EngineService {
   private baseline: string | null = null;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
+  /** When each sample PR was last "fetched": a few minutes before start, moved by a fake agent refresh. */
+  private readonly fetchedAt = new Map<PrKey, string>();
 
 
   constructor(options: FakeEngineOptions = {}) {
     this.now = options.now ?? (() => new Date());
+    this.startedAt = this.now();
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
     this.data = buildSampleData(this.now());
@@ -360,6 +367,11 @@ export class FakeEngine implements EngineService {
       agentOff: this.toolStatus.agentOff() !== null,
       catchUp: this.catchUp.stateOf(prKey),
     });
+  }
+
+  /** Sample PRs count as fetched SAMPLE_FETCH_AGE_MS before the engine started, until a fake refresh moves them. */
+  private fetchedAtOf(prKey: PrKey): string {
+    return this.fetchedAt.get(prKey) ?? new Date(this.startedAt.getTime() - SAMPLE_FETCH_AGE_MS).toISOString();
   }
 
   private findTile(tileId: string): Tile | undefined {
@@ -880,6 +892,7 @@ export class FakeEngine implements EngineService {
     const news = whatsNew(this.eventsOf(prKey), this.viewer());
     return {
       pr,
+      fetchedAt: this.fetchedAtOf(prKey),
       events,
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr),
       whatsNew: news,

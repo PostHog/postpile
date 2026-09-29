@@ -96,6 +96,22 @@ function holderAlive(holder: LockInfo): boolean {
   return started === null || Math.abs(started - Date.parse(holder.processStartedAt)) <= START_TIME_SLACK_MS;
 }
 
+/** Lock kinds of the desktop app: the only holder that runs the live poll and answers agent requests. */
+export const APP_LOCK_KINDS: readonly LockKind[] = ['packaged', 'dev'];
+
+/**
+ * The desktop app holding this database's folder right now, or null: no
+ * lock, a stale one, or the CLI or the standalone server holds it. Reads
+ * only, never takes or removes the lock (the MCP process asks this).
+ */
+export function runningApp(databaseFile: string): LockInfo | null {
+  const holder = readLock(join(dirname(databaseFile), LOCK_FILE_NAME));
+  if (!holder || !APP_LOCK_KINDS.includes(holder.kind) || !holderAlive(holder)) {
+    return null;
+  }
+  return holder;
+}
+
 /** Creates the file only if it does not exist yet (O_EXCL). False when it does. */
 function createExclusive(file: string, info: LockInfo): boolean {
   let fd: number;

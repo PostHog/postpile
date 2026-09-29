@@ -418,6 +418,7 @@ export class ReadModels {
     const gap = this.glanceGap(key, glance !== null);
     return {
       pr,
+      fetchedAt: this.store.prs.fetchedAt(key),
       events,
       activity: activityList(events, viewer, news?.anchor.at ?? null, pr),
       whatsNew: news,
