@@ -83,6 +83,8 @@ export interface TileViewInput {
   events: Map<PrKey, PrEvent[]>;
   userStates: Map<PrKey, UserPrState>;
   viewer: Viewer | null;
+  /** PRs whose agent glance says NOT_YOURS (see `teamRequestHold`). */
+  notYours?: ReadonlySet<PrKey>;
   pendingWrite: TilePendingWrite | null;
   quietRepo: boolean;
   repoLabel: string | null;
@@ -102,13 +104,14 @@ export function buildTileView(input: TileViewInput): TileView {
     forWhom: tileForWhom(prs.map((pr) => pr.forWhom)),
     tier: tileTier(prs.map((pr) => pr.tier)),
     people: tilePeople(memberPrs, viewer?.login ?? null),
-    turn: whoseTurn({ tile, prs: input.prsByKey, events: input.events, userStates: input.userStates, viewer }),
+    turn: whoseTurn({ tile, prs: input.prsByKey, events: input.events, userStates: input.userStates, viewer, notYours: input.notYours }),
     afterRead: tileAfterMarkRead({
       tile,
       prs: input.prsByKey,
       events: input.events,
       userStates: input.userStates,
       viewer,
+      notYours: input.notYours,
       readAt: input.now,
     }),
     pendingWrite: input.pendingWrite,

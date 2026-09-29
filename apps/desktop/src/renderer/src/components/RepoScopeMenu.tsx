@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { RepoEntry, RepoOverview } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useRepos } from '../api/repos.ts';
-import { countTitle, scopeLabel, shortRepo } from '../lib/repos.ts';
+import { countTitle, scopeLabel, shortRepo, topicCount } from '../lib/repos.ts';
 import { useDismiss } from '../lib/use-dismiss.ts';
 import { ChevronIcon } from './icons.tsx';
 
@@ -20,8 +20,9 @@ function Radio(props: { checked: boolean }) {
 
 function Count(props: { topics: number; prs: number | null }) {
   return (
-    <span className="font-mono text-[10.5px] text-faint" title={countTitle(props.topics, props.prs)}>
-      {props.topics}
+    // Words, not a bare number: a lone "6" next to a repo read as six unread things.
+    <span className="shrink-0 text-[10.5px] whitespace-nowrap text-faint" title={countTitle(props.topics, props.prs)}>
+      {topicCount(props.topics)}
     </span>
   );
 }

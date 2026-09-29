@@ -94,6 +94,19 @@ export interface TopicListItem {
   people: TopicPerson[];
 }
 
+/** The sidebar's Finished drawer lists topics retired this recently. */
+export const FINISHED_TOPICS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** A retired topic in the sidebar's Finished drawer. */
+export interface FinishedTopic {
+  id: string;
+  name: string;
+  area: string | null;
+  /** The topic's last update, which is its retirement unless something touched it since. */
+  retiredAt: IsoTime;
+  prCount: number;
+}
+
 /** Who the app works for, for the sidebar's Mine and Team filter buttons. */
 export interface ViewerView {
   /** Null before the first sync stored the viewer. */
@@ -297,6 +310,8 @@ export interface SyncReport {
   dossiersUpdated: number;
   facts: FactChangeCounts;
   errors: string[];
+  /** Finished topics this sync retired. Missing on reports stored before the sync retired topics. */
+  topicsRetired?: number;
   /** Missing on reports stored before phase timings existed. */
   phaseMs?: SyncPhaseTimings;
   /**

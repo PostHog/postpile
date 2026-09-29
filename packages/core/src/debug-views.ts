@@ -16,7 +16,7 @@ export const DEBUG_EVENTS_PER_PR = 5;
  * - not_pr: issues, releases, discussions; only PR threads become tiles.
  * - pr_not_synced: a PR thread whose PR was never fetched (sync limit, error).
  * - no_topic: the PR is stored but sits in no topic and is not unsorted.
- * - topic_hidden: the PR's topic is merged away or archived.
+ * - topic_hidden: the PR's topic is merged away, archived or retired.
  * - no_tile: the topic is live but no tile holds the PR.
  */
 export type NotificationLanding =

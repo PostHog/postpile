@@ -1,4 +1,6 @@
 import {
+  scopedSettings,
+  type ListScope,
   glanceStateOf,
   activityList,
   whatsNew,
@@ -9,6 +11,7 @@ import {
   buildTileView,
   compareTopicUrgency,
   displayState,
+  FINISHED_TOPICS_MS,
   isMergeApprovedMove,
   isPrInQuietRepo,
   isQuietTile,
@@ -29,6 +32,7 @@ import {
   whoseTurn,
   type FactQuery,
   type FactView,
+  type FinishedTopic,
   type CatchUpRunState,
   type GlanceGap,
   type GlanceState,
@@ -225,6 +229,7 @@ export class ReadModels {
         events: board.events,
         userStates: board.userStates,
         viewer,
+        notYours: board.notYours,
         pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
         quietRepo: isQuietTile(memberKeys(tile), settings),
         repoLabel: labels.tile,
@@ -246,12 +251,12 @@ export class ReadModels {
     return [...prs.values()];
   }
 
-  listTopics(): TopicListItem[] {
+  listTopics(scope?: ListScope): TopicListItem[] {
     const board = this.board();
     const topics = board.topics();
     const dossiers = this.store.dossiers.latestMany(topics.map((topic) => topic.id));
     const viewer = loadViewer(this.store);
-    const settings = loadRepoSettings(this.store);
+    const settings = scopedSettings(loadRepoSettings(this.store), scope);
     const items: TopicListItem[] = [];
     for (const topic of topics) {
       const tiles = board.tilesForTopic(topic.id);
@@ -261,7 +266,7 @@ export class ReadModels {
       const states = tiles.map((tile) => board.stateOf(tile).kind);
       const urgency = topicUrgency(
         tiles.map((tile, index) => {
-          const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer });
+          const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer, notYours: board.notYours });
           const loudMembers = tile.members.filter((member) => !isPrInQuietRepo(member.prKey, settings));
           return {
             state: states[index] ?? 'open',
@@ -299,6 +304,22 @@ export class ReadModels {
       });
     }
     return items.sort(compareTopics);
+  }
+
+  /** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. Ignores the repo scope. */
+  listFinishedTopics(): FinishedTopic[] {
+    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
+    return this.store.topics
+      .list()
+      .filter((topic) => topic.status === 'retired' && topic.updatedAt >= since)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+        area: topic.area,
+        retiredAt: topic.updatedAt,
+        prCount: this.store.memberships.listForTopic(topic.id).length,
+      }));
   }
 
   /** The title bar's repo menu: topics and PRs per repo, counted over every topic, not the scope. */
@@ -342,9 +363,9 @@ export class ReadModels {
   }
 
   /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */
-  search(query: string): SearchResult {
+  search(query: string, scope?: ListScope): SearchResult {
     const board = this.board();
-    const settings = loadRepoSettings(this.store);
+    const settings = scopedSettings(loadRepoSettings(this.store), scope);
     // Only the topics the sidebar lists, each with all its tiles, like an opened topic.
     const listed = board.topics().filter((topic) => this.isListed(board.tilesForTopic(topic.id), settings));
     const topics: SearchableTopic[] = listed.map((topic) => ({

@@ -1,6 +1,6 @@
 {
   "name": "@postpile/cli",
-  "version": "0.2.1",
+  "version": "0.3.1",
   "description": "PostPile dev CLI: sync, poll, sweep and read topics from the terminal",
   "private": true,
   "license": "MIT",
@@ -22,6 +22,7 @@
   "dependencies": {
     "@postpile/core": "workspace:*",
     "@postpile/engine": "workspace:*",
+    "@postpile/mcp": "workspace:*",
     "@postpile/server": "workspace:*"
   },
   "bin": {

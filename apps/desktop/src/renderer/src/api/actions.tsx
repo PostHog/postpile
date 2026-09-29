@@ -16,6 +16,7 @@ import type {
   InstructionsProposal,
   InstructionsProposalReply,
   InstructionsSaveResult,
+  McpConnectFrom,
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
@@ -139,6 +140,14 @@ export interface Actions {
   clearStartFresh(): Promise<boolean>;
   /** "Not now": hides the cleanup for a week. Local. */
   hideInboxCleanup(): Promise<boolean>;
+  /**
+   * "Add to Claude Code": the server runs `claude mcp add` (installed app
+   * only). Local, not a GitHub write; fire it only from a click. Returns
+   * whether Claude Code has the server afterwards.
+   */
+  connectMcp(from: McpConnectFrom): Promise<boolean>;
+  /** "Not now" on the footer's MCP offer. Local, kept by the server. */
+  hideMcpConnect(): Promise<boolean>;
   /** "Send test notification" (desktop app only, over the preload). Says in a toast what happened. */
   sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
@@ -585,6 +594,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     startFresh: () => run(CLEANUP_BUSY.startFresh, null, () => request('POST', '/api/inbox-cleanup/start-fresh')),
     clearStartFresh: () => run(CLEANUP_BUSY.clearStartFresh, null, () => request('DELETE', '/api/inbox-cleanup/start-fresh')),
     hideInboxCleanup: () => run(CLEANUP_BUSY.notNow, null, () => request('POST', '/api/inbox-cleanup/not-now')),
+    connectMcp: (from) => run('mcp:connect', null, () => request('POST', '/api/mcp-connection', { from })),
+    hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),
     markTopicSeen,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),

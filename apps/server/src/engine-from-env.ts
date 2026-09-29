@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AppConfig } from '@postpile/core';
+import type { AppConfig, McpLauncher } from '@postpile/core';
 import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind, type Telemetry } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
@@ -34,6 +34,8 @@ export interface EngineFromEnvOptions {
   migrateLegacy?: boolean;
   /** Reuse a Telemetry the caller already built (the desktop app's main process); defaults to building one from env. */
   telemetry?: Telemetry;
+  /** How Claude Code starts the MCP server (the desktop app knows). Missing: "Add to Claude Code" only shows the command. */
+  mcpLauncher?: McpLauncher | null;
 }
 
 /**
@@ -57,6 +59,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
     withoutLock: options.withoutLock,
     appVersion: readOwnVersion(),
     telemetry: options.telemetry,
+    mcpLauncher: options.mcpLauncher,
   });
 }
 

@@ -11,6 +11,7 @@ function report(overrides: Partial<ConsolidationReport> = {}): ConsolidationRepo
     ruleProposalsFiled: 0,
     factsMerged: 2,
     topicsRetired: 0,
+    topicsSplit: 0,
     agentCallStats: { total: 1, byKind: {} },
     errors: [],
     ...overrides,
@@ -47,7 +48,7 @@ describe('ConsolidationSchedule', () => {
       { onlyIfDue: true, maxAgentCalls: 30 },
       { onlyIfDue: true, maxAgentCalls: 30 },
     ]);
-    expect(lines).toEqual(['consolidation: 1 topic and 0 rule proposals, 2 facts merged, 0 topics retired, 1 agent calls']);
+    expect(lines).toEqual(['consolidation: 1 topic and 0 rule proposals, 2 facts merged, 0 topics retired, 0 small splits applied, 1 agent calls']);
   });
 
   it('logs a failure instead of throwing', async () => {

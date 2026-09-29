@@ -8,7 +8,48 @@ Decisions from the design rounds, tidied. Open points are at the end.
 has a stable id, a name, who drives it, the user's role, an agent-written
 summary, and *tailoring*: per-topic instructions the user gave through chat,
 stored only after the user confirms. Topics are never renamed or merged
-silently; the agent files proposals and the user decides.
+silently; the agent files proposals and the user decides. The one exception
+is a small split (2026-09-29): consolidation applies a split of at most 3
+PRs (`AUTO_SPLIT_MAX_PRS`, stack layers counted, every named PR in the topic,
+at least one PR left behind) right away, with no undo; "Wrong topic" on a PR
+fixes a bad one, and that correction reaches the next consolidation prompt.
+Bigger splits stay proposals.
+
+**Areas, topics, tiles and sets** (2026-09-29): one glossary,
+`WORK_GLOSSARY` in `packages/agent/src/prompts/shared.ts`, goes into every
+prompt that sorts, groups or tidies PRs (topic assignment, set grouping,
+dossier update, consolidation), so all agents cut work at the same grain:
+
+- *Area*: a part of the product or codebase ("Hogland", "CI"). A label on
+  topics, never a topic itself.
+- *Topic*: one goal someone drives, with a finish line. The test: one
+  sentence states the goal, and every PR moves it forward or came out of
+  that work while it was going on (a fix found while doing it). Sharing a
+  repo, an area or a word ("CI", "security") is not enough.
+- *Tile*: what the user acts on in one go: a PR, a stack or a set.
+- *Set*: two or more PRs inside one topic best read together.
+
+Topic assignment puts a PR into a live topic whose goal it serves or came
+out of (live: open PRs or activity in the last two weeks; each offered topic
+shows its open count and last activity). A finished or quiet topic only takes
+a direct follow-up; anything else gets a new topic. There is no catch-all
+"fixes and upkeep" topic and no preference for broad topics any more: that
+preference let unrelated PRs pile into one topic. The user's instructions may
+set a finer or coarser grain.
+
+**Topic status**: `active`, `retired` (finished) or `archived` (merged
+away, never comes back). Every full sync ends by retiring each active topic
+that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR
+merged or closed, no events for 3 days, no unread or snoozed tile. No agent
+verdict is needed, and Unsorted never retires. It runs after the digest, so
+the sync's own events count; the sync log line and `SyncReport.topicsRetired`
+say how many. Retiring is reversible: a new loud event on a member PR
+(`reviveRetiredTopics`, full sync and live poll) or a new PR assigned to it
+(retired topics stay on offer for 30 days) makes it active again. Retired
+topics leave the sidebar list and wait in its Finished drawer (see "Queue
+sections"). Until 2026-09-29 only the daily consolidation retired topics,
+and only when the agent said finished and 14 quiet days had passed; most
+topics with every PR merged never left the sidebar.
 
 **Tiles** are the unit of attention inside a topic. A tile holds one of:
 
@@ -74,7 +115,8 @@ a classification.
   them while whose turn is not "you" (a later question or mention after the approval keeps
   it out of Done), or handled (marked read) while whose turn is not "you" and no review is pending of
   them (`reviewPending`: a personal request, a team request on a teammate's PR, or a routed
-  team request no teammate picked up, head not reviewed by them). Marking read a PR that
+  team request no teammate picked up and not on hold (`teamRequestHold`, see whose turn),
+  head not reviewed by them). Marking read a PR that
   still waits on their review makes it read (no strip, no coral) but leaves it open in the
   normal tile list with its turn footer, and in To review; it never lands in the Done fold.
   An approval counts on any commit (2026-09-28): a PR the user approved stays done after later
@@ -122,6 +164,18 @@ read time") (a thread's `updated_at` runs ahead of the PR's own, so
 comparing against the PR would refetch everything). `SyncOptions` exist for
 cheap runs: `maxPrs` (newest first, the rest follow on later syncs even after a
 304), `maxAgentCalls`, `agentJobs`.
+
+**Big inboxes** (2026-09-29, core `selectSyncThreads`): every notification
+is stored, but only threads updated in the last 30 days
+(`SYNC_MAX_AGE_DAYS`) are ever fetched and digested, and one full sync takes
+at most 60 PRs (`SYNC_MAX_PRS`, the engine's default `maxPrs`), unread
+first, newest first. A thread older than that comes back in when it moves
+again; the user's own PRs, review requests and recent merges still arrive as
+found PRs. When a sync stops at the cap, the next background sync runs 2
+minutes later instead of an hour (`BACKLOG_SYNC_MINUTES`), so a backlog
+(two weeks away, ~400 notifications) drains in batches while the newest 60
+already show. Before, a year of unread notifications kept the first sync
+running for 20+ minutes.
 
 **Reconciling with GitHub's read time.** Every event on a thread from before
 that thread's `last_read_at` counts as seen, stamped with that time, whenever
@@ -717,7 +771,7 @@ Output and what happens:
 | `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1. Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
 | `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
 | `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
-| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 14 days, no unread or snoozed tile. Retiring is reversible |
+| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 3 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
 
 Also deterministic, in the same run: retire topics that pass the gate and
 whose dossier status is `finished`. Dossier versions are pruned on every
@@ -1424,7 +1478,17 @@ authors.
      ("Review for team-devex: lyra's PR") until another teammate approves
      or requests changes; a teammate's comment alone does not cover it
      (2026-09-28). A team request on a PR from outside the team (routed)
-     is yours only while no teammate reviewed at all.
+     is yours only while no teammate reviewed at all, and while it is not
+     on hold (`teamRequestHold`, 2026-09-29).
+   - them: a routed team request while someone else's changes request
+     stands: the author "to address ada's changes" (the author moves
+     first).
+   - none: a routed team request whose agent glance says NOT_YOURS (stored
+     glance, stale or not, `Board.notYours`, so the tile state, whose turn
+     and after-read agree). The PR stays in To review with its team chip;
+     a mark-read makes it done. A personal request or a team request on a
+     teammate's PR never goes on hold. Before this, a tile said "Not
+     yours" next to "Your move: Review for team-devex".
    - them: you commented or
      requested changes on the head: the author "to address 2 threads" (open
      threads you started), "to address your changes" or "to reply".
@@ -1695,6 +1759,14 @@ avatars and filters", QueuesB2).
   `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
   Routed, FYI; Routed and FYI folded). Section tint: honey for reply and
   review, ink for mine, sea for team and team mentioned, grey for other.
+- **Finished drawer** (2026-09-29): under the sections, a folded "Finished"
+  group header lists topics retired in the last 30 days, newest first
+  (`GET /api/topics/finished`, `FinishedTopic`: name and how long ago it
+  retired, PR count in the tooltip). Quiet on purpose: muted names, no
+  bubble, no faces, no count on the header. A row opens the topic like any
+  other (`getTopic` and `tilesForTopic` work for a retired topic; the
+  breadcrumb says "Finished"). Search and the queue filters cover live
+  topics only, so the drawer hides while they narrow. Hidden when empty.
 - **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
   per tier over the PRs in the topic's tiles (each PR once), plus open PRs
   by you / by a teammate. Only open PRs get a real tier; merged and closed
@@ -2434,11 +2506,99 @@ message, are dropped.
    `graphql`/`rest`, read from the sync's own error text — GitHub's GraphQL
    and REST rate-limit errors are shaped differently at the point
    `packages/github` builds them), `consolidation_ran` (proposals_filed).
+6. *MCP server*: `mcp_tool_called` (tool, found: false when the PR, topic
+   or search found nothing). Sent by the separate `postpile-mcp` process
+   under the same install id, so it counts toward the same person.
+   `mcp_connect_clicked` (from `footer`/`setup`, ok: Claude Code has the
+   server afterwards) and `mcp_connect_dismissed` (the footer's "Not now"),
+   both sent by the engine from the action itself.
 
 **Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
 and a scratch data dir sends one `telemetry_test` event (distinct id
 `postpile-dev-check`) and flushes; that event is not part of the catalogue
 the app sends in normal use.
+
+## MCP server (read-only)
+
+Other agents on the machine (Claude Code in a checkout, say) can ask
+PostPile what it knows before they act on a PR: `postpile-mcp`, a stdio MCP
+server on the official SDK (`packages/mcp`). Read-only, decided 2026-09-29;
+writes come later through the running app's API so they keep the writes
+lock, undo and the user's say.
+
+**Process**: its own process, not the app's. It opens the database the way
+`cli --read-only` does (`createEngine({ withoutLock: true })`: read-only
+SQLite, no migrations, no lock, no GitHub writes), so it works next to the
+running app and with the app closed, and needs no port or token discovery.
+The data is as fresh as the app's last sync and poll; every answer says when
+the last full sync finished. Stdout is the protocol, so `console.log` goes to
+stderr (`routeConsoleToStderr`).
+
+**Shipping**: electron-vite builds `apps/desktop/src/main/mcp.ts` next to the
+main process as `out/main/mcp.js`. `Contents/Resources/postpile-mcp`
+(`apps/desktop/build/postpile-mcp`, via `extraResources`) runs the app's own
+binary with `ELECTRON_RUN_AS_NODE=1` on it: no window, no dock icon, no Node
+install needed, the same engine code as the app. The cask links it into
+Homebrew's bin (`binary`); the script follows that symlink back into the
+bundle. From the repo: `pnpm cli mcp` (`POSTPILE_FAKE=1` for sample data).
+
+**Tools** (all `readOnlyHint`; inputs are small zod shapes):
+
+- `pr_context(pr)`: `owner/repo#123`, a PR URL, or `#123` when the number is
+  unique in the store. The PR (state, author, size), whose move, why it is
+  unread, stack layer, the viewer's approval, what is new since they looked,
+  the glance (verdict, for you, risk, files to open first), facts, the
+  activity list (the detail pane's, noise folded), then the topic: dossier
+  (`formatDossier`, shared with the CLI) and every tile with its PRs.
+- `topic(topic)`: an id, or part of a name when that picks one topic.
+- `search_prs(query)`: the search bar's matcher, 25 PRs at most.
+- `whats_on_me()`: live tiles in `needs_you` topics where it is the user's
+  move, then unread ones where it is not.
+
+Reads cover every repo (`listTopics` / `search` with `{ allRepos: true }`),
+whatever repo the window has chosen; quiet repos stay quiet. Answers are
+plain text: a freshness line, who the app works for, then one
+`<postpile-data>` fence around everything that comes from GitHub or from an
+agent summary of it, with a line telling the caller it is data, not
+instructions. A fence tag inside the data is broken up so a PR body can't
+close it. No structured content: text is what the calling model reads, and
+sending both would double the tokens.
+
+**Connecting** (decided 2026-09-29): the app nudges, it never installs by
+itself. The status footer shows "agents: not connected" while Claude Code
+lacks the server; a click opens a small popover with one sentence on what it
+does, **Add to Claude Code**, the server command for other agents (copy
+only) and "Not now". The last setup step (Accept) has the same offer in its
+own box below Accept, with a secondary button so Accept stays the one
+primary; it is never part of Accept.
+
+- Engine: `McpConnection` (`packages/engine/src/mcp-connection.ts`) behind
+  `mcpConnection()`, `connectMcp(from)` and `hideMcpConnect()`. Routes:
+  `GET /api/mcp-connection`, `POST /api/mcp-connection {from}`, `POST
+  /api/mcp-connection/not-now`.
+- Detection: `claude mcp get postpile` (exit 0 = there; "No MCP server
+  named" = not there; anything else, e.g. a timeout, = unknown and no nag).
+  It runs through the setup checks' command runner, with the claude binary
+  `ToolHealth` found, in the app's own empty folder (`agentCwdFor`), so it
+  sees user-scope servers and macOS asks for nothing. Cached for 5 minutes;
+  the renderer asks again on window focus and after an add.
+- Install, only on the click: `claude mcp add --scope user postpile --
+  <Contents/Resources/postpile-mcp>`, then a fresh check. "Already exists"
+  counts as done when the check finds it.
+- The launcher path is only known to Electron main, which passes
+  `mcpLauncher` into `engineFromEnv` / `createEngine`: `{kind: 'app', path:
+  process.resourcesPath/postpile-mcp}` when packaged, `{kind: 'dev',
+  repoRoot}` in a dev run. Dev runs, the CLI and the standalone server never
+  run claude for this: the state stays unknown (no footer item), the button
+  is disabled with the reason, and the command shows to copy (dev:
+  `claude mcp add postpile -e POSTPILE_PROFILE=default -- pnpm -C <repo> cli
+  mcp`).
+- claude missing or logged out: nothing runs, state unknown, no footer item
+  (the tool note already covers claude). A usage limit does not matter.
+- "Not now" is kept in meta (`mcp_connect_hidden_at`) and hides the footer
+  item for good; the setup offer still shows on "Run setup again".
+- Sample data (`FakeMcp`): starts not connected, a click "adds" it in
+  memory; never runs claude or touches the real Claude Code config.
 
 ## Architecture
 
@@ -2504,6 +2664,9 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/inbox-cleanup/mark-read` `{olderThanDays: 14\|30}` | `cleanUpInbox()` (GitHub write, pending while locked) |
 | `POST`/`DELETE /api/inbox-cleanup/start-fresh` | `startFresh()` / `clearStartFresh()` |
 | `POST /api/inbox-cleanup/not-now` | `hideInboxCleanup()` (7 days) |
+| `GET /api/mcp-connection` | `mcpConnection()` (cached `claude mcp get postpile`, commands, "Not now") |
+| `POST /api/mcp-connection` `{from: footer\|setup}` | `connectMcp()` (`claude mcp add`, installed app only) |
+| `POST /api/mcp-connection/not-now` | `hideMcpConnect()` |
 | `GET /api/repos` | `listRepos()` (repo menu: counts, scope, quiet) |
 | `POST /api/repos/scope` `{repo}` | `setRepoScope()` (one repo, null = all) |
 | `POST /api/repos/quiet` `{repo, quiet}` | `setRepoQuiet()` |
@@ -2633,7 +2796,8 @@ preflight and does not know the token, so CORS stays open.
   - when "seen" moves: explicit `markTopicSeen` when leaving a topic, or on opening it
     [explicit, the UI calls it when the user leaves the topic]
   - retiring finished topics: automatic behind the deterministic gate (all PRs merged/closed,
-    14 quiet days, nothing unread or snoozed) or a proposal like merges [automatic, reversible]
+    3 quiet days since 2026-09-29, was 14; nothing unread or snoozed) or a proposal like merges
+    [automatic on every full sync, reversible]
   - accepted global rules: kept in the database and added to every prompt, or appended to
     instructions.md [database; instructions.md stays the user's own file]
   - fold set grouping into the dossier update to save one call per topic [not yet, sets stay a

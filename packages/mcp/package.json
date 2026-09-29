@@ -1,0 +1,31 @@
+{
+  "name": "@postpile/mcp",
+  "version": "0.3.1",
+  "description": "PostPile MCP server: read-only tools that let other agents ask what PostPile knows about a PR and its topic",
+  "private": true,
+  "license": "MIT",
+  "author": "PostHog Inc. (https://posthog.com)",
+  "homepage": "https://github.com/PostHog/postpile#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/postpile.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/PostHog/postpile/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@postpile/core": "workspace:*",
+    "@postpile/engine": "workspace:*",
+    "@postpile/server": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

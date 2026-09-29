@@ -1,6 +1,6 @@
 // Fakes for engine tests. Nothing here touches GitHub or the claude CLI.
 import { FakeRunner } from '@postpile/agent';
-import type { ActivityPr, NotificationThread, Pr, PrKey, PrRef, TelemetryEventName, TelemetryEventProps, Viewer } from '@postpile/core';
+import type { ActivityPr, McpLauncher, NotificationThread, Pr, PrKey, PrRef, TelemetryEventName, TelemetryEventProps, Viewer } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
@@ -356,6 +356,8 @@ export interface HarnessOptions {
   telemetry?: FakeTelemetry;
   /** No setup flag, as on a first run: setup shows and the poll waits. Off by default, so tests start past setup. */
   firstRun?: boolean;
+  /** How Claude Code starts the MCP server; none by default, so nothing runs claude mcp. */
+  mcpLauncher?: McpLauncher;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -406,6 +408,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     syncLog: options.syncLog ?? (() => {}),
     userConfig: options.userConfig ?? null,
     setupCommands: commands.run,
+    mcpLauncher: options.mcpLauncher ?? null,
     tools,
     telemetry,
   });

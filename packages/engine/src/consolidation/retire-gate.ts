@@ -1,12 +1,13 @@
 import type { Board } from '../board.ts';
 
 /** A finished topic must have been quiet this long before it is retired. */
-export const RETIRE_QUIET_MS = 14 * 24 * 60 * 60 * 1000;
+export const RETIRE_QUIET_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
- * The deterministic half of retiring a topic; the agent's "finished" alone is
- * never enough. Every member PR merged or closed, no events for 14 days, and
- * no unread or snoozed tile left.
+ * When a topic is over: every member PR merged or closed, no events for 3
+ * days, and no unread or snoozed tile left. Every full sync retires the
+ * topics that pass (`retireFinishedTopics`); consolidation checks it too
+ * before it follows the agent's "finished".
  */
 export class RetireGate {
   constructor(private readonly board: Board) {}

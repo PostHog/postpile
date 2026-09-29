@@ -22,6 +22,8 @@ cask "postpile" do
   depends_on macos: :monterey
 
   app "PostPile.app"
+  # Read-only MCP server for other agents; the script follows this symlink back into the app.
+  binary "#{appdir}/PostPile.app/Contents/Resources/postpile-mcp"
 
   zap trash: [
     "~/.config/postpile",
@@ -47,6 +49,10 @@ cask "postpile" do
 
       brew install gh && gh auth login
       curl -fsSL https://claude.ai/install.sh | bash && claude auth login
+
+    Let other agents ask PostPile about your PRs (read-only):
+
+      claude mcp add postpile -- postpile-mcp
 
     Update later with: brew upgrade --cask postpile
   EOS

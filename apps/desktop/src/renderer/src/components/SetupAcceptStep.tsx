@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import type { SetupCurrentInstructions, SetupFitNote, SetupSectionEdit } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useMcpConnection } from '../api/mcp.ts';
 import { useSyncProgress } from '../api/sync.ts';
 import { acceptPlan, draftText, type SetupFitFix, type SetupFitState } from '../lib/setup.ts';
 import { syncProgressDetail, syncProgressText } from '../lib/sync-progress.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { DiffView } from './DiffView.tsx';
+import { McpConnectOffer } from './McpConnectOffer.tsx';
 import { SetupChip } from './SetupChip.tsx';
 import { SetupFitPanel } from './SetupFitPanel.tsx';
 
@@ -26,11 +28,30 @@ function SyncingNote() {
   );
 }
 
+/** The optional MCP offer: "Add to Claude Code" only runs from its button, never with Accept. */
+function McpOfferBox() {
+  const view = useMcpConnection().data;
+  if (!view) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-row border border-hairline p-3">
+      <h3 className="text-[12.5px] font-semibold text-ink">Optional: let other agents ask PostPile</h3>
+      {view.state === 'connected' ? (
+        <p className="text-xs text-ink-2">Claude Code has it. New Claude Code sessions can ask PostPile about a PR and its topic.</p>
+      ) : (
+        <McpConnectOffer view={view} from="setup" />
+      )}
+    </div>
+  );
+}
+
 /**
  * Step 4: what Accept does, the agent's fit check with its fixes, the final
  * text (as a diff against the current file, or all new), then Accept: writes a new instructions version, quiet
  * repos, scope and the done flag, runs the first sync and hands over to the
  * topics. A file changed on disk meanwhile sends the user back to review.
+ * Below it, the optional MCP offer (its own button, never part of Accept).
  */
 export function SetupAcceptStep(props: {
   edits: SetupSectionEdit[];
@@ -83,6 +104,7 @@ export function SetupAcceptStep(props: {
           Back to the draft
         </Button>
       </div>
+      <McpOfferBox />
     </section>
   );
 }

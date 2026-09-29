@@ -14,6 +14,30 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The setup draft leaves rules for coding agents out of Preferences, even when your Claude Code notes have them.
 - No live poll, Mac notifications or agent catch-ups while first-run setup is open. They start once you accept or skip setup, so setup's own agent calls don't wait behind them.
 
+## 0.3.1 (2026-09-29)
+
+### Changed
+
+- Finished topics leave the sidebar on their own: every sync retires a topic once all its PRs are merged or closed, nothing is unread or snoozed, and it has been quiet for 3 days (was 14 days, and only in the nightly tidy-up). A new event or PR brings it back. Topics retired in the last 30 days wait in a folded "Finished" drawer at the bottom of the sidebar.
+
+## 0.3.0 (2026-09-29)
+
+### New
+
+- Read-only MCP server, `postpile-mcp`: other agents can ask what PostPile knows about a PR and its topic (`pr_context`, `topic`, `search_prs`, `whats_on_me`). Set it up with `claude mcp add postpile -- postpile-mcp`. It ships inside the app and Homebrew links it. From the repo, run `pnpm cli mcp`.
+- "Add to Claude Code": while Claude Code does not have PostPile's MCP server, the status bar shows "agents: not connected". A click offers to add it (`claude mcp add --scope user`), shows the command for other agents, or hides the item with "Not now". The last setup step offers the same. Nothing is added without the click.
+
+### Changed
+
+- Topics are cut by goal: every agent gets the same definition of area, topic, tile and set, and a PR no longer lands in a broad topic it only shares a repo or a word with. With no live goal to join, it gets a new topic.
+- The nightly tidy-up applies small topic splits (up to 3 PRs) by itself. Bigger splits still wait in the Inbox.
+- A team review request routed to your team is no longer your move while someone else's change request stands (it is the author's move), or when the agent glance says Not yours. Marking such a tile read makes it done.
+
+### Fixed
+
+- The first sync no longer runs for 20+ minutes on a big inbox. Notifications older than 30 days are left alone, one sync takes at most 60 PRs (newest and unread first), and when there are more, the next background sync follows 2 minutes later instead of an hour.
+- The repo menu says "6 topics" instead of a bare "6" that read like an unread count.
+
 ## 0.2.1 (2026-09-29)
 
 ### Fixed

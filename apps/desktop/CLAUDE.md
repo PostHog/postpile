@@ -28,7 +28,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 
 ## Data: typed query hooks, types from core
 
-- One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`),
+- One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,
+  `useFinishedTopics` for the sidebar's Finished drawer),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
   `viewer.ts` (`useViewer`, login and teammates for the filter buttons),
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
@@ -55,6 +56,9 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `useActions().checkTools`),
   `update.ts` (`useUpdate`: the server's last update check, every minute;
   `UpdatePill` in the title bar, "Later" per version in localStorage),
+  `mcp.ts` (`useMcpConnection`: is PostPile's MCP server in Claude Code,
+  refetched on window focus; the server runs `claude mcp get` at most every
+  5 minutes),
   `telemetry.ts` (`sendTelemetry`, fire-and-forget
   POST to `/api/telemetry`; not a query hook, no cache, a dropped call is
   swallowed. Only the events in `RENDERER_TELEMETRY_EVENTS`
@@ -88,6 +92,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`cleanUpInbox`, "mark everything older than N days read") is on it as
   `cleanup` and behaves like mark read: locked, it becomes one pending
   write. Start fresh and "Not now" are local.
+- "Add to Claude Code" (`connectMcp(from)`) changes Claude Code's config,
+  never GitHub, so it is not on the `GithubWrite` list. Fire it only from a
+  click, never from an effect or along with Accept: the app never installs
+  the MCP server by itself. `hideMcpConnect` is the footer's "Not now".
 - **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
   asks in a small popover ("Mark-read and approvals will reach GitHub")
   that also lists the pending writes (`lib/pending.ts`) with "Send N to
@@ -210,7 +218,11 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `InboxCleanup` (sidebar footer line or middle-column banner, as the
   server's `look` says) + `InboxCleanupDialog`,
   `UpdatePill` (title bar update reminder, self-contained so it can move;
-  neutral, never coral).
+  neutral, never coral),
+  `McpFooterItem` ("agents: not connected" in the footer, only while
+  `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
+  `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
+  optional box; secondary button there so Accept stays the one primary).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
@@ -311,7 +323,10 @@ The sidebar lists topics in queue sections (`lib/queues.ts`,
 PRs, To review, Team mentioned, then Other topics, which keeps the old
 groups from `lib/sidebar.ts` (`sidebarGroups`: Needs you, Your team by
 area, Routed, FYI). A topic can sit in several sections on purpose. Fold
-state is local UI state; Routed and FYI start folded. The Mine / Team /
+state is local UI state; Routed, FYI and Finished start folded. The
+Finished drawer (retired topics, `useFinishedTopics`) hides while search
+or a queue filter narrows; a finished topic is not in `useTopics`, so
+`App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The Mine / Team /
 Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
 not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set

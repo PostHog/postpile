@@ -1,10 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
 import { useTools } from '../api/tools.ts';
+import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
 import { queueLayout, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
+import { ageLabel, whenLabel } from '../lib/time.ts';
+import { useNow } from '../lib/use-now.ts';
 import { Avatar } from './Avatar.tsx';
 import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
@@ -144,6 +147,41 @@ function GroupHeader(props: { label: string; open: boolean; onToggle: () => void
   );
 }
 
+/**
+ * Topics a sync retired in the last 30 days (every PR merged or closed,
+ * nothing unread, 3 quiet days), folded away under the live ones. A row
+ * opens the topic like any other; a new event brings it back to the list.
+ */
+function FinishedDrawer(props: { open: boolean; onToggle: () => void; activeTopicId: string | null; onSelect: (topicId: string) => void }) {
+  const finished = useFinishedTopics().data ?? [];
+  const now = useNow(60_000);
+  if (finished.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-px">
+      <GroupHeader small label="Finished" open={props.open} onToggle={props.onToggle} />
+      {props.open &&
+        finished.map((topic) => {
+          const active = topic.id === props.activeTopicId;
+          return (
+            <button
+              key={topic.id}
+              type="button"
+              onClick={() => props.onSelect(topic.id)}
+              aria-current={active ? 'true' : undefined}
+              title={`${topic.prCount} ${topic.prCount === 1 ? 'PR' : 'PRs'}, retired ${whenLabel(topic.retiredAt, now)}`}
+              className={`flex min-w-0 items-center gap-[7px] rounded-row px-2 py-1 text-left ${active ? 'bg-surface shadow-active-row' : 'hover:bg-surface/60'}`}
+            >
+              <span className={`truncate text-[12px] ${active ? 'text-ink-2' : 'text-muted'}`}>{topic.name}</span>
+              <span className="ml-auto shrink-0 font-mono text-[10px] text-faint">{ageLabel(topic.retiredAt, now)}</span>
+            </button>
+          );
+        })}
+    </div>
+  );
+}
+
 function InboxItem(props: { count: number; active: boolean; onSelect: () => void }) {
   const badge = props.active ? 'bg-accent text-on-accent' : 'bg-chip text-ink-2';
   return (
@@ -193,15 +231,15 @@ interface TopicSidebarProps {
   viewer: ViewerView | undefined;
 }
 
-/** Section keys for the fold state: "team", "routed", "fyi", or "area:<name>". */
+/** Section keys for the fold state: "team", "routed", "fyi", "finished", or "area:<name>". */
 type SectionKey = string;
 
 /**
  * Inside Other topics, Routed and FYI start folded: they are other teams'
  * work. Topics that need you never hide in them, they are listed under
- * "Needs you" whatever their relation.
+ * "Needs you" whatever their relation. Finished starts folded too.
  */
-const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi'];
+const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi', 'finished'];
 
 /** "Filtering: 2 topics, 5 tiles · Clear", above the topic list while the search bar filters. */
 function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
@@ -278,6 +316,10 @@ export function TopicSidebar(props: TopicSidebarProps) {
           {group('routed', 'Routed to you', groups.routed, otherItems(groups.routed))}
           {group('fyi', 'FYI', groups.fyi, otherItems(groups.fyi))}
         </div>
+      )}
+      {/* Search and the queue filters cover live topics only, so the drawer steps aside while they narrow. */}
+      {!narrowed && (
+        <FinishedDrawer open={isOpen('finished')} onToggle={() => toggle('finished')} activeTopicId={props.activeTopicId} onSelect={props.onSelect} />
       )}
       <div className="mt-auto flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
         <InboxCleanup place="line" />

@@ -43,6 +43,7 @@ const TOPIC = {
   deps: 'topic-dependency-bumps',
   ingestion: 'topic-ingestion-runners',
   desktop: 'topic-desktop-release',
+  warmer: 'topic-cache-warmer',
 };
 
 function buildTopics(clock: SampleClock): Topic[] {
@@ -119,6 +120,20 @@ function buildTopics(clock: SampleClock): Topic[] {
       driver: 'mae',
       userRole: 'watcher',
     }),
+    // Every PR merged and quiet for 3 days: a sync retired it, so it only shows in the Finished drawer.
+    {
+      ...sampleTopic(clock, {
+        id: TOPIC.warmer,
+        area: 'CI',
+        name: 'Drop the nightly cache warmer',
+        summary: 'Depot keeps the cache warm, so the nightly warmer job is gone.',
+        tailoring: '',
+        driver: 'nell',
+        userRole: 'reviewer',
+      }),
+      status: 'retired',
+      updatedAt: clock.hoursAgo(48),
+    },
   ];
 }
 
@@ -245,6 +260,10 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1899, title: 'Rename workflow files to ci-*.yml', author: 'rowan', state: 'OPEN',
       size: [0, 0, 9], checks: 'SUCCESS', openedHoursAgo: 48, queued: true,
       reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED'], ['nell', 'APPROVED']],
+    }),
+    samplePr(clock, {
+      number: 1840, title: 'Remove the nightly cache warmer job', author: 'nell', state: 'MERGED',
+      size: [0, 64, 2], checks: 'SUCCESS', openedHoursAgo: 150, mergedHoursAgo: 120, reviews: [[SAMPLE_VIEWER, 'APPROVED']],
     }),
     samplePr(clock, {
       number: 1790, title: 'Raise Django test timeout to 45 min', author: 'nell', state: 'MERGED',
@@ -412,6 +431,10 @@ function buildEvents(clock: SampleClock): PrEvent[] {
         mutedBecause: 'Bot rebase, no content change.',
       },
       { kind: 'merge_queue', actor: 'mergify[bot]', text: 'queued for merge', hoursAgo: 1, rule: 'quiet', isBot: true },
+    ]),
+    ...sampleEvents(clock, 1840, [
+      { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 150, rule: 'loud', seen: true },
+      { kind: 'merged', actor: 'nell', text: 'merged it', hoursAgo: 120, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 1790, [
       { kind: 'merged_without_review', actor: 'nell', text: 'merged it without your review', hoursAgo: 48, rule: 'loud' },
@@ -606,6 +629,7 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(1932)}`, 'Ingestion asks platform about its runner workflow', [
       pinged(1932, 'review_requested'),
     ]),
+    sampleTile(TOPIC.warmer, 'single', `pr:${sampleKey(1840)}`, 'Nightly cache warmer removed', [pinged(1840, 'review_requested')]),
     sampleTile(TOPIC.desktop, 'single', `pr:${sampleKey(1940)}`, 'Desktop 2.3 release thread', [pinged(1940, 'subscribed')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1950)}`, 'Your pnpm cache PR waits for CI', [found(1950, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1955)}`, 'nell wants your review on the Playwright pin', [

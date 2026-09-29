@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 import type { AgentService } from '@postpile/agent';
 import type {
+  ListScope,
   ActionLogEntry,
   ActionResult,
   ChatMessage,
@@ -10,6 +11,7 @@ import type {
   FactQuery,
   FactView,
   FeedbackInput,
+  FinishedTopic,
   GitHubWritesChange,
   GitHubWritesStatus,
   CleanupAge,
@@ -21,6 +23,9 @@ import type {
   InstructionsSaveResult,
   InstructionsView,
   LivePollStatus,
+  McpConnectFrom,
+  McpConnectionView,
+  McpLauncher,
   SyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
@@ -91,6 +96,7 @@ import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { errorText } from './errors.ts';
 import { GitHubSync, NO_FOCUS, type PollFocus } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
+import { McpConnection } from './mcp-connection.ts';
 import { InstructionsHistory } from './instructions/history.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
@@ -151,11 +157,17 @@ export interface EngineDeps {
   /** Sync start, summary and errors. Defaults to console.log, which the desktop app writes to its log file. */
   syncLog?: (line: string) => void;
   /**
-   * Runs gh and claude for the setup checks. createEngine passes the real
-   * programs run in the app's own folder; tests pass a fake. Missing: the
-   * real programs, run in the temp folder.
+   * Runs gh and claude for the setup checks and the MCP connection.
+   * createEngine passes the real programs run in the app's own folder; tests
+   * pass a fake. Missing: the real programs, run in the temp folder.
    */
   setupCommands?: CommandRunner;
+  /**
+   * How Claude Code starts PostPile's MCP server (the desktop app knows).
+   * Only an `app` launcher lets "Add to Claude Code" run claude. Missing: none,
+   * the command is only shown.
+   */
+  mcpLauncher?: McpLauncher | null;
   /**
    * gh and claude status. Must be the one the token source, fetch and agent
    * runner report to (createEngine wires that). Missing: everything counts as
@@ -201,6 +213,7 @@ export class Engine implements EngineService {
   private readonly cleanup: InboxCleanup;
   private readonly setup: SetupFlow;
   private readonly toolHealth: ToolHealth;
+  private readonly mcp: McpConnection;
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
@@ -280,8 +293,10 @@ export class Engine implements EngineService {
       digest: () => this.workContextDigest(),
       now,
     });
-    const setupChecks = new SetupChecks(deps.reader, deps.setupCommands ?? systemCommands(tmpdir()));
+    const commands = deps.setupCommands ?? systemCommands(tmpdir());
+    const setupChecks = new SetupChecks(deps.reader, commands);
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
+    this.mcp = new McpConnection({ store, commands, tools: this.toolHealth, launcher: deps.mcpLauncher ?? null, now, telemetry: this.telemetry });
   }
 
   /** The newest work context digest as the setup sweep reads it: prompt text, version and date. */
@@ -401,11 +416,17 @@ export class Engine implements EngineService {
       // The sync digests every topic: queued catch-up follow-ups are dropped, running ones waited for.
       this.catchUps.dropQueued();
       const before = Engine.settled([this.consolidating, this.polling, this.catchUps.settled()]);
+      // PRs left over by the PR cap bring the next background sync forward.
+      let backlog = false;
       this.syncing = before
         .then(() => this.syncIfGhWorks(options))
+        .then((report) => {
+          backlog = report.prsSkipped > 0;
+          return report;
+        })
         .finally(() => {
           this.syncing = null;
-          this.autoSync?.reschedule();
+          this.autoSync?.reschedule(backlog);
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
           void this.livePoller?.runCycle();
         });
@@ -549,8 +570,12 @@ export class Engine implements EngineService {
     return loadLastSyncReport(this.deps.store);
   }
 
-  async listTopics(): Promise<TopicListItem[]> {
-    return this.reads.listTopics();
+  async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
+    return this.reads.listTopics(scope);
+  }
+
+  async listFinishedTopics(): Promise<FinishedTopic[]> {
+    return this.reads.listFinishedTopics();
   }
 
   async listRepos(): Promise<RepoOverview> {
@@ -736,8 +761,8 @@ export class Engine implements EngineService {
     return result;
   }
 
-  async search(query: string): Promise<SearchResult> {
-    return this.reads.search(query);
+  async search(query: string, scope?: ListScope): Promise<SearchResult> {
+    return this.reads.search(query, scope);
   }
 
   async listFacts(query: FactQuery): Promise<FactView[]> {
@@ -853,6 +878,18 @@ export class Engine implements EngineService {
 
   checkTools(): Promise<ToolsView> {
     return this.toolHealth.check();
+  }
+
+  mcpConnection(): Promise<McpConnectionView> {
+    return this.mcp.view();
+  }
+
+  connectMcp(from: McpConnectFrom): Promise<ActionResult> {
+    return this.mcp.connect(from);
+  }
+
+  async hideMcpConnect(): Promise<ActionResult> {
+    return this.mcp.hide();
   }
 
   async startSetupSweep(): Promise<SetupSweepView> {

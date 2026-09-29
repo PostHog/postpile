@@ -52,6 +52,16 @@ function threadsByPrKey(threads: NotificationThread[]): Map<PrKey, NotificationT
  * Everything needed to derive tiles and their state, loaded from the store in
  * one go. Tiles and state are never stored; every read builds a fresh Board.
  */
+function notYoursKeys(store: Store, keys: PrKey[]): Set<PrKey> {
+  const result = new Set<PrKey>();
+  for (const [key, glance] of store.glances.getMany(keys)) {
+    if (glance.verdict === 'NOT_YOURS') {
+      result.add(key);
+    }
+  }
+  return result;
+}
+
 export class Board {
   readonly stacks: Stack[];
   /** The one topic each stack shows in, by stack id. */
@@ -71,6 +81,8 @@ export class Board {
     private readonly snoozes: Map<string, Snooze>,
     readonly pullIns: Map<PrKey, PullIn>,
     readonly found: Map<PrKey, FoundPr>,
+    /** PRs whose stored glance says NOT_YOURS, stale or not, so tile state and whose turn agree (see `teamRequestHold`). */
+    readonly notYours: Set<PrKey>,
   ) {
     this.stacks = buildStacks([...prs.values()]);
     this.stackOf = stackByPrKey(this.stacks);
@@ -143,6 +155,7 @@ export class Board {
       new Map(store.snoozes.list().map((s) => [s.tileId, s])),
       store.pullIns.listAll(),
       store.foundPrs.listAll(),
+      notYoursKeys(store, keys),
     );
   }
 
@@ -215,6 +228,7 @@ export class Board {
       snooze: this.snoozes.get(tile.id) ?? null,
       now: this.now,
       viewer: this.viewer,
+      notYours: this.notYours,
     });
   }
 

@@ -9,7 +9,8 @@ function reportLine(report: ConsolidationReport): string {
   const errors = report.errors.length > 0 ? `, errors: ${report.errors.join('; ')}` : '';
   return (
     `consolidation: ${report.topicProposalsFiled} topic and ${report.ruleProposalsFiled} rule proposals, ` +
-    `${report.factsMerged} facts merged, ${report.topicsRetired} topics retired, ${report.agentCallStats.total} agent calls${errors}`
+    `${report.factsMerged} facts merged, ${report.topicsRetired} topics retired, ${report.topicsSplit} small splits applied, ` +
+    `${report.agentCallStats.total} agent calls${errors}`
   );
 }
 

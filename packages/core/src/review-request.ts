@@ -134,6 +134,39 @@ export function reviewedHead(pr: Pr, viewer: Viewer, userState: UserPrState | nu
   return onHead || isApprovedByViewer(pr, userState, viewer.login);
 }
 
+/** The reviewer whose standing review asks for changes (a later verdict by them clears it), or null. */
+export function changesRequestedBy(pr: Pr): string | null {
+  const latest = new Map<string, Review>();
+  for (const review of [...pr.reviews].sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1))) {
+    if (isVerdict(review)) {
+      latest.set(review.author.toLowerCase(), review);
+    }
+  }
+  const asking = [...latest.values()].find((review) => review.state === 'CHANGES_REQUESTED');
+  return asking?.author ?? null;
+}
+
+/** Why a routed team request asks nothing of the viewer for now. */
+export type TeamRequestHold = { kind: 'changes'; by: string } | { kind: 'not_yours' };
+
+/**
+ * A routed team request (`team`: the viewer's team asked on an outsider's
+ * PR) waits while someone else's changes request stands, since the author
+ * moves first, or when the agent's glance says the PR is not the viewer's
+ * (2026-09-29: "Not yours" next to "Your move: Review for team-devex").
+ * Personal requests and requests on a teammate's PR never wait.
+ */
+export function teamRequestHold(pr: Pr, viewer: Viewer, notYours: boolean): TeamRequestHold | null {
+  if (reviewRequest(pr, viewer) !== 'team') {
+    return null;
+  }
+  if (notYours) {
+    return { kind: 'not_yours' };
+  }
+  const by = changesRequestedBy(pr);
+  return by !== null && !sameLogin(by, viewer.login) ? { kind: 'changes', by } : null;
+}
+
 /**
  * A review is still asked of the viewer and they have not given one: an
  * open, non-draft PR by someone else with a personal request, a team
@@ -141,10 +174,13 @@ export function reviewedHead(pr: Pr, viewer: Viewer, userState: UserPrState | nu
  * picked up yet, and the head not reviewed. A team request a teammate
  * already took asks nothing more of the viewer.
  */
-export function reviewPending(pr: Pr, viewer: Viewer, userState: UserPrState | null = null): boolean {
+export function reviewPending(pr: Pr, viewer: Viewer, userState: UserPrState | null = null, notYours = false): boolean {
   if (pr.state !== 'OPEN' || pr.isDraft || sameLogin(pr.author, viewer.login)) {
     return false;
   }
   const request = reviewRequest(pr, viewer);
-  return request !== null && request !== 'team_taken' && !reviewedHead(pr, viewer, userState);
+  if (request === null || request === 'team_taken' || teamRequestHold(pr, viewer, notYours) !== null) {
+    return false;
+  }
+  return !reviewedHead(pr, viewer, userState);
 }
