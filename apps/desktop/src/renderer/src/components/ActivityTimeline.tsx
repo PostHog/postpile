@@ -75,13 +75,13 @@ function ActivityRow(props: RowProps) {
   );
 }
 
-function lineRow(line: ActivityLine, last: boolean) {
+export function lineRow(line: ActivityLine, last: boolean) {
   const newest = line.events[0]!.event;
   const reason = line.events.length > 1 ? `${line.events.length} events` : (newest.override?.reason ?? newest.ruleReason);
   return <ActivityRow key={line.id} kind={line.kind} actor={line.actor} summary={line.summary} at={line.at} display={line.display} reason={reason} last={last} unmuteId={null} />;
 }
 
-function eventRow(view: EventView, last: boolean) {
+export function eventRow(view: EventView, last: boolean) {
   const { event } = view;
   return (
     <ActivityRow
@@ -98,37 +98,28 @@ function eventRow(view: EventView, last: boolean) {
   );
 }
 
-const sectionLabel = 'pb-1.5 text-[10.5px] font-semibold tracking-[0.04em] uppercase';
-const linkButton = 'self-start text-[11.5px] text-accent hover:underline';
+export const linkButton = 'self-start text-[11.5px] text-accent hover:underline';
 
 /**
- * The PR's meaningful activity from core (`PrDetail.activity`): new since
- * you looked first, set apart, then the rest; about a dozen lines before
- * "Show all N". Bot and CI noise is one line that expands.
+ * The PR's earlier activity from core (`PrDetail.activity`); what is new
+ * since you looked sits in `NewSinceBox` under the title, not here again.
+ * About a dozen lines before "Show all N". Bot and CI noise is one line
+ * that expands.
  */
 export function ActivityTimeline(props: { activity: ActivityList }) {
   const [showAll, setShowAll] = useState(false);
   const [showNoise, setShowNoise] = useState(false);
   const { fresh, earlier, noise } = props.activity;
-  const total = fresh.length + earlier.length;
-  const room = showAll ? total : props.activity.cap;
-  const shownFresh = fresh.slice(0, room);
-  const shownEarlier = earlier.slice(0, Math.max(0, room - shownFresh.length));
+  const shown = showAll ? earlier : earlier.slice(0, props.activity.cap);
+  const empty = earlier.length === 0 && noise.length === 0;
   return (
     <div className="flex flex-col">
-      <span className="pb-2 text-[11px] font-semibold tracking-[0.04em] text-muted">Activity</span>
-      {total === 0 && noise.length === 0 && <span className="text-xs text-faint">No activity yet.</span>}
-      {shownFresh.length > 0 && (
-        <div className="mb-2 flex flex-col rounded-row border border-unread-border bg-unread-row px-2.5 pt-2">
-          <span className={`${sectionLabel} text-unread-ink`}>New since you looked</span>
-          {shownFresh.map((line, index) => lineRow(line, index === shownFresh.length - 1))}
-        </div>
-      )}
-      {shownFresh.length > 0 && shownEarlier.length > 0 && <span className={`${sectionLabel} text-faint`}>Earlier</span>}
-      {shownEarlier.map((line, index) => lineRow(line, index === shownEarlier.length - 1))}
-      {total > props.activity.cap && (
+      <span className="pb-2 text-[11px] font-semibold tracking-[0.04em] text-muted">{fresh.length > 0 ? 'Earlier activity' : 'Activity'}</span>
+      {empty && <span className="text-xs text-faint">{fresh.length > 0 ? 'Nothing before that.' : 'No activity yet.'}</span>}
+      {shown.map((line, index) => lineRow(line, index === shown.length - 1))}
+      {earlier.length > props.activity.cap && (
         <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>
-          {showAll ? 'Show fewer' : `Show all ${total}`}
+          {showAll ? 'Show fewer' : `Show all ${earlier.length}`}
         </button>
       )}
       {noise.length > 0 && (

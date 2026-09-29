@@ -1,14 +1,17 @@
 import type { TileView } from '@postpile/core';
 import { eventGlyph, splitActor } from '../lib/events.ts';
 import { ageLabel } from '../lib/time.ts';
-import { isFyiNews, newestUnreadReason, prNumber } from '../lib/tiles.ts';
+import { isFyiNews, newestUnreadReason, prNumber, stripMoreCount, stripNews } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
+import { whatsNewText } from '../lib/whats-new.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph } from './icons.tsx';
 
 /**
  * "Why now" on unread tiles: who did what, with an ink event badge on their
- * avatar, a coral dot for new since you looked, and how long ago.
+ * avatar, a coral dot for new since you looked, and how long ago. On a
+ * revisit (the viewer touched the PR before) the text says what changed
+ * since that touch instead ("6 commits since your changes request").
  */
 export function UnreadStrip(props: { view: TileView }) {
   const now = useNow();
@@ -16,24 +19,27 @@ export function UnreadStrip(props: { view: TileView }) {
   if (!reason) {
     return null;
   }
-  const more = props.view.state.unreadBecause.length - 1;
-  const split = splitActor(reason.summary, reason.actor);
+  const news = stripNews(props.view);
+  const more = stripMoreCount(props.view, news);
+  const actor = news ? news.actor : reason.actor;
+  const text = news ? whatsNewText(news) : reason.summary;
+  const split = splitActor(text, actor);
   return (
     <div className="flex h-[38px] shrink-0 items-center gap-[9px] rounded-t-[11px] border-b border-warm-strip-line bg-warm-strip px-3.5 text-xs text-ink">
       <span className="relative shrink-0">
-        <Avatar login={reason.actor} size="lg" />
+        <Avatar login={actor} size="lg" />
         <span className="absolute -right-1 -bottom-[3px] flex size-[15px] items-center justify-center rounded-full border-[1.5px] border-warm-strip bg-ink text-on-ink">
-          <Glyph glyph={eventGlyph(reason.kind)} />
+          <Glyph glyph={eventGlyph(news ? news.lead.eventKind : reason.kind)} />
         </span>
       </span>
-      <span className="min-w-0 truncate" title={reason.summary}>
+      <span className="min-w-0 truncate" title={news ? `${text} · newest: ${reason.summary}` : reason.summary}>
         {split ? (
           <>
             <span className="font-[650]">{split.actor}</span>
             {split.rest}
           </>
         ) : (
-          reason.summary
+          text
         )}
       </span>
       {isFyiNews(props.view) && (
@@ -53,7 +59,7 @@ export function UnreadStrip(props: { view: TileView }) {
       >
         NEW
       </span>
-      <span className="shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(reason.at, now)}</span>
+      <span className="shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(news ? news.newestAt : reason.at, now)}</span>
     </div>
   );
 }

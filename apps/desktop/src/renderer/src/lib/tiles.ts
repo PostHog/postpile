@@ -1,4 +1,4 @@
-import type { ForWhom, PrSet, PrSummary, TileView, UnreadReason } from '@postpile/core';
+import type { ForWhom, PrSet, PrSummary, TileView, UnreadReason, WhatsNew } from '@postpile/core';
 import { newest } from './time.ts';
 
 /** "acme/app#1902" -> "1902". */
@@ -32,6 +32,35 @@ export function kindLabel(view: TileView): string {
 export function newestUnreadReason(view: TileView): UnreadReason | null {
   const reasons = view.state.unreadBecause;
   return reasons[reasons.length - 1] ?? null;
+}
+
+/**
+ * The revisit summary for the strip: `whatsNew` of the PR behind the newest
+ * unread reason. Null on a first look, so the strip keeps the event's words.
+ */
+export function stripNews(view: TileView): WhatsNew | null {
+  const reason = newestUnreadReason(view);
+  if (!reason) {
+    return null;
+  }
+  return view.prs.find((pr) => pr.key === reason.prKey)?.whatsNew ?? null;
+}
+
+/**
+ * The strip's "+N": other unread events on the tile. On a revisit the lead
+ * already covers part of its PR's news, so it is that PR's extra count plus
+ * the unread events on the tile's other PRs.
+ */
+export function stripMoreCount(view: TileView, news: WhatsNew | null): number {
+  const reasons = view.state.unreadBecause;
+  const reason = newestUnreadReason(view);
+  if (!reason) {
+    return 0;
+  }
+  if (!news) {
+    return reasons.length - 1;
+  }
+  return news.extraCount + reasons.filter((other) => other.prKey !== reason.prKey).length;
 }
 
 /**

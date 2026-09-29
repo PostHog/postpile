@@ -3,6 +3,7 @@ import type { PrDetail, PrLifecycle, PrStatus, PrSummary, TileView } from '@post
 import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
+import { NewSinceBox } from './NewSinceBox.tsx';
 import { LIFECYCLE_WORDS, reviewWord } from '../lib/pr.ts';
 import { type StackPlace, stackPlaces } from '../lib/stacks.ts';
 import { ExternalIcon, PrStateIcon } from './icons.tsx';
@@ -87,6 +88,7 @@ export function PrBody(props: PrBodyProps) {
         </div>
         <span className="font-mono text-[11px] text-muted select-text">{branchLine(props, place)}</span>
       </div>
+      <NewSinceBox key={pr.key} detail={props.detail} />
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
       {props.actions}
       <PrDescription key={pr.key} body={pr.body} />

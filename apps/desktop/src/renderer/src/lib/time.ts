@@ -34,3 +34,30 @@ export function newest(times: string[]): string | null {
   }
   return result;
 }
+
+function dayStart(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** For running text: "just now", "5m ago", "3h ago" (same day), "yesterday", "3 days ago", "2w ago". */
+export function whenLabel(iso: string, now: Date): string {
+  const then = new Date(iso);
+  const elapsed = now.getTime() - then.getTime();
+  if (Number.isNaN(elapsed)) {
+    return '';
+  }
+  if (elapsed < MINUTE) {
+    return 'just now';
+  }
+  const days = Math.round((dayStart(now) - dayStart(then)) / DAY);
+  if (days <= 0) {
+    return `${ageLabel(iso, now)} ago`;
+  }
+  if (days === 1) {
+    return 'yesterday';
+  }
+  if (days < 7) {
+    return `${days} days ago`;
+  }
+  return `${ageLabel(iso, now)} ago`;
+}
