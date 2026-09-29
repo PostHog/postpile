@@ -6,6 +6,7 @@ import { GlanceCard } from './GlanceCard.tsx';
 import { LIFECYCLE_WORDS, reviewWord } from '../lib/pr.ts';
 import { ExternalIcon, PrStateIcon } from './icons.tsx';
 import { StateWordLabel } from './pills.tsx';
+import { PrDescription } from './PrDescription.tsx';
 import { PrFacts } from './PrFacts.tsx';
 import { ReviewList } from './ReviewList.tsx';
 
@@ -79,6 +80,7 @@ export function PrBody(props: PrBodyProps) {
       </div>
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
       {props.actions}
+      <PrDescription key={pr.key} body={pr.body} />
       <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
       <ReviewList pr={pr} />
       <AgentFacts facts={props.detail.facts} />
