@@ -18,6 +18,17 @@ export { LivePoller, MAX_ERROR_BACKOFF_SECONDS, MAX_RATE_LIMIT_BACKOFF_SECONDS, 
 export { PingThrottle, PING_TILE_WINDOW_MS, PINGS_BEFORE_SUMMARY } from './live/ping-throttle.ts';
 export { PING_DECISIONS_PER_DAY, PING_FRESH_MS } from './live/ping-decider.ts';
 export type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
-export { isExecutableFile, ToolHealth, type ToolHealthDeps } from './tools/tool-health.ts';
+export { isExecutableFile, ToolHealth, type BrokenToolState, type ToolHealthDeps } from './tools/tool-health.ts';
 export { AgentOffError, GatedRunner } from './tools/gated-runner.ts';
 export { GhOffError, WatchedTokenSource, watchedFetch } from './tools/watched-github.ts';
+export {
+  NoopTelemetry,
+  PostHogTelemetry,
+  TELEMETRY_API_KEY,
+  TELEMETRY_HOST,
+  telemetryFromEnv,
+  type Telemetry,
+  type TelemetryFromEnvOptions,
+  type TelemetryPersonInfo,
+} from './telemetry/telemetry.ts';
+export { telemetryEnabled } from './telemetry/telemetry-env.ts';

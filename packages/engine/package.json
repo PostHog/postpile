@@ -27,6 +27,7 @@
     "@postpile/core": "workspace:*",
     "@postpile/store": "workspace:*",
     "@postpile/github": "workspace:*",
-    "@postpile/agent": "workspace:*"
+    "@postpile/agent": "workspace:*",
+    "posthog-node": "^5.54.1"
   }
 }

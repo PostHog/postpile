@@ -1,4 +1,13 @@
-import { ALL_AGENT_JOBS, splitAgentOffErrors, type AgentCallStats, type SyncOptions, type SyncProgress, type SyncReport } from '@postpile/core';
+import {
+  agentCallSummary,
+  ALL_AGENT_JOBS,
+  rateLimitSourceFromErrors,
+  splitAgentOffErrors,
+  type AgentCallStats,
+  type SyncOptions,
+  type SyncProgress,
+  type SyncReport,
+} from '@postpile/core';
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { reviveRetiredTopics } from './consolidation/revive.ts';
@@ -13,6 +22,8 @@ import { emptyFactCounts } from './memory/fact-writer.ts';
 import { advanceSeenFromGitHub } from './memory/seen-from-github.ts';
 import { PhaseClock } from './phase-clock.ts';
 import type { RunDeps } from './run-deps.ts';
+import { runTelemetry } from './run-deps.ts';
+import { hasCompletedFirstSync, markFirstSyncCompleted } from './telemetry/first-sync.ts';
 
 function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): SyncReport {
   return {
@@ -44,6 +55,8 @@ interface LiveSync {
 /** One sync: fetch -> verify facts -> agent digest. Tiles are derived on read. */
 export class SyncRun {
   private live: LiveSync | null = null;
+  /** The first sync in this process is "start" (the app's own auto-sync); every later one is "manual" ("Sync now"). */
+  private syncedOnceInProcess = false;
 
   constructor(
     private readonly deps: RunDeps,
@@ -142,6 +155,43 @@ export class SyncRun {
     } catch (error) {
       this.log(`sync: could not store the report: ${errorText(error)}`);
     }
+    this.reportTelemetry(report);
     return report;
+  }
+
+  /** sync_completed always; rate_limited and first_sync_completed only when they apply. Never throws: telemetry never breaks a sync. */
+  private reportTelemetry(report: SyncReport): void {
+    try {
+      const telemetry = runTelemetry(this.deps);
+      const trigger = this.syncedOnceInProcess ? 'manual' : 'start';
+      this.syncedOnceInProcess = true;
+      const durationMs = Math.max(0, new Date(report.finishedAt).getTime() - new Date(report.startedAt).getTime());
+      const summary = agentCallSummary(report.agentCallStats);
+      telemetry.capture('sync_completed', {
+        duration_ms: durationMs,
+        prs_fetched: report.prsFetched,
+        new_events: report.newEvents,
+        agent_calls: report.agentCalls,
+        agent_failures: summary.failed,
+        cost_usd: Math.round(summary.costUsd * 100) / 100,
+        stopped_at_cap: summary.stoppedAtCap,
+        trigger,
+      });
+      const rateLimitSource = rateLimitSourceFromErrors(report.errors);
+      if (rateLimitSource) {
+        telemetry.capture('rate_limited', { source: rateLimitSource });
+      }
+      if (!hasCompletedFirstSync(this.deps.store)) {
+        markFirstSyncCompleted(this.deps.store);
+        telemetry.capture('first_sync_completed', {
+          prs: report.prsFetched,
+          topics: this.deps.store.topics.listActive().length,
+          duration_ms: durationMs,
+          agent_calls: report.agentCalls,
+        });
+      }
+    } catch (error) {
+      this.log(`sync: telemetry failed: ${errorText(error)}`);
+    }
   }
 }

@@ -32,7 +32,12 @@ export interface ToolHealthDeps {
   forgetToken?: () => void;
   /** State changes only, never every call. Defaults to console.log. */
   log?: (line: string) => void;
+  /** A tool moved into a broken state (never on recovery back to ok). For the tool_missing telemetry event. */
+  onBroken?: (tool: 'gh' | 'claude', state: BrokenToolState) => void;
 }
+
+/** GhState/ClaudeState with 'ok' and 'unchecked' excluded: what onBroken actually ever reports. */
+export type BrokenToolState = Exclude<GhState, 'ok' | 'unchecked'> | Exclude<ClaudeState, 'ok' | 'unchecked'>;
 
 interface ToolRecord<State> {
   state: State;
@@ -110,6 +115,9 @@ export class ToolHealth {
   private setGh(next: ToolRecord<GhState>): void {
     if (next.state !== this.gh.state) {
       this.log(`tools: gh ${this.gh.state} -> ${next.state}`);
+      if (next.state !== 'ok' && next.state !== 'unchecked') {
+        this.deps.onBroken?.('gh', next.state);
+      }
     }
     this.gh = next;
   }
@@ -117,6 +125,9 @@ export class ToolHealth {
   private setClaude(next: ToolRecord<ClaudeState>): void {
     if (next.state !== this.claude.state) {
       this.log(`tools: claude ${this.claude.state} -> ${next.state}`);
+      if (next.state !== 'ok' && next.state !== 'unchecked') {
+        this.deps.onBroken?.('claude', next.state);
+      }
     }
     this.claude = next;
   }

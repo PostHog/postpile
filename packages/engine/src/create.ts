@@ -1,3 +1,4 @@
+import { arch, release } from 'node:os';
 import { ClaudeCliRunner, RunnerAgentService } from '@postpile/agent';
 import { systemTimers, UNDO_WINDOW_MS } from '@postpile/core';
 import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@postpile/github';
@@ -17,6 +18,7 @@ import { systemCommands } from './setup/setup-checks.ts';
 import { GatedRunner } from './tools/gated-runner.ts';
 import { ToolHealth } from './tools/tool-health.ts';
 import { WatchedTokenSource, watchedFetch } from './tools/watched-github.ts';
+import { telemetryFromEnv, type Telemetry } from './telemetry/telemetry.ts';
 import { UserConfigFile } from './user-config.ts';
 import { WriteSwitch } from './writes/write-switch.ts';
 
@@ -37,6 +39,10 @@ export interface CreateEngineOptions {
    * sync or write through it.
    */
   withoutLock?: boolean;
+  /** The running app's version, for telemetry's app_version property. Defaults to 'unknown'. */
+  appVersion?: string;
+  /** Reuse an existing Telemetry (e.g. one a main process also uses directly); defaults to building one from env. */
+  telemetry?: Telemetry;
 }
 
 /** POSTPILE_PING_CAP when it is a whole number >= 0, else the default. */
@@ -58,11 +64,25 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   // Before the store opens: a second process on the same database refuses here.
   const lock = options.withoutLock ? null : DataDirLock.acquire(paths.databaseFile, options.lockKind ?? 'server');
   const now = (): Date => new Date();
+  const telemetry =
+    options.telemetry ??
+    telemetryFromEnv({
+      env: process.env,
+      appVersion: options.appVersion ?? 'unknown',
+      osVersion: release(),
+      arch: arch(),
+      telemetryIdFile: paths.telemetryIdFile,
+    });
   // gh and claude behind one status: a missing or logged-out tool stops the
   // calls that need it (no process per call, no log line per call) and the UI
   // shows the fix. Real failures report back into it.
   const ghTokens = new GhCliTokenSource();
-  const tools = new ToolHealth({ commands: systemCommands, now, forgetToken: () => ghTokens.forget() });
+  const tools = new ToolHealth({
+    commands: systemCommands,
+    now,
+    forgetToken: () => ghTokens.forget(),
+    onBroken: (tool, reason) => telemetry.capture('tool_missing', { tool, reason }),
+  });
   const tokens = new WatchedTokenSource(ghTokens, tools);
   const fetchFn = watchedFetch(tools);
   let store: Store;
@@ -104,5 +124,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     dataLock: lock,
     userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
     tools,
+    telemetry,
+    appVersion: options.appVersion,
   });
 }
