@@ -70,25 +70,54 @@ class FakeClock implements OpenedReadClock {
 }
 
 describe('OpenedReadTimer', () => {
-  function started(): { clock: FakeClock; timer: OpenedReadTimer; calls: () => number } {
+  function started(wanted = true): { clock: FakeClock; timer: OpenedReadTimer; calls: () => number } {
     const clock = new FakeClock();
     let count = 0;
     const timer = new OpenedReadTimer(() => (count += 1), clock);
+    timer.setWanted(wanted);
     return { clock, timer, calls: () => count };
   }
 
-  it('counts the open once, after the delay while visible', () => {
+  it('does not mark while the PR is still on screen, only once the user moves on after the delay', () => {
     const { clock, timer, calls } = started();
     timer.visible();
-    clock.advance(OPENED_READ_DELAY_MS - 1);
+    clock.advance(OPENED_READ_DELAY_MS * 10);
     expect(calls()).toBe(0);
-    clock.advance(1);
-    timer.visible();
-    clock.advance(OPENED_READ_DELAY_MS);
+
+    timer.leave();
+
     expect(calls()).toBe(1);
   });
 
-  it('starts the wait over when the window comes back after being hidden, instead of dropping the open', () => {
+  it('marks nothing when the user moves on before the delay', () => {
+    const { clock, timer, calls } = started();
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS - 1);
+    timer.leave();
+    clock.advance(OPENED_READ_DELAY_MS);
+    expect(calls()).toBe(0);
+  });
+
+  it('counts leaving the app after the delay as moving on', () => {
+    const { clock, timer, calls } = started();
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.hidden();
+    expect(calls()).toBe(1);
+  });
+
+  it('marks once per open', () => {
+    const { clock, timer, calls } = started();
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.hidden();
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.leave();
+    expect(calls()).toBe(1);
+  });
+
+  it('starts the wait over when the window comes back after being hidden early, instead of dropping the open', () => {
     const { clock, timer, calls } = started();
     timer.visible();
     clock.advance(1000);
@@ -98,16 +127,32 @@ describe('OpenedReadTimer', () => {
 
     timer.visible();
     clock.advance(OPENED_READ_DELAY_MS - 1);
+    timer.leave();
     expect(calls()).toBe(0);
-    clock.advance(1);
-    expect(calls()).toBe(1);
+
+    const again = started();
+    again.timer.visible();
+    again.clock.advance(1000);
+    again.timer.hidden();
+    again.timer.visible();
+    again.clock.advance(OPENED_READ_DELAY_MS);
+    again.timer.leave();
+    expect(again.calls()).toBe(1);
   });
 
-  it('never fires after stop, the PR was left before the delay', () => {
-    const { clock, timer, calls } = started();
+  it('marks nothing on leave when a mark-read is not wanted at that moment', () => {
+    const { clock, timer, calls } = started(false);
     timer.visible();
-    timer.stop();
     clock.advance(OPENED_READ_DELAY_MS);
+    timer.leave();
     expect(calls()).toBe(0);
+
+    const late = started(false);
+    late.timer.visible();
+    late.clock.advance(OPENED_READ_DELAY_MS);
+    // A sync made it wanted while the PR was open: the open still counts.
+    late.timer.setWanted(true);
+    late.timer.leave();
+    expect(late.calls()).toBe(1);
   });
 });

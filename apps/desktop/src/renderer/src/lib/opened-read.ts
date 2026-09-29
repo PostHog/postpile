@@ -35,42 +35,68 @@ export interface OpenedReadClock {
 }
 
 /**
- * One open of a PR in the detail pane: calls `onOpened` once, after the PR
- * stayed OPENED_READ_DELAY_MS on screen while the document was visible.
- * Hidden before that, the wait starts over once it is visible again, so a
- * window put away right after a click does not drop the open (Codex review
- * on PR #10).
+ * One open of a PR in the detail pane (2026-09-29, "Marked when you move
+ * on"). The PR has to stay OPENED_READ_DELAY_MS on screen while the document
+ * is visible: that arms the open, the proof the user looked. The mark itself
+ * (`onOpened`) only fires when the user moves on: `leave()` (another PR or
+ * tile, the detail pane closed) or `hidden()` (the window hidden or blurred:
+ * leaving the app counts too). Marking while the PR is still on screen
+ * changed its status under the user's eyes. Clicking through PRs faster
+ * than the delay marks nothing; hidden before the delay, the wait starts
+ * over once visible again (Codex review on PR #10). Once per open, and only
+ * while `setWanted(true)` (`opensMarkRead`) holds at that moment.
  */
 export class OpenedReadTimer {
   private handle: number | null = null;
+  private armed = false;
   private fired = false;
+  private wanted = false;
 
   constructor(
     private readonly onOpened: () => void,
     private readonly clock: OpenedReadClock,
   ) {}
 
-  /** Stops a running wait; a later `visible()` starts a full one again. */
-  stop(): void {
+  private stopWait(): void {
     if (this.handle !== null) {
       this.clock.clearTimeout(this.handle);
       this.handle = null;
     }
   }
 
-  /** The document is visible: start the wait, unless one runs or the open already counted. */
+  /** Fires once, when armed and wanted. */
+  private fireIfArmed(): void {
+    if (this.armed && this.wanted && !this.fired) {
+      this.fired = true;
+      this.onOpened();
+    }
+  }
+
+  /** Whether a mark-read of the PR is wanted right now (`opensMarkRead`), kept up to date while it is open. */
+  setWanted(wanted: boolean): void {
+    this.wanted = wanted;
+  }
+
+  /** The document is visible: start the wait, unless one runs or the open is armed already. */
   visible(): void {
-    if (this.fired || this.handle !== null) {
+    if (this.fired || this.armed || this.handle !== null) {
       return;
     }
     this.handle = this.clock.setTimeout(() => {
       this.handle = null;
-      this.fired = true;
-      this.onOpened();
+      this.armed = true;
     }, OPENED_READ_DELAY_MS);
   }
 
+  /** The window was hidden or lost focus: an armed open fires, a running wait stops. */
   hidden(): void {
-    this.stop();
+    this.stopWait();
+    this.fireIfArmed();
+  }
+
+  /** The user moved on to another PR or tile, or closed the pane: an armed open fires. */
+  leave(): void {
+    this.stopWait();
+    this.fireIfArmed();
   }
 }
