@@ -49,6 +49,7 @@ describe('PostHogTelemetry', () => {
       cost_usd: 0.02,
       stopped_at_cap: false,
       trigger: 'manual',
+      gh_requests: 12,
     });
     await telemetry.shutdown();
 

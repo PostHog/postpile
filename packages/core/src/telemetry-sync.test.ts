@@ -29,6 +29,10 @@ describe('rateLimitSourceFromErrors', () => {
     expect(rateLimitSourceFromErrors(['GitHub GET team members failed with 403: rate limit exceeded'])).toBe('rest');
   });
 
+  it('reads graphql from an HTTP-level answer to the GraphQL endpoint', () => {
+    expect(rateLimitSourceFromErrors(['GitHub POST graphql failed with 403: API rate limit exceeded'])).toBe('graphql');
+  });
+
   it('reads graphql from the "failed: <message>" shape', () => {
     expect(rateLimitSourceFromErrors(['GitHub PR batch query failed: API rate limit exceeded for installation'])).toBe('graphql');
   });

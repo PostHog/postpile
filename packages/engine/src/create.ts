@@ -16,6 +16,7 @@ import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
 import { PendingWrites } from './writes/pending-writes.ts';
 import { systemCommands } from './setup/setup-checks.ts';
+import { GitHubQuota, quotaFetch } from './github-quota.ts';
 import { GatedRunner } from './tools/gated-runner.ts';
 import { ToolHealth } from './tools/tool-health.ts';
 import { WatchedTokenSource, watchedFetch } from './tools/watched-github.ts';
@@ -102,7 +103,13 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     onBroken: (tool, reason) => telemetry.capture('tool_missing', { tool, reason }),
   });
   const tokens = new WatchedTokenSource(ghTokens, tools);
-  const fetchFn = watchedFetch(tools);
+  // The hourly GitHub quota is shared with the user's own gh: every answer's
+  // rate-limit headers land here, and background work leaves headroom.
+  const quota = new GitHubQuota(
+    () => Date.now(),
+    (resource, level) => telemetry.capture('github_quota_low', { resource, level }),
+  );
+  const fetchFn = watchedFetch(tools, quotaFetch(quota));
   let store: Store;
   try {
     // Without the lock the app may be writing: open read-only, no migrations, no WAL pragma.
@@ -147,5 +154,6 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     tools,
     telemetry,
     appVersion: options.appVersion,
+    quota,
   });
 }

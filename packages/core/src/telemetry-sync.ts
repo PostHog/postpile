@@ -24,15 +24,17 @@ export function agentCallSummary(stats: AgentCallStats): AgentCallSummary {
 }
 
 /**
- * Whether a finished sync's errors mention a rate limit, and which surface:
- * the GraphQL and REST error messages are shaped differently at the point
- * they are built (see packages/github), so the wording alone tells them
- * apart without threading a typed error through every layer.
+ * Whether a finished sync's errors (or the live poll's rate-limit error)
+ * mention a rate limit, and which surface: the GraphQL and REST error
+ * messages are shaped differently at the point they are built (see
+ * packages/github), so the wording alone tells them apart without threading
+ * a typed error through every layer. An HTTP-level answer to the GraphQL
+ * endpoint ("GitHub POST graphql failed with 403") is GraphQL too.
  */
 export function rateLimitSourceFromErrors(errors: string[]): 'graphql' | 'rest' | null {
   const hit = errors.find((line) => /rate limit/i.test(line));
   if (!hit) {
     return null;
   }
-  return /failed with \d/.test(hit) ? 'rest' : 'graphql';
+  return /failed with \d/.test(hit) && !/POST graphql /.test(hit) ? 'rest' : 'graphql';
 }

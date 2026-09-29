@@ -1,5 +1,5 @@
 import type { ClaudeState, GhState, ToolStatus, ToolsView } from '@postpile/core';
-import { ageLabel } from './time.ts';
+import { ageLabel, clockLabel } from './time.ts';
 
 // What the renderer shows about gh and claude (DESIGN.md "Missing tools").
 // The words and fix commands come from the server; this only picks where.
@@ -28,10 +28,6 @@ export function toolsRefetchMs(view: ToolsView | undefined): number {
   return notice.gh || notice.claude || view?.gh.state === 'offline' ? 30_000 : 5 * 60_000;
 }
 
-function clock(date: Date): string {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
 /** A usage limit: "Trying again at 15:40, in 25 min." Empty without a time. */
 export function retryLine(retryAt: string | null, now: Date): string {
   if (retryAt === null) {
@@ -42,7 +38,7 @@ export function retryLine(retryAt: string | null, now: Date): string {
   if (minutes <= 0) {
     return 'Trying again with the next agent call.';
   }
-  return `Trying again at ${clock(at)}, in ${minutes} min.`;
+  return `Trying again at ${clockLabel(at)}, in ${minutes} min.`;
 }
 
 /** "Checked 2m ago. Looks again by itself at 15:42." */
@@ -53,7 +49,7 @@ export function checkLine(view: ToolsView, now: Date): string {
     parts.push(age === 'now' ? 'Checked just now.' : `Checked ${age} ago.`);
   }
   if (view.nextCheckAt) {
-    parts.push(`Looks again by itself at ${clock(new Date(view.nextCheckAt))}.`);
+    parts.push(`Looks again by itself at ${clockLabel(new Date(view.nextCheckAt))}.`);
   }
   return parts.join(' ');
 }

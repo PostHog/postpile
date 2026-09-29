@@ -24,6 +24,11 @@ export function ageLabel(iso: string, now: Date): string {
   return `${Math.floor(elapsed / WEEK)}w`;
 }
 
+/** Local wall-clock time, "15:40". */
+export function clockLabel(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
 /** The newest of a list of ISO times; ISO strings compare correctly as text. */
 export function newest(times: string[]): string | null {
   let result: string | null = null;

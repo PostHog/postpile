@@ -61,6 +61,7 @@ export * from './instructions-sections.ts';
 export * from './setup.ts';
 export * from './setup-draft.ts';
 export * from './tools.ts';
+export * from './github-quota.ts';
 export * from './mac-privacy.ts';
 export * from './updates.ts';
 export * from './mcp-connection.ts';

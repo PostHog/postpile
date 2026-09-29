@@ -926,6 +926,14 @@ the app meanwhile.
 
 ## Decided
 
+- **PostPile never uses the full GitHub quota (2026-09-29)**: it shares the
+  hourly limits with the user's own gh and tools (same token), so it leaves
+  clear headroom. With 50% or less of a limit left, the hourly auto sync and
+  its backlog follow-ups wait for the reset and the live poll slows to once
+  a minute; at 20% or less the live poll waits too. "Sync now" and the start
+  sync still run (logged). The footer says so only while low. DESIGN.md
+  "GitHub quota".
+
 - **MCP server: nudge, never install silently** (2026-09-29): a footer item
   ("agents: not connected") and an optional box on the setup Accept step
   offer "Add to Claude Code"; `claude mcp add --scope user` runs only on
@@ -1218,5 +1226,7 @@ Env switches:
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_MISSING=gh,claude POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
+- `POSTPILE_FAKE_QUOTA` (with `POSTPILE_FAKE=1`): `low` or `critical`
+  simulates a GitHub quota that is low or nearly used, for the footer.
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
   `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.

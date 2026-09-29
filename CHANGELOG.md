@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- PostPile keeps well under your GitHub rate limit, which it shares with your own `gh` and other tools. With half or less of the hourly limit left, the hourly background sync waits for the reset and the live poll slows to once a minute; at a fifth or less the live poll waits too. "Sync now" still works. The status bar says so while it happens, e.g. "GitHub quota low: background sync paused until 14:05".
+
 ## 0.3.1 (2026-09-29)
 
 ### Changed

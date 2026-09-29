@@ -52,6 +52,12 @@ const proposalKind = z.enum(['topic_merge', 'rename', 'rule', 'instructions']);
 const syncTrigger = z.enum(['start', 'manual', 'auto']);
 const syncErrorKind = z.enum(['gh_unavailable', 'agent_unavailable', 'rate_limited', 'other']);
 const rateLimitSource = z.enum(['graphql', 'rest']);
+// Where GitHub said "rate limited": a full sync's errors, or the live poll backing off.
+const rateLimitWhere = z.enum(['sync', 'poll']);
+// packages/core/src/github-quota.ts QuotaResource and the two levels below ok.
+const quotaResource = z.enum(['core', 'graphql']);
+const quotaLevel = z.enum(['low', 'critical']);
+const percent = z.number().int().min(0).max(100);
 
 // -----------------------------------------------------------------------
 // 6. MCP server (postpile-mcp, a separate read-only process)
@@ -116,10 +122,16 @@ export const TELEMETRY_EVENTS = {
       cost_usd: z.number().min(0),
       stopped_at_cap: z.boolean(),
       trigger: syncTrigger,
+      // GitHub requests the sync made, and the lowest share of each hourly limit left while it ran (absent when no answer said).
+      gh_requests: count,
+      gh_core_remaining_pct: percent.optional(),
+      gh_graphql_remaining_pct: percent.optional(),
     })
     .strict(),
   sync_failed: z.object({ error_kind: syncErrorKind }).strict(),
-  rate_limited: z.object({ source: rateLimitSource }).strict(),
+  rate_limited: z.object({ source: rateLimitSource, where: rateLimitWhere }).strict(),
+  // Once per drop into a worse level within one rate-limit window, not per request (DESIGN.md "GitHub quota").
+  github_quota_low: z.object({ resource: quotaResource, level: quotaLevel }).strict(),
   consolidation_ran: z.object({ proposals_filed: count }).strict(),
   // One glance catch-up run after the poll (packages/engine/src/catch-up). Always one topic per run.
   catch_up_ran: z.object({ topics: z.literal(1), agent_calls: count, duration_ms: durationMs, ok: z.boolean() }).strict(),
