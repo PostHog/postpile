@@ -71,7 +71,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
-- `POSTPILE_POLL_SECONDS`: the notification poll interval, default 10 (0 turns it off)
+- `POSTPILE_POLL_SECONDS`: the notification poll interval, default 60 (0 turns it off). A lower value only counts until GitHub sends its `X-Poll-Interval` (usually 60): the poll never runs faster than GitHub asks
 - `POSTPILE_AUTO_SYNC_MINUTES`: minutes between background full syncs in the desktop app, default 60 (0 turns it off; the default is off when `POSTPILE_SYNC_ON_START=0`)
 - `POSTPILE_CATCHUP_CAP`: agent calls per rolling 24h for glance catch-up after the poll, default 300 (0 turns catch-up off; the default is 0 when `POSTPILE_MAX_AGENT_CALLS=0`)
 - `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac notifications

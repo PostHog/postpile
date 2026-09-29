@@ -104,6 +104,45 @@ describe('after a full sync', () => {
   });
 });
 
+describe('poll on window focus', () => {
+  /** Live poll started and one full sync done, so the cycle right after it ran. */
+  async function afterFirstCycle(h: Harness): Promise<void> {
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    h.engine.startLivePoll({ intervalSeconds: 60, onNotify: () => {} });
+    await h.engine.sync({ maxAgentCalls: 0 });
+    for (let i = 0; i < 50 && (await h.engine.livePollStatus()).lastPollAt === null; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+
+  it('runs one cycle without opened PRs, but not within 15s of the last one', async () => {
+    const h = makeHarness();
+    await afterFirstCycle(h);
+    const calls = h.reader.notificationCalls;
+
+    await h.engine.refreshOnFocus([]);
+    expect(h.reader.notificationCalls).toBe(calls);
+    h.timers.advance(15_000);
+    await h.engine.refreshOnFocus([]);
+    expect(h.reader.notificationCalls).toBe(calls + 1);
+    h.engine.stopLivePoll();
+  });
+
+  it('runs no cycle while a full sync runs', async () => {
+    const h = makeHarness();
+    await afterFirstCycle(h);
+    h.timers.advance(20_000);
+    const lastPollAt = (await h.engine.livePollStatus()).lastPollAt;
+
+    const sync = h.engine.sync({ maxAgentCalls: 0 });
+    await h.engine.refreshOnFocus([]);
+    expect((await h.engine.livePollStatus()).lastPollAt).toBe(lastPollAt);
+    await sync;
+    h.engine.stopLivePoll();
+  });
+});
+
 describe('how a read elsewhere was noticed', () => {
   it('logs a thread that left the unread list after a 200', async () => {
     const lines: string[] = [];

@@ -65,10 +65,16 @@ export type LivePollState = 'off' | 'waiting' | 'polling' | 'blocked' | 'backoff
 /** The fast notification poll, as the status footer shows it. */
 export interface LivePollStatus {
   state: LivePollState;
-  /** How often the app polls when nothing is wrong. POSTPILE_POLL_SECONDS, default 10. */
+  /** The configured interval: POSTPILE_POLL_SECONDS, default 60. */
   intervalSeconds: number;
-  /** GitHub's X-Poll-Interval from the last answer. Shown, not obeyed (see DESIGN.md). */
+  /** The last X-Poll-Interval GitHub sent; null until it sent one. */
   githubPollIntervalSeconds: number | null;
+  /**
+   * How often the poll runs while the GitHub quota is fine: intervalSeconds,
+   * raised to githubPollIntervalSeconds (DESIGN.md "Live poll and Mac pings").
+   * A low quota slows it further (githubQuota.pollSeconds).
+   */
+  everySeconds: number;
   lastPollAt: IsoTime | null;
   /** Last cycle whose inbox answer was not a 304. */
   lastChangeAt: IsoTime | null;
@@ -96,6 +102,7 @@ export const OFF_POLL_STATUS: LivePollStatus = {
   state: 'off',
   intervalSeconds: 0,
   githubPollIntervalSeconds: null,
+  everySeconds: 0,
   lastPollAt: null,
   lastChangeAt: null,
   nextPollAt: null,

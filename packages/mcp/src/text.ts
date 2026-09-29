@@ -33,7 +33,7 @@ export function freshness(report: SyncReport | null): string {
   if (!report) {
     return 'PostPile has not finished a sync yet, so it knows little. The app syncs on start and every hour.';
   }
-  return `From PostPile's local database, as of its last full sync at ${minute(report.finishedAt)} (the app also polls GitHub every few seconds while it runs).`;
+  return `From PostPile's local database, as of its last full sync at ${minute(report.finishedAt)} (the app also polls GitHub every minute while it runs).`;
 }
 
 export function answer(header: string[], data: string[]): string {

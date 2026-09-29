@@ -2230,21 +2230,40 @@ standalone server never starts it.
 
 **Poll** (`LivePoller` in engine `live/`, started by the desktop main process):
 
-- `GET /notifications` every `POSTPILE_POLL_SECONDS` (default 10, 0 turns
-  it off) with the stored ETag / Last-Modified, shared with the full sync. A
-  304 costs no rate limit and does nothing else.
-- GitHub's `X-Poll-Interval` (usually 60) is read, logged when it changes and
-  shown in the footer tooltip, but not obeyed: Julian asked for 10s, and 304s
-  are free. One cycle at a time; the next is scheduled when the last one ends.
-  The first cycle waits one interval so the app's start sync goes first.
+- `GET /notifications` every `POSTPILE_POLL_SECONDS` (default 60, 0 turns
+  it off, window focus included) with the stored ETag / Last-Modified, shared
+  with the full sync. A 304 costs no rate limit and does nothing else.
+- GitHub's `X-Poll-Interval` is obeyed: the next regular cycle waits the
+  configured interval or the last `X-Poll-Interval` GitHub sent, whichever is
+  longer (`LivePollStatus.everySeconds`; an answer without the header keeps
+  the last one). A lower `POSTPILE_POLL_SECONDS` only counts until the first
+  answer. Logged when it changes; the footer says "live · every 60s", the
+  tooltip names both values. One cycle at a time; the next is scheduled when
+  the last one ends, whoever started it. The first cycle waits one interval
+  so the app's start sync goes first.
+- History: 2026-09-28 the poll ran every 10s and only logged the header,
+  because Julian wanted quick pings and 304s are free. 2026-09-29 research:
+  GitHub has no push API for a user's notifications, its notifications docs
+  say "Please obey the header", every answer in the real app log said 60s,
+  and GitHub's best-practices page warns that misbehaving integrations can
+  be banned. Julian: "switch to 60s plus poll on focus".
+- Poll on focus (2026-09-29): when the window gets focus, one cycle runs
+  right away (`LivePoller.runOnFocus`, through `refreshOnFocus`), so what
+  happened while the user was elsewhere shows without waiting up to a
+  minute. Skipped when a cycle started less than 15s ago
+  (`FOCUS_DEBOUNCE_SECONDS`, so switching windows does not hammer GitHub),
+  before the first cycle, while the poll is off, while the quota is nearly
+  used, and while a full sync or consolidation runs. The regular timer then
+  counts from that cycle.
 - Backoff: a rate limit (429, or 403 with Retry-After / no requests left / a
   "rate limit" message, or a GraphQL `RATE_LIMITED` error; `GitHubError.rateLimited`)
   waits Retry-After or until X-RateLimit-Reset, else doubles from 60s to 15
-  min. Other errors double from the interval up to 5 min. The footer shows
+  min. Other errors double from the effective interval up to 5 min. The footer shows
   "backing off, retry in Ns" (state `backoff`). A rate-limit backoff sends
   `rate_limited` with `where: 'poll'`.
 - GitHub quota: once a minute at most while the quota is low, paused until
-  the reset while it is nearly used (see "GitHub quota").
+  the reset while it is nearly used (see "GitHub quota"). The slower of the
+  quota pace and `X-Poll-Interval` wins.
 - Overlap: `Engine.pollOnce()` answers `blocked` while a full sync or a
   consolidation runs (glance catch-up runs go beside poll cycles, see
   "Glance catch-up") (footer: "paused: full sync running"); sync and
@@ -2284,10 +2303,10 @@ standalone server never starts it.
   it brings in get ping and revive handling. Approve marks read before that
   refresh, so what the refresh brings in stays unseen.
 - Focus refresh (2026-09-28): the main process remembers PR links opened
-  from the app (`OpenedPrs`, 30 minutes). When the window gets focus back,
-  `refreshOnFocus` runs one cycle now that also looks those threads up
-  directly (`GET /notifications/threads/{id}`) and fetches the ones without
-  a thread.
+  from the app (`OpenedPrs`, 30 minutes). The focus cycle above also looks
+  those threads up directly (`GET /notifications/threads/{id}`) and fetches
+  the ones without a thread. When the focus cycle is debounced they ride on
+  the next cycle.
 - "Read elsewhere" log: every thread noticed as read on github.com logs
   how: it left the unread list (the list answered 200) or the read list
   says read while the unread list answered 304. The action log from real
@@ -2367,7 +2386,8 @@ beyond what the full sync already does for threads that left the inbox).
   permission is asked (and set) once for each.
 
 **Fake mode**: `FakeLivePoll` adds a sample question to the next open pinged
-tile every ~45s and pings for it with a fake rules decision, through the same
+tile on the first cycle at least 45s after the last one (so once a minute,
+as the sample X-Poll-Interval is 60) and pings for it with a fake rules decision, through the same
 `LivePoller` and throttle.
 
 **Cost**: a `ping_decision` call measured about $0.04 and 4-5s (2 items, real
@@ -2498,8 +2518,8 @@ resumes at the reset without a request to find out.
   `pollSeconds()` / `pollPausedUntil()` (live poll). The paused auto sync
   moves its due time to the reset, so "next full sync in N min" stays true.
   The paused poll shows "live · paused: GitHub quota nearly used" and
-  schedules its next cycle at the reset; cycles asked for meanwhile (sync
-  end, window focus) wait too.
+  schedules its next cycle at the reset; a cycle asked for meanwhile (sync
+  end) waits too, and window focus runs none.
 - Not held back: a sync the user or the app start asked for (it runs and
   logs "GitHub quota low (graphql 40% left), running anyway"), so the first
   sync after setup always runs; writes and the refresh right after them.
@@ -2941,7 +2961,7 @@ preflight and does not know the token, so CORS stays open.
   data (`FakeEngine`, for UI work). `POSTPILE_READ_ONLY=1` never builds the real GitHub
   writer and keeps the footer lock closed (smoke runs against a real account). Without it,
   writes are still off until the lock is opened. `POSTPILE_POLL_SECONDS`
-  (default 10, 0 off), `POSTPILE_PING_CAP` (default 200 per 24h) and
+  (default 60, 0 off, never faster than GitHub's X-Poll-Interval), `POSTPILE_PING_CAP` (default 200 per 24h) and
   `POSTPILE_MAC_NOTIFICATIONS=0` tune the live poll. `POSTPILE_CATCHUP_CAP` (default
   300 per 24h, 0 off) caps glance catch-up, `POSTPILE_AUTO_SYNC_MINUTES` (default 60,
   0 off) the background sync.
@@ -3026,8 +3046,8 @@ preflight and does not know the token, so CORS stays open.
     the posthog project never fit, only its MEMORY.md index]
   - a failed sweep retries after 2h, not on every 30-minute check [yes]
 - **Live poll and Mac pings** (current choices in brackets):
-  - obey GitHub's X-Poll-Interval (60s) or poll faster [10s as asked; 304s are free, the value
-    is shown in the footer tooltip]
+  - obey GitHub's X-Poll-Interval (60s) or poll faster [obey it, plus one cycle on window
+    focus (decided 2026-09-29, was 10s)]
   - loud but not addressed (approval or comment on your own PR, merged without your review):
     ping or not [not; they stay unread tiles and never reach the agent]
   - team review requests (RT) and team mentions: addressed [yes; the prompt tells the agent it

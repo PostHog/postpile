@@ -111,10 +111,14 @@ export function autoSyncMinutesFromEnv(value: string | undefined, syncOnStart = 
   return syncOnStart ? DEFAULT_AUTO_SYNC_MINUTES : 0;
 }
 
-/** How often the desktop app polls GitHub notifications. */
-export const DEFAULT_POLL_SECONDS = 10;
+/** How often the desktop app polls GitHub notifications, GitHub's usual X-Poll-Interval. */
+export const DEFAULT_POLL_SECONDS = 60;
 
-/** POSTPILE_POLL_SECONDS: whole seconds >= 0 (0 turns the poll off); the default otherwise. */
+/**
+ * POSTPILE_POLL_SECONDS: whole seconds >= 0 (0 turns the poll off); the
+ * default otherwise. A lower value only counts until GitHub sends its
+ * X-Poll-Interval: the poll never runs faster than that.
+ */
 export function pollSecondsFromEnv(value: string | undefined): number {
   const parsed = Number(value);
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_POLL_SECONDS;

@@ -569,18 +569,21 @@ export class Engine implements EngineService {
   }
 
   async refreshOnFocus(prKeys: PrKey[]): Promise<void> {
-    if (prKeys.length === 0 || this.syncing || this.consolidating) {
+    if (this.syncing || this.consolidating) {
       return;
     }
-    const threads = this.deps.store.notifications.getByPrKeys(prKeys);
-    this.focus = {
-      threadIds: [...threads.values()].map((thread) => thread.id),
-      prRefs: prKeys.filter((key) => !threads.has(key)).map(parsePrKey),
-    };
-    // A cycle already running is joined; the focus then waits for the next one.
+    if (prKeys.length > 0) {
+      const threads = this.deps.store.notifications.getByPrKeys(prKeys);
+      this.focus = {
+        threadIds: [...threads.values()].map((thread) => thread.id),
+        prRefs: prKeys.filter((key) => !threads.has(key)).map(parsePrKey),
+      };
+    }
+    // A cycle already running is joined, and a debounced focus runs none; the
+    // opened PRs then ride on the next cycle.
     if (this.livePoller) {
-      await this.livePoller.runCycle();
-    } else {
+      await this.livePoller.runOnFocus();
+    } else if (prKeys.length > 0) {
       await this.pollOnce().catch(() => {});
     }
   }
@@ -593,7 +596,7 @@ export class Engine implements EngineService {
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),
-      githubQuota: this.quota.view(poll.intervalSeconds),
+      githubQuota: this.quota.view(poll.everySeconds),
     };
   }
 

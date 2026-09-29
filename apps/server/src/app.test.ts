@@ -237,11 +237,11 @@ describe('server app', () => {
   });
 
   it('reads the poll interval from the environment, 0 turns it off', () => {
-    expect(pollSecondsFromEnv(undefined)).toBe(10);
+    expect(pollSecondsFromEnv(undefined)).toBe(60);
     expect(pollSecondsFromEnv('30')).toBe(30);
     expect(pollSecondsFromEnv('0')).toBe(0);
-    expect(pollSecondsFromEnv('fast')).toBe(10);
-    expect(pollSecondsFromEnv('2.5')).toBe(10);
+    expect(pollSecondsFromEnv('fast')).toBe(60);
+    expect(pollSecondsFromEnv('2.5')).toBe(60);
   });
 
   it('reads the auto sync interval from the env: 60 by default, 0 turns it off', () => {

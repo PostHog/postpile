@@ -37,7 +37,7 @@ The first sync then takes a few minutes while the agent sorts your pull requests
 - Shows whose move it is on every pull request. Deterministic rules (reviews, pushes, replies, stack order) decide first, and the agent judges only what the rules can't.
 - Keeps a stack of pull requests together as one unit.
 - Gives each pull request a short agent glance (verdict and risk) with sources you can check, recheck, or forget.
-- Sends Mac notifications only for the pings that an agent judged worth it, from a poll every 10 seconds.
+- Sends Mac notifications only for the pings that an agent judged worth it, from a poll every minute, and right away when you switch to the app.
 - Uses GitHub as the source of truth for read and unread. Writes (approve, comment, mark read) stay locked until you open the lock in the status bar.
 
 **Status: alpha.** Its author uses it every day at PostHog. Expect rough edges, database migrations between versions, and features that fit that workflow first.

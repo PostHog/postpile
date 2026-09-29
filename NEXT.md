@@ -425,7 +425,8 @@ now".
   none, rules in core `whoseTurn`), people stack in the header. Same
   badges, pills and glyphs in the detail pane. Primary buttons are ink.
 - Live poll and Mac pings (DESIGN.md "Live poll and Mac pings"): the desktop
-  app polls `GET /notifications` every 10s (ETag, 304 = free), backs off on
+  app polls `GET /notifications` every 60s or GitHub's X-Poll-Interval, and
+  once when the window gets focus (ETag, 304 = free), backs off on
   rate limits (Retry-After / reset / doubling) and errors, shows state in the
   footer; on a change it syncs just the moved PRs (events, loudness, topic for
   new PRs, tiles refresh). Rules first, then one Sonnet `ping_decision` call
@@ -433,7 +434,7 @@ now".
   cap 200, every decision in `ping_decision` (migration 007). Native
   notifications grouped per tile (2 min) and as a summary above 3; a click
   opens the tile. Closing the window hides it, Cmd+Q quits. Fake mode pings a
-  sample question every ~45s. CLI `poll` runs one cycle.
+  sample question about once a minute. CLI `poll` runs one cycle.
 - Queue sidebar (DESIGN.md "Queue sections"): topics listed under Needs
   reply / My PRs / Team's PRs / To review / Team mentioned / Other topics,
   a topic in every section it has PRs for; rows with a face stack (team
@@ -887,8 +888,7 @@ the app meanwhile.
   index; fine? Which prompts get the digest (now: topics, dossiers, glances,
   pings, chat)?
 
-- **Live poll**: poll at 10s and only show GitHub's X-Poll-Interval (60s), or
-  obey it? Should loud-but-not-addressed activity (approval or comment on your
+- **Live poll**: should loud-but-not-addressed activity (approval or comment on your
   own PR) ping? Team review requests and team mentions ping today (the agent
   is told it is the team); keep that? Cap of 200 ping decisions a day
   (~$0.04 each, a normal day ~10-40) and the 30-minute freshness window are
@@ -948,6 +948,16 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **The live poll obeys X-Poll-Interval, plus a cycle on focus**
+  (2026-09-29): the poll waits the configured interval (default now 60s)
+  or GitHub's X-Poll-Interval, whichever is longer; `POSTPILE_POLL_SECONDS`
+  never goes below the header once GitHub sent one. Window focus runs one
+  cycle right away, unless one started in the last 15s. Research first: no
+  push API for a user's notifications, the docs say "Please obey the
+  header", the real log shows 60s every time, and GitHub warns it can ban
+  misbehaving integrations. Julian: "switch to 60s plus poll on focus".
+  Replaces the 10s poll of 2026-09-28. DESIGN.md "Live poll and Mac pings".
 
 - **A reply that asks nothing is not your move** (2026-09-29): whose turn,
   Needs reply and the after-read toast skip an ask (reply, mention,
@@ -1208,7 +1218,8 @@ pnpm server        # standalone API on 127.0.0.1:4870, prints its token
 ```
 
 The desktop app syncs once on start, on "Sync now" and every 60 minutes in the
-background. Between syncs it polls notifications every 10s, pings the Mac for
+background. Between syncs it polls notifications every minute (GitHub's
+X-Poll-Interval) and when the window gets focus, pings the Mac for
 addressed activity and catches up dossiers and glances of the topics the poll
 brought news for. Without
 GitHub writes stay off until the lock in the status footer is opened (the
@@ -1260,7 +1271,9 @@ Env switches:
 - `POSTPILE_SYNC_ON_START=0`: the renderer does not sync when it loads
   (UI and perf runs against a DB copy, no GitHub or agent traffic).
 - `POSTPILE_POLL_SECONDS`: live poll interval in the desktop app, default
-  10, 0 turns it off. `POSTPILE_PING_CAP`: ping decision calls per 24h,
+  60, 0 turns it off (window focus polls too). A lower value only counts
+  until GitHub sends its X-Poll-Interval (usually 60); the poll never runs
+  faster than that. `POSTPILE_PING_CAP`: ping decision calls per 24h,
   default 200 (then rules only). `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac
   notifications, the poll still refreshes tiles.
 - `POSTPILE_SETUP_MODEL`: model of the setup draft and refine calls,

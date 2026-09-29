@@ -3,7 +3,7 @@ import { OFF_POLL_STATUS, type LivePollStatus } from '@postpile/core';
 import { liveLabel, quotaLabel } from './live.ts';
 
 const now = new Date('2026-09-28T10:00:00Z');
-const running: LivePollStatus = { ...OFF_POLL_STATUS, state: 'waiting', intervalSeconds: 10, githubPollIntervalSeconds: 60 };
+const running: LivePollStatus = { ...OFF_POLL_STATUS, state: 'waiting', intervalSeconds: 60, githubPollIntervalSeconds: 60, everySeconds: 60 };
 
 describe('liveLabel', () => {
   it('says off when the poll never started', () => {
@@ -13,8 +13,14 @@ describe('liveLabel', () => {
 
   it('shows the interval and GitHub’s X-Poll-Interval in the tooltip', () => {
     const label = liveLabel(running, now);
-    expect(label).toMatchObject({ text: 'live · every 10s', warn: false });
+    expect(label).toMatchObject({ text: 'live · every 60s', warn: false });
     expect(label.title).toContain('GitHub asks for 60s (X-Poll-Interval)');
+  });
+
+  it('shows the effective interval when GitHub asks for more than the configured one', () => {
+    const status: LivePollStatus = { ...running, intervalSeconds: 10, githubPollIntervalSeconds: 90, everySeconds: 90 };
+    expect(liveLabel(status, now).text).toBe('live · every 90s');
+    expect(liveLabel(status, now).title).toMatch(/^Polling every 90s \(set to 10s, GitHub asks for 90s/);
   });
 
   it('warns while backing off, with the seconds left', () => {
@@ -37,7 +43,8 @@ describe('quotaLabel', () => {
   });
 
   it('says background sync waits until the reset, and the poll slows', () => {
-    const status: LivePollStatus = { ...running, githubQuota: { level: 'low', resource: 'graphql', remainingPercent: 40, resumeAt, pollSeconds: 60 } };
+    const quota = { level: 'low' as const, resource: 'graphql' as const, remainingPercent: 40, resumeAt, pollSeconds: 60 };
+    const status: LivePollStatus = { ...running, intervalSeconds: 30, githubPollIntervalSeconds: null, everySeconds: 30, githubQuota: quota };
     expect(quotaLabel(status)).toMatchObject({ text: 'GitHub quota low: background sync paused until 14:05', warn: true });
     expect(quotaLabel(status)?.title).toMatch(/^GraphQL: 40% of the hourly limit left/);
     expect(liveLabel(status, now).text).toBe('live · every 60s');
