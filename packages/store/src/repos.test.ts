@@ -307,6 +307,8 @@ describe('TopicProposalRepo', () => {
       status: 'pending',
       createdAt: at(0),
       decidedAt: null,
+      source: 'consolidation',
+      client: null,
     });
     store.proposals.add({
       id: 'p2',
@@ -320,6 +322,8 @@ describe('TopicProposalRepo', () => {
       status: 'pending',
       createdAt: at(1),
       decidedAt: null,
+      source: 'consolidation',
+      client: null,
     });
     expect(store.proposals.get('p1')?.prKeys).toEqual(['acme/app#1']);
     expect(store.proposals.listPendingForTopic('topic-1').map((p) => p.id)).toEqual(['p2']);
@@ -327,6 +331,23 @@ describe('TopicProposalRepo', () => {
     store.proposals.decide('p1', 'rejected', at(3));
     expect(store.proposals.get('p1')).toMatchObject({ status: 'accepted', decidedAt: at(2) });
     expect(store.proposals.listPending().map((p) => p.id)).toEqual(['p2']);
+  });
+
+  it('keeps who filed a proposal and lists outside ones and recent decisions', () => {
+    const base = { kind: 'rename' as const, intoTopicId: null, fromArea: null, prKeys: [], reason: 'clearer', status: 'pending' as const, decidedAt: null };
+    store.proposals.add({ ...base, id: 'c1', topicId: 'topic-1', name: 'One', createdAt: at(0), source: 'consolidation', client: null });
+    store.proposals.add({ ...base, id: 'a1', topicId: 'topic-1', name: 'Uno', createdAt: at(1), source: 'agent', client: 'claude-code' });
+    store.proposals.add({ ...base, id: 'a2', topicId: 'topic-1', name: 'Eins', createdAt: at(2), source: 'agent', client: 'codex-mcp-client' });
+    expect(store.proposals.get('a1')).toMatchObject({ source: 'agent', client: 'claude-code' });
+    expect(store.proposals.get('c1')).toMatchObject({ source: 'consolidation', client: null });
+    expect(store.proposals.listPendingFromAgents().map((p) => p.id)).toEqual(['a1', 'a2']);
+    expect(store.proposals.countFromAgentsSince(at(2))).toBe(1);
+
+    store.proposals.decide('a1', 'rejected', at(5));
+    store.proposals.decide('c1', 'accepted', at(6));
+    expect(store.proposals.listDecidedForTopic('topic-1', at(0)).map((p) => p.id)).toEqual(['c1', 'a1']);
+    expect(store.proposals.listDecidedForTopic('topic-1', at(6)).map((p) => p.id)).toEqual(['c1']);
+    expect(store.proposals.listPendingFromAgents().map((p) => p.id)).toEqual(['a2']);
   });
 });
 

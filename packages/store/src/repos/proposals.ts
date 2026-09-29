@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PrKey, ProposalStatus, TopicProposal, TopicProposalKind } from '@postpile/core';
+import type { PrKey, ProposalSource, ProposalStatus, TopicProposal, TopicProposalKind } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface ProposalRow {
@@ -14,6 +14,8 @@ interface ProposalRow {
   status: string;
   created_at: string;
   decided_at: string | null;
+  source: string;
+  client: string | null;
 }
 
 function toProposal(row: ProposalRow): TopicProposal {
@@ -29,6 +31,8 @@ function toProposal(row: ProposalRow): TopicProposal {
     status: row.status as ProposalStatus,
     createdAt: row.created_at,
     decidedAt: row.decided_at,
+    source: row.source as ProposalSource,
+    client: row.client,
   };
 }
 
@@ -39,8 +43,8 @@ export class TopicProposalRepo {
     run(
       this.db,
       `INSERT INTO topic_proposal
-         (id, kind, topic_id, name, into_topic_id, from_area, pr_keys_json, reason, status, created_at, decided_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, kind, topic_id, name, into_topic_id, from_area, pr_keys_json, reason, status, created_at, decided_at, source, client)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       proposal.id,
       proposal.kind,
       proposal.topicId,
@@ -52,6 +56,8 @@ export class TopicProposalRepo {
       proposal.status,
       proposal.createdAt,
       proposal.decidedAt,
+      proposal.source,
+      proposal.client,
     );
   }
 
@@ -87,6 +93,31 @@ export class TopicProposalRepo {
       'SELECT * FROM topic_proposal WHERE topic_id = ? ORDER BY created_at, id',
       topicId,
     ).map(toProposal);
+  }
+
+  /** Proposals about this topic decided (accepted or rejected) at or after `since`, newest first. */
+  listDecidedForTopic(topicId: string, since: string): TopicProposal[] {
+    return all<ProposalRow>(
+      this.db,
+      `SELECT * FROM topic_proposal
+       WHERE topic_id = ? AND status != 'pending' AND decided_at >= ?
+       ORDER BY decided_at DESC, id`,
+      topicId,
+      since,
+    ).map(toProposal);
+  }
+
+  /** Every pending proposal from an outside agent, expired or not, oldest first. */
+  listPendingFromAgents(): TopicProposal[] {
+    return all<ProposalRow>(
+      this.db,
+      "SELECT * FROM topic_proposal WHERE status = 'pending' AND source = 'agent' ORDER BY created_at, id",
+    ).map(toProposal);
+  }
+
+  /** How many proposals outside agents filed at or after `since`, whatever became of them. */
+  countFromAgentsSince(since: string): number {
+    return one<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM topic_proposal WHERE source = 'agent' AND created_at >= ?", since)?.n ?? 0;
   }
 
   /** Every area_merge proposal, any status, oldest first. They name no topic. */

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import {
   fixedClaimNote,
+  isLiveProposal,
   UNDO_WINDOW_MS,
   type ActionResult,
   type Fact,
@@ -63,7 +64,8 @@ export class MemoryActions {
   ) {}
 
   listProposals(): PendingProposals {
-    return { topics: this.store.proposals.listPending(), rules: this.store.ruleProposals.listPending() };
+    const now = this.now().toISOString();
+    return { topics: this.store.proposals.listPending().filter((proposal) => isLiveProposal(proposal, now)), rules: this.store.ruleProposals.listPending() };
   }
 
   /** An accepted global rule goes into every prompt from the rule table; a topic rule is appended to the tailoring. */

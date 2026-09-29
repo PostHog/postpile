@@ -259,6 +259,8 @@ describe('topic proposals', () => {
       status: 'pending',
       createdAt: at(0),
       decidedAt: null,
+      source: 'consolidation',
+      client: null,
     });
 
     expect((await h.engine.decideTopicProposal('p1', true)).ok).toBe(true);

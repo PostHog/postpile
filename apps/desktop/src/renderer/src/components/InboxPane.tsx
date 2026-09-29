@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { PendingProposals, RuleProposal, TopicListItem, TopicProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { proposalText } from '../lib/proposals.ts';
+import { proposalMeta, proposalText } from '../lib/proposals.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
@@ -34,7 +34,7 @@ function TopicProposalCard(props: { proposal: TopicProposal; topicName: (topicId
   return (
     <Card
       title={`${proposalText(proposal, props.topicName)}?`}
-      meta={`topic · ${ageLabel(proposal.createdAt, now)}`}
+      meta={proposalMeta(proposal, ageLabel(proposal.createdAt, now))}
       reason={proposal.reason}
       busy={actions.isBusy(`proposal:${proposal.id}`)}
       onDecide={(accept) => void actions.decideProposal(proposal.id, accept)}

@@ -207,7 +207,14 @@ export interface TopicDetail {
   placement: TopicPlacement | null;
   tiles: TileView[];
   sets: PrSet[];
+  /** Waiting for the user; an outside agent's expired ones are left out (`isLiveProposal`). */
   pendingProposals: TopicProposal[];
+  /**
+   * Accepted, rejected or expired in the last OUTSIDE_PROPOSAL_DAYS days,
+   * newest first. The MCP topic tool shows them, so an outside agent sees
+   * what became of its suggestions and does not repeat itself.
+   */
+  decidedProposals: TopicProposal[];
   /** Null until the first dossier update for the topic (and always for Unsorted). */
   dossier: DossierView | null;
 }

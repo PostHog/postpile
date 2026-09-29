@@ -3,7 +3,7 @@ import type { DossierStatus, DossierView, TopicDetail, TopicGroup, TopicListItem
 import { useActions } from '../api/actions.tsx';
 import { fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
-import { proposalText } from '../lib/proposals.ts';
+import { proposalText, suggestedBy } from '../lib/proposals.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
@@ -34,10 +34,14 @@ function ProposalRow(props: { proposal: TopicProposal; topics: TopicListItem[] }
   const actions = useActions();
   const { proposal } = props;
   const topicName = (topicId: string) => props.topics.find((item) => item.topic.id === topicId)?.topic.name ?? topicId;
+  const by = suggestedBy(proposal);
+  const lead = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)} suggests` : 'Agent proposes';
   return (
     <div className="flex max-w-[680px] items-center gap-3 rounded-row border border-accent-line bg-accent-soft px-3 py-2 text-xs">
       <span className="min-w-0 flex-1">
-        <span className="font-semibold">Agent proposes: {proposalText(proposal, topicName)}.</span>{' '}
+        <span className="font-semibold">
+          {lead}: {proposalText(proposal, topicName)}.
+        </span>{' '}
         <span className="text-ink-2">{proposal.reason}</span>
       </span>
       <Button onClick={() => void actions.decideProposal(proposal.id, true)}>Accept</Button>

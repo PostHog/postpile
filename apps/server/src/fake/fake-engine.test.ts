@@ -190,6 +190,20 @@ describe('FakeEngine memory', () => {
     const topics = await engine.listTopics();
     expect(topics.map((item) => item.topic.id)).not.toContain('topic-frontend-build');
   });
+
+  it('shows who suggested a topic change and splits the topic on accept', async () => {
+    const engine = new FakeEngine();
+    const split = (await engine.listProposals()).topics.find((proposal) => proposal.id === 'proposal-split-sharding');
+    expect(split).toMatchObject({ kind: 'split', source: 'agent', client: 'claude-code' });
+
+    expect((await engine.decideTopicProposal('proposal-split-sharding', true)).ok).toBe(true);
+
+    const moved = (await engine.getPr('acme/app#1822'))?.topicId;
+    expect(moved).not.toBe('topic-ci-tests');
+    expect((await engine.getTopic(moved ?? ''))?.topic.name).toBe('Backend test sharding');
+    expect((await engine.getPr('acme/app#1955'))?.topicId).toBe('topic-ci-tests');
+    expect((await engine.getTopic('topic-ci-tests'))?.decidedProposals.map((proposal) => proposal.id)).toEqual(['proposal-split-sharding']);
+  });
 });
 
 describe('FakeEngine rechecks', () => {

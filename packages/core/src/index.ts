@@ -29,6 +29,7 @@ export * from './pr-tier.ts';
 export * from './topic-queues.ts';
 export * from './topic-urgency.ts';
 export * from './topics.ts';
+export * from './topic-proposals.ts';
 export * from './topic-roles.ts';
 export * from './deferred-queue.ts';
 export * from './memory.ts';

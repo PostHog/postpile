@@ -138,6 +138,7 @@ import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
 import { FakeMcp } from './fake-mcp.ts';
+import { FakeTopicChanges } from './fake-topic-changes.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
@@ -254,6 +255,7 @@ export class FakeEngine implements EngineService {
   private readonly setup: FakeSetup;
   private readonly toolStatus: FakeTools;
   private readonly mcp: FakeMcp;
+  private readonly topicChanges: FakeTopicChanges;
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
@@ -300,6 +302,7 @@ export class FakeEngine implements EngineService {
     this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
+    this.topicChanges = new FakeTopicChanges(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
     this.live = new FakeLivePoll(this.data, this.now, (prKey) => isPrInQuietRepo(prKey, this.repoSettings));
     this.writes = new FakeWrites(this.now, {
@@ -787,7 +790,8 @@ export class FakeEngine implements EngineService {
       placement: this.memory.placement(topic),
       tiles: this.topicTileViews(topicId),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
-      pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
+      pendingProposals: this.topicChanges.pendingForTopic(topicId),
+      decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback, this.baseline),
     };
   }
@@ -1200,42 +1204,7 @@ export class FakeEngine implements EngineService {
   }
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    const proposal = this.data.proposals.find((candidate) => candidate.id === proposalId);
-    if (!proposal || proposal.status !== 'pending') {
-      return fail(`no pending proposal ${proposalId}`);
-    }
-    proposal.status = accept ? 'accepted' : 'rejected';
-    proposal.decidedAt = this.timestamp();
-    const topic = this.data.topics.find((candidate) => candidate.id === proposal.topicId);
-    if (accept && proposal.kind === 'rename' && topic && proposal.name) {
-      topic.name = proposal.name;
-    }
-    if (accept && proposal.kind === 'merge' && topic && proposal.intoTopicId) {
-      this.mergeTopic(topic.id, proposal.intoTopicId);
-    }
-    if (accept && proposal.kind === 'area_merge' && proposal.fromArea && proposal.name) {
-      for (const moved of this.data.topics.filter((candidate) => candidate.area === proposal.fromArea)) {
-        moved.area = proposal.name;
-      }
-    }
-    return ok(accept ? 'accepted' : 'rejected');
-  }
-
-  /** Moves tiles and members over and archives the source topic. */
-  private mergeTopic(fromTopicId: string, intoTopicId: string): void {
-    for (const tile of this.tilesOfTopic(fromTopicId)) {
-      tile.topicId = intoTopicId;
-    }
-    for (const [prKey, topicId] of this.data.membership) {
-      if (topicId === fromTopicId) {
-        this.data.membership.set(prKey, intoTopicId);
-      }
-    }
-    const topic = this.data.topics.find((candidate) => candidate.id === fromTopicId);
-    if (topic) {
-      topic.status = 'archived';
-      topic.updatedAt = this.timestamp();
-    }
+    return this.topicChanges.decide(proposalId, accept);
   }
 
   // Engine memory v2, backed by FakeMemory.
@@ -1245,8 +1214,7 @@ export class FakeEngine implements EngineService {
   }
 
   async listProposals(): Promise<PendingProposals> {
-    const topics = this.data.proposals.filter((proposal) => proposal.status === 'pending');
-    return { topics, rules: this.memory.pendingRuleProposals() };
+    return { topics: this.topicChanges.pending(), rules: this.memory.pendingRuleProposals() };
   }
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {

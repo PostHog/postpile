@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TopicProposal } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { proposalText } from './proposals.ts';
+import { proposalMeta, proposalText, suggestedBy } from './proposals.ts';
 
 const names: Record<string, string> = { a: 'Frontend build', b: 'Move CI to Depot' };
 
@@ -18,6 +18,8 @@ function proposal(overrides: Partial<TopicProposal>): TopicProposal {
     status: 'pending',
     createdAt: at(0),
     decidedAt: null,
+    source: 'consolidation',
+    client: null,
     ...overrides,
   };
 }
@@ -36,5 +38,20 @@ describe('proposalText', () => {
     expect(proposalText(proposal({ kind: 'area_merge', topicId: null, name: 'CI', fromArea: 'CI & tests' }), (id) => names[id] ?? id)).toBe(
       'Fold area "CI & tests" into "CI"',
     );
+  });
+});
+
+describe('suggestedBy', () => {
+  it('names known outside agents and falls back for unknown ones', () => {
+    expect(suggestedBy(proposal({ source: 'agent', client: 'claude-code' }))).toBe('Claude Code');
+    expect(suggestedBy(proposal({ source: 'agent', client: 'some-tool' }))).toBe('an outside agent');
+    expect(suggestedBy(proposal({ source: 'agent', client: 'constructor' }))).toBe('an outside agent');
+    expect(suggestedBy(proposal({ source: 'agent', client: null }))).toBe('an outside agent');
+    expect(suggestedBy(proposal({}))).toBeNull();
+  });
+
+  it('puts the suggester in the card meta line only for outside proposals', () => {
+    expect(proposalMeta(proposal({ source: 'agent', client: 'claude-code' }), '2h')).toBe('topic · suggested by Claude Code · 2h');
+    expect(proposalMeta(proposal({}), '2h')).toBe('topic · 2h');
   });
 });
