@@ -1820,13 +1820,34 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
 The sidebar lists topics under ghatchup's PR queues (mockup "B with
 avatars and filters", QueuesB2).
 
-- **Sections**, in order: Needs reply, My PRs, Team's PRs, To review, Team
-  mentioned (one per `prTier`), then Other topics. Each lists topics, not
-  PRs: a topic sits in every section where it has at least one PR of that
-  tier, with that count on the row. Other topics holds topics with only
+- **Sections**, in order: Needs reply, Changes you requested, My PRs,
+  Team's PRs, To review, Team mentioned (one per `prTier`), then Other
+  topics. Each lists topics, not PRs, and **each topic once in the whole
+  sidebar** (2026-09-29): in the highest section where it has a PR, with
+  that section's count on the row. Other topics holds topics with only
   `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
-  Routed, FYI; Routed and FYI folded). Section tint: honey for reply and
-  review, ink for mine, sea for team and team mentioned, grey for other.
+  Routed, FYI; Routed and FYI folded). The queue filters (Mine, Team,
+  Reply, Review) still match a topic by any of its PRs. Section tint: honey
+  for reply, changes and review, ink for mine, sea for team and team
+  mentioned, grey for other.
+  History: until 2026-09-29 a topic sat in every section where it had a PR
+  of that tier. That came with the picked mockup (QueuesB2, 2026-09-28) as a
+  side effect of per-PR sections over per-topic rows, not as a decision;
+  Julian: "If it's highlighted in my PRs, I will naturally click on it and
+  check it".
+- **Changes you requested** (tier `changes_requested`, 2026-09-29): open PRs
+  where the viewer's newest verdict review asks for changes, whoever wrote
+  them. Directly under Needs reply because a standing change request is the
+  viewer's own open loop: Julian, "this should surface very high up, maybe
+  directly below needs reply". Rows whose author addressed the changes
+  ("addressed your changes: re-review", the viewer's move, unread) sort
+  first; rows still waiting on the author follow, quiet. Before, only the
+  addressed case had a section (To review), and a change request the author
+  had not touched fell to Team's PRs or Other topics.
+- **Authorship**: the viewer's own PR stays under My PRs whatever area or
+  team the code belongs to; only Needs reply ranks above it (as in
+  ghatchup). An area is a label for where the code lives and never moves a
+  topic between sections.
 - **Finished drawer** (2026-09-29): under the sections, a folded "Finished"
   group header lists topics retired in the last 30 days, newest first
   (`GET /api/topics/finished`, `FinishedTopic`: name and how long ago it

@@ -942,6 +942,12 @@ the app meanwhile.
 
 ## Decided
 
+- **Each topic once in the sidebar; "Changes you requested" under Needs
+  reply** (2026-09-29): a topic shows only in its highest section (the
+  queue filters still find it by any PR). New section for open PRs where
+  your latest review requests changes, addressed ones first. Your own PR
+  stays under My PRs whatever its area. DESIGN.md "Queue sections".
+
 - **Merged without your review is surfaced, never loud** (2026-09-29
   evening, tried on the "PostPile Tile Rules" page first): the tile stays
   open with a grey strip until you mark it read; a "Not yours" glance
