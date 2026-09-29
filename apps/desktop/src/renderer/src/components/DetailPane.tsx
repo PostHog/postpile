@@ -14,6 +14,8 @@ interface DetailPaneProps {
   onSelectPr: (prKey: string) => void;
   /** A newer request than the one seen at mount opens the chat with its draft. */
   chatRequest: ChatRequest | null;
+  /** The line under "No tile selected". */
+  noSelectionText: string;
 }
 
 const paneFrame = 'flex min-h-0 flex-col border-l border-hairline-strong bg-surface';
@@ -37,8 +39,9 @@ export function DetailPane(props: DetailPaneProps) {
 
   if (!props.view || !props.prKey) {
     return (
-      <aside aria-label="Details" className={`${paneFrame} items-center justify-center px-8 text-center text-xs text-muted`}>
-        Pick a tile to see its PRs here.
+      <aside aria-label="Details" className={`${paneFrame} items-center justify-center gap-1 px-8 text-center text-xs text-muted`}>
+        <p className="font-medium text-ink-2">No tile selected</p>
+        <p>{props.noSelectionText}</p>
       </aside>
     );
   }
