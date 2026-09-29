@@ -53,13 +53,21 @@ const BANDS: Record<ForWhom['kind'], string | null> = {
   none: null,
 };
 
-/** The same band, dashed, on drafts. */
+/**
+ * The same band, dashed, on drafts: the colour of the solid band as stripes.
+ * Drawn as a background inside the same rounded shape, so the dashes follow
+ * the tile's corners and never sit on top of the frame (a dashed border did).
+ */
 const DASHED_BANDS: Record<ForWhom['kind'], string | null> = {
-  you: 'border-honey',
-  team: 'border-sea',
-  own: 'border-muted',
+  you: 'var(--color-honey)',
+  team: 'var(--color-sea)',
+  own: 'var(--color-muted)',
   none: null,
 };
+
+function dashedBand(color: string): { backgroundImage: string } {
+  return { backgroundImage: `repeating-linear-gradient(to bottom, ${color} 0 6px, transparent 6px 10px)` };
+}
 
 /** The people involved as a small overlapping stack of avatars. */
 function PeopleStack(props: { people: TilePerson[] }) {
@@ -149,7 +157,11 @@ export function Tile(props: TileProps) {
         <span aria-hidden="true" className={`absolute inset-y-0 left-0 z-[1] w-1 rounded-l-[11px] ${done ? 'bg-ghost' : BANDS[view.forWhom.kind]}`} />
       )}
       {DASHED_BANDS[view.forWhom.kind] && draft && (
-        <span aria-hidden="true" className={`absolute inset-y-0 left-0 z-[1] w-1 border-l-4 border-dashed ${done ? 'border-ghost' : DASHED_BANDS[view.forWhom.kind]}`} />
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 z-[1] w-1 overflow-hidden rounded-l-[11px]"
+          style={dashedBand(done ? 'var(--color-ghost)' : (DASHED_BANDS[view.forWhom.kind] ?? ''))}
+        />
       )}
       {unread && <UnreadStrip view={view} />}
       <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pt-3 pb-3">
