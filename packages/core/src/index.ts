@@ -34,6 +34,7 @@ export * from './instructions.ts';
 export * from './deferred-queue.ts';
 export * from './memory.ts';
 export * from './memory-views.ts';
+export * from './memory-text.ts';
 export * from './big-claims.ts';
 export * from './dossier.ts';
 export * from './fact-rules.ts';
