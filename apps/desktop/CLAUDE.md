@@ -187,7 +187,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 - One component per file in `components/`, named like the UI part:
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
   `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`),
-  `DetailPane` (+ `DetailContext`, `GlanceCard`, `PrFacts`, `ReviewList`,
+  `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
+  `PrDescription`, `PrFacts`, `ReviewList`,
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
@@ -197,7 +198,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `UpdatePill` (title bar update reminder, self-contained so it can move;
   neutral, never coral).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `ForWhomChip`,
-  `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
+  `StateWordLabel`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
@@ -207,13 +208,40 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   Something used in three places goes here; two call
   sites can stay duplicated.
 - Don't extract a component that has more props than JSX children.
+
+## Icons
+
+- All icons are inline stroke SVGs in `components/icons.tsx`, 16px
+  viewBox, `stroke="currentColor"`, colored with `text-*` utilities. No
+  icon font, no icon package, no emoji. Shapes follow GitHub's Octicons,
+  drawn simply, so PR states read like on github.com.
+- One-path glyphs go in `GLYPH_PATHS` (`Glyph`); anything with a fill or
+  a dash pattern gets its own small component (`PrStateIcon` draft,
+  `RingDotIcon`).
+- PR state: `PrStateIcon` (open green pull request, draft dashed grey
+  circle, merged purple, closed red, queued amber; the word from
+  `LIFECYCLE_WORDS` as its title). Review state: `StateWordLabel` with a
+  `StateWord` from `reviewWord` / `rowStateWord` (`lib/pr.ts`). Never a CI
+  icon or word outside `PrFacts`.
+- Icons carry words: a lone icon gets a `title` (and `aria-label` when it
+  is the only content of a control).
+
+## Focus
+
+`app.css` drops the ring for mouse focus (`:focus:not(:focus-visible)`) and
+draws one accent ring with an offset for keyboard focus on buttons and
+links. Rows inside a rounded box use `focus-visible:-outline-offset-2` so
+the box cannot clip the ring. Back / forward (`useNavShortcuts`) blur the
+focused element of the old view; without that, a clicked row kept focus
+and showed Chromium's ring after the next key press, on a tile that was no
+longer selected.
 - Order functions so they are defined before they are used.
 
 ## Tile look ("Warm reach")
 
 Four spots per tile, all derived in core and shipped on `TileView` /
 `PrSummary` (DESIGN.md "Tile faces"); the renderer only picks labels and
-tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
+tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.ts`).
 
 - For whom: `ForWhomChip` ("For you" honey, "For team-devex" sea, "Your
   PR" neutral, nothing else) from `TileView.forWhom` / `PrSummary.forWhom`,
@@ -225,11 +253,14 @@ tints (`lib/why.ts`, `lib/events.ts`, `statusParts` in `lib/pr.ts`).
   strip; read tiles get a quieter (ink-2) title, done and draft tiles a
   muted one. Drafts (`isDraftTile`): grey "Draft" chip and a dashed frame
   or dashed left band.
-- PR status: `StatusPill`, one segment pill; open threads after it. Both
-  go grey on done tiles, like the why badge. When only agents approved
-  (`PrStatus.agentApprovers`) the review segment reads "approved by agent"
-  in the usual green, names in the tooltip; the detail uses
-  `PrDetail.agentApprovers` with `approvedText` in `lib/pr.ts`.
+- PR status (design 3a, 2026-09-29): `PrStateIcon` at the start of the row,
+  `StateWordLabel` on the right ("Needs review", "Approved", "Changes
+  requested", DRAFT chip, "Merged", "Closed"), open threads after it. The
+  state keeps its color on done tiles; title and counts go grey. When only
+  agents approved (`PrStatus.agentApprovers`) the word reads "Approved by
+  agent", names in the tooltip; the detail uses `PrDetail.agentApprovers`
+  with `approvedText` in `lib/pr.ts`. **No CI on rows, tiles, the detail
+  state line or the RISK box**: checks only show in `PrFacts`.
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for
   "Your move".
 - Coral (`unread`) means "new since you looked" and nothing else on a tile.

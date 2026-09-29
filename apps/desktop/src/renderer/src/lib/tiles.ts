@@ -1,9 +1,20 @@
-import type { PrSet, PrSummary, TileView, UnreadReason } from '@postpile/core';
+import type { ForWhom, PrSet, PrSummary, TileView, UnreadReason } from '@postpile/core';
 import { newest } from './time.ts';
 
 /** "acme/app#1902" -> "1902". */
 export function prNumber(key: string): string {
   return key.split('#')[1] ?? key;
+}
+
+/**
+ * Same "for whom" (and same team). A stack or set row only shows its own
+ * chip when it differs from the tile's, so the usual case stays quiet.
+ */
+export function sameForWhom(a: ForWhom, b: ForWhom): boolean {
+  if (a.kind === 'team' && b.kind === 'team') {
+    return a.team === b.team;
+  }
+  return a.kind === b.kind;
 }
 
 /** "PR", "Stack · 3", "Set · 3". */

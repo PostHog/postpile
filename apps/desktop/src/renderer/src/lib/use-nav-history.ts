@@ -46,6 +46,19 @@ function isTextField(target: EventTarget | null): boolean {
   return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
 }
 
+/**
+ * Drops the focus a click left on a button of the old view. Without this the
+ * button keeps focus after the picks move on, and the next key press (Esc,
+ * an arrow) flips Chromium to keyboard mode, which draws a focus ring on a
+ * row of a tile that is no longer selected. Text fields keep their focus.
+ */
+function dropStaleFocus(): void {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== document.body && !isTextField(active)) {
+    active.blur();
+  }
+}
+
 /** Mouse buttons 3 and 4 are the side "back" and "forward" buttons. */
 const MOUSE_BACK = 3;
 const MOUSE_FORWARD = 4;
@@ -62,8 +75,14 @@ export function useNavShortcuts(back: () => void, forward: () => void): void {
     latest.current = { back, forward };
   });
   useEffect(() => {
-    const goBack = () => latest.current.back();
-    const goForward = () => latest.current.forward();
+    const goBack = () => {
+      dropStaleFocus();
+      latest.current.back();
+    };
+    const goForward = () => {
+      dropStaleFocus();
+      latest.current.forward();
+    };
     const onKey = (event: KeyboardEvent) => {
       if (!event.metaKey || event.altKey || event.ctrlKey || event.shiftKey || isTextField(event.target)) {
         return;

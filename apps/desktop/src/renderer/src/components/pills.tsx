@@ -1,16 +1,17 @@
 // Small status chips used across panes: verdict, why it's here, PR status.
-import type { ForWhom, GlanceGap, PrStatus, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
+import type { ReactNode } from 'react';
+import type { ForWhom, GlanceGap, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
 import { pendingWriteTitle } from '../lib/guard.ts';
 import { glanceGapText } from '../lib/glance.ts';
-import { statusParts, type StatusTone } from '../lib/pr.ts';
+import type { StateWord } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';
 import { forWhomLabel, whyTitle } from '../lib/why.ts';
-import { ClockIcon } from './icons.tsx';
+import { ClockIcon, DashIcon, Glyph, PencilIcon, RingDotIcon } from './icons.tsx';
 
-const VERDICTS: Record<Verdict, { glyph: string; label: string; tone: string }> = {
-  LOOKS_SAFE: { glyph: '✓', label: 'Looks safe', tone: 'bg-safe-soft text-safe' },
-  LOOK_CLOSER: { glyph: '◉', label: 'Look closer', tone: 'bg-closer-soft text-closer' },
-  NOT_YOURS: { glyph: '–', label: 'Not yours', tone: 'bg-segment text-muted' },
+const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }> = {
+  LOOKS_SAFE: { icon: <Glyph glyph="check" size={11} strokeWidth={2.2} />, label: 'Looks safe', tone: 'border-safe-line bg-safe-soft text-safe' },
+  LOOK_CLOSER: { icon: <RingDotIcon size={10} />, label: 'Look closer', tone: 'border-match-line bg-closer-soft text-closer' },
+  NOT_YOURS: { icon: <DashIcon size={11} />, label: 'Not yours', tone: 'border-hairline bg-segment text-muted' },
 };
 
 /** "pending: mark read on GitHub": a mark-read made while writes were locked. Neutral, not coral: nothing is new. */
@@ -29,25 +30,26 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
   );
 }
 
-/** Greyed on done tiles; "stale" when the glance was made for an older state. */
+/** Greyed on done tiles; "stale" when the glance was made for an older state. Same height as the "for whom" chip. */
 export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean; gap?: GlanceGap | null }) {
   if (!props.verdict) {
     const text = glanceGapText(props.gap ?? null);
     const tone = props.gap?.reason === 'failed' ? 'border-status-bad text-status-bad' : 'border-frame text-faint';
     return (
-      <span title={text.card} className={`flex h-[19px] items-center rounded-full border border-dashed px-[7px] text-[10.5px] font-medium whitespace-nowrap ${tone}`}>
+      <span title={text.card} className={`flex h-[22px] items-center rounded-full border border-dashed px-2 text-[11px] font-medium whitespace-nowrap ${tone}`}>
         {text.pill}
       </span>
     );
   }
   const verdict = VERDICTS[props.verdict];
-  const tone = props.greyed ? 'bg-segment text-muted' : verdict.tone;
+  const tone = props.greyed ? 'border-hairline bg-segment text-muted' : verdict.tone;
   return (
     <span
-      className={`flex h-[19px] items-center gap-1 rounded-full pr-[7px] pl-[5px] text-[10.5px] font-semibold tracking-[0.01em] ${tone}`}
+      className={`flex h-[22px] shrink-0 items-center gap-[5px] rounded-full border pr-2 pl-[7px] text-[11px] font-semibold whitespace-nowrap ${tone}`}
       title={props.stale ? 'Stale: the PR or your instructions moved since this glance. Sync to refresh.' : undefined}
     >
-      {verdict.glyph} {verdict.label}
+      {verdict.icon}
+      {verdict.label}
       {props.stale && <span className="font-normal opacity-70">· stale</span>}
     </span>
   );
@@ -85,31 +87,43 @@ export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance
   );
 }
 
-const STATUS_TONES: Record<StatusTone, string> = {
-  good: 'bg-status-good-soft text-status-good',
-  neutral: 'bg-quiet-soft text-muted',
-  bad: 'bg-status-bad-soft text-status-bad',
-  merged: 'bg-merged-soft text-merged-ink',
-  queued: 'bg-status-queued-soft text-status-queued',
+const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { icon: ReactNode; tone: string }> = {
+  review: { icon: <Glyph glyph="eye" size={13} strokeWidth={1.6} />, tone: 'text-closer' },
+  approved: { icon: <Glyph glyph="check" size={13} strokeWidth={1.8} />, tone: 'text-status-good' },
+  changes: { icon: <Glyph glyph="changes" size={13} strokeWidth={1.6} />, tone: 'text-status-bad' },
+  merged: { icon: null, tone: 'text-merged-ink' },
+  closed: { icon: null, tone: 'text-status-bad' },
 };
 
-/** Same neutral grey as the why badge on done tiles: every segment loses its tint. */
-const STATUS_GREYED = 'bg-why-done text-muted';
+const STATE_WORD_SIZES = {
+  row: 'text-[11.5px]',
+  md: 'text-[13px]',
+};
 
-/** One segment pill: lifecycle, then review and checks when they apply. Greyed on done tiles. */
-export function StatusPill(props: { status: PrStatus; size?: 'sm' | 'md'; greyed?: boolean }) {
-  const parts = statusParts(props.status);
-  const height = props.size === 'md' ? 'h-[21px] text-[11px]' : 'h-[18px] text-[9.5px]';
+/**
+ * A PR's state word with its icon (`reviewWord` / `rowStateWord` in
+ * lib/pr.ts): "Needs review" honey eye, "Approved" green check, "Changes
+ * requested" red, merged / closed as the colored word, drafts as an
+ * outlined DRAFT chip with a pencil. Never CI.
+ */
+export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STATE_WORD_SIZES }) {
+  const { word } = props;
+  if (word.kind === 'draft') {
+    return (
+      <span
+        title={word.title}
+        className="flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-frame bg-surface px-1.5 text-[10px] font-bold tracking-[0.06em] whitespace-nowrap text-muted"
+      >
+        <PencilIcon size={10} />
+        DRAFT
+      </span>
+    );
+  }
+  const look = STATE_WORD_LOOKS[word.kind];
   return (
-    <span title={parts.map((part) => part.title).join(' · ')} className={`flex shrink-0 overflow-hidden rounded-[5px] border border-pill-line ${height}`}>
-      {parts.map((part, index) => (
-        <span
-          key={part.text}
-          className={`flex items-center px-[5px] font-semibold whitespace-nowrap ${index > 0 ? 'border-l border-surface' : ''} ${props.greyed ? STATUS_GREYED : STATUS_TONES[part.tone]}`}
-        >
-          {part.text}
-        </span>
-      ))}
+    <span title={word.title} className={`flex shrink-0 items-center gap-1 font-semibold whitespace-nowrap ${STATE_WORD_SIZES[props.size ?? 'row']} ${look.tone}`}>
+      {look.icon}
+      {word.text}
     </span>
   );
 }

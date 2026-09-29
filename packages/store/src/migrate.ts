@@ -14,6 +14,7 @@ import * as prEventOrderIndex from './migrations/012_pr_event_order_index.ts';
 import * as pendingWriteKind from './migrations/013_pending_write_kind.ts';
 import * as foundPr from './migrations/014_found_pr.ts';
 import * as dropTopicDeferred from './migrations/015_drop_topic_deferred.ts';
+import * as glanceKeyFiles from './migrations/016_glance_key_files.ts';
 
 interface Migration {
   version: number;
@@ -21,7 +22,7 @@ interface Migration {
 }
 
 // Append new migrations here, in order. Never edit one that has shipped.
-const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred];
+const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles];
 
 /** The schema version this build writes and expects. */
 export const LATEST_VERSION = migrations[migrations.length - 1]!.version;

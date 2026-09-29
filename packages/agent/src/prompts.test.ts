@@ -139,6 +139,13 @@ describe('glanceBatchPrompt, answer shape', () => {
     const retry = glanceBatchPrompt({ topic: null, dossier: null, items: [{ pr, provenance: { kind: 'pinged', reason: 'author' } }], viewer, context: emptyContext, attempt: 2 });
     expect(retry).toContain('A first answer for these pull requests could not be used');
   });
+
+  it('asks for key files picked from the changed files only', () => {
+    const prompt = oneGlancePrompt(makePr(), { kind: 'pinged', reason: 'author' });
+    expect(prompt).toContain('keyFiles: up to 3 files');
+    expect(prompt).toContain('Pick only from the PR\'s "Changed files"');
+    expect(prompt).toContain('"keyFiles": [{"path"');
+  });
 });
 
 describe('setGroupingPrompt', () => {

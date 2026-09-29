@@ -1,4 +1,4 @@
-import type { Glance, IsoTime, PrKey } from '@postpile/core';
+import type { Glance, IsoTime, KeyFile, Pr, PrKey } from '@postpile/core';
 import type { z } from 'zod';
 import type { glanceBatchOutput } from './schemas.ts';
 import { glanceBatchItemOutput } from './schemas.ts';
@@ -47,6 +47,26 @@ function entryProblem(entry: Record<string, unknown>, fields: string[]): string 
   return `answered with missing or invalid ${fields.join(', ')}`;
 }
 
+/** At most this many key files per glance. */
+const KEY_FILES_MAX = 3;
+
+/**
+ * The answered key files that are really in the PR: paths not among its
+ * changed files are dropped (the model may guess or garble one), repeats
+ * too, and at most three are kept. A leading "./" or "/" is forgiven.
+ */
+export function keyFilesFor(answered: KeyFile[], pr: Pr): KeyFile[] {
+  const changed = new Set(pr.files.map((file) => file.path));
+  const kept: KeyFile[] = [];
+  for (const entry of answered) {
+    const path = entry.path.replace(/^\.?\//, '');
+    if (changed.has(path) && !kept.some((file) => file.path === path)) {
+      kept.push({ path, why: entry.why });
+    }
+  }
+  return kept.slice(0, KEY_FILES_MAX);
+}
+
 /**
  * Checks every entry on its own, so one bad entry costs one PR, not the
  * batch. Entries for PRs not in the batch and repeats are dropped; whatever
@@ -82,6 +102,7 @@ export function mapGlanceAnswer(answer: GlanceBatchAnswer, input: GlanceBatchInp
       does: value.does,
       risk: value.risk,
       othersSaid: value.othersSaid,
+      keyFiles: keyFilesFor(value.keyFiles, item.pr),
       pullInReason: item.provenance.kind === 'pulled_in' ? item.provenance.reason : null,
       dossierVersion: input.dossier?.version ?? null,
       inputHash: stamp.inputHash(item),

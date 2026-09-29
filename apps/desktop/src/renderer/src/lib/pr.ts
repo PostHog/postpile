@@ -1,4 +1,4 @@
-import type { Checks, Pr, PrStatus, Review } from '@postpile/core';
+import type { Checks, Pr, PrLifecycle, PrStatus, Review } from '@postpile/core';
 
 const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 
@@ -118,59 +118,61 @@ export function lastPushAt(pr: Pr): string | null {
   return last ? last.committedAt : null;
 }
 
-/** good: green, neutral: grey, bad: red (failing, changes), merged: purple, queued: amber. */
-export type StatusTone = 'good' | 'neutral' | 'bad' | 'merged' | 'queued';
+/** The lifecycle in one word, as the detail pane's state line and the state icon's tooltip say it. */
+export const LIFECYCLE_WORDS: Record<PrLifecycle, { text: string; title: string }> = {
+  open: { text: 'Open', title: 'Open' },
+  draft: { text: 'Draft', title: 'Draft: not ready for review yet' },
+  queued: { text: 'Queued', title: 'In the merge queue' },
+  merged: { text: 'Merged', title: 'Merged' },
+  closed: { text: 'Closed', title: 'Closed without merge' },
+};
 
-export interface StatusPart {
+/**
+ * One state word with its icon: the review state (needs review, approved,
+ * changes requested), or on a PR row the draft chip and merged / closed in
+ * place of the review. CI is not a state word: checks only show in the
+ * detail pane's facts (2026-09-29).
+ */
+export interface StateWord {
+  kind: 'review' | 'approved' | 'changes' | 'draft' | 'merged' | 'closed';
   text: string;
-  tone: StatusTone;
   /** Spelled out for the tooltip. */
   title: string;
 }
 
-const LIFECYCLE_PARTS: Record<PrStatus['lifecycle'], StatusPart> = {
-  open: { text: 'open', tone: 'good', title: 'Open' },
-  draft: { text: 'draft', tone: 'neutral', title: 'Draft' },
-  queued: { text: 'queued', tone: 'queued', title: 'In the merge queue' },
-  merged: { text: 'merged', tone: 'merged', title: 'Merged' },
-  closed: { text: 'closed', tone: 'bad', title: 'Closed without merge' },
-};
-
-const REVIEW_PARTS: Record<NonNullable<PrStatus['review']>, StatusPart> = {
-  approved: { text: 'approved', tone: 'good', title: 'Approved' },
-  changes: { text: 'changes', tone: 'bad', title: 'Changes requested' },
-  review: { text: 'review', tone: 'neutral', title: 'Review required' },
-};
-
-const CHECK_PARTS: Record<NonNullable<PrStatus['checks']>, StatusPart> = {
-  ok: { text: 'ci ok', tone: 'good', title: 'Checks pass' },
-  fail: { text: 'ci ✗', tone: 'bad', title: 'Checks fail' },
-  pending: { text: 'ci …', tone: 'neutral', title: 'Checks running' },
-};
-
 /**
- * The review segment. Only agents approved: says so in words, same calm
- * tone as any approval, and names them in the tooltip.
+ * The review state in words, null when none applies (merged, closed,
+ * drafts, repos without a review rule). Only agents approved: says so, and
+ * names them in the tooltip.
  */
-function reviewPart(review: NonNullable<PrStatus['review']>, agentApprovers: string[]): StatusPart {
-  if (review !== 'approved' || agentApprovers.length === 0) {
-    return REVIEW_PARTS[review];
+export function reviewWord(status: PrStatus): StateWord | null {
+  if (status.review === 'review') {
+    return { kind: 'review', text: 'Needs review', title: 'Review required' };
+  }
+  if (status.review === 'changes') {
+    return { kind: 'changes', text: 'Changes requested', title: 'Changes requested' };
+  }
+  if (status.review !== 'approved') {
+    return null;
+  }
+  if (status.agentApprovers.length === 0) {
+    return { kind: 'approved', text: 'Approved', title: 'Approved' };
   }
   return {
-    text: agentApprovers.length === 1 ? 'approved by agent' : 'approved by agents',
-    tone: 'good',
-    title: capitalize(approvedText(agentApprovers)),
+    kind: 'approved',
+    text: status.agentApprovers.length === 1 ? 'Approved by agent' : 'Approved by agents',
+    title: capitalize(approvedText(status.agentApprovers)),
   };
 }
 
-/** The segments of the status pill, leaving out parts that do not apply. */
-export function statusParts(status: PrStatus): StatusPart[] {
-  const parts = [LIFECYCLE_PARTS[status.lifecycle]];
-  if (status.review) {
-    parts.push(reviewPart(status.review, status.agentApprovers));
+/** A PR row's state word: merged, closed and drafts say so, everything else shows its review state. */
+export function rowStateWord(status: PrStatus): StateWord | null {
+  if (status.lifecycle === 'merged' || status.lifecycle === 'closed') {
+    const word = LIFECYCLE_WORDS[status.lifecycle];
+    return { kind: status.lifecycle, text: word.text, title: word.title };
   }
-  if (status.checks) {
-    parts.push(CHECK_PARTS[status.checks]);
+  if (status.lifecycle === 'draft') {
+    return { kind: 'draft', text: 'Draft', title: LIFECYCLE_WORDS.draft.title };
   }
-  return parts;
+  return reviewWord(status);
 }

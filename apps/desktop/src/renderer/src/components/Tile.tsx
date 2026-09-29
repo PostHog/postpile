@@ -1,11 +1,12 @@
 import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { ageLabel } from '../lib/time.ts';
-import { isDraftTile, kindLabel, leadPr, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { isDraftTile, kindLabel, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
+import { KindIcon } from './icons.tsx';
 import { ForWhomChip, PendingWritePill, RepoLabel, VerdictPill } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
@@ -70,6 +71,33 @@ function PeopleStack(props: { people: TilePerson[] }) {
   );
 }
 
+/**
+ * The tile's PR rows. One PR: a white bordered box. A stack or set: one
+ * tinted box with rounded member rows, the selected one highlighted.
+ */
+function PrRows(props: TileProps & { done: boolean }) {
+  const { view } = props;
+  const grouped = view.prs.length > 1;
+  const box = grouped
+    ? `gap-0.5 p-[3px] ${props.selected ? 'bg-accent-soft' : 'bg-subtle'} border ${props.selected ? 'border-accent-line' : 'border-hairline-soft'}`
+    : `overflow-hidden border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`;
+  return (
+    <div className={`flex flex-col rounded-row ${box}`}>
+      {view.prs.map((pr) => (
+        <PrRow
+          key={pr.key}
+          pr={pr}
+          grouped={grouped}
+          showForWhom={grouped && !sameForWhom(pr.forWhom, view.forWhom)}
+          selected={props.selected && pr.key === props.selectedPrKey}
+          greyed={props.done}
+          onClick={() => props.onSelect(pr.key)}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** One unit of attention: a single PR, a stack or a set. Done tiles go flat and grey. */
 export function Tile(props: TileProps) {
   const actions = useActions();
@@ -121,7 +149,10 @@ export function Tile(props: TileProps) {
         <div className="flex cursor-pointer flex-col gap-2" onClick={selectLead}>
           <div className="flex items-center gap-[7px]">
             <ForWhomChip forWhom={view.forWhom} code={view.why} greyed={done} />
-            <span className={`shrink-0 text-[11px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>{kindLabel(view)}</span>
+            <span className={`flex shrink-0 items-center gap-[5px] text-[12px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>
+              {tile.kind !== 'single' && <KindIcon kind={tile.kind} size={13} />}
+              {kindLabel(view)}
+            </span>
             {draft && (
               <span
                 title="A draft: nobody reviews or approves it yet, and it won't merge soon"
@@ -150,20 +181,7 @@ export function Tile(props: TileProps) {
           )}
           {forYou && <p className={`line-clamp-3 text-[12.5px] leading-[1.45] ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
         </div>
-        <div className={`flex flex-col overflow-hidden rounded-row border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`}>
-          {view.prs.map((pr, index) => (
-            <PrRow
-              key={pr.key}
-              pr={pr}
-              first={index === 0}
-              showForWhom={view.prs.length > 1}
-              selected={props.selected && pr.key === props.selectedPrKey}
-              strong={unread && pr.key === lead?.key}
-              greyed={done}
-              onClick={() => props.onSelect(pr.key)}
-            />
-          ))}
-        </div>
+        <PrRows {...props} done={done} />
       </div>
       <div className={`mt-auto flex min-h-[46px] items-center gap-2 rounded-b-[11px] px-3.5 ${footer}`}>
         <TurnLine turn={view.turn} greyed={done} />

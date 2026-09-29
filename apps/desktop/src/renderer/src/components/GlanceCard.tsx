@@ -3,6 +3,7 @@ import { useActions } from '../api/actions.tsx';
 import { assessment, type AssessmentLine, type AssessmentMark } from '../lib/assessment.ts';
 import { glanceGapText } from '../lib/glance.ts';
 import { Button } from './Button.tsx';
+import { KeyFiles } from './KeyFiles.tsx';
 
 interface GlanceCardProps {
   detail: PrDetail;
@@ -64,7 +65,8 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
 /**
  * The agent's assessment of the PR (mockup ForWhom2 part 2, variant 1):
  * box 1 is titled with the verdict and holds the for-you lines, box 2
- * "RISK · level" the risks and failing CI, then plain Does and Others lines.
+ * "RISK · level" the agent's risks (never an auto CI line), then plain Does
+ * and Others lines.
  * The verdict and the risk level each show once. Pulled-in stack layers get
  * no glance; the card says so.
  */
@@ -75,7 +77,7 @@ export function GlanceCard(props: GlanceCardProps) {
   const stackLayer = summary?.provenance.kind === 'pulled_in' && !glance;
   // Sets are grouped by the agent among pinged PRs; any member can be wrong there.
   const canUnrelate = props.view.tile.kind === 'set';
-  const view = glance ? assessment(glance, summary?.forWhom ?? null, summary?.status.checks === 'fail') : null;
+  const view = glance ? assessment(glance, summary?.forWhom ?? null) : null;
   return (
     <div className="flex flex-col gap-3">
       {view && <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} />}
@@ -86,6 +88,7 @@ export function GlanceCard(props: GlanceCardProps) {
           <PlainLine mark="“" label="Others:" text={view.others} />
         </div>
       )}
+      {glance && <KeyFiles keyFiles={glance.keyFiles} pr={props.detail.pr} />}
       {!glance && !stackLayer && <p className="text-xs text-muted">{glanceGapText(glanceGap).card}</p>}
       {stackLayer && (
         <p className="text-xs text-muted">Pulled in to complete the stack. Stack layers get no glance until GitHub pings you about them.</p>

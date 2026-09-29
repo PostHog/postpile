@@ -36,6 +36,8 @@ const glanceOutput = z.object({
   does: text,
   risk: text,
   othersSaid: text,
+  /** Paths are checked against the PR's changed files in mapGlanceAnswer. */
+  keyFiles: z.array(z.object({ path: text.min(1), why: text.default('') })).default([]),
 });
 
 export const topicAssignmentOutput = z.object({

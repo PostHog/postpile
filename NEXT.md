@@ -61,6 +61,23 @@ now".
   `POSTPILE_UPDATE_CHECK=0` turns it off; sample data shows a sample
   update unless `POSTPILE_FAKE_UPDATE=0`. Not tried against a real
   release yet (fake mode and unit tests only).
+- PR state icons, 3a design (2026-09-29, DESIGN.md "Tile faces"): PR rows,
+  tile headers and the detail pane show the state as GitHub-style icons
+  and words (open / draft / merged / closed / queued, needs review /
+  approved / changes requested, DRAFT chip), stack and set rows in one
+  tinted box. The segment pill is gone and CI only shows in the facts;
+  the renderer no longer adds "CI is failing" to the RISK box.
+- PR description (2026-09-29): the body renders as markdown in a 160px
+  scroll box with Expand under the action bar (react-markdown +
+  remark-gfm, no raw HTML, template comments stripped, remote images not
+  loaded).
+- Key files (2026-09-29): glances name up to 3 changed files to open first
+  (`keyFiles`, migration 016, glance prompt g2 so every glance regenerates
+  once), shown as "Look at first" with +/- and a link to the files tab.
+  Not tried against real agent answers yet (unit tests and fake mode).
+- Stale focus rings on tiles fixed (2026-09-29): back / forward blur the
+  old view's focused row, and a global focus-visible style replaces
+  Chromium's default ring.
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as
@@ -804,6 +821,11 @@ the app meanwhile.
   later need a tidy-up process." No "unsorted" answer, no new-topic cap, no
   deferral. Topics stay few through the prompt (existing first, broad names
   after the work); consolidation still proposes merges for 1-2 PR topics.
+- **CI status only in the facts section; PR state as icons + words per the
+  3a design** (2026-09-29): rows, tiles and the detail state line show the
+  lifecycle as a GitHub-style icon and the review state as icon + word;
+  checks show only in the detail pane's "Checks" fact. The agent may still
+  mention CI in its own glance text.
 
 - **Sonnet 5.5, pinned** (2026-09-28): the Sonnet calls use the full id
   `claude-sonnet-5-5` instead of the `sonnet` alias. claude CLI 2.1.284

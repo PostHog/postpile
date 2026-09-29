@@ -366,6 +366,7 @@ describe('GlanceRepo', () => {
       does: 'Moves tests to depot',
       risk: 'low',
       othersSaid: 'bob approved',
+      keyFiles: [{ path: 'src/app.ts', why: 'the new branch' }],
       pullInReason: null,
       dossierVersion: 3,
       inputHash: 'h1',
