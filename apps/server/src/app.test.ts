@@ -61,6 +61,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     sendPendingWrites: notImplemented,
     discardPendingWrites: notImplemented,
     markThreadRead: notImplemented,
+    markOpenedRead: notImplemented,
     getChat: notImplemented,
     approve: notImplemented,
     markRead: notImplemented,

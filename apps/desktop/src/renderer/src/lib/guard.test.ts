@@ -19,6 +19,11 @@ describe('writeBlockedReason', () => {
     expect(markReadNote(ON)).toBeUndefined();
   });
 
+  it('blocks the mark-read on opening a PR while locked: it never becomes a pending write', () => {
+    expect(writeBlockedReason('openedRead', OFF)).toMatch(/GitHub writes are off/);
+    expect(writeBlockedReason('openedRead', ON)).toBeNull();
+  });
+
   it('blocks while the writes state is still loading', () => {
     expect(writeBlockedReason('markRead', undefined)).toMatch(/until the app knows/);
   });

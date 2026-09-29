@@ -2,6 +2,17 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Whatever happened on a PR before your own last action on it counts as seen, however you acted (github.com, the gh CLI, GitHub Mobile, an agent commenting as you): your review, a comment or reply, a push to your own PR, or merging or closing it yourself. A "ready for review" from before your CLI approval no longer keeps the tile unread, and never pings.
+- "New since you looked" can now say "since you merged it" or "since you closed it"; a push to someone else's PR no longer counts as your last look.
+- Threads where you reviewed or replied after everything unread (from the gh CLI, GitHub Mobile or an agent) are marked read on GitHub after a sync, your own PRs included, only while GitHub writes are unlocked. A push does not count, and a merge without your review stays unread unless you acted after it. "Handled quietly" lists them with the reason ("you approved after it").
+- A push to your own PR answers a mention or reply before it, like a comment would: "this needs a merge-in from master" stops being your move once you pushed.
+- The move for a mention or a reply says what happened ("lyra mentioned you", "lyra replied to you") instead of "Reply to …". A question still says "Answer lyra's question".
+- Opening a PR in the detail pane marks it read on GitHub, like a visit on github.com, when nothing is asked of you (the tile would be done after a mark-read), it is not snoozed and GitHub writes are unlocked. "Handled quietly" lists these as "opened in PostPile".
+
 ## 0.9.0 (2026-09-29)
 
 ### Changed

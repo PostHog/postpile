@@ -99,7 +99,7 @@ export function makeReview(overrides: Partial<Review> = {}): Review {
 }
 
 export function makeCommit(overrides: Partial<Commit> = {}): Commit {
-  return { oid: 'head', headline: 'do the thing', author: 'alice', committedAt: at(5), ...overrides };
+  return { oid: 'head', headline: 'do the thing', author: 'alice', committer: overrides.author ?? 'alice', committedAt: at(5), ...overrides };
 }
 
 export function makeTimelineItem(overrides: Partial<TimelineItem> = {}): TimelineItem {

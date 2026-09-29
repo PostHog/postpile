@@ -20,6 +20,7 @@ import type {
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
+  OpenedReadResult,
   PendingWritesResult,
   PrKey,
   RepoOverview,
@@ -109,6 +110,12 @@ export interface Actions {
   discardPendingWrites(): Promise<void>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo and lock as a tile. */
   markThreadRead(threadId: string): Promise<void>;
+  /**
+   * The PR stayed open in the detail pane: the server marks its GitHub thread
+   * read when nothing is asked of the user. Quiet (no toast, no undo), and
+   * never sent while GitHub writes are locked.
+   */
+  markOpenedRead(prKey: PrKey): Promise<void>;
   approve(prKey: PrKey): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
@@ -362,6 +369,20 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function markOpenedRead(prKey: PrKey): Promise<void> {
+    if (writeBlockedReason('openedRead', writes) !== null) {
+      return;
+    }
+    try {
+      const result = await request<OpenedReadResult>('POST', `${prPath(prKey)}/opened`);
+      if (result.marked) {
+        await refreshAll();
+      }
+    } catch {
+      // Nobody clicked anything, so nothing to report: the next open or sync tries again.
+    }
+  }
+
   async function setRepoScope(repo: string | null): Promise<void> {
     try {
       await withBusy('repos', () => request<RepoOverview>('POST', '/api/repos/scope', { repo }));
@@ -597,6 +618,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     connectMcp: (from) => run('mcp:connect', null, () => request('POST', '/api/mcp-connection', { from })),
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),
     markTopicSeen,
+    markOpenedRead,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     chat,

@@ -112,11 +112,13 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`actionLine` in `lib/notifications.ts`); a read thread without one reads
   as "read on github.com or another client"; a quiet mark-read (origin
   `quiet`) as "marked read by PostPile: only bot activity since your last
-  read". Rows also show the newest ping decision (`pingDecisionLine`), the
+  read", or with its reason ("you approved after it", "opened in
+  PostPile"). Rows also show the newest ping decision (`pingDecisionLine`), the
   expanded row the last three. Keep the tooltips honest about what reaches
   GitHub.
 - "Handled quietly" (`HandledQuietlyPane`, pane `quiet`) is read only: the
-  engine's own quiet mark-reads of the last 7 days, a click opens the tile.
+  engine's own quiet mark-reads of the last 7 days with their reason
+  (`quietReasonText` in `lib/quiet.ts`), a click opens the tile.
   No actions, no coral.
 - After an action the provider invalidates every query except the config.
   Mark-read and memory correction results carry an undo token; the toast
@@ -164,6 +166,14 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
   leaves a topic (another topic or the Inbox), not on a timer.
+- `markOpenedRead` is quiet too (no toast, no undo) and on the
+  `GithubWrite` list as `openedRead`, blocked while locked (never a
+  pending write). `useOpenedRead` in `App.tsx` calls it once per open,
+  after the PR stayed 1.5s in the detail pane with the window visible
+  (`OpenedReadTimer`; hiding the window restarts the wait), only when
+  `opensMarkRead` (`lib/opened-read.ts`) says a mark-read leaves the tile
+  done. The server checks again and marks the GitHub thread read ("opened
+  in PostPile", listed under Handled quietly).
 - A missing glance is worded from `PrSummary.glanceState` /
   `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
   never "the next sync picks it up". Only a failed glance gets a button:

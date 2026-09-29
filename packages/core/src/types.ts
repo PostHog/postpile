@@ -38,6 +38,13 @@ export interface Commit {
   oid: string;
   headline: string;
   author: string;
+  /**
+   * Who committed it (GitHub login, else the git name). Differs from the
+   * author after someone else's cherry-pick or rebase, and is GitHub's
+   * web-flow for commits made in the web UI. Absent in snapshots stored
+   * before it was fetched.
+   */
+  committer?: string;
   committedAt: IsoTime;
 }
 

@@ -66,7 +66,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     glanceState: input.glanceState,
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
-    whatsNew: member.provenance.kind === 'found' ? null : whatsNew(events, viewer),
+    whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),
     updatedAt: pr.updatedAt,
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,

@@ -59,7 +59,8 @@ interface LiveSync {
 
 /**
  * One sync: fetch -> verify facts -> agent digest -> retire finished topics
- * -> mark bot-only threads read ("Handled quietly"). Tiles are derived on read.
+ * -> mark threads read that only bots or the user's own later action left unread ("Handled quietly").
+ * Tiles are derived on read.
  */
 export class SyncRun {
   private live: LiveSync | null = null;
@@ -84,7 +85,7 @@ export class SyncRun {
     const quiet = await this.quietReads.run();
     errors.push(...quiet.errors);
     if (quiet.marked.length > 0) {
-      this.log(`sync: handled quietly: ${quiet.marked.length} threads marked read on GitHub (only bot activity since the last read)`);
+      this.log(`sync: handled quietly: ${quiet.marked.length} threads marked read on GitHub (only bot activity since the last read, or you acted after it)`);
     }
   }
 

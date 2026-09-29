@@ -127,7 +127,26 @@ describe('whoseTurn: your move', () => {
     const question = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'lyra', at: at(10) });
     expect(single(pr, [question])).toMatchObject({ kind: 'you', what: "Answer lyra's question" });
     const answered = { ...pr, comments: [makeComment({ author: me, createdAt: at(11) })] };
-    expect(single(answered, [question]).kind).toBe('none');
+    const reply = makeEvent({ id: 'own-reply', kind: 'comment', actor: me, at: at(11) });
+    expect(single(answered, [question, reply]).kind).toBe('none');
+  });
+
+  it('says what a mention or reply did instead of presuming a reply; a question still asks for an answer', () => {
+    const pr = makePr({ author: 'rowan' });
+    expect(single(pr, [makeEvent({ kind: 'mention', ruleLoudness: 'loud', actor: 'lyra', at: at(10) })])).toMatchObject({ kind: 'you', move: 'reply', what: 'lyra mentioned you' });
+    expect(single(pr, [makeEvent({ kind: 'team_mention', ruleLoudness: 'loud', actor: 'lyra', at: at(10) })])).toMatchObject({ move: 'reply', what: 'lyra mentioned your team' });
+    expect(single(pr, [makeEvent({ kind: 'reply_to_user', ruleLoudness: 'loud', actor: 'lyra', at: at(10) })])).toMatchObject({ move: 'reply', what: 'lyra replied to you' });
+  });
+
+  it('counts your push on your own PR as the answer to a mention ("needs a merge-in from master")', () => {
+    const own = makePr({ author: me, commits: [makeCommit({ oid: 'c-own', author: me, committedAt: at(20) })] });
+    const mention = makeEvent({ kind: 'mention', ruleLoudness: 'loud', actor: 'lyra', at: at(10) });
+    const push = makeEvent({ id: 'own-push', kind: 'commits_pushed', actor: me, at: at(20), sourceId: 'c-own' });
+    expect(single(own, [mention])).toMatchObject({ kind: 'you', move: 'reply', what: 'lyra mentioned you' });
+    expect(single(own, [mention, push]).kind).not.toBe('you');
+    // A push on someone else's PR is no touch.
+    const others = { ...own, author: 'rowan' };
+    expect(single(others, [mention, push])).toMatchObject({ kind: 'you', move: 'reply' });
   });
 
   it('folds a mention into the review ask', () => {
@@ -146,7 +165,7 @@ describe('whoseTurn: your move', () => {
   it('asks nothing for a reply the events agent lowered, like a plain thanks', () => {
     const pr = makePr({ author: 'rowan' });
     const thanks = makeEvent({ kind: 'reply_to_user', ruleLoudness: 'loud', actor: 'rowan', summary: "rowan replied to you: thanks, that's fine" });
-    expect(single(pr, [thanks])).toMatchObject({ kind: 'you', move: 'reply', what: 'Reply to rowan' });
+    expect(single(pr, [thanks])).toMatchObject({ kind: 'you', move: 'reply', what: 'rowan replied to you' });
     const lowered: PrEvent = { ...thanks, override: { loudness: 'quiet', reason: 'Only says thanks.', by: 'agent' } };
     expect(single(pr, [lowered])).toEqual({ kind: 'none', who: null, what: '', prKey: null });
     const muted: PrEvent = { ...thanks, override: { loudness: 'muted', reason: 'Noise.', by: 'agent' } };
@@ -311,7 +330,7 @@ describe('whoseTurn: drafts', () => {
   it('is your move only for a personal question or mention', () => {
     const question = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'ada', at: at(30) });
     const team = makeEvent({ kind: 'team_mention', ruleLoudness: 'loud', actor: 'ada', at: at(30) });
-    expect(single(draft, [question])).toMatchObject({ kind: 'you', what: 'Reply to ada on draft' });
+    expect(single(draft, [question])).toMatchObject({ kind: 'you', what: "Answer ada's question on draft" });
     expect(single(draft, [team]).kind).toBe('none');
   });
 

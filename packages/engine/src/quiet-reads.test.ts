@@ -1,5 +1,5 @@
 import type { Pr } from '@postpile/core';
-import { at, makeComment, makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
+import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness, type HarnessOptions } from './testing/fakes.ts';
 
@@ -199,6 +199,93 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     await h.engine.setGitHubWrites(true);
     // GitHub has a newer update than the stored thread, but the stored ETag still answers 304.
     h.reader.threads = [{ ...threadFor(pr), updatedAt: at(45) }];
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.writer.calls).toEqual([]);
+  });
+});
+
+// "You already dealt with it": alice asked the viewer at minute 1 and marked the PR ready at 10; the viewer approved from the gh CLI at 30.
+describe('Handled quietly: the full sync marks threads read the viewer acted on after every unread event', () => {
+  function approvedFromTheCli(overrides: Partial<Pr> = {}): Pr {
+    return makePr({
+      number: 9,
+      author: 'alice',
+      title: 'Split the deploy job',
+      timeline: [
+        makeTimelineItem({ id: 't-ask', kind: 'review_requested', actor: 'alice', subject: viewer.login, at: at(1) }),
+        makeTimelineItem({ id: 't-ready', kind: 'ready_for_review', actor: 'alice', subject: null, at: at(10) }),
+      ],
+      reviews: [makeReview({ id: 'r-me', author: viewer.login, state: 'APPROVED', submittedAt: at(30) })],
+      updatedAt: at(30),
+      ...overrides,
+    });
+  }
+
+  async function syncedNeverRead(pr: Pr, options: HarnessOptions = {}): Promise<Harness> {
+    const h = makeHarness(options);
+    h.reader.addPr(pr, makeThreadFor(pr, { lastReadAt: null, updatedAt: pr.updatedAt, unread: true }));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    return h;
+  }
+
+  it('marks the thread read with the reason in the log detail, listed under Handled quietly', async () => {
+    const pr = approvedFromTheCli();
+    const h = await syncedNeverRead(pr);
+
+    expect(h.writer.calls).toEqual([`markThreadRead thread-9`]);
+    expect(quietRows(h)).toEqual([expect.objectContaining({ outcome: 'github', prKey: pr.key, detail: 'you approved after it' })]);
+    expect(await h.engine.handledQuietly()).toEqual([expect.objectContaining({ prKey: pr.key, reason: 'approved', bots: [] })]);
+    expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(false);
+  });
+
+  it('does nothing while GitHub writes are locked', async () => {
+    const h = await syncedNeverRead(approvedFromTheCli(), { writesEnabled: false });
+
+    expect(h.writer.calls).toEqual([]);
+    expect(quietRows(h)).toEqual([]);
+    expect(h.store.pendingWrites.list()).toEqual([]);
+  });
+
+  it('includes the viewer own PR when they replied after the review comments', async () => {
+    const review = makeComment({ id: 'c-rowan', author: 'rowan', body: 'Rename this?', createdAt: at(10) });
+    const reply = makeComment({ id: 'c-me', author: viewer.login, body: 'Done in the next commit', createdAt: at(30) });
+    const pr = makePr({ number: 9, author: viewer.login, comments: [review, reply], updatedAt: at(30) });
+    const h = await syncedNeverRead(pr);
+
+    expect(quietRows(h)).toEqual([expect.objectContaining({ prKey: pr.key, detail: 'you replied after it' })]);
+  });
+
+  it('never counts a push as having read the comments', async () => {
+    const review = makeComment({ id: 'c-rowan', author: 'rowan', body: 'Rename this?', createdAt: at(10) });
+    const pr = makePr({
+      number: 9,
+      author: viewer.login,
+      comments: [review],
+      commits: [makeCommit({ oid: 'c2', author: viewer.login, committedAt: at(30) })],
+      headOid: 'c2',
+      updatedAt: at(30),
+    });
+    const h = await syncedNeverRead(pr);
+
+    expect(h.writer.calls).toEqual([]);
+  });
+
+  it('leaves it when someone acted after the approval', async () => {
+    const late = makeComment({ id: 'c-late', author: 'rowan', body: 'Merging after lunch', createdAt: at(40) });
+    const h = await syncedNeverRead(approvedFromTheCli({ comments: [late], updatedAt: at(40) }));
+
+    expect(h.writer.calls).toEqual([]);
+  });
+
+  it('leaves it when the PR snapshot is older than the thread', async () => {
+    const pr = approvedFromTheCli();
+    const h = await syncedNeverRead(pr, { writesEnabled: false });
+    await h.engine.setGitHubWrites(true);
+    h.reader.failingPrs.add(pr.key);
+    h.reader.addPr(pr, makeThreadFor(pr, { lastReadAt: null, updatedAt: '2026-09-02T12:30:00.000Z', unread: true }));
+    h.reader.etag = 'etag-2';
 
     await h.engine.sync({ maxAgentCalls: 0 });
 

@@ -9,6 +9,8 @@ const ANCHOR_SINCE: Record<WhatsNewAnchorKind, string> = {
   review: 'since your review',
   comment: 'since your comment',
   push: 'since your push',
+  merge: 'since you merged it',
+  close: 'since you closed it',
   read: 'since you marked it read',
 };
 
@@ -19,6 +21,8 @@ const REPLY_NOUN: Record<WhatsNewAnchorKind, string | null> = {
   review: 'review',
   comment: 'comment',
   push: null,
+  merge: null,
+  close: null,
   read: null,
 };
 

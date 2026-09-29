@@ -66,6 +66,7 @@ export interface RawCommit {
     messageHeadline: string;
     committedDate: string;
     author: { user: { login: string } | null; name: string | null } | null;
+    committer?: { user: { login: string } | null; name: string | null } | null;
   };
 }
 
