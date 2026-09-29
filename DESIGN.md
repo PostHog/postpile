@@ -110,7 +110,9 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 Rules classify first (`ruleLoudness` in core). The agent may override with a
 reason; overrides are stored on the event. `seen` is user state (`seenAt`), not
-a classification.
+a classification. The effective loudness (override over rule) of a reply,
+mention or question also decides whether it is still an ask for whose turn:
+lowered to quiet or muted, it asks nothing (see "Whose turn", rule 2).
 
 **Tile state is derived, never stored**:
 
@@ -535,7 +537,18 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 9. **events** (`event_classification`, v2: one call per topic, up to 20 PRs
    per call, `classifyEventBatch`): second opinion on loud, unseen events
    without an override logged after the topic's classify cursor, plus
-   unseen `commits_after_approval` events (quiet by rule). For those the
+   loud personal asks (mention, question, reply) already read, since those
+   stay the user's move until answered (2026-09-29), plus
+   unseen `commits_after_approval` events (quiet by rule). A reply or
+   mention that asks nothing ("thanks", "yeah that's fine") goes quiet; a
+   question or request still waiting for the user stays loud. Once per
+   topic, on the first full syncs after that rule came in, every unanswered
+   loud personal ask without an override on an open PR goes along too,
+   wherever the cursor is (`isUnansweredAsk`), so asks judged by the older
+   prompt get the new rule. Meta `events_rejudge_asks_v1:<topic>` (or
+   `:unsorted`) marks a topic whose batches ran, so a topic the call cap
+   skipped does not make the others send theirs again; the global
+   `events_rejudge_asks_v1` ends it once every topic did. For pushes the
    prompt shows the PR's files and says plain follow-up pushes are
    normally not worth the user's attention; the agent raises one to loud,
    with a one-line reason, only for a substantial change in CI, build or
@@ -1512,6 +1525,17 @@ draft), `fix_ci`, `merge`. Rules per pinged PR, first match wins:
    seen (mark-read in the app, or read on GitHub) it no longer makes it your
    move, so it no longer keeps the tile off Done or the topic in needs-you.
    Personal asks (mention, question, reply) stay until answered.
+   An ask the events agent lowered to quiet or muted (`effectiveLoudness`,
+   override over rule) is no ask (2026-09-29): not your move, not Needs
+   reply (`prTier`), not "still your move" after a mark-read. Until the
+   agent has weighed in, the rule's loud stands. History: the rule was
+   ported from ghatchup ("a human asked something and there is no sign you
+   answered"), which also had "ADDRESSED YOU: a human spoke to you, but
+   nothing is owed". The agent's second opinion on events exists since
+   2026-09-27 to tell "can you take a look?" from "thanks!", but whose turn
+   never consulted it, so a plain "thanks, that's fine" kept saying "Reply
+   to …". Julian, 2026-09-29: "if the author just replies 'Oh yeah, that's
+   fine,' that's not my move to reply again".
 3. On your own PR:
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
@@ -1725,8 +1749,8 @@ the sync.
 
 **PR tiers** (`prTier` in `pr-tier.ts`, ported from ghatchup's
 `triage.Classify`): one tier per open PR, first match wins: `needs_reply`
-(a human mention, question or reply the viewer has not answered, same
-check as whose-turn), `changes_requested` (the viewer's newest verdict
+(a human mention, question or reply the viewer has not answered and the
+events agent did not lower, same check as whose-turn), `changes_requested` (the viewer's newest verdict
 review on someone else's PR asks for changes, drafts included; added
 2026-09-29), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
@@ -1817,6 +1841,13 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
   agent-muted events and review requests between others fold into one "N
   bot/CI events" line that expands (Unmute lives there).
+  Comments and reviews from people show in full (2026-09-29): the event
+  `summary` is one clipped line (100 chars, first line) for tiles, MCP and
+  the agent, so `activityList(events, viewer, since, pr)` also puts the
+  whole text on the line as `body`, read from `pr.comments` / `pr.reviews`
+  by the event's `sourceId`. The row shows the lead ("lyra commented") and
+  the body under it, wrapped, line breaks kept, never clamped. Bots keep
+  the one-line form; so do agent-muted people in the folded line.
 - **Resizable**: the two edges (sidebar | tiles, tiles | detail) are draggable
   (`PaneDivider`, pointer capture, a 12px invisible hit area, col-resize
   cursor). Limits: sidebar 200-440px, tile column 340-720px, and a drag never

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { activityList, noiseLabel, noiseSummary } from './activity.ts';
 import { reviewRequestSubject } from './events.ts';
-import { at, makeEvent, viewer } from './fixtures.ts';
+import { at, makeComment, makeEvent, makePr, makeReview, viewer } from './fixtures.ts';
 import type { EventDisplayState, PrEvent } from './types.ts';
 import type { EventView } from './views.ts';
 
@@ -107,6 +107,34 @@ describe('activityList fresh noise', () => {
     expect(list.freshNoise).toEqual([]);
     expect(list.freshNoiseLabel).toBe('');
     expect(list.noise).toHaveLength(2);
+  });
+});
+
+describe('activityList bodies', () => {
+  const longText = `First line of a long comment.\n\n${'More words. '.repeat(40)}`;
+
+  it('carries the full body of human comments and reviews, not of bots or pushes', () => {
+    const pr = makePr({
+      comments: [makeComment({ id: 'c1', author: 'lyra', body: longText }), makeComment({ id: 'c2', author: 'greptile[bot]', body: longText })],
+      reviews: [makeReview({ id: 'r1', author: 'ada', body: 'Please split this up.' }), makeReview({ id: 'r2', author: 'sol', body: '' })],
+    });
+    const comment = ev({ kind: 'comment', actor: 'lyra', sourceId: 'c1', summary: 'lyra commented: First line of a long comment.', at: at(1) });
+    const review = ev({ kind: 'review_changes_requested', actor: 'ada', sourceId: 'r1', summary: 'ada requested changes: Please split this up.', at: at(2) });
+    const empty = ev({ kind: 'review_approved', actor: 'sol', sourceId: 'r2', summary: 'sol approved', at: at(3) });
+    const bot = ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, sourceId: 'c2', at: at(4) });
+    const push = ev({ kind: 'commits_pushed', actor: 'rowan', summary: 'rowan pushed: fix', at: at(5) });
+    const list = activityList([comment, review, empty, bot, push], who, null, pr);
+    const bodies = new Map(list.earlier.map((line) => [line.actor, line.body]));
+    expect(bodies.get('lyra')).toBe(longText.trim());
+    expect(bodies.get('ada')).toBe('Please split this up.');
+    expect(bodies.get('sol')).toBeNull();
+    expect(bodies.get('rowan')).toBeNull();
+    expect(list.noise[0]?.event.actor).toBe('greptile[bot]');
+  });
+
+  it('has no body without the PR', () => {
+    const comment = ev({ kind: 'comment', actor: 'lyra', sourceId: 'c1', at: at(1) });
+    expect(activityList([comment], who).earlier[0]?.body).toBeNull();
   });
 });
 

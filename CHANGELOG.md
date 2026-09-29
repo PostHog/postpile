@@ -6,13 +6,20 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- New sidebar section "Changes you requested", right under Needs reply: open PRs where your latest review asks for changes. The ones where the author pushed or replied since come first; the ones still waiting on the author follow. The "author addressed your changes" case used to sit under To review. The Review filter covers both.
-- Each topic shows once in the sidebar, in its most urgent section, instead of in every section where it has a PR. The Mine, Team, Reply and Review filters still find a topic by any of its PRs.
-- Your own PRs stay under My PRs whatever area or team the code belongs to; only Needs reply ranks above them.
 - Threads you had read that came back only because of bots (CI, merge queue, review and deploy bots) are marked read on GitHub by PostPile after a sync, 10 minutes after the last bot activity at the earliest. Never your own PRs, never when something is your move or new for you, never a merge without your review, and only while GitHub writes are unlocked. "Handled quietly" in the sidebar lists the last 7 days.
 - The notifications debug view shows each thread's ping decisions: pinged or withheld, by the rules or the agent, and why.
 - One hourly usage event counts pings sent and withheld and threads handled quietly (counts only).
+
+## 0.6.0 (2026-09-29)
+
+### Changed
+
+- New sidebar section "Changes you requested", right under Needs reply: open PRs where your latest review asks for changes. The ones where the author pushed or replied since come first; the ones still waiting on the author follow. The "author addressed your changes" case used to sit under To review. The Review filter covers both.
+- Each topic shows once in the sidebar, in its most urgent section, instead of in every section where it has a PR. The Mine, Team, Reply and Review filters still find a topic by any of its PRs.
+- Your own PRs stay under My PRs whatever area or team the code belongs to; only Needs reply ranks above them.
 - The "your move" chip on a topic row names the most urgent move ("Reply", "Re-review", "Review", "Address changes", "Fix CI", "Merge") and how many more ("Reply +2"). Hover it to see every move.
+- A reply or mention that asks nothing of you ("thanks", "yeah that's fine") no longer makes it your move: when the agent judges it quiet, the tile stops saying "Reply to …", the topic leaves Needs reply, and marking it read no longer says "still your move". A real question still waits for your answer.
+- Comments and review texts from people now show in full in the detail pane, in "New since you looked" and in the activity list. They used to be cut to one short line. Bot and CI lines stay compact.
 
 ## 0.5.0 (2026-09-29)
 

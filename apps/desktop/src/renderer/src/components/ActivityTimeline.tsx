@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { eventGlyph, splitActor } from '../lib/events.ts';
+import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Glyph } from './icons.tsx';
@@ -39,6 +39,8 @@ interface RowProps {
   kind: EventKind;
   actor: string;
   summary: string;
+  /** The full text of a human comment or review, shown under the line. */
+  body: string | null;
   at: string;
   display: EventDisplayState;
   /** Why the rules (or the agent) classed it so, for the hover title. */
@@ -60,7 +62,8 @@ function ActivityRow(props: RowProps) {
         {!props.last && <span className="w-px flex-1 bg-hairline" />}
       </span>
       <span className={`pb-2.5 text-[12.5px] leading-[1.45] select-text ${TEXT[props.display]}`}>
-        <LineText summary={props.summary} actor={props.actor} />
+        <LineText summary={props.body ? summaryLead(props.summary) : props.summary} actor={props.actor} />
+        {props.body && <span className="mt-0.5 block font-normal break-words whitespace-pre-wrap [overflow-wrap:anywhere]">{props.body}</span>}
         {props.unmuteId && (
           <button type="button" onClick={() => void actions.unmute(props.unmuteId!)} className="ml-2 text-[11.5px] text-muted underline hover:text-ink">
             Unmute
@@ -78,7 +81,7 @@ function ActivityRow(props: RowProps) {
 export function lineRow(line: ActivityLine, last: boolean) {
   const newest = line.events[0]!.event;
   const reason = line.events.length > 1 ? `${line.events.length} events` : (newest.override?.reason ?? newest.ruleReason);
-  return <ActivityRow key={line.id} kind={line.kind} actor={line.actor} summary={line.summary} at={line.at} display={line.display} reason={reason} last={last} unmuteId={null} />;
+  return <ActivityRow key={line.id} kind={line.kind} actor={line.actor} summary={line.summary} body={line.body} at={line.at} display={line.display} reason={reason} last={last} unmuteId={null} />;
 }
 
 export function eventRow(view: EventView, last: boolean) {
@@ -89,6 +92,7 @@ export function eventRow(view: EventView, last: boolean) {
       kind={event.kind}
       actor={event.actor}
       summary={event.summary}
+      body={null}
       at={event.at}
       display={view.display}
       reason={event.override?.reason ?? event.ruleReason}

@@ -1,10 +1,11 @@
 import type { Dossier, Pr } from '@postpile/core';
-import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
+import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
+import { REJUDGE_ASKS_KEY } from './digest/event-batches.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
-import { topicWithPrs } from './testing/topics.ts';
+import { makeTopic, topicWithPrs } from './testing/topics.ts';
 
 const LATER = '2026-09-03T00:00:00.000Z';
 
@@ -453,6 +454,113 @@ describe('event classification', () => {
     expect(h.agent.eventInputs[0]?.topic?.id).toBe('depot');
     const overridden = h.store.events.listForPr(h.agent.eventInputs[0]!.items[0]!.pr.key)[0];
     expect(overridden?.override).toMatchObject({ loudness: 'quiet', by: 'agent' });
+  });
+});
+
+describe('replies that ask nothing', () => {
+  // The viewer asked in a review thread, bob answered "thanks, that's fine".
+  function thankedPr(number = 1): Pr {
+    const thread = makeThread(`t${number}`, [
+      makeComment({ id: `mine-${number}`, author: viewer.login, body: 'Maybe rename this?', createdAt: at(5) }),
+      makeComment({ id: `thanks-${number}`, author: 'bob', body: "Thanks, that's fine", createdAt: at(10) }),
+    ]);
+    return reviewRequestedPr(number, { author: 'bob', threads: [thread], comments: thread.comments, reviews: [makeReview({ author: viewer.login, state: 'COMMENTED', submittedAt: at(5) })] });
+  }
+
+  it('go to the agent even once read on GitHub, and stop being your move when it lowers them', async () => {
+    const h = makeHarness();
+    const pr = thankedPr();
+    h.store.topics.create(makeTopic('depot'));
+    h.reader.addPr(pr, makeThreadFor(pr, { unread: false, lastReadAt: at(20) }));
+    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    h.agent.answerEvents((input) => {
+      const reply = input.items[0]!.events.find((event) => event.kind === 'reply_to_user')!;
+      return [{ eventId: reply.id, loudness: 'quiet', reason: 'Only says thanks.' }];
+    });
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    const reply = h.agent.eventInputs[0]?.items[0]?.events.find((event) => event.kind === 'reply_to_user');
+    expect(reply?.seenAt).not.toBeNull();
+    const turn = (await h.engine.getTopic('depot'))?.tiles[0]?.turn;
+    expect(turn).toMatchObject({ kind: 'them', who: 'bob', what: 'to address 1 thread' });
+  });
+
+  /**
+   * A database from before the re-judge: each topic's thanked PR was
+   * fetched and judged (kept loud, no override), and its classify cursor
+   * moved past the reply.
+   */
+  async function judgedBeforeUpgrade(h: Harness, topics: string[]): Promise<void> {
+    topics.forEach((topicId, index) => topicWithPrs(h, topicId, [thankedPr(index + 1)]));
+    await h.engine.sync({ agentJobs: [] });
+    const seq = h.store.eventLog.maxSeq();
+    for (const topicId of topics) {
+      h.store.cursors.advance({ kind: 'classify', scope: topicId, seq, dossierVersion: null, updatedAt: NOW.toISOString() });
+    }
+    h.reader.etag = 'etag-2';
+  }
+
+  /** The topic ids of every events call so far, in order. */
+  function judgedTopics(h: Harness): (string | undefined)[] {
+    return h.agent.eventInputs.map((input) => input.topic?.id);
+  }
+
+  it('behind the classify cursor are judged once more on the first sync after the upgrade', async () => {
+    const h = makeHarness();
+    await judgedBeforeUpgrade(h, ['depot']);
+    h.agent.answerEvents((input) => {
+      const reply = input.items[0]!.events.find((event) => event.kind === 'reply_to_user')!;
+      return [{ eventId: reply.id, loudness: 'quiet', reason: 'Only says thanks.' }];
+    });
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    expect(h.agent.eventInputs[0]?.items[0]?.events.map((event) => event.kind)).toEqual(['reply_to_user']);
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.turn).toMatchObject({ kind: 'them', who: 'bob' });
+    h.reader.etag = 'etag-3';
+    await h.engine.sync({ agentJobs: ['events'] });
+    expect(judgedTopics(h)).toEqual(['depot']);
+  });
+
+  it('kept loud by the re-judge are not sent again', async () => {
+    const h = makeHarness();
+    await judgedBeforeUpgrade(h, ['depot']);
+
+    await h.engine.sync({ agentJobs: ['events'] });
+    h.reader.etag = 'etag-3';
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    expect(judgedTopics(h)).toEqual(['depot']);
+    expect(h.store.meta.get(REJUDGE_ASKS_KEY)).not.toBeNull();
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.turn).toMatchObject({ kind: 'you', what: 'Reply to bob' });
+  });
+
+  it('are re-judged topic by topic under the call cap, each only once', async () => {
+    const h = makeHarness();
+    await judgedBeforeUpgrade(h, ['depot', 'billing']);
+
+    await h.engine.sync({ maxAgentCalls: 1, agentJobs: ['events'] });
+    const first = judgedTopics(h);
+    h.reader.etag = 'etag-3';
+    await h.engine.sync({ maxAgentCalls: 1, agentJobs: ['events'] });
+    h.reader.etag = 'etag-4';
+    await h.engine.sync({ maxAgentCalls: 1, agentJobs: ['events'] });
+
+    // The agent keeps both asks loud; the second sync goes to the topic the cap skipped, not the first again.
+    expect(first).toHaveLength(1);
+    expect([...judgedTopics(h)].sort()).toEqual(['billing', 'depot']);
+    expect(h.store.meta.get(REJUDGE_ASKS_KEY)).not.toBeNull();
+  });
+
+  it('stay your move while the agent leaves them loud', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [thankedPr()]);
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    const turn = (await h.engine.getTopic('depot'))?.tiles[0]?.turn;
+    expect(turn).toMatchObject({ kind: 'you', move: 'reply', what: 'Reply to bob' });
   });
 });
 

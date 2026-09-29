@@ -13,7 +13,8 @@ function filesLine(pr: Pr): string {
 
 function eventLine(event: PrEvent): string {
   const bot = event.isBot ? ' (bot)' : '';
-  return `- id ${event.id} | ${event.at} | ${event.kind} by @${event.actor}${bot} | rules said ${event.ruleLoudness} (${event.ruleReason}) | ${event.summary}`;
+  const read = event.seenAt !== null ? ' (already read)' : '';
+  return `- id ${event.id} | ${event.at} | ${event.kind} by @${event.actor}${bot}${read} | rules said ${event.ruleLoudness} (${event.ruleReason}) | ${event.summary}`;
 }
 
 function prSection(pr: Pr, events: PrEvent[]): string {
@@ -26,7 +27,9 @@ function prSection(pr: Pr, events: PrEvent[]): string {
  * Second opinion on rule loudness for every PR of one topic with new loud
  * events, in one call. Rules cannot tell "can you take a look?" from
  * "thanks!", or a meaningful bot comment from a rebase on a draft. The agent
- * only returns the events it disagrees with.
+ * only returns the events it disagrees with. A loud reply, mention or
+ * question is also what makes it the user's move to answer (whose turn), so
+ * lowering a plain "thanks" clears that too.
  */
 export function eventBatchPrompt(input: EventBatchInput): string {
   const topic = input.topic ? ` They belong to the topic "${input.topic.name}".` : '';
@@ -36,10 +39,16 @@ ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 Loudness levels:
-- loud: the user should look now. Someone asks them something or needs them, the PR merged
-  without their review when their instructions care about that.
+- loud: the user should look now. Someone asks them something or needs them.
 - quiet: worth a dot, not worth interrupting: bots, CI, deploys, merge queue, routine chatter.
 - muted: pure noise, hidden: bot rebases on a draft, repeated bot nags, automated status spam.
+
+Replies to the user, mentions and questions (reply_to_user, mention, question_to_user,
+team_mention) start loud, and while loud they make it the user's move to answer. A reply or
+mention that asks nothing of the user ("thanks", "done", "yeah that's fine", a plain
+acknowledgement) is quiet: no answer is owed. A question or request still waiting for the
+user's answer stays loud. Judge events marked (already read) the same way: they are here
+because they still count as owed an answer.
 
 Pushes after the user approved (commits_after_approval) start quiet: an approval stands on any
 commit. Plain follow-up pushes (review fixes, small tweaks, rebases, formatting) are normally

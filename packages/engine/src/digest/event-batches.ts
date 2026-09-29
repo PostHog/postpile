@@ -1,5 +1,5 @@
 import type { EventBatchInput } from '@postpile/agent';
-import type { PrEvent, PrKey } from '@postpile/core';
+import { isUnansweredAsk, PERSONAL_ASK_KINDS, type PrEvent, type PrKey } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import type { DigestDeps, TopicScope } from './deps.ts';
@@ -9,6 +9,18 @@ export const EVENT_BATCH_PRS = 20;
 
 /** Classify cursor scope for PRs without a topic. */
 const UNSORTED_SCOPE = 'unsorted';
+
+/**
+ * Set once the one-time re-judge of stuck asks ran for every topic (see
+ * `stuckAsks`). Each topic (or Unsorted) also gets `<key>:<scope>` once its
+ * own batches ran, so a topic the call cap skipped does not make the others
+ * send their asks again.
+ */
+export const REJUDGE_ASKS_KEY = 'events_rejudge_asks_v1';
+
+function rejudgeKey(group: EventGroup): string {
+  return `${REJUDGE_ASKS_KEY}:${group.scope}`;
+}
 
 type EventItem = EventBatchInput['items'][number];
 
@@ -22,10 +34,18 @@ interface EventGroup {
 /**
  * Loud events get a second opinion (demote or mute). A push after the
  * viewer's approval starts quiet and goes to the agent too, which may raise
- * it when the push changes what was approved.
+ * it when the push changes what was approved. A loud personal ask (mention,
+ * question, reply) goes even once it is read: it stays the viewer's move
+ * until answered, unless the agent says it asks nothing ("thanks!").
  */
 function needsOpinion(event: PrEvent): boolean {
-  if (event.seenAt !== null || event.override !== null) {
+  if (event.override !== null) {
+    return false;
+  }
+  if (event.ruleLoudness === 'loud' && PERSONAL_ASK_KINDS.includes(event.kind)) {
+    return true;
+  }
+  if (event.seenAt !== null) {
     return false;
   }
   return event.ruleLoudness === 'loud' || event.kind === 'commits_after_approval';
@@ -33,8 +53,8 @@ function needsOpinion(event: PrEvent): boolean {
 
 /**
  * Second opinion on loud events, plus pushes after the viewer's approval: a
- * wrong "loud" costs the user an unread tile, a wrong "quiet" is still
- * visible as a dot. One call per topic
+ * wrong "loud" costs the user an unread tile (and, on an ask, a "your move"
+ * footer), a wrong "quiet" is still visible as a dot. One call per topic
  * (20 PRs at most). The agent may demote (or mute) with a reason; the
  * override is stored on the event.
  *
@@ -60,15 +80,39 @@ export class EventBatchClassifier {
     return [...topics, unsorted];
   }
 
-  /** Unseen events without an override that need an opinion (needsOpinion), logged after afterSeq, per PR. */
-  private items(prKeys: PrKey[], afterSeq: number): EventItem[] {
+  /**
+   * Unanswered loud personal asks without an override on open PRs, read or
+   * not, wherever the cursor is: the asks whose turn would still call your
+   * move. Asks judged before 2026-09-29 sit behind the cursor, judged by a
+   * prompt that did not say "thanks" asks nothing, so the first full sync
+   * after the upgrade sends them once more (REJUDGE_ASKS_KEY).
+   */
+  private stuckAsks(prKeys: PrKey[]): PrEvent[] {
+    const { store, viewer } = this.deps;
+    const events = store.events.listForPrs(prKeys);
+    const open = [...store.prs.getMany(prKeys).values()].filter((pr) => pr.state === 'OPEN');
+    return open.flatMap((pr) =>
+      (events.get(pr.key) ?? []).filter((event) => event.override === null && isUnansweredAsk(pr, event, viewer, PERSONAL_ASK_KINDS)),
+    );
+  }
+
+  /**
+   * Events without an override that need an opinion (needsOpinion), logged
+   * after afterSeq, per PR. With `rejudge`, the stuck asks too.
+   */
+  private items(prKeys: PrKey[], afterSeq: number, rejudge: boolean): EventItem[] {
+    const logged = this.deps.store.eventLog.listSince(prKeys, afterSeq).map((entry) => entry.event);
+    const events = logged.filter(needsOpinion);
+    if (rejudge) {
+      const ids = new Set(events.map((event) => event.id));
+      events.push(...this.stuckAsks(prKeys).filter((event) => !ids.has(event.id)));
+      events.sort((a, b) => (a.at < b.at ? -1 : 1));
+    }
     const byPr = new Map<PrKey, PrEvent[]>();
-    for (const { event } of this.deps.store.eventLog.listSince(prKeys, afterSeq)) {
-      if (needsOpinion(event)) {
-        const list = byPr.get(event.prKey) ?? [];
-        list.push(event);
-        byPr.set(event.prKey, list);
-      }
+    for (const event of events) {
+      const list = byPr.get(event.prKey) ?? [];
+      list.push(event);
+      byPr.set(event.prKey, list);
     }
     const prs = this.deps.store.prs.getMany([...byPr.keys()]);
     return [...byPr].flatMap(([key, events]) => {
@@ -102,22 +146,38 @@ export class EventBatchClassifier {
     }
   }
 
-  private async runGroup(group: EventGroup, toSeq: number): Promise<void> {
+  /** When a batch was skipped or failed, the cursor (and the group's re-judge key) stays put. */
+  private async runGroup(group: EventGroup, toSeq: number, rejudge: boolean): Promise<void> {
     const { store } = this.deps;
     const cursorSeq = store.cursors.get('classify', group.scope)?.seq ?? 0;
-    const batches = chunk(this.items(group.prKeys, cursorSeq), EVENT_BATCH_PRS);
+    const batches = chunk(this.items(group.prKeys, cursorSeq, rejudge), EVENT_BATCH_PRS);
     const done = await Promise.all(batches.map((batch) => this.classify(group.topicId, batch)));
-    if (done.every(Boolean)) {
-      const updatedAt = this.deps.now().toISOString();
-      store.cursors.advance({ kind: 'classify', scope: group.scope, seq: toSeq, dossierVersion: null, updatedAt });
+    if (!done.every(Boolean)) {
+      return;
+    }
+    const updatedAt = this.deps.now().toISOString();
+    store.cursors.advance({ kind: 'classify', scope: group.scope, seq: toSeq, dossierVersion: null, updatedAt });
+    if (rejudge) {
+      store.meta.set(rejudgeKey(group), updatedAt);
     }
   }
 
-  /** Every topic and Unsorted, or only the scope's (a glance catch-up run). */
+  /**
+   * Every topic and Unsorted, or only the scope's (a glance catch-up run).
+   * Full runs re-judge the stuck asks of each group that has not done it
+   * yet; a capped or failed group tries again on the next sync, the others
+   * do not send theirs again. Once every group did, the global flag ends it.
+   */
   async run(scope: TopicScope | null = null): Promise<void> {
+    const { store } = this.deps;
     // Taken once up front: events logged while calls run are left for the next sync.
-    const toSeq = this.deps.store.eventLog.maxSeq();
+    const toSeq = store.eventLog.maxSeq();
+    const rejudgeOpen = scope === null && store.meta.get(REJUDGE_ASKS_KEY) === null;
     const groups = this.groups().filter((group) => scope === null || group.topicId === scope.topicId);
-    await Promise.all(groups.map((group) => this.runGroup(group, toSeq)));
+    const rejudged = (group: EventGroup) => store.meta.get(rejudgeKey(group)) !== null;
+    await Promise.all(groups.map((group) => this.runGroup(group, toSeq, rejudgeOpen && !rejudged(group))));
+    if (rejudgeOpen && groups.every(rejudged)) {
+      store.meta.set(REJUDGE_ASKS_KEY, this.deps.now().toISOString());
+    }
   }
 }

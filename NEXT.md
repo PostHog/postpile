@@ -642,6 +642,13 @@ now".
 - A database from before the classify cursor gives a second opinion on its
   older loud unseen events once, on the first sync after the upgrade (one
   call per topic with such events, within `--max-agent-calls`).
+- Asks the events agent judged before 2026-09-29 sit behind the classify
+  cursor. The first full syncs after the upgrade send every unanswered loud
+  personal ask on an open PR once more, once per topic (meta
+  `events_rejudge_asks_v1:<topic>`, then the global
+  `events_rejudge_asks_v1`; within the call cap, merged into the topic's
+  normal batch), so an old "thanks, that's fine" can go quiet. No cursor
+  reset. The per-topic keys stay in `meta` after the global flag is set.
 - Topics without a stored dossier context hash count as unchanged; the hash
   is written on their next dossier update.
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
@@ -952,6 +959,13 @@ the app meanwhile.
   one hourly telemetry summary (`pings_summarized`, counts only), and the
   notifications debug view shows ping decisions. DESIGN.md "Handled
   quietly".
+- **A reply that asks nothing is not your move** (2026-09-29): whose turn,
+  Needs reply and the after-read toast skip an ask (reply, mention,
+  question) the events agent lowered to quiet or muted. The agent prompt
+  says a plain acknowledgement ("thanks", "yeah that's fine") is quiet, and
+  read personal asks go to the agent too. Julian: "if the author just
+  replies 'Oh yeah, that's fine,' that's not my move to reply again".
+  DESIGN.md "Whose turn", rule 2.
 
 - **Each topic once in the sidebar; "Changes you requested" under Needs
   reply** (2026-09-29): a topic shows only in its highest section (the

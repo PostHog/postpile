@@ -245,6 +245,17 @@ describe('eventBatchPrompt', () => {
     expect(prompt).toContain('  files: .github/workflows/ci.yml');
     expect(prompt).not.toContain('new commits after\n  they approved');
   });
+
+  it('says a reply that asks nothing is quiet, marks read asks, and never makes a merge loud', () => {
+    const thanks = makeEvent({ id: 't', kind: 'reply_to_user', ruleLoudness: 'loud', summary: "bob replied to you: thanks, that's fine", seenAt: '2026-09-02T10:00:00Z' });
+    const prompt = eventBatchPrompt({ topic: makeTopic(), items: [{ pr: pr1, events: [thanks] }], viewer, context: fullContext });
+    expect(prompt).toContain('A reply or\nmention that asks nothing of the user');
+    expect(prompt).toContain('is quiet: no answer is owed');
+    expect(prompt).toContain("user's answer stays loud");
+    expect(prompt).toContain('- id t | 2026-09-02T09:00:00Z | reply_to_user by @bob (already read) |');
+    expect(prompt).not.toContain('merged\n  without their review');
+    expect(prompt).not.toContain('instructions care about that');
+  });
 });
 
 describe('consolidationPrompt', () => {

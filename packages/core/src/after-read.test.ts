@@ -54,6 +54,21 @@ describe('tileAfterMarkRead', () => {
     expect(result.turn).toEqual(NO_TURN);
   });
 
+  it('is not done while a reply to you is unanswered', () => {
+    const reply = makeEvent({ kind: 'reply_to_user', actor: 'ada', at: at(20), ruleLoudness: 'loud' });
+    const result = afterRead(makePr({ author: 'ada' }), [reply]);
+    expect(result.done).toBe(false);
+    expect(result.turn).toMatchObject({ kind: 'you', what: 'Reply to ada' });
+  });
+
+  it('is done when the events agent lowered the reply: a plain thanks is not still your move', () => {
+    const reply = makeEvent({ kind: 'reply_to_user', actor: 'ada', at: at(20), ruleLoudness: 'loud' });
+    const lowered: PrEvent = { ...reply, override: { loudness: 'quiet', reason: 'Only says thanks.', by: 'agent' } };
+    const result = afterRead(makePr({ author: 'ada' }), [lowered]);
+    expect(result.done).toBe(true);
+    expect(result.turn).toEqual(NO_TURN);
+  });
+
   it('is done on a PR you only follow', () => {
     const comment = makeEvent({ kind: 'comment', actor: 'bob', at: at(20), ruleLoudness: 'loud' });
     expect(afterRead(makePr({ author: 'ada' }), [comment]).done).toBe(true);
