@@ -209,6 +209,9 @@ describe('server routes over the fake engine', () => {
     expect((await opened(yours.tile.members[0]!.prKey)).json).toEqual({ marked: false });
     expect((await opened(doneKey)).json).toEqual({ marked: true });
     expect((await opened(doneKey)).json).toEqual({ marked: false });
+    // Handled in PostPile too: the tile is done now, not just read.
+    const topic = (await (await app.request(`/api/topics/${done.tile.topicId}`)).json()) as TopicDetail;
+    expect(topic.tiles.find((view) => view.tile.id === done.tile.id)?.state.kind).toBe('done');
 
     const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
     expect(quiet[0]).toMatchObject({ prKey: doneKey, reason: 'opened' });

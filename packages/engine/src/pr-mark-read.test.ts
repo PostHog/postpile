@@ -141,3 +141,34 @@ describe('markPrRead: the detail pane acts on the selected PR', () => {
     expect(doneByKey(await setView(h))[second.key]).toBe(false);
   });
 });
+
+describe('markOpenedRead on a set: checked per PR', () => {
+  /** A PR in the set that asks the viewer for a review: a mark-read cannot make it done. */
+  async function syncedWithAsk(): Promise<{ h: Harness; asking: Pr }> {
+    const h = await syncedSet();
+    const asking = makePr({ number: 13, author: 'alice', reviewerUsers: ['viewer'], updatedAt: at(6) });
+    h.reader.addPr(asking, makeThreadFor(asking, { reason: 'review_requested' }));
+    // A new inbox answer, so the second sync fetches it.
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.memberships.assign({ prKey: asking.key, topicId: TOPIC, assignedBy: 'agent', reason: '', createdAt: at(0) });
+    const set = h.store.sets.get('s1')!;
+    h.store.sets.save({ ...set, members: [...set.members, { prKey: asking.key, reason: 'c' }] });
+    return { h, asking };
+  }
+
+  it('opening one PR handles it while another member still asks for a review; the set stays open', async () => {
+    const { h, asking } = await syncedWithAsk();
+    await h.engine.setGitHubWrites(true);
+    expect((await setView(h)).afterRead.done).toBe(false);
+
+    expect(await h.engine.markOpenedRead(second.key)).toEqual({ marked: true });
+
+    expect(h.writer.calls).toEqual([`markThreadRead thread-${second.ref.number}`]);
+    const view = await setView(h);
+    expect(doneByKey(view)).toEqual({ [first.key]: false, [second.key]: true, [asking.key]: false });
+    expect(view.state.kind).not.toBe('done');
+    // The PR that asks for a review is left alone.
+    expect(await h.engine.markOpenedRead(asking.key)).toEqual({ marked: false });
+  });
+});

@@ -234,40 +234,45 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
 /** One tile that holds the opened PR, as far as the "opened in PostPile" rule cares. */
 export interface OpenedTile {
   snoozed: boolean;
-  /** A mark-read would leave the tile done: nothing asked of the user (`TileView.afterRead.done`). */
+}
+
+/**
+ * Why opening a PR in PostPile leaves it alone:
+ * - no_thread: the PR has no notification thread (a found PR): nothing on GitHub to mirror
+ * - no_tile: no tile shows the PR
+ * - snoozed: the user put a tile holding it away for later
+ * - asks_you: a mark-read of the PR would leave something asked of the user
+ * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, so the user did not see the newest activity
+ */
+export type OpenedSkip = 'no_thread' | 'no_tile' | 'snoozed' | 'asks_you' | 'stale_snapshot';
+
+/**
+ * mark: the thread is unread on GitHub; mark it read there, then handle the
+ * PR here. handle: GitHub has the thread read already (a github.com visit,
+ * an earlier open), so only PostPile's side is left: handle the PR here.
+ */
+export type OpenedReadCheck = { kind: 'mark' } | { kind: 'handle' } | { kind: 'skip'; why: OpenedSkip };
+
+export interface OpenedReadInput {
+  /** The PR's notification thread, null when it has none (a found PR). */
+  thread: NotificationThread | null;
+  prFetchedAt: IsoTime | null;
+  /** Every tile that holds the PR. */
+  tiles: OpenedTile[];
+  /** A mark-read of this PR alone would leave it done: nothing asked of the user (`PrSummary.afterRead.done`). */
   doneAfterRead: boolean;
 }
 
 /**
- * Why opening a PR in PostPile leaves its GitHub thread alone:
- * - not_unread: GitHub has it read already
- * - stale_snapshot: the stored PR snapshot is older than the thread, so the user did not see the newest activity
- * - no_tile: no tile shows the PR
- * - snoozed: the user put a tile holding it away for later
- * - asks_you: a mark-read would leave something asked of the user
- */
-export type OpenedSkip = 'not_unread' | 'stale_snapshot' | 'no_tile' | 'snoozed' | 'asks_you';
-
-export type OpenedReadCheck = { kind: 'mark' } | { kind: 'skip'; why: OpenedSkip };
-
-export interface OpenedReadInput {
-  thread: NotificationThread;
-  prFetchedAt: IsoTime | null;
-  /** Every tile that holds the PR. */
-  tiles: OpenedTile[];
-}
-
-/**
- * Whether opening the PR in PostPile's detail pane may mark its thread read
- * on GitHub, like a visit on github.com does, limited to cases where that
- * cannot hide a to-do (DESIGN.md "You already dealt with it", part 3).
+ * Whether opening the PR in PostPile's detail pane may mark it read on
+ * GitHub, like a visit on github.com does, and handle it in PostPile, limited
+ * to cases where that cannot hide a to-do (DESIGN.md "You already dealt with
+ * it", part 3). Checked per PR since 2026-09-29: that PR done after a
+ * mark-read, no tile holding it snoozed.
  */
 export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
-  if (!input.thread.unread) {
-    return { kind: 'skip', why: 'not_unread' };
-  }
-  if (!snapshotCoversThread(input)) {
-    return { kind: 'skip', why: 'stale_snapshot' };
+  if (input.thread === null) {
+    return { kind: 'skip', why: 'no_thread' };
   }
   if (input.tiles.length === 0) {
     return { kind: 'skip', why: 'no_tile' };
@@ -275,8 +280,14 @@ export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (input.tiles.some((tile) => tile.snoozed)) {
     return { kind: 'skip', why: 'snoozed' };
   }
-  if (!input.tiles.every((tile) => tile.doneAfterRead)) {
+  if (!input.doneAfterRead) {
     return { kind: 'skip', why: 'asks_you' };
+  }
+  if (!input.thread.unread) {
+    return { kind: 'handle' };
+  }
+  if (!snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt })) {
+    return { kind: 'skip', why: 'stale_snapshot' };
   }
   return { kind: 'mark' };
 }

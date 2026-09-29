@@ -1048,29 +1048,38 @@ export class FakeEngine implements EngineService {
     return this.markPrsRead([], [], 'debug', null, [thread]);
   }
 
-  /** Like QuietReads.markOpened, in memory: the sample thread turns read and the PR's events seen. */
+  /**
+   * Like QuietReads.markOpened, in memory: when a mark-read of that PR would
+   * leave it done, the sample thread turns read (if it is unread) and the PR
+   * is handled, its events seen.
+   */
   async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
     this.writes.settle();
     if (!this.writes.isEnabled()) {
       return { marked: false };
     }
-    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
-    if (!thread) {
-      return { marked: false };
-    }
-    const tiles = this.tilesHolding(prKey).map((tile) => {
-      const view = this.tileView(tile);
-      return { snoozed: view.state.kind === 'snoozed', doneAfterRead: view.afterRead.done };
+    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey) ?? null;
+    const views = this.tilesHolding(prKey).map((tile) => this.tileView(tile));
+    const rows = views.flatMap((view) => view.prs.filter((pr) => pr.key === prKey));
+    const check = openedReadCheck({
+      thread,
+      // Sample snapshots are always as fresh as their threads.
+      prFetchedAt: thread?.updatedAt ?? null,
+      tiles: views.map((view) => ({ snoozed: view.state.kind === 'snoozed' })),
+      doneAfterRead: rows.some((pr) => pr.afterRead.done),
     });
-    // Sample snapshots are always as fresh as their threads.
-    if (openedReadCheck({ thread, prFetchedAt: thread.updatedAt, tiles }).kind === 'skip') {
+    if (check.kind === 'skip' || thread === null) {
       return { marked: false };
     }
-    this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
-    for (const event of this.eventsOf(prKey)) {
-      event.seenAt ??= this.timestamp();
+    if (check.kind === 'mark') {
+      this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
     }
-    return { marked: true };
+    const change = this.markSampleRead([prKey], [prKey]);
+    const handled = change.eventIds.length > 0 || change.handledPrKeys.length > 0;
+    if (check.kind === 'handle' && handled) {
+      this.writes.record({ action: 'mark_read', origin: 'quiet', outcome: 'local', threadId: thread.id, prKey, detail: 'no unread GitHub thread' });
+    }
+    return { marked: check.kind === 'mark' || handled };
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

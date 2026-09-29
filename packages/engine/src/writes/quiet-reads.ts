@@ -1,11 +1,12 @@
 import {
   eventsReadOnGitHub,
+  isTracked,
   openedReadCheck,
+  prAfterMarkRead,
   quietReadCheck,
   quietReadDetail,
   quietReasonDetail,
   QUIET_READS_PER_RUN,
-  tileAfterMarkRead,
   touchedReadCheck,
   type NotificationThread,
   type OpenedTile,
@@ -127,32 +128,64 @@ export class QuietReads {
     return true;
   }
 
-  /** Every tile that holds the PR: snoozed, and done after a mark-read (the rules behind `TileView.afterRead`). */
+  /** Every tile that holds the PR, and whether one of them is snoozed. */
   private tilesHolding(board: Board, prKey: PrKey): OpenedTile[] {
     return board
       .allTiles()
       .filter((tile) => tile.members.some((member) => member.prKey === prKey))
-      .map((tile) => ({
-        snoozed: board.stateOf(tile).kind === 'snoozed',
-        doneAfterRead: tileAfterMarkRead({
-          tile,
-          prs: board.prs,
-          events: board.events,
-          userStates: board.userStates,
-          viewer: board.viewer,
-          notYours: board.notYours,
-          readAt: board.now,
-        }).done,
-      }));
+      .map((tile) => ({ snoozed: board.stateOf(tile).kind === 'snoozed' }));
+  }
+
+  /** A mark-read of this PR alone would leave it done (the rule behind `PrSummary.afterRead`); tracked when any tile tracks it. */
+  private prDoneAfterRead(board: Board, prKey: PrKey): boolean {
+    const pr = board.prs.get(prKey);
+    if (!pr) {
+      return false;
+    }
+    const tracked = board
+      .allTiles()
+      .some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
+    return prAfterMarkRead({
+      pr,
+      events: board.events.get(prKey) ?? [],
+      userState: board.userStates.get(prKey) ?? null,
+      viewer: board.viewer,
+      notYours: board.notYours.has(prKey),
+      tracked,
+      readAt: board.now,
+    }).done;
+  }
+
+  /**
+   * PostPile's side of an open: every event of the PR seen and the PR
+   * handled, like a mark-read of it. True when anything changed.
+   */
+  private handleOpened(prKey: PrKey, at: string): boolean {
+    let changed = false;
+    this.store.transaction(() => {
+      const unseen = this.store.events
+        .listForPr(prKey)
+        .filter((event) => event.seenAt === null)
+        .map((event) => event.id);
+      this.store.events.markSeen(unseen, at);
+      const handled = this.store.userPrStates.get(prKey)?.handledAt ?? null;
+      if (handled === null) {
+        this.store.userPrStates.markHandled(prKey, at);
+      }
+      changed = unseen.length > 0 || handled === null;
+    });
+    return changed;
   }
 
   /**
    * "Opened in PostPile" (DESIGN.md "You already dealt with it"): the user
-   * opened the PR in the detail pane. Its thread is marked read on GitHub,
-   * like a visit on github.com, when a mark-read would leave every tile
-   * holding it done and none is snoozed (`openedReadCheck`), and only while
-   * writes are unlocked. Same write and mirror as the sync's quiet
-   * mark-reads, no undo window. True when GitHub took it.
+   * opened the PR in the detail pane. When a mark-read of that PR would leave
+   * it done and no tile holding it is snoozed (`openedReadCheck`), and only
+   * while writes are unlocked: its thread is marked read on GitHub if it is
+   * unread there (same write and mirror as the sync's quiet mark-reads, no
+   * undo window), and the PR is handled here too (2026-09-29), events seen
+   * and `handledAt` set. A thread GitHub has read already only gets the
+   * PostPile side. True when anything changed.
    */
   async markOpened(prKey: PrKey): Promise<boolean> {
     if (!this.writes.enabled()) {
@@ -160,19 +193,29 @@ export class QuietReads {
     }
     const nowIso = this.now().toISOString();
     const board = Board.load(this.store, nowIso);
-    const thread = board.threads.get(prKey);
-    if (!thread) {
+    const thread = board.threads.get(prKey) ?? null;
+    const check = openedReadCheck({
+      thread,
+      prFetchedAt: this.store.prs.fetchedAtByKey().get(prKey) ?? null,
+      tiles: this.tilesHolding(board, prKey),
+      doneAfterRead: this.prDoneAfterRead(board, prKey),
+    });
+    if (check.kind === 'skip' || thread === null) {
       return false;
     }
-    const check = openedReadCheck({ thread, prFetchedAt: this.store.prs.fetchedAtByKey().get(prKey) ?? null, tiles: this.tilesHolding(board, prKey) });
-    if (check.kind === 'skip') {
-      return false;
+    if (check.kind === 'mark') {
+      const marked = await this.markOne({ thread, prKey, detail: quietReasonDetail('opened') });
+      if (!marked) {
+        return false;
+      }
     }
-    const marked = await this.markOne({ thread, prKey, detail: quietReasonDetail('opened') });
-    if (marked) {
-      advanceSeenFromGitHub(this.store, [prKey], nowIso);
+    const handled = this.handleOpened(prKey, nowIso);
+    if (check.kind === 'handle' && handled) {
+      // GitHub had it read already: logged like any mark-read that only changed the app.
+      this.writes.log.record({ action: 'mark_read', origin: 'quiet', outcome: 'local', prKey, threadId: thread.id, detail: 'no unread GitHub thread' });
     }
-    return marked;
+    advanceSeenFromGitHub(this.store, [prKey], nowIso);
+    return check.kind === 'mark' || handled;
   }
 
   async run(): Promise<QuietReadsResult> {

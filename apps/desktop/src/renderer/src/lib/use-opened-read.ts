@@ -4,7 +4,7 @@ import { useActions } from '../api/actions.tsx';
 import { opensMarkRead, OpenedReadTimer, type OpenedTileView } from './opened-read.ts';
 
 /**
- * Marks the PR in the detail pane read on GitHub once it stayed open for
+ * Marks the PR in the detail pane read on GitHub (and handled in PostPile) once it stayed open for
  * OPENED_READ_DELAY_MS while the window is visible, when `opensMarkRead`
  * says so. Once per open (`OpenedReadTimer`): re-renders and refetches of
  * the same PR ask nothing more, hiding the window restarts the wait, and

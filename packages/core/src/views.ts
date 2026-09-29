@@ -355,8 +355,9 @@ export interface ActionResult {
   undoToken: string | null;
 }
 
-/** Opening a PR in PostPile: whether its GitHub thread was marked read ("opened in PostPile"). Nothing to show either way. */
+/** Opening a PR in PostPile: whether its GitHub thread was marked read or the PR handled ("opened in PostPile"). Nothing to show either way. */
 export interface OpenedReadResult {
+  /** Something changed (the thread on GitHub, or the PR's handled state here): the renderer refetches. */
   marked: boolean;
 }
 

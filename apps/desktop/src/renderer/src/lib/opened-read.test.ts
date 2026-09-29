@@ -7,16 +7,28 @@ const ON = { enabled: true, forcedOffReason: null, pending: [] };
 const OFF = { enabled: false, forcedOffReason: null, pending: [] };
 
 function view(kind: TileStateKind, done: boolean): OpenedTileView {
-  return { state: { kind, unreadBecause: [] }, afterRead: { done, turn: NONE }, prs: [{ key: 'acme/app#3' }] };
+  return { state: { kind, unreadBecause: [] }, prs: [{ key: 'acme/app#3', afterRead: { done, turn: NONE } }] };
 }
 
 describe('opensMarkRead', () => {
-  it('asks when a mark-read leaves the tile done and writes are unlocked', () => {
+  it('asks when a mark-read of that PR leaves it done and writes are unlocked', () => {
     expect(opensMarkRead(view('unread', true), 'acme/app#3', ON)).toBe(true);
     expect(opensMarkRead(view('open', true), 'acme/app#3', ON)).toBe(true);
   });
 
-  it('never asks for a tile that stays your move or is snoozed', () => {
+  it('checks the opened PR, not the rest of the set', () => {
+    const set: OpenedTileView = {
+      state: { kind: 'open', unreadBecause: [] },
+      prs: [
+        { key: 'acme/app#3', afterRead: { done: true, turn: NONE } },
+        { key: 'acme/app#4', afterRead: { done: false, turn: { kind: 'you', move: 'review', who: null, what: 'Review', prKey: 'acme/app#4' } } },
+      ],
+    };
+    expect(opensMarkRead(set, 'acme/app#3', ON)).toBe(true);
+    expect(opensMarkRead(set, 'acme/app#4', ON)).toBe(false);
+  });
+
+  it('never asks for a PR that stays your move or a snoozed tile', () => {
     expect(opensMarkRead(view('unread', false), 'acme/app#3', ON)).toBe(false);
     expect(opensMarkRead(view('snoozed', true), 'acme/app#3', ON)).toBe(false);
   });
