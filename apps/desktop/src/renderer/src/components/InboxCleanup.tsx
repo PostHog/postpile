@@ -26,7 +26,7 @@ export function InboxCleanup(props: { place: 'line' | 'banner' }) {
   if (props.place === 'line') {
     return (
       <>
-        <p className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-faint">
+        <p className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-hint">
           <span className="truncate">{backlogText(view)}</span>
           <span>·</span>
           <button type="button" onClick={() => setOpen(true)} className="shrink-0 text-muted hover:text-ink hover:underline">

@@ -116,7 +116,7 @@ export function RepoScopeMenu() {
               <RepoRow key={entry.repo} entry={entry} busy={busy} />
             ))}
           </ul>
-          <p className="border-t border-hairline px-2 pt-1.5 pb-0.5 text-[10.5px] leading-snug text-faint">
+          <p className="border-t border-hairline px-2 pt-1.5 pb-0.5 text-[10.5px] leading-snug text-hint">
             A repo picks the topics; an open topic still shows all its tiles. Quiet repos still sync, but never ping or make a
             topic urgent.
           </p>

@@ -8,9 +8,10 @@ import { type SearchFilter } from '../lib/search.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
+import { teamPill } from '../lib/faces.ts';
 import { yourMoveChip } from '../lib/your-move.ts';
 import { Avatar } from './Avatar.tsx';
-import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon } from './icons.tsx';
+import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
 import { InboxCleanup } from './InboxCleanup.tsx';
 
@@ -64,16 +65,39 @@ function UnreadBubble(props: { item: TopicListItem }) {
   );
 }
 
-/** Up to three faces (`TopicListItem.people`): you and your team with a sea ring, else the others. */
+/**
+ * Up to three faces (`TopicListItem.people`, PR authors only). You and your
+ * teammates sit together in the team pill (sea tint, thin sea border, the
+ * people icon first); the other authors follow outside it as plain avatars,
+ * overlapping like the faces inside (the first one onto the pill's edge).
+ */
 function FaceStack(props: { people: TopicPerson[]; active: boolean }) {
-  const background = props.active ? 'ring-surface' : 'ring-sidebar';
+  const ring = props.active ? 'ring-surface' : 'ring-sidebar';
+  const pill = teamPill(props.people);
   return (
-    <span className="flex shrink-0 items-center pl-[5px]">
-      {props.people.map((person) => (
-        <span key={person.login} className="-ml-[5px] rounded-full" title={person.relation === 'other' ? person.login : `${person.login} (${person.relation === 'you' ? 'you' : 'team'})`}>
-          <Avatar login={person.login} className={`ring-2 ${person.relation === 'other' ? background : 'ring-sea'}`} />
+    <span className="flex shrink-0 items-center">
+      {pill.ours.length > 0 && (
+        <span title={pill.title} className="flex h-[22px] items-center rounded-full border border-sea-pale bg-sea-soft pr-[2px] pl-1.5 text-sea-ink">
+          <PeopleIcon size={11} />
+          <span className="flex pl-[7px]">
+            {pill.ours.map((person) => (
+              <span key={person.login} className="-ml-[5px] rounded-full">
+                <Avatar login={person.login} className="ring-2 ring-sea-soft" />
+              </span>
+            ))}
+          </span>
         </span>
-      ))}
+      )}
+      {pill.others.length > 0 && (
+        // Same overlap as inside the pill; next to a pill the first face tucks onto its edge.
+        <span className={`flex ${pill.ours.length > 0 ? '' : 'pl-[5px]'}`}>
+          {pill.others.map((person) => (
+            <span key={person.login} className="-ml-[5px] rounded-full" title={person.login}>
+              <Avatar login={person.login} className={`ring-2 ${ring}`} />
+            </span>
+          ))}
+        </span>
+      )}
     </span>
   );
 }
@@ -159,7 +183,7 @@ function SectionHeader(props: { tier: PrTier | 'other' }) {
 
 /** A section title that folds its topics away. */
 function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; indent?: boolean }) {
-  const size = props.small ? 'text-[10.5px] font-medium text-muted' : 'text-[11px] font-semibold tracking-[0.04em] text-muted';
+  const size = props.small ? 'text-[10.5px] font-medium text-hint' : 'text-[11px] font-semibold tracking-[0.04em] text-hint';
   return (
     <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center gap-1.5 py-1 text-left ${props.indent ? 'px-4' : 'px-2'}`}>
       <span className={`text-faint ${props.open ? '' : '-rotate-90'}`}>

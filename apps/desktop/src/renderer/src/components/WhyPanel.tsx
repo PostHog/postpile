@@ -11,17 +11,20 @@ const TONES: Record<CheckTone, string> = {
   muted: 'bg-segment text-muted',
 };
 
-/** "Why do you think this?": the sources behind one fact or dossier line and whether it still checks out. */
-export function WhyPanel(props: { target: MemoryTarget; onClose: () => void }) {
+/**
+ * "Why do you think this?": the sources behind one fact or dossier line and
+ * whether it still checks out. `updating`: a sync or catch-up runs for the
+ * line's topic, so a stale check says "Updating now".
+ */
+export function WhyPanel(props: { target: MemoryTarget; updating: boolean; onClose: () => void }) {
   const now = useNow();
   const sources = useMemorySources(props.target, true);
   const data = sources.data;
+  const check = data ? checkLabel(data.check, props.updating) : null;
   return (
     <div className="mt-1.5 flex flex-col gap-2 rounded-row border border-hairline bg-subtle px-3 py-2.5">
       <div className="flex items-center gap-2">
-        {data && (
-          <span className={`rounded px-1.5 text-[10.5px] font-medium ${TONES[checkLabel(data.check).tone]}`}>{checkLabel(data.check).text}</span>
-        )}
+        {check && <span className={`rounded px-1.5 text-[10.5px] font-medium ${TONES[check.tone]}`}>{check.text}</span>}
         {data && (
           <span className="font-mono text-[10.5px] text-faint">
             {data.recordedIn} · {ageLabel(data.recordedAt, now)}
@@ -33,7 +36,7 @@ export function WhyPanel(props: { target: MemoryTarget; onClose: () => void }) {
       </div>
       {sources.isPending && <p className="text-xs text-muted">Looking up the sources…</p>}
       {sources.error && <p className="text-xs text-unread-ink">Could not load the sources: {sources.error.message}</p>}
-      {data && data.sources.length === 0 && <p className="text-xs text-faint">No source recorded for this line.</p>}
+      {data && data.sources.length === 0 && <p className="text-xs text-hint">No source recorded for this line.</p>}
       {data?.sources.map((source, index) => (
         <MemorySourceRow key={`${source.kind}:${source.title}:${index}`} source={source} />
       ))}

@@ -37,6 +37,31 @@ export function refLabel(ref: FactRef): string {
   return ref.kind === 'pr' || ref.kind === 'event' ? number : `${number} ${ref.kind}`;
 }
 
+/** Two refs draw the same chip when they show the same label and lead to the same place. */
+function chipKey(ref: FactRef): string {
+  return `${refLabel(ref)}|${ref.url ?? ''}`;
+}
+
+/**
+ * The source chips per line of one block (the since-you-looked list, open
+ * questions, a PR's facts): a chip already shown on an earlier line, or
+ * earlier on the same line, is left out, so "#1902" does not repeat down
+ * the block. Same order and length as `lines`.
+ */
+export function blockRefs(lines: { refs: FactRef[] }[]): FactRef[][] {
+  const shown = new Set<string>();
+  return lines.map((line) =>
+    line.refs.filter((ref) => {
+      const key = chipKey(ref);
+      if (shown.has(key)) {
+        return false;
+      }
+      shown.add(key);
+      return true;
+    }),
+  );
+}
+
 /** Why a dossier claim at `path` (e.g. "openQuestions[2]") failed verification, if it did. */
 export function claimStaleReason(path: string, issues: DossierIssue[]): StaleReason | null {
   return issues.find((issue) => issue.path === path)?.reason ?? null;

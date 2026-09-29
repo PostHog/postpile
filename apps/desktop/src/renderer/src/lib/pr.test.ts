@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrStatus, Review } from '@postpile/core';
 import { at, makePr } from '@postpile/core/fixtures';
-import { approvedText, checkCounts, LIFECYCLE_WORDS, mergeStatus, reviewRows, reviewWord, rowStateWord } from './pr.ts';
+import { approvedText, checkCounts, checksNote, LIFECYCLE_WORDS, mergeStatus, reviewRows, reviewWord, rowStateWord } from './pr.ts';
 
 function review(author: string, state: Review['state'], minutes: number): Review {
   return { id: `${author}-${minutes}`, author, state, body: '', submittedAt: at(minutes), commitOid: null };
@@ -38,6 +38,12 @@ describe('pr helpers', () => {
       ],
     });
     expect(counts).toEqual({ ok: 2, failed: 1, pending: 1, total: 4 });
+  });
+
+  it('words checks neutrally, failed and running together as not passing', () => {
+    expect(checksNote({ ok: 2, failed: 1, pending: 1, total: 4 })).toBe('4 checks · 2 not passing');
+    expect(checksNote({ ok: 3, failed: 0, pending: 0, total: 3 })).toBe('3 checks · all passing');
+    expect(checksNote({ ok: 1, failed: 0, pending: 0, total: 1 })).toBe('1 check · all passing');
   });
 
   it('describes the merge status', () => {

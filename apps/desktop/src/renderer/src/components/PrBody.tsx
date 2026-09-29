@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import type { PrDetail, PrLifecycle, PrStatus, PrSummary, TileView } from '@postpile/core';
+import { useActions } from '../api/actions.tsx';
+import { updatingNow } from '../lib/staleness.ts';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
@@ -71,8 +73,11 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus | 
 
 /** The scrolling part of the detail pane for one PR. */
 export function PrBody(props: PrBodyProps) {
+  const { syncing } = useActions();
   const { pr } = props.detail;
   const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
+  // A catch-up run on the PR's topic shows as its glance writing; facts get rewritten by it too.
+  const updating = updatingNow({ syncing, writing: props.detail.glanceState === 'writing' });
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-[22px] py-[18px]">
       <StateLine pr={pr} status={props.summary?.status ?? null} />
@@ -94,7 +99,7 @@ export function PrBody(props: PrBodyProps) {
       <PrDescription key={pr.key} body={pr.body} />
       <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
       <ReviewList pr={pr} />
-      <AgentFacts facts={props.detail.facts} />
+      <AgentFacts facts={props.detail.facts} updating={updating} />
       <ActivityTimeline activity={props.detail.activity} />
     </div>
   );

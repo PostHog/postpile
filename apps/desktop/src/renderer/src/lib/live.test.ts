@@ -30,7 +30,8 @@ describe('liveLabel', () => {
   });
 
   it('says why it is paused', () => {
-    expect(liveLabel({ ...running, state: 'blocked', note: 'full sync running' }, now).text).toBe('live · paused: full sync running');
+    expect(liveLabel({ ...running, state: 'blocked', note: 'full sync running' }, now).text).toBe('live · paused while syncing');
+    expect(liveLabel({ ...running, state: 'blocked', note: 'consolidating' }, now).text).toBe('live · paused: consolidating');
   });
 });
 

@@ -2,9 +2,10 @@ import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postp
 import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
 import { glanceStateText } from '../lib/glance.ts';
+import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { isDraftTile, kindLabel, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { isDraftTile, kindLabel, leadPr, newsPrKeys, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
@@ -84,13 +85,16 @@ function PeopleStack(props: { people: TilePerson[] }) {
 }
 
 /**
- * The tile's PR rows. One PR: a white bordered box. A stack or set: one
- * tinted box with rounded member rows, the selected one highlighted.
+ * The tile's PR rows. One PR: a white bordered box without the title (the
+ * tile's heading is the title). A stack or set: one tinted box with rounded
+ * member rows, the selected one highlighted. A PR with news that keeps the
+ * tile unread gets the coral dot.
  */
 function PrRows(props: TileProps & { done: boolean }) {
   const { view } = props;
   const grouped = view.prs.length > 1;
   const places = stackPlaces(view.tile.stacks);
+  const news = newsPrKeys(view);
   const box = grouped
     ? `gap-0.5 p-[3px] ${props.selected ? 'bg-accent-soft' : 'bg-subtle'} border ${props.selected ? 'border-accent-line' : 'border-hairline-soft'}`
     : `overflow-hidden border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`;
@@ -103,6 +107,8 @@ function PrRows(props: TileProps & { done: boolean }) {
           grouped={grouped}
           showForWhom={grouped && !sameForWhom(pr.forWhom, view.forWhom)}
           stackPlace={places.get(pr.key) ?? null}
+          showTitle={grouped}
+          news={news.has(pr.key)}
           selected={props.selected && pr.key === props.selectedPrKey}
           greyed={props.done}
           onClick={() => props.onSelect(pr.key)}
@@ -129,6 +135,7 @@ export function Tile(props: TileProps) {
   const lead = leadPr(view);
   const nextAutoSyncAt = useNextAutoSyncAt();
   const glanceText = lead ? glanceStateText({ state: lead.glanceState, gap: lead.glanceGap, nextAutoSyncAt, now }) : null;
+  const glanceUpdating = updatingNow({ syncing: actions.syncing, writing: lead?.glanceState === 'writing' });
   const forYou = tileForYou(view, props.sets);
   const updatedAt = tileUpdatedAt(view);
   const background = done ? 'bg-done' : props.filterMatch === true ? 'bg-warm-strip' : 'bg-surface';
@@ -191,11 +198,11 @@ export function Tile(props: TileProps) {
                 Draft
               </span>
             )}
-            <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} missing={glanceText} />
+            <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} updating={glanceUpdating} greyed={done} missing={glanceText} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}
             {view.quietRepo && (
-              <span className="shrink-0 text-[10.5px] text-faint" title="This repo is set to “Let it go stale” in the repo menu: still synced, never urgent, never pings">
+              <span className="shrink-0 text-[10.5px] text-hint" title="This repo is set to “Let it go stale” in the repo menu: still synced, never urgent, never pings">
                 quiet repo
               </span>
             )}

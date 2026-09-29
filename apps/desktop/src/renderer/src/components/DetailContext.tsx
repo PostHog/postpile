@@ -1,9 +1,9 @@
 import type { TileView } from '@postpile/core';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindLabel, prNumber, sameForWhom } from '../lib/tiles.ts';
+import { kindLabel, newsPrKeys, prNumber, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, StackMark, StateWordLabel } from './pills.tsx';
+import { ForWhomChip, NewsDot, StackMark, StateWordLabel } from './pills.tsx';
 
 interface DetailContextProps {
   view: TileView;
@@ -25,11 +25,18 @@ function NavButton(props: { back: boolean; ariaLabel: string; onClick: () => voi
   );
 }
 
-/** Tinted header that repeats the selected tile: kind, title, position, and its PRs. */
+/**
+ * Tinted header that repeats the selected tile. Several PRs: kind, title,
+ * "PR x of n" with arrows, and the PR list (coral dot on the PRs that keep
+ * the tile unread). One PR: just the kind; the title is right below in the
+ * body, and a counter or arrows would lead nowhere.
+ */
 export function DetailContext(props: DetailContextProps) {
   const { view } = props;
   const count = view.prs.length;
+  const several = count > 1;
   const places = stackPlaces(view.tile.stacks);
+  const news = newsPrKeys(view);
   const index = Math.max(
     view.prs.findIndex((pr) => pr.key === props.prKey),
     0,
@@ -49,14 +56,18 @@ export function DetailContext(props: DetailContextProps) {
           <KindIcon kind={view.tile.kind} size={14} />
           {kindLabel(view)}
         </span>
-        <span className="min-w-0 truncate text-[12.5px] text-ink-2">{view.tile.title}</span>
-        <span className="ml-auto shrink-0 font-mono text-[11px] whitespace-nowrap text-muted">
-          PR {index + 1} of {count}
-        </span>
-        <NavButton back ariaLabel="Previous PR in this tile" onClick={() => step(-1)} />
-        <NavButton back={false} ariaLabel="Next PR in this tile" onClick={() => step(1)} />
+        {several && (
+          <>
+            <span className="min-w-0 truncate text-[12.5px] text-ink-2">{view.tile.title}</span>
+            <span className="ml-auto shrink-0 font-mono text-[11px] whitespace-nowrap text-muted">
+              PR {index + 1} of {count}
+            </span>
+            <NavButton back ariaLabel="Previous PR in this tile" onClick={() => step(-1)} />
+            <NavButton back={false} ariaLabel="Next PR in this tile" onClick={() => step(1)} />
+          </>
+        )}
       </div>
-      {count > 1 && (
+      {several && (
         <div className="flex flex-col gap-1">
           {view.prs.map((pr) => {
             const picked = pr.key === props.prKey;
@@ -81,7 +92,8 @@ export function DetailContext(props: DetailContextProps) {
                 className={`flex h-8 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${look}`}
               >
                 <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
-                <span className={`shrink-0 font-mono text-[11px] ${quiet && !picked ? 'text-faint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
+                {news.has(pr.key) && <NewsDot />}
+                <span className={`shrink-0 font-mono text-[11px] ${quiet && !picked ? 'text-hint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
                 {place && <StackMark place={place} />}
                 <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>
                 {!sameForWhom(pr.forWhom, view.forWhom) && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} size="row" />}
