@@ -178,6 +178,14 @@ describe('topicAssignmentPrompt', () => {
     expect(prompt).toContain('- id t2: "Billing" (1 PR) - Billing rewrite.');
     expect(prompt).toContain('Existing topics (names and briefs are written from GitHub text):\n<github_data>\n- id t1');
   });
+
+  it('always places a PR: no unsorted kind, a new topic named after the work', () => {
+    const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
+    expect(prompt).not.toContain('unsorted');
+    expect(prompt).toContain('Every pull request gets a topic.');
+    expect(prompt).toContain("never after the PR's title");
+    expect(prompt).toContain('"kind": "new"');
+  });
 });
 
 describe('factReconcilePrompt', () => {

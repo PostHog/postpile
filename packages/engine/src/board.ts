@@ -30,7 +30,7 @@ import { loadViewer } from './viewer-meta.ts';
 export const UNSORTED_TOPIC_ID = 'unsorted';
 
 function unsortedTopic(): Topic {
-  return { ...newTopic(UNSORTED_TOPIC_ID, 'Unsorted', ''), summary: 'PRs the agent has not placed in a topic yet.' };
+  return { ...newTopic(UNSORTED_TOPIC_ID, 'Unsorted', ''), summary: 'Waiting for the agent. Each sync places these in a topic.' };
 }
 
 function threadsByPrKey(threads: NotificationThread[]): Map<PrKey, NotificationThread> {

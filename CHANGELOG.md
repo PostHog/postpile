@@ -2,6 +2,11 @@
 
 Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
 
+## 0.1.0-alpha.1 (unreleased)
+
+- Every PR now lands in a topic on the sync that sees it: the agent picks an existing topic or starts a new one named after the work. Unsorted only holds PRs the agent could not get to yet (call cap, claude missing, failed call), and the next sync places them. PRs parked in Unsorted by an earlier build are picked up on the next sync.
+- The app runs its daily memory tidy-up (merge proposals for small topics, fact merges, retiring finished topics) by itself when it is due.
+
 ## 0.1.0-alpha.0 (2026-09-28)
 
 First public build. macOS arm64 only, ad-hoc signed, not notarized.

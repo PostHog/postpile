@@ -9,9 +9,11 @@ function topicLine(topic: TopicChoice): string {
 }
 
 /**
- * Sorts new or changed PRs into the user's topics. Topics must stay stable,
- * so the prompt pushes hard towards existing ones. The engine creates new
- * topics directly; renames and merges stay proposals the user decides on.
+ * Sorts new or changed PRs into the user's topics. Every PR gets one: an
+ * existing topic or a new one. Topics must stay stable and few without a
+ * cap, so the prompt pushes hard towards existing ones and asks for broad
+ * names. The engine creates new topics directly; renames and merges stay
+ * proposals the user decides on.
  */
 export function topicAssignmentPrompt(input: TopicAssignmentInput): string {
   const topics = input.topics.length === 0 ? '(none yet)' : input.topics.map(topicLine).join('\n');
@@ -34,10 +36,10 @@ Rules:
   handful of initiatives, not one topic per PR. Judge by the topic's goal and people, not only its
   name; a broader existing topic ("CI & tests", "Dev env") is better than a new narrow one. A
   finished topic is fine when the PR continues that work.
-- Use kind "new" only when no existing topic fits AND either at least two PRs above belong to it,
-  or the PR clearly starts a new multi-PR initiative. Name it after the work, 2 to 6 words, not
-  after one PR's title. PRs that belong together get the same new name.
-- A lone PR that fits nowhere and starts nothing: kind "unsorted". It waits for the next tidy-up.
+- Every pull request gets a topic. When no existing topic fits, use kind "new", even for a
+  single PR. Name the new topic after the ongoing work or area the PR is part of, 2 to 6 words,
+  broad enough that follow-up PRs fit too ("Storybook visual review", "Desktop app release"),
+  never after the PR's title. PRs above that belong together get the same new name.
 - reason: one short sentence on why the PR belongs there.
-${jsonOnly('{"assignments": [{"prKey": "owner/repo#1", "kind": "existing", "topicId": "<id>", "reason": "..."} | {"prKey": "owner/repo#2", "kind": "new", "name": "...", "reason": "..."} | {"prKey": "owner/repo#3", "kind": "unsorted", "reason": "..."}]}')}`;
+${jsonOnly('{"assignments": [{"prKey": "owner/repo#1", "kind": "existing", "topicId": "<id>", "reason": "..."} | {"prKey": "owner/repo#2", "kind": "new", "name": "...", "reason": "..."}]}')}`;
 }

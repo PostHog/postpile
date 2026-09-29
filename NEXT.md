@@ -6,6 +6,17 @@ now".
 
 ## Done
 
+- Always place PRs (2026-09-29, DESIGN.md "Topic assignment against
+  fragmentation"): a copy of the real database had 61 PRs stuck in Unsorted.
+  The agent could answer "unsorted", a 5-new-topics cap sent the rest there
+  too, and both waited for a consolidation the desktop app never ran. Now
+  every PR gets an existing or a new topic (no cap; the prompt asks for
+  broad names after the work, never the PR title). Missing, invalid or
+  "unsorted" answers get one retry batch in the same sync; what is left is
+  asked again next sync. Batches of 40 sorted by repo and branch, so related
+  PRs meet. Migration 015 deletes the old `topic_deferred:*` rows. The
+  desktop app now checks every 30 minutes whether consolidation is due.
+
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as
@@ -194,9 +205,9 @@ now".
     full first sync of ~120 calls then fits in one); the title bar says when
     a sync stopped at the cap
   - topic assignment prefers existing topics (member counts in the
-    prompt), may leave a lone PR in Unsorted, creates at most 5 topics per
-    sync; Unsorted PRs are asked about again after the next consolidation,
-    which is told to propose merges for 1-2 PR topics
+    prompt); consolidation is told to propose merges for 1-2 PR topics.
+    The Unsorted answer and the 5-new-topics cap from this pass were
+    dropped on 2026-09-29 (see "Always place PRs")
   - dossier answers with missing optional fields (askedBy, ...) no longer
     fail the whole update
   - PRs without a glance say why: skipped by the call cap or failed
@@ -457,8 +468,7 @@ now".
   pending mark-reads (local state already says read, GitHub stays unread).
   The action log then shows them as `queued` with no send row.
 - Nothing files `new_topic` proposals: new topics are created directly.
-- Desktop does not run `consolidate({onlyIfDue})` when idle yet. Quitting
-  the app while on a topic does not mark it seen.
+- Quitting the app while on a topic does not mark it seen.
 - Dossier corrections are matched by text: a line the next update rewords
   slightly loses its "marked wrong" mark, which is the intended outcome.
   Fact corrections also land in `correctedClaims` (harmless, no dossier
@@ -528,8 +538,6 @@ now".
   and the relation badge are gone from sidebar rows (the sections carry
   most of it, whose turn is still on the tiles). Topic names truncate early
   at the 1100px minimum because of the face stack.
-- Unsorted PRs are not shown to consolidation; they are only re-offered to
-  topic assignment after a consolidation run.
 - Dossiers written before line sources show "no source recorded" on goal,
   status, timeline and cares until their next update. No forced refresh:
   `DOSSIER_PROMPT_VERSION` only goes into the stored input hash.
@@ -742,6 +750,13 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **The agent places every PR** (2026-09-29): "I want to make sure from the
+  beginning that the agent places each PR. If it doesn't fit an existing
+  topic, just make up a new one. I don't want to let it leave lingering and
+  later need a tidy-up process." No "unsorted" answer, no new-topic cap, no
+  deferral. Topics stay few through the prompt (existing first, broad names
+  after the work); consolidation still proposes merges for 1-2 PR topics.
 
 - **Sonnet 5.5, pinned** (2026-09-28): the Sonnet calls use the full id
   `claude-sonnet-5-5` instead of the `sonnet` alias. claude CLI 2.1.284

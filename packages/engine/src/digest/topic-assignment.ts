@@ -1,21 +1,18 @@
 import type { TopicAssignment, TopicChoice } from '@postpile/agent';
-import { buildStacks, dossierBrief, newTopic, stackByPrKey, stackTopicId, type PrKey, type Topic } from '@postpile/core';
+import { buildStacks, dossierBrief, newTopic, stackByPrKey, stackTopicId, type Pr, type PrKey, type Topic } from '@postpile/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import type { DigestDeps } from './deps.ts';
 
-/** PRs per assignment call. Keeps the prompt small enough for a quick answer. */
-export const ASSIGNMENT_BATCH_SIZE = 20;
+/**
+ * PRs per assignment call. Short PR details keep 40 in one prompt of a sane
+ * size, and a big backlog lands in few calls where related PRs meet.
+ */
+export const ASSIGNMENT_BATCH_SIZE = 40;
 
 /** Retired topics stay on offer this long, so a late follow-up PR finds its old topic. */
 const RETIRED_OFFER_MS = 30 * 24 * 60 * 60 * 1000;
-
-/**
- * New topics one sync may create. The first real sync made 61 topics, most
- * with one or two PRs; past this cap PRs wait in Unsorted instead.
- */
-export const MAX_NEW_TOPICS_PER_SYNC = 5;
 
 /** How the PRs waiting for a topic split up, treating each stack as one unit. */
 interface StackSplit {
@@ -27,39 +24,26 @@ interface StackSplit {
   followers: Map<PrKey, PrKey[]>;
 }
 
-/** Meta key: when a PR was left in Unsorted by topic assignment. */
-export function deferredKey(prKey: string): string {
-  return `topic_deferred:${prKey}`;
+/** Same repo together, then similar branch names and titles, so related PRs share a request. */
+function askOrder(a: Pr, b: Pr): number {
+  return a.ref.repo.localeCompare(b.ref.repo) || a.headRef.localeCompare(b.headRef) || a.title.localeCompare(b.title);
 }
 
 /**
  * Gives every PR without a topic to the agent, together with the existing
- * topics and their dossier briefs. The agent picks one or names a new topic.
- * New topics are created right away (otherwise a first sync would leave
- * everything unsorted); existing topics are never renamed or merged here.
- * Recently retired topics are offered too; a PR joining one brings it back.
- * A stack is one unit: its layers always get the same topic.
+ * topics and their dossier briefs. The agent picks one or names a new topic,
+ * for every PR: nothing is parked for a later tidy-up. New topics are
+ * created right away, without a cap; the prompt keeps them few. Existing
+ * topics are never renamed or merged here. Recently retired topics are
+ * offered too; a PR joining one brings it back. A stack is one unit: its
+ * layers always get the same topic. PRs an answer leaves out get one retry
+ * batch; what is still missing (or cut by the call cap) stays without a
+ * topic and is asked about again on the next sync.
  */
 export class TopicAssigner {
-  private created = 0;
   private followers = new Map<PrKey, PrKey[]>();
 
   constructor(private readonly deps: DigestDeps) {}
-
-  /**
-   * A PR left in Unsorted is offered again only after the next
-   * consolidation, which may have merged or reshaped topics; asking again
-   * every sync would pay for the same "no fit" answer.
-   */
-  private isDeferred(prKey: string): boolean {
-    const { store } = this.deps;
-    const deferredAt = store.meta.get(deferredKey(prKey));
-    if (deferredAt === null) {
-      return false;
-    }
-    const consolidatedAt = store.cursors.get('consolidate', 'global')?.updatedAt ?? '';
-    return deferredAt >= consolidatedAt;
-  }
 
   /** Pinged or found PRs without a topic; a pulled-in stack layer gets no topic of its own. */
   private unassignedKeys(): PrKey[] {
@@ -137,31 +121,23 @@ export class TopicAssigner {
     });
   }
 
-  /** An existing topic of that name, a new one while under the cap, or null (the PR waits in Unsorted). */
-  private findOrCreateTopic(name: string): Topic | null {
-    const { store } = this.deps;
+  /** An offered topic of that name (any case), else a new one. */
+  private findOrCreateTopic(name: string): Topic {
     const wanted = name.trim().toLowerCase();
     const existing = this.offeredTopics().find((t) => t.name.trim().toLowerCase() === wanted);
     if (existing) {
       return existing;
     }
-    if (this.created >= MAX_NEW_TOPICS_PER_SYNC) {
-      return null;
-    }
     const topic = newTopic(newTopicId(name), name.trim(), this.deps.now().toISOString());
-    store.topics.create(topic);
-    this.created += 1;
+    this.deps.store.topics.create(topic);
     return topic;
   }
 
-  private topicIdFor(assignment: TopicAssignment): string | null {
+  private topicIdFor(assignment: TopicAssignment): string {
     if (assignment.kind === 'existing') {
       return assignment.topicId;
     }
-    if (assignment.kind === 'new') {
-      return this.findOrCreateTopic(assignment.name)?.id ?? null;
-    }
-    return null;
+    return this.findOrCreateTopic(assignment.name).id;
   }
 
   private apply(assignments: TopicAssignment[]): void {
@@ -172,10 +148,6 @@ export class TopicAssigner {
         // The rest of a stack follows the layer the agent was asked about.
         const keys = [assignment.prKey, ...(this.followers.get(assignment.prKey) ?? [])];
         const topicId = this.topicIdFor(assignment);
-        if (topicId === null) {
-          keys.forEach((key) => store.meta.set(deferredKey(key), at));
-          continue;
-        }
         if (store.topics.get(topicId)?.status === 'retired') {
           store.topics.setStatus(topicId, 'active', at);
         }
@@ -186,27 +158,51 @@ export class TopicAssigner {
     });
   }
 
+  /**
+   * One assignment call. Returns the PRs the answer left out or answered
+   * badly (all of them when the call failed); none when the call cap is hit,
+   * since those wait for the next sync anyway.
+   */
+  private async askBatch(batch: Pr[]): Promise<Pr[]> {
+    if (!this.deps.budget.take('topic_assignment')) {
+      return [];
+    }
+    try {
+      const assignments = await this.deps.agent.assignTopics({
+        prs: batch,
+        viewer: this.deps.viewer,
+        // Re-read per batch so a topic created by the previous batch is offered again.
+        topics: this.topicChoices(),
+        context: this.deps.contexts.forTopic(null),
+      });
+      this.apply(assignments);
+      const answered = new Set(assignments.map((assignment) => assignment.prKey));
+      return batch.filter((pr) => !answered.has(pr.key));
+    } catch (error) {
+      this.deps.errors.push(`topic assignment: ${errorText(error)}`);
+      return batch;
+    }
+  }
+
+  /** Batches one after the other, so each sees the topics the ones before created. Returns the PRs still missing. */
+  private async askRound(prs: Pr[]): Promise<Pr[]> {
+    const missing: Pr[] = [];
+    for (const batch of chunk(prs, ASSIGNMENT_BATCH_SIZE)) {
+      missing.push(...(await this.askBatch(batch)));
+    }
+    return missing;
+  }
+
   async run(): Promise<void> {
     const split = this.splitByStack(this.unassignedKeys());
     this.joinStacks(split.join);
     this.followers = split.followers;
-    const asked = [...this.deps.store.prs.getMany(split.ask.filter((key) => !this.isDeferred(key))).values()];
-    for (const batch of chunk(asked, ASSIGNMENT_BATCH_SIZE)) {
-      if (!this.deps.budget.take('topic_assignment')) {
-        break;
-      }
-      try {
-        const assignments = await this.deps.agent.assignTopics({
-          prs: batch,
-          viewer: this.deps.viewer,
-          // Re-read per batch so a topic created by the previous batch is offered again.
-          topics: this.topicChoices(),
-          context: this.deps.contexts.forTopic(null),
-        });
-        this.apply(assignments);
-      } catch (error) {
-        this.deps.errors.push(`topic assignment: ${errorText(error)}`);
-      }
+    const asked = [...this.deps.store.prs.getMany(split.ask).values()].sort(askOrder);
+    const missing = await this.askRound(asked);
+    const stillMissing = await this.askRound(missing);
+    if (stillMissing.length > 0) {
+      const keys = stillMissing.map((pr) => pr.key).join(', ');
+      this.deps.errors.push(`topic assignment: no topic after a retry, asked again next sync: ${keys}`);
     }
   }
 }

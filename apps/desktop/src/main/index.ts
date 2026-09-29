@@ -7,6 +7,7 @@ import fixPath from 'fix-path';
 import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
+import { ConsolidationSchedule } from './consolidation-schedule.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
@@ -79,6 +80,7 @@ const rendererFile = join(import.meta.dirname, '../renderer/index.html');
 let engine: EngineService | null = null;
 let server: RunningServer | null = null;
 let mainWindow: BrowserWindow | null = null;
+let consolidationSchedule: ConsolidationSchedule | null = null;
 // Set by Cmd+Q (before-quit). Until then, closing the window only hides it on macOS.
 let quitting = false;
 // PRs opened on github.com from the app; refreshed when the window gets focus back.
@@ -295,12 +297,18 @@ async function start(): Promise<void> {
   });
   // "What you're working on": checked now and every 30 minutes, runs once a day from 06:00.
   engine.startWorkContextSchedule();
+  // Consolidation (merge proposals, facts, retiring): checked every 30 minutes,
+  // runs when due, capped like a sync. The engine never lets it overlap a sync.
+  const service = engine;
+  consolidationSchedule = new ConsolidationSchedule((options) => service.consolidate(options), config.syncCallCap);
+  consolidationSchedule.start();
 }
 
 async function shutdown(): Promise<void> {
   try {
     engine?.stopLivePoll();
     engine?.stopWorkContextSchedule();
+    consolidationSchedule?.stop();
     // Queued mark-reads are sent, not dropped: the user meant to clear them.
     await engine?.flushPendingWrites();
     await engine?.close();
