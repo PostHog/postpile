@@ -14,6 +14,14 @@ describe('pingRule', () => {
     expect(pingRule([mention], pr, viewer, true)).toMatchObject({ class: 'quiet_repo', reason: 'quiet repo (let it go stale)' });
   });
 
+  it('never pings for a PR whose tile is still snoozed', () => {
+    // A bot's event the agent raised to loud never wakes a snooze, so it must not ping past one either.
+    const raised = makeEvent({ id: 'r', kind: 'review_requested', actor: 'github-actions[bot]', isBot: true, ruleLoudness: 'quiet', override: { loudness: 'loud', reason: 'worth a look', by: 'agent' } });
+    const comment = makeEvent({ id: 'c', kind: 'comment', actor: 'ada', ruleLoudness: 'quiet', at: at(11) });
+    expect(pingRule([raised, comment], pr, viewer, false)).toMatchObject({ class: 'addressed', event: { id: 'r' } });
+    expect(pingRule([raised, comment], pr, viewer, false, true)).toMatchObject({ class: 'snoozed', reason: 'tile snoozed' });
+  });
+
   it('lets a mention through as addressed', () => {
     const mention = makeEvent({ id: 'm', kind: 'mention', actor: 'bob', ruleLoudness: 'loud', ruleReason: 'mentions you' });
     expect(pingRule([mention], pr, viewer, false)).toMatchObject({ class: 'addressed', loudness: 'loud', reason: 'mentions you' });

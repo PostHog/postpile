@@ -18,8 +18,10 @@ import type { Glance, IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './ty
  * rephrase. `routed` is a review request routed to the viewer's team on a
  * PR from outside the team: it never pings from the poll, it pings once when
  * the glance says Look closer (`lookCloserPingCheck`, 2026-09-29).
+ * `snoozed`: the tile holding the PR stays snoozed after the new events, so
+ * nothing woke it and nothing pings.
  */
-export type PingRuleClass = 'addressed' | 'routed' | 'not_addressed' | 'quiet' | 'muted' | 'bot' | 'quiet_repo';
+export type PingRuleClass = 'addressed' | 'routed' | 'not_addressed' | 'quiet' | 'muted' | 'bot' | 'quiet_repo' | 'snoozed';
 
 export interface PingRule {
   class: PingRuleClass;
@@ -172,6 +174,8 @@ function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {
 export interface PingContext {
   newestFirst: PrEvent[];
   quietRepo: boolean;
+  /** The tile holding the PR is still snoozed with the new events in. */
+  snoozed: boolean;
   allAutomation: boolean;
   addressed: PrEvent | undefined;
   routed: PrEvent | undefined;
@@ -179,7 +183,7 @@ export interface PingContext {
   quiet: PrEvent | undefined;
 }
 
-function buildPingContext(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean): PingContext {
+function buildPingContext(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean, snoozed: boolean): PingContext {
   const newestFirst = [...events].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
   // Bot-only: a review request aimed at the viewer or their team is no bot's, whoever clicked it (`isAutomation`).
   const allAutomation = newestFirst.every((event) => isAutomation(event, reviewRequestTarget(event, pr), viewer));
@@ -187,6 +191,7 @@ function buildPingContext(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: 
   return {
     newestFirst,
     quietRepo,
+    snoozed,
     allAutomation,
     addressed: aimed.find((event) => !isRoutedTeamRequestEvent(event, pr, viewer)),
     routed: aimed[0],
@@ -230,6 +235,16 @@ export const PING_TABLE: readonly PingRow[] = [
     class: 'quiet_repo',
     event: newestEvent,
     reason: 'quiet repo (let it go stale)',
+  },
+  {
+    // A snooze that no human news broke stays quiet: an event the agent
+    // raised to loud but a bot made (it never wakes a snooze) does not ping
+    // past it either.
+    name: 'snoozed tile',
+    when: (context) => context.snoozed,
+    class: 'snoozed',
+    event: newestEvent,
+    reason: 'tile snoozed',
   },
   {
     name: 'only automation',
@@ -278,10 +293,11 @@ export function findPingRow(context: PingContext): PingRow | undefined {
 /**
  * The deterministic part of a ping decision for one PR's new events.
  * Newest event first within a class, so the notification is about the
- * latest thing that happened.
+ * latest thing that happened. `snoozed`: the tile holding the PR is still
+ * snoozed with the new events in.
  */
-export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean): PingRule {
-  const context = buildPingContext(events, pr, viewer, quietRepo);
+export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean, snoozed = false): PingRule {
+  const context = buildPingContext(events, pr, viewer, quietRepo, snoozed);
   const row = findPingRow(context);
   if (!row) {
     throw new Error('ping table has no row');

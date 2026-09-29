@@ -3019,6 +3019,12 @@ beyond what the full sync already does for threads that left the inbox).
   PR from outside the team (not theirs, not a teammate's), made by a person
   or a bot. It never pings from the poll and never reaches the agent; it
   pings when the glance says Look closer (below).
+- `snoozed` (2026-09-29): the tile holding the PR is still snoozed with the
+  new events in (the decider reads the tile state off the board), so nothing
+  pings. Human news wakes a snooze first; what stays behind a snooze is
+  automation, for example a bot's event the agent raised to loud, which
+  pinged for a snoozed tile before (found by the property tests, see "Tests
+  across rules").
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
   instructions, topic tailoring, dossier brief, glance, the new events (fenced

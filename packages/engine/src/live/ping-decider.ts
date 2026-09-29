@@ -116,8 +116,11 @@ export class PingDecider {
       if (events.length === 0) {
         continue;
       }
-      const rule = pingRule(events, pr, viewer, isPrInQuietRepo(key, settings));
-      result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, ...this.locate(board, key) });
+      const located = this.locate(board, key);
+      // New human news wakes a snooze before the board is read, so a tile still snoozed here has nothing that should ping.
+      const snoozed = located.tile !== null && board.stateOf(located.tile).kind === 'snoozed';
+      const rule = pingRule(events, pr, viewer, isPrInQuietRepo(key, settings), snoozed);
+      result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, ...located });
     }
     return result;
   }

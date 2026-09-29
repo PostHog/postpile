@@ -22,6 +22,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - "Ask <author>" is hidden for every automation account PostPile knows, not only `[bot]` logins.
 - MCP `pr_context` and `search_prs` name the move of the PR itself, not of its tile, so they match the detail pane on stacks and sets.
 - The MCP server says so, and asks for a reconnect, when the app was updated while it kept running.
+- A snoozed tile no longer pings. A bot's event the agent raised to loud never wakes a snooze, but it could still send a Mac notification for the snoozed tile.
 
 ## 0.11.1 (2026-09-29)
 
