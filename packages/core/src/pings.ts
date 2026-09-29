@@ -166,41 +166,132 @@ function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {
 }
 
 /**
+ * What the table rows look at: the events newest first, and for each class
+ * the newest event that qualifies for it (undefined when none does).
+ */
+export interface PingContext {
+  newestFirst: PrEvent[];
+  quietRepo: boolean;
+  allAutomation: boolean;
+  addressed: PrEvent | undefined;
+  routed: PrEvent | undefined;
+  loud: PrEvent | undefined;
+  quiet: PrEvent | undefined;
+}
+
+function buildPingContext(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean): PingContext {
+  const newestFirst = [...events].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
+  // Bot-only: a review request aimed at the viewer or their team is no bot's, whoever clicked it (`isAutomation`).
+  const allAutomation = newestFirst.every((event) => isAutomation(event, reviewRequestTarget(event, pr), viewer));
+  const aimed = newestFirst.filter((event) => isAddressedToViewer(event, pr, viewer));
+  return {
+    newestFirst,
+    quietRepo,
+    allAutomation,
+    addressed: aimed.find((event) => !isRoutedTeamRequestEvent(event, pr, viewer)),
+    routed: aimed[0],
+    loud: newestFirst.find((event) => effectiveLoudness(event) === 'loud'),
+    quiet: newestFirst.find((event) => effectiveLoudness(event) === 'quiet'),
+  };
+}
+
+/** One row of the ping table: a named condition, the class it decides, and which event it is about. */
+export interface PingRow {
+  name: string;
+  when: (context: PingContext) => boolean;
+  class: PingRuleClass;
+  /** The event the class comes from. Null when there were no events. */
+  event: (context: PingContext) => PrEvent | null;
+  /** Replaces the event's own reason. */
+  reason?: string;
+}
+
+function newestEvent(context: PingContext): PrEvent {
+  return context.newestFirst[0]!;
+}
+
+/**
+ * The ping classes as a table. Read top to bottom, first match wins. Within
+ * a class the event is the newest one that qualifies, so the notification is
+ * about the latest thing that happened. The last row matches everything.
+ */
+export const PING_TABLE: readonly PingRow[] = [
+  {
+    name: 'no new events',
+    when: (context) => context.newestFirst.length === 0,
+    class: 'quiet',
+    event: () => null,
+    reason: 'no new events',
+  },
+  {
+    // A PR in a quiet repo ("Let it go stale") never pings, whatever happened.
+    name: 'quiet repo',
+    when: (context) => context.quietRepo,
+    class: 'quiet_repo',
+    event: newestEvent,
+    reason: 'quiet repo (let it go stale)',
+  },
+  {
+    name: 'only automation',
+    when: (context) => context.allAutomation,
+    class: 'bot',
+    event: newestEvent,
+  },
+  {
+    name: 'aimed at you',
+    when: (context) => context.addressed !== undefined,
+    class: 'addressed',
+    event: (context) => context.addressed!,
+  },
+  {
+    name: 'routed to your team',
+    when: (context) => context.routed !== undefined,
+    class: 'routed',
+    event: (context) => context.routed!,
+    reason: 'review routed to your team: pings when the glance says Look closer',
+  },
+  {
+    name: 'loud, not aimed at you',
+    when: (context) => context.loud !== undefined,
+    class: 'not_addressed',
+    event: (context) => context.loud!,
+  },
+  {
+    name: 'quiet',
+    when: (context) => context.quiet !== undefined,
+    class: 'quiet',
+    event: (context) => context.quiet!,
+  },
+  {
+    name: 'muted',
+    when: () => true,
+    class: 'muted',
+    event: newestEvent,
+  },
+];
+
+/** The first row that matches, or undefined when the table has a gap. */
+export function findPingRow(context: PingContext): PingRow | undefined {
+  return PING_TABLE.find((row) => row.when(context));
+}
+
+/**
  * The deterministic part of a ping decision for one PR's new events.
  * Newest event first within a class, so the notification is about the
- * latest thing that happened. A PR in a quiet repo ("Let it go stale")
- * never pings, whatever happened.
+ * latest thing that happened.
  */
 export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean): PingRule {
-  if (events.length === 0) {
-    return { class: 'quiet', loudness: 'quiet', reason: 'no new events', event: null };
+  const context = buildPingContext(events, pr, viewer, quietRepo);
+  const row = findPingRow(context);
+  if (!row) {
+    throw new Error('ping table has no row');
   }
-  const newestFirst = [...events].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
-  if (quietRepo) {
-    return { ...ruleFrom('quiet_repo', newestFirst[0]!), reason: 'quiet repo (let it go stale)' };
+  const event = row.event(context);
+  if (event === null) {
+    return { class: row.class, loudness: 'quiet', reason: row.reason ?? '', event: null };
   }
-  // Bot-only: a review request aimed at the viewer or their team is no bot's, whoever clicked it (`isAutomation`).
-  if (newestFirst.every((event) => isAutomation(event, reviewRequestTarget(event, pr), viewer))) {
-    return ruleFrom('bot', newestFirst[0]!);
-  }
-  const aimed = newestFirst.filter((event) => isAddressedToViewer(event, pr, viewer));
-  const addressed = aimed.find((event) => !isRoutedTeamRequestEvent(event, pr, viewer));
-  if (addressed) {
-    return ruleFrom('addressed', addressed);
-  }
-  const routed = aimed[0];
-  if (routed) {
-    return { ...ruleFrom('routed', routed), reason: 'review routed to your team: pings when the glance says Look closer' };
-  }
-  const loud = newestFirst.find((event) => effectiveLoudness(event) === 'loud');
-  if (loud) {
-    return ruleFrom('not_addressed', loud);
-  }
-  const quiet = newestFirst.find((event) => effectiveLoudness(event) === 'quiet');
-  if (quiet) {
-    return ruleFrom('quiet', quiet);
-  }
-  return ruleFrom('muted', newestFirst[0]!);
+  const rule = ruleFrom(row.class, event);
+  return row.reason === undefined ? rule : { ...rule, reason: row.reason };
 }
 
 /** Notification limits: macOS cuts long text anyway. */
