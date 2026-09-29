@@ -949,6 +949,12 @@ the app meanwhile.
 
 ## Decided
 
+- **A push answers an ask on your own PR; mentions are not called replies**
+  (2026-09-29): whose turn counts your last touch (comment, review, push to
+  your own PR) as the answer to a mention or reply; the move text says what
+  happened ("lyra mentioned you"), only a question says "Answer …".
+  DESIGN.md "Whose turn" rule 2.
+
 - **You already dealt with it** (2026-09-29): your own action on a PR (your
   last touch: review, comment, push on your own PR) makes earlier events
   seen; threads whose unread activity all predates it get marked read on

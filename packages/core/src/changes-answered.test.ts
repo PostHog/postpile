@@ -160,7 +160,7 @@ describe('addressed your changes: variants', () => {
 
   it('follows the draft rules on a draft: only a reply to the viewer is a move', () => {
     const draft = prWith({ isDraft: true });
-    expect(turn(draft)).toMatchObject({ kind: 'you', what: 'Reply to bob on draft' });
+    expect(turn(draft)).toMatchObject({ kind: 'you', what: 'bob replied to you on draft' });
     expect(tier(draft)).toBe('needs_reply');
     const pushedDraft = prWith({ isDraft: true, reviews: [changesRequested], threads: [makeThread('th1', [threadStart])], comments: [threadStartInline] });
     expect(turn(pushedDraft).kind).toBe('none');

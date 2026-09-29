@@ -5,6 +5,7 @@ import { changesAnswered, type ChangesAnswer } from './changes-answered.ts';
 import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
+import { lastTouch } from './last-touch.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
 import { changesRequestedBy, isApprovedByViewer, isPersonalRequest, reviewRequest, teamRequestHold, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
@@ -97,22 +98,26 @@ function isViewer(ctx: PrContext, login: string): boolean {
   return sameLogin(login, ctx.viewer.login);
 }
 
-/** The viewer commented or reviewed on the PR after `since`. */
-function spokeSince(pr: Pr, viewer: Viewer, since: string): boolean {
-  const comment = pr.comments.some((c) => sameLogin(c.author, viewer.login) && c.createdAt > since);
-  const review = pr.reviews.some((r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING' && r.submittedAt > since);
-  return comment || review;
+/**
+ * The viewer touched the PR after `since` (`lastTouch`, the same definition
+ * that makes earlier events seen): a comment or review, or a push to their
+ * own PR. A push answers "this needs a merge-in from master" (2026-09-29).
+ */
+function touchedSince(pr: Pr, events: PrEvent[], viewer: Viewer, since: string): boolean {
+  const touch = lastTouch(pr, events, viewer);
+  return touch !== null && touch.at > since;
 }
 
 /**
  * A human event of `kinds` aimed at the viewer that they have not answered
- * since (no comment or review after it). A team mention only asks until it
+ * since (no touch after it: comment, review, push to their own PR; `events`
+ * are the PR's events, where the touches are). A team mention only asks until it
  * is read: once seen (mark-read in the app or read on GitHub) it no longer
  * counts (decided 2026-09-28). Personal asks count until answered. An event
  * the events agent lowered to quiet or muted ("thanks, that's fine") asks
  * nothing (decided 2026-09-29).
  */
-export function isUnansweredAsk(pr: Pr, event: PrEvent, viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): boolean {
+export function isUnansweredAsk(pr: Pr, events: PrEvent[], event: PrEvent, viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): boolean {
   if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
     return false;
   }
@@ -122,14 +127,14 @@ export function isUnansweredAsk(pr: Pr, event: PrEvent, viewer: Viewer, kinds: r
   if (effectiveLoudness(event) !== 'loud') {
     return false;
   }
-  return !spokeSince(pr, viewer, event.at);
+  return !touchedSince(pr, events, viewer, event.at);
 }
 
 /** The newest unanswered ask on the PR (`isUnansweredAsk`). Also used by `prTier`. */
 export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): PrEvent | null {
   let newest: PrEvent | null = null;
   for (const event of events) {
-    if (!isUnansweredAsk(pr, event, viewer, kinds)) {
+    if (!isUnansweredAsk(pr, events, event, viewer, kinds)) {
       continue;
     }
     if (newest === null || event.at > newest.at) {
@@ -164,11 +169,14 @@ function ownTeamSlug(ctx: PrContext): string {
   return team.split('/').pop() ?? team;
 }
 
+// A question asks for an answer; a mention or a reply says what happened and
+// does not presume one (Julian, 2026-09-29: a comment not written as needing a
+// reply from you is no "Reply to"). The move stays `reply` either way.
 const ASK_VERBS: Record<string, { alone: (actor: string) => string; withReview: string }> = {
   question_to_user: { alone: (actor) => `Answer ${actor}'s question`, withReview: 'asked you something' },
-  mention: { alone: (actor) => `Reply to ${actor}'s mention`, withReview: 'mentioned you' },
-  reply_to_user: { alone: (actor) => `Reply to ${actor}`, withReview: 'replied to you' },
-  team_mention: { alone: (actor) => `Reply to ${actor}, your team was mentioned`, withReview: 'mentioned your team' },
+  mention: { alone: (actor) => `${actor} mentioned you`, withReview: 'mentioned you' },
+  reply_to_user: { alone: (actor) => `${actor} replied to you`, withReview: 'replied to you' },
+  team_mention: { alone: (actor) => `${actor} mentioned your team`, withReview: 'mentioned your team' },
 };
 
 function askText(ask: PrEvent, reviewToo: boolean): string {
@@ -269,14 +277,14 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
 
 /**
  * Drafts: nobody reviews, approves or merges one right away. Only a personal
- * question, mention or reply is a move ("Reply to ada on draft"); on the
+ * question, mention or reply is a move ("Answer ada's question on draft"); on the
  * viewer's own draft also review comments to address. Never review, re-check
  * or merge.
  */
 function draftTurn(ctx: PrContext): WhoseTurn {
   const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer, PERSONAL_ASK_KINDS);
   if (ask) {
-    return you(ctx, 'reply', `Reply to ${ask.actor} on draft`);
+    return you(ctx, 'reply', `${askText(ask, false)} on draft`);
   }
   if (!sameLogin(ctx.pr.author, ctx.viewer.login)) {
     return NO_TURN;

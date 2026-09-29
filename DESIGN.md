@@ -1523,8 +1523,21 @@ draft), `fix_ci`, `merge`. Rules per pinged PR, first match wins:
 
 1. merged or closed: none.
 2. you: a human mentioned you, your team, replied to you or asked you a
-   question, and you have not commented or reviewed since ("Answer ada's
-   question"; with a pending review of yours: "Review, lyra mentioned you").
+   question, and you have not touched the PR since (a comment or review, or
+   a push to your own PR; core `lastTouch`, the definition of "You already
+   dealt with it"). The text says what happened and only a question asks
+   for an answer: "Answer ada's question", "lyra mentioned you", "lyra
+   mentioned your team", "lyra replied to you"; with a pending review of
+   yours: "Review, lyra mentioned you". The move stays `reply` (chip
+   "Reply", Needs reply).
+   History (2026-09-29): on the viewer's own PR a teammate wrote "@you this
+   needs a merge-in from master I think!". The events agent rightly kept it
+   loud, a request, but the move said "Reply to …'s mention" until the
+   viewer commented, although the push was the answer. Only a comment or
+   review counted then. Julian: "if the reply is not directly written as
+   needing a reply from me, it also doesn't count" as a reply, so the
+   request stays a move but is no longer called one. A push on someone
+   else's PR does not count (see `lastTouch`).
    A team mention asks only until it is read (2026-09-28): once its event is
    seen (mark-read in the app, read on GitHub, or any touch of yours after
    it, see "You already dealt with it") it no longer makes it your
@@ -1629,8 +1642,9 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
 it won't merge soon. Rules in core:
 
 - whose-turn (`draftTurn`): an open draft is your move only for a personal
-  question, mention or reply you have not answered ("Reply to ada on
-  draft", `PERSONAL_ASK_KINDS`; a team mention is not enough). On your own
+  question, mention or reply you have not answered ("Answer ada's question
+  on draft", "lyra mentioned you on draft", `PERSONAL_ASK_KINDS`; a team
+  mention is not enough). On your own
   draft also for review threads waiting on you ("Address 2 comments on your
   draft") or a standing change request. Never Review, Fix CI or Merge.
 - tier: a draft never lands in To review (`prTier`); needs_reply still
