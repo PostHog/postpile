@@ -7,7 +7,8 @@ import { leadPr } from './tiles.ts';
 
 /**
  * The tile footer's main action:
- * - open: the tile is done, the button opens it.
+ * - open: the tile is done, the button opens it. Nothing else is offered
+ *   on a done tile: no mark button, no Snooze.
  * - mark_read: "Mark read". The tile is unread, or a mark-read leaves something asked.
  * - mark_done: "Mark done". The tile is read and a mark-read makes it done.
  * - snooze: the tile is read and still your move. Marking read changes
@@ -29,10 +30,10 @@ export function tileFooterAction(view: Pick<TileView, 'state' | 'turn' | 'afterR
   return view.afterRead.done ? 'mark_done' : 'mark_read';
 }
 
-/** The mark button's label, or null when the tile shows none (read and still your move). Done tiles keep "Mark read". */
+/** The mark button's label, or null when the tile shows none: read and still your move, or done (a done tile offers Open and nothing else). */
 export function markButtonLabel(view: Pick<TileView, 'state' | 'turn' | 'afterRead'>): 'Mark read' | 'Mark done' | null {
   const action = tileFooterAction(view);
-  if (action === 'snooze') {
+  if (action === 'snooze' || action === 'open') {
     return null;
   }
   return action === 'mark_done' ? 'Mark done' : 'Mark read';

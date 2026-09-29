@@ -6,6 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- Done tiles offer Open and nothing else: no Mark read button and no Snooze, in the tile footer and in the detail pane (where Open on GitHub leads).
 - The detail pane acts on the PR you look at: on a stack or set, Mark read and Mark done mark only the selected PR (with its own undo), the label follows that PR, and there is no mark button while that PR is still your move. Snooze stays in the tile footer for sets and stacks. Single-PR tiles behave as before, and the tile footer still acts on the whole tile.
 - The coral dot marks every PR of a stack or set that keeps the tile from being done ("Not done yet"), on read tiles too, so an open set says which PR still holds it. Mark a dotted PR done and its dot goes.
 - Opening a PR in PostPile also marks it done there when nothing is asked of you on that PR (checked per PR now, not for the whole tile), not only read on GitHub. It happens when you move on (another PR or tile, closing the pane, leaving the app) after looking at it for 1.5 seconds, never while it is still on screen. A visit on github.com still only marks it read.
