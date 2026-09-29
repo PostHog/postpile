@@ -2231,6 +2231,40 @@ vacation). Rules in core `inbox-cleanup.ts`, engine `InboxCleanup`
 - **Fake mode**: three old unread sample threads (16, 22, 45 days), the
   banner on every start, pending and send handled by `FakeWrites`.
 
+## You already dealt with it
+
+Decided 2026-09-29 (evening), agreed before building. When the user acts on
+a PR on GitHub, whatever happened before that action has been seen by them,
+however they acted: github.com, the gh CLI, GitHub Mobile, or an agent
+commenting as them. GitHub clears the notification only for a visit on
+github.com, so an approval from the CLI left #106890's "ready for review"
+unread for days. Julian asked to make this general instead of a one-off.
+
+**"Acted" is the viewer's last touch**, the definition already agreed for
+"New since you looked" (`whatsNew`'s anchor): their review (approve, request
+changes, comment), a comment or thread reply, or a push to their own PR.
+Merging or closing counts only when the viewer did it.
+
+1. *Tile*: every event before the viewer's last touch counts as seen by the
+   rules. This generalizes two narrow rules that already existed (a review
+   request turns quiet once the viewer reviewed after it, an ask once they
+   replied after it); "ready for review" was the case they missed.
+2. *GitHub read state* (a second reason for Handled quietly): when every
+   unread event on a thread is older than the viewer's last touch, PostPile
+   marks the thread read on GitHub after a full sync, through the normal
+   mark-read path, only while writes are unlocked, listed as "you approved
+   after it" / "you replied after it". The viewer's own PRs are included here
+   (they acted after the activity). A push does not count for this part:
+   pushing code does not mean reading the review comments. A merge without
+   the viewer's review is never marked read this way unless they touched the
+   PR after the merge.
+3. *Opening a PR in PostPile*: opening a PR in the detail pane marks its
+   GitHub thread read, only when a mark-read would leave the tile done
+   (`TileView.afterRead.done`: nothing asked of the viewer), and only while
+   writes are unlocked. It mirrors what github.com does on a visit, limited
+   to cases where it cannot hide a to-do. Also listed under Handled quietly
+   ("opened in PostPile").
+
 ## Handled quietly
 
 Decided 2026-09-29. A PR thread the user had read comes back unread only

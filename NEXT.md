@@ -949,6 +949,12 @@ the app meanwhile.
 
 ## Decided
 
+- **You already dealt with it** (2026-09-29): your own action on a PR (your
+  last touch: review, comment, push on your own PR) makes earlier events
+  seen; threads whose unread activity all predates it get marked read on
+  GitHub (not for pushes); opening a PR in PostPile marks it read when
+  nothing is asked of you. DESIGN.md "You already dealt with it".
+
 - **The live poll obeys X-Poll-Interval, plus a cycle on focus**
   (2026-09-29): the poll waits the configured interval (default now 60s)
   or GitHub's X-Poll-Interval, whichever is longer; `POSTPILE_POLL_SECONDS`
