@@ -49,7 +49,11 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   refetch), `useSetupSweep`, polled every second while the job runs),
   `tools.ts` (`useTools`: gh and claude status with fix commands, every
   30s while something is wrong, else every 5 min; "Check again" is
-  `useActions().checkTools`).
+  `useActions().checkTools`), `telemetry.ts` (`sendTelemetry`, fire-and-forget
+  POST to `/api/telemetry`; not a query hook, no cache, a dropped call is
+  swallowed. Only the events in `RENDERER_TELEMETRY_EVENTS`
+  (`@postpile/core`) go through it — search, queue filter, topic and tile
+  opens, setup steps, the update pill; everything else is the engine's own).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small

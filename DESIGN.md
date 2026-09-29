@@ -1992,6 +1992,79 @@ and Refresh. Routes: `GET /api/work-context`, `POST /api/work-context/sweep`,
 /api/work-context/skip-list {patterns}` (saved to config.json). Fake mode shows a sample
 digest linked to the sample topics.
 
+## Usage analytics
+
+On by default, so the team can tell whether PostPile is actually working for
+people, without adding an opt-out control to the UI (decided 2026-09-29): env
+switches only, `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`. Off in the dev
+profile, fake mode and every test; `POSTPILE_TELEMETRY=1` forces it on in dev,
+for checking the pipeline by hand. `posthog-node` runs in the server/engine
+process only (`packages/engine/src/telemetry/`): the renderer never talks to
+PostHog directly, it reports UI-only events through `POST /api/telemetry`,
+validated against the same catalogue the engine's own events use
+(`packages/core/src/telemetry-events.ts`, the allow-list for both). One
+`Telemetry` class (`capture`, `identifyPerson`, `setViewerIdentity`,
+`captureException`, `shutdown`) plus a no-op implementation used whenever
+telemetry is off, so call sites never branch on it. `Engine.close()` flushes
+it, so it goes out on every quit path.
+
+**Identity**: pseudonymous. `distinct_id` is `sha256("postpile:v1:" +
+<GitHub numeric user id>)`, computed from `Viewer.databaseId` (GraphQL
+`viewer { databaseId }`, stored alongside the login). Before the viewer is
+known (first run, setup) a random install id lives in the data folder
+(`telemetry-id`, `paths.ts`) and is aliased to the hashed id once the viewer
+is fetched, so PostHog treats both as the same person. The login, name and
+email are never sent. Person properties (`$set`, refreshed after every sync):
+`app_version`, `os_version`, `arch`, `is_posthog_member` (the viewer's teams
+include a `PostHog/...` team), `agent_available` (`claude` found). Super
+properties on every event: `app_version`, `profile`, `$process_person_profile`.
+
+**The leak guard**: every prop is checked in the `Telemetry` class itself
+before anything leaves the process — a string longer than 40 characters or
+containing `/` or `#` is dropped and logged once
+(`packages/core/src/telemetry-guard.ts`). This is on top of the catalogue
+only allowing enums, counts, durations and booleans in the first place: PR
+titles, bodies, repo names, branch names, logins, prompts, agent text and
+topic names are never event props. Uncaught exceptions and unhandled
+rejections (main process and server) go through `captureException`, itself
+scrubbed to the error's class name and a stack of `file:line` pairs from the
+app's own bundle only (`packages/core/src/telemetry-errors.ts`); node_modules
+and Node-internal frames, and anything that looks like a path or a URL in the
+message, are dropped.
+
+**Events** (snake_case; the full typed list, incl. prop shapes, is
+`TELEMETRY_EVENTS` in `packages/core/src/telemetry-events.ts`):
+
+1. *Activation*: `app_launched` (first_launch), `setup_step_viewed` (step),
+   `setup_completed`, `setup_skipped`, `first_sync_completed` (prs, topics,
+   duration_ms, agent_calls — fires once ever, a meta flag), `tool_missing`
+   (tool, reason — once per state change, from `ToolHealth`).
+2. *Retention*: `app_active` (once per calendar day), `window_focused`
+   (throttled to once per 30 minutes).
+3. *Core actions*: `tile_opened`, `pr_approved`, `marked_read`, `snoozed`
+   (the condition name for an event-based snooze — someone replies, a push,
+   CI green — or a time bucket for `until_time`), `opened_on_github`,
+   `ask_sent` (AskComposer's send), `chat_message_sent`, `mac_ping_shown` /
+   `mac_ping_clicked`, `search_used` (throttled, query length bucket only),
+   `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked` /
+   `update_later_clicked` (reserved for the update-checker, not built yet).
+4. *Agent trust*: `wrong_topic_marked`, `not_related_marked`,
+   `recheck_requested` + `recheck_resolved` (the agent's own answer, not yet
+   the user's later accept/fix/drop), `memory_corrected`, `proposal_resolved`
+   (kind `topic_merge` / `rename` / `rule` / `instructions`), `instructions_edited`.
+5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
+   agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,
+   trigger `start`/`manual`), `sync_failed` (error_kind, currently only
+   `gh_unavailable`: a blocked sync never runs), `rate_limited` (source
+   `graphql`/`rest`, read from the sync's own error text — GitHub's GraphQL
+   and REST rate-limit errors are shaped differently at the point
+   `packages/github` builds them), `consolidation_ran` (proposals_filed).
+
+**Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
+and a scratch data dir sends one `telemetry_test` event (distinct id
+`postpile-dev-check`) and flushes; that event is not part of the catalogue
+the app sends in normal use.
+
 ## Architecture
 
 TypeScript everywhere, Node 24, pnpm workspaces (`pnpm-workspace.yaml`, workspace deps as `workspace:*`).

@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- Usage analytics (2026-09-29, DESIGN.md "Usage analytics"): on by default,
+  env-only opt-out (`POSTPILE_TELEMETRY=0` / `DO_NOT_TRACK=1`), sent to
+  PostHog's "PostPile" project. One `Telemetry` class in
+  `packages/engine/src/telemetry/` (posthog-node, server/engine process
+  only) plus a no-op used when off; the renderer reports its own UI events
+  through `POST /api/telemetry`, validated against the shared catalogue in
+  `packages/core/src/telemetry-events.ts`. Pseudonymous identity: the
+  viewer's numeric GitHub id, sha256-hashed, aliased from a random install
+  id once the viewer is known. No session replay, no autocapture, no PR
+  titles/bodies/repo names/branch names/logins/prompts/agent text/topic
+  names in any event — guarded in code, not just by convention. Verified
+  once for real with `POSTPILE_TELEMETRY=1` against a scratch data dir (a
+  single `telemetry_test` event, confirmed delivered).
+
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as
@@ -742,6 +756,10 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Usage analytics on by default, no UI opt-out** (2026-09-29): env
+  switches only (`POSTPILE_TELEMETRY=0`, `DO_NOT_TRACK=1`). Identity is a
+  hashed GitHub id, never the login. No session replay, no autocapture.
 
 - **Sonnet 5.5, pinned** (2026-09-28): the Sonnet calls use the full id
   `claude-sonnet-5-5` instead of the `sonnet` alias. claude CLI 2.1.284

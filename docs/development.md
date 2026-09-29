@@ -66,6 +66,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
 - `POSTPILE_POLL_SECONDS`: the notification poll interval, default 10 (0 turns it off)
 - `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac notifications
+- `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`: no usage analytics (also off by default under `POSTPILE_PROFILE=dev`, `POSTPILE_FAKE=1` and in tests). `POSTPILE_TELEMETRY=1` forces it on, including in dev, for checking the pipeline by hand — never in tests. See README › Privacy and DESIGN.md › Usage analytics.
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL` (default `claude-sonnet-5-5`), `POSTPILE_SWEEP_MODEL`, `POSTPILE_SETUP_MODEL` (default `opus`), `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs
 - `POSTPILE_CLAUDE_BIN`: the `claude` binary to run
 - `POSTPILE_CLAUDE_DIR`: the folder the work context sweep reads, default `~/.claude`

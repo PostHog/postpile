@@ -2,6 +2,10 @@
 
 Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
 
+## 0.1.0-alpha.1 (unreleased)
+
+- Usage analytics, on by default: counts and enums only (syncs, tile opens, proposal decisions, tool health, and the like), never PR titles, bodies, repo/branch names, logins, prompts or agent text. Identity is a sha256-hashed GitHub id, never the login. Turn it off with `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`; see README › Privacy and DESIGN.md › Usage analytics.
+
 ## 0.1.0-alpha.0 (2026-09-28)
 
 First public build. macOS arm64 only, ad-hoc signed, not notarized.
