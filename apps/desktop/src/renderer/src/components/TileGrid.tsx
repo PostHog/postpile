@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
+import { unreadTiles } from '../lib/selection.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';
 
@@ -94,7 +95,8 @@ export function TileGrid(props: TileGridProps) {
   const tiles = matching ? ordered.filter((view) => matching.has(view.tile.id)) : ordered;
   const unread = tiles.filter((view) => view.state.kind === 'unread');
   const live = tiles.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
-  const shown = filter === 'unread' ? unread : live;
+  // The selected tile stays in the Unread list while selected: reading or approving it must not hide it.
+  const shown = filter === 'unread' ? unreadTiles(tiles, props.selectedTileId) : live;
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center gap-2.5 border-t border-hairline pt-3">

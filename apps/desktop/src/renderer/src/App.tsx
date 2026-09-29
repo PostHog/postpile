@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { TileView } from '@postpile/core';
 import { useActions } from './api/actions.tsx';
 import { useAppConfig } from './api/config.ts';
 import { useLivePoll } from './api/live.ts';
@@ -30,11 +29,11 @@ import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
 import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
 import type { SetupStepKey } from './lib/setup.ts';
-import { applyQueueFilter, filterCounts, firstGridTile, type QueueFilter } from './lib/queues.ts';
+import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
+import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
-import { leadPr } from './lib/tiles.ts';
 import { toolsNotice } from './lib/tools.ts';
 import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
@@ -50,21 +49,6 @@ function EmptyMain(props: { text: string }) {
       <p className="m-auto max-w-sm text-center text-xs leading-relaxed text-muted">{props.text}</p>
     </MainPane>
   );
-}
-
-/**
- * The tile and PR the user picked, falling back to the grid's first (shown)
- * tile and its first PR matching the search, else its lead PR.
- */
-function resolveSelection(entry: NavEntry, tiles: TileView[], matchingPrKeys: Set<string> | null) {
-  const view = tiles.find((candidate) => candidate.tile.id === entry.tileId) ?? firstGridTile(tiles);
-  let prKey: string | null = null;
-  if (view) {
-    const picked = view.prs.find((pr) => pr.key === entry.prKey);
-    const matching = matchingPrKeys ? view.prs.find((pr) => matchingPrKeys.has(pr.key)) : undefined;
-    prKey = picked?.key ?? matching?.key ?? leadPr(view)?.key ?? null;
-  }
-  return { view, prKey };
 }
 
 export function App() {
@@ -130,13 +114,27 @@ export function App() {
   // Search and queue filter both narrow the sidebar; the open topic follows.
   const narrowed = filter !== null || queueFilter !== null;
   const shownItems = applyQueueFilter(filterTopics(items, filter), queueFilter);
-  const activeItem = visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null);
+  // What was on screen for this pick and these filters. An approve, refetch,
+  // poll or sync that drops it from the filter keeps it on screen; only a new
+  // pick or a filter change lets the "first match" fallback move the view.
+  const [kept, setKept] = useState<KeptView | null>(null);
+  const currentFilterKey = filterKey(queueFilter, filter ? (search.data?.query ?? null) : null);
+  const keptNow = keptFor(kept, nav.current, currentFilterKey);
+  const activeItem = visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null, keptNow?.topicId ?? null);
   const topic = useTopic(activeItem?.topic.id ?? null);
   const matchingTileIds = activeItem && filter ? (filter.tilesByTopic.get(activeItem.topic.id) ?? new Set<string>()) : null;
-  const shownTiles = (topic.data?.tiles ?? []).filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
-  const selected = resolveSelection(nav.current, shownTiles, filter?.prKeys ?? null);
+  const allTiles = topic.data?.tiles ?? [];
+  const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
+  const keptTile = keptNow && keptNow.topicId === activeItem?.topic.id ? keptNow : null;
+  const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeItem?.topic.id ?? null, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
+  const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown);
+  useEffect(() => {
+    if (keptAfter !== kept) {
+      setKept(keptAfter);
+    }
+  });
   const go = (next: NavEntry) => {
     if (!sameView(shown, next)) {
       nav.navigate(next);
@@ -171,7 +169,7 @@ export function App() {
   // This follows the picked topic, not the shown one, so a search filter that
   // hides the topic for a moment does not mark it seen.
   const shownTopicId = pane === 'topic' ? (activeItem?.topic.id ?? null) : null;
-  const pickedTopicId = pane === 'topic' ? (visibleTopic(items, nav.current.topicId, null)?.topic.id ?? null) : null;
+  const pickedTopicId = pane === 'topic' ? (visibleTopic(items, nav.current.topicId, null, null)?.topic.id ?? null) : null;
   const lastPickedTopicId = useRef<string | null>(null);
   useEffect(() => {
     const left = lastPickedTopicId.current;
@@ -259,7 +257,7 @@ export function App() {
           selectedTileId={selected.view?.tile.id ?? null}
           selectedPrKey={selected.prKey}
           onSelect={pickTile}
-          matchingTileIds={matchingTileIds}
+          matchingTileIds={withSelectedTile(matchingTileIds, selected.view?.tile.id ?? null)}
           queueFilter={queueFilter}
         />
       </MainPane>
@@ -328,7 +326,7 @@ export function App() {
             error={topics.error?.message ?? null}
             filter={filter}
             onClearFilter={() => setQuery('')}
-            shown={shownItems}
+            shown={listedTopics(items, shownItems, activeItem?.topic.id ?? null)}
             queueFilter={queueFilter}
             onQueueFilter={changeQueueFilter}
             filterCounts={filterCounts(items)}

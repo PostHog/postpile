@@ -42,10 +42,17 @@ export function sidebarOrder(items: TopicListItem[]): TopicListItem[] {
 
 /**
  * The topic to show: the picked one, unless the search or a queue filter
- * hides it, then the first shown one in sidebar order. `shown` is null when
- * nothing narrows the list. Without a pick, the sidebar's first topic.
+ * hides it. Then the kept one (what was on screen for this pick and these
+ * filters, so an approve or a refetch that drops it from the filter does
+ * not move the view), else the first shown one in sidebar order. `shown` is
+ * null when nothing narrows the list. Without a pick, the sidebar's first topic.
  */
-export function visibleTopic(items: TopicListItem[], pickedId: string | null, shown: TopicListItem[] | null): TopicListItem | null {
+export function visibleTopic(
+  items: TopicListItem[],
+  pickedId: string | null,
+  shown: TopicListItem[] | null,
+  keptId: string | null = null,
+): TopicListItem | null {
   const picked = items.find((item) => item.topic.id === pickedId) ?? null;
   if (!shown) {
     return picked ?? sidebarOrder(items)[0] ?? null;
@@ -53,5 +60,6 @@ export function visibleTopic(items: TopicListItem[], pickedId: string | null, sh
   if (picked && shown.includes(picked)) {
     return picked;
   }
-  return sidebarOrder(shown)[0] ?? null;
+  const kept = items.find((item) => item.topic.id === keptId);
+  return kept ?? sidebarOrder(shown)[0] ?? null;
 }
