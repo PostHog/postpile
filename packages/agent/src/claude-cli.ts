@@ -63,12 +63,16 @@ interface ClaudeJsonResult {
  * (older CLIs); the requested model is recorded then.
  */
 function answeringModel(parsed: ClaudeJsonResult): string | null {
-  const entries = Object.entries(parsed.modelUsage ?? {});
-  if (entries.length === 0) {
-    return null;
+  let best: string | null = null;
+  let bestCost = -1;
+  for (const [model, usage] of Object.entries(parsed.modelUsage ?? {})) {
+    const cost = usage.costUSD ?? 0;
+    if (cost > bestCost) {
+      best = model;
+      bestCost = cost;
+    }
   }
-  entries.sort((a, b) => (b[1].costUSD ?? 0) - (a[1].costUSD ?? 0));
-  return entries[0][0];
+  return best;
 }
 
 export function parseClaudeOutput(stdout: string): { text: string; costUsd: number | null; model: string | null } {
