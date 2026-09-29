@@ -150,6 +150,24 @@ export function clientName(name: string | undefined): string {
   return plain === '' ? 'unknown' : plain;
 }
 
+/**
+ * The MCP server lives as long as its Claude session and keeps its code
+ * after an app update. When the app recorded another version than this
+ * server's, every answer starts with a note asking for a reconnect.
+ */
+export async function staleServerNote(reader: Pick<PostPileReader, 'recordedAppVersion'>, ownVersion: string): Promise<string | null> {
+  let appVersion: string | null;
+  try {
+    appVersion = await reader.recordedAppVersion();
+  } catch {
+    return null;
+  }
+  if (appVersion === null || appVersion === ownVersion || ownVersion === 'unknown') {
+    return null;
+  }
+  return `Note: PostPile was updated to ${appVersion}, but this MCP server still runs ${ownVersion}, so its answers may follow old rules. Ask the user to reconnect the postpile MCP server (/mcp in Claude Code).`;
+}
+
 export function createMcpServer(reader: PostPileReader, options: McpServerOptions): McpServer {
   const server = new McpServer({ name: 'postpile', version: options.version }, { instructions: INSTRUCTIONS });
   const ctx: ActionContext = {
@@ -168,9 +186,11 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
       result = { text: `PostPile could not answer: ${errorText(error)}. Try again, or go on without PostPile.`, found: false, isError: true };
     }
     const isError = result.isError === true;
-    options.onToolCall?.(tool, { found: result.found, responseChars: result.text.length, error: isError });
+    const note = await staleServerNote(reader, options.version);
+    const text = note ? `${note}\n\n${result.text}` : result.text;
+    options.onToolCall?.(tool, { found: result.found, responseChars: text.length, error: isError });
     return {
-      content: [{ type: 'text' as const, text: result.text }],
+      content: [{ type: 'text' as const, text }],
       ...(isError ? { isError: true } : {}),
       ...(result.structured && !isError ? { structuredContent: result.structured } : {}),
     };

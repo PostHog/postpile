@@ -609,6 +609,11 @@ export class FakeEngine implements EngineService {
     return this.lastSync;
   }
 
+  /** Sample data has no database, so no app ever recorded a version. */
+  async recordedAppVersion(): Promise<string | null> {
+    return null;
+  }
+
   async syncProgress(): Promise<SyncProgress | null> {
     return this.progress ? { ...this.progress, running: [...this.progress.running] } : null;
   }

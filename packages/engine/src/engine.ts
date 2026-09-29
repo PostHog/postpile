@@ -78,6 +78,7 @@ import {
   systemTimers,
   withQuietRepo,
 } from '@postpile/core';
+import { loadAppVersion, saveAppVersion } from './app-version-meta.ts';
 import type { AutoSyncOptions } from './auto-sync.ts';
 import { isPostHogMember } from '@postpile/core/telemetry-identity';
 import { PingSummary } from './telemetry/ping-summary.ts';
@@ -268,6 +269,10 @@ export class Engine implements EngineService {
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
+    // So an MCP server started before an app update can tell it runs old code.
+    if (deps.storeReadOnly !== true && deps.appVersion && deps.appVersion !== 'unknown') {
+      saveAppVersion(store, deps.appVersion);
+    }
     this.telemetry = deps.telemetry ?? new NoopTelemetry();
     this.pingSummary = new PingSummary(store, this.telemetry, now);
     this.toolHealth = deps.tools ?? ToolHealth.assumeOk(now);
@@ -738,6 +743,10 @@ export class Engine implements EngineService {
 
   async lastSyncReport(): Promise<SyncReport | null> {
     return loadLastSyncReport(this.deps.store);
+  }
+
+  async recordedAppVersion(): Promise<string | null> {
+    return loadAppVersion(this.deps.store);
   }
 
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {

@@ -20,7 +20,7 @@ import { parsePrInput } from './pr-input.ts';
 import { ago, answer, briefGlanceLines, day, echo, fenced, freshness, glanceLines, prSummaryLine, stateWord, tileLine, turnText, whatsNewText, withActor } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'lastSyncReport'>;
+export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'lastSyncReport' | 'recordedAppVersion'>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -182,8 +182,12 @@ function prHeadLines(detail: PrDetail, tiles: TileView[]): string[] {
     `${stateWord(pr.state, pr.isDraft)}, by ${pr.author}, +${pr.additions} -${pr.deletions}, updated ${day(pr.updatedAt)}`,
     pr.url,
   ];
+  // The move of this PR, as the detail pane shows it, not of its tile: on a set another PR's move can lead the tile.
+  const row = tiles.flatMap((view) => view.prs).find((summary) => summary.key === pr.key);
+  if (row) {
+    lines.push(turnText(row.turn));
+  }
   for (const view of tiles) {
-    lines.push(turnText(view.turn));
     const unread = view.state.unreadBecause.filter((reason) => reason.prKey === pr.key);
     for (const reason of unread) {
       lines.push(`Unread for you: ${withActor(reason.actor, reason.summary)} (${day(reason.at)})`);
@@ -444,8 +448,9 @@ function repoMatches(pr: PrSummary, repo: string | null): boolean {
   return repo === null || parsePrKey(pr.key).repo.toLowerCase() === repo.toLowerCase();
 }
 
-function moveMatches(view: TileView, whoseMove: WhoseMoveFilter): boolean {
-  return whoseMove === 'any' || view.turn.kind === whoseMove;
+/** A tile's move (whats_on_me) or one PR's (search_prs). */
+function moveMatches(subject: Pick<TileView, 'turn'>, whoseMove: WhoseMoveFilter): boolean {
+  return whoseMove === 'any' || subject.turn.kind === whoseMove;
 }
 
 /** "Showing 26-50 of 80." plus the line that says how to get the next page, for a cut list. */
@@ -483,11 +488,11 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
     const keys = wanted.get(detail.topic.id) ?? new Set<PrKey>();
     for (const view of detail.tiles) {
       for (const pr of view.prs) {
-        if (!keys.has(pr.key) || seen.has(pr.key) || !stateMatches(pr, options.state) || !repoMatches(pr, options.repo) || !moveMatches(view, options.whoseMove)) {
+        if (!keys.has(pr.key) || seen.has(pr.key) || !stateMatches(pr, options.state) || !repoMatches(pr, options.repo) || !moveMatches(pr, options.whoseMove)) {
           continue;
         }
         seen.add(pr.key);
-        rows.push(`${prSummaryLine(pr)}  · topic ${detail.topic.name} (${detail.topic.id}) · ${turnText(view.turn)}`);
+        rows.push(`${prSummaryLine(pr)}  · topic ${detail.topic.name} (${detail.topic.id}) · ${turnText(pr.turn)}`);
       }
     }
   }
