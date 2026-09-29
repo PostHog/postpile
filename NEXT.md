@@ -965,6 +965,18 @@ the app meanwhile.
   unread. DESIGN.md "Tile faces", "Three-pane balance", "Queue sections",
   "Glance catch-up" › "Out of date wording".
 
+- **A push answers an ask on your own PR; mentions are not called replies**
+  (2026-09-29): whose turn counts your last touch (comment, review, push to
+  your own PR) as the answer to a mention or reply; the move text says what
+  happened ("lyra mentioned you"), only a question says "Answer …".
+  DESIGN.md "Whose turn" rule 2.
+
+- **You already dealt with it** (2026-09-29): your own action on a PR (your
+  last touch: review, comment, push on your own PR) makes earlier events
+  seen; threads whose unread activity all predates it get marked read on
+  GitHub (not for pushes); opening a PR in PostPile marks it read when
+  nothing is asked of you. DESIGN.md "You already dealt with it".
+
 - **CI is not a signal** (2026-09-29): CI status feeds no agent prompt
   (glance, dossier update, ping decision, memory recheck, chat, topics), no
   hash and no dossier delta; the glance and dossier update prompts say not to

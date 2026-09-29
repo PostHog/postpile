@@ -123,6 +123,11 @@ describe('quiet mark-reads and ping decisions', () => {
     expect(line?.title).toContain('trunk-io[bot], CI');
   });
 
+  it('says what the user did when that was the reason', () => {
+    const quiet = entry({ origin: 'quiet', outcome: 'github', batch: null, detail: 'you approved after it' });
+    expect(actionLine({ ...row({ unread: false }), lastAction: quiet }, now)?.text).toBe('marked read by PostPile: you approved after it · 2h ago');
+  });
+
   it('words a ping decision: pinged or withheld, by whom, why and when', () => {
     const base = { threadId: 't', prKey: 'acme/app#1', title: '', body: '', at: '2026-09-27T09:00:00Z' };
     expect(pingDecisionLine({ ...base, ping: false, source: 'agent', reason: 'an FYI, nothing asked' }, now)).toMatchObject({

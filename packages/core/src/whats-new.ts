@@ -1,21 +1,21 @@
 // "What is new" on a revisit: the viewer already touched the PR (their own
-// review, approval, comment or push, or a mark-read in the app or on
-// GitHub) and loud events came in after that. The tile's why-now strip and
+// review, approval, comment, push to their own PR, merge or close, see
+// `last-touch.ts`, or a mark-read in the app or on GitHub) and loud events
+// came in after that. The tile's why-now strip and
 // the detail pane's "New since you looked" box say what changed since that
 // touch. Rules only; the renderer turns the result into words
 // (`lib/whats-new.ts`). DESIGN.md "Tile faces" › Why now on a revisit.
-import { isUnseenLoud } from './loudness.ts';
 import { PUSH_KINDS } from './kinds.ts';
-import { sameLogin } from './mentions.ts';
-import type { EventKind, IsoTime, PrEvent, Viewer } from './types.ts';
+import { isOwnEvent, lastTouch, type TouchKind } from './last-touch.ts';
+import { isUnseenLoud } from './loudness.ts';
+import type { EventKind, IsoTime, Pr, PrEvent, Viewer } from './types.ts';
 
 /**
  * The viewer's last touch before the new events: one of their own actions
- * (loudness rules mark these "your own activity"), or a mark-read (events
- * turn seen when marked read in the app or when GitHub's `last_read_at`
- * passes them).
+ * (`lastTouch`), or a mark-read (events turn seen when marked read in the
+ * app or when GitHub's `last_read_at` passes them).
  */
-export type WhatsNewAnchorKind = 'changes_request' | 'approval' | 'review' | 'comment' | 'push' | 'read';
+export type WhatsNewAnchorKind = TouchKind | 'read';
 
 export interface WhatsNewAnchor {
   kind: WhatsNewAnchorKind;
@@ -87,33 +87,6 @@ function leadKindOf(kind: EventKind): WhatsNewLeadKind {
   }
 }
 
-/** The anchor kind of one of the viewer's own events; null for kinds that are not a touch (merge, close, ...). */
-function anchorKindOf(kind: EventKind): WhatsNewAnchorKind | null {
-  if (PUSH_KINDS.includes(kind)) {
-    return 'push';
-  }
-  switch (kind) {
-    case 'review_changes_requested':
-      return 'changes_request';
-    case 'review_approved':
-      return 'approval';
-    case 'review_commented':
-      return 'review';
-    case 'comment':
-    case 'reply_to_user':
-    case 'question_to_user':
-    case 'mention':
-    case 'team_mention':
-      return 'comment';
-    default:
-      return null;
-  }
-}
-
-function isOwn(event: PrEvent, viewer: Viewer): boolean {
-  return event.actor !== '' && sameLogin(event.actor, viewer.login);
-}
-
 function byTime(a: PrEvent, b: PrEvent): number {
   return a.at < b.at ? -1 : a.at > b.at ? 1 : 0;
 }
@@ -122,23 +95,19 @@ function byTime(a: PrEvent, b: PrEvent): number {
  * The viewer's touch before `before`: their newest own action wins (it says
  * what they did), else the newest mark-read. Null when they never touched it.
  */
-function lastTouch(events: PrEvent[], viewer: Viewer, before: IsoTime): WhatsNewAnchor | null {
-  let own: WhatsNewAnchor | null = null;
+function anchorBefore(pr: Pr, events: PrEvent[], viewer: Viewer, before: IsoTime): WhatsNewAnchor | null {
+  const own = lastTouch(pr, events, viewer, { before });
+  if (own !== null) {
+    return own;
+  }
   let read: IsoTime | null = null;
   for (const event of events) {
-    if (isOwn(event, viewer)) {
-      const kind = anchorKindOf(event.kind);
-      if (kind !== null && event.at < before && (own === null || event.at >= own.at)) {
-        own = { kind, at: event.at };
-      }
+    if (isOwnEvent(event, viewer)) {
       continue;
     }
     if (event.seenAt !== null && event.seenAt <= before && (read === null || event.seenAt > read)) {
       read = event.seenAt;
     }
-  }
-  if (own !== null) {
-    return own;
   }
   return read === null ? null : { kind: 'read', at: read };
 }
@@ -168,7 +137,7 @@ function extraCount(fresh: PrEvent[], lead: WhatsNewLead): number {
  * count. Null when there is nothing new, or when the viewer never touched the
  * PR before the new events (a first-time ask keeps the plain wording).
  */
-export function whatsNew(events: PrEvent[], viewer: Viewer | null): WhatsNew | null {
+export function whatsNew(pr: Pr, events: PrEvent[], viewer: Viewer | null): WhatsNew | null {
   if (viewer === null) {
     return null;
   }
@@ -178,7 +147,7 @@ export function whatsNew(events: PrEvent[], viewer: Viewer | null): WhatsNew | n
   if (!first || !newest) {
     return null;
   }
-  const anchor = lastTouch(events, viewer, first.at);
+  const anchor = anchorBefore(pr, events, viewer, first.at);
   if (anchor === null) {
     return null;
   }

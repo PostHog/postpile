@@ -341,6 +341,11 @@ export interface ActionResult {
   undoToken: string | null;
 }
 
+/** Opening a PR in PostPile: whether its GitHub thread was marked read ("opened in PostPile"). Nothing to show either way. */
+export interface OpenedReadResult {
+  marked: boolean;
+}
+
 export type TileFeedbackKind = 'not_mine' | 'not_related' | 'wrong_topic';
 
 export interface FeedbackInput {

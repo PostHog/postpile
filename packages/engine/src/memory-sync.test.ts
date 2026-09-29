@@ -553,7 +553,7 @@ describe('replies that ask nothing', () => {
 
     expect(judgedTopics(h)).toEqual(['depot']);
     expect(h.store.meta.get(REJUDGE_ASKS_KEY)).not.toBeNull();
-    expect((await h.engine.getTopic('depot'))?.tiles[0]?.turn).toMatchObject({ kind: 'you', what: 'Reply to bob' });
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.turn).toMatchObject({ kind: 'you', what: 'bob replied to you' });
   });
 
   it('are re-judged topic by topic under the call cap, each only once', async () => {
@@ -580,7 +580,7 @@ describe('replies that ask nothing', () => {
     await h.engine.sync({ agentJobs: ['events'] });
 
     const turn = (await h.engine.getTopic('depot'))?.tiles[0]?.turn;
-    expect(turn).toMatchObject({ kind: 'you', move: 'reply', what: 'Reply to bob' });
+    expect(turn).toMatchObject({ kind: 'you', move: 'reply', what: 'bob replied to you' });
   });
 });
 
