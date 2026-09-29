@@ -1873,7 +1873,11 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      changes"). Failing CI alone is not your move (2026-09-29).
    - them: that change request, after you pushed and requested ada again
      (she is back in the requested reviewers): "ada to re-review"
-     (2026-09-29, `reReviewAsked` in `changes-answered.ts`).
+     (2026-09-29, `reReviewAsked` in `changes-answered.ts`). Every standing
+     change request counts: while any of them has no re-review asked after
+     your push, the move stays yours and names the first such reviewer
+     ("Address carol's changes"); "ada to re-review" only once all have
+     (`standingChanges`, 2026-09-29).
    - them: the first pending reviewer, user before team, shown as "Waiting
      on sol" (`WhoseTurn.lead`), "and N more" when several are asked. Your
      own team asked by CODEOWNERS counts as a reviewer here, never as a
@@ -1914,7 +1918,9 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      stands: the author "to address ada's changes" (the author moves
      first). Once the author pushed after it and requested ada again (she
      is back in `reviewerUsers`), it is ada's move: "ada to re-review"
-     (2026-09-29, `reReviewAsked`; the team request stays on hold).
+     (2026-09-29, `reReviewAsked`; the team request stays on hold). With
+     several change requests, the author moves while any of them lacks
+     that re-review (`standingChanges`).
    - none: a routed team request whose agent glance says NOT_YOURS (stored
      glance, stale or not, `Board.notYours`, so the tile state, whose turn
      and after-read agree). The PR stays in To review with its team chip;

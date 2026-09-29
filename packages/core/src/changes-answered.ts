@@ -6,7 +6,7 @@
 import { isBot } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
-import { newestVerdictBy } from './review-request.ts';
+import { changesRequestedByAll, newestVerdictBy } from './review-request.ts';
 import type { EventKind, IsoTime, Pr, Viewer } from './types.ts';
 
 export interface ChangesAnswer {
@@ -128,4 +128,25 @@ export function reReviewAsked(pr: Pr, reviewer: string): boolean {
     return false;
   }
   return pushedAfter(pr, reviewer, verdict.submittedAt);
+}
+
+/**
+ * Where the standing change requests leave the PR (2026-09-29).
+ * address: the author moves first, since at least one request has no
+ * re-review asked after the author's push (`reReviewAsked`); `by` names the
+ * first of them. re_review: every request has one; `by` names the first
+ * reviewer. Every request counts, so "Bob to re-review" never hides open
+ * work for Carol.
+ */
+export type StandingChanges = { kind: 'address' | 're_review'; by: string };
+
+/** See `StandingChanges`. `except` leaves one reviewer out (the viewer, on someone else's PR). Null without a standing request. */
+export function standingChanges(pr: Pr, except: string | null = null): StandingChanges | null {
+  const reviewers = changesRequestedByAll(pr).filter((login) => except === null || !sameLogin(login, except));
+  const first = reviewers[0];
+  if (first === undefined) {
+    return null;
+  }
+  const waiting = reviewers.find((login) => !reReviewAsked(pr, login));
+  return waiting === undefined ? { kind: 're_review', by: first } : { kind: 'address', by: waiting };
 }

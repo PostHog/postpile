@@ -1,7 +1,7 @@
 // "Whose turn": is the next move on a tile the viewer's, someone else's, or
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
 import { isBot } from './bots.ts';
-import { changesAnswered, reReviewAsked, type ChangesAnswer } from './changes-answered.ts';
+import { changesAnswered, standingChanges, type ChangesAnswer } from './changes-answered.ts';
 import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
@@ -223,13 +223,13 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
   if (threads.count > 0) {
     return you(ctx, 'address_changes', `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
   }
-  const changesBy = changesRequestedBy(ctx.pr);
-  if (changesBy && reReviewAsked(pr, changesBy)) {
-    // You pushed and asked them again: their move now.
-    return them(ctx, changesBy, RE_REVIEW);
+  const changes = standingChanges(pr);
+  if (changes?.kind === 're_review') {
+    // You pushed and asked every one of them again: their move now.
+    return them(ctx, changes.by, RE_REVIEW);
   }
-  if (changesBy) {
-    return you(ctx, 'address_changes', `Address ${changesBy}'s changes`);
+  if (changes) {
+    return you(ctx, 'address_changes', `Address ${changes.by}'s changes`);
   }
   // Users before teams; the viewer's own team can sit here too (CODEOWNERS).
   const reviewers = [...pr.reviewerUsers, ...pr.reviewerTeams];
@@ -254,9 +254,10 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   if (hold?.kind === 'not_yours') {
     return NO_TURN;
   }
-  if (hold?.kind === 'changes') {
-    // The author moves first, until they pushed and asked the requester again.
-    return reReviewAsked(pr, hold.by) ? them(ctx, hold.by, RE_REVIEW) : them(ctx, pr.author, `to address ${hold.by}'s changes`);
+  const changes = hold?.kind === 'changes' ? standingChanges(pr, ctx.viewer.login) : null;
+  if (changes) {
+    // The author moves first, until they pushed and asked every requester again.
+    return changes.kind === 're_review' ? them(ctx, changes.by, RE_REVIEW) : them(ctx, pr.author, `to address ${changes.by}'s changes`);
   }
   if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
     return you(ctx, 'review', reviewText(ctx, ask));
@@ -275,9 +276,9 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     if (pr.reviewDecision === 'APPROVED') {
       return them(ctx, pr.author, 'to merge');
     }
-    const changesBy = changesRequestedBy(pr);
-    if (changesBy && reReviewAsked(pr, changesBy)) {
-      return them(ctx, changesBy, RE_REVIEW);
+    const changes = standingChanges(pr);
+    if (changes?.kind === 're_review') {
+      return them(ctx, changes.by, RE_REVIEW);
     }
     return them(ctx, teamRequestTakenBy(ctx.pr, ctx.viewer)[0]!, 'is reviewing');
   }

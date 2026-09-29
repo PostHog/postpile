@@ -64,6 +64,18 @@ describe('whoseTurn: your move', () => {
     expect(turn(forced)).toMatchObject({ kind: 'them', who: 'ada', what: 'to re-review' });
   });
 
+  it('waits on the author while any outsider change request lacks a re-review, on a routed team request', () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
+    const reviews = [
+      makeReview({ id: 'r-bob', author: 'bob', state: 'CHANGES_REQUESTED', submittedAt: at(10) }),
+      makeReview({ id: 'r-carol', author: 'carol', state: 'CHANGES_REQUESTED', body: 'Please split the migration.', submittedAt: at(12) }),
+    ];
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'], reviews, commits: [makeCommit({ author: 'rowan', committedAt: at(20) })] });
+    const turn = (p: Pr) => turnOf(singleTile(p), [p], [], [], withTeam);
+    expect(turn({ ...pr, reviewerUsers: ['bob'] })).toMatchObject({ kind: 'them', who: 'rowan', what: "to address carol's changes" });
+    expect(turn({ ...pr, reviewerUsers: ['bob', 'carol'] })).toMatchObject({ kind: 'them', who: 'bob', what: 'to re-review' });
+  });
+
   it('names the re-reviewer on a team request a teammate picked up with a change request', () => {
     const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
     const changes = makeReview({ author: 'lyra', state: 'CHANGES_REQUESTED', submittedAt: at(10) });
@@ -237,6 +249,18 @@ describe('whoseTurn: on your own PR', () => {
     // A push from before the change request does not count.
     const early = { ...changes, reviewerUsers: ['ada'], commits: [makeCommit({ author: me, committedAt: at(5) })] };
     expect(single(early)).toMatchObject({ kind: 'you', what: "Address ada's changes" });
+  });
+
+  it('keeps the move yours while any change request has no re-review asked since your push', () => {
+    const reviews = [
+      makeReview({ id: 'r-bob', author: 'bob', state: 'CHANGES_REQUESTED', submittedAt: at(10) }),
+      // Carol asked for changes in the review body alone: no thread waits on you.
+      makeReview({ id: 'r-carol', author: 'carol', state: 'CHANGES_REQUESTED', body: 'Please split the migration.', submittedAt: at(12) }),
+    ];
+    const pushed = { ...own, reviews, commits: [makeCommit({ author: me, committedAt: at(20) })] };
+    expect(single({ ...pushed, reviewerUsers: ['bob'] })).toMatchObject({ kind: 'you', move: 'address_changes', what: "Address carol's changes" });
+    expect(single(pushed)).toMatchObject({ kind: 'you', what: "Address bob's changes" });
+    expect(single({ ...pushed, reviewerUsers: ['bob', 'carol'] })).toEqual({ kind: 'them', who: 'bob', what: 'to re-review', prKey: own.key });
   });
 
   it('never makes failing CI on your own PR a move of yours: CI is not a signal', () => {
