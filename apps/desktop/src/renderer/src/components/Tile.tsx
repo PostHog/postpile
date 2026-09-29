@@ -15,7 +15,7 @@ import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { TileMenu } from './TileMenu.tsx';
 import { TurnLine } from './TurnLine.tsx';
-import { UnreadStrip } from './UnreadStrip.tsx';
+import { UnreadStrip, UnseenMergeStrip } from './UnreadStrip.tsx';
 import { markReadNote } from '../lib/guard.ts';
 import { githubLink, markButtonLabel, tileFooterAction } from '../lib/mark-read.ts';
 
@@ -174,6 +174,7 @@ export function Tile(props: TileProps) {
         </span>
       )}
       {unread && <UnreadStrip view={view} />}
+      {!unread && <UnseenMergeStrip view={view} />}
       <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pt-3 pb-3">
         <div className="flex cursor-pointer flex-col gap-2" onClick={selectLead}>
           <div className="flex items-center gap-[7px]">

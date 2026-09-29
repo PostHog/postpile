@@ -263,9 +263,11 @@ the reasons and does not flip back:
    and "a useful rule for any engineer … not in instructions". The phrase
    match is gone; the agent may still raise a single event like any other.
 2. *Not done until seen.* `isPrDone`: a merged PR is done, except while its
-   `merged_without_review` event is unseen. Such a tile is `open`: grey, the
-   merge as its dot line, whose turn "none", in the normal tile list (not in
-   the Done fold). History: 2026-09-25 "approved and even merged might mean I
+   `merged_without_review` event is unseen. Such a tile is `open`, whose turn
+   "none", in the normal tile list (not in the Done fold), and carries the
+   merge on `TileState.unseenMerges`: the tile shows it in a grey strip where
+   an unread tile has its warm one ("nell merged it without your review ·
+   2d", `UnseenMergeStrip`), without the NEW pill. History: 2026-09-25 "approved and even merged might mean I
    still need to take a look"; 2026-09-28 "review required in done makes no
    sense" (done = nothing asked of the user, which stays: nothing is asked
    here, but something is unseen) and "not urgent when all stuff has merged"

@@ -942,6 +942,15 @@ the app meanwhile.
 
 ## Decided
 
+- **Merged without your review is surfaced, never loud** (2026-09-29
+  evening, tried on the "PostPile Tile Rules" page first): the tile stays
+  open with a grey strip until you mark it read; a "Not yours" glance
+  settles it; glances run after the merge; topics wait for it before they
+  retire; the topic row shows "N merged without you". The instructions phrase
+  that made it loud is gone. Only your own review counts, also for team
+  requests. Full rules and their history: DESIGN.md "Merged without your
+  review".
+
 - **PostPile never uses the full GitHub quota (2026-09-29)**: it shares the
   hourly limits with the user's own gh and tools (same token), so it leaves
   clear headroom. With 50% or less of a limit left, the hourly auto sync and

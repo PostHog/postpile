@@ -280,7 +280,9 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   of the strip's PR, `stripNews`) the text, avatar, badge, "+N" and age
   come from core's `whatsNew`, worded by `whatsNewText` in
   `lib/whats-new.ts`; never add a second line or change the strip's size. Only unread tiles have the
-  strip; read tiles get a quieter (ink-2) title, done and draft tiles a
+  warm strip; an open tile with an unseen merge without the user's review
+  (`TileState.unseenMerges`) gets the same-sized grey `UnseenMergeStrip`,
+  no NEW pill; read tiles get a quieter (ink-2) title, done and draft tiles a
   muted one. Drafts (`isDraftTile`): grey "Draft" chip and a dashed frame
   or dashed left band.
 - PR status (design 3a, 2026-09-29): `PrStateIcon` at the start of the row,

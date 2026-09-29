@@ -86,7 +86,20 @@ function YourMoveChip(props: { count: number }) {
   );
 }
 
-/** One topic: name, faces and the unread bubble, then a one-line summary with the "your move" chip at its end. */
+/**
+ * "2 merged without you" in plain grey, never coral: tiles holding a merge
+ * without the user's review they have not seen (DESIGN "Merged without your review").
+ */
+function UnseenMergeChip(props: { count: number }) {
+  const label = `${props.count} ${props.count === 1 ? 'PR' : 'PRs'} merged without your review, not seen yet`;
+  return (
+    <span title={label} className="flex h-[15px] shrink-0 items-center gap-1 rounded bg-chip px-1 text-[9.5px] font-semibold whitespace-nowrap text-ink-2">
+      <span className="font-mono">{props.count}</span> merged without you
+    </span>
+  );
+}
+
+/** One topic: name, faces and the unread bubble, then a one-line summary with the "your move" and "merged without you" chips at its end. */
 function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
   const { item } = props;
   // Unread rows: bold ink name, the bubble and a light warm row. Read rows: regular, muted, no bubble.
@@ -115,6 +128,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
           {topicSnippet(item)}
         </span>
         {item.yourMoveTiles > 0 && <YourMoveChip count={item.yourMoveTiles} />}
+        {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
       </span>
     </button>
   );

@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- PRs that merged without your review are no longer tucked into Done. Their tile stays in the list with a grey line ("nell merged it without your review"), never unread and never a ping, until you mark it read, which also marks it read on GitHub. The agent now also glances these PRs after the merge, so "Look closer" tells you which ones are worth a look; "Not yours" moves one to Done. The topic row says how many are waiting ("2 merged without you"), and a topic with one doesn't retire. This works for everyone; the "merged without my review" instruction is no longer needed.
+
 ## 0.4.0 (2026-09-29)
 
 ### New

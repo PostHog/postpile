@@ -25,7 +25,7 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): Top
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,
-    yourMoveTiles: 0,
+    yourMoveTiles: 0, unseenMergeTiles: 0,
     queues: { tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0 },
     people: [],
     ...extra,

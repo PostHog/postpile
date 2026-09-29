@@ -63,3 +63,45 @@ export function UnreadStrip(props: { view: TileView }) {
     </div>
   );
 }
+
+/**
+ * The quiet counterpart on an open tile: a merge without the user's review
+ * they have not seen. Grey, no NEW badge, never coral: it waits to be looked
+ * at, it does not ask for anything (DESIGN "Merged without your review").
+ */
+export function UnseenMergeStrip(props: { view: TileView }) {
+  const now = useNow();
+  const merges = props.view.state.unseenMerges ?? [];
+  const merge = merges[merges.length - 1];
+  if (!merge) {
+    return null;
+  }
+  const split = splitActor(merge.summary, merge.actor);
+  return (
+    <div className="flex h-[38px] shrink-0 items-center gap-[9px] rounded-t-[11px] border-b border-hairline bg-subtle px-3.5 text-xs text-ink-2">
+      <span className="relative shrink-0">
+        <Avatar login={merge.actor} size="lg" />
+        <span className="absolute -right-1 -bottom-[3px] flex size-[15px] items-center justify-center rounded-full border-[1.5px] border-subtle bg-ink-2 text-on-ink">
+          <Glyph glyph={eventGlyph(merge.kind)} />
+        </span>
+      </span>
+      <span className="min-w-0 truncate" title={`${merge.summary}. Not seen yet; Mark done once you have looked.`}>
+        {split ? (
+          <>
+            <span className="font-[650]">{split.actor}</span>
+            {split.rest}
+          </>
+        ) : (
+          merge.summary
+        )}
+      </span>
+      {props.view.prs.length > 1 && <span className="shrink-0 font-mono text-[10.5px] text-muted">#{prNumber(merge.prKey)}</span>}
+      {merges.length > 1 && (
+        <span className="shrink-0 text-[11px] text-muted" title={`${merges.length - 1} more merged without your review on this tile`}>
+          +{merges.length - 1}
+        </span>
+      )}
+      <span className="ml-auto shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(merge.at, now)}</span>
+    </div>
+  );
+}
