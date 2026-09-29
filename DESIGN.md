@@ -8,7 +8,34 @@ Decisions from the design rounds, tidied. Open points are at the end.
 has a stable id, a name, who drives it, the user's role, an agent-written
 summary, and *tailoring*: per-topic instructions the user gave through chat,
 stored only after the user confirms. Topics are never renamed or merged
-silently; the agent files proposals and the user decides.
+silently; the agent files proposals and the user decides. The one exception
+is a small split (2026-09-29): consolidation applies a split of at most 3
+PRs (`AUTO_SPLIT_MAX_PRS`, stack layers counted, every named PR in the topic,
+at least one PR left behind) right away, with no undo; "Wrong topic" on a PR
+fixes a bad one, and that correction reaches the next consolidation prompt.
+Bigger splits stay proposals.
+
+**Areas, topics, tiles and sets** (2026-09-29): one glossary,
+`WORK_GLOSSARY` in `packages/agent/src/prompts/shared.ts`, goes into every
+prompt that sorts, groups or tidies PRs (topic assignment, set grouping,
+dossier update, consolidation), so all agents cut work at the same grain:
+
+- *Area*: a part of the product or codebase ("Hogland", "CI"). A label on
+  topics, never a topic itself.
+- *Topic*: one goal someone drives, with a finish line. The test: one
+  sentence states the goal, and every PR moves it forward or came out of
+  that work while it was going on (a fix found while doing it). Sharing a
+  repo, an area or a word ("CI", "security") is not enough.
+- *Tile*: what the user acts on in one go: a PR, a stack or a set.
+- *Set*: two or more PRs inside one topic best read together.
+
+Topic assignment puts a PR into a live topic whose goal it serves or came
+out of (live: open PRs or activity in the last two weeks; each offered topic
+shows its open count and last activity). A finished or quiet topic only takes
+a direct follow-up; anything else gets a new topic. There is no catch-all
+"fixes and upkeep" topic and no preference for broad topics any more: that
+preference let unrelated PRs pile into one topic. The user's instructions may
+set a finer or coarser grain.
 
 **Tiles** are the unit of attention inside a topic. A tile holds one of:
 
@@ -74,7 +101,8 @@ a classification.
   them while whose turn is not "you" (a later question or mention after the approval keeps
   it out of Done), or handled (marked read) while whose turn is not "you" and no review is pending of
   them (`reviewPending`: a personal request, a team request on a teammate's PR, or a routed
-  team request no teammate picked up, head not reviewed by them). Marking read a PR that
+  team request no teammate picked up and not on hold (`teamRequestHold`, see whose turn),
+  head not reviewed by them). Marking read a PR that
   still waits on their review makes it read (no strip, no coral) but leaves it open in the
   normal tile list with its turn footer, and in To review; it never lands in the Done fold.
   An approval counts on any commit (2026-09-28): a PR the user approved stays done after later
@@ -1387,7 +1415,17 @@ authors.
      ("Review for team-devex: lyra's PR") until another teammate approves
      or requests changes; a teammate's comment alone does not cover it
      (2026-09-28). A team request on a PR from outside the team (routed)
-     is yours only while no teammate reviewed at all.
+     is yours only while no teammate reviewed at all, and while it is not
+     on hold (`teamRequestHold`, 2026-09-29).
+   - them: a routed team request while someone else's changes request
+     stands: the author "to address ada's changes" (the author moves
+     first).
+   - none: a routed team request whose agent glance says NOT_YOURS (stored
+     glance, stale or not, `Board.notYours`, so the tile state, whose turn
+     and after-read agree). The PR stays in To review with its team chip;
+     a mark-read makes it done. A personal request or a team request on a
+     teammate's PR never goes on hold. Before this, a tile said "Not
+     yours" next to "Your move: Review for team-devex".
    - them: you commented or
      requested changes on the head: the author "to address 2 threads" (open
      threads you started), "to address your changes" or "to reply".
