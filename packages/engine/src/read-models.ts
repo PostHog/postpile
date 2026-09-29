@@ -345,12 +345,12 @@ export class ReadModels {
     return { login: viewer?.login ?? null, teamMembers: viewer?.teamMembers ?? [] };
   }
 
-  /** Decided or expired in the last OUTSIDE_PROPOSAL_DAYS days, newest first. */
+  /** Decided or expired in the last OUTSIDE_PROPOSAL_DAYS days, newest first; merges into this topic included. */
   private decidedProposals(topicId: string, now: string): TopicProposal[] {
     const since = new Date(Date.parse(now) - OUTSIDE_PROPOSAL_DAYS * 24 * 3600_000).toISOString();
     const expired = this.store.proposals
       .listPendingForTopic(topicId)
-      .filter((proposal) => proposal.topicId === topicId && proposalOutcome(proposal, now) === 'expired' && (proposalOutcomeAt(proposal, now) ?? '') >= since);
+      .filter((proposal) => proposalOutcome(proposal, now) === 'expired' && (proposalOutcomeAt(proposal, now) ?? '') >= since);
     const decided = this.store.proposals.listDecidedForTopic(topicId, since);
     return [...decided, ...expired].sort((a, b) => (proposalOutcomeAt(b, now) ?? '').localeCompare(proposalOutcomeAt(a, now) ?? ''));
   }

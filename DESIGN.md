@@ -3250,7 +3250,9 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
   data can't fake a close tag; fence tags inside the data are broken up
   anyway; control characters and invisible Unicode (tag characters,
   bidi overrides, zero-width) are stripped from fenced text; topic names in
-  error text sit inside the fence too.
+  error text sit inside the fence too, as do the app's reasons in the two
+  new tools' refusals (they name topics and PRs); only fixed wording stays
+  outside.
 - **Annotations**: the four reads keep `readOnlyHint`, idempotent, closed
   world. `refresh_from_github`: not read-only, not destructive, idempotent,
   open world. `propose_topic_change`: not read-only, not destructive,
@@ -3338,7 +3340,8 @@ now. GitHub reads only, never a write.
   tracked PR), a running poll cycle is waited for and then one runs with the
   PRs fetched directly; agent refreshes queue behind each other. The hourly
   cap counts only requests that read GitHub (fresh-only and refused ones
-  don't), in memory, so a restart resets it. A PR PostPile does not track is
+  don't, nor a read the app could not make: setup open, gh off), in
+  memory, so a restart resets it. A PR PostPile does not track is
   refused, never fetched. Refusals are tool errors. The action log row has
   no thread or PR (the detail lists them), so it never shows as a thread's
   last action; outcome `github` when GitHub was read, `skipped` otherwise.
@@ -3398,7 +3401,10 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   name is cut to letters, digits, `._ -` and 64 characters ("unknown" when
   empty); the renderer maps `claude-code` to Claude Code, `codex-mcp-client`
   to Codex and `cursor-vscode` to Cursor, and the topic header's proposal
-  row reads "Claude Code suggests: …" for outside ones.
+  row reads "Claude Code suggests: …" for outside ones. An accepted merge
+  archives its source topic, so decisions list merges on the target too
+  ("merged in from <source>"), and the propose answer for a merge points
+  at the target's `topic(...)` for the outcome.
 
 ## Architecture
 

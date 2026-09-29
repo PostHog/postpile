@@ -95,13 +95,18 @@ export class TopicProposalRepo {
     ).map(toProposal);
   }
 
-  /** Proposals about this topic decided (accepted or rejected) at or after `since`, newest first. */
+  /**
+   * Proposals about this topic decided (accepted or rejected) at or after
+   * `since`, newest first: the ones that change it, and merges into it (an
+   * accepted merge archives its source, so the target is where it shows).
+   */
   listDecidedForTopic(topicId: string, since: string): TopicProposal[] {
     return all<ProposalRow>(
       this.db,
       `SELECT * FROM topic_proposal
-       WHERE topic_id = ? AND status != 'pending' AND decided_at >= ?
+       WHERE (topic_id = ? OR into_topic_id = ?) AND status != 'pending' AND decided_at >= ?
        ORDER BY decided_at DESC, id`,
+      topicId,
       topicId,
       since,
     ).map(toProposal);

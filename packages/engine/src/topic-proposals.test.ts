@@ -48,6 +48,19 @@ describe('topic proposals from outside agents', () => {
     expect(topic?.decidedProposals.map((p) => p.id)).toEqual(['outside']);
   });
 
+  it('show an accepted merge on the target topic, since the merged one is archived', async () => {
+    const { h } = clockedHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    topicWithPrs(h, 'ci', [reviewRequestedPr(2)]);
+    h.store.proposals.add(proposal({ id: 'm', kind: 'merge', topicId: 'ci', name: null, intoTopicId: 'depot' }));
+    expect((await h.engine.getTopic('depot'))?.pendingProposals.map((p) => p.id)).toEqual(['m']);
+
+    expect((await h.engine.decideTopicProposal('m', true)).ok).toBe(true);
+
+    expect(h.store.topics.get('ci')?.status).toBe('archived');
+    expect((await h.engine.getTopic('depot'))?.decidedProposals.map((p) => [p.id, p.status])).toEqual([['m', 'accepted']]);
+  });
+
   it('list decisions of the last 14 days on the topic, newest first', async () => {
     const { h, setNow } = clockedHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

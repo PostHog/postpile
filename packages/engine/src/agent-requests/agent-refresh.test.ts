@@ -130,6 +130,21 @@ describe('AgentRefresher', () => {
     expect((await s.refresher.refresh({ kind: 'pr', prKey: 'acme/app#2' }, 'claude-code')).status).toBe('done');
   });
 
+  it('uses no hourly slot for a read the app could not make', async () => {
+    const s = setup();
+    s.onRead = async () => ({ kind: 'blocked', reason: 'setup not finished', retryAt: null });
+    for (let i = 0; i < 25; i += 1) {
+      expect((await s.refresher.refresh({ kind: 'pr', prKey: 'acme/app#1' }, 'claude-code')).status).toBe('blocked');
+    }
+    s.onRead = async () => ({ kind: 'ran' });
+    for (let i = 0; i < 20; i += 1) {
+      s.setNow(T0 + i * 61_000);
+      expect((await s.refresher.refresh({ kind: 'pr', prKey: 'acme/app#2' }, 'claude-code')).status).toBe('done');
+    }
+    s.setNow(T0 + 20 * 61_000);
+    expect((await s.refresher.refresh({ kind: 'pr', prKey: 'acme/app#3' }, 'claude-code')).reason).toContain('20 refreshes in the last hour');
+  });
+
   it('runs one refresh at a time', async () => {
     const s = setup();
     let release: () => void = () => {};

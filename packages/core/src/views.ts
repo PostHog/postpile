@@ -212,7 +212,8 @@ export interface TopicDetail {
   pendingProposals: TopicProposal[];
   /**
    * Accepted, rejected or expired in the last OUTSIDE_PROPOSAL_DAYS days,
-   * newest first. The MCP topic tool shows them, so an outside agent sees
+   * newest first, merges into this topic included (an accepted merge
+   * archives its source). The MCP topic tool shows them, so an outside agent sees
    * what became of its suggestions and does not repeat itself.
    */
   decidedProposals: TopicProposal[];

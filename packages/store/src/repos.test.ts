@@ -348,6 +348,11 @@ describe('TopicProposalRepo', () => {
     expect(store.proposals.listDecidedForTopic('topic-1', at(0)).map((p) => p.id)).toEqual(['c1', 'a1']);
     expect(store.proposals.listDecidedForTopic('topic-1', at(6)).map((p) => p.id)).toEqual(['c1']);
     expect(store.proposals.listPendingFromAgents().map((p) => p.id)).toEqual(['a2']);
+
+    store.proposals.add({ ...base, id: 'm1', kind: 'merge', topicId: 'topic-2', name: null, intoTopicId: 'topic-1', createdAt: at(7), source: 'agent', client: 'claude-code' });
+    store.proposals.decide('m1', 'accepted', at(8));
+    expect(store.proposals.listDecidedForTopic('topic-1', at(6)).map((p) => p.id)).toEqual(['m1', 'c1']);
+    expect(store.proposals.listDecidedForTopic('topic-2', at(6)).map((p) => p.id)).toEqual(['m1']);
   });
 });
 

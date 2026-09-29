@@ -64,7 +64,7 @@ function wantsAttention(view: TileView): boolean {
  * says when to try again. GitHub reads only, never a write.
  */
 export class AgentRefresher {
-  /** When each refresh that read GitHub started, for the hourly cap. */
+  /** When each refresh that read GitHub started, for the hourly cap; blocked runs are not in it. */
   private readonly readTimes: number[] = [];
   /** The refresh running now; the next one waits for it. */
   private running: Promise<unknown> = Promise.resolve();
@@ -164,13 +164,15 @@ export class AgentRefresher {
     if (capped) {
       return this.logged(client, capped);
     }
-    this.readTimes.push(nowMs);
     const fetchedBefore = new Map(stale.map((key) => [key, this.deps.pr(key)?.fetchedAt ?? null]));
     const eventsBefore = this.deps.eventCounts(stale);
     const run = await this.deps.read(stale);
     if (run.kind === 'blocked') {
+      // Nothing reached GitHub (setup open, gh off, a consolidation): no hourly slot used.
       return this.logged(client, { ...blocked(picked, run.reason, run.retryAt), fresh });
     }
+    // Counted once GitHub was read (or a running sync joined); refreshes run one at a time, so the cap can't be raced.
+    this.readTimes.push(nowMs);
     const fetched = stale.filter((key) => (this.deps.pr(key)?.fetchedAt ?? null) !== fetchedBefore.get(key));
     const eventsAfter = this.deps.eventCounts(fetched);
     const changed = fetched.filter((key) => (eventsAfter.get(key) ?? 0) > (eventsBefore.get(key) ?? 0));

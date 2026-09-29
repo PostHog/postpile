@@ -358,13 +358,22 @@ export async function prContext(ctx: ReadContext, input: string, detail: Detail)
   return { text: answer(await header(reader), data, [prFreshnessLine(pr, ctx), next]), found: true };
 }
 
-/** What the proposal would change, in a few words. */
-function proposalWords(proposal: TopicProposal): string {
+/** One read per topic, all at once; topics that are gone are left out. */
+async function readTopics(reader: PostPileReader, topicIds: string[]): Promise<TopicDetail[]> {
+  const details = await Promise.all([...new Set(topicIds)].map((topicId) => reader.getTopic(topicId)));
+  return details.filter((detail): detail is TopicDetail => detail !== null);
+}
+
+/** What the proposal would change, in a few words, seen from `topicId`. `name` looks up other topics' names. */
+function proposalWords(proposal: TopicProposal, topicId: string, name: (id: string | null) => string, outcome: string): string {
   if (proposal.kind === 'rename') {
     return `rename to "${proposal.name ?? ''}"`;
   }
+  if (proposal.kind === 'merge' && proposal.intoTopicId === topicId) {
+    return `${outcome === 'accepted' ? 'merged' : 'merge'} in from "${name(proposal.topicId)}"`;
+  }
   if (proposal.kind === 'merge') {
-    return `merge into ${proposal.intoTopicId ?? 'another topic'}`;
+    return `merge into "${name(proposal.intoTopicId)}"`;
   }
   if (proposal.kind === 'split') {
     return `split "${proposal.name ?? ''}" out (${proposal.prKeys.join(', ')})`;
@@ -375,25 +384,33 @@ function proposalWords(proposal: TopicProposal): string {
   return `new topic "${proposal.name ?? ''}"`;
 }
 
-function proposalLine(proposal: TopicProposal, now: string): string {
+function proposalLine(proposal: TopicProposal, topicId: string, name: (id: string | null) => string, now: string): string {
   const outcome = proposalOutcome(proposal, now);
   const when = outcome === 'pending' ? `pending since ${day(proposal.createdAt)}` : `${outcome} on ${day(proposalOutcomeAt(proposal, now) ?? proposal.createdAt)}`;
   const who = proposal.source === 'agent' ? `suggested by ${proposal.client ?? 'an outside agent'}` : "from PostPile's consolidation";
-  return `  ${when}: ${proposalWords(proposal)}, ${who}. Reason: ${proposal.reason}`;
+  return `  ${when}: ${proposalWords(proposal, topicId, name, outcome)}, ${who}. Reason: ${proposal.reason}`;
 }
 
 /**
- * Pending topic suggestions and the ones decided in the last 14 days, so an
- * outside agent sees what became of its suggestions and does not repeat
- * itself. Empty when there are none.
+ * Pending topic suggestions and the ones decided in the last 14 days, merges
+ * into this topic included, so an outside agent sees what became of its
+ * suggestions and does not repeat itself. The other topics' names are read
+ * once each (a merged topic is archived, but still readable by id). Empty
+ * when there are none.
  */
-function suggestionLines(detail: TopicDetail, now: Date): string[] {
+async function suggestionLines(reader: PostPileReader, detail: TopicDetail, now: Date): Promise<string[]> {
   const iso = now.toISOString();
   const proposals = [...detail.pendingProposals, ...detail.decidedProposals];
   if (proposals.length === 0) {
     return [];
   }
-  return ['', `Topic suggestions (pending, and decided in the last ${OUTSIDE_PROPOSAL_DAYS} days):`, ...proposals.map((proposal) => proposalLine(proposal, iso))];
+  const ids = new Set(proposals.flatMap((proposal) => [proposal.topicId, proposal.intoTopicId]).filter((id): id is string => id !== null && id !== detail.topic.id));
+  const names = new Map<string, string>([[detail.topic.id, detail.topic.name]]);
+  for (const other of await readTopics(reader, [...ids])) {
+    names.set(other.topic.id, other.topic.name);
+  }
+  const name = (id: string | null): string => (id === null ? 'another topic' : (names.get(id) ?? id));
+  return ['', `Topic suggestions (pending, and decided in the last ${OUTSIDE_PROPOSAL_DAYS} days):`, ...proposals.map((proposal) => proposalLine(proposal, detail.topic.id, name, iso))];
 }
 
 export async function topicOverview(ctx: ReadContext, input: string, detail: Detail): Promise<ToolAnswer> {
@@ -406,7 +423,7 @@ export async function topicOverview(ctx: ReadContext, input: string, detail: Det
   if (!topic) {
     return toolError([`Topic ${match.item.topic.id} is gone. Look it up again with whats_on_me or search_prs.`]);
   }
-  const data = [...(detail === 'full' ? fullTopicLines(topic, null) : briefTopicLines(topic)), ...suggestionLines(topic, ctx.now())];
+  const data = [...(detail === 'full' ? fullTopicLines(topic, null) : briefTopicLines(topic)), ...(await suggestionLines(reader, topic, ctx.now()))];
   const footer = detail === 'brief' ? ['Next: detail: "full" adds people, timeline, recent changes and every PR; pr_context for one PR.'] : [];
   return { text: answer(await header(reader), data, footer), found: true };
 }
@@ -429,12 +446,6 @@ function repoMatches(pr: PrSummary, repo: string | null): boolean {
 
 function moveMatches(view: TileView, whoseMove: WhoseMoveFilter): boolean {
   return whoseMove === 'any' || view.turn.kind === whoseMove;
-}
-
-/** One read per topic, all at once; topics that are gone are left out. */
-async function readTopics(reader: PostPileReader, topicIds: string[]): Promise<TopicDetail[]> {
-  const details = await Promise.all([...new Set(topicIds)].map((topicId) => reader.getTopic(topicId)));
-  return details.filter((detail): detail is TopicDetail => detail !== null);
 }
 
 /** "Showing 26-50 of 80." plus the line that says how to get the next page, for a cut list. */

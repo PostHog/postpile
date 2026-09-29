@@ -61,12 +61,12 @@ export class FakeTopicChanges {
     return this.pending().filter((proposal) => proposal.topicId === topicId);
   }
 
-  /** Accepted, rejected or expired in the last OUTSIDE_PROPOSAL_DAYS days, newest first. */
+  /** Accepted, rejected or expired in the last OUTSIDE_PROPOSAL_DAYS days, newest first; merges into this topic included. */
   decidedForTopic(topicId: string): TopicProposal[] {
     const now = this.timestamp();
     const since = new Date(this.now().getTime() - OUTSIDE_PROPOSAL_DAYS * 24 * 3600_000).toISOString();
     return this.data.proposals
-      .filter((proposal) => proposal.topicId === topicId && proposalOutcome(proposal, now) !== 'pending' && (proposalOutcomeAt(proposal, now) ?? '') >= since)
+      .filter((proposal) => (proposal.topicId === topicId || proposal.intoTopicId === topicId) && proposalOutcome(proposal, now) !== 'pending' && (proposalOutcomeAt(proposal, now) ?? '') >= since)
       .sort((a, b) => (proposalOutcomeAt(b, now) ?? '').localeCompare(proposalOutcomeAt(a, now) ?? ''));
   }
 
