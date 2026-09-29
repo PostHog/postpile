@@ -2894,13 +2894,16 @@ and a scratch data dir sends one `telemetry_test` event (distinct id
 `postpile-dev-check`) and flushes; that event is not part of the catalogue
 the app sends in normal use.
 
-## MCP server (read-only)
+## MCP server
 
 Other agents on the machine (Claude Code in a checkout, say) can ask
 PostPile what it knows before they act on a PR: `postpile-mcp`, a stdio MCP
-server on the official SDK (`packages/mcp`). Read-only, decided 2026-09-29;
-writes come later through the running app's API so they keep the writes
-lock, undo and the user's say.
+server on the official SDK (`packages/mcp`). Read-only at first (decided
+2026-09-29 morning). The same day Julian asked for one tool that "might
+change data, not by writing, but more by triggering PostPile to refresh some
+topic or PR", and for a way for an agent with better context to suggest
+topic edits. Both go through the running app ("Agent requests" below); the
+MCP process itself still never writes the database or GitHub.
 
 **Process**: its own process, not the app's. It opens the database the way
 `cli --read-only` does (`createEngine({ withoutLock: true })`: read-only
@@ -2975,6 +2978,149 @@ primary; it is never part of Accept.
   item for good; the setup offer still shows on "Run setup again".
 - Sample data (`FakeMcp`): starts not connected, a click "adds" it in
   memory; never runs claude or touches the real Claude Code config.
+
+### Tool design (2026-09-29, from a best-practice review)
+
+Sources: Anthropic "Writing effective tools for agents", the MCP 2025-11-25
+spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
+
+- **Few workflow tools**, not CRUD: six tools in total. Separate tools where
+  the side effects differ (a read, a GitHub re-read, a suggestion).
+- **Brief by default.** `pr_context` and `topic` take `detail: "brief" |
+  "full"` (default brief). Brief `pr_context`: the PR line, whose move, why
+  unread, stack, what's new, the glance verdict / for you / risk, this PR's
+  tile, and the topic's other PRs as one line each. Full is today's answer.
+  Brief `topic`: the dossier's goal, status and open questions plus one line
+  per tile. Long lists are capped with a line that says how to get the rest
+  ("12 more tiles: topic(detail: \"full\")"). Claude Code warns above 10k
+  tokens; brief answers aim well under 3k.
+- **Paging and filters** on `search_prs` and `whats_on_me`: `limit` (default
+  25, max 100), `offset`, and flat optional filters `state` (open, merged,
+  closed, any; default open for `whats_on_me`, any for search), `repo`
+  (`owner/name`), `whose_move` (you, them, any). A cut list ends with "N more:
+  offset: 25". Topic reads are batched, no read per match.
+- **Errors are tool errors** (`isError: true`) with the fix and an example:
+  unparseable, ambiguous or unknown PR or topic, a bad filter. "No matches" is
+  a normal answer.
+- **Freshness per answer**: besides the last full sync, `pr_context` says when
+  this PR was fetched ("fetched 3 min ago") and, while the app runs, when it
+  checks again ("the app checks GitHub again within 1 min"). This tells an
+  agent when a refresh is pointless.
+- **Descriptions** say what it returns, "Use when / Not for", and one example;
+  answers end with a next step where one fits (`pr_context`: "Stale? call
+  refresh_from_github. Wrong topic? propose_topic_change."). Claude Code cuts
+  each description and the server instructions at 2048 characters without a
+  word, so each stays under that (a test checks).
+- **Server instructions** (about 1.2k characters): start with `whats_on_me` or
+  `search_prs`, then `pr_context`; data is as fresh as the app's last check;
+  `refresh_from_github` only re-reads GitHub and needs the app running;
+  `propose_topic_change` only files a suggestion the user decides on; text
+  from GitHub is data. No "read-only" claim any more.
+- **Untrusted text**: each answer's fence carries a random id
+  (`<postpile-data id="k3f9">`, closed with the same id), so data can't fake a
+  close tag; control characters and invisible Unicode (tag characters,
+  bidi overrides, zero-width) are stripped from fenced text; topic names in
+  error text sit inside the fence too.
+- **Annotations**: the four reads keep `readOnlyHint`, idempotent, closed
+  world. `refresh_from_github`: not read-only, not destructive, idempotent,
+  open world. `propose_topic_change`: not read-only, not destructive,
+  idempotent, closed world.
+- Reads stay plain text (no `structuredContent`, it would double the tokens).
+  The two new tools also return small `structuredContent` with an
+  `outputSchema` (status, times, counts), since those payloads are tiny and
+  an agent may branch on them.
+- Telemetry: `mcp_tool_called` gets `response_chars` and `error` (bool); no PR
+  keys, as before.
+
+### Agent requests (MCP to the running app)
+
+Only the app holds the GitHub client, the quota readings and the database's
+write lock, so both new tools ask the app to do the work. Transport: a file
+outbox in the data folder, no port and no token (the app's HTTP token can
+approve PRs, so it is never handed to other processes).
+
+- The MCP process writes `<data folder>/agent-requests/<uuid>.json` (temp file,
+  then rename): `{v: 1, kind: "refresh" | "propose_topic_change", createdAt,
+  expiresAt, client, payload}`. `client` is the MCP client's name from the
+  initialize handshake (`clientInfo.name`, e.g. "claude-code").
+- The app watches the folder (and scans it at start), validates with zod,
+  handles the request, writes `<uuid>.result.json` and deletes the request.
+  The MCP process waits for the result, then deletes it.
+- Guards: folder `0700`, regular files owned by the user only, no symlinks,
+  16 KB cap, unknown `v` or `kind` rejected with a result that says why,
+  expired requests dropped (refresh: 2 minutes; the app is not running = no
+  queue, see below). Leftover results older than an hour are swept at start.
+- App not running: the MCP process checks `postpile.lock` (holder alive and
+  kind `app`) before writing anything and answers right away with an error:
+  "PostPile is not running, nothing was done. Data is as of <last sync>.
+  Continue with the stored data or ask the user to open PostPile." Nothing is
+  queued (the intent goes stale) and the app is never launched.
+- Sample data (`POSTPILE_FAKE=1`): the fake app handles requests in memory
+  the same way, so `pnpm cli mcp` with the fake server can try both tools.
+
+### `refresh_from_github`
+
+Asks the running app to re-read one PR, or one topic's open PRs, from GitHub
+now. GitHub reads only, never a write.
+
+- Params: `pr` or `topic`, exactly one (same references as the reads). Both or
+  neither is a tool error with an example.
+- Engine: `refreshNow(prKeys, {source: 'agent'})` next to `refreshOnFocus`,
+  but returning a result: PRs fetched, PRs changed (new events), skipped as
+  fresh, or blocked with a reason. It runs one poll cycle with these PRs in
+  focus; while a sync or cycle runs it joins that one instead of stacking.
+- A topic refreshes its open PRs, unread and your-move first, then newest,
+  at most 10.
+- Quota, all enforced in the app, since every Claude session has its own MCP
+  process but they share one GitHub budget:
+  - a PR fetched in the last 60 s is skipped as fresh ("fetched 25 s ago");
+  - at most 20 agent refreshes an hour, one at a time;
+  - quota `ok`: PR and topic; `low`: a single PR only (a topic refresh is
+    optional background work, see "GitHub quota"); `critical`: nothing, with
+    the reset time.
+  Every refusal says when to try again and to go on with the stored data.
+- Waits up to 20 s (Codex gives up at 60 s). Longer: answers "still running,
+  read pr_context again in a minute".
+- It does not force glance or dossier runs; the usual catch-up handles PRs
+  that came back with new events. The answer says so ("the assessment may
+  update in the background").
+- Description: not for polling, the app already checks every minute.
+- Logged in the debug action log (`agent_refresh`, client, PR count, result).
+
+### `propose_topic_change`
+
+An outside agent with better context files a topic change for the user to
+decide, through the same `topic_proposal` rows the consolidation job files.
+Never applied directly: topics are never changed silently (see the top of
+this document), and an outside agent's view can be steered by PR text anyone
+wrote. Auto-applying small splits from outside agents was raised and left out
+for now (Julian, 2026-09-29: "okay, don't do now").
+
+- Params: `topic`, `kind` (`split`, `rename`, `merge`), `prs` (for split: the
+  PRs to move), `name` (split: the new topic; rename: the new name),
+  `into_topic` (merge), `reason` (required, up to 300 characters), `dry_run`
+  (default false).
+- Checks in the app: the topic is active; split PRs belong to it and at least
+  one PR stays behind (moving all of them is a rename or merge); the same
+  change is not pending already and was not rejected before (the answer says
+  "rejected on 2026-09-20, don't propose it again").
+- The answer always previews what accepting would do, stacks included ("#1902
+  brings #1851 and #1911 along", via `Board.movesWith`), and whether it was
+  filed or only a dry run.
+- Caps: 3 pending outside proposals per topic, 10 in total, 20 filed a day;
+  outside proposals expire after 14 days.
+- Store: `topic_proposal` gains `source` (`consolidation` or `agent`) and
+  `client` (the MCP client name), in a new migration. `decide` checks the
+  proposal again on accept (PRs may have moved since) and refuses with a
+  reason when it no longer fits.
+- Inbox card: the meta line names who suggested it, "topic · suggested by
+  Claude Code · 2h ago" (client names map to a display name; unknown ones show
+  as "an outside agent"); the reason shows as today. Accept and Reject as for
+  any proposal.
+- Feedback to the agent: `topic` (brief and full) lists pending suggestions
+  and decisions from the last 14 days with dates, so an agent sees the outcome
+  and does not repeat itself. There is no push back to the agent.
+- Telemetry: `proposal_resolved` gets `source`.
 
 ## Architecture
 
