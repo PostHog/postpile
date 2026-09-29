@@ -11,6 +11,12 @@
 # token secrets and should only admit v* tags, so a branch can't publish the cask.
 # It renders homebrew/postpile.rb.tmpl into Casks/postpile.rb in
 # PostHog/homebrew-tap, mirroring PostHog/posthog's build-phrocs.yml.
+#
+# The build job runs in the `desktop-signing` environment (also v* tags only),
+# which holds PostHog's Apple Developer ID certificate and notarization login.
+# With them the app is signed, uses the hardened runtime and is notarized, like
+# PostHog/posthog's desktop-release.yml. Without the certificate the release
+# still goes out ad-hoc signed, with a warning. See RELEASING.md.
 
 name: Release
 
@@ -38,13 +44,16 @@ jobs:
     build:
         # Apple silicon runner: the app is arm64 only.
         runs-on: macos-14
-        timeout-minutes: 30
+        # Notarization waits on Apple, usually minutes, sometimes much longer.
+        timeout-minutes: 60
         if: github.repository == 'PostHog/postpile'
+        environment: desktop-signing
         permissions:
             contents: write
         outputs:
             version: ${{ steps.version.outputs.version }}
             sha256: ${{ steps.checksum.outputs.sha256 }}
+            signed: ${{ steps.signing.outputs.signed }}
         env:
             TAG: ${{ inputs.tag || github.ref_name }}
         steps:
@@ -91,9 +100,71 @@ jobs:
                   pnpm typecheck
                   pnpm test
 
-            # electron-vite build, then electron-builder: ad-hoc signed app + zip, never published by electron-builder itself.
-            - name: Build the app
+            # No certificate yet (the secrets are not shared with this repo) means an
+            # ad-hoc release, so releases keep working until access is granted. A
+            # certificate without the notarization login is a setup mistake: fail
+            # rather than ship a signed app that Gatekeeper still blocks.
+            - name: Check signing secrets
+              id: signing
+              env:
+                  APPLE_CODESIGN_CERT_BASE64: ${{ secrets.APPLE_CODESIGN_CERT_BASE64 }}
+                  APPLE_CODESIGN_CERT_PASSWORD: ${{ secrets.APPLE_CODESIGN_CERT_PASSWORD }}
+                  APPLE_ID: ${{ vars.APPLE_ID || secrets.APPLE_ID }}
+                  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "$APPLE_CODESIGN_CERT_BASE64" ]; then
+                      echo "::warning::APPLE_CODESIGN_CERT_BASE64 is not set in the desktop-signing environment: building an ad-hoc signed, not notarized release. See RELEASING.md > Signing and notarization."
+                      echo "signed=false" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+                  missing=""
+                  for name in APPLE_CODESIGN_CERT_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+                      if [ -z "${!name}" ]; then
+                          missing="$missing $name"
+                      fi
+                  done
+                  if [ -n "$missing" ]; then
+                      echo "::error::APPLE_CODESIGN_CERT_BASE64 is set, but these are missing in the desktop-signing environment:${missing}"
+                      exit 1
+                  fi
+                  echo "signed=true" >> "$GITHUB_OUTPUT"
+
+            # electron-vite build, then electron-builder: app + zip, never published by electron-builder itself.
+            - name: Build the app (ad-hoc signed)
+              if: steps.signing.outputs.signed != 'true'
               run: pnpm dist
+
+            # electron-builder.yml stays ad-hoc for local builds, which have no
+            # certificate, and this step overrides the three signing keys. That keeps
+            # one config file and puts the signing switch next to the secrets.
+            # - identity: electron-builder imports CSC_LINK into a temporary keychain
+            #   (no keychain steps needed, same as PostHog's desktop release). The
+            #   yml's "-" can't be unset from the command line (null means "don't
+            #   sign"), so the team ID picks the certificate: it is part of the
+            #   certificate name "Developer ID Application: <org> (<team id>)".
+            # - forceCodeSigning: fail instead of silently shipping unsigned when
+            #   the certificate doesn't match.
+            # - notarize: notarytool with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and
+            #   APPLE_TEAM_ID from the env, then staples the ticket to the app
+            #   before the zip is made.
+            - name: Build the app (Developer ID signed and notarized)
+              if: steps.signing.outputs.signed == 'true'
+              env:
+                  CSC_LINK: ${{ secrets.APPLE_CODESIGN_CERT_BASE64 }}
+                  CSC_KEY_PASSWORD: ${{ secrets.APPLE_CODESIGN_CERT_PASSWORD }}
+                  APPLE_ID: ${{ vars.APPLE_ID || secrets.APPLE_ID }}
+                  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
+              run: |
+                  set -euo pipefail
+                  pnpm build
+                  pnpm --filter @postpile/desktop exec electron-builder --mac --config electron-builder.yml --publish never \
+                      "-c.mac.identity=${APPLE_TEAM_ID}" \
+                      -c.mac.hardenedRuntime=true \
+                      -c.mac.notarize=true \
+                      -c.forceCodeSigning=true
 
             # macOS drops notifications from an app with a broken signature, so a bad bundle must not ship.
             - name: Verify the app bundle
@@ -106,6 +177,29 @@ jobs:
                   test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = com.posthog.postpile
                   test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
                   test -f "apps/desktop/dist/PostPile-${VERSION}-mac-arm64.zip"
+
+            # What users get is the zip, so check the app inside it, not only the
+            # one in dist/: Developer ID signature with the hardened runtime,
+            # Gatekeeper accepts it, and the notarization ticket is stapled (so the
+            # first open works offline too).
+            - name: Verify signing and notarization
+              if: steps.signing.outputs.signed == 'true'
+              env:
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  UNZIPPED="$RUNNER_TEMP/unzipped"
+                  rm -rf "$UNZIPPED"
+                  ditto -x -k "apps/desktop/dist/PostPile-${VERSION}-mac-arm64.zip" "$UNZIPPED"
+                  for APP in apps/desktop/dist/mac-arm64/PostPile.app "$UNZIPPED/PostPile.app"; do
+                      echo "--- $APP"
+                      codesign --verify --deep --strict --verbose=2 "$APP"
+                      codesign -dv --verbose=4 "$APP" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
+                      grep -q '^Authority=Developer ID Application:' "$RUNNER_TEMP/codesign.txt"
+                      grep -q 'flags=.*runtime' "$RUNNER_TEMP/codesign.txt"
+                      spctl --assess --type execute -vv "$APP"
+                      xcrun stapler validate "$APP"
+                  done
 
             - name: Checksum
               id: checksum
@@ -164,19 +258,28 @@ jobs:
                   sparse-checkout-cone-mode: false
 
             # Render to /tmp before the tap checkout, which replaces the workspace.
+            # A signed and notarized build drops the ad-hoc caveat block (xattr /
+            # Open Anyway); an ad-hoc build keeps its text and loses only the markers.
             - name: Render Homebrew cask
               env:
                   VERSION: ${{ needs.build.outputs.version }}
                   SHA256: ${{ needs.build.outputs.sha256 }}
+                  SIGNED: ${{ needs.build.outputs.signed }}
               run: |
                   set -euo pipefail
                   [ -n "$VERSION" ] && [ -n "$SHA256" ] || { echo "::error::missing version or sha256 from the build job"; exit 1; }
+                  if [ "$SIGNED" = true ]; then
+                      CAVEAT_EXPR='/ADHOC_CAVEAT_BEGIN/,/ADHOC_CAVEAT_END/d'
+                  else
+                      CAVEAT_EXPR='/ADHOC_CAVEAT_BEGIN/d;/ADHOC_CAVEAT_END/d'
+                  fi
                   sed \
                       -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
                       -e "s/SHA256_PLACEHOLDER/${SHA256}/g" \
+                      -e "$CAVEAT_EXPR" \
                       homebrew/postpile.rb.tmpl > /tmp/postpile.rb
-                  if grep -q PLACEHOLDER /tmp/postpile.rb; then
-                      echo "::error::placeholder left in the rendered cask"
+                  if grep -qE 'PLACEHOLDER|ADHOC_CAVEAT' /tmp/postpile.rb; then
+                      echo "::error::placeholder or caveat marker left in the rendered cask"
                       exit 1
                   fi
                   cat /tmp/postpile.rb
