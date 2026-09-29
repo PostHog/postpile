@@ -16,6 +16,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- A tile's button only says "Mark done" when marking it read actually makes it done. On a PR that still waits on you (say the author addressed your changes) it says "Mark read", and once read Snooze becomes the main button, next to "Review on GitHub". The toast says "Marked read. Still your move: re-review." and offers "Snooze until next push". Read tiles get a regular-weight title and keep their place in the list.
 - Coming back to a PR you already reviewed, commented on or marked read, the tile's "why now" line says what changed since then: "6 commits since your changes request", "lyra replied to your review", "lyra requested changes since you approved". Bot and CI activity never counts. First-time asks keep their wording.
 - The detail pane's "New since you looked" box moved up under the title and says since when ("since your changes request yesterday"). It shows up to 3 lines, folds bot and CI activity into one line, and the activity list below no longer repeats it.
 - Every PR lands in a topic on the sync that sees it: the agent picks an existing topic or starts a new one named after the work. Unsorted only holds PRs the agent could not get to yet (daily limit, `claude` missing, a failed call), and the next sync places them. PRs an earlier version left in Unsorted get placed on the next sync too.

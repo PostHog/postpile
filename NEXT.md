@@ -6,6 +6,18 @@ now".
 
 ## Done
 
+- Honest mark button, Snooze after read (2026-09-29, DESIGN.md "Tile
+  faces" › After a mark-read): core `tileAfterMarkRead` runs `isPrDone` and
+  `whoseTurn` over the data as a mark-read leaves it, shipped as
+  `TileView.afterRead`. Tile footer and detail action bar pick the label in
+  `lib/mark-read.ts`: "Mark read" on unread tiles, "Mark done" only where a
+  mark-read makes the tile done; read and still your move, Snooze is the
+  ink button plus "Review on GitHub" (files tab; "Open on GitHub" on own
+  PRs) and the action bar drops the mark button. Read titles go regular
+  weight. The toast says "Marked read. Still your move: re-review." with
+  Undo and "Snooze until next push". `tileListRank` keeps read your-move
+  tiles with the unread ones, so a mark-read never moves a tile down.
+  Checked on sample #1960 and #1870.
 - What is new on revisits (2026-09-29, DESIGN.md "Tile faces" › Why now on
   a revisit, "Three-pane balance" › New since you looked): core
   `whatsNew(events, viewer)` finds the viewer's last touch (own review,
@@ -869,6 +881,13 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Mark read vs Mark done honest; after read with your move left, Snooze
+  is primary; no re-sorting** (2026-09-29): "Mark done" only where a
+  mark-read makes the tile done. A read tile that is still your move shows
+  Snooze as the main button with "Review on GitHub" next to it, and the
+  toast after the mark-read says it is still your move. The tile keeps its
+  place; queues and sections do not change.
 
 - **Revisits** (2026-09-29): the why-now strip says what changed since
   your last touch; New since you looked sits under the title; quiet events
