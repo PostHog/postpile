@@ -1,5 +1,5 @@
 import type { AppConfig } from '@postpile/core';
-import { createEngine, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
+import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
 import { FakeUpdates } from './fake/fake-update.ts';
@@ -65,7 +65,22 @@ export function appConfigFromEnv(): AppConfig {
     syncOnStart: process.env.POSTPILE_SYNC_ON_START !== '0',
     profile: profileFromEnv(process.env),
     databasePath: isFake() ? null : defaultPaths().databaseFile,
+    autoSyncMinutes: autoSyncMinutesFromEnv(process.env.POSTPILE_AUTO_SYNC_MINUTES, process.env.POSTPILE_SYNC_ON_START !== '0'),
   };
+}
+
+/**
+ * POSTPILE_AUTO_SYNC_MINUTES: whole minutes >= 0 (0 turns the background
+ * sync off); the default otherwise. The default is off when the start sync
+ * is off (POSTPILE_SYNC_ON_START=0): runs meant to make no GitHub or agent
+ * traffic stay that way unless they ask for auto sync explicitly.
+ */
+export function autoSyncMinutesFromEnv(value: string | undefined, syncOnStart = true): number {
+  const parsed = Number(value);
+  if (value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return syncOnStart ? DEFAULT_AUTO_SYNC_MINUTES : 0;
 }
 
 /** How often the desktop app polls GitHub notifications. */

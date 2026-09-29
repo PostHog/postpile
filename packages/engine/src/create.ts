@@ -4,6 +4,7 @@ import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@postpile/git
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from './actions/local-change.ts';
 import { AgentCallLog } from './agent-call-log.ts';
+import { CATCH_UP_CALLS_PER_DAY } from './catch-up/catch-up-cap.ts';
 import { DataDirLock, type LockKind } from './data-lock.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
@@ -43,6 +44,19 @@ export interface CreateEngineOptions {
 export function pingCapFromEnv(value: string | undefined): number {
   const parsed = Number(value);
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : PING_DECISIONS_PER_DAY;
+}
+
+/**
+ * POSTPILE_CATCHUP_CAP when it is a whole number >= 0, else the default. A
+ * dev session with POSTPILE_MAX_AGENT_CALLS=0 gets 0 too (catch-up off), so
+ * "no agent calls" keeps meaning none.
+ */
+export function catchUpCapFromEnv(value: string | undefined, maxAgentCalls: string | undefined): number {
+  const parsed = Number(value);
+  if (value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return maxAgentCalls?.trim() === '0' ? 0 : CATCH_UP_CALLS_PER_DAY;
 }
 
 /** Wires the real dependencies. Tests build Engine directly with fakes instead. */
@@ -104,6 +118,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     instructionsFile: paths.instructionsFile,
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
+    catchUpCallsPerDay: catchUpCapFromEnv(process.env.POSTPILE_CATCHUP_CAP, process.env.POSTPILE_MAX_AGENT_CALLS),
     dataLock: lock,
     userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
     setupCommands: commands,

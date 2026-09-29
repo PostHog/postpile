@@ -47,6 +47,11 @@ function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   return result;
 }
 
+/** PRs that should have a glance (open, pinged or found, in a tile), for the read models' glance state. */
+export function glanceTargetKeys(board: Board): Set<PrKey> {
+  return new Set(itemsByUrgency(board).keys());
+}
+
 /**
  * Builds glance batch inputs the same way for the glance job (what to
  * generate) and the read models (whether a stored glance still matches), so

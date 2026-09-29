@@ -281,7 +281,9 @@ async function start(): Promise<void> {
   const config = appConfigFromEnv();
   // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours.
   server = await startServer({ engine, port: 0, token, config, updates: updateSourceFromEnv(app.getVersion()) });
-  console.log(`server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}`);
+  console.log(
+    `server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}, auto sync ${config.autoSyncMinutes > 0 ? `every ${config.autoSyncMinutes} min` : 'off'}`,
+  );
   serveConnection(server.url, token);
   mainWindow = await openWindow();
   // A click opens the tile: show the window, then let the renderer navigate.
@@ -305,6 +307,10 @@ async function start(): Promise<void> {
     intervalSeconds: pollSecondsFromEnv(process.env.POSTPILE_POLL_SECONDS),
     onNotify: (notifications) => notifier.show(notifications),
   });
+  // A background full sync every POSTPILE_AUTO_SYNC_MINUTES (default 60, 0 off),
+  // counted from the end of the last sync and capped like "Sync now". The
+  // engine skips it while a sync runs; the title bar shows it like any sync.
+  engine.startAutoSync({ minutes: config.autoSyncMinutes, maxAgentCalls: config.syncCallCap });
   // "What you're working on": checked now and every 30 minutes, runs once a day from 06:00.
   engine.startWorkContextSchedule();
   // Consolidation (merge proposals, facts, retiring): checked every 30 minutes,
@@ -317,6 +323,7 @@ async function start(): Promise<void> {
 async function shutdown(): Promise<void> {
   try {
     engine?.stopLivePoll();
+    engine?.stopAutoSync();
     engine?.stopWorkContextSchedule();
     consolidationSchedule?.stop();
     // Queued mark-reads are sent, not dropped: the user meant to clear them.

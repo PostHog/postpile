@@ -2,7 +2,7 @@ import type { EventBatchInput } from '@postpile/agent';
 import type { PrEvent, PrKey } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
-import type { DigestDeps } from './deps.ts';
+import type { DigestDeps, TopicScope } from './deps.ts';
 
 /** PRs per event classification call. */
 export const EVENT_BATCH_PRS = 20;
@@ -113,9 +113,11 @@ export class EventBatchClassifier {
     }
   }
 
-  async run(): Promise<void> {
+  /** Every topic and Unsorted, or only the scope's (a glance catch-up run). */
+  async run(scope: TopicScope | null = null): Promise<void> {
     // Taken once up front: events logged while calls run are left for the next sync.
     const toSeq = this.deps.store.eventLog.maxSeq();
-    await Promise.all(this.groups().map((group) => this.runGroup(group, toSeq)));
+    const groups = this.groups().filter((group) => scope === null || group.topicId === scope.topicId);
+    await Promise.all(groups.map((group) => this.runGroup(group, toSeq)));
   }
 }

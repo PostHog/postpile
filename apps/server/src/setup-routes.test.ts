@@ -6,7 +6,7 @@ import { FakeEngine } from './fake/fake-engine.ts';
 const TOKEN = 'test-token';
 
 function appWith(engine: FakeEngine) {
-  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null });
+  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
   return async <T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<{ status: number; json: T }> => {
     const headers: Record<string, string> = { [TOKEN_HEADER]: TOKEN };
     if (init.body !== undefined) {

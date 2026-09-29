@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AgentCallObserver, ObservedCall } from '@postpile/agent';
 import { emptyAgentCallStats, recordAgentCall, type AgentCallStats } from '@postpile/core';
 import type { Store } from '@postpile/store';
@@ -19,11 +20,17 @@ interface ActiveRun {
 /**
  * The engine's AgentCallObserver. Every call becomes an agent_call row and,
  * while a sync or consolidation runs, is added to that run's stats. The
- * engine never runs a sync and a consolidation at the same time, so one
- * active run is enough.
+ * engine never runs a sync, a consolidation and a poll cycle at the same
+ * time, so one active run (begin/end) is enough for those.
+ *
+ * Glance catch-up runs are the exception: they run beside poll cycles and
+ * each other. withRun() scopes a run to its own async work
+ * (AsyncLocalStorage follows the awaits of that work), so its calls land in
+ * its stats and never in a poll cycle's, and the other way round.
  */
 export class AgentCallLog implements AgentCallObserver {
   private active: ActiveRun | null = null;
+  private readonly scoped = new AsyncLocalStorage<ActiveRun>();
 
   constructor(
     private readonly store: Store,
@@ -40,11 +47,16 @@ export class AgentCallLog implements AgentCallObserver {
     this.active = null;
   }
 
+  /** Runs work as its own run: calls made inside it count there, whatever begin/end says meanwhile. */
+  withRun<T>(runId: string, stats: AgentCallStats, work: () => Promise<T>): Promise<T> {
+    return this.scoped.run({ id: runId, stats }, work);
+  }
+
   private runFor(call: ObservedCall): ActiveRun | null {
     if (ACTION_KINDS.has(call.purpose) || call.purpose === 'context_sweep') {
       return null;
     }
-    return this.active;
+    return this.scoped.getStore() ?? this.active;
   }
 
   onCall(call: ObservedCall): void {

@@ -1,5 +1,7 @@
 import { splitAgentOffErrors, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
+import { Board } from '../board.ts';
 import { AgentBudget } from '../budget.ts';
+import { topicsToCatchUp } from '../catch-up/topic-catch-up.ts';
 import { reviveRetiredTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';
 import { errorText } from '../errors.ts';
@@ -19,16 +21,29 @@ export const POLL_TOPIC_CALLS = 1;
 /**
  * One cycle of the fast poll: conditional inbox and read-threads reads, a
  * freshness check once a minute; on a change, fetch the PRs that moved, log their events with rule loudness, give new PRs
- * a topic, and decide pings. Dossiers, glances, sets, stack layers and the
- * event second opinion are left to the regular full sync. Never marks
- * anything read on GitHub.
+ * a topic, and decide pings. The topics whose PRs brought loud news or have
+ * no glance yet go to onCatchUp, which runs their dossier and glances right
+ * away (TopicCatchUp) instead of waiting for the next full sync. Sets and
+ * stack layers stay with the full sync. Never marks anything read on GitHub.
  */
 export class PollRun {
   constructor(
     private readonly deps: RunDeps,
     private readonly github: GitHubSync,
     private readonly decider: PingDecider,
+    private readonly onCatchUp: (topicIds: (string | null)[]) => void = () => {},
   ) {}
+
+  /** After topic assignment, so a PR new to the app catches up in its new topic. */
+  private requestCatchUps(fetchedPrKeys: PrKey[], newEventIds: string[]): void {
+    const { store, now } = this.deps;
+    const board = Board.load(store, now().toISOString());
+    const glances = store.glances.getMany(fetchedPrKeys);
+    const topics = topicsToCatchUp(board, fetchedPrKeys, newEventIds, (key) => glances.has(key));
+    if (topics.length > 0) {
+      this.onCatchUp(topics);
+    }
+  }
 
   /** Only the PRs this cycle fetched: the backlog without a topic is the full sync's job. */
   private async assignTopics(fetchedPrKeys: PrKey[], viewer: Viewer, stats: AgentCallStats, errors: string[]): Promise<void> {
@@ -69,11 +84,15 @@ export class PollRun {
           errors.push(`topics: ${errorText(error)}`);
         }
       }
-      // The first look at an empty store is the whole inbox; none of it is news.
+      // The first look at an empty store is the whole inbox; none of it is news, and the full sync digests it.
       if (inbox.firstLook) {
         return { ...done, prsUpdated: inbox.fetchedPrKeys.length, decisions: [], pings: [], errors };
       }
       const decided = await this.decider.decide(inbox.fetchedPrKeys, inbox.newEventIds, inbox.viewer);
+      // After the pings: they are the time-critical part and go first in the agent queue.
+      if (this.deps.agentOff() === null) {
+        this.requestCatchUps(inbox.fetchedPrKeys, inbox.newEventIds);
+      }
       return {
         ...done,
         prsUpdated: inbox.fetchedPrKeys.length,

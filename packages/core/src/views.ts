@@ -21,6 +21,7 @@ import type {
   Verdict,
 } from './types.ts';
 import type { ActivityList } from './activity.ts';
+import type { GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
@@ -36,12 +37,13 @@ import type { ForWhom } from './for-whom.ts';
 export type TopicGroup = 'needs_you' | 'quiet';
 
 /**
- * Why a PR has no glance yet. call_cap: the sync stopped at its agent-call
- * cap before reaching it; the next sync picks it up. failed: the agent was
- * asked (twice) and gave no usable answer.
+ * Why a PR has no glance yet. call_cap: the sync (or a catch-up run) stopped
+ * at its agent-call cap before reaching it. daily_cap: the daily catch-up
+ * cap (POSTPILE_CATCHUP_CAP) is spent; the next full sync writes it. failed:
+ * the agent was asked (twice) and gave no usable answer.
  */
 export interface GlanceGap {
-  reason: 'call_cap' | 'failed';
+  reason: 'call_cap' | 'daily_cap' | 'failed';
   detail: string;
   at: IsoTime;
 }
@@ -127,6 +129,8 @@ export interface PrSummary {
   forYou: string | null;
   /** Set while there is no glance and the last sync said why. */
   glanceGap: GlanceGap | null;
+  /** Where the glance stands (`glanceStateOf`): ready, queued, writing, failed, agent_off, capped or none. */
+  glanceState: GlanceState;
   unseenLoudEvents: number;
   updatedAt: IsoTime;
   /** In a quiet repo ("Let it go stale"): tier rest, never urgent, never pings. */
@@ -196,6 +200,8 @@ export interface PrDetail {
   glanceStale: boolean;
   /** Set while there is no glance and the last sync said why. */
   glanceGap: GlanceGap | null;
+  /** Where the glance stands (`glanceStateOf`); failed offers Retry. */
+  glanceState: GlanceState;
   userState: UserPrState | null;
   /** The viewer's standing approval (`viewerApproval`): app record or GitHub, any commit. Null when none. */
   viewerApproval: ViewerApproval | null;
@@ -395,6 +401,11 @@ export interface AppConfig {
   profile: 'default' | 'dev';
   /** The database this process opened, for the DEV badge's tooltip. Null in fake mode. */
   databasePath: string | null;
+  /**
+   * Minutes between background full syncs while the desktop app runs.
+   * POSTPILE_AUTO_SYNC_MINUTES, default 60; 0 turns it off.
+   */
+  autoSyncMinutes: number;
 }
 
 /**

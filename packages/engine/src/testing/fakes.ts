@@ -306,6 +306,8 @@ export interface HarnessOptions {
   /** Clock for the engine; tests move it forward by changing what it returns. */
   now?: () => Date;
   pingDecisionsPerDay?: number;
+  /** Daily glance catch-up cap; 0 (the default here) keeps catch-up off, so poll tests see only the poll's calls. */
+  catchUpCallsPerDay?: number;
   /** GitHub writes on (the default here, so action tests reach FakeWriter) or off, as on a first real run. */
   writesEnabled?: boolean;
   /** Build the switch with no real writer, like POSTPILE_READ_ONLY=1. */
@@ -359,6 +361,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     now,
     timers,
     pingDecisionsPerDay: options.pingDecisionsPerDay,
+    catchUpCallsPerDay: options.catchUpCallsPerDay ?? 0,
     claudeDir: options.claudeDir ?? '/nonexistent/claude',
     syncLog: options.syncLog ?? (() => {}),
     userConfig: options.userConfig ?? null,

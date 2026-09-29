@@ -25,7 +25,7 @@ import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { verifyWorldFor } from '../memory/fact-world.ts';
 import { FEEDBACK_IN_PROMPTS } from '../prompt-context.ts';
-import type { DigestDeps } from './deps.ts';
+import type { DigestDeps, TopicScope } from './deps.ts';
 
 /** Versions kept per topic; older ones are pruned on every save. */
 export const DOSSIER_VERSIONS_KEPT = 50;
@@ -105,11 +105,13 @@ export class DossierUpdater {
     return answered;
   }
 
-  private topicsInOrder(): Topic[] {
+  /** Every active topic, or only the scope's (none for Unsorted, which has no dossier). */
+  private topicsInOrder(scope: TopicScope | null): Topic[] {
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
     const hasUnread = (topic: Topic): boolean =>
       board.tilesForTopic(topic.id).some((tile) => board.stateOf(tile).kind === 'unread');
-    const topics = this.deps.store.topics.listActive();
+    const active = this.deps.store.topics.listActive();
+    const topics = scope === null ? active : active.filter((topic) => topic.id === scope.topicId);
     return [...topics.filter(hasUnread), ...topics.filter((topic) => !hasUnread(topic))];
   }
 
@@ -245,12 +247,15 @@ export class DossierUpdater {
     }
   }
 
-  /** Starts every update side by side (the runner's limiter caps how many run at once). */
-  start(): DossierRun {
+  /**
+   * Starts every update side by side (the runner's limiter caps how many run
+   * at once). A glance catch-up passes its topic as scope.
+   */
+  start(scope: TopicScope | null = null): DossierRun {
     const candidates: TopicCandidates[] = [];
     const skippedByBudget = new Set<string>();
     const updates = new Map<string, Promise<void>>();
-    for (const topic of this.topicsInOrder()) {
+    for (const topic of this.topicsInOrder(scope)) {
       updates.set(topic.id, this.update(topic, candidates, skippedByBudget));
     }
     return {

@@ -80,6 +80,12 @@ export interface LivePollStatus {
   changeCount: number;
   /** Pings shown on the Mac since the app started (a summary counts once). */
   notificationsShown: number;
+  /** A full sync runs, started by anyone (Sync now, the start sync, the hourly auto sync). */
+  syncRunning: boolean;
+  /** When the next background full sync is due; null while auto sync is off or not started. */
+  nextAutoSyncAt: IsoTime | null;
+  /** Grows when a glance catch-up run is queued, starts or ends; the renderer refetches when it moves. */
+  catchUpChanges: number;
 }
 
 /** Before the poll starts, and for hosts that never start it (CLI, standalone server). */
@@ -94,6 +100,9 @@ export const OFF_POLL_STATUS: LivePollStatus = {
   note: null,
   changeCount: 0,
   notificationsShown: 0,
+  syncRunning: false,
+  nextAutoSyncAt: null,
+  catchUpChanges: 0,
 };
 
 /**

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
 import { createApp, TOKEN_HEADER } from './app.ts';
-import { appConfigFromEnv, pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
+import { appConfigFromEnv, autoSyncMinutesFromEnv, pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
 import { OFF_POLL_STATUS } from '@postpile/core';
 
-const CONFIG: AppConfig = { fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null };
+const CONFIG: AppConfig = { fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 };
 
 function notImplemented(): never {
   throw new Error('not implemented');
@@ -28,6 +28,9 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     pollOnce: notImplemented,
     startLivePoll: notImplemented,
     stopLivePoll: notImplemented,
+    startAutoSync: notImplemented,
+    stopAutoSync: notImplemented,
+    retryGlance: notImplemented,
     livePollStatus: notImplemented,
     refreshOnFocus: notImplemented,
     listTopics: notImplemented,
@@ -158,7 +161,7 @@ describe('server app', () => {
     const app = createApp(fakeEngine({}), 'secret', CONFIG);
     expect((await app.request('/api/config')).status).toBe(401);
     const res = await app.request('/api/config', { headers: { [TOKEN_HEADER]: 'secret' } });
-    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null });
+    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
   });
 
   it('applies the app call cap to a sync without one, and keeps an explicit cap', async () => {
@@ -232,6 +235,16 @@ describe('server app', () => {
     expect(pollSecondsFromEnv('0')).toBe(0);
     expect(pollSecondsFromEnv('fast')).toBe(10);
     expect(pollSecondsFromEnv('2.5')).toBe(10);
+  });
+
+  it('reads the auto sync interval from the env: 60 by default, 0 turns it off', () => {
+    expect(autoSyncMinutesFromEnv(undefined)).toBe(60);
+    expect(autoSyncMinutesFromEnv('15')).toBe(15);
+    expect(autoSyncMinutesFromEnv('0')).toBe(0);
+    expect(autoSyncMinutesFromEnv('hourly')).toBe(60);
+    // A run without the start sync gets no background sync either, unless it asks.
+    expect(autoSyncMinutesFromEnv(undefined, false)).toBe(0);
+    expect(autoSyncMinutesFromEnv('30', false)).toBe(30);
   });
 
   it('serves the live poll status behind the token', async () => {

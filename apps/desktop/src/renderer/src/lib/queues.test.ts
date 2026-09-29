@@ -52,6 +52,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     glanceStale: false,
     forYou: null,
     glanceGap: null,
+    glanceState: 'ready',
     unseenLoudEvents: 0,
     updatedAt: at(0),
     quietRepo: false,

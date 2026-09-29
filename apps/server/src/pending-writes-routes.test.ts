@@ -31,7 +31,7 @@ async function engineApp(options: HarnessOptions): Promise<{ app: TestApp; h: Ha
   const h = makeHarness(options);
   h.reader.addPr(pr, makeThreadFor(pr));
   await h.engine.sync({ maxAgentCalls: 0 });
-  return { app: wrap(createApp(h.engine, TOKEN, { fake: false, syncCallCap: 0, syncOnStart: true, profile: 'default', databasePath: null })), h };
+  return { app: wrap(createApp(h.engine, TOKEN, { fake: false, syncCallCap: 0, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 })), h };
 }
 
 async function afterUndoWindow(h: Harness): Promise<void> {
@@ -98,7 +98,7 @@ describe('pending writes routes (real engine, fake GitHub)', () => {
 describe('pending writes routes (fake mode)', () => {
   it('works on sample data: pending after the window, send after unlock', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
-    const app = wrap(createApp(new FakeEngine({ now: () => now }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null }));
+    const app = wrap(createApp(new FakeEngine({ now: () => now }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 }));
     const setTile = encodeURIComponent('set:turbo-cache');
 
     await app.post(`/api/tiles/${setTile}/mark-read`);

@@ -23,6 +23,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     glanceStale: false,
     forYou: `for you ${number}`,
     glanceGap: null,
+    glanceState: 'ready',
     unseenLoudEvents: 0,
     updatedAt: at(number),
     quietRepo: false,

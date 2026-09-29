@@ -318,6 +318,10 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
     const pr = await engine.getPr(prKeyFromParams(c.req.param()));
     return pr ? c.json(pr) : c.json({ error: 'not found' }, 404);
   });
+  // Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, never a GitHub write.
+  app.post('/api/prs/:owner/:repo/:number/glance/retry', async (c) => {
+    return c.json(await engine.retryGlance(prKeyFromParams(c.req.param())));
+  });
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
     return c.json(await engine.approve(prKeyFromParams(c.req.param())));
   });

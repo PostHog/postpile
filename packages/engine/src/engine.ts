@@ -53,6 +53,7 @@ import type {
   WorkThreadForget,
 } from '@postpile/core';
 import { emptyAgentCallStats, normalizeRepoScope, OFF_POLL_STATUS, parsePrKey, systemTimers, withQuietRepo } from '@postpile/core';
+import type { AutoSyncOptions } from './auto-sync.ts';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -65,6 +66,12 @@ import { ProposalActions } from './actions/proposal-actions.ts';
 import { ReadMarker } from './actions/read-marker.ts';
 import { TileActions } from './actions/tile-actions.ts';
 import type { AgentCallLog } from './agent-call-log.ts';
+import { AutoSyncSchedule } from './auto-sync.ts';
+import { Board } from './board.ts';
+import { CatchUpCap } from './catch-up/catch-up-cap.ts';
+import { CatchUpQueue } from './catch-up/catch-up-queue.ts';
+import { TopicCatchUp } from './catch-up/topic-catch-up.ts';
+import { glanceGapKey } from './digest/glance-batches.ts';
 import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { errorText } from './errors.ts';
 import { GitHubSync, NO_FOCUS, type PollFocus } from './github-sync.ts';
@@ -114,6 +121,12 @@ export interface EngineDeps {
   timers?: Timers;
   /** Daily cap on ping_decision calls. Defaults to PING_DECISIONS_PER_DAY. */
   pingDecisionsPerDay?: number;
+  /**
+   * Daily cap on glance catch-up calls (POSTPILE_CATCHUP_CAP). 0 turns
+   * catch-up off: new PRs then wait for the next full sync. Missing: 0, so
+   * tests opt in; createEngine passes the env value or CATCH_UP_CALLS_PER_DAY.
+   */
+  catchUpCallsPerDay?: number;
   /** The database folder's lock; released on close. Null in tests and read-only CLI access. */
   dataLock?: { release(): void } | null;
   /** Local Claude Code folder the work context sweep reads. Defaults to POSTPILE_CLAUDE_DIR, else ~/.claude. */
@@ -161,6 +174,9 @@ export class Engine implements EngineService {
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
   private livePoller: LivePoller | null = null;
+  private autoSync: AutoSyncSchedule | null = null;
+  private readonly catchUpCap: CatchUpCap;
+  private readonly catchUps: CatchUpQueue;
   private readonly github: GitHubSync;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
@@ -183,7 +199,10 @@ export class Engine implements EngineService {
     this.workContext = new WorkContextMemory(store, this.sweeper, now);
     this.sweepSchedule = new WorkContextSchedule(this.sweeper, deps.timers ?? systemTimers, now);
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
-    this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites);
+    this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites, {
+      agentOff: () => agentOff() !== null,
+      catchUp: (topicId) => this.catchUps.stateOf(topicId),
+    });
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
@@ -208,7 +227,16 @@ export class Engine implements EngineService {
       capPerDay: deps.pingDecisionsPerDay ?? PING_DECISIONS_PER_DAY,
       agentOff,
     });
-    this.pollRun = new PollRun(runDeps, github, decider);
+    const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
+    this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
+    const topicCatchUp = new TopicCatchUp(runDeps, this.catchUpCap, lineLog);
+    // Never beside a full sync or a consolidation: the request is skipped and the sync covers the topic.
+    this.catchUps = new CatchUpQueue(
+      (topicId) => topicCatchUp.run(topicId),
+      () => !this.syncing && !this.consolidating && agentOff() === null,
+      lineLog,
+    );
+    this.pollRun = new PollRun(runDeps, github, decider, (topicIds) => this.requestCatchUps(topicIds));
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
     const setupSweep = new SetupSweep({
       store,
@@ -248,6 +276,16 @@ export class Engine implements EngineService {
       await this.pollOnce();
     } catch (error) {
       (this.deps.syncLog ?? console.log)(`refresh after write: ${key}: ${errorText(error)}`);
+    }
+  }
+
+  /** Topics the poll brought news for: one catch-up run each, coalesced by the queue. Off with a cap of 0. */
+  private requestCatchUps(topicIds: (string | null)[]): void {
+    if (this.catchUpCap.perDay === 0) {
+      return;
+    }
+    for (const topicId of topicIds) {
+      this.catchUps.request(topicId);
     }
   }
 
@@ -303,11 +341,14 @@ export class Engine implements EngineService {
 
   sync(options: SyncOptions = {}): Promise<SyncReport> {
     if (!this.syncing) {
-      const before = Engine.settled([this.consolidating, this.polling]);
+      // The sync digests every topic: queued catch-up follow-ups are dropped, running ones waited for.
+      this.catchUps.dropQueued();
+      const before = Engine.settled([this.consolidating, this.polling, this.catchUps.settled()]);
       this.syncing = before
         .then(() => this.syncIfGhWorks(options))
         .finally(() => {
           this.syncing = null;
+          this.autoSync?.reschedule();
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
           void this.livePoller?.runCycle();
         });
@@ -317,7 +358,7 @@ export class Engine implements EngineService {
 
   consolidate(options: ConsolidateOptions = {}): Promise<ConsolidationReport> {
     if (!this.consolidating) {
-      const before = Engine.settled([this.syncing, this.polling]);
+      const before = Engine.settled([this.syncing, this.polling, this.catchUps.settled()]);
       this.consolidating = before
         .then(() => this.consolidationRun.run(options))
         .finally(() => {
@@ -368,6 +409,49 @@ export class Engine implements EngineService {
     this.livePoller = null;
   }
 
+  startAutoSync(options: AutoSyncOptions): void {
+    if (this.autoSync) {
+      return;
+    }
+    const target = { isSyncing: () => this.syncing !== null, sync: (maxAgentCalls: number) => this.sync({ maxAgentCalls }) };
+    this.autoSync = new AutoSyncSchedule(target, this.deps.timers ?? systemTimers, options, this.deps.syncLog ?? ((line) => console.log(line)));
+    this.autoSync.start();
+  }
+
+  stopAutoSync(): void {
+    this.autoSync?.stop();
+    this.autoSync = null;
+  }
+
+  async retryGlance(prKey: PrKey): Promise<ActionResult> {
+    const { store, now } = this.deps;
+    const agentOff = this.toolHealth.agentOffReason();
+    if (agentOff !== null) {
+      return { ok: false, message: `Agent features are off: ${agentOff}`, undoToken: null };
+    }
+    if (this.catchUpCap.perDay === 0) {
+      return { ok: false, message: 'Glance catch-up is off (POSTPILE_CATCHUP_CAP=0); the next sync tries again.', undoToken: null };
+    }
+    if (this.syncing) {
+      return { ok: true, message: 'A sync is running; it retries this glance.', undoToken: null };
+    }
+    if (this.consolidating) {
+      return { ok: false, message: 'Consolidation is running; retry in a moment.', undoToken: null };
+    }
+    if (this.catchUpCap.remaining() === 0) {
+      return { ok: false, message: 'Daily agent limit for glances reached; the next full sync writes it.', undoToken: null };
+    }
+    if (!store.prs.get(prKey)) {
+      return { ok: false, message: `${prKey} is not synced yet.`, undoToken: null };
+    }
+    const topicId = Board.load(store, now().toISOString()).memberships.get(prKey)?.topicId ?? null;
+    // The gap would read "failed" until the run writes a new glance or a new gap.
+    store.meta.delete(glanceGapKey(prKey));
+    const request = this.catchUps.request(topicId);
+    const message = request === 'queued' ? 'Glance queued: its topic is being caught up, one more run follows.' : 'Writing the glance…';
+    return { ok: true, message, undoToken: null };
+  }
+
   async refreshOnFocus(prKeys: PrKey[]): Promise<void> {
     if (prKeys.length === 0 || this.syncing || this.consolidating) {
       return;
@@ -385,8 +469,14 @@ export class Engine implements EngineService {
     }
   }
 
+  /** The poll's own status, plus what the renderer refreshes on: syncs, the next auto sync, catch-up runs. */
   async livePollStatus(): Promise<LivePollStatus> {
-    return this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
+    return {
+      ...(this.livePoller?.currentStatus() ?? OFF_POLL_STATUS),
+      syncRunning: this.syncing !== null,
+      nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
+      catchUpChanges: this.catchUps.changes(),
+    };
   }
 
   async syncProgress(): Promise<SyncProgress | null> {
@@ -667,11 +757,14 @@ export class Engine implements EngineService {
 
   async close(): Promise<void> {
     this.stopLivePoll();
+    this.stopAutoSync();
+    this.catchUps.dropQueued();
     // A running sweep is not awaited (it can take minutes); its late write fails quietly.
     this.stopWorkContextSchedule();
     await this.polling?.catch(() => {});
     await this.syncing?.catch(() => {});
     await this.consolidating?.catch(() => {});
+    await this.catchUps.settled();
     this.deps.store.close();
     this.deps.dataLock?.release();
   }

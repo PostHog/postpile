@@ -38,6 +38,7 @@ export * from './fact-rules.ts';
 export * from './verify.ts';
 export * from './delta.ts';
 export * from './glance-batches.ts';
+export * from './glance-state.ts';
 export * from './agent-calls.ts';
 export * from './topic-changes.ts';
 export * from './dossier-history.ts';

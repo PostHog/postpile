@@ -1,4 +1,5 @@
 import {
+  glanceStateOf,
   activityList,
   agentOnlyApprovers,
   standingApprovals,
@@ -27,7 +28,9 @@ import {
   whoseTurn,
   type FactQuery,
   type FactView,
+  type CatchUpRunState,
   type GlanceGap,
+  type GlanceState,
   type NotificationDebugRow,
   type Pr,
   type PrDetail,
@@ -50,7 +53,7 @@ import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
 import { debugNotificationRows } from './debug-notifications.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
-import { GlanceInputs } from './glance-inputs.ts';
+import { GlanceInputs, glanceTargetKeys } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
 import { placementOf } from './memory/placement.ts';
 import type { PromptContextSource } from './prompt-context.ts';
@@ -78,6 +81,14 @@ function compareTopics(a: TopicListItem, b: TopicListItem): number {
   return a.topic.name.localeCompare(b.topic.name);
 }
 
+/** What the glance state needs from outside the store: the agent switch and the catch-up runs. */
+export interface GlanceStatusSource {
+  agentOff(): boolean;
+  catchUp(topicId: string | null): CatchUpRunState;
+}
+
+const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null };
+
 /** Builds the API read models. Every call loads a fresh Board, so state is always derived. */
 export class ReadModels {
   private readonly memory: MemoryReads;
@@ -88,8 +99,21 @@ export class ReadModels {
     private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
     private readonly pendingWrites: PendingWrites,
+    private readonly glanceStatus: GlanceStatusSource = NO_GLANCE_STATUS,
   ) {
     this.memory = new MemoryReads(store, now);
+  }
+
+  /** The words the UI shows for a PR's glance (`glanceStateOf`). */
+  private glanceState(board: Board, key: PrKey, parts: { hasGlance: boolean; stale: boolean; gap: GlanceGap | null; wanted: Set<PrKey> }): GlanceState {
+    return glanceStateOf({
+      hasGlance: parts.hasGlance,
+      stale: parts.stale,
+      wanted: parts.wanted.has(key),
+      gap: parts.gap,
+      agentOff: this.glanceStatus.agentOff(),
+      catchUp: this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null),
+    });
   }
 
   private board(): Board {
@@ -149,6 +173,7 @@ export class ReadModels {
     settings: RepoSettings,
     repoLabels: (string | null)[],
     tileUnread: boolean,
+    wanted: Set<PrKey>,
   ): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     return tile.members.flatMap((member, index) => {
@@ -157,6 +182,7 @@ export class ReadModels {
         return [];
       }
       const glance = glances.get(pr.key) ?? null;
+      const gap = this.glanceGap(pr.key, glance !== null);
       return [
         buildPrSummary({
           pr,
@@ -167,7 +193,8 @@ export class ReadModels {
           reason: board.threads.get(pr.key)?.reason ?? null,
           glance,
           glanceStale: stale.has(pr.key),
-          glanceGap: this.glanceGap(pr.key, glance !== null),
+          glanceGap: gap,
+          glanceState: this.glanceState(board, pr.key, { hasGlance: glance !== null, stale: stale.has(pr.key), gap, wanted }),
           quietRepo: isPrInQuietRepo(pr.key, settings),
           repoLabel: repoLabels[index] ?? null,
           tileUnread,
@@ -181,6 +208,7 @@ export class ReadModels {
     // An opened topic shows every tile; the repo scope only labels the ones from another repo.
     const tiles = board.tilesForTopic(topicId);
     const stale = this.staleGlances(board, tiles.flatMap((tile) => tile.members.map((m) => m.prKey)));
+    const wanted = glanceTargetKeys(board);
     const viewer = loadViewer(this.store);
     const pending = this.pendingWrites.byPrKey();
     const baseRepo = labelBaseRepo(tiles.flatMap(memberKeys), settings);
@@ -191,7 +219,7 @@ export class ReadModels {
       return buildTileView({
         tile,
         state,
-        prs: this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread'),
+        prs: this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted),
         prsByKey: board.prs,
         events: board.events,
         userStates: board.userStates,
@@ -346,13 +374,16 @@ export class ReadModels {
         .map((tile) => tile.id),
     );
     const events = (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) }));
+    const stale = this.staleGlances(board, [key]).has(key);
+    const gap = this.glanceGap(key, glance !== null);
     return {
       pr,
       events,
       activity: activityList(events, loadViewer(this.store)),
       glance,
-      glanceStale: this.staleGlances(board, [key]).has(key),
-      glanceGap: this.glanceGap(key, glance !== null),
+      glanceStale: stale,
+      glanceGap: gap,
+      glanceState: this.glanceState(board, key, { hasGlance: glance !== null, stale, gap, wanted: glanceTargetKeys(board) }),
       userState: board.userStates.get(key) ?? null,
       viewerApproval: viewerApproval(pr, board.userStates.get(key) ?? null, loadViewer(this.store)?.login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),

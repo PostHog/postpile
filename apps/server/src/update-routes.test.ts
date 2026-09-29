@@ -6,7 +6,7 @@ import { FakeUpdates } from './fake/fake-update.ts';
 import { RELEASES_URL, UpdateChecker } from './update-check.ts';
 
 const TOKEN = 'secret';
-const CONFIG: AppConfig = { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null };
+const CONFIG: AppConfig = { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 };
 const NOW = new Date('2026-09-29T12:00:00Z');
 
 const RELEASES = [

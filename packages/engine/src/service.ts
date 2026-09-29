@@ -49,6 +49,7 @@ import type {
   WorkThreadForget,
   ViewerView,
 } from '@postpile/core';
+import type { AutoSyncOptions } from './auto-sync.ts';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 
 /**
@@ -78,6 +79,19 @@ export interface EngineService {
   stopLivePoll(): void;
   /** For the status footer. `off` when the poll was never started. */
   livePollStatus(): Promise<LivePollStatus>;
+  /**
+   * A background full sync every `minutes` while the host runs (desktop app),
+   * capped like "Sync now". Counts from the end of the last sync, skipped
+   * while one runs. 0 or less keeps it off. A second call is ignored.
+   */
+  startAutoSync(options: AutoSyncOptions): void;
+  stopAutoSync(): void;
+  /**
+   * Retry on a glance that failed: clears the PR's glance gap and runs a
+   * glance catch-up for its topic now (or queues the one follow-up when a run
+   * is going). Local: agent calls only, never a GitHub write.
+   */
+  retryGlance(prKey: PrKey): Promise<ActionResult>;
   /**
    * The window got focus back after the user opened these PRs on github.com
    * from the app: one poll cycle now, with a direct thread lookup for each

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   ActionLogEntry,
   ActionResult,
@@ -30,8 +30,8 @@ interface TestApp {
 }
 
 /** Wraps the app so every request carries the token. */
-function appWithFake(): TestApp {
-  const app = createApp(new FakeEngine({ syncStepMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null });
+function appWithFake(engine: FakeEngine = new FakeEngine({ syncStepMs: 0 })): TestApp {
+  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
   return {
     request: async (path, init = {}) => {
       const headers = { ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };
@@ -45,7 +45,29 @@ async function post<T>(app: TestApp, path: string, body: unknown = {}): Promise<
   return { status: res.status, json: (await res.json()) as T };
 }
 
+/** Every PR row of every sample topic. */
+async function allRows(app: TestApp): Promise<TopicDetail['tiles'][number]['prs']> {
+  const topics = (await (await app.request('/api/topics')).json()) as TopicListItem[];
+  const details = await Promise.all(topics.map(async (item) => (await (await app.request(`/api/topics/${item.topic.id}`)).json()) as TopicDetail));
+  return details.flatMap((detail) => detail.tiles.flatMap((tile) => tile.prs));
+}
+
 describe('server routes over the fake engine', () => {
+  it('retries a failed glance: queued, writing, then ready', async () => {
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, catchUpStepMs: 5 }));
+    // The sample catch-up starts once a UI reads the live status.
+    await app.request('/api/live');
+    const failed = (await allRows(app)).find((row) => row.glanceState === 'failed');
+    expect(failed).toBeDefined();
+    const path = `/api/prs/${failed!.key.replace('#', '/')}`;
+
+    const res = await post<ActionResult>(app, `${path}/glance/retry`);
+
+    expect(res.json).toMatchObject({ ok: true, message: 'Writing the glance…' });
+    expect(((await (await app.request(path)).json()) as PrDetail).glanceState).toBe('queued');
+    await vi.waitFor(async () => expect(((await (await app.request(path)).json()) as PrDetail).glanceState).toBe('ready'));
+  });
+
   it('shows the inbox cleanup on sample data, parks it while locked and starts fresh', async () => {
     const app = appWithFake();
     const view = (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
@@ -115,7 +137,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('rechecks a memory line and validates the body', async () => {
-    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null });
+    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
     const headers = { [TOKEN_HEADER]: TOKEN, 'content-type': 'application/json' };
     const body = { factId: 'fact-rowan-drives', topicId: null, text: 'rowan drives it', target: { kind: 'fact', factId: 'fact-rowan-drives' } };
     const res = await app.request('/api/memory/recheck', { method: 'POST', headers, body: JSON.stringify(body) });

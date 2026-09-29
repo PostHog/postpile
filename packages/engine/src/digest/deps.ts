@@ -23,3 +23,8 @@ export interface DigestDeps {
   tally: DigestTally;
   now: () => Date;
 }
+
+/** One topic for a glance catch-up run; topicId null is the virtual Unsorted topic. */
+export interface TopicScope {
+  topicId: string | null;
+}

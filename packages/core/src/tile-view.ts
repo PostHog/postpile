@@ -10,6 +10,7 @@ import { isApprovedByViewer } from './review-request.ts';
 import { tilePeople } from './tile-people.ts';
 import { memberTier, personRelation, tileTier } from './topic-queues.ts';
 import type { Glance, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
+import type { GlanceState } from './glance-state.ts';
 import type { GlanceGap, PrSummary, TilePendingWrite, TileView } from './views.ts';
 import { whoseTurn } from './whose-turn.ts';
 import { tileWhy, whyHere } from './why-here.ts';
@@ -26,6 +27,7 @@ export interface PrSummaryInput {
   glance: Pick<Glance, 'verdict' | 'forYou'> | null;
   glanceStale: boolean;
   glanceGap: GlanceGap | null;
+  glanceState: GlanceState;
   quietRepo: boolean;
   repoLabel: string | null;
   /** The tile is unread, so the primary action may be Mark read. */
@@ -58,6 +60,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     glanceStale: input.glanceStale,
     forYou: input.glance?.forYou ?? null,
     glanceGap: input.glanceGap,
+    glanceState: input.glanceState,
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
     updatedAt: pr.updatedAt,

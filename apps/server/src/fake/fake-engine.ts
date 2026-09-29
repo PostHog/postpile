@@ -85,6 +85,9 @@ import {
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
+  isTracked,
+  glanceStateOf,
+  type GlanceState,
   labelBaseRepo,
   tileRepoLabels,
   viewerOrgs,
@@ -115,7 +118,8 @@ import {
   type SearchResult,
   type Viewer,
 } from '@postpile/core';
-import { LivePoller, type EngineService, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
@@ -148,6 +152,8 @@ export interface FakeEngineOptions {
   setupStepMs?: number;
   /** POSTPILE_FAKE_MISSING: gh or claude problems to simulate (see FakeTools). */
   missingTools?: FakeToolProblem[];
+  /** How long each step of the sample glance catch-up (queued, then writing) takes. Tests pass 0. */
+  catchUpStepMs?: number;
 }
 
 /** One step of the fake sync: what runs, calls it plans, calls that come back by its end. */
@@ -227,6 +233,8 @@ export class FakeEngine implements EngineService {
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
+  private autoSync: AutoSyncSchedule | null = null;
+  private readonly catchUp: FakeCatchUp;
   private readonly now: () => Date;
   private readonly snoozes = new Map<string, Snooze>();
   private readonly chats = new Map<string, ChatMessage[]>();
@@ -254,6 +262,8 @@ export class FakeEngine implements EngineService {
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
     this.data = buildSampleData(this.now());
+    const catchUpStepMs = options.catchUpStepMs ?? 4000;
+    this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
@@ -302,12 +312,23 @@ export class FakeEngine implements EngineService {
     return id;
   }
 
-  /** Sample PRs without a glance read as skipped by the call cap. */
+  /** Sample PRs without a glance read as skipped by the call cap, one as failed (FakeCatchUp). */
   private glanceGapOf(prKey: PrKey): GlanceGap | null {
-    if (this.data.glances.some((glance) => glance.prKey === prKey)) {
-      return null;
-    }
-    return { reason: 'call_cap', detail: 'The sync stopped at its agent-call cap before this PR.', at: this.timestamp() };
+    return this.catchUp.gapOf(prKey);
+  }
+
+  /** Same rule as the engine; sample glances are never stale. */
+  private glanceStateOfPr(prKey: PrKey): GlanceState {
+    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+    const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
+    return glanceStateOf({
+      hasGlance: this.data.glances.some((glance) => glance.prKey === prKey),
+      stale: false,
+      wanted: pr?.state === 'OPEN' && tracked,
+      gap: this.glanceGapOf(prKey),
+      agentOff: this.toolStatus.agentOff() !== null,
+      catchUp: this.catchUp.stateOf(prKey),
+    });
   }
 
   private findTile(tileId: string): Tile | undefined {
@@ -396,6 +417,7 @@ export class FakeEngine implements EngineService {
           glance: this.data.glances.find((candidate) => candidate.prKey === pr.key) ?? null,
           glanceStale: false,
           glanceGap: this.glanceGapOf(pr.key),
+          glanceState: this.glanceStateOfPr(pr.key),
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
@@ -525,6 +547,7 @@ export class FakeEngine implements EngineService {
       this.syncing = this.runFakeSync().finally(() => {
         this.syncing = null;
         this.progress = null;
+        this.autoSync?.reschedule();
       });
     }
     return this.syncing;
@@ -779,6 +802,7 @@ export class FakeEngine implements EngineService {
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: false,
       glanceGap: this.glanceGapOf(prKey),
+      glanceState: this.glanceStateOfPr(prKey),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
@@ -1315,7 +1339,40 @@ export class FakeEngine implements EngineService {
   }
 
   async livePollStatus(): Promise<LivePollStatus> {
-    return this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
+    // The renderer asks this every 5s from load: the sample catch-up starts once someone watches, so it can be seen.
+    this.catchUp.seedOnce();
+    return {
+      ...(this.livePoller?.currentStatus() ?? OFF_POLL_STATUS),
+      syncRunning: this.syncing !== null,
+      nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
+      catchUpChanges: this.catchUp.changes(),
+    };
+  }
+
+  /** The real schedule over the fake sync, so the title bar shows a background sync like a normal one. */
+  startAutoSync(options: AutoSyncOptions): void {
+    if (this.autoSync) {
+      return;
+    }
+    const target = { isSyncing: () => this.syncing !== null, sync: () => this.sync() };
+    this.autoSync = new AutoSyncSchedule(target, systemTimers, options, (line) => console.log(line));
+    this.autoSync.start();
+  }
+
+  stopAutoSync(): void {
+    this.autoSync?.stop();
+    this.autoSync = null;
+  }
+
+  async retryGlance(prKey: PrKey): Promise<ActionResult> {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      return fail(`Agent features are off: ${agentOff}`);
+    }
+    if (!this.data.prs.some((pr) => pr.key === prKey)) {
+      return fail(`${prKey} is not synced yet.`);
+    }
+    return this.catchUp.retry(prKey);
   }
 
   /** Sample data never changes on GitHub; one poll cycle keeps the flow the same as the real engine. */
@@ -1379,5 +1436,6 @@ export class FakeEngine implements EngineService {
 
   async close(): Promise<void> {
     this.stopLivePoll();
+    this.stopAutoSync();
   }
 }

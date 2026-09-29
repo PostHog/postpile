@@ -3,7 +3,7 @@ import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { GlanceInputs, type GlanceTarget } from '../glance-inputs.ts';
 import { chunk } from '../lists.ts';
-import type { DigestDeps } from './deps.ts';
+import type { DigestDeps, TopicScope } from './deps.ts';
 import type { DossierRun } from './dossiers.ts';
 
 const MISSING_REASON = 'missing or invalid in the answer';
@@ -45,11 +45,20 @@ export class GlanceBatchWriter {
     }
   }
 
+  /** A call the budget refused: the daily catch-up cap, or the run's own cap. */
+  private capGap(prKeys: PrKey[], runCapDetail: string): void {
+    if (this.deps.budget.stoppedByDailyCap()) {
+      this.markGap(prKeys, 'daily_cap', 'The daily catch-up cap is spent; the next full sync writes it.');
+    } else {
+      this.markGap(prKeys, 'call_cap', runCapDetail);
+    }
+  }
+
   /** Returns the PRs that still need a glance after this batch. */
   private async runBatch(batch: GlanceBatch, inputs: GlanceInputs, byKey: Map<PrKey, GlanceTarget>): Promise<PrKey[]> {
     const { store, agent } = this.deps;
     if (!this.deps.budget.take('glance_batch')) {
-      this.markGap(batch.prKeys, 'call_cap', 'The sync stopped at its agent-call cap before this PR.');
+      this.capGap(batch.prKeys, 'The run stopped at its agent-call cap before this PR.');
       return [];
     }
     const items = batch.prKeys.flatMap((key) => {
@@ -99,9 +108,8 @@ export class GlanceBatchWriter {
   /** Targets outside skipTopics; the ones inside get a call_cap gap. */
   private withoutSkipped(targets: GlanceTarget[], skipTopics: Set<string>): GlanceTarget[] {
     const waiting = targets.filter((target) => target.topicId !== null && skipTopics.has(target.topicId));
-    this.markGap(
+    this.capGap(
       waiting.map((target) => target.item.pr.key),
-      'call_cap',
       'Its topic dossier waits for the next sync (call cap), and the glance with it.',
     );
     return targets.filter((target) => target.topicId === null || !skipTopics.has(target.topicId));
@@ -144,13 +152,15 @@ export class GlanceBatchWriter {
   /**
    * dossiers: the running dossier updates. Each topic's glances start as soon
    * as its own dossier settled, not after every dossier; topics whose update
-   * the budget skipped get none (glancing them now would pay twice).
+   * the budget skipped get none (glancing them now would pay twice). A glance
+   * catch-up run passes its topic as scope: only that topic's PRs.
    */
-  async run(dossiers: Pick<DossierRun, 'skippedByBudget' | 'settled'>): Promise<void> {
+  async run(dossiers: Pick<DossierRun, 'skippedByBudget' | 'settled'>, scope: TopicScope | null = null): Promise<void> {
     const { store, viewer, contexts } = this.deps;
     const board = Board.load(store, this.deps.now().toISOString());
     const inputs = new GlanceInputs(store, board, viewer, contexts);
-    const targets = this.withoutSkipped(inputs.targets(), dossiers.skippedByBudget);
+    const inScope = inputs.targets().filter((target) => scope === null || target.topicId === scope.topicId);
+    const targets = this.withoutSkipped(inScope, dossiers.skippedByBudget);
     const byKey = new Map<PrKey, GlanceTarget>();
 
     const topics = [...groupByTopic(targets)].map(([topicId, group]) =>
