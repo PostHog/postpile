@@ -1,4 +1,4 @@
-import type { ActionLogEntry, ActionOrigin, NotificationDebugRow, NotificationLanding, NotificationReason } from '@postpile/core';
+import type { ActionLogEntry, ActionOrigin, NotificationDebugRow, NotificationLanding, NotificationReason, PingDecision } from '@postpile/core';
 import { ageLabel } from './time.ts';
 
 export interface NotificationFilter {
@@ -218,4 +218,28 @@ export function actionLine(row: NotificationDebugRow, now: Date): ActionLine | n
   const age = ageLabel(last.at, now);
   const title = [last.detail, `${last.action} · ${last.origin} · ${last.outcome} · ${last.at}`].filter(Boolean).join('\n');
   return { text: age === 'now' ? `${text} · just now` : `${text} · ${age} ago`, tone, title };
+}
+
+const DECIDED_BY: Record<PingDecision['source'], string> = {
+  rules: 'the rules',
+  agent: 'the agent',
+  fallback: 'the fallback (agent unavailable)',
+};
+
+export interface PingDecisionLine {
+  text: string;
+  /** Pinged reads stronger than withheld. */
+  pinged: boolean;
+  /** The ping's title and body when it pinged, and the time. */
+  title: string;
+}
+
+/** "withheld by the agent: the mention is an FYI · 3h ago" / "pinged by the rules: …". */
+export function pingDecisionLine(decision: PingDecision, now: Date): PingDecisionLine {
+  const verb = decision.ping ? 'pinged' : 'withheld';
+  const age = ageLabel(decision.at, now);
+  const when = age === 'now' ? 'just now' : `${age} ago`;
+  const reason = decision.reason === '' ? '' : `: ${decision.reason}`;
+  const title = [decision.ping ? [decision.title, decision.body].filter(Boolean).join('\n') : '', decision.at].filter(Boolean).join('\n');
+  return { text: `${verb} by ${DECIDED_BY[decision.source]}${reason} · ${when}`, pinged: decision.ping, title };
 }

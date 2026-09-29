@@ -45,6 +45,22 @@ describe('Engine.debugNotifications', () => {
     expect(h.writer.calls).toEqual([]);
   });
 
+  it('carries the newest ping decisions of each thread, pinged or withheld, with who decided and why', async () => {
+    const h = makeHarness();
+    h.store.notifications.upsertMany([storedThread({ id: 'a' }), storedThread({ id: 'b', number: 901 })]);
+    const base = { prKey: 'acme/app#900', title: '', body: '' };
+    h.store.pingDecisions.add({ ...base, threadId: 'a', ping: false, source: 'rules', reason: 'bot: bot-only activity', at: '2030-01-01T00:01:00.000Z' });
+    h.store.pingDecisions.add({ ...base, threadId: 'a', ping: true, source: 'agent', reason: 'alice asked you', at: '2030-01-01T00:02:00.000Z' });
+
+    const rows = await h.engine.debugNotifications(10);
+
+    expect(rows.find((row) => row.thread.id === 'a')?.pingDecisions.map((d) => [d.ping, d.source, d.reason])).toEqual([
+      [true, 'agent', 'alice asked you'],
+      [false, 'rules', 'bot: bot-only activity'],
+    ]);
+    expect(rows.find((row) => row.thread.id === 'b')?.pingDecisions).toEqual([]);
+  });
+
   it('stops at the limit', async () => {
     const h = makeHarness();
     h.store.notifications.upsertMany([storedThread({ id: 'a' }), storedThread({ id: 'b' })]);

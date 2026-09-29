@@ -503,13 +503,15 @@ describe('PingDecisionRepo', () => {
     ]);
   });
 
-  it('counts decisions by outcome in a time window', () => {
+  it('lists the decisions of some threads and counts them by outcome in a time window', () => {
     const base = { prKey: 'acme/app#1', title: '', body: '', reason: 'r' };
     store.pingDecisions.add({ ...base, threadId: 't1', ping: true, source: 'agent', at: at(1) });
     store.pingDecisions.add({ ...base, threadId: 't1', ping: false, source: 'agent', at: at(2) });
     store.pingDecisions.add({ ...base, threadId: 't2', ping: false, source: 'rules', at: at(3) });
     store.pingDecisions.add({ ...base, threadId: 't3', ping: true, source: 'fallback', at: at(4) });
 
+    expect(store.pingDecisions.listForThreads(['t1']).map((decision) => decision.at)).toEqual([at(2), at(1)]);
+    expect(store.pingDecisions.listForThreads([])).toEqual([]);
     expect(store.pingDecisions.countBetween(at(1), at(4))).toEqual({ pinged: 1, withheldRules: 1, withheldAgent: 1 });
     expect(store.pingDecisions.countBetween(at(4), at(9))).toEqual({ pinged: 0, withheldRules: 0, withheldAgent: 0 });
   });

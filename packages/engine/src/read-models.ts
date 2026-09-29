@@ -39,6 +39,7 @@ import {
   type GlanceState,
   type NotificationDebugRow,
   HANDLED_QUIETLY_DAYS,
+  pingDecisionsByThread,
   type QuietReadView,
   type Pr,
   type PrDetail,
@@ -363,7 +364,9 @@ export class ReadModels {
       byPrKey: this.store.actionLog.latestByPrKey(),
       firstOfBatch: this.store.actionLog.firstOfBatches(),
     };
-    return debugNotificationRows(this.board(), this.store.notifications.list().slice(0, limit), actions);
+    const threads = this.store.notifications.list().slice(0, limit);
+    const decisions = pingDecisionsByThread(this.store.pingDecisions.listForThreads(threads.map((thread) => thread.id)));
+    return debugNotificationRows(this.board(), threads, actions, decisions);
   }
 
   /** "Handled quietly": the quiet mark-reads of the last HANDLED_QUIETLY_DAYS days, newest first. */

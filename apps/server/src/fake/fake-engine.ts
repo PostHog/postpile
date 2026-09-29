@@ -129,6 +129,8 @@ import {
   botsFromQuietDetail,
   HANDLED_QUIETLY_DAYS,
   parsePrKey,
+  pingDecisionsByThread,
+  type PingDecision,
   type QuietReadView,
 } from '@postpile/core';
 import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
@@ -142,7 +144,7 @@ import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { sampleThreads } from './fake-notifications.ts';
-import { sampleQuietReads } from './fake-quiet.ts';
+import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
 import { FakeWrites } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -261,6 +263,8 @@ export class FakeEngine implements EngineService {
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
   private readonly writes: FakeWrites;
+  /** Sample decisions plus the fake poll's own, oldest sample first. */
+  private readonly pingDecisions: PingDecision[];
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
   private readonly recheckDelayMs: number;
   private readonly syncStepMs: number;
@@ -301,6 +305,7 @@ export class FakeEngine implements EngineService {
     for (const entry of sampleQuietReads(this.now())) {
       this.writes.record(entry);
     }
+    this.pingDecisions = samplePingDecisions(this.now());
     this.workContext = new FakeWorkContext(this.data.topics, this.now, options.sweepDelayMs ?? 2000);
     this.instructions = new FakeInstructions({
     now: this.now,
@@ -800,6 +805,7 @@ export class FakeEngine implements EngineService {
   async debugNotifications(limit: number): Promise<NotificationDebugRow[]> {
     this.writes.settle();
     const actions = this.writes.index();
+    const decisions = pingDecisionsByThread(this.pingDecisions);
     return this.threadsOnGitHub()
       .slice(0, limit)
       .map((thread) => {
@@ -810,6 +816,7 @@ export class FakeEngine implements EngineService {
           landing: this.landingOf(key),
           recentEvents: key === null ? [] : debugEventLines(this.eventsOf(key)),
           ...actionTrail(actions, thread.id, key),
+          pingDecisions: decisions.get(thread.id) ?? [],
         };
       });
   }
@@ -1398,7 +1405,11 @@ export class FakeEngine implements EngineService {
     if (ghOff !== null) {
       return { kind: 'blocked', reason: ghOff };
     }
-    return this.live.poll();
+    const cycle = this.live.poll();
+    if (cycle.kind === 'done') {
+      this.pingDecisions.push(...cycle.decisions);
+    }
+    return cycle;
   }
 
   /** The real scheduler and burst grouping over the fake poll. */

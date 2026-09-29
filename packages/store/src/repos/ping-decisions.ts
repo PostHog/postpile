@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { PingDecision, PingDecisionSource } from '@postpile/core';
-import { all, fromBool, run, toBool } from '../sql.ts';
+import { all, fromBool, placeholders, run, toBool } from '../sql.ts';
 
 interface PingDecisionRow {
   thread_id: string;
@@ -56,6 +56,18 @@ export class PingDecisionRepo {
   /** Newest first. */
   listRecent(limit: number): PingDecision[] {
     return all<PingDecisionRow>(this.db, 'SELECT * FROM ping_decision ORDER BY id DESC LIMIT ?', limit).map(toDecision);
+  }
+
+  /** Every decision for these threads, newest first. */
+  listForThreads(threadIds: string[]): PingDecision[] {
+    if (threadIds.length === 0) {
+      return [];
+    }
+    return all<PingDecisionRow>(
+      this.db,
+      `SELECT * FROM ping_decision WHERE thread_id IN (${placeholders(threadIds.length)}) ORDER BY id DESC`,
+      ...threadIds,
+    ).map(toDecision);
   }
 
   /**

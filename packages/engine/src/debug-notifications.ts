@@ -9,6 +9,7 @@ import {
   type NotificationDebugRow,
   type NotificationLanding,
   type NotificationThread,
+  type PingDecision,
   type PrKey,
   type QuietReadView,
 } from '@postpile/core';
@@ -49,9 +50,15 @@ export function landingOf(board: Board, key: PrKey | null): NotificationLanding 
 /**
  * The stored notification threads as GitHub sent them (the caller passes them
  * newest first), each with where it landed, its PR's newest events and the
- * app's last logged action on it. Reads only; nothing here touches GitHub.
+ * app's last logged action on it, plus the live poll's newest ping decisions
+ * by thread id. Reads only; nothing here touches GitHub.
  */
-export function debugNotificationRows(board: Board, threads: NotificationThread[], actions: ActionLogIndex): NotificationDebugRow[] {
+export function debugNotificationRows(
+  board: Board,
+  threads: NotificationThread[],
+  actions: ActionLogIndex,
+  decisions: Map<string, PingDecision[]>,
+): NotificationDebugRow[] {
   return threads.map((thread) => {
     const key = threadPrKey(thread);
     return {
@@ -60,6 +67,7 @@ export function debugNotificationRows(board: Board, threads: NotificationThread[
       landing: landingOf(board, key),
       recentEvents: key === null ? [] : debugEventLines(board.events.get(key) ?? []),
       ...actionTrail(actions, thread.id, key),
+      pingDecisions: decisions.get(thread.id) ?? [],
     };
   });
 }

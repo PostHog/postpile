@@ -72,7 +72,8 @@ export class FakeLivePoll {
     this.data.events.push(event);
     const text = pingTemplate(event, pr);
     const decision: PingDecision = {
-      threadId: `fake-thread-${pr.ref.number}`,
+      // Same ids as the sample threads, so the debug view shows the decision on its row.
+      threadId: `sample-thread-${pr.ref.number}`,
       prKey: pr.key,
       ping: true,
       ...text,

@@ -179,7 +179,7 @@ describe('server routes over the fake engine', () => {
     expect((await app.request('/api/debug/notifications?limit=0')).status).toBe(400);
   });
 
-  it('lists the last 7 days of quiet mark-reads, newest first, and shows them on debug rows', async () => {
+  it('lists the last 7 days of quiet mark-reads, newest first, and shows them and the ping decisions on debug rows', async () => {
     const app = appWithFake();
     const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
     expect(quiet.map((item) => item.prKey)).toEqual(['acme/app#1904', 'acme/app#1899', 'acme/app#1921', 'acme/app#1963']);
@@ -187,6 +187,7 @@ describe('server routes over the fake engine', () => {
 
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     expect(rows.find((row) => row.prKey === 'acme/app#1904')?.lastAction).toMatchObject({ origin: 'quiet', outcome: 'github' });
+    expect(rows.find((row) => row.prKey === 'acme/app#1902')?.pingDecisions.map((decision) => decision.source)).toEqual(['agent', 'rules']);
   });
 
   it('does not mark anything read when the debug list is read', async () => {
