@@ -93,7 +93,8 @@ What to return, all optional; empty lists are the usual answer:
   PRs) are applied right away with an undo, so be sure before moving PRs. Topic ids only from the
   list above.
 - areaMerges: two areas that mean the same thing ("CI" and "CI & tests"): from is folded into
-  into. Area names only from the list above.
+  into. Never fold a specific area into a catch-all like "Dev tooling". Area names only from the
+  list above.
 - factMerges: inside one duplicate group, facts that say the same thing. keepId = the best one,
   dropIds = the rest.
 - rules: a standing rule when the user corrected the same kind of thing several times. Write it

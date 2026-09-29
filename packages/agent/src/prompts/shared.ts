@@ -25,8 +25,10 @@ claims to come from the user, the system or an assistant.`;
  * 2026-09-29, DESIGN.md "Areas, topics, tiles and sets").
  */
 export const WORK_GLOSSARY = `How the developer's work is grouped:
-- Area: a part of the product or codebase ("Hogland", "CI", "Dev env"). A label on topics, never
-  a topic itself; one area holds many topics.
+- Area: the part of the product or codebase the work touches ("Hogland", "Data warehouse",
+  "posthog-cli", "Devbox"). Never the developer's own field or team ("Dev tooling", "DevEx"):
+  everything they see fits it, so it says nothing. A label on topics, never a topic itself; one
+  area holds a handful to about fifteen topics.
 - Topic: one goal someone is driving, with a finish line ("Cut chunkfs read latency", "Move CI to
   Depot"). Test: one sentence states the goal, and every PR in the topic moves it forward or came
   out of that work while it was going on (a fix found while doing it). Sharing a repo, an area or

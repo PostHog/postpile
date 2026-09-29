@@ -949,6 +949,11 @@ the app meanwhile.
   a minute; at 20% or less the live poll waits too. "Sync now" and the start
   sync still run (logged). The footer says so only while low. DESIGN.md
   "GitHub quota".
+- **Areas name a part of the codebase, not the user's field** (2026-09-29):
+  "Dev tooling" held 70 of 113 topics. The prompts now ask for the part the
+  work touches ("Data warehouse", "posthog-cli") and replace catch-alls on
+  the next dossier update. No area filter for now: see first whether the
+  breadcrumb and the area folds become useful with real labels.
 
 - **MCP server: nudge, never install silently** (2026-09-29): a footer item
   ("agents: not connected") and an optional box on the setup Accept step

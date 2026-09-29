@@ -20,8 +20,12 @@ Bigger splits stay proposals.
 prompt that sorts, groups or tidies PRs (topic assignment, set grouping,
 dossier update, consolidation), so all agents cut work at the same grain:
 
-- *Area*: a part of the product or codebase ("Hogland", "CI"). A label on
-  topics, never a topic itself.
+- *Area*: the part of the product or codebase the work touches ("Hogland",
+  "Data warehouse", "posthog-cli"), never the user's own field or team
+  ("Dev tooling" held 70 of 113 topics on real data and said nothing). A
+  label on topics, never a topic itself, a handful to about fifteen topics
+  each. The dossier update replaces a catch-all area when it next writes the
+  topic (still at most MAX_NEW_AREAS_PER_SYNC new areas per sync).
 - *Topic*: one goal someone drives, with a finish line. The test: one
   sentence states the goal, and every PR moves it forward or came out of
   that work while it was going on (a fix found while doing it). Sharing a

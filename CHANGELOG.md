@@ -2,7 +2,7 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## Unreleased
+## 0.4.0 (2026-09-29)
 
 ### New
 
@@ -11,6 +11,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- Topic areas name the part of the product or codebase the work touches ("Data warehouse", "posthog-cli") instead of a catch-all like "Dev tooling". Existing topics get a better area the next time their dossier updates.
 - PostPile keeps well under your GitHub rate limit, which it shares with your own `gh` and other tools. With half or less of the hourly limit left, the hourly background sync waits for the reset and the live poll slows to once a minute; at a fifth or less the live poll waits too. "Sync now" still works. The status bar says so while it happens, e.g. "GitHub quota low: background sync paused until 14:05".
 - The setup draft leaves rules for coding agents out of Preferences, even when your Claude Code notes have them.
 - No live poll, Mac notifications or agent catch-ups while first-run setup is open. They start once you accept or skip setup, so setup's own agent calls don't wait behind them.
