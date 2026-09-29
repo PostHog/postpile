@@ -154,10 +154,11 @@ function isSnoozeActive(input: TileStateInput): boolean {
   const memberKeys = input.tile.members.map((m) => m.prKey);
   const prs = memberKeys.map((key) => input.prs.get(key)).filter((pr): pr is Pr => pr !== undefined);
   const events = memberKeys.flatMap((key) => input.events.get(key) ?? []);
-  if (events.some((event) => breaksSnooze(event, snooze))) {
+  const context = { prs, events, now: input.now, viewer: input.viewer ?? null };
+  if (events.some((event) => breaksSnooze(event, snooze, context))) {
     return false;
   }
-  return !isSnoozeOver(snooze, { prs, events, now: input.now, viewerLogin: input.viewer?.login });
+  return !isSnoozeOver(snooze, context);
 }
 
 function allPingedDone(input: TileStateInput): boolean {

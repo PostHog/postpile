@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeEvent, makePr } from './fixtures.ts';
+import { deriveEvents } from './events.ts';
+import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
+import { lookCloserEvent } from './glance-pings.ts';
 import { breaksSnooze, isSnoozeOver, snoozeTelemetryBucket, type SnoozeContext } from './snooze.ts';
 import type { Snooze, SnoozeCondition } from './types.ts';
 
@@ -8,7 +10,7 @@ function snooze(condition: SnoozeCondition): Snooze {
 }
 
 function context(overrides: Partial<SnoozeContext> = {}): SnoozeContext {
-  return { prs: [makePr()], events: [], now: at(20), viewerLogin: 'viewer', ...overrides };
+  return { prs: [makePr()], events: [], now: at(20), viewer, ...overrides };
 }
 
 describe('isSnoozeOver', () => {
@@ -48,11 +50,22 @@ describe('isSnoozeOver', () => {
 describe('breaksSnooze', () => {
   it('lets an unseen loud human event after the snooze through', () => {
     const s = snooze({ kind: 'until_time', until: at(999) });
-    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', at: at(11) }), s)).toBe(true);
-    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', at: at(9) }), s)).toBe(false);
-    expect(breaksSnooze(makeEvent({ ruleLoudness: 'quiet', at: at(11) }), s)).toBe(false);
-    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', isBot: true, at: at(11) }), s)).toBe(false);
-    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', seenAt: at(12), at: at(11) }), s)).toBe(false);
+    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', at: at(11) }), s, context())).toBe(true);
+    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', at: at(9) }), s, context())).toBe(false);
+    expect(breaksSnooze(makeEvent({ ruleLoudness: 'quiet', at: at(11) }), s, context())).toBe(false);
+    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', isBot: true, at: at(11) }), s, context())).toBe(false);
+    expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', seenAt: at(12), at: at(11) }), s, context())).toBe(false);
+  });
+
+  it('wakes on a bot-made review request that asks the viewer, never on the app-made Look closer event', () => {
+    const s = snooze({ kind: 'until_time', until: at(999) });
+    const request = makeTimelineItem({ id: 'rr', actor: 'assignbot[bot]', subject: viewer.login, at: at(15) });
+    const pr = makePr({ author: 'rowan', reviewerUsers: [viewer.login], timeline: [request] });
+    const event = deriveEvents(pr, viewer, null).find((candidate) => candidate.kind === 'review_requested')!;
+    expect(event).toMatchObject({ isBot: true, ruleLoudness: 'loud' });
+    expect(breaksSnooze(event, s, context({ prs: [pr] }))).toBe(true);
+    const lookCloser = lookCloserEvent(pr, 'acme/team-platform', 'rr', at(16));
+    expect(breaksSnooze(lookCloser, s, context({ prs: [pr] }))).toBe(false);
   });
 });
 

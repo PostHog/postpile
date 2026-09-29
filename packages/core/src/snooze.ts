@@ -1,7 +1,9 @@
+import { isAutomation } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
-import type { EventKind, IsoTime, Pr, PrEvent, Snooze, SnoozeCondition } from './types.ts';
+import { reviewRequestTarget } from './review-request.ts';
+import type { EventKind, IsoTime, Pr, PrEvent, Snooze, SnoozeCondition, Viewer } from './types.ts';
 
 export interface SnoozeContext {
   /** The PRs in the snoozed tile. */
@@ -10,9 +12,11 @@ export interface SnoozeContext {
   events: PrEvent[];
   now: IsoTime;
   /** The viewer's own replies never end a "someone replies" snooze. */
-  viewerLogin?: string;
+  viewer?: Viewer | null;
 }
 
+// Wider than the asks in kinds.ts on purpose: any human comment or review
+// ends a "someone replies" snooze, not only one aimed at the viewer.
 const replyKinds: EventKind[] = [
   'mention',
   'team_mention',
@@ -24,17 +28,24 @@ const replyKinds: EventKind[] = [
   'review_commented',
 ];
 
-function isByViewer(event: PrEvent, viewerLogin: string | undefined): boolean {
-  return viewerLogin !== undefined && sameLogin(event.actor, viewerLogin);
+function isByViewer(event: PrEvent, viewer: Viewer | null): boolean {
+  return viewer !== null && sameLogin(event.actor, viewer.login);
+}
+
+/** `isAutomation` for an event of the snoozed PRs, its request target looked up on its PR. */
+function isAutomationIn(event: PrEvent, context: SnoozeContext): boolean {
+  const pr = context.prs.find((candidate) => candidate.key === event.prKey);
+  const target = pr === undefined ? null : reviewRequestTarget(event, pr);
+  return isAutomation(event, target, context.viewer ?? null);
 }
 
 function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
   return context.events.some(
     (event) =>
       event.at > snooze.since &&
-      !event.isBot &&
       replyKinds.includes(event.kind) &&
-      !isByViewer(event, context.viewerLogin),
+      !isAutomationIn(event, context) &&
+      !isByViewer(event, context.viewer ?? null),
   );
 }
 
@@ -64,10 +75,12 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
 /**
  * A loud event from a human after the snooze started ends it whatever the
  * condition, so a mention is never hidden behind a snooze. Open question in
- * DESIGN.md; this is the proposed default.
+ * DESIGN.md; this is the proposed default. Human means not automation
+ * (`isAutomation`): a bot-made review request that asks the viewer wakes the
+ * snooze, the app's own Look closer event does not.
  */
-export function breaksSnooze(event: PrEvent, snooze: Snooze): boolean {
-  return event.at > snooze.since && !event.isBot && event.seenAt === null && effectiveLoudness(event) === 'loud';
+export function breaksSnooze(event: PrEvent, snooze: Snooze, context: SnoozeContext): boolean {
+  return event.at > snooze.since && event.seenAt === null && effectiveLoudness(event) === 'loud' && !isAutomationIn(event, context);
 }
 
 export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'ci_green';

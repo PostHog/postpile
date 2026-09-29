@@ -47,27 +47,36 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
 describe('botOnlySinceRead', () => {
   it('returns the events after the read when every one is a bot, CI results without an actor included', () => {
     const events = [humanComment(5), botComment(30), ciResult(31)];
-    expect(botOnlySinceRead(events, at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30', 'ci-31']);
+    expect(botOnlySinceRead(makePr(), events, at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30', 'ci-31']);
   });
 
   it('is null once a person took part after the read', () => {
-    expect(botOnlySinceRead([botComment(30), humanComment(32)], at(20), viewer)).toBeNull();
+    expect(botOnlySinceRead(makePr(), [botComment(30), humanComment(32)], at(20), viewer)).toBeNull();
   });
 
   it('is null when nothing known happened after the read', () => {
-    expect(botOnlySinceRead([humanComment(5)], at(20), viewer)).toBeNull();
+    expect(botOnlySinceRead(makePr(), [humanComment(5)], at(20), viewer)).toBeNull();
   });
 
   it('counts an actor-less event as a bot even when it was not flagged', () => {
     const deploy = makeEvent({ id: 'deploy', kind: 'deploy', actor: '', isBot: false, at: at(30) });
-    expect(botOnlySinceRead([deploy], at(20), viewer)).toHaveLength(1);
+    expect(botOnlySinceRead(makePr(), [deploy], at(20), viewer)).toHaveLength(1);
   });
 
   it('leaves the viewer own events out: their review after the read is not someone else activity', () => {
     const ownReview = makeEvent({ id: 'own-review', prKey: pr.key, kind: 'review_approved', actor: viewer.login, at: at(25) });
-    expect(botOnlySinceRead([ownReview, botComment(30)], at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30']);
+    expect(botOnlySinceRead(makePr(), [ownReview, botComment(30)], at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30']);
     // Only the viewer since the read: nothing by someone else is known.
-    expect(botOnlySinceRead([ownReview], at(20), viewer)).toBeNull();
+    expect(botOnlySinceRead(makePr(), [ownReview], at(20), viewer)).toBeNull();
+  });
+
+  it('treats a bot-made review request that asks the viewer as a person asking, not bot activity', () => {
+    const request = makeTimelineItem({ id: 'rr', actor: 'assignbot[bot]', subject: viewer.login, at: at(30) });
+    const asked = makePr({ timeline: [request] });
+    const event = makeEvent({ id: 'rr-event', kind: 'review_requested', actor: 'assignbot[bot]', isBot: true, sourceId: 'rr', at: at(30) });
+    expect(botOnlySinceRead(asked, [event], at(20), viewer)).toBeNull();
+    const otherTeam = makePr({ timeline: [{ ...request, subject: 'acme/team-web' }] });
+    expect(botOnlySinceRead(otherTeam, [event], at(20), viewer)).toHaveLength(1);
   });
 });
 
