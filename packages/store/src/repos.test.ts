@@ -227,6 +227,14 @@ describe('ActionLogRepo', () => {
     expect(store.actionLog.firstOfBatches().get('b1')?.id).toBe(first);
     expect(store.actionLog.listRecent(2).map((entry) => entry.action)).toEqual(['undo_mark_read', 'mark_read']);
   });
+
+  it('lists one origin after a time, newest first', () => {
+    store.actionLog.add({ ...base, action: 'mark_read', origin: 'quiet', outcome: 'github', at: at(1) });
+    const newer = store.actionLog.add({ ...base, action: 'mark_read', origin: 'quiet', outcome: 'github', at: at(3) });
+    const newest = store.actionLog.add({ ...base, action: 'mark_read', origin: 'quiet', outcome: 'github', at: at(4) });
+    store.actionLog.add({ ...base, action: 'mark_read', origin: 'tile', at: at(5) });
+    expect(store.actionLog.listByOriginSince('quiet', at(2)).map((entry) => entry.id)).toEqual([newest, newer]);
+  });
 });
 
 describe('TopicRepo and memberships', () => {

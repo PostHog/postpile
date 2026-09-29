@@ -126,6 +126,7 @@ import type { UserConfigFile } from './user-config.ts';
 import { WorkContextMemory } from './work-context/work-context.ts';
 import type { GitHubWrites } from './writes/github-writes.ts';
 import type { PendingWrites } from './writes/pending-writes.ts';
+import { QuietReads } from './writes/quiet-reads.ts';
 
 export interface EngineDeps {
   store: Store;
@@ -274,7 +275,8 @@ export class Engine implements EngineService {
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff, telemetry: this.telemetry };
     const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
-    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, deps.syncLog);
+    const quietReads = new QuietReads(store, deps.reader, deps.writes, now);
+    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, quietReads, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);
     const decider = new PingDecider({
       store,

@@ -56,6 +56,11 @@ export class ActionLogRepo {
     return all<ActionLogRow>(this.db, 'SELECT * FROM action_log ORDER BY id DESC LIMIT ?', limit).map(toEntry);
   }
 
+  /** Entries of one origin after `since` (an ISO time), newest first. */
+  listByOriginSince(origin: ActionOrigin, since: string): ActionLogEntry[] {
+    return all<ActionLogRow>(this.db, 'SELECT * FROM action_log WHERE origin = ? AND at > ? ORDER BY id DESC', origin, since).map(toEntry);
+  }
+
   /** The newest entry per thread id. */
   latestByThread(): Map<string, ActionLogEntry> {
     const rows = all<ActionLogRow>(

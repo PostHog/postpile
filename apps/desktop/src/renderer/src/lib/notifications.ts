@@ -102,6 +102,7 @@ const WHO: Record<ActionOrigin, string> = {
   poll: 'the live poll',
   footer: 'you from the lock',
   cleanup: 'you in the inbox cleanup',
+  quiet: 'PostPile',
 };
 
 /**
@@ -127,6 +128,10 @@ function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): {
   const who = WHO[last.origin];
   switch (last.outcome) {
     case 'github':
+      if (last.origin === 'quiet') {
+        // Handled quietly: the detail names the bots.
+        return { text: 'marked read by PostPile: only bot activity since your last read', tone: 'app' };
+      }
       return { text: `marked read by ${who}${decidedBy ? `, queued by ${WHO[decidedBy.origin]}` : ''}`, tone: 'app' };
     case 'queued':
       if (last.detail !== '') {
