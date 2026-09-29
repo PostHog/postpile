@@ -1209,12 +1209,14 @@ export class FakeEngine implements EngineService {
     return ok(`snoozed until ${condition.kind}`);
   }
 
+  /** Like TileActions.unsnooze: a tile id that no longer exists fails. */
   async unsnooze(tileId: string): Promise<ActionResult> {
     const tile = this.findTile(tileId);
-    if (tile) {
-      this.applySnoozeWrites(snoozeWrites(tile, { kind: 'end' }));
+    if (!tile) {
+      return fail(`no tile ${tileId}`);
     }
-    return ok('unsnoozed');
+    this.applySnoozeWrites(snoozeWrites(tile, { kind: 'end' }));
+    return ok('Unsnoozed');
   }
 
   /** Agent actions fail with the headline while the agent is off, as the engine's do. */
