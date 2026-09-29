@@ -55,6 +55,19 @@ export interface SetupFitState {
   result: SetupFitResult | null;
 }
 
+/**
+ * The fit state once a check of `checked` answers, with the text now at
+ * `now`. Same text: the answer. Changed meanwhile: the answer is dropped,
+ * and so is that check's "Checking" state, so a later visit to Accept with
+ * the same text asks again instead of waiting forever.
+ */
+export function fitAfterAnswer(fit: SetupFitState | null, now: string, checked: string, result: SetupFitResult): SetupFitState | null {
+  if (now === checked) {
+    return { text: checked, result };
+  }
+  return fit?.text === checked && fit.result === null ? null : fit;
+}
+
 /** A fix button's words. */
 export function fitFixLabel(note: SetupFitNote, fix: SetupFitFix): string {
   if (fix === 'move') {

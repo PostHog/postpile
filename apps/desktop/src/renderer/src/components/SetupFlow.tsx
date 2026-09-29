@@ -7,6 +7,7 @@ import {
   applyFitFix,
   draftText,
   editsFromDraft,
+  fitAfterAnswer,
   pickMainRepo,
   picksAfterRefine,
   picksFromDraft,
@@ -103,7 +104,7 @@ export function SetupFlow(props: {
 
   /**
    * The fit check for the text as it is now, unless it was already checked.
-   * The answer is dropped when the text changed while it ran.
+   * The answer is dropped when the text changed while it ran (fitAfterAnswer).
    */
   async function checkFit(edits: SetupSectionEdit[]) {
     const text = draftText(edits);
@@ -112,7 +113,7 @@ export function SetupFlow(props: {
     }
     setReview((current) => current && { ...current, fit: { text, result: null } });
     const result = await actions.checkSetupFit({ sections: edits });
-    setReview((current) => (current && draftText(current.edits) === text ? { ...current, fit: { text, result } } : current));
+    setReview((current) => current && { ...current, fit: fitAfterAnswer(current.fit, draftText(current.edits), text, result) });
   }
 
   function toAccept() {

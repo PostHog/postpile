@@ -1,6 +1,6 @@
 import type { SetupDraft, SetupFitNote } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
-import { acceptPlan, applyFitFix, draftText, fitFixes, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
+import { acceptPlan, applyFitFix, draftText, fitAfterAnswer, fitFixes, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
 
 function repo(name: string, prs: number) {
   return { repo: name, prs, authored: prs > 2 ? 2 : 0, reviewed: prs > 2 ? prs - 2 : prs, requested: 0 };
@@ -131,5 +131,22 @@ describe('fit fixes', () => {
     ]);
     const quiet = applyFitFix(edits, { ...ignore, moveTo: 'What to ignore or keep quiet' }, 'move');
     expect(quiet.at(-1)).toEqual({ heading: 'What to ignore or keep quiet', body: '- Ignore the docs bot' });
+  });
+});
+
+describe('fitAfterAnswer', () => {
+  const answer = { ok: true, message: '', notes: [] };
+
+  it('keeps the answer when the text did not change', () => {
+    expect(fitAfterAnswer({ text: 'a', result: null }, 'a', 'a', answer)).toEqual({ text: 'a', result: answer });
+  });
+
+  it('drops a pending check whose text moved on, so the next visit asks again', () => {
+    expect(fitAfterAnswer({ text: 'a', result: null }, 'b', 'a', answer)).toBeNull();
+  });
+
+  it('leaves a newer check alone', () => {
+    const newer = { text: 'b', result: null };
+    expect(fitAfterAnswer(newer, 'b', 'a', answer)).toBe(newer);
   });
 });
