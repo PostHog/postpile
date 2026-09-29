@@ -169,7 +169,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - `markOpenedRead` is quiet too (no toast, no undo) and on the
   `GithubWrite` list as `openedRead`, blocked while locked (never a
   pending write). `useOpenedRead` in `App.tsx` calls it once per open,
-  after the PR stayed 1.5s in the detail pane, only when
+  after the PR stayed 1.5s in the detail pane with the window visible
+  (`OpenedReadTimer`; hiding the window restarts the wait), only when
   `opensMarkRead` (`lib/opened-read.ts`) says a mark-read leaves the tile
   done. The server checks again and marks the GitHub thread read ("opened
   in PostPile", listed under Handled quietly).

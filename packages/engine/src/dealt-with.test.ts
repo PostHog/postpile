@@ -80,7 +80,7 @@ describe('You already dealt with it: events before the viewer last touch count a
       author: viewer.login,
       timeline: [],
       reviews: [makeReview({ id: 'r-rowan', author: 'rowan', state: 'CHANGES_REQUESTED', submittedAt: at(10) })],
-      commits: [{ oid: 'c2', headline: 'address the review', author: viewer.login, committedAt: at(30) }],
+      commits: [{ oid: 'c2', headline: 'address the review', author: viewer.login, committer: viewer.login, committedAt: at(30) }],
       headOid: 'c2',
       updatedAt: at(30),
     });
@@ -91,6 +91,41 @@ describe('You already dealt with it: events before the viewer last touch count a
     const review = h.store.events.listForPr(pr.key).find((event) => event.kind === 'review_changes_requested');
     expect(review?.seenAt).toBe(at(30));
     expect(await tileState(h, 't')).not.toBe('unread');
+  });
+
+  it('does not count the viewer commit that a collaborator cherry-picked onto their PR', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    const pr = reviewRequestedPr(1, {
+      author: viewer.login,
+      timeline: [],
+      reviews: [makeReview({ id: 'r-rowan', author: 'rowan', state: 'CHANGES_REQUESTED', submittedAt: at(10) })],
+      commits: [{ oid: 'c2', headline: 'address the review', author: viewer.login, committer: 'rowan', committedAt: at(30) }],
+      headOid: 'c2',
+      updatedAt: at(30),
+    });
+    topicWithPrs(h, 't', [pr]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const review = h.store.events.listForPr(pr.key).find((event) => event.kind === 'review_changes_requested');
+    expect(review?.seenAt).toBeNull();
+    expect(await tileState(h, 't')).toBe('unread');
+  });
+
+  it('counts a force push by the viewer on their own PR', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    const pr = reviewRequestedPr(1, {
+      author: viewer.login,
+      timeline: [makeTimelineItem({ id: 'fp-1', kind: 'head_ref_force_pushed', actor: viewer.login, subject: null, at: at(30) })],
+      reviews: [makeReview({ id: 'r-rowan', author: 'rowan', state: 'CHANGES_REQUESTED', submittedAt: at(10) })],
+      updatedAt: at(30),
+    });
+    topicWithPrs(h, 't', [pr]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const review = h.store.events.listForPr(pr.key).find((event) => event.kind === 'review_changes_requested');
+    expect(review?.seenAt).toBe(at(30));
   });
 
   it('also applies to events stored before the rule, on the next full sync', async () => {

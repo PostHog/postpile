@@ -74,7 +74,7 @@ fragment prData on PullRequest {
     nodes { id path isResolved comments(first: 30) { nodes { id url ...comment } } }
   }
   commits(last: 50) {
-    nodes { commit { oid messageHeadline committedDate author { name user { login } } } }
+    nodes { commit { oid messageHeadline committedDate author { name user { login } } committer { name user { login } } } }
   }
   headCommit: commits(last: 1) {
     nodes { commit { statusCheckRollup {

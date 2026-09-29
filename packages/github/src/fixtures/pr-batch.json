@@ -67,9 +67,9 @@
         ] },
         "commits": { "nodes": [
           { "commit": { "oid": "c1", "messageHeadline": "Add depot config", "committedDate": "2026-09-18T09:00:00Z",
-            "author": { "name": "Alice A", "user": { "login": "alice" } } } },
+            "author": { "name": "Alice A", "user": { "login": "alice" } }, "committer": { "name": "Alice A", "user": { "login": "alice" } } } },
           { "commit": { "oid": "c2", "messageHeadline": "Fix cache", "committedDate": "2026-09-20T09:00:00Z",
-            "author": { "name": "Alice Laptop", "user": null } } }
+            "author": { "name": "Alice Laptop", "user": null }, "committer": { "name": "GitHub", "user": { "login": "web-flow" } } } }
         ] },
         "headCommit": { "nodes": [
           { "commit": { "statusCheckRollup": {

@@ -7,6 +7,9 @@ import { PUSH_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
 import type { IsoTime, Pr, PrEvent, Viewer } from './types.ts';
 
+/** GitHub's committer on commits made in the web UI (a suggestion, "Update branch"), as login or as name. */
+const WEB_FLOW_COMMITTERS = ['web-flow', 'GitHub'];
+
 /**
  * What the viewer did: their review (changes request, approval, review
  * comment), a comment or thread reply, a push to their own PR, or merging or
@@ -34,16 +37,34 @@ export function isOwnEvent(event: PrEvent, viewer: Viewer): boolean {
 }
 
 /**
+ * The viewer pushed this: a force push they did (the timeline names the
+ * pusher), or a commit they committed, or one GitHub's web UI committed
+ * with them as author. The commit author alone is no evidence: a
+ * collaborator's or a bot's cherry-pick or rebase keeps the viewer as author
+ * (Codex review on PR #10). A snapshot without the committer is no evidence.
+ */
+function pushedByViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
+  if (event.kind === 'force_pushed') {
+    return isOwnEvent(event, viewer);
+  }
+  const committer = pr.commits.find((commit) => commit.oid === event.sourceId)?.committer;
+  if (!committer) {
+    return false;
+  }
+  return sameLogin(committer, viewer.login) || (WEB_FLOW_COMMITTERS.includes(committer) && isOwnEvent(event, viewer));
+}
+
+/**
  * The touch kind of one event, null when it is not the viewer's or not a
- * touch. A push counts only on the viewer's own PR: on someone else's PR a
- * rebase can carry the viewer's commits without them doing anything.
+ * touch. A push counts only on the viewer's own PR, and only with evidence
+ * that the viewer pushed (`pushedByViewer`), not just authored the commit.
  */
 export function touchKindOf(event: PrEvent, pr: Pr, viewer: Viewer): TouchKind | null {
+  if (PUSH_KINDS.includes(event.kind)) {
+    return sameLogin(pr.author, viewer.login) && pushedByViewer(event, pr, viewer) ? 'push' : null;
+  }
   if (!isOwnEvent(event, viewer)) {
     return null;
-  }
-  if (PUSH_KINDS.includes(event.kind)) {
-    return sameLogin(pr.author, viewer.login) ? 'push' : null;
   }
   switch (event.kind) {
     case 'review_changes_requested':

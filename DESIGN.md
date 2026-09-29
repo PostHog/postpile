@@ -2279,6 +2279,15 @@ Merging or closing counts only when the viewer did it.
    the build settled:
    - A push counts only on the viewer's own PR. On someone else's PR a
      rebase can carry the viewer's commits without them doing anything.
+   - And only with evidence that the viewer pushed, not just wrote the
+     commit (Codex review on PR #10): the commit's committer is the viewer,
+     or GitHub's web-flow committed it with the viewer as author (a
+     suggestion or "Update branch" they clicked), or a force push the
+     timeline credits to them. A collaborator's or bot's cherry-pick or
+     rebase keeps the viewer as author but makes itself the committer, so
+     it does not count. The committer comes with the commits in the same PR
+     query (`Commit.committer`); a snapshot stored before that has none and
+     counts as no evidence until the PR is fetched again.
    - The touch itself is marked too: a merge the viewer did on a PR they
      were asked to review is a `merged_without_review` of their own and
      would otherwise keep the tile open.
@@ -2331,8 +2340,11 @@ Merging or closing counts only when the viewer did it.
    `EngineService.markOpenedRead` -> `QuietReads.markOpened`, with the rule
    in core `openedReadCheck`. Details the build settled:
    - "Opened" means the PR stayed in the detail pane for 1.5s
-     (`OPENED_READ_DELAY_MS`, renderer `useOpenedRead`) while the window
-     was visible, so clicking through tiles marks nothing. The first tile
+     (`OPENED_READ_DELAY_MS`, renderer `useOpenedRead` with
+     `OpenedReadTimer`) while the window was visible, so clicking through
+     tiles marks nothing. Hidden before that, the wait starts over when the
+     window is visible again with the same PR open (Codex review on PR #10:
+     the open used to be dropped). The first tile
      the app shows by itself counts too: it is on screen. One request per
      open; re-renders and refetches of the same PR send nothing.
    - The renderer asks only when `TileView.afterRead.done`, the tile is not

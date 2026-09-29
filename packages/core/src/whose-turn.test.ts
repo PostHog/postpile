@@ -139,13 +139,13 @@ describe('whoseTurn: your move', () => {
   });
 
   it('counts your push on your own PR as the answer to a mention ("needs a merge-in from master")', () => {
-    const own = makePr({ author: me });
+    const own = makePr({ author: me, commits: [makeCommit({ oid: 'c-own', author: me, committedAt: at(20) })] });
     const mention = makeEvent({ kind: 'mention', ruleLoudness: 'loud', actor: 'lyra', at: at(10) });
-    const push = makeEvent({ id: 'own-push', kind: 'commits_pushed', actor: me, at: at(20) });
+    const push = makeEvent({ id: 'own-push', kind: 'commits_pushed', actor: me, at: at(20), sourceId: 'c-own' });
     expect(single(own, [mention])).toMatchObject({ kind: 'you', move: 'reply', what: 'lyra mentioned you' });
     expect(single(own, [mention, push]).kind).not.toBe('you');
     // A push on someone else's PR is no touch.
-    const others = makePr({ author: 'rowan' });
+    const others = { ...own, author: 'rowan' };
     expect(single(others, [mention, push])).toMatchObject({ kind: 'you', move: 'reply' });
   });
 

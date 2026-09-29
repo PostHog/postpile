@@ -204,10 +204,12 @@ function allComments(raw: RawPullRequest, threads: ReviewThread[]): Comment[] {
 
 function toCommit(raw: RawCommit): Commit {
   const author = raw.commit.author;
+  const committer = raw.commit.committer;
   return {
     oid: raw.commit.oid,
     headline: raw.commit.messageHeadline,
     author: author?.user?.login ?? author?.name ?? '',
+    committer: committer?.user?.login ?? committer?.name ?? '',
     committedAt: isoTime(raw.commit.committedDate),
   };
 }

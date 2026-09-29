@@ -17,7 +17,8 @@ function seenWhere(events: PrEvent[], ids: string[], seenAt: string): PrEvent[] 
 
 describe('touchKindOf', () => {
   const alicePr = makePr();
-  const ownPr = makePr({ author: me });
+  // Own events carry sourceId c1 (makeEvent): the viewer committed c1 on their own PR.
+  const ownPr = makePr({ author: me, commits: [makeCommit({ oid: 'c1', author: me })] });
 
   it('names reviews, comments, merges and closes by the viewer', () => {
     expect(touchKindOf(own('review_approved', 0), alicePr, viewer)).toBe('approval');
@@ -32,7 +33,23 @@ describe('touchKindOf', () => {
   it('counts a push only on the viewer own PR', () => {
     expect(touchKindOf(own('commits_pushed', 0), ownPr, viewer)).toBe('push');
     expect(touchKindOf(own('force_pushed', 0), ownPr, viewer)).toBe('push');
-    expect(touchKindOf(own('commits_pushed', 0), alicePr, viewer)).toBeNull();
+    expect(touchKindOf(own('commits_pushed', 0), { ...alicePr, commits: ownPr.commits }, viewer)).toBeNull();
+  });
+
+  it('needs evidence the viewer pushed, not just that they wrote the commit', () => {
+    const withCommit = (committer: string | undefined) => ({ ...ownPr, commits: [{ ...makeCommit({ oid: 'c1', author: me }), committer }] });
+    // A collaborator cherry-picked or rebased the viewer's commit onto the PR.
+    expect(touchKindOf(own('commits_pushed', 0), withCommit('rowan'), viewer)).toBeNull();
+    expect(touchKindOf(own('commits_pushed', 0), withCommit('renovate[bot]'), viewer)).toBeNull();
+    // The viewer clicked a suggestion or "Update branch" in the web UI.
+    expect(touchKindOf(own('commits_pushed', 0), withCommit('web-flow'), viewer)).toBe('push');
+    // A snapshot stored before the committer was fetched.
+    expect(touchKindOf(own('commits_pushed', 0), withCommit(undefined), viewer)).toBeNull();
+    // The viewer committed someone else's commit (their own cherry-pick).
+    const picked = makeEvent({ id: 'picked', kind: 'commits_pushed', actor: 'rowan', sourceId: 'c1' });
+    expect(touchKindOf(picked, { ...ownPr, commits: [{ ...makeCommit({ oid: 'c1', author: 'rowan' }), committer: me }] }, viewer)).toBe('push');
+    // A force push by someone else is not the viewer's.
+    expect(touchKindOf(makeEvent({ kind: 'force_pushed', actor: 'rowan' }), ownPr, viewer)).toBeNull();
   });
 
   it('is null for other people, CI and own events that are not a touch', () => {
@@ -43,7 +60,7 @@ describe('touchKindOf', () => {
 });
 
 describe('lastTouch', () => {
-  const pr = makePr({ author: me });
+  const pr = makePr({ author: me, commits: [makeCommit({ oid: 'c1', author: me })] });
 
   it('takes the newest touch, or the newest before a time', () => {
     const events = [own('comment', 0), own('commits_pushed', 30)];

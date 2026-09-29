@@ -24,3 +24,50 @@ export function opensMarkRead(view: OpenedTileView | null, prKey: PrKey | null, 
   }
   return view.afterRead.done && view.state.kind !== 'snoozed';
 }
+
+/** The timer functions the wait needs; `window` in the app, a fake in tests. */
+export interface OpenedReadClock {
+  setTimeout(callback: () => void, ms: number): number;
+  clearTimeout(handle: number): void;
+}
+
+/**
+ * One open of a PR in the detail pane: calls `onOpened` once, after the PR
+ * stayed OPENED_READ_DELAY_MS on screen while the document was visible.
+ * Hidden before that, the wait starts over once it is visible again, so a
+ * window put away right after a click does not drop the open (Codex review
+ * on PR #10).
+ */
+export class OpenedReadTimer {
+  private handle: number | null = null;
+  private fired = false;
+
+  constructor(
+    private readonly onOpened: () => void,
+    private readonly clock: OpenedReadClock,
+  ) {}
+
+  /** Stops a running wait; a later `visible()` starts a full one again. */
+  stop(): void {
+    if (this.handle !== null) {
+      this.clock.clearTimeout(this.handle);
+      this.handle = null;
+    }
+  }
+
+  /** The document is visible: start the wait, unless one runs or the open already counted. */
+  visible(): void {
+    if (this.fired || this.handle !== null) {
+      return;
+    }
+    this.handle = this.clock.setTimeout(() => {
+      this.handle = null;
+      this.fired = true;
+      this.onOpened();
+    }, OPENED_READ_DELAY_MS);
+  }
+
+  hidden(): void {
+    this.stop();
+  }
+}

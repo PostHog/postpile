@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeEvent, makePr, viewer } from './fixtures.ts';
+import { at, makeCommit, makeEvent, makePr, viewer } from './fixtures.ts';
 import type { PrEvent } from './types.ts';
 import { whatsNew } from './whats-new.ts';
 
@@ -91,9 +91,11 @@ describe('whatsNew', () => {
   });
 
   it('anchors on a push only on the viewer own PR', () => {
-    const events = [own('commits_pushed', 0), loud('review_changes_requested', 'lyra', 5)];
-    expect(whatsNew(pr, events, viewer)).toBeNull();
-    expect(whatsNew(makePr({ author: me }), events, viewer)?.anchor).toEqual({ kind: 'push', at: at(0) });
+    const push = { ...own('commits_pushed', 0), sourceId: 'c-own' };
+    const commits = [makeCommit({ oid: 'c-own', author: me })];
+    const events = [push, loud('review_changes_requested', 'lyra', 5)];
+    expect(whatsNew({ ...pr, commits }, events, viewer)).toBeNull();
+    expect(whatsNew(makePr({ author: me, commits }), events, viewer)?.anchor).toEqual({ kind: 'push', at: at(0) });
   });
 
   it('falls back to the mark-read when the viewer never acted', () => {
