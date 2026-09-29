@@ -154,6 +154,20 @@ export interface PrSummary {
   /** Where the glance stands (`glanceStateOf`): ready, queued, writing, failed, agent_off, capped or none. */
   glanceState: GlanceState;
   unseenLoudEvents: number;
+  /**
+   * Nothing is asked of the viewer on this PR (`isPrDone`). A tile is done
+   * when every tracked member is; the renderer dots the tracked members that
+   * are not (DESIGN.md "Actions act on what you look at").
+   */
+  done: boolean;
+  /** Whose move it is on this PR alone (`prWhoseTurn`), for the detail pane's buttons. */
+  turn: WhoseTurn;
+  /**
+   * What a mark-read of this PR alone would leave (`prAfterMarkRead`): the
+   * detail pane says "Mark done" only when `done` is true. Always not done
+   * for a pulled-in stack layer.
+   */
+  afterRead: TileAfterRead;
   /** What changed since the viewer's last touch (`whatsNew`), for the why-now strip; null on a first look or with nothing new. */
   whatsNew: WhatsNew | null;
   updatedAt: IsoTime;

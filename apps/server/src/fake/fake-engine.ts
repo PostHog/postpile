@@ -470,6 +470,7 @@ export class FakeEngine implements EngineService {
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
+          now: this.timestamp(),
         }),
       ];
     });

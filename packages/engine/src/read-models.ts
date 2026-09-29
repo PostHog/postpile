@@ -207,6 +207,7 @@ export class ReadModels {
           quietRepo: isPrInQuietRepo(pr.key, settings),
           repoLabel: repoLabels[index] ?? null,
           tileUnread,
+          now: board.now,
         }),
       ];
     });
