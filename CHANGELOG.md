@@ -9,6 +9,9 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - New sidebar section "Changes you requested", right under Needs reply: open PRs where your latest review asks for changes. The ones where the author pushed or replied since come first; the ones still waiting on the author follow. The "author addressed your changes" case used to sit under To review. The Review filter covers both.
 - Each topic shows once in the sidebar, in its most urgent section, instead of in every section where it has a PR. The Mine, Team, Reply and Review filters still find a topic by any of its PRs.
 - Your own PRs stay under My PRs whatever area or team the code belongs to; only Needs reply ranks above them.
+- Threads you had read that came back only because of bots (CI, merge queue, review and deploy bots) are marked read on GitHub by PostPile after a sync, 10 minutes after the last bot activity at the earliest. Never your own PRs, never when something is your move or new for you, never a merge without your review, and only while GitHub writes are unlocked. "Handled quietly" in the sidebar lists the last 7 days.
+- The notifications debug view shows each thread's ping decisions: pinged or withheld, by the rules or the agent, and why.
+- One hourly usage event counts pings sent and withheld and threads handled quietly (counts only).
 - The "your move" chip on a topic row names the most urgent move ("Reply", "Re-review", "Review", "Address changes", "Fix CI", "Merge") and how many more ("Reply +2"). Hover it to see every move.
 
 ## 0.5.0 (2026-09-29)

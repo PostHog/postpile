@@ -587,7 +587,7 @@ now".
 ## Stubbed or thin
 
 - Desktop UI follows the chosen style, but the layout is still open. Not in
-  the UI yet: a "handled quietly" list (shown disabled), keyboard
+  the UI yet: keyboard
   navigation between tiles, dark mode, one-press approve from a tile (Approve lives in the
   detail pane, next to the glance).
 - The footer lock is enforced in the engine (`GitHubWrites`), not only in the
@@ -941,6 +941,17 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Handled quietly: bot-only activity gets marked read** (2026-09-29): a
+  thread you had read that turned unread only because of bots is marked read
+  on GitHub by PostPile after a full sync, 10 minutes after the last bot
+  activity at the earliest, only while writes are unlocked. Never your own PR
+  (bot reviews can mean work), never with an unseen merge without your
+  review, never while the tile is unread or it is your move. Rules only, no
+  agent. The sidebar's "Handled quietly" lists the last 7 days. Pings get
+  one hourly telemetry summary (`pings_summarized`, counts only), and the
+  notifications debug view shows ping decisions. DESIGN.md "Handled
+  quietly".
 
 - **Each topic once in the sidebar; "Changes you requested" under Needs
   reply** (2026-09-29): a topic shows only in its highest section (the
