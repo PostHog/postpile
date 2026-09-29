@@ -1589,7 +1589,8 @@ the visit.
 
 **The verdict pill follows the footer.** A multi-PR tile showed the lead
 PR's verdict ("Not yours" from the first PR) while the footer talked about
-another one. The lead PR (`leadPr`) now prefers the PR of the tile's turn when
+another one. The lead PR (core `leadPrKey`, shipped as
+`TileView.offers.leadPrKey`) now prefers the PR of the tile's turn when
 the turn is not `none`, then the newest unread reason, then the first open
 tracked PR.
 
@@ -1685,15 +1686,16 @@ updates it while I'm looking at it."
   (`prWhoseTurn`), `.afterRead` (core `prAfterMarkRead`: that PR's events
   seen, handled when tracked; never done for a pulled-in layer) and
   `.ownTeamRequests`.
-- Detail pane: `detailPr` / `prMarkAction` / `detailMarkLabel` /
-  `detailPrimary` in the renderer's `lib/mark-read.ts`; the mark goes to
+- Detail pane: core `paneOffers` (`core/offers.ts`, shipped as
+  `TileView.offers.pane` by PR key; was `detailPrimary` and friends in the
+  renderer's `lib/mark-read.ts` until the rules-layer batch); the mark goes to
   `EngineService.markPrRead` (origin `detail`, own batch and undo, handled
   unless pulled in). A mark-read of an unread PR that leaves it your move
   says so in the toast, without the tile Snooze offer.
 - The dot: `notDonePrKeys` in `lib/tiles.ts`, `NotDoneDot` in `pills.tsx`.
   A done PR that still has unseen news keeps the tile unread, so it keeps
   its dot until it is read.
-- Lead PR: `leadPr` in `lib/tiles.ts`.
+- Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
 - Marked when you move on: `OpenedReadTimer` in the renderer's
   `lib/opened-read.ts` (the dwell arms, `leave()` / `hidden()` fire,
   `setWanted` keeps `opensMarkRead` current) driven by `useOpenedRead`
@@ -1946,7 +1948,7 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
 
 **After a mark-read** (2026-09-29; core `tileAfterMarkRead` in
 `after-read.ts`, shipped as `TileView.afterRead`; labels in the renderer's
-`lib/mark-read.ts`). Done means nothing is asked of you, so a button must not
+core `tileOffers` in `offers.ts`, shipped as `TileView.offers`). Done means nothing is asked of you, so a button must not
 promise Done where a mark-read cannot deliver it (Julian pressed "Mark done"
 four times on a PR whose author addressed his changes; the thread went read,
 the tile stayed, nothing visible changed). `afterRead` runs the same
@@ -1968,13 +1970,13 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   look at"): on a single-PR tile, same label rule as the footer; the mark
   button is left out while the tile is read and still your move (Snooze
   stays there, as the primary). On a stack or set it acts on the selected
-  PR: the same rule per PR (`prMarkAction` / `detailMarkLabel` in
-  `lib/mark-read.ts` over `PrSummary.afterRead`, core `prAfterMarkRead`):
+  PR: the same rule per PR (core `prMarkAction` in `offers.ts` over
+  `PrSummary.afterRead`, core `prAfterMarkRead`):
   "Mark read" while the PR has unseen news, "Mark done" when a mark-read of
   it makes it done, else "Mark read"; no mark button while that PR is read
   and still your move (`PrSummary.turn`), or done already, or a pulled-in
   layer without news. No Snooze in the pane there; Open on GitHub leads
-  when nothing is to mark. The primary comes from `detailPrimary`, see
+  when nothing is to mark. The primary comes from core `paneOffers`, see
   "Own PRs never ask for a review".
 - Read looks read: no strip, no NEW, title in regular weight. The honey
   your-move footer stays as the only reminder.
@@ -2020,7 +2022,7 @@ any review ask; on top of that:
   but calm (re-approving is harmless, it never nags). On your own PR, or a merged or closed one: Mark read while the
   tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
 - The pane leads with what it acts on (2026-09-29,
-  `detailPrimary` in the renderer's `lib/mark-read.ts`, on top of the
+  core `paneOffers` in `offers.ts`, on top of the
   tile's `tileFooterAction`): the one ink button, placed first, is Approve
   while it is due (someone else's open PR, not approved, not a draft), else
   on a single-PR tile the tile footer's Mark read / Mark done / Snooze, or
@@ -3947,9 +3949,25 @@ classification now also covers retired topics) and reads effective loudness,
 so an event the agent turned quiet does not bring a retired topic back. The
 live poll does not classify, so it still revives on the rule's loudness.
 
+Landed as (projection step): `buildPrSummary` adds `PrSummary.facts`
+(`prFacts`: automation author, who a review request asks, last touch, open
+ask) next to the existing `turn`, `done` and `afterRead`; Board caches tile
+state and whose turn per snapshot (`stateOf`, `turnOf`). Offers are
+`tileOffers` / `paneOffers` in `core/offers.ts`, shipped as
+`TileView.offers` (footer action and label, GitHub link, lead PR, and the
+pane's buttons per PR key); `ActionBar` and `Tile` only lay them out. A done
+PR (or one on a done tile) gets no Approve, Ask or Remove team; a done PR
+whose news keeps its tile unread keeps Mark read. The renderer's tier order
+is typed with core's `PrTierOrder`, so a drift fails to compile. The fake
+engine reads through `planRead` and sends pending writes through
+`pendingWriteStep`.
+
 **Consumers agree.** MCP `pr_context` prints the move of the PR asked about,
-not of its tile. The MCP process runs as long as the Claude session; when the
-app was updated underneath it, its answers say so and ask for a reconnect.
+not of its tile (so does each `search_prs` row and its `whose_move` filter;
+the "Its tile:" line keeps the tile's). The MCP process runs as long as the
+Claude session; when the app was updated underneath it, its answers say so
+and ask for a reconnect: the engine that holds the lock records its version
+in meta (`app_version`), and every MCP answer compares it with its own.
 Tier "To review" and whose move "Review" agree for the dismissed-review case
 (a dismissed review no longer counts as reviewed for the tier either).
 
