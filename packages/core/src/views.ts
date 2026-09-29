@@ -344,6 +344,8 @@ export interface MemoryCorrection {
   relation?: TopicRelation;
   /** kind fix: the corrected line. */
   fixedText?: string;
+  /** Set when the user accepts a "Recheck" outcome, so telemetry can count recheck decisions. */
+  fromRecheck?: boolean;
 }
 
 /** "Recheck" on a fact or dossier line: what the agent should look at. */

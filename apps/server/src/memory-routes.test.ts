@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ActionResult, ConsolidateOptions, ConsolidationReport, FactQuery, FactView, PendingProposals } from '@postpile/core';
+import type { ActionResult, ConsolidateOptions, ConsolidationReport, FactQuery, FactView, MemoryCorrection, PendingProposals } from '@postpile/core';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { FakeEngine } from './fake/fake-engine.ts';
 
@@ -8,16 +8,21 @@ const TOKEN = 'test-token';
 interface Recorded {
   factQueries: FactQuery[];
   consolidateOptions: ConsolidateOptions[];
+  corrections: MemoryCorrection[];
 }
 
 /** The sample FakeEngine, but remembering what the routes passed to the memory calls. */
 function setup(): { recorded: Recorded; request: (path: string, init?: RequestInit) => Promise<Response> } {
-  const recorded: Recorded = { factQueries: [], consolidateOptions: [] };
+  const recorded: Recorded = { factQueries: [], consolidateOptions: [], corrections: [] };
   const fake = new FakeEngine({ syncStepMs: 0 });
   const engine = Object.assign(fake, {
     listFacts: async (query: FactQuery): Promise<FactView[]> => {
       recorded.factQueries.push(query);
       return [];
+    },
+    correctMemory: async (input: MemoryCorrection): Promise<ActionResult> => {
+      recorded.corrections.push(input);
+      return FakeEngine.prototype.correctMemory.call(fake, input);
     },
     consolidate: async (options: ConsolidateOptions = {}): Promise<ConsolidationReport> => {
       recorded.consolidateOptions.push(options);
@@ -79,6 +84,15 @@ describe('engine memory routes', () => {
 
     expect(((await corrected.json()) as ActionResult).ok).toBe(true);
     expect(bad.status).toBe(400);
+  });
+
+  it('passes fromRecheck through, so an accepted recheck reaches telemetry', async () => {
+    const { recorded, request } = setup();
+
+    const body = { kind: 'confirm', factId: 'fact-rowan-drives', text: 'rowan drives the move to Depot.', fromRecheck: true };
+    await request('/api/memory/corrections', { method: 'POST', body: JSON.stringify(body) });
+
+    expect(recorded.corrections[0]).toMatchObject({ kind: 'confirm', fromRecheck: true });
   });
 
   it('consolidates with or without a body', async () => {

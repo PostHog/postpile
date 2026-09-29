@@ -44,6 +44,7 @@ const memoryCorrectionBody = z.object({
   text: z.string().default(''),
   relation: z.enum(['team', 'routed', 'fyi']).optional(),
   fixedText: z.string().optional(),
+  fromRecheck: z.boolean().optional(),
 });
 
 /** Same target shape as the "Why?" query, as JSON. */

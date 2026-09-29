@@ -757,6 +757,11 @@ export class Engine implements EngineService {
     const result = await this.memoryActions.correctMemory(input);
     if (result.ok) {
       this.telemetry.capture('memory_corrected', {});
+      if (input.fromRecheck) {
+        // The user's decision on a recheck: Accept on "still looks right", "needs a fix" or "no longer holds".
+        const outcome = input.kind === 'confirm' ? 'keep' : input.kind === 'fix' ? 'fix' : 'drop';
+        this.telemetry.capture('recheck_resolved', { outcome });
+      }
     }
     return result;
   }
@@ -764,10 +769,9 @@ export class Engine implements EngineService {
   async recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult> {
     this.telemetry.capture('recheck_requested', {});
     const result = await this.rechecker.recheck(request);
-    // The agent's own answer, not yet the user's accept/fix/drop click (correctMemory does
-    // not know it followed a recheck): a close enough signal for how often rechecks agree.
+    // Only the agent's proposal; recheck_resolved fires when the user accepts it (correctMemory).
     if (result.status === 'answered') {
-      this.telemetry.capture('recheck_resolved', { outcome: result.outcome === 'holds' ? 'keep' : result.outcome });
+      this.telemetry.capture('recheck_proposed', { outcome: result.outcome === 'holds' ? 'keep' : result.outcome });
     }
     return result;
   }

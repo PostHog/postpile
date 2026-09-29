@@ -2295,8 +2295,10 @@ message, are dropped.
    (the title bar pill opened) / `update_later_clicked`,
    `glance_retry_clicked` (Retry on a failed glance).
 4. *Agent trust*: `wrong_topic_marked`, `not_related_marked`,
-   `recheck_requested` + `recheck_resolved` (the agent's own answer, not yet
-   the user's later accept/fix/drop), `memory_corrected`, `proposal_resolved`
+   `recheck_requested`, `recheck_proposed` (outcome: the agent's answer),
+   `recheck_resolved` (outcome keep/fix/drop: the user's Accept in the
+   recheck dialog, sent with the correction as `fromRecheck`),
+   `memory_corrected`, `proposal_resolved`
    (kind `topic_merge` / `rename` / `rule` / `instructions`), `instructions_edited`.
 5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
    agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,

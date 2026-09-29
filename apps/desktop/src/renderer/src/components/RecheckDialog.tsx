@@ -56,7 +56,7 @@ export function RecheckDialog(props: RecheckDialogProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const correction: MemoryCorrection = { kind: 'wrong', factId: request.factId, topicId: request.topicId, text: request.text };
+  const correction: MemoryCorrection = { kind: 'wrong', factId: request.factId, topicId: request.topicId, text: request.text, fromRecheck: true };
   // A glance is not a memory line: nothing to accept into memory. The outcome
   // informs; to act on it, the user tells the agent (or the next sync rewrites it).
   const assessment = Boolean(request.prKey);

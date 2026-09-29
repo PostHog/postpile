@@ -90,6 +90,9 @@ export const TELEMETRY_EVENTS = {
   wrong_topic_marked: NO_PROPS,
   not_related_marked: NO_PROPS,
   recheck_requested: NO_PROPS,
+  // The agent's answer to a recheck, before the user decides.
+  recheck_proposed: z.object({ outcome: recheckOutcome }).strict(),
+  // The user's Accept on a recheck outcome (keep, fix or drop the line).
   recheck_resolved: z.object({ outcome: recheckOutcome }).strict(),
   memory_corrected: NO_PROPS,
   proposal_resolved: z.object({ kind: proposalKind, accepted: z.boolean() }).strict(),

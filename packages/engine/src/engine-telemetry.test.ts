@@ -2,10 +2,11 @@
 // the right shape, not just that the Telemetry class is wired in. One test
 // per event is enough here: the props themselves are already covered by the
 // zod catalogue in packages/core.
-import { at, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeFact, makeFactRef, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
+import { topicWithPrs } from './testing/topics.ts';
 
 const pr = reviewRequestedPr(1);
 const tileId = `pr:${pr.key}`;
@@ -48,6 +49,36 @@ describe('engine telemetry', () => {
     h.telemetry.events.length = 0;
     await h.engine.sync({ maxAgentCalls: 0 });
     expect(h.telemetry.events.find((e) => e.event === 'sync_completed')?.props).toMatchObject({ trigger: 'manual' });
+  });
+
+  it('fires recheck_proposed on the agent answer and recheck_resolved only on the user accept', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.facts.add(makeFact({ id: 'f1', topicId: 'depot', text: 'alice drives the rollout', refs: [makeFactRef({ prKey: pr.key })] }));
+    h.runner.answer('memory_recheck', { outcome: 'drop', text: '', why: 'bob took over.' });
+    h.telemetry.events.length = 0;
+
+    await h.engine.recheckMemory({ factId: 'f1', topicId: null, text: 'alice drives the rollout', target: { kind: 'fact', factId: 'f1' } });
+    expect(h.telemetry.events).toEqual([
+      { event: 'recheck_requested', props: {} },
+      { event: 'recheck_proposed', props: { outcome: 'drop' } },
+    ]);
+
+    h.telemetry.events.length = 0;
+    await h.engine.correctMemory({ kind: 'wrong', factId: 'f1', topicId: null, text: 'alice drives the rollout', fromRecheck: true });
+    expect(h.telemetry.events).toEqual([
+      { event: 'memory_corrected', props: {} },
+      { event: 'recheck_resolved', props: { outcome: 'drop' } },
+    ]);
+  });
+
+  it('fires no recheck_resolved for a plain "Forget"', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [pr]);
+    h.store.facts.add(makeFact({ id: 'f1', topicId: 'depot', text: 'alice drives the rollout', refs: [makeFactRef({ prKey: pr.key })] }));
+    await h.engine.correctMemory({ kind: 'wrong', factId: 'f1', topicId: null, text: 'alice drives the rollout' });
+    expect(h.telemetry.events.map((e) => e.event)).toEqual(['memory_corrected']);
   });
 
   it('fires sync_failed when gh is not usable, instead of running the sync', async () => {
