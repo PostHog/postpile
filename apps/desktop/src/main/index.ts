@@ -19,6 +19,7 @@ import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServe
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { ConsolidationSchedule } from './consolidation-schedule.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
+import { ActiveDayReporter } from './active-day.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
 import { welcomeOnce, WELCOME_FLAG_FILE } from './welcome.ts';
@@ -128,7 +129,18 @@ function openExternalLink(url: string): void {
 const WINDOW_FOCUS_TELEMETRY_MS = 30 * 60_000;
 let lastWindowFocusTelemetryMs = 0;
 
+// app_active once per local calendar day while the app runs (daily / weekly
+// active users and retention). Checked at launch, on focus and every 30 minutes,
+// so a Mac that stays up past midnight still counts the new day.
+const ACTIVE_DAY_CHECK_MS = 30 * 60_000;
+let activeDay: ActiveDayReporter | null = null;
+
+function checkActiveDay(): void {
+  activeDay?.check(new Date());
+}
+
 function reportWindowFocused(): void {
+  checkActiveDay();
   const now = Date.now();
   if (now - lastWindowFocusTelemetryMs >= WINDOW_FOCUS_TELEMETRY_MS) {
     lastWindowFocusTelemetryMs = now;
@@ -320,6 +332,9 @@ async function start(): Promise<void> {
   // Before welcomeOnce below writes its flag file: whether this run is the very first one.
   const firstLaunch = !existsSync(join(app.getPath('userData'), WELCOME_FLAG_FILE));
   telemetry.capture('app_launched', { first_launch: firstLaunch });
+  activeDay = new ActiveDayReporter(join(app.getPath('userData'), 'telemetry-active-day'), () => telemetry.capture('app_active', {}));
+  checkActiveDay();
+  setInterval(checkActiveDay, ACTIVE_DAY_CHECK_MS).unref();
   mainWindow = await openWindow();
   // A click opens the tile: show the window, then let the renderer navigate.
   const notifier = new MacNotifier({
