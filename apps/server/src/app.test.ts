@@ -76,6 +76,8 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     decideTopicProposal: notImplemented,
     refreshNow: notImplemented,
     proposeTopicChange: notImplemented,
+    startAgentRequests: () => {},
+    stopAgentRequests: () => {},
     listFacts: notImplemented,
     listProposals: notImplemented,
     decideRuleProposal: notImplemented,

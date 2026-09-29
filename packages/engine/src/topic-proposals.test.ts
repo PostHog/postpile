@@ -1,5 +1,8 @@
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Pr, TopicProposal } from '@postpile/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { topicWithPrs } from './testing/topics.ts';
@@ -148,5 +151,34 @@ describe('proposeTopicChange from an outside agent', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
     const wrong = await h.engine.proposeTopicChange({ topicId: 'other', kind: 'split', prKeys: [lone.key], name: 'X', intoTopicId: null, reason: 'r', dryRun: false }, client);
     expect(wrong).toMatchObject({ status: 'refused', reason: expect.stringContaining('is not in "other"') });
+  });
+});
+
+describe('agent requests through the data folder', () => {
+  it('files a suggestion that arrives as a request file, once the app answers requests', { timeout: 10_000 }, async () => {
+    const folder = join(mkdtempSync(join(tmpdir(), 'postpile-engine-requests-')), 'agent-requests');
+    const now = new Date('2026-09-02T12:00:00Z');
+    const h = makeHarness({ now: () => now, agentRequestsFolder: folder });
+    await depotWithStack(h);
+    h.engine.startAgentRequests();
+    const id = '0f8fad5b-d9cb-469f-a165-70867728950e';
+    writeFileSync(
+      join(folder, `${id}.json`),
+      JSON.stringify({
+        v: 1,
+        kind: 'propose_topic_change',
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 120_000).toISOString(),
+        client: 'claude-code',
+        payload: { topicId: 'depot', kind: 'rename', prKeys: [], name: 'Depot CI', intoTopicId: null, reason: 'clearer', dryRun: false },
+      }),
+    );
+
+    // The folder watch usually answers within milliseconds; the 5 s rescan is the safety net.
+    await vi.waitFor(() => expect(existsSync(join(folder, `${id}.result.json`))).toBe(true), { timeout: 8000, interval: 20 });
+    const result = JSON.parse(readFileSync(join(folder, `${id}.result.json`), 'utf8'));
+    expect(result).toMatchObject({ ok: true, kind: 'propose_topic_change', topicChange: { status: 'filed' } });
+    expect((await h.engine.listProposals()).topics).toMatchObject([{ kind: 'rename', name: 'Depot CI', source: 'agent', client: 'claude-code' }]);
+    await h.engine.close();
   });
 });

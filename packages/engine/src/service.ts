@@ -130,6 +130,14 @@ export interface EngineService {
    * would do, stacks included. Never applies it.
    */
   proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult>;
+  /**
+   * Answers agent requests from MCP processes (DESIGN.md "Agent requests"):
+   * watches `<data folder>/agent-requests` while the desktop app runs. A
+   * second call is ignored; a no-op without a data folder (sample data,
+   * read-only access).
+   */
+  startAgentRequests(): void;
+  stopAgentRequests(): void;
 
   /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
   listTopics(scope?: ListScope): Promise<TopicListItem[]>;

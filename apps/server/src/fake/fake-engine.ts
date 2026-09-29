@@ -1234,6 +1234,11 @@ export class FakeEngine implements EngineService {
     return this.topicChanges.propose(change, options.client);
   }
 
+  /** Sample data has no data folder: the MCP server over sample data answers agent requests in memory instead. */
+  startAgentRequests(): void {}
+
+  stopAgentRequests(): void {}
+
   // Engine memory v2, backed by FakeMemory.
 
   async listFacts(query: FactQuery): Promise<FactView[]> {

@@ -86,6 +86,8 @@ import { GitHubError, type GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.ts';
+import { answerAgentRequest } from './agent-requests/answer.ts';
+import { AgentRequestInbox } from './agent-requests/inbox.ts';
 import { OutsideProposals } from './agent-requests/topic-change.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
@@ -196,6 +198,8 @@ export interface EngineDeps {
    * until a test feeds it readings.
    */
   quota?: GitHubQuota;
+  /** `<data folder>/agent-requests`, where MCP processes leave requests for the app. Missing: agent requests stay off. */
+  agentRequestsFolder?: string | null;
 }
 
 /**
@@ -251,6 +255,7 @@ export class Engine implements EngineService {
   private focus: PollFocus = NO_FOCUS;
   private readonly agentRefresher: AgentRefresher;
   private readonly outsideProposals: OutsideProposals;
+  private agentRequests: AgentRequestInbox | null = null;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
@@ -678,6 +683,24 @@ export class Engine implements EngineService {
     return this.outsideProposals.propose(change, options.client);
   }
 
+  startAgentRequests(): void {
+    const folder = this.deps.agentRequestsFolder;
+    if (this.agentRequests || !folder) {
+      return;
+    }
+    this.agentRequests = new AgentRequestInbox({
+      folder,
+      handle: (request) => answerAgentRequest(this, request),
+      now: this.deps.now,
+      log: this.deps.syncLog ?? ((line) => console.log(line)),
+    });
+    this.agentRequests.start();
+  }
+
+  stopAgentRequests(): void {
+    this.agentRequests?.stop();
+  }
+
   /** The poll's own status, plus what the renderer refreshes on (syncs, the next auto sync, catch-up runs) and the GitHub quota while it is low. */
   async livePollStatus(): Promise<LivePollStatus> {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
@@ -1064,6 +1087,9 @@ export class Engine implements EngineService {
   }
 
   async close(): Promise<void> {
+    this.stopAgentRequests();
+    // Requests taken already finish and leave their answer before the store closes.
+    await this.agentRequests?.settled();
     this.stopLivePoll();
     this.stopAutoSync();
     this.catchUps.dropQueued();
