@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, processStartTime } from './data-lock.ts';
+import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, processStartTime, removeStaleLock, type LockInfo } from './data-lock.ts';
 
 const dirs: string[] = [];
 
@@ -80,6 +80,25 @@ describe('DataDirLock', () => {
     const lock = DataDirLock.acquire(db, 'dev');
     expect(lock.info.kind).toBe('dev');
     lock.release();
+  });
+
+  it('removes a stale lock only while it is still the holder judged stale', () => {
+    const db = tempDb();
+    const file = join(db, '..', LOCK_FILE_NAME);
+    const stale: LockInfo = { pid: 99_999_999, kind: 'packaged', startedAt: 'x', databaseFile: db, processStartedAt: '2026-09-28T09:00:00.000Z' };
+    // Another process took the stale lock over between our check and our remove.
+    const fresh: LockInfo = { pid: process.ppid, kind: 'dev', startedAt: 'y', databaseFile: db, processStartedAt: '2026-09-28T10:00:00.000Z' };
+    writeFileSync(file, JSON.stringify(fresh));
+    expect(removeStaleLock(file, stale)).toBe(false);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(fresh);
+    // Same pid, other process start: a new holder too.
+    writeFileSync(file, JSON.stringify({ ...stale, processStartedAt: '2026-09-28T11:00:00.000Z' }));
+    expect(removeStaleLock(file, stale)).toBe(false);
+    // A lock that turned readable meanwhile is not the unreadable one judged stale.
+    expect(removeStaleLock(file, null)).toBe(false);
+    writeFileSync(file, JSON.stringify(stale));
+    expect(removeStaleLock(file, stale)).toBe(true);
+    expect(existsSync(file)).toBe(false);
   });
 
   it('does not remove a lock that another process took over meanwhile', () => {

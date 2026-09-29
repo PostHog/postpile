@@ -112,6 +112,27 @@ export function runningApp(databaseFile: string): LockInfo | null {
   return holder;
 }
 
+/** The same lock holder: same pid and same process start (both missing counts as the same). */
+function sameHolder(a: LockInfo, b: LockInfo): boolean {
+  return a.pid === b.pid && a.processStartedAt === b.processStartedAt;
+}
+
+/**
+ * Removes a lock judged stale, but only while it is still that exact holder
+ * (`stale`, or still unreadable when `stale` is null). Two processes can
+ * find the same stale lock; the slower one would otherwise delete the fresh
+ * lock the faster one just wrote. True when it removed the file.
+ */
+export function removeStaleLock(file: string, stale: LockInfo | null): boolean {
+  const current = readLock(file);
+  const unchanged = stale === null ? current === null : current !== null && sameHolder(current, stale);
+  if (!unchanged) {
+    return false;
+  }
+  rmSync(file, { force: true });
+  return true;
+}
+
 /** Creates the file only if it does not exist yet (O_EXCL). False when it does. */
 function createExclusive(file: string, info: LockInfo): boolean {
   let fd: number;
@@ -164,7 +185,8 @@ export class DataDirLock {
         throw new DataDirLockedError(holder, lockFile);
       }
       // Dead holder, a reused pid, our own pid from an earlier run, or a file that stayed unreadable: stale.
-      rmSync(lockFile, { force: true });
+      // Removed only if still that holder; otherwise the next try reads the new one.
+      removeStaleLock(lockFile, holder);
     }
     throw new Error(`could not take the lock ${lockFile}`);
   }
