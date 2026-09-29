@@ -52,6 +52,7 @@ import type {
   RepoSettings,
   Snooze,
   SnoozeCondition,
+  SnoozeWrites,
   SyncReport,
   SetupAcceptRequest,
   SetupAcceptResult,
@@ -83,6 +84,7 @@ import {
   buildPrSummary,
   buildTileView,
   deriveTileState,
+  snoozeWrites,
   displayState,
   compareTopicUrgency,
   actionTrail,
@@ -279,7 +281,8 @@ export class FakeEngine implements EngineService {
   private readonly quota: GitHubQuota;
   private readonly now: () => Date;
   private readonly startedAt: Date;
-  private readonly snoozes = new Map<string, Snooze>();
+  /** Snoozes by PR, as in the store. */
+  private readonly snoozes = new Map<PrKey, Snooze>();
   private readonly chats = new Map<string, ChatMessage[]>();
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
@@ -463,7 +466,7 @@ export class FakeEngine implements EngineService {
       prs: this.prsByKey(),
       events: this.eventsByKey(tile.members.map((member) => member.prKey)),
       userStates: this.userStatesByKey(),
-      snooze: this.snoozes.get(tile.id) ?? null,
+      snoozes: this.snoozes,
       now: this.timestamp(),
       viewer: this.viewer(),
       notYours: this.notYours(),
@@ -1185,16 +1188,25 @@ export class FakeEngine implements EngineService {
     return ok('undone');
   }
 
+  private applySnoozeWrites(writes: SnoozeWrites): void {
+    writes.remove.forEach((key) => this.snoozes.delete(key));
+    writes.put.forEach((snooze) => this.snoozes.set(snooze.prKey, snooze));
+  }
+
   async snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult> {
-    if (!this.findTile(tileId)) {
+    const tile = this.findTile(tileId);
+    if (!tile) {
       return fail(`no tile ${tileId}`);
     }
-    this.snoozes.set(tileId, { tileId, condition, since: this.timestamp() });
+    this.applySnoozeWrites(snoozeWrites(tile, { kind: 'start', condition, at: this.timestamp() }));
     return ok(`snoozed until ${condition.kind}`);
   }
 
   async unsnooze(tileId: string): Promise<ActionResult> {
-    this.snoozes.delete(tileId);
+    const tile = this.findTile(tileId);
+    if (tile) {
+      this.applySnoozeWrites(snoozeWrites(tile, { kind: 'end' }));
+    }
     return ok('unsnoozed');
   }
 

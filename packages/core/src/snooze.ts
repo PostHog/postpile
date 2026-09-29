@@ -2,13 +2,14 @@ import { isAutomation } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
+import { isTracked } from './provenance.ts';
 import { reviewRequestTarget } from './review-request.ts';
-import type { EventKind, IsoTime, Pr, PrEvent, Snooze, SnoozeCondition, Viewer } from './types.ts';
+import type { EventKind, IsoTime, Pr, PrEvent, PrKey, Snooze, SnoozeCondition, Tile, Viewer } from './types.ts';
 
 export interface SnoozeContext {
-  /** The PRs in the snoozed tile. */
-  prs: Pr[];
-  /** Their events. */
+  /** The snoozed PR. */
+  pr: Pr;
+  /** Its events. */
   events: PrEvent[];
   now: IsoTime;
   /** The viewer's own replies never end a "someone replies" snooze. */
@@ -32,11 +33,9 @@ function isByViewer(event: PrEvent, viewer: Viewer | null): boolean {
   return viewer !== null && sameLogin(event.actor, viewer.login);
 }
 
-/** `isAutomation` for an event of the snoozed PRs, its request target looked up on its PR. */
-function isAutomationIn(event: PrEvent, context: SnoozeContext): boolean {
-  const pr = context.prs.find((candidate) => candidate.key === event.prKey);
-  const target = pr === undefined ? null : reviewRequestTarget(event, pr);
-  return isAutomation(event, target, context.viewer ?? null);
+/** `isAutomation` for an event of the snoozed PR, its request target looked up on the PR. */
+function isAutomationOn(event: PrEvent, context: SnoozeContext): boolean {
+  return isAutomation(event, reviewRequestTarget(event, context.pr), context.viewer ?? null);
 }
 
 function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
@@ -44,21 +43,29 @@ function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
     (event) =>
       event.at > snooze.since &&
       replyKinds.includes(event.kind) &&
-      !isAutomationIn(event, context) &&
+      !isAutomationOn(event, context) &&
       !isByViewer(event, context.viewer ?? null),
   );
 }
 
+/** A merged or closed PR gets no push or CI run worth waiting for. */
+function isFinished(pr: Pr): boolean {
+  return pr.state !== 'OPEN';
+}
+
 function newPush(snooze: Snooze, context: SnoozeContext): boolean {
-  return context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
+  return isFinished(context.pr) || context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
 }
 
 function ciGreen(context: SnoozeContext): boolean {
-  const open = context.prs.filter((pr) => pr.state === 'OPEN');
-  return open.length > 0 && open.every((pr) => pr.checks.rollup === 'SUCCESS');
+  return isFinished(context.pr) || context.pr.checks.rollup === 'SUCCESS';
 }
 
-/** True once the snooze condition is met: a human reply, a push, green CI, or the time passed. */
+/**
+ * True once the snooze condition is met: a human reply, a push, green CI, or
+ * the time passed. A push or CI snooze also ends when the PR is merged or
+ * closed; otherwise it could never end and kept the topic from retiring.
+ */
 export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
   switch (snooze.condition.kind) {
     case 'someone_replies':
@@ -80,7 +87,48 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
  * snooze, the app's own Look closer event does not.
  */
 export function breaksSnooze(event: PrEvent, snooze: Snooze, context: SnoozeContext): boolean {
-  return event.at > snooze.since && event.seenAt === null && effectiveLoudness(event) === 'loud' && !isAutomationIn(event, context);
+  return event.at > snooze.since && event.seenAt === null && effectiveLoudness(event) === 'loud' && !isAutomationOn(event, context);
+}
+
+/**
+ * Where a PR's snooze stands. Only its start is stored: broken and over are
+ * read off the PR's history on every load. So a snooze broken by a mention
+ * comes back once that mention is seen (open question in DESIGN.md).
+ */
+export type SnoozePhase = 'active' | 'broken' | 'over';
+
+export function snoozePhase(snooze: Snooze, context: SnoozeContext): SnoozePhase {
+  if (context.events.some((event) => breaksSnooze(event, snooze, context))) {
+    return 'broken';
+  }
+  return isSnoozeOver(snooze, context) ? 'over' : 'active';
+}
+
+/** The user snoozing a tile ("start") or taking the snooze back ("end"). */
+export type SnoozeChange = { kind: 'start'; condition: SnoozeCondition; at: IsoTime } | { kind: 'end' };
+
+/** What a snooze change writes: snoozes to store (replacing any), and PRs whose snooze goes. */
+export interface SnoozeWrites {
+  put: Snooze[];
+  remove: PrKey[];
+}
+
+/**
+ * Snoozing a tile puts one snooze on each tracked PR in it, all with the
+ * same condition and start. Pulled-in stack layers get none: they never
+ * decide whether the tile is snoozed. Unsnoozing removes the snooze of every
+ * PR in the tile.
+ */
+export function snoozeWrites(tile: Tile, change: SnoozeChange): SnoozeWrites {
+  switch (change.kind) {
+    case 'start': {
+      const tracked = tile.members.filter((member) => isTracked(member.provenance));
+      const put = tracked.map((member) => ({ prKey: member.prKey, condition: change.condition, since: change.at }));
+      return { put, remove: [] };
+    }
+    case 'end':
+      return { put: [], remove: tile.members.map((member) => member.prKey) };
+  }
 }
 
 export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'ci_green';

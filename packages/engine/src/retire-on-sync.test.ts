@@ -118,7 +118,7 @@ describe('Engine.sync retires finished topics', () => {
     const h = makeHarness({ now: () => FOUR_DAYS_LATER });
     const pr = mergedPr(1);
     await syncedAndRead(h, [pr]);
-    h.store.snoozes.put({ tileId: `pr:${pr.key}`, condition: { kind: 'until_time', until: '2099-01-01T00:00:00.000Z' }, since: at(6) });
+    h.store.snoozes.put({ prKey: pr.key, condition: { kind: 'until_time', until: '2099-01-01T00:00:00.000Z' }, since: at(6) });
 
     await h.engine.sync({ maxAgentCalls: 0 });
 

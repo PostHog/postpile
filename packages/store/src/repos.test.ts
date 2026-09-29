@@ -416,17 +416,12 @@ describe('GlanceRepo', () => {
 });
 
 describe('SnoozeRepo', () => {
-  it('stores one snooze per tile with its condition', () => {
-    store.snoozes.put({ tileId: 'pr:a/b#1', condition: { kind: 'new_push' }, since: at(0) });
-    store.snoozes.put({ tileId: 'pr:a/b#1', condition: { kind: 'until_time', until: at(60) }, since: at(1) });
-    expect(store.snoozes.get('pr:a/b#1')).toEqual({
-      tileId: 'pr:a/b#1',
-      condition: { kind: 'until_time', until: at(60) },
-      since: at(1),
-    });
-    expect(store.snoozes.list()).toHaveLength(1);
-    store.snoozes.remove('pr:a/b#1');
-    expect(store.snoozes.get('pr:a/b#1')).toBeNull();
+  it('stores one snooze per PR with its condition', () => {
+    store.snoozes.put({ prKey: 'a/b#1', condition: { kind: 'new_push' }, since: at(0) });
+    store.snoozes.put({ prKey: 'a/b#1', condition: { kind: 'until_time', until: at(60) }, since: at(1) });
+    expect(store.snoozes.list()).toEqual([{ prKey: 'a/b#1', condition: { kind: 'until_time', until: at(60) }, since: at(1) }]);
+    store.snoozes.remove('a/b#1');
+    expect(store.snoozes.list()).toEqual([]);
   });
 });
 

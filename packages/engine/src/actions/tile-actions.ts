@@ -1,4 +1,4 @@
-import { isTracked, threadPrKey, type ActionResult, type PrKey, type SnoozeCondition, type Tile } from '@postpile/core';
+import { isTracked, snoozeWrites, threadPrKey, type ActionResult, type PrKey, type SnoozeCondition, type SnoozeWrites, type Tile } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import type { ReadMarker } from './read-marker.ts';
@@ -79,16 +79,34 @@ export class TileActions {
     return ok('Undone');
   }
 
+  /** Writes a snooze change for every PR of a tile at once. */
+  private applySnoozeWrites(writes: SnoozeWrites): void {
+    this.store.transaction(() => {
+      writes.remove.forEach((key) => this.store.snoozes.remove(key));
+      writes.put.forEach((snooze) => this.store.snoozes.put(snooze));
+    });
+  }
+
+  /** Snoozes each tracked PR of the tile with the same condition (see `snoozeWrites`). */
   snooze(tileId: string, condition: SnoozeCondition): ActionResult {
-    if (!this.findTile(tileId)) {
+    const tile = this.findTile(tileId);
+    if (!tile) {
       return failed(`no tile ${tileId}`);
     }
-    this.store.snoozes.put({ tileId, condition, since: this.now().toISOString() });
+    const writes = snoozeWrites(tile, { kind: 'start', condition, at: this.now().toISOString() });
+    if (writes.put.length === 0) {
+      return failed(`nothing to snooze in tile ${tileId}`);
+    }
+    this.applySnoozeWrites(writes);
     return ok('Snoozed');
   }
 
   unsnooze(tileId: string): ActionResult {
-    this.store.snoozes.remove(tileId);
+    const tile = this.findTile(tileId);
+    if (!tile) {
+      return failed(`no tile ${tileId}`);
+    }
+    this.applySnoozeWrites(snoozeWrites(tile, { kind: 'end' }));
     return ok('Unsnoozed');
   }
 }

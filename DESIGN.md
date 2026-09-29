@@ -135,7 +135,9 @@ team-devex" instead of the bot's name.
 **Tile state is derived, never stored**:
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
-- `snoozed`: a snooze is active and its condition is not met yet.
+- `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
+  yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); a push or CI snooze also
+  ends when its PR is merged or closed.
 - `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
   without their review they have not seen yet, see "Merged without your review"), or approved by
@@ -431,8 +433,8 @@ else watcher.
 Sets (`set_grouping`) run per topic with 2+ open PRs; hash = PRs + dissolved
 sets + topic feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active
 sets are not in the hash, they are the agent's own last answer. A set the
-agent keeps under the same title keeps its id (tile id, snooze and chat
-survive); sets it drops are deleted; dissolved sets are never brought back.
+agent keeps under the same title keeps its id (tile id and chat survive;
+snoozes are per PR and survive regrouping anyway); sets it drops are deleted; dissolved sets are never brought back.
 A set holds a stack whole or not at all (see "Stacks as one unit").
 The full job order is in the v2 sync flow below.
 

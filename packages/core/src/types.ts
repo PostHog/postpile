@@ -566,8 +566,12 @@ export type SnoozeCondition =
   | { kind: 'ci_green' }
   | { kind: 'until_time'; until: IsoTime };
 
+/**
+ * One PR put away for later. A tile's snooze is one of these per tracked PR,
+ * all with the same condition, so it survives the PR joining a stack or set.
+ */
 export interface Snooze {
-  tileId: string;
+  prKey: PrKey;
   condition: SnoozeCondition;
   /** Events and pushes are compared against this. */
   since: IsoTime;

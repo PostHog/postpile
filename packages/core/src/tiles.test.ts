@@ -11,7 +11,7 @@ import {
   singleTileId,
   type TileStateInput,
 } from './tiles.ts';
-import type { Pr, PrEvent, PrSet, Tile, UserPrState, Viewer } from './types.ts';
+import type { Pr, PrEvent, PrSet, Snooze, SnoozeCondition, Tile, UserPrState, Viewer } from './types.ts';
 
 function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPrState[] = []): TileStateInput {
   const eventMap = new Map<string, PrEvent[]>();
@@ -23,13 +23,17 @@ function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPr
     prs: new Map(prs.map((pr) => [pr.key, pr])),
     events: eventMap,
     userStates: new Map(userStates.map((s) => [s.prKey, s])),
-    snooze: null,
+    snoozes: new Map(),
     now: at(100),
     viewer: teamViewer,
   };
 }
 
 const teamViewer: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
+
+function snoozesFor(keys: string[], condition: SnoozeCondition): Map<string, Snooze> {
+  return new Map(keys.map((prKey) => [prKey, { prKey, condition, since: at(10) }]));
+}
 const handled = makeUserState({ handledAt: at(50) });
 
 describe('isPrDone', () => {
@@ -212,20 +216,30 @@ describe('deriveTileState', () => {
 
   it('is snoozed while the condition holds, even with older unseen loud events', () => {
     const input = stateInput(tile, [pr], [makeEvent({ ruleLoudness: 'loud', at: at(5) })]);
-    input.snooze = { tileId: tile.id, condition: { kind: 'until_time', until: at(200) }, since: at(10) };
+    input.snoozes = snoozesFor([pr.key], { kind: 'until_time', until: at(200) });
     expect(deriveTileState(input).kind).toBe('snoozed');
   });
 
   it('wakes from a snooze when the condition is met', () => {
     const input = stateInput(tile, [pr], []);
-    input.snooze = { tileId: tile.id, condition: { kind: 'until_time', until: at(50) }, since: at(10) };
+    input.snoozes = snoozesFor([pr.key], { kind: 'until_time', until: at(50) });
     expect(deriveTileState(input).kind).toBe('open');
   });
 
   it('wakes from a snooze on a loud human event after it started', () => {
     const input = stateInput(tile, [pr], [makeEvent({ kind: 'mention', ruleLoudness: 'loud', at: at(20) })]);
-    input.snooze = { tileId: tile.id, condition: { kind: 'new_push' }, since: at(10) };
+    input.snoozes = snoozesFor([pr.key], { kind: 'new_push' });
     expect(deriveTileState(input).kind).toBe('unread');
+  });
+
+  it('keeps a snooze when its PR joins a set, and shows the set while a tracked PR in it is not snoozed', () => {
+    const joined = makePr({ number: 2 });
+    const setTile: Tile = { ...tile, id: 'set:s1', kind: 'set', members: [...tile.members, { ...tile.members[0]!, prKey: joined.key }] };
+    const input = stateInput(setTile, [pr, joined], []);
+    input.snoozes = snoozesFor([pr.key], { kind: 'until_time', until: at(200) });
+    expect(deriveTileState(input).kind).toBe('open');
+    input.snoozes = snoozesFor([pr.key, joined.key], { kind: 'until_time', until: at(200) });
+    expect(deriveTileState(input).kind).toBe('snoozed');
   });
 });
 
