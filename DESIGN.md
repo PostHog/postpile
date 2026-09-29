@@ -3902,6 +3902,21 @@ and write path:
   hand-written simulation, so a button never promises more than the action
   does.
 
+Landed as `planRead({scope, cause, events, userStates, at})` in
+`core/read-plan.ts`, returning `{seenAt, handledAt, handleKeys, change}`
+(`change` is what undo puts back). Causes: `button`, `approved` (seen only),
+`opened`, `pending_completion` (seen up to the click), `read_on_github` and
+`quiet` (seen up to GitHub's read time, never handled); the switch is
+exhaustive. An earlier handled time is kept. The engine writes a plan through
+`writeReadPlan` / `readLocally` (`actions/local-change.ts`); one guarded
+`markThreadReadIfUnchanged` serves both the mark-read queue and quiet reads.
+A waiting GitHub write moves through `pendingWriteStep(write, cause)` in
+`core/pending-write.ts`, and `PendingWrites.apply` is the only place that
+carries out its effects. Not in the planner: the own-touch reconciliation in
+github-sync (stamps each event with its own time), undo and not-taken
+(`putBackLocalChange`, reversals rather than reads) and the inbox-cleanup
+baseline.
+
 **Handled is not reset by new activity (decided 2026-09-29).** Handled means
 "you dealt with this once", not "complete now". New loud activity already
 makes the tile unread before done is checked; once seen, done needs no move
@@ -3913,17 +3928,24 @@ when a PR joins a stack or set, so the snooze was lost (and could come back
 if the old tile returned). Snoozing a tile now writes one snooze per tracked
 PR with the same condition; a tile is snoozed while every tracked PR in it
 has an active snooze, so a new unsnoozed PR joining a snoozed tile shows the
-tile. Existing snoozes are carried over by a migration. A snooze waiting for
+tile. Existing snoozes are carried over by migration 019 (`pr_snooze`; the
+old `snooze` table stays until 019 has shipped). A CI snooze on a multi-PR
+tile is now checked per PR, so the tile shows once any tracked PR is green
+(open question whether it should wait for all). Events on pulled-in,
+untracked stack layers no longer touch a snooze. A snooze waiting for
 a push or for green CI ends when the PR is merged or closed; it could never
 finish before and kept the topic from retiring. The human-only wake rule is
 unchanged: the app's own Look-closer event does not break a snooze (its
 ping already skips snoozed tiles).
 
 **Topic status has one writer.** All status changes (retire, revive,
-archive, restore) go through one transition function, and retiring records
-its own `retiredAt` instead of reading `updatedAt` (any rename moved it).
-Revive runs after new events are classified and reads effective loudness,
-so an event the agent turned quiet does not bring a retired topic back.
+archive; nothing restores a topic today) go through `nextTopicStatus` in
+core and `changeTopicStatus` in the engine, and retiring records its own
+`retiredAt` (migration 020) instead of reading `updatedAt` (any rename moved
+it). In the full sync, revive runs after new events are classified (event
+classification now also covers retired topics) and reads effective loudness,
+so an event the agent turned quiet does not bring a retired topic back. The
+live poll does not classify, so it still revives on the rule's loudness.
 
 **Consumers agree.** MCP `pr_context` prints the move of the PR asked about,
 not of its tile. The MCP process runs as long as the Claude session; when the
