@@ -4,9 +4,10 @@
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { clipText } from './dossier.ts';
 import type { GitHubQuotaView } from './github-quota.ts';
+import { reviewRequestSubject } from './events.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
-import { sameLogin } from './mentions.ts';
+import { isViewerSubject, sameLogin } from './mentions.ts';
 import type { IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
 
 /**
@@ -153,6 +154,18 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
   }
 }
 
+/**
+ * The event counts as a bot's for the bot-only shortcut: a bot did it and it
+ * is not a review request aimed at the viewer or their team (a request
+ * counts by whom it asks, not who clicked it, 2026-09-29).
+ */
+function isBotOnly(event: PrEvent, viewer: Viewer): boolean {
+  if (!event.isBot) {
+    return false;
+  }
+  return !(event.kind === 'review_requested' && isViewerSubject(reviewRequestSubject(event.summary), viewer));
+}
+
 function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {
   const reason = event.override?.reason ?? event.ruleReason;
   return { class: pingClass, loudness: effectiveLoudness(event), reason, event };
@@ -172,7 +185,7 @@ export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: b
   if (quietRepo) {
     return { ...ruleFrom('quiet_repo', newestFirst[0]!), reason: 'quiet repo (let it go stale)' };
   }
-  if (newestFirst.every((event) => event.isBot)) {
+  if (newestFirst.every((event) => isBotOnly(event, viewer))) {
     return ruleFrom('bot', newestFirst[0]!);
   }
   const addressed = newestFirst.find((event) => isAddressedToViewer(event, pr, viewer));
@@ -194,6 +207,15 @@ export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: b
 export const PING_TITLE_MAX = 80;
 export const PING_BODY_MAX = 200;
 
+/** "Review requested for team-devex", or "Review requested from you" for a personal request. */
+function requestHeadline(event: PrEvent): string {
+  const subject = reviewRequestSubject(event.summary);
+  if (subject === null || !subject.includes('/')) {
+    return 'Review requested from you';
+  }
+  return `Review requested for ${subject.split('/').pop()}`;
+}
+
 function headline(event: PrEvent): string {
   const who = `@${event.actor}`;
   // Replies keep their own reason ("replies to you"); only pushes and plain comments carry this one.
@@ -210,7 +232,8 @@ function headline(event: PrEvent): string {
     case 'reply_to_user':
       return `${who} replied to you`;
     case 'review_requested':
-      return `${who} asked for your review`;
+      // A bot's request says what it asks, not which bot clicked it.
+      return event.isBot ? requestHeadline(event) : `${who} asked for your review`;
     case 'commits_after_approval':
       return 'New commits after your approval';
     case 'review_changes_requested':

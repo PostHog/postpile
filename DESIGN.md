@@ -114,6 +114,24 @@ a classification. The effective loudness (override over rule) of a reply,
 mention or question also decides whether it is still an ask for whose turn:
 lowered to quiet or muted, it asks nothing (see "Whose turn", rule 2).
 
+**A review request counts by whom it asks, not who clicked it** (decided
+2026-09-29). A teammate's PR was marked ready, then a reviewer-assigning bot
+requested the viewer's team. The request event was classified "bot activity"
+(quiet) because its actor is a bot, so the ping was withheld as
+`not_addressed: ready for your review`, while whose turn said "Review for
+team-devex: <teammate>'s PR". Rule: a `review_requested` event is classified
+by its target (the viewer, one of the viewer's teams), whether a person or a
+bot made the request; the bot-actor shortcut never applies to a review
+request aimed at the viewer or their team (`ruleLoudness`, and the bot-only
+class in `pingRule`). Loudness and ping class then follow the path of a
+human-made request: a personal request and a team request on a teammate's
+PR are addressed; a routed team request goes the way a human-made routed
+request goes (see "Routed team requests ping when the glance says Look
+closer" under the pings). Requests to other people or teams stay quiet bot
+activity. Whose turn never names a bot as the requester ("Review for
+team-devex", "Review"), and the ping template says "Review requested for
+team-devex" instead of the bot's name.
+
 **Tile state is derived, never stored**:
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
@@ -2947,7 +2965,8 @@ beyond what the full sync already does for threads that left the inbox).
 - `pingRule` in core classes the events: `bot` (bot-only), `muted`, `quiet`,
   `not_addressed` (loud, but not aimed at the user in person: a comment or
   approval on their PR, merged without their review) or `addressed` (mention,
-  team mention, question, reply, and on an open PR: review request, a push
+  team mention, question, reply, and on an open PR: review request (made by
+  a person or a bot, see "A review request counts by whom it asks"), a push
   after approval the agent raised, changes requested on their own PR, and
   on a non-draft PR the author's push or comment after the user's changes
   request, headline "@pim addressed your changes"). Agent and user
