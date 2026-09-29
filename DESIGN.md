@@ -44,7 +44,9 @@ set a finer or coarser grain.
 **Topic status**: `active`, `retired` (finished) or `archived` (merged
 away, never comes back). Every full sync ends by retiring each active topic
 that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR
-merged or closed, no events for 3 days, no unread or snoozed tile. No agent
+merged or closed, no events for 3 days, and every tile done (since
+2026-09-29 evening; before, only "no unread or snoozed tile", which retired
+topics holding unseen merges without the user's review). No agent
 verdict is needed, and Unsorted never retires. It runs after the digest, so
 the sync's own events count; the sync log line and `SyncReport.topicsRetired`
 say how many. Retiring is reversible: a new loud event on a member PR
@@ -101,8 +103,8 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 | loudness | effect | examples |
 |---|---|---|
-| loud | tile becomes unread | mention, review requested, question to the user, merged without the user's review (when instructions care), a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
-| quiet | dot, no state change | bots, CI, deploys, merge queue, pushes after the user approved (by default) |
+| loud | tile becomes unread | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
+| quiet | dot, no state change | bots, CI, deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading |
 
@@ -115,7 +117,8 @@ a classification.
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
 - `snoozed`: a snooze is active and its condition is not met yet.
 - `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
-  nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed, or approved by
+  nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
+  without their review they have not seen yet, see "Merged without your review"), or approved by
   them while whose turn is not "you" (a later question or mention after the approval keeps
   it out of Done), or handled (marked read) while whose turn is not "you" and no review is pending of
   them (`reviewPending`: a personal request, a team request on a teammate's PR, or a routed
@@ -125,8 +128,8 @@ a classification.
   normal tile list with its turn footer, and in To review; it never lands in the Done fold.
   An approval counts on any commit (2026-09-28): a PR the user approved stays done after later
   pushes. `commits_after_approval` events are quiet by the rules; the tile comes back only
-  through the normal loud events (re-review requested, mention, question, changes requested,
-  merged without review) or when the agent raises the push (see Sync flow › events).
+  through the normal loud events (re-review requested, mention, question, changes requested)
+  or when the agent raises the push (see Sync flow › events).
 - `open`: everything else.
 
 **Glance** per pinged PR (pulled-in stack layers get none): verdict
@@ -233,6 +236,65 @@ Action details:
   membership removed so the next sync re-sorts it with the feedback in the
   prompt.
 - unmute: user override (`quiet`, or the rule loudness if that was not muted).
+
+## Merged without your review
+
+Decided 2026-09-29 (evening), tried on the "PostPile Tile Rules" page before
+it was built. The question PostPile inherits from ghatchup: after time away,
+did something merge that the user should have looked at? The answer is
+surfaced, never loud: no unread tile, no coral, no ping, no "needs you".
+
+**What counts.** A PR merged while a review was asked of the user or of one
+of their teams (`viewerWasAsked`) and the user never reviewed it themselves
+gets a `merged_without_review` event instead of `merged`. Only the user's own
+review counts, also when their team was asked: a teammate's review does not
+clear it (the team was asked, the user still wants to know). Closed without
+merging is not this case.
+
+**The rules**, each with where it came from, so the next change starts from
+the reasons and does not flip back:
+
+1. *Never loud.* `merged_without_review` is quiet by the rules for every user.
+   History: the first DESIGN.md (2026-09-27) made it loud "when instructions
+   care", a phrase match on the user's instructions (`caresAboutUnreviewedMerges`).
+   That was an assumption in the first build, never discussed, and the
+   user's instructions never had the phrase, so these merges disappeared.
+   On 2026-09-29 Julian: "They must not be loud, but they should be surfaced"
+   and "a useful rule for any engineer … not in instructions". The phrase
+   match is gone; the agent may still raise a single event like any other.
+2. *Not done until seen.* `isPrDone`: a merged PR is done, except while its
+   `merged_without_review` event is unseen. Such a tile is `open`: grey, the
+   merge as its dot line, whose turn "none", in the normal tile list (not in
+   the Done fold). History: 2026-09-25 "approved and even merged might mean I
+   still need to take a look"; 2026-09-28 "review required in done makes no
+   sense" (done = nothing asked of the user, which stays: nothing is asked
+   here, but something is unseen) and "not urgent when all stuff has merged"
+   (why it never makes a topic urgent).
+3. *"Not yours" counts as seen.* When the PR's glance says NOT_YOURS, the
+   merge counts as seen and the tile is done (it shows in the Done fold with
+   the verdict). This applies to personal requests too: after a merge the only
+   question is whether it concerns the user. For open PRs the team request
+   hold still ignores NOT_YOURS on personal requests (see whose turn).
+4. *Glanced after the merge.* Glance targets include merged PRs with an
+   unseen `merged_without_review` event. The glance then answers "worth a
+   look after the fact?": LOOK_CLOSER is worth a look (what the user would
+   have pushed back on), LOOKS_SAFE is fine, NOT_YOURS is rule 3. History:
+   glances were for open PRs only since the first build, when agent calls had
+   a small cap; 2026-09-28 "cost shall not be an issue".
+5. *Mark read settles it.* Mark read on the tile marks the event seen (the tile
+   becomes done) and the thread read on GitHub, through the normal mark-read
+   queue, undo window and writes lock. PostPile never marks these read by
+   itself.
+6. *Topics wait for it.* A topic retires only when every tile is done (see
+   Topic status), so an unseen merge keeps its topic in the sidebar. History:
+   0.3.1 (2026-09-29) retired on "nothing unread or snoozed", which after a
+   week away retired exactly the topics holding unseen merges.
+7. *Findable across topics.* The topic row in the sidebar shows a grey count,
+   "2 merged without you", next to "1 your move" (`TopicListItem.unseenMergeTiles`).
+   No coral, and the topic's group stays as it was.
+8. *Inbox cleanup unchanged.* "Mark everything older than 14 / 30 days read"
+   stays the user's explicit choice, and it includes these threads (idea from
+   2026-09-28: "when people come from vacation, I had 500").
 
 ## Memory / agentic digesting layer (v1 base)
 
@@ -2862,7 +2924,7 @@ preflight and does not know the token, so CORS stays open.
   - when "seen" moves: explicit `markTopicSeen` when leaving a topic, or on opening it
     [explicit, the UI calls it when the user leaves the topic]
   - retiring finished topics: automatic behind the deterministic gate (all PRs merged/closed,
-    3 quiet days since 2026-09-29, was 14; nothing unread or snoozed) or a proposal like merges
+    3 quiet days since 2026-09-29, was 14; every tile done) or a proposal like merges
     [automatic on every full sync, reversible]
   - accepted global rules: kept in the database and added to every prompt, or appended to
     instructions.md [database; instructions.md stays the user's own file]
