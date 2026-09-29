@@ -9,6 +9,8 @@ export const PENDING_DETAIL = 'GitHub writes are locked: waits until you unlock 
 export const DISCARDED_DETAIL = 'discarded while locked: stays unread, like on GitHub';
 export const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup waits until you unlock and send it';
 export const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
+/** Why a pending write the lock stopped mid-send stays pending. */
+const WRITES_OFF = 'GitHub writes are off';
 export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or another client; pending mark-read cleared';
 
 /**
@@ -174,10 +176,19 @@ export class PendingWrites {
     this.store.pendingWrites.remove(write.id);
   }
 
-  /** The cleanup's single PUT. Done when GitHub took it; a failure stays pending with the error. */
+  /**
+   * The cleanup's single PUT. Done when GitHub took it; a failure stays
+   * pending with the error, and so does a cleanup the lock stopped mid-send
+   * (the same as a thread write stopped there).
+   */
   private async sendCleanup(write: PendingWrite, notTaken: string[]): Promise<boolean> {
     try {
-      await this.writes.markAllReadBefore(write.readBefore ?? '', { origin: 'footer', batch: write.batch });
+      const result = await this.writes.markAllReadBefore(write.readBefore ?? '', { origin: 'footer', batch: write.batch });
+      if (result === 'off') {
+        this.store.pendingWrites.keepAfterTry(write.id, [], WRITES_OFF, this.now().toISOString());
+        notTaken.push(`${this.title(write)}: GitHub didn't take it: ${WRITES_OFF}; still pending`);
+        return false;
+      }
     } catch (error) {
       const message = errorText(error);
       this.store.pendingWrites.keepAfterTry(write.id, [], message, this.now().toISOString());
@@ -208,7 +219,7 @@ export class PendingWrites {
         errors.push(outcome.error);
       } else if (outcome?.kind === 'off') {
         left.push(thread);
-        errors.push('GitHub writes are off');
+        errors.push(WRITES_OFF);
       } else if (outcome?.kind === 'skipped') {
         notTaken.push(`${this.title(write)}: ${notTakenDetail(outcome.reason)}`);
       } else if (outcome && thread.prKey !== null) {

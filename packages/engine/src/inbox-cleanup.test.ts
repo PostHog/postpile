@@ -92,6 +92,29 @@ describe('inbox cleanup', () => {
     ]);
   });
 
+  it('keeps a pending cleanup when the lock closes while pending writes are sent', async () => {
+    const h = await withOldThreads({ writesEnabled: false });
+    const pr = reviewRequestedPr(1);
+    await h.engine.markRead(`pr:${pr.key}`);
+    await h.engine.flushPendingWrites();
+    await h.engine.cleanUpInbox(14);
+    await h.engine.setGitHubWrites(true);
+    // The lock closes right after the first pending write reached GitHub.
+    const markThreadRead = h.writer.markThreadRead.bind(h.writer);
+    h.writer.markThreadRead = async (threadId) => {
+      await markThreadRead(threadId);
+      await h.engine.setGitHubWrites(false);
+    };
+
+    const sent = await h.engine.sendPendingWrites();
+
+    expect(sent).toMatchObject({ ok: false, done: 1, failed: 1 });
+    expect(sent.message).toContain("GitHub didn't take it: GitHub writes are off; still pending");
+    expect(h.writer.calls).toEqual([`markThreadRead ${makeThreadFor(pr).id}`]);
+    expect(sent.status.pending).toEqual([expect.objectContaining({ kind: 'mark_all_read_before', error: 'GitHub writes are off' })]);
+    expect((await h.engine.inboxCleanup()).pendingCutoff).toBe(CUTOFF_14);
+  });
+
   it('discards a pending cleanup without writing anything', async () => {
     const h = await withOldThreads({ writesEnabled: false });
     await h.engine.cleanUpInbox(30);
