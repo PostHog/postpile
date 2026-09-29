@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export const LOCK_FILE_NAME = 'postpile.lock';
@@ -21,6 +21,12 @@ const UNREADABLE_RETRIES = 5;
 const UNREADABLE_RETRY_MS = 20;
 /** ps reports start times to the second; a holder whose start time differs by more is another process on a reused pid. */
 const START_TIME_SLACK_MS = 2000;
+/** A takeover folder this old was left by a process that died while taking over. */
+export const TAKEOVER_ABANDONED_MS = 30_000;
+/** How long to wait before trying again while another process takes the lock over. */
+const TAKEOVER_BACKOFF_MS = 50;
+/** Tries to take the lock: the later ones after a stale lock was found. */
+const ACQUIRE_ATTEMPTS = 3;
 
 /** Thrown when another live process holds the data folder. The message is meant for the user. */
 export class DataDirLockedError extends Error {
@@ -121,7 +127,9 @@ function sameHolder(a: LockInfo, b: LockInfo): boolean {
  * Removes a lock judged stale, but only while it is still that exact holder
  * (`stale`, or still unreadable when `stale` is null). Two processes can
  * find the same stale lock; the slower one would otherwise delete the fresh
- * lock the faster one just wrote. True when it removed the file.
+ * lock the faster one just wrote. True when it removed the file. Called
+ * only while holding the takeover folder (`takeOver`), so nobody else can
+ * write a new lock between the read and the remove.
  */
 export function removeStaleLock(file: string, stale: LockInfo | null): boolean {
   const current = readLock(file);
@@ -152,11 +160,65 @@ function createExclusive(file: string, info: LockInfo): boolean {
   return true;
 }
 
+/** The takeover mutex next to the lock file. */
+export function takeoverDir(lockFile: string): string {
+  return `${lockFile}.takeover`;
+}
+
+/**
+ * Creates the takeover folder (mkdir is atomic: exactly one process gets
+ * it). A folder older than TAKEOVER_ABANDONED_MS was left by a process that
+ * died mid-takeover and is removed first. False while someone else holds it.
+ */
+function claimTakeover(dir: string): boolean {
+  try {
+    if (Date.now() - statSync(dir).mtimeMs > TAKEOVER_ABANDONED_MS) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    // No folder yet: nothing abandoned.
+  }
+  try {
+    mkdirSync(dir);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Replaces a stale lock under the takeover folder: re-read it, remove it
+ * only if it is still the holder judged stale, create ours exclusively and
+ * read it back. Only one process runs this at a time, so two processes
+ * finding the same stale lock can no longer delete each other's fresh one.
+ * False when someone else is taking over, the holder changed, or another
+ * process created the lock first; the caller then tries again.
+ */
+function takeOver(lockFile: string, stale: LockInfo | null, info: LockInfo): boolean {
+  const dir = takeoverDir(lockFile);
+  if (!claimTakeover(dir)) {
+    sleepSync(TAKEOVER_BACKOFF_MS);
+    return false;
+  }
+  try {
+    if (!removeStaleLock(lockFile, stale)) {
+      return false;
+    }
+    return createExclusive(lockFile, info) && readLock(lockFile)?.pid === info.pid;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /**
  * An exclusive lock on the folder of a database: `<folder>/postpile.lock`
  * with pid, kind and start time. A second process refuses to open the same
  * database. A lock left by a dead process (crash, kill -9) is stale and
- * taken over. Released on close and on process exit.
+ * taken over, one process at a time (`takeOver`). Released on close and on
+ * process exit.
  */
 export class DataDirLock {
   private released = false;
@@ -174,8 +236,7 @@ export class DataDirLock {
     mkdirSync(folder, { recursive: true });
     const lockFile = join(folder, LOCK_FILE_NAME);
     const info: LockInfo = { pid: process.pid, kind, startedAt, databaseFile, processStartedAt: ownProcessStart() };
-    // Three tries: the later ones after removing a stale lock.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt++) {
       // Read back after creating: a process taking over the same stale lock may have replaced ours.
       if (createExclusive(lockFile, info) && readLock(lockFile)?.pid === process.pid) {
         return new DataDirLock(lockFile, info);
@@ -185,8 +246,9 @@ export class DataDirLock {
         throw new DataDirLockedError(holder, lockFile);
       }
       // Dead holder, a reused pid, our own pid from an earlier run, or a file that stayed unreadable: stale.
-      // Removed only if still that holder; otherwise the next try reads the new one.
-      removeStaleLock(lockFile, holder);
+      if (takeOver(lockFile, holder, info)) {
+        return new DataDirLock(lockFile, info);
+      }
     }
     throw new Error(`could not take the lock ${lockFile}`);
   }

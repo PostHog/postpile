@@ -1,8 +1,8 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, processStartTime, removeStaleLock, type LockInfo } from './data-lock.ts';
+import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, processStartTime, removeStaleLock, takeoverDir, type LockInfo } from './data-lock.ts';
 
 const dirs: string[] = [];
 
@@ -99,6 +99,46 @@ describe('DataDirLock', () => {
     writeFileSync(file, JSON.stringify(stale));
     expect(removeStaleLock(file, stale)).toBe(true);
     expect(existsSync(file)).toBe(false);
+  });
+
+  it('leaves a stale lock alone while a second contender holds the takeover folder', () => {
+    const db = tempDb();
+    const file = join(db, '..', LOCK_FILE_NAME);
+    const stale = { pid: 99_999_999, kind: 'packaged', startedAt: 'x', databaseFile: db };
+    writeFileSync(file, JSON.stringify(stale));
+    // The other contender is mid-takeover: it holds the mutex.
+    mkdirSync(takeoverDir(file));
+
+    expect(() => DataDirLock.acquire(db, 'dev')).toThrow(`could not take the lock ${file}`);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(stale);
+    expect(existsSync(takeoverDir(file))).toBe(true);
+  });
+
+  it('sees the lock the second contender wrote once its takeover is done', () => {
+    const db = tempDb();
+    const file = join(db, '..', LOCK_FILE_NAME);
+    writeFileSync(file, JSON.stringify({ pid: 99_999_999, kind: 'packaged', startedAt: 'x', databaseFile: db }));
+    // The contender took over first: its fresh lock (a live pid) is in place, its mutex gone.
+    writeFileSync(file, JSON.stringify({ pid: process.ppid, kind: 'dev', startedAt: 'y', databaseFile: db }));
+
+    expect(() => DataDirLock.acquire(db, 'server')).toThrow(DataDirLockedError);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ pid: process.ppid, kind: 'dev' });
+  });
+
+  it('removes an abandoned takeover folder and takes the stale lock over, cleaning up after itself', () => {
+    const db = tempDb();
+    const file = join(db, '..', LOCK_FILE_NAME);
+    writeFileSync(file, JSON.stringify({ pid: 99_999_999, kind: 'packaged', startedAt: 'x', databaseFile: db }));
+    mkdirSync(takeoverDir(file));
+    const longAgo = new Date(Date.now() - 60_000);
+    utimesSync(takeoverDir(file), longAgo, longAgo);
+
+    const lock = DataDirLock.acquire(db, 'dev');
+
+    expect(lock.info.kind).toBe('dev');
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ pid: process.pid, kind: 'dev' });
+    expect(existsSync(takeoverDir(file))).toBe(false);
+    lock.release();
   });
 
   it('does not remove a lock that another process took over meanwhile', () => {
