@@ -1945,7 +1945,11 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   with its usual menu, and a quieter "Review on GitHub" opens the files tab
   of the move's PR ("Open on GitHub" and the PR itself on your own PR),
   through the external link path (so `opened_on_github` fires). Done tiles
-  keep "Open".
+  keep "Open" and nothing else: no mark button and no Snooze, in the tile
+  footer and in the detail pane (2026-09-29: a done tile still offered
+  "Mark read" in the pane and Snooze in the footer, both leftovers that did
+  nothing visible; a user debugging a finished topic read them as "something
+  is still open here").
 - Detail pane action bar (changed 2026-09-29, "Actions act on what you
   look at"): on a single-PR tile, same label rule as the footer; the mark
   button is left out while the tile is read and still your move (Snooze
