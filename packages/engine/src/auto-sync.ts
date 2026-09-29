@@ -20,6 +20,8 @@ export interface AutoSyncOptions {
 
 export interface AutoSyncTarget {
   isSyncing(): boolean;
+  /** Epoch ms until which background GitHub work waits (the GitHub quota is low), else null. */
+  pausedUntil(): number | null;
   sync(maxAgentCalls: number): Promise<unknown>;
 }
 
@@ -28,7 +30,8 @@ export interface AutoSyncTarget {
  * interval counts from the end of the last sync, whoever started it (the
  * engine calls reschedule() when any sync ends), so a "Sync now" pushes the
  * next auto sync out. Skipped when a sync is running at the due time; that
- * sync's end schedules the next one. Failures are logged, never thrown.
+ * sync's end schedules the next one. While the GitHub quota is low it waits
+ * for the reset (DESIGN.md "GitHub quota"). Failures are logged, never thrown.
  */
 export class AutoSyncSchedule {
   private timer: unknown = null;
@@ -50,8 +53,11 @@ export class AutoSyncSchedule {
   }
 
   private schedule(minutes: number = this.options.minutes): void {
+    this.scheduleIn(minutes * 60 * 1000);
+  }
+
+  private scheduleIn(ms: number): void {
     this.clearTimer();
-    const ms = minutes * 60 * 1000;
     this.dueAt = this.timers.now() + ms;
     this.timer = this.timers.setTimeout(() => {
       this.timer = null;
@@ -62,6 +68,12 @@ export class AutoSyncSchedule {
   private async fire(): Promise<void> {
     if (this.target.isSyncing()) {
       this.log('auto sync: skipped, a sync is running');
+      return;
+    }
+    const pausedUntil = this.target.pausedUntil();
+    if (pausedUntil !== null) {
+      this.log(`auto sync: GitHub quota low, waiting until ${new Date(pausedUntil).toISOString()}`);
+      this.scheduleIn(Math.max(0, pausedUntil - this.timers.now()));
       return;
     }
     this.log(`auto sync: starting (every ${this.options.minutes} min)`);

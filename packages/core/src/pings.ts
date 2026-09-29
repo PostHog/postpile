@@ -3,6 +3,7 @@
 // DESIGN.md "Live poll and Mac pings" has the whole flow.
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { clipText } from './dossier.ts';
+import type { GitHubQuotaView } from './github-quota.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
@@ -86,6 +87,8 @@ export interface LivePollStatus {
   nextAutoSyncAt: IsoTime | null;
   /** Grows when a glance catch-up run is queued, starts or ends; the renderer refetches when it moves. */
   catchUpChanges: number;
+  /** Set while the GitHub quota is low or critical and background work waits (DESIGN.md "GitHub quota"); null when ok. */
+  githubQuota: GitHubQuotaView | null;
 }
 
 /** Before the poll starts, and for hosts that never start it (CLI, standalone server). */
@@ -103,6 +106,7 @@ export const OFF_POLL_STATUS: LivePollStatus = {
   syncRunning: false,
   nextAutoSyncAt: null,
   catchUpChanges: 0,
+  githubQuota: null,
 };
 
 /**

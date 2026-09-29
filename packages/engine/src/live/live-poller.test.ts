@@ -2,7 +2,8 @@ import type { MacNotification, Ping } from '@postpile/core';
 import { FakeTimers } from '@postpile/core/fixtures';
 import { GitHubError } from '@postpile/github';
 import { describe, expect, it } from 'vitest';
-import { LivePoller } from './live-poller.ts';
+import { GitHubQuota } from '../github-quota.ts';
+import { LivePoller, QUOTA_PAUSE_NOTE } from './live-poller.ts';
 import type { PollCycle } from './poll-cycle.ts';
 
 function done(overrides: Partial<Extract<PollCycle, { kind: 'done' }>> = {}): PollCycle {
@@ -33,12 +34,18 @@ function setup(poll: ScriptedPoll, intervalSeconds = 10) {
   const timers = new FakeTimers();
   const shown: MacNotification[][] = [];
   const logs: string[] = [];
-  const poller = new LivePoller(poll.fn, timers, {
-    intervalSeconds,
-    onNotify: (notifications) => shown.push(notifications),
-    log: (message) => logs.push(message),
-  });
-  return { timers, shown, logs, poller };
+  const quota = new GitHubQuota(() => timers.now());
+  const poller = new LivePoller(
+    poll.fn,
+    timers,
+    {
+      intervalSeconds,
+      onNotify: (notifications) => shown.push(notifications),
+      log: (message) => logs.push(message),
+    },
+    quota,
+  );
+  return { timers, shown, logs, poller, quota };
 }
 
 /** Moves the clock and lets the cycle the timer started finish. */
@@ -175,5 +182,41 @@ describe('LivePoller', () => {
     const off = setup(poll, 0);
     off.poller.start();
     expect(off.poller.currentStatus().state).toBe('off');
+  });
+
+  it('slows to once a minute while the GitHub quota is low', async () => {
+    const poll = new ScriptedPoll();
+    const { timers, poller, logs, quota } = setup(poll);
+    poller.start();
+    quota.note({ resource: 'graphql', limit: 5000, remaining: 2000, resetAtMs: timers.now() + 30 * 60_000 });
+
+    await tick(timers, poller, 10_000);
+    expect(poll.calls).toBe(1);
+    expect(poller.currentStatus().nextPollAt).toBe(new Date(timers.now() + 60_000).toISOString());
+    timers.advance(59_999);
+    expect(poll.calls).toBe(1);
+    await tick(timers, poller, 1);
+    expect(poll.calls).toBe(2);
+    expect(logs).toContain('live poll: every 60s, GitHub quota graphql 40% left');
+  });
+
+  it('pauses until the reset while the quota is nearly used, then polls again', async () => {
+    const poll = new ScriptedPoll();
+    const { timers, poller, logs, quota } = setup(poll);
+    poller.start();
+    const resetAt = timers.now() + 20 * 60_000;
+    quota.note({ resource: 'core', limit: 5000, remaining: 400, resetAtMs: resetAt });
+
+    await tick(timers, poller, 10_000);
+    expect(poll.calls).toBe(0);
+    expect(poller.currentStatus()).toMatchObject({ state: 'blocked', note: QUOTA_PAUSE_NOTE, nextPollAt: new Date(resetAt).toISOString() });
+    // A cycle asked for meanwhile (a sync ended, the window got focus) waits too, and logs nothing new.
+    await poller.runCycle();
+    expect(poll.calls).toBe(0);
+    expect(logs.filter((line) => line.includes('paused until'))).toHaveLength(1);
+
+    await tick(timers, poller, resetAt - timers.now());
+    expect(poll.calls).toBe(1);
+    expect(poller.currentStatus()).toMatchObject({ state: 'waiting', note: null });
   });
 });

@@ -2098,7 +2098,10 @@ standalone server never starts it.
   "rate limit" message, or a GraphQL `RATE_LIMITED` error; `GitHubError.rateLimited`)
   waits Retry-After or until X-RateLimit-Reset, else doubles from 60s to 15
   min. Other errors double from the interval up to 5 min. The footer shows
-  "backing off, retry in Ns" (state `backoff`).
+  "backing off, retry in Ns" (state `backoff`). A rate-limit backoff sends
+  `rate_limited` with `where: 'poll'`.
+- GitHub quota: once a minute at most while the quota is low, paused until
+  the reset while it is nearly used (see "GitHub quota").
 - Overlap: `Engine.pollOnce()` answers `blocked` while a full sync or a
   consolidation runs (glance catch-up runs go beside poll cycles, see
   "Glance catch-up") (footer: "paused: full sync running"); sync and
@@ -2318,7 +2321,60 @@ renderer sees it through `LivePollStatus.syncRunning` (the title bar shows
 `syncing · agent 34/82` like for "Sync now", `useActions().syncing` covers
 both) and `nextAutoSyncAt` ("next full sync in N min"). The last sync shown
 is the newer of this window's and the stored report. Full syncs were
-start-only and manual before (2026-09-29).
+start-only and manual before (2026-09-29). While the GitHub quota is low, a
+due auto sync (the backlog follow-up too) waits until the reset instead
+(see "GitHub quota").
+
+## GitHub quota
+
+Decided 2026-09-29: PostPile never uses the full GitHub quota. It reads with
+the user's own `gh auth token`, so it shares the hourly limits (REST core
+5000 requests, GraphQL 5000 points) with their gh CLI and every other tool,
+and leaves clear headroom for them.
+
+**Tracking** (`GitHubQuota` in engine `github-quota.ts`, rules in core
+`github-quota.ts`): `quotaFetch` wraps the fetch every GitHub read and write
+goes through (inside `watchedFetch`) and notes each answer's
+`X-RateLimit-Limit`, `-Remaining`, `-Reset` and `-Resource`. Only `core` and
+`graphql` count; search has its own small per-minute window. In memory only:
+the newest reading per limit (within one window the lower remaining wins,
+since answers can arrive out of order), a request count since start and per
+sync. A reading past its reset counts as a full limit, so paused work
+resumes at the reset without a request to find out.
+
+**Levels** (`quotaLevel`, the worst of the two limits):
+
+| level | share left | what waits until the reset |
+| --- | --- | --- |
+| `ok` | more than 50% | nothing |
+| `low` | 50% or less | the hourly auto sync and its backlog follow-ups; the live poll slows to once a minute (`LOW_QUOTA_POLL_SECONDS`) |
+| `critical` | 20% or less | the live poll too |
+
+- One place answers "may background GitHub work run now?":
+  `allowsBackground()` / `backgroundPausedUntil()` (auto sync),
+  `pollSeconds()` / `pollPausedUntil()` (live poll). The paused auto sync
+  moves its due time to the reset, so "next full sync in N min" stays true.
+  The paused poll shows "live · paused: GitHub quota nearly used" and
+  schedules its next cycle at the reset; cycles asked for meanwhile (sync
+  end, window focus) wait too.
+- Not held back: a sync the user or the app start asked for (it runs and
+  logs "GitHub quota low (graphql 40% left), running anyway"), so the first
+  sync after setup always runs; writes and the refresh right after them.
+- Glance catch-up is not gated: its runs make agent calls only, no GitHub
+  requests. It follows the poll, so it slows and pauses with it.
+
+**Footer**: `LivePollStatus.githubQuota` (`GitHubQuotaView`: level, the
+worst limit, percent left, `resumeAt`, the poll's pace) is null at `ok`, so
+the footer stays quiet. Otherwise it says "GitHub quota low: background sync
+paused until 14:05" or "GitHub quota nearly used: background sync and live
+poll paused until 14:05", with the limit and percent in the tooltip.
+
+**Telemetry**: `github_quota_low {resource, level}` once per drop into a
+worse level within one window, `sync_completed` gets `gh_requests` and the
+lowest percent left per limit during the sync (see "Usage analytics").
+
+Sample data simulates it with `POSTPILE_FAKE_QUOTA=low` or `critical` (a
+GraphQL reading that resets 35 minutes after start).
 
 ## Work context sweep ("What you're working on")
 
@@ -2499,13 +2555,19 @@ message, are dropped.
    (kind `topic_merge` / `rename` / `rule` / `instructions`), `instructions_edited`.
 5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
    agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,
-   trigger `start`/`manual`/`auto`, auto = the hourly background sync),
+   trigger `start`/`manual`/`auto`, auto = the hourly background sync,
+   gh_requests = GitHub requests made while it ran, gh_core_remaining_pct and
+   gh_graphql_remaining_pct = the lowest whole percent of that limit left
+   during the sync, absent when no answer carried it),
    `catch_up_ran` (topics, always 1; agent_calls, duration_ms, ok: one glance
    catch-up run after the poll), `sync_failed` (error_kind, currently only
    `gh_unavailable`: a blocked sync never runs), `rate_limited` (source
-   `graphql`/`rest`, read from the sync's own error text — GitHub's GraphQL
-   and REST rate-limit errors are shaped differently at the point
-   `packages/github` builds them), `consolidation_ran` (proposals_filed).
+   `graphql`/`rest`, read from the error text — GitHub's GraphQL and REST
+   rate-limit errors are shaped differently at the point `packages/github`
+   builds them; where `sync` from a full sync's errors, `poll` from the live
+   poll's backoff), `github_quota_low` (resource `core`/`graphql`, level
+   `low`/`critical`: once per drop into a worse level within a rate-limit
+   window, see "GitHub quota"), `consolidation_ran` (proposals_filed).
 6. *MCP server*: `mcp_tool_called` (tool, found: false when the PR, topic
    or search found nothing). Sent by the separate `postpile-mcp` process
    under the same install id, so it counts toward the same person.
@@ -2683,7 +2745,7 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/undo` `{undoToken}` | `undo()` |
 | `POST /api/feedback` | `giveFeedback()` |
 | `POST /api/events/:id/unmute` | `unmuteEvent()` |
-| `GET /api/live` | `livePollStatus()` (fast poll state, backoff, X-Poll-Interval, `changeCount`) |
+| `GET /api/live` | `livePollStatus()` (fast poll state, backoff, X-Poll-Interval, `changeCount`, `githubQuota` while low) |
 | `GET`/`POST /api/github-writes` `{enabled}` | `githubWrites()` / `setGitHubWrites()` (the footer lock) |
 | `GET /api/debug/actions?limit=` | `actionLog()` (default 200, max 1000) |
 | `POST /api/notifications/:threadId/mark-read` | `markThreadRead()` (debug view, origin `debug`) |

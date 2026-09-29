@@ -22,6 +22,11 @@ describe('sanitizeTelemetryProps', () => {
     expect(sanitizeTelemetryProps({ title: 'Fix #123' })).toEqual({});
   });
 
+  it('keeps the GitHub quota props as they are', () => {
+    expect(sanitizeTelemetryProps({ resource: 'graphql', level: 'critical' })).toEqual({ resource: 'graphql', level: 'critical' });
+    expect(sanitizeTelemetryProps({ gh_requests: 42, gh_core_remaining_pct: 0, where: 'poll' })).toEqual({ gh_requests: 42, gh_core_remaining_pct: 0, where: 'poll' });
+  });
+
   it('never drops non-string values, however large the number', () => {
     expect(sanitizeTelemetryProps({ count: 1_000_000 })).toEqual({ count: 1_000_000 });
   });

@@ -46,6 +46,15 @@ describe('FakeEngine', () => {
     expect((await engine.livePollStatus()).state).toBe('off');
   });
 
+  it('simulates a low GitHub quota with POSTPILE_FAKE_QUOTA, and stays quiet without it', async () => {
+    const now = new Date('2026-09-27T10:00:00Z');
+    expect((await new FakeEngine({ now: () => now }).livePollStatus()).githubQuota).toBeNull();
+    const low = new FakeEngine({ now: () => now, quota: 'low' });
+    expect((await low.livePollStatus()).githubQuota).toMatchObject({ level: 'low', resource: 'graphql', resumeAt: '2026-09-27T10:35:00.000Z' });
+    const critical = new FakeEngine({ now: () => now, quota: 'critical' });
+    expect((await critical.livePollStatus()).githubQuota).toMatchObject({ level: 'critical', pollSeconds: null });
+  });
+
   it('refuses undo after the 6s window', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
     const engine = new FakeEngine({ now: () => now });

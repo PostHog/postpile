@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OFF_POLL_STATUS, type LivePollStatus } from '@postpile/core';
-import { liveLabel } from './live.ts';
+import { liveLabel, quotaLabel } from './live.ts';
 
 const now = new Date('2026-09-28T10:00:00Z');
 const running: LivePollStatus = { ...OFF_POLL_STATUS, state: 'waiting', intervalSeconds: 10, githubPollIntervalSeconds: 60 };
@@ -25,5 +25,27 @@ describe('liveLabel', () => {
 
   it('says why it is paused', () => {
     expect(liveLabel({ ...running, state: 'blocked', note: 'full sync running' }, now).text).toBe('live · paused: full sync running');
+  });
+});
+
+describe('quotaLabel', () => {
+  const resumeAt = new Date(2026, 8, 28, 14, 5).toISOString();
+
+  it('stays quiet while the quota is fine', () => {
+    expect(quotaLabel(undefined)).toBeNull();
+    expect(quotaLabel(running)).toBeNull();
+  });
+
+  it('says background sync waits until the reset, and the poll slows', () => {
+    const status: LivePollStatus = { ...running, githubQuota: { level: 'low', resource: 'graphql', remainingPercent: 40, resumeAt, pollSeconds: 60 } };
+    expect(quotaLabel(status)).toMatchObject({ text: 'GitHub quota low: background sync paused until 14:05', warn: true });
+    expect(quotaLabel(status)?.title).toMatch(/^GraphQL: 40% of the hourly limit left/);
+    expect(liveLabel(status, now).text).toBe('live · every 60s');
+  });
+
+  it('says the live poll waits too when the quota is nearly used', () => {
+    const status: LivePollStatus = { ...running, githubQuota: { level: 'critical', resource: 'core', remainingPercent: 12, resumeAt, pollSeconds: null } };
+    expect(quotaLabel(status)?.text).toBe('GitHub quota nearly used: background sync and live poll paused until 14:05');
+    expect(quotaLabel(status)?.title).toMatch(/^REST: 12%/);
   });
 });

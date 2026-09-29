@@ -66,6 +66,7 @@ import {
   normalizeRepoScope,
   OFF_POLL_STATUS,
   parsePrKey,
+  rateLimitSourceFromErrors,
   snoozeTelemetryBucket,
   systemTimers,
   withQuietRepo,
@@ -74,7 +75,7 @@ import type { AutoSyncOptions } from './auto-sync.ts';
 import { isPostHogMember } from '@postpile/core/telemetry-identity';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
 import { loadViewer } from './viewer-meta.ts';
-import type { GitHubReader } from '@postpile/github';
+import { GitHubError, type GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
@@ -94,6 +95,7 @@ import { TopicCatchUp } from './catch-up/topic-catch-up.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { errorText } from './errors.ts';
+import { GitHubQuota } from './github-quota.ts';
 import { GitHubSync, NO_FOCUS, type PollFocus } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { McpConnection } from './mcp-connection.ts';
@@ -178,6 +180,12 @@ export interface EngineDeps {
   telemetry?: Telemetry;
   /** For the app_version person property; the identify call is skipped without one. */
   appVersion?: string;
+  /**
+   * The GitHub quota the reader's and writer's fetch report to (createEngine
+   * wires that). Missing: an empty one on the engine's timers, which stays ok
+   * until a test feeds it readings.
+   */
+  quota?: GitHubQuota;
 }
 
 /**
@@ -223,6 +231,7 @@ export class Engine implements EngineService {
   private readonly catchUps: CatchUpQueue;
   private readonly github: GitHubSync;
   private readonly telemetry: Telemetry;
+  private readonly quota: GitHubQuota;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
 
@@ -230,6 +239,8 @@ export class Engine implements EngineService {
     const { store, now } = deps;
     this.telemetry = deps.telemetry ?? new NoopTelemetry();
     this.toolHealth = deps.tools ?? ToolHealth.assumeOk(now);
+    const timers = deps.timers ?? systemTimers;
+    this.quota = deps.quota ?? new GitHubQuota(() => timers.now());
     const agentOff = (): string | null => this.toolHealth.agentOffReason();
     const history = new InstructionsHistory(store, deps.instructionsFile, now);
     const proposer = new InstructionsProposer(store, deps.agent, history);
@@ -263,7 +274,7 @@ export class Engine implements EngineService {
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff, telemetry: this.telemetry };
     const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
-    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, deps.syncLog);
+    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);
     const decider = new PingDecider({
       store,
@@ -334,6 +345,18 @@ export class Engine implements EngineService {
     }
     for (const topicId of topicIds) {
       this.catchUps.request(topicId);
+    }
+  }
+
+  /** The poll hit GitHub's rate limit: the same event a sync sends, marked as the poll's. Never throws. */
+  private reportPollRateLimit(error: unknown): void {
+    if (!(error instanceof GitHubError) || !error.rateLimited) {
+      return;
+    }
+    try {
+      this.telemetry.capture('rate_limited', { source: rateLimitSourceFromErrors([error.message]) ?? 'rest', where: 'poll' });
+    } catch (telemetryError) {
+      (this.deps.syncLog ?? console.log)(`poll: telemetry failed: ${errorText(telemetryError)}`);
     }
   }
 
@@ -472,9 +495,15 @@ export class Engine implements EngineService {
     if (!this.polling) {
       const focus = this.focus;
       this.focus = NO_FOCUS;
-      this.polling = this.pollRun.run(focus).finally(() => {
-        this.polling = null;
-      });
+      this.polling = this.pollRun
+        .run(focus)
+        .catch((error: unknown) => {
+          this.reportPollRateLimit(error);
+          throw error;
+        })
+        .finally(() => {
+          this.polling = null;
+        });
     }
     return this.polling;
   }
@@ -483,7 +512,7 @@ export class Engine implements EngineService {
     if (this.livePoller) {
       return;
     }
-    this.livePoller = new LivePoller(() => this.pollOnce(), this.deps.timers ?? systemTimers, options);
+    this.livePoller = new LivePoller(() => this.pollOnce(), this.deps.timers ?? systemTimers, options, this.quota);
     this.livePoller.start();
   }
 
@@ -496,7 +525,11 @@ export class Engine implements EngineService {
     if (this.autoSync) {
       return;
     }
-    const target = { isSyncing: () => this.syncing !== null, sync: (maxAgentCalls: number) => this.sync({ maxAgentCalls, auto: true }) };
+    const target = {
+      isSyncing: () => this.syncing !== null,
+      pausedUntil: () => this.quota.backgroundPausedUntil(),
+      sync: (maxAgentCalls: number) => this.sync({ maxAgentCalls, auto: true }),
+    };
     this.autoSync = new AutoSyncSchedule(target, this.deps.timers ?? systemTimers, options, this.deps.syncLog ?? ((line) => console.log(line)));
     this.autoSync.start();
   }
@@ -552,13 +585,15 @@ export class Engine implements EngineService {
     }
   }
 
-  /** The poll's own status, plus what the renderer refreshes on: syncs, the next auto sync, catch-up runs. */
+  /** The poll's own status, plus what the renderer refreshes on (syncs, the next auto sync, catch-up runs) and the GitHub quota while it is low. */
   async livePollStatus(): Promise<LivePollStatus> {
+    const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
-      ...(this.livePoller?.currentStatus() ?? OFF_POLL_STATUS),
+      ...poll,
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),
+      githubQuota: this.quota.view(poll.intervalSeconds),
     };
   }
 

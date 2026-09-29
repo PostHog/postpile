@@ -22,6 +22,32 @@ describe('TELEMETRY_EVENTS', () => {
     expect(TELEMETRY_EVENTS.app_active.safeParse({ anything: 1 }).success).toBe(false);
   });
 
+  it('takes the GitHub quota numbers on sync_completed, with the percentages optional', () => {
+    const sync = {
+      duration_ms: 1200,
+      prs_fetched: 3,
+      new_events: 2,
+      agent_calls: 1,
+      agent_failures: 0,
+      cost_usd: 0.02,
+      stopped_at_cap: false,
+      trigger: 'auto',
+      gh_requests: 14,
+    };
+    expect(TELEMETRY_EVENTS.sync_completed.safeParse(sync).success).toBe(true);
+    expect(TELEMETRY_EVENTS.sync_completed.safeParse({ ...sync, gh_core_remaining_pct: 97, gh_graphql_remaining_pct: 0 }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.sync_completed.safeParse({ ...sync, gh_core_remaining_pct: 101 }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.sync_completed.safeParse({ ...sync, gh_graphql_remaining_pct: 12.5 }).success).toBe(false);
+  });
+
+  it('knows github_quota_low and where a rate limit hit', () => {
+    expect(TELEMETRY_EVENTS.github_quota_low.safeParse({ resource: 'graphql', level: 'critical' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.github_quota_low.safeParse({ resource: 'search', level: 'low' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.github_quota_low.safeParse({ resource: 'core', level: 'ok' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.rate_limited.safeParse({ source: 'rest', where: 'poll' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.rate_limited.safeParse({ source: 'rest' }).success).toBe(false);
+  });
+
   it('lists every catalogue key in TELEMETRY_EVENT_NAMES', () => {
     expect(TELEMETRY_EVENT_NAMES).toEqual(Object.keys(TELEMETRY_EVENTS));
   });

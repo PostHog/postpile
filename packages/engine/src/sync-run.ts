@@ -16,6 +16,7 @@ import { reviveRetiredTopics } from './consolidation/revive.ts';
 import type { DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
 import { errorText } from './errors.ts';
+import type { GitHubQuota, QuotaRunStats } from './github-quota.ts';
 import { saveLastSyncReport, syncReportLogLines } from './last-sync-report.ts';
 import type { GitHubSync } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
@@ -65,6 +66,7 @@ export class SyncRun {
     private readonly deps: RunDeps,
     private readonly github: GitHubSync,
     private readonly markReadQueue: MarkReadQueue,
+    private readonly quota: GitHubQuota,
     private readonly log: (line: string) => void = (line) => console.log(line),
   ) {}
 
@@ -96,6 +98,11 @@ export class SyncRun {
     report.agentCallStats = callLog.begin(`sync:${startedAt}`);
     noteSyncStart(store, startedAt);
     this.log(`sync: started (max agent calls ${options.maxAgentCalls ?? 'unlimited'})`);
+    // Only the hourly auto sync waits for a low quota; a sync the user or the app start asked for runs anyway.
+    if (!this.quota.allowsBackground()) {
+      this.log(`sync: GitHub quota low (${this.quota.describe()}), running anyway: not a background sync`);
+    }
+    this.quota.startRun();
     const phases = new PhaseClock(now);
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
     this.live = { startedAt, phases, budget, stats: report.agentCallStats };
@@ -163,7 +170,7 @@ export class SyncRun {
     } catch (error) {
       this.log(`sync: could not store the report: ${errorText(error)}`);
     }
-    this.reportTelemetry(report, options.auto === true, crashed);
+    this.reportTelemetry(report, options.auto === true, crashed, this.quota.runStats());
     return report;
   }
 
@@ -173,14 +180,14 @@ export class SyncRun {
    * showed); rate_limited and first_sync_completed only when they apply.
    * Never throws: telemetry never breaks a sync.
    */
-  private reportTelemetry(report: SyncReport, auto: boolean, crashed: boolean): void {
+  private reportTelemetry(report: SyncReport, auto: boolean, crashed: boolean, quota: QuotaRunStats): void {
     try {
       const telemetry = runTelemetry(this.deps);
       const trigger = auto ? 'auto' : this.syncedOnceInProcess ? 'manual' : 'start';
       this.syncedOnceInProcess = true;
       const rateLimitSource = rateLimitSourceFromErrors(report.errors);
       if (rateLimitSource) {
-        telemetry.capture('rate_limited', { source: rateLimitSource });
+        telemetry.capture('rate_limited', { source: rateLimitSource, where: 'sync' });
       }
       if (crashed) {
         telemetry.capture('sync_failed', { error_kind: rateLimitSource ? 'rate_limited' : 'other' });
@@ -197,6 +204,10 @@ export class SyncRun {
         cost_usd: Math.round(summary.costUsd * 100) / 100,
         stopped_at_cap: summary.stoppedAtCap,
         trigger,
+        gh_requests: quota.requests,
+        // Absent, not a made-up number, when no answer during the sync carried that limit.
+        ...(quota.lowestPercent.core !== undefined ? { gh_core_remaining_pct: quota.lowestPercent.core } : {}),
+        ...(quota.lowestPercent.graphql !== undefined ? { gh_graphql_remaining_pct: quota.lowestPercent.graphql } : {}),
       });
       if (!hasCompletedFirstSync(this.deps.store)) {
         markFirstSyncCompleted(this.deps.store);

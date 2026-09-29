@@ -11,13 +11,14 @@ export { GitHubWrites, type WriteContext, type WriteResult } from './writes/gith
 export { ActionLog } from './writes/action-log.ts';
 export { catchUpCapFromEnv, createEngine, pingCapFromEnv, type CreateEngineOptions } from './create.ts';
 export { AutoSyncSchedule, DEFAULT_AUTO_SYNC_MINUTES, type AutoSyncOptions } from './auto-sync.ts';
+export { GitHubQuota, quotaFetch, type QuotaRunStats } from './github-quota.ts';
 export { CATCH_UP_CALLS_PER_DAY } from './catch-up/catch-up-cap.ts';
 export { AgentCallLog, ACTION_RUN_ID, SWEEP_RUN_ID } from './agent-call-log.ts';
 export { claudeDirFromEnv, DEFAULT_COLLECT_BUDGET, SESSION_DAYS } from './work-context/collector.ts';
 export { DEFAULT_SWEEP_SKIP, resolveSweepSkip, sweepSkipFromEnv } from './work-context/skip-list.ts';
 export { UserConfigFile, type UserConfigData } from './user-config.ts';
 export { launchToolPath, systemPathDirs, type LaunchToolPathOptions } from './tool-path.ts';
-export { LivePoller, MAX_ERROR_BACKOFF_SECONDS, MAX_RATE_LIMIT_BACKOFF_SECONDS, RATE_LIMIT_BACKOFF_SECONDS } from './live/live-poller.ts';
+export { LivePoller, MAX_ERROR_BACKOFF_SECONDS, MAX_RATE_LIMIT_BACKOFF_SECONDS, QUOTA_PAUSE_NOTE, RATE_LIMIT_BACKOFF_SECONDS } from './live/live-poller.ts';
 export { PingThrottle, PING_TILE_WINDOW_MS, PINGS_BEFORE_SUMMARY } from './live/ping-throttle.ts';
 export { PING_DECISIONS_PER_DAY, PING_FRESH_MS } from './live/ping-decider.ts';
 export type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';

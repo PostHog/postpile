@@ -126,11 +126,12 @@ import {
   type SearchResult,
   type Viewer,
 } from '@postpile/core';
-import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
 import { FakeMcp } from './fake-mcp.ts';
+import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
@@ -163,6 +164,8 @@ export interface FakeEngineOptions {
   missingTools?: FakeToolProblem[];
   /** How long each step of the sample glance catch-up (queued, then writing) takes. Tests pass 0. */
   catchUpStepMs?: number;
+  /** POSTPILE_FAKE_QUOTA: a GitHub quota that is low or nearly used (see fake-quota.ts). */
+  quota?: FakeQuotaLevel | null;
 }
 
 /** One step of the fake sync: what runs, calls it plans, calls that come back by its end. */
@@ -245,6 +248,7 @@ export class FakeEngine implements EngineService {
   private livePoller: LivePoller | null = null;
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUp: FakeCatchUp;
+  private readonly quota: GitHubQuota;
   private readonly now: () => Date;
   private readonly snoozes = new Map<string, Snooze>();
   private readonly chats = new Map<string, ChatMessage[]>();
@@ -275,6 +279,7 @@ export class FakeEngine implements EngineService {
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);
+    this.quota = fakeQuota(options.quota ?? null, this.now);
     this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
@@ -1367,7 +1372,7 @@ export class FakeEngine implements EngineService {
     if (this.livePoller) {
       return;
     }
-    this.livePoller = new LivePoller(() => this.pollOnce(), systemTimers, options);
+    this.livePoller = new LivePoller(() => this.pollOnce(), systemTimers, options, this.quota);
     this.livePoller.start();
   }
 
@@ -1379,11 +1384,13 @@ export class FakeEngine implements EngineService {
   async livePollStatus(): Promise<LivePollStatus> {
     // The renderer asks this every 5s from load: the sample catch-up starts once someone watches, so it can be seen.
     this.catchUp.seedOnce();
+    const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
-      ...(this.livePoller?.currentStatus() ?? OFF_POLL_STATUS),
+      ...poll,
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUp.changes(),
+      githubQuota: this.quota.view(poll.intervalSeconds),
     };
   }
 
@@ -1392,7 +1399,7 @@ export class FakeEngine implements EngineService {
     if (this.autoSync) {
       return;
     }
-    const target = { isSyncing: () => this.syncing !== null, sync: () => this.sync() };
+    const target = { isSyncing: () => this.syncing !== null, pausedUntil: () => this.quota.backgroundPausedUntil(), sync: () => this.sync() };
     this.autoSync = new AutoSyncSchedule(target, systemTimers, options, (line) => console.log(line));
     this.autoSync.start();
   }

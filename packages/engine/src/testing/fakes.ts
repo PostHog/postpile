@@ -22,6 +22,7 @@ import { putBackNotTaken } from '../actions/local-change.ts';
 import { AgentCallLog } from '../agent-call-log.ts';
 import { Engine } from '../engine.ts';
 import { loadSetupFlag, saveSetupFlag } from '../setup/setup-flag.ts';
+import { GitHubQuota } from '../github-quota.ts';
 import { ToolHealth } from '../tools/tool-health.ts';
 import { MarkReadQueue } from '../mark-read-queue.ts';
 import { ActionLog } from '../writes/action-log.ts';
@@ -92,9 +93,12 @@ export class FakeReader implements GitHubReader {
   /** Thrown by the next listNotifications, then cleared. */
   failNext: Error | null = null;
   notificationCalls = 0;
+  /** Runs on every listNotifications, e.g. to note the rate-limit headers a real answer carries. */
+  onListNotifications: (() => void) | null = null;
 
   async listNotifications(conditions: NotificationConditions): Promise<NotificationsResult> {
     this.notificationCalls += 1;
+    this.onListNotifications?.();
     if (this.failNext) {
       const error = this.failNext;
       this.failNext = null;
@@ -331,6 +335,8 @@ export interface Harness {
   commands: FakeCommands;
   tools: ToolHealth;
   telemetry: FakeTelemetry;
+  /** On the harness timers; tests feed it readings with note(). */
+  quota: GitHubQuota;
 }
 
 export interface HarnessOptions {
@@ -391,6 +397,10 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const commands = new FakeCommands();
   const tools = new ToolHealth({ commands: commands.run, now, path: () => '/usr/bin', isExecutable: commands.isExecutable, claudeBinary: 'claude', log: () => {} });
   const telemetry = options.telemetry ?? new FakeTelemetry();
+  const quota = new GitHubQuota(
+    () => timers.now(),
+    (resource, level) => telemetry.capture('github_quota_low', { resource, level }),
+  );
   const engine = new Engine({
     store,
     reader,
@@ -411,6 +421,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     mcpLauncher: options.mcpLauncher ?? null,
     tools,
     telemetry,
+    quota,
   });
-  return { engine, store, reader, writer, writes, runner, agent, timers, commands, tools, telemetry };
+  return { engine, store, reader, writer, writes, runner, agent, timers, commands, tools, telemetry, quota };
 }

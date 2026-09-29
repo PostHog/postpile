@@ -1,6 +1,7 @@
 import { OFF_POLL_STATUS, type LivePollStatus, type Timers } from '@postpile/core';
 import { GitHubError } from '@postpile/github';
 import { errorText } from '../errors.ts';
+import type { GitHubQuota } from '../github-quota.ts';
 import type { LivePollOptions, PollCycle } from './poll-cycle.ts';
 import { PingThrottle } from './ping-throttle.ts';
 
@@ -9,6 +10,8 @@ export const RATE_LIMIT_BACKOFF_SECONDS = 60;
 export const MAX_RATE_LIMIT_BACKOFF_SECONDS = 15 * 60;
 /** Other failures (network, 5xx) back off from the interval up to this. */
 export const MAX_ERROR_BACKOFF_SECONDS = 5 * 60;
+/** The footer's "live · paused: ..." while the GitHub quota is nearly used. */
+export const QUOTA_PAUSE_NOTE = 'GitHub quota nearly used';
 
 function isoAt(ms: number): string {
   return new Date(ms).toISOString();
@@ -20,7 +23,9 @@ function isoAt(ms: number): string {
  * After or X-RateLimit-Reset when GitHub says, doubling from a minute when
  * not) and on errors, waits while a full sync runs, and hands grouped pings
  * to onNotify. GitHub's X-Poll-Interval is logged and shown, not obeyed:
- * the configured interval wins (a 304 costs no rate limit).
+ * the configured interval wins (a 304 costs no rate limit). The GitHub
+ * quota slows it to once a minute when low and pauses it until the reset
+ * when critical (DESIGN.md "GitHub quota").
  */
 export class LivePoller {
   private readonly throttle = new PingThrottle();
@@ -30,14 +35,19 @@ export class LivePoller {
   private running: Promise<void> | null = null;
   private stopped = true;
   private failures = 0;
+  /** Seconds between cycles the quota allowed last; logged when it changes. */
+  private pace: number;
 
   constructor(
     private readonly poll: () => Promise<PollCycle>,
     private readonly timers: Timers,
     private readonly options: LivePollOptions,
+    /** Null: no quota rules, e.g. in tests that do not care. */
+    private readonly quota: GitHubQuota | null = null,
   ) {
     this.log = options.log ?? ((message) => console.log(message));
     this.status = { ...OFF_POLL_STATUS, intervalSeconds: options.intervalSeconds };
+    this.pace = options.intervalSeconds;
   }
 
   /** The first cycle runs after one interval, so the app's start sync goes first. */
@@ -87,13 +97,44 @@ export class LivePoller {
     }, seconds * 1000);
   }
 
+  /** The quota is nearly used: no request until it resets. Logged once per pause. */
+  private waitForQuota(untilMs: number): void {
+    const seconds = Math.max(this.options.intervalSeconds, Math.ceil((untilMs - this.timers.now()) / 1000));
+    if (this.status.note !== QUOTA_PAUSE_NOTE) {
+      this.log(`live poll: paused until ${isoAt(untilMs)}, GitHub quota nearly used (${this.quota?.describe() ?? 'unknown'})`);
+    }
+    this.status.state = 'blocked';
+    this.status.note = QUOTA_PAUSE_NOTE;
+    if (!this.stopped) {
+      this.schedule(seconds);
+    } else {
+      this.status.state = 'off';
+    }
+  }
+
+  /** Seconds to the next cycle when nothing failed: the interval, or longer while the quota is low. */
+  private nextDelay(): number {
+    const seconds = this.quota?.pollSeconds(this.options.intervalSeconds) ?? this.options.intervalSeconds;
+    if (seconds !== this.pace) {
+      this.log(`live poll: every ${seconds}s, GitHub quota ${this.quota?.describe() ?? 'unknown'}`);
+      this.pace = seconds;
+    }
+    return seconds;
+  }
+
   private async cycle(): Promise<void> {
     this.clearTimer();
+    const pausedUntil = this.quota?.pollPausedUntil() ?? null;
+    if (pausedUntil !== null) {
+      this.waitForQuota(pausedUntil);
+      return;
+    }
     this.status.state = 'polling';
     this.status.nextPollAt = null;
-    let delay = this.options.intervalSeconds;
+    let delay: number;
     try {
       this.record(await this.poll());
+      delay = this.nextDelay();
     } catch (error) {
       delay = this.backOff(error);
     }

@@ -67,6 +67,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
 - `POSTPILE_FAKE_UPDATE=0`: with `POSTPILE_FAKE=1`, no sample update in the title bar (it shows one by default)
 - `POSTPILE_FAKE_MISSING`: with `POSTPILE_FAKE=1`, simulates missing tools for UI checks (comma separated: `gh`, `gh-auth`, `gh-token`, `gh-offline`, `claude`, `claude-auth`, `claude-limit`)
+- `POSTPILE_FAKE_QUOTA`: with `POSTPILE_FAKE=1`, `low` or `critical` simulates a GitHub quota that is low or nearly used
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
