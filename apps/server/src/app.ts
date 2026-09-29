@@ -236,6 +236,8 @@ export function createApp(
   });
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
+  // The sidebar's Finished drawer. Before /api/topics/:id, which would take "finished" as an id.
+  app.get('/api/topics/finished', async (c) => c.json(await engine.listFinishedTopics()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
   // The title bar's repo menu. Scope and quiet repos are kept in meta; local, never GitHub writes.
   app.get('/api/repos', async (c) => c.json(await engine.listRepos()));

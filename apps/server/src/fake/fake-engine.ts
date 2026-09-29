@@ -10,6 +10,7 @@ import type {
   Feedback,
   FeedbackInput,
   FeedbackKind,
+  FinishedTopic,
   GitHubWritesChange,
   CleanupAge,
   InboxCleanupView,
@@ -97,6 +98,7 @@ import {
   withQuietRepo,
   debugEventLines,
   emptyAgentCallStats,
+  FINISHED_TOPICS_MS,
   fixedClaimNote,
   isMergeApprovedMove,
   OFF_POLL_STATUS,
@@ -710,6 +712,22 @@ export class FakeEngine implements EngineService {
     this.cleanupProminent = false;
     this.cleanupHiddenUntil = new Date(this.now().getTime() + CLEANUP_SNOOZE_DAYS * 24 * 3_600_000).toISOString();
     return ok(`Hidden for ${CLEANUP_SNOOZE_DAYS} days`);
+  }
+
+  /** Retired sample topics from the last 30 days, newest first, like the engine. */
+  async listFinishedTopics(): Promise<FinishedTopic[]> {
+    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
+    const memberTopicIds = [...this.data.membership.values()];
+    return this.data.topics
+      .filter((topic) => topic.status === 'retired' && topic.updatedAt >= since)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+        area: topic.area,
+        retiredAt: topic.updatedAt,
+        prCount: memberTopicIds.filter((topicId) => topicId === topic.id).length,
+      }));
   }
 
   async getViewer(): Promise<ViewerView> {

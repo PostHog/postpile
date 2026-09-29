@@ -13,6 +13,7 @@ import type {
   GitHubWritesStatus,
   InboxCleanupView,
   PrDetail,
+  FinishedTopic,
   RepoOverview,
   SearchResult,
   TopicDetail,
@@ -136,6 +137,19 @@ describe('server routes over the fake engine', () => {
     expect(topics.find((item) => item.topic.id === 'topic-frontend-build')?.group).toBe('quiet');
   });
 
+  it('lists finished topics apart from the sidebar topics, and opens one like any topic', async () => {
+    const app = appWithFake();
+
+    const finished = (await (await app.request('/api/topics/finished')).json()) as FinishedTopic[];
+    const topics = (await (await app.request('/api/topics')).json()) as TopicListItem[];
+
+    expect(finished.map((topic) => `${topic.id} ${topic.prCount}`)).toEqual(['topic-cache-warmer 1']);
+    expect(topics.map((item) => item.topic.id)).not.toContain('topic-cache-warmer');
+    const detail = (await (await app.request('/api/topics/topic-cache-warmer')).json()) as TopicDetail;
+    expect(detail.topic.status).toBe('retired');
+    expect(detail.tiles.map((view) => view.tile.id)).toEqual(['pr:acme/app#1840']);
+  });
+
   it('rechecks a memory line and validates the body', async () => {
     const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
     const headers = { [TOKEN_HEADER]: TOKEN, 'content-type': 'application/json' };
@@ -152,7 +166,9 @@ describe('server routes over the fake engine', () => {
     const times = rows.map((row) => row.thread.updatedAt);
     expect(times).toEqual([...times].sort().reverse());
     const kinds = new Set(rows.map((row) => row.landing.kind));
-    expect(kinds).toEqual(new Set(['tile', 'not_pr', 'pr_not_synced']));
+    expect(kinds).toEqual(new Set(['tile', 'not_pr', 'pr_not_synced', 'topic_hidden']));
+    // The retired sample topic lists no tiles, so its thread lands nowhere visible.
+    expect(rows.find((row) => row.prKey === 'acme/app#1840')?.landing).toMatchObject({ kind: 'topic_hidden', topicId: 'topic-cache-warmer' });
     const depot = rows.find((row) => row.prKey === 'acme/app#1902');
     expect(depot?.landing).toMatchObject({ kind: 'tile', topicId: 'topic-depot', tileId: 'stack:acme/app#1851' });
     expect(depot?.recentEvents.length).toBeGreaterThan(0);

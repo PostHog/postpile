@@ -9,6 +9,7 @@ import {
   buildTileView,
   compareTopicUrgency,
   displayState,
+  FINISHED_TOPICS_MS,
   isMergeApprovedMove,
   isPrInQuietRepo,
   isQuietTile,
@@ -29,6 +30,7 @@ import {
   whoseTurn,
   type FactQuery,
   type FactView,
+  type FinishedTopic,
   type CatchUpRunState,
   type GlanceGap,
   type GlanceState,
@@ -300,6 +302,22 @@ export class ReadModels {
       });
     }
     return items.sort(compareTopics);
+  }
+
+  /** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. Ignores the repo scope. */
+  listFinishedTopics(): FinishedTopic[] {
+    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
+    return this.store.topics
+      .list()
+      .filter((topic) => topic.status === 'retired' && topic.updatedAt >= since)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+        area: topic.area,
+        retiredAt: topic.updatedAt,
+        prCount: this.store.memberships.listForTopic(topic.id).length,
+      }));
   }
 
   /** The title bar's repo menu: topics and PRs per repo, counted over every topic, not the scope. */

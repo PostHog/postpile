@@ -5,7 +5,7 @@ import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { topicWithPrs } from './testing/topics.ts';
 
-/** Four weeks after the fixture PRs' activity, so the 14 quiet days have passed. */
+/** Four weeks after the fixture PRs' activity, so the 3 quiet days have passed. */
 const MONTH_LATER = new Date('2026-09-30T12:00:00Z');
 
 function finishedDossier(): Dossier {
