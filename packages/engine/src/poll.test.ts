@@ -173,6 +173,24 @@ describe('Engine.pollOnce', () => {
     expect(h.store.pingDecisions.listRecent(1)[0]?.source).toBe('fallback');
   });
 
+  it('asks only about the PRs it just fetched, not the backlog without a topic', async () => {
+    const h = makeHarness();
+    const backlog = await syncedPr(h, 1);
+    const fresh = reviewRequestedPr(3, { updatedAt: LATER });
+    h.reader.addPr(fresh, makeThreadFor(fresh, { updatedAt: LATER }));
+    h.reader.etag = 'etag-2';
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: fresh.key, kind: 'new', name: 'Depot', reason: 'runners' }] });
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    const prompts = h.runner.promptsFor('topic_assignment');
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain(`${fresh.key} "`);
+    expect(prompts[0]).not.toContain(`${backlog.key} "`);
+    expect(h.store.memberships.listUnassignedPrKeys()).toEqual([backlog.key]);
+  });
+
   it('never writes to GitHub and leaves the thread unread', async () => {
     const h = makeHarness();
     const pr = await syncedPr(h, 1);

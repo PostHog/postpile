@@ -189,6 +189,11 @@ export class RunnerAgentService implements AgentService {
       if (!wanted.has(assignment.prKey) || assigned.has(assignment.prKey)) {
         continue;
       }
+      // An old or misbehaving model may still say "unsorted": the PR counts as
+      // missing, so the engine asks about it again instead of parking it.
+      if (assignment.kind === 'unsorted') {
+        continue;
+      }
       if (assignment.kind === 'existing' && !topicIds.has(assignment.topicId)) {
         continue;
       }

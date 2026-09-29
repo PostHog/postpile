@@ -71,6 +71,21 @@ describe('RunnerAgentService.assignTopics', () => {
     expect(runner.requests[0]?.model).toBe('claude-sonnet-5-5');
   });
 
+  it('drops "unsorted" answers without failing the batch, so the engine asks again', async () => {
+    const { runner, service } = setup();
+    runner.answer('topic_assignment', {
+      assignments: [
+        { prKey: 'acme/app#1', kind: 'unsorted', reason: 'fits nowhere' },
+        { prKey: 'acme/app#2', kind: 'new', name: 'Billing rewrite', reason: 'new work' },
+      ],
+    });
+    const prs = [1, 2].map((number) => makePr({ ref: { repo: 'acme/app', number } }));
+
+    const result = await service.assignTopics({ prs, viewer, topics: [], context: emptyContext });
+
+    expect(result).toEqual([{ prKey: 'acme/app#2', kind: 'new', name: 'Billing rewrite', reason: 'new work' }]);
+  });
+
   it('does not call the model without PRs', async () => {
     const { runner, service } = setup();
     expect(await service.assignTopics({ prs: [], viewer, topics: [], context: emptyContext })).toEqual([]);

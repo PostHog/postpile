@@ -79,9 +79,7 @@ export interface TopicAssignmentInput {
 
 export type TopicAssignment =
   | { prKey: PrKey; kind: 'existing'; topicId: string; reason: string }
-  | { prKey: PrKey; kind: 'new'; name: string; reason: string }
-  /** No topic fits and a new one is not worth it yet: left in Unsorted until after the next consolidation. */
-  | { prKey: PrKey; kind: 'unsorted'; reason: string };
+  | { prKey: PrKey; kind: 'new'; name: string; reason: string };
 
 export interface SetGroupingInput {
   topic: Topic;

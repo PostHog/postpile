@@ -194,16 +194,24 @@ and only recomputes on change.
 | event overrides | `pr_event.override_*` with reason | kept across re-derivation |
 | other agent answers | not cached: topic assignment and event overrides only run for new PRs and events, drafts and chat run on request | - |
 
-Topic assignment: PRs without a topic go to the agent in batches of 20,
+Topic assignment: PRs without a topic go to the agent in batches of 40,
+sorted by repo, then head branch and title so related PRs share a request,
 together with the list of existing topics (name, summary and dossier brief).
-It picks one or names a new topic. **New topics are created directly**
-(otherwise a first sync would leave everything unsorted); renames, merges and
+**Every PR gets a topic**: it picks an existing one or names a new one; there
+is no "leave it unsorted" answer. **New topics are created directly**, without
+a cap (the prompt keeps them few, see "Topic assignment against
+fragmentation"); a new name that matches an offered topic (any case) reuses
+it, so a second batch finds what the first created. Renames, merges and
 splits are proposals only. They come out of the consolidation job and are
 filed as pending `topic_proposal` rows (never the same idea twice, so a
 rejected rename stays rejected). Nothing produces `new_topic` proposals yet,
 since new topics are created directly.
 Until the agent has placed a PR it shows up in a virtual **Unsorted** topic
-(id `unsorted`, never stored), so `--no-agent` syncs are still usable.
+(id `unsorted`, never stored, "Waiting for the agent. Each sync places these
+in a topic."), so `--no-agent` syncs are still usable. PRs land there only
+when the agent could not place them yet: the call failed twice, the call cap
+was hit, or claude is missing. Nothing is parked: every sync asks about every
+PR without a topic again.
 
 Driver and user role are derived without the agent: driver = most frequent
 author among the topic's PRs; role = driver if that is the user, else reviewer
@@ -357,7 +365,13 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    fetched PR (`FactRepo.listActiveTouchingPrs`). `invalidate` outcomes are
    closed right away (a merged PR ends "alice works on #12"); `stale` ones are
    marked and go to the topic's next dossier update as the recheck list.
-3. **topics** (`topic_assignment`, batches of 20): as v1, but each offered
+3. **topics** (`topic_assignment`, batches of 40, one after the other so
+   each sees the topics the ones before created): PRs an answer leaves out,
+   answers invalidly (unknown topic id) or calls "unsorted" (old or
+   misbehaving model; the schema still parses it) go into one retry batch in
+   the same sync, like glances. A failed call counts all its PRs as missing.
+   Still missing after that: one error line, and the next sync asks again.
+   As v1, but each offered
    topic carries `brief` = `dossierBrief(latest dossier)` (goal, status,
    driver, max 400 chars), not only name and summary. Recently retired topics
    (30 days) are offered too, their brief prefixed "Finished, retired.";
@@ -673,8 +687,11 @@ stored and before a dossier goes into a glance prompt
 ### Consolidation ("sleep-time")
 
 `consolidate(options)` on EngineService, CLI `consolidate [--if-due]
-[--max-agent-calls n]`, and the desktop app calls it with `onlyIfDue` after
-a sync once the user has been idle for a while. Due = 24h since the last run
+[--max-agent-calls n]`, and the desktop app asks every 30 minutes
+(`ConsolidationSchedule` in the main process) with `onlyIfDue` and the sync
+call cap. The engine waits for a running sync or poll first, so they never
+overlap; a run or a failure is logged, never thrown. Placing PRs is not its
+job: topic assignment places every PR itself. Due = 24h since the last run
 and at least one new dossier version since. One `consolidation` call (sonnet)
 over all active topics (split into chunks of 40 topics when needed).
 
@@ -1142,7 +1159,7 @@ A PR that is a stack layer is never shown apart from its stack.
 - **Topic assignment**: a waiting layer whose stack already has a topic
   joins it without an agent call (reason "joins its stack"). Of a stack
   without a topic only the lowest waiting layer is asked about; the other
-  waiting layers follow the answer (or its deferral).
+  waiting layers follow the answer.
 - **Moves**: "Wrong topic" on one layer moves (or re-sorts) every layer
   that is tracked or has a topic; an accepted split or new-topic proposal
   brings whole stacks along (`Board.movesWith`).
@@ -1187,10 +1204,17 @@ work it is.
   into one row each.
 
 Topic assignment against fragmentation (first real sync: 61 topics for
-142 PRs): the prompt shows member counts and asks for existing topics
-first, a new one only for 2+ PRs or a clear new initiative, `unsorted`
-otherwise; at most 5 new topics per sync. Unsorted PRs are offered again
-after the next consolidation.
+142 PRs): the prompt shows member counts and asks hard for existing topics
+first. When none fits, a new topic may hold a single PR, but it is named
+after the ongoing work or area (2 to 6 words, broad enough for follow-up
+PRs, e.g. "Storybook visual review", "Desktop app release"), never after
+the PR's title; PRs in the same request that belong together share the new
+name. No cap and no deferral (dropped 2026-09-29: the cap and the
+"unsorted" answer left PRs lingering in Unsorted until a consolidation the
+desktop app never ran, and deferred lone PRs never met in one request).
+Small topics are consolidation's job: it proposes merging 1-2 PR topics
+into a bigger one. Migration 015 deleted the old `topic_deferred:*` meta
+rows.
 
 ## Tile faces: why it's here, status, whose turn
 
@@ -1837,7 +1861,9 @@ threads moved since their last fetch, newest first, at most 24 (two GraphQL
 batches; the rest wait for the next change or the full sync). Snapshots,
 events with rule loudness and the event log are written exactly as in the
 full sync (`GitHubSync.poll`), retired topics revive, and PRs new to the app
-get a topic (one `topic_assignment` call at most). Tiles are derived on read,
+get a topic (one `topic_assignment` call at most, asking only about the
+PRs that cycle fetched; the backlog without a topic stays with the full
+sync, and the poll never runs the retry batch). Tiles are derived on read,
 so they update by themselves; the renderer refetches when `changeCount` in
 `GET /api/live` moves. Dossiers, glances, sets, stack layers and the event
 second opinion stay with the full sync, which still finds the new events
@@ -2220,7 +2246,8 @@ preflight and does not know the token, so CORS stays open.
     [yes]
   - one initiative per topic, or initiatives spanning topics [one per topic]
   - consolidation cadence: due after 24h and at least one new dossier version, triggered by
-    the desktop app when idle and by `consolidate` in the CLI [yes]
+    the desktop app when idle and by `consolidate` in the CLI [yes; the desktop app checks
+    every 30 minutes since 2026-09-29, no idle detection]
   - dossier history: keep the newest 50 versions per topic, pruned on save [50]
   - glance batches with 18 PRs per call [yes; moved from haiku to sonnet after a side-by-side run]
   - dossier driver overrides "most frequent author" for the topic driver [yes]

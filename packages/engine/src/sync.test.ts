@@ -196,12 +196,14 @@ describe('Engine.sync with the agent', () => {
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
     h.runner.answer('topic_assignment', 'not json at all');
+    h.runner.answer('topic_assignment', 'not json either');
 
     const report = await h.engine.sync({ agentJobs: ['topics', 'glances'] });
 
-    expect(report.errors).toHaveLength(1);
-    expect(report.errors[0]).toMatch(/^topic assignment/);
-    expect(report.agentCallStats.byKind.topic_assignment).toMatchObject({ calls: 1, failed: 1 });
+    // Both calls fail (first try and retry), then one line says the PR waits for the next sync.
+    expect(report.errors).toHaveLength(3);
+    expect(report.errors.every((line) => line.startsWith('topic assignment'))).toBe(true);
+    expect(report.agentCallStats.byKind.topic_assignment).toMatchObject({ calls: 2, failed: 2 });
     expect((await h.engine.getPr(pr.key))?.glance?.verdict).toBe('LOOKS_SAFE');
   });
 

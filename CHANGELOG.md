@@ -5,6 +5,8 @@ Notable changes per release. Versions follow semver, with `-alpha.N` pre-release
 ## 0.1.0-alpha.1 (unreleased)
 
 - Fewer macOS permission prompts. The app no longer runs your login shell at launch to find PATH (that ran your whole `.zshrc` in PostPile's name); it reads `/etc/paths` and `/etc/paths.d` instead and adds the usual install folders. Tools elsewhere (mise, asdf) go in `toolPath` in `~/.config/postpile/config.json`. `gh` and `claude` run in an empty app folder, claude calls skip CLAUDE.md, auto memory, skills, the autoupdater and claude.ai connectors, and the work context sweep stays out of Documents, iCloud, cloud drives, other apps' containers and `/Volumes`. FYI: old grants can be cleared with `tccutil reset All com.posthog.postpile`.
+- Every PR now lands in a topic on the sync that sees it: the agent picks an existing topic or starts a new one named after the work. Unsorted only holds PRs the agent could not get to yet (call cap, claude missing, failed call), and the next sync places them. PRs parked in Unsorted by an earlier build are picked up on the next sync.
+- The app runs its daily memory tidy-up (merge proposals for small topics, fact merges, retiring finished topics) by itself when it is due.
 
 ## 0.1.0-alpha.0 (2026-09-28)
 
