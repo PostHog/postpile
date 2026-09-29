@@ -1710,6 +1710,20 @@ avatars and filters", QueuesB2).
   search. In the open topic, matching tiles get the warm strip fill and a
   honey line, the rest fade to 45% but stay. Plain UI state, not in the
   back / forward history. The avatars come from `GET /api/viewer`.
+- **Selection stays put**: what the user picked stays on screen until the
+  user navigates. An approve, mark-read, refetch, live poll or sync never
+  moves it, even when the open topic then leaves the queue filter or the
+  search, or the open tile turns read or done. The "first match" fallback
+  only runs when the user picks something or changes a filter (the queue
+  filter, or the search once its new results are in), or when the pick is
+  really gone (topic deleted or merged). Meanwhile the open topic stays
+  listed in the sidebar in its normal place, the open tile stays in the
+  grid (search matches, the Unread list, the Done fold opens for it), and
+  a tile id that disappears (set regrouped, PR left a stack, single to set)
+  is followed by its picked PR to the tile that holds it now. None of this
+  adds history entries. Why: after an approve the user often moves on to
+  the next tile they had in sight; a jump to "the next best item" loses
+  their place (2026-09-29). Pure rules in `lib/selection.ts`.
 - **Topic column**: the whole topic, tiles sorted by `TileView.tier` (the
   most urgent tier among its PRs), needs reply first, rest last; inside a
   tier the old order (unread before open; a read tile that is still your

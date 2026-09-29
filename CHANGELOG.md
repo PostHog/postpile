@@ -30,6 +30,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Fewer macOS permission prompts. The app no longer runs your login shell at launch to find tools (that ran your whole `.zshrc` in PostPile's name); it reads `/etc/paths` and `/etc/paths.d` and adds the usual install folders. Tools installed elsewhere (mise, asdf) go in `toolPath` in `~/.config/postpile/config.json`. `gh` and `claude` run in an empty app folder, agent calls leave out your CLAUDE.md, memory, skills and claude.ai connectors, and the work context sweep stays out of Documents, iCloud, cloud drives, other apps' data and `/Volumes`. FYI: old grants can be cleared with `tccutil reset All com.posthog.postpile`.
 - Stacks no longer go missing. A stack whose bottom PR merged stays one stack, a closed attempt no longer pushes the open PRs that replaced it out of the stack, and a stack with a PR in a retired topic still shows in its active topic. Stacks inside a set show as stacks. PRs from forks never join a stack by branch name.
 - No more stray focus borders on tiles after going back and forward.
+- Approving (or marking read) no longer jumps to another topic or tile. The picked topic and tile stay on screen until you pick something else or change a filter, even when the topic leaves the Review filter or the tile turns done or read. The tile also stays in the Unread list while it is selected.
 
 ## 0.1.0-alpha.0 (2026-09-28)
 

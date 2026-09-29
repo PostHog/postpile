@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- Selection stays put (2026-09-29, DESIGN.md "Queue sections" › Selection stays
+  put): after an approve the view no longer jumps to the next topic or
+  tile. `lib/selection.ts` keeps what was on screen per nav entry and
+  filter key (`KeptView`, queue filter plus the query the search results
+  answer); `visibleTopic` shows the kept topic before the first match,
+  `listedTopics` keeps it in the sidebar, `resolveSelection` follows a
+  vanished tile id by its PR, and the grid keeps the selected tile in
+  search matches and in the Unread list. Checked in fake mode: approve
+  under Review (used to jump to Move CI to Depot, now stays and the done
+  tile stays selected in the open Done fold), approve inside the Turbo set
+  (never jumped in fake mode; sample tile ids do not change), approve with
+  Unread on (tile used to vanish from the list). Open: clearing a filter
+  goes back to the picked topic's first tile, not the tile last open under
+  the filter (entries are not pinned while narrowed).
 - Honest mark button, Snooze after read (2026-09-29, DESIGN.md "Tile
   faces" › After a mark-read): core `tileAfterMarkRead` runs `isPrDone` and
   `whoseTurn` over the data as a mark-read leaves it, shipped as
@@ -881,6 +895,12 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Selection never moves on its own** (2026-09-29): after an action or a
+  refresh the selection stays where it is; the fallback to the first match
+  only runs when the user changes the filter or picks something, or the
+  pick is gone. A topic kept this way stays listed in the sidebar as usual,
+  no extra marker.
 
 - **Mark read vs Mark done honest; after read with your move left, Snooze
   is primary; no re-sorting** (2026-09-29): "Mark done" only where a

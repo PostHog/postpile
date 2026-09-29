@@ -323,9 +323,14 @@ Tiles stay in one column (DESIGN.md "Three-pane balance").
 "Your instructions", the notifications debug list, which also takes the
 detail pane's column), and the picked
 tile + PR. Everything else is
-derived on render (`resolveSelection`): a missing pick falls back to the first
-topic, its first tile and that tile's lead PR. Don't mirror server data into
-`useState`.
+derived on render (`resolveSelection` in `lib/selection.ts`): a missing
+pick falls back to the first topic, its first tile and that tile's lead PR;
+a vanished tile id follows its PR to the tile that holds it now. Don't
+mirror server data into `useState`. The one exception is `KeptView`: what
+was on screen for the current entry and filter key (queue filter plus the
+query the shown search results answer). While both stay the same it is
+shown again even when it no longer matches, so a refetch after an action
+never moves the selection; a new pick or a filter change drops it.
 
 The picks live in a back / forward history (`lib/history.ts`, hook in
 `lib/use-nav-history.ts`): every user pick goes through `go()` in `App.tsx`,
@@ -349,7 +354,9 @@ The title bar search filters, it has no result list: `GET /api/search`
 (matcher `searchTopics` in core) returns matching topics and tiles, the
 sidebar and tile grid hide the rest (`lib/search.ts`). When the filter hides
 the picked topic, the first match shows instead; that is derived, not a
-history entry, and clearing the filter brings the pick back.
+history entry, and clearing the filter brings the pick back. Only a filter
+change does that: a topic that drops out of the results after a refetch
+stays on screen and listed (`KeptView`).
 
 ## Electron shell
 
