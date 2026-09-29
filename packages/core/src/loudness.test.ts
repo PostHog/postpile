@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeEvent, makePr, makeUserState, viewer } from './fixtures.ts';
-import { displayState, effectiveLoudness, isUnseenLoud, ruleLoudness, type LoudnessInput } from './loudness.ts';
+import { displayState, effectiveLoudness, findLoudnessRow, isUnseenLoud, ruleLoudness, type LoudnessInput } from './loudness.ts';
 
 function input(overrides: Partial<LoudnessInput>): LoudnessInput {
   return {
@@ -123,5 +123,37 @@ describe('ruleLoudness on drafts', () => {
     expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: ready }))).toEqual({ loudness: 'loud', reason: 'ready for your review' });
     expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: makePr({ author: 'rowan' }) })).loudness).toBe('quiet');
     expect(ruleLoudness(input({ kind: 'ready_for_review', actor: 'rowan', pr: makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'] }) })).loudness).toBe('loud');
+  });
+});
+
+describe('loudness table', () => {
+  it('has a row for every kind across the input partitions', () => {
+    const kindNames: Record<LoudnessInput['kind'], true> = {
+      mention: true, team_mention: true, review_requested: true, review_request_removed: true, reply_to_user: true,
+      question_to_user: true, comment: true, review_approved: true, review_changes_requested: true,
+      review_commented: true, commits_pushed: true, commits_after_approval: true, force_pushed: true, merged: true,
+      merged_without_review: true, closed: true, reopened: true, ready_for_review: true, converted_to_draft: true,
+      ci: true, deploy: true, merge_queue: true, bot_comment: true, look_closer: true,
+    };
+    const kinds = Object.keys(kindNames) as LoudnessInput['kind'][];
+    const prs = [makePr(), makePr({ author: viewer.login }), makePr({ isDraft: true }), makePr({ state: 'MERGED' })];
+    const gaps: string[] = [];
+    for (const kind of kinds) {
+      for (const actor of ['', 'viewer', 'bob']) {
+        for (const isBot of [false, true]) {
+          for (const pr of prs) {
+            for (const subject of [null, 'viewer', 'carol', 'acme/team-platform']) {
+              for (const flag of [false, true]) {
+                const candidate = input({ kind, actor, isBot, pr, subject, userRepliedAfter: flag, requestAnswered: flag });
+                if (!findLoudnessRow(candidate)) {
+                  gaps.push(`${kind}/${actor}/${isBot}/${subject}/${flag}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(gaps).toEqual([]);
   });
 });

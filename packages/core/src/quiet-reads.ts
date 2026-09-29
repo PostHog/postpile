@@ -6,10 +6,12 @@
 // engine from the tile. Rules only, no IO. DESIGN.md "Handled quietly" and
 // "You already dealt with it" have the reasons behind each rule.
 
+import { isAutomation } from './bots.ts';
 import type { NotificationLanding } from './debug-views.ts';
 import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
 import { isUnseenMergeWithoutReview } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
+import { reviewRequestTarget } from './review-request.ts';
 import type { IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
@@ -26,12 +28,11 @@ export const QUIET_READS_PER_RUN = 50;
 export const CI_ACTOR = 'CI';
 
 /**
- * Automation: a bot account (`isBot` when the event was built), or no actor
- * at all. CI results carry an empty actor and are flagged as bots already;
- * the empty check keeps any other actor-less event on the safe side.
+ * Automation by the shared rule (`isAutomation`): a bot-made review request
+ * that asks the viewer or their team is a person's ask, not bot activity.
  */
-export function isBotEvent(event: PrEvent): boolean {
-  return event.isBot || event.actor === '';
+function isAutomationOn(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
+  return isAutomation(event, reviewRequestTarget(event, pr), viewer);
 }
 
 /**
@@ -41,9 +42,9 @@ export function isBotEvent(event: PrEvent): boolean {
  * when nothing by someone else after the read is known (the thread turned
  * unread for a reason the app cannot see).
  */
-export function botOnlySinceRead(events: PrEvent[], lastReadAt: IsoTime, viewer: Viewer): PrEvent[] | null {
+export function botOnlySinceRead(pr: Pr, events: PrEvent[], lastReadAt: IsoTime, viewer: Viewer): PrEvent[] | null {
   const since = events.filter((event) => event.at > lastReadAt && !isOwnEvent(event, viewer));
-  if (since.length === 0 || !since.every(isBotEvent)) {
+  if (since.length === 0 || !since.every((event) => isAutomationOn(event, pr, viewer))) {
     return null;
   }
   return since;
@@ -138,7 +139,7 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (!prCoversThread(input)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const botEvents = botOnlySinceRead(events, thread.lastReadAt, viewer);
+  const botEvents = botOnlySinceRead(pr, events, thread.lastReadAt, viewer);
   if (botEvents === null) {
     return { kind: 'skip', why: 'human_activity' };
   }
@@ -232,7 +233,7 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
     return { kind: 'skip', why: 'nothing_known' };
   }
   const late = unread.filter((event) => event.at > touch.at);
-  if (!late.every(isBotEvent)) {
+  if (!late.every((event) => isAutomationOn(event, pr, viewer))) {
     return { kind: 'skip', why: 'activity_after' };
   }
   if (late.length > 0 && isOwnOpenPr(pr, viewer)) {

@@ -1,5 +1,6 @@
 import {
   isLiveProposal,
+  isRetiredSince,
   OUTSIDE_PROPOSAL_DAYS,
   proposalOutcome,
   proposalOutcomeAt,
@@ -35,7 +36,6 @@ import {
   topicQueues,
   topicUrgency,
   viewerOrgs,
-  whoseTurn,
   type FactQuery,
   type FactView,
   type FinishedTopic,
@@ -279,7 +279,7 @@ export class ReadModels {
       const states = tiles.map((tile) => board.stateOf(tile).kind);
       const urgency = topicUrgency(
         tiles.map((tile, index) => {
-          const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer, notYours: board.notYours });
+          const turn = board.turnOf(tile);
           const loudMembers = tile.members.filter((member) => !isPrInQuietRepo(member.prKey, settings));
           return {
             state: states[index] ?? 'open',
@@ -323,17 +323,16 @@ export class ReadModels {
   /** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. Ignores the repo scope. */
   listFinishedTopics(): FinishedTopic[] {
     const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
-    return this.store.topics
-      .list()
-      .filter((topic) => topic.status === 'retired' && topic.updatedAt >= since)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    const finished = this.store.topics.list().filter((topic) => isRetiredSince(topic, since));
+    return finished
       .map((topic) => ({
         id: topic.id,
         name: topic.name,
         area: topic.area,
-        retiredAt: topic.updatedAt,
+        retiredAt: topic.retiredAt ?? topic.updatedAt,
         prCount: this.store.memberships.listForTopic(topic.id).length,
-      }));
+      }))
+      .sort((a, b) => b.retiredAt.localeCompare(a.retiredAt));
   }
 
   /** The title bar's repo menu: topics and PRs per repo, counted over every topic, not the scope. */

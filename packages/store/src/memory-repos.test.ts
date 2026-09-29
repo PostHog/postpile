@@ -19,6 +19,7 @@ function makeTopic(overrides: Partial<Topic> = {}): Topic {
     name: 'Move CI to Depot',
     summary: '',
     summaryInputHash: null,
+    retiredAt: null,
     area: null,
     tailoring: '',
     driver: 'alice',

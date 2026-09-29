@@ -23,6 +23,8 @@ export function readOwnVersion(): string {
 }
 
 export interface EngineFromEnvOptions {
+  /** The app's version; defaults to this package's. The desktop app passes its own, which the bundle cannot read from here. */
+  appVersion?: string;
   /** Who takes the database lock: the server by default. */
   lockKind?: LockKind;
   /** The CLI's --read-only: read the database while another process holds it, no GitHub writes. */
@@ -63,7 +65,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
   return createEngine({
     lockKind: options.lockKind ?? 'server',
     withoutLock: options.withoutLock,
-    appVersion: readOwnVersion(),
+    appVersion: options.appVersion ?? readOwnVersion(),
     telemetry: options.telemetry,
     mcpLauncher: options.mcpLauncher,
   });

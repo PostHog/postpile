@@ -4,7 +4,7 @@ import { FakeEngine } from '@postpile/server';
 import { describe, expect, it } from 'vitest';
 import { InMemoryAgentRequests } from './agent-requests.ts';
 import type { PostPileReader } from './reads.ts';
-import { createMcpServer, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
+import { createMcpServer, staleServerNote, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
 
 /** Claude Code cuts tool descriptions and server instructions at this many characters, without a word. */
 const CLAUDE_CODE_CUT = 2048;
@@ -144,6 +144,7 @@ describe('PostPile MCP server', () => {
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
       lastSyncReport: () => engine.lastSyncReport(),
+      recordedAppVersion: async () => null,
       getTopic: async (topicId) => {
         const detail = await engine.getTopic(topicId);
         if (!detail || topicId !== 'topic-depot') {
@@ -158,6 +159,46 @@ describe('PostPile MCP server', () => {
     const client = await connected(reader);
     expect(await callText(client, 'topic', { topic: 'topic-depot' })).toContain('5 more tiles: topic(topic: "topic-depot", detail: "full")');
     expect(await callText(client, 'pr_context', { pr: 'acme/app#1911' })).toContain('44 more: topic(topic: "topic-depot", detail: "full")');
+  });
+
+  // Bug fixed 2026-09-29: pr_context printed the tile's move, so on a set it could name another PR's move.
+  it('prints the move of the PR asked about, not of its tile', async () => {
+    const engine = new FakeEngine();
+    const reader: PostPileReader = {
+      getPr: (key) => engine.getPr(key),
+      listTopics: (scope) => engine.listTopics(scope),
+      search: (query, scope) => engine.search(query, scope),
+      getViewer: () => engine.getViewer(),
+      lastSyncReport: () => engine.lastSyncReport(),
+      recordedAppVersion: async () => null,
+      getTopic: async (topicId) => {
+        const detail = await engine.getTopic(topicId);
+        const tileTurn = { kind: 'them' as const, who: 'ada', what: 'to merge on another PR', prKey: 'acme/app#1' };
+        return detail && { ...detail, tiles: detail.tiles.map((view) => ({ ...view, turn: tileTurn })) };
+      },
+    };
+    const client = await connected(reader);
+    const text = await callText(client, 'pr_context', { pr: 'acme/app#1911' });
+    // Only the "Its tile:" line names the tile's move.
+    expect(text.split('Its tile:')[0]).not.toContain('to merge on another PR');
+    expect(text).toMatch(/(Your move|Their move|Nobody's move)/);
+    expect(await callText(client, 'search_prs', { query: '1911' })).not.toContain('to merge on another PR');
+  });
+
+  it('asks for a reconnect when the app was updated underneath it', async () => {
+    const engine = new FakeEngine();
+    const updated = Object.assign(engine, { recordedAppVersion: async () => '0.12.0' });
+    const text = await callText(await connected(updated, { version: '0.11.1' }), 'whats_on_me');
+    expect(text).toMatch(/^Note: PostPile was updated to 0\.12\.0, but this MCP server still runs 0\.11\.1/);
+    expect(await callText(await connected(new FakeEngine(), { version: '0.11.1' }), 'whats_on_me')).not.toContain('reconnect');
+  });
+
+  it('says nothing about a reconnect while either version is unknown', async () => {
+    const recorded = (version: string | null) => ({ recordedAppVersion: async () => version });
+    expect(await staleServerNote(recorded(null), '0.11.1')).toBeNull();
+    expect(await staleServerNote(recorded('unknown'), '0.11.1')).toBeNull();
+    expect(await staleServerNote(recorded('0.12.0'), 'unknown')).toBeNull();
+    expect(await staleServerNote(recorded('0.11.1'), '0.11.1')).toBeNull();
   });
 
   it('searches PRs with paging and flat filters', async () => {

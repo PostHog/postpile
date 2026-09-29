@@ -1,17 +1,23 @@
 import { randomUUID } from 'node:crypto';
 import {
   DeferredQueue,
+  NO_READ_CHANGE,
   UNDO_WINDOW_MS,
   type ActionOrigin,
   type DeferredBatch,
   type IsoTime,
   type PendingThread,
   type PrKey,
+  type ReadChange,
+  type ThreadOutcome,
   type Timers,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import { errorText } from './errors.ts';
 import { notTakenDetail, type GitHubWrites } from './writes/github-writes.ts';
+import { markThreadReadIfUnchanged } from './writes/thread-mark-read.ts';
+
+export type { ThreadOutcome };
 
 /** Who queued a batch, for the action log. */
 export interface BatchOrigin {
@@ -19,13 +25,10 @@ export interface BatchOrigin {
   tileId: string | null;
 }
 
-/** What a mark-read changed in the app right away, so an undo (or parking the batch) can put it back. */
-export interface LocalChange {
-  eventIds: string[];
-  handledKeys: PrKey[];
-}
+/** What a mark-read changed in the app right away, so an undo (or parking the batch) can put it back (`planRead`'s change). */
+export type LocalChange = ReadChange;
 
-export const NO_LOCAL_CHANGE: LocalChange = { eventIds: [], handledKeys: [] };
+export const NO_LOCAL_CHANGE: LocalChange = NO_READ_CHANGE;
 
 /** One click's worth of mark-read. */
 export interface MarkReadRequest {
@@ -74,14 +77,6 @@ export type ThreadMarkedRead = (threadId: string, readAt: IsoTime) => void;
 export type ThreadNotTaken = (thread: PendingThread, local: LocalChange) => void;
 
 export const NEWER_ACTIVITY_REASON = 'activity after the last sync';
-
-/** What one thread's send came to. off: the lock closed while the batch was on its way, nothing was sent. */
-export type ThreadOutcome =
-  | { kind: 'sent' }
-  | { kind: 'observed' }
-  | { kind: 'skipped'; reason: string }
-  | { kind: 'failed'; error: string }
-  | { kind: 'off' };
 
 /** Who sends, for the log: the queue when a window ran out, the quit flush, or the user sending pending writes from the footer. */
 export interface SendContext {
@@ -154,22 +149,20 @@ export class MarkReadQueue {
     const logContext = { origin: context.origin, prKey: thread.prKey, tileId: context.tileId, batch: context.batchId };
     const log = (outcome: 'observed' | 'skipped', detail: string) =>
       this.writes.log.record({ action: 'mark_read', threadId: thread.id, ...logContext, outcome, detail });
-    const current = await this.reader.getThread(thread.id);
-    if (current === null || !current.unread) {
-      // Gone, or read somewhere else in the meantime: nothing to send.
-      this.onMarked(thread.id, current?.lastReadAt ?? thread.updatedAt);
+    const result = await markThreadReadIfUnchanged(this.reader, this.writes, thread, logContext);
+    if (result.kind === 'already_read') {
+      this.onMarked(thread.id, result.lastReadAt ?? thread.updatedAt);
       log('observed', 'already read on GitHub');
       return { kind: 'observed' };
     }
-    if (current.updatedAt > thread.updatedAt) {
+    if (result.kind === 'moved') {
       log('skipped', notTakenDetail(NEWER_ACTIVITY_REASON));
       return { kind: 'skipped', reason: NEWER_ACTIVITY_REASON };
     }
-    const result = await this.writes.markThreadRead(thread.id, logContext);
-    if (result === 'off') {
+    if (result.kind === 'off') {
       return { kind: 'off' };
     }
-    this.onMarked(thread.id, current.updatedAt);
+    this.onMarked(thread.id, result.readAt);
     return { kind: 'sent' };
   }
 

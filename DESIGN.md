@@ -51,7 +51,13 @@ verdict is needed, and Unsorted never retires. It runs after the digest, so
 the sync's own events count; the sync log line and `SyncReport.topicsRetired`
 say how many. Retiring is reversible: a new loud event on a member PR
 (`reviveRetiredTopics`, full sync and live poll) or a new PR assigned to it
-(retired topics stay on offer for 30 days) makes it active again. Retired
+(retired topics stay on offer for 30 days) makes it active again. Every
+status change goes through `nextTopicStatus` (engine: `changeTopicStatus`),
+and retiring records `retiredAt` (migration 020; before, "retired at" read
+`updatedAt`, which any rename moved). Loud means effective loudness: the
+full sync classifies new events first (retired topics' events included) and
+revives after, so an event the agent turned quiet brings nothing back. The
+live poll does not classify and still revives on the rule's loudness. Retired
 topics leave the sidebar list and wait in its Finished drawer (see "Queue
 sections"). Until 2026-09-29 only the daily consolidation retired topics,
 and only when the agent said finished and 14 quiet days had passed; most
@@ -135,7 +141,9 @@ team-devex" instead of the bot's name.
 **Tile state is derived, never stored**:
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
-- `snoozed`: a snooze is active and its condition is not met yet.
+- `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
+  yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); a push or CI snooze also
+  ends when its PR is merged or closed.
 - `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
   without their review they have not seen yet, see "Merged without your review"), or approved by
@@ -431,8 +439,8 @@ else watcher.
 Sets (`set_grouping`) run per topic with 2+ open PRs; hash = PRs + dissolved
 sets + topic feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active
 sets are not in the hash, they are the agent's own last answer. A set the
-agent keeps under the same title keeps its id (tile id, snooze and chat
-survive); sets it drops are deleted; dissolved sets are never brought back.
+agent keeps under the same title keeps its id (tile id and chat survive;
+snoozes are per PR and survive regrouping anyway); sets it drops are deleted; dissolved sets are never brought back.
 A set holds a stack whole or not at all (see "Stacks as one unit").
 The full job order is in the v2 sync flow below.
 
@@ -1581,7 +1589,8 @@ the visit.
 
 **The verdict pill follows the footer.** A multi-PR tile showed the lead
 PR's verdict ("Not yours" from the first PR) while the footer talked about
-another one. The lead PR (`leadPr`) now prefers the PR of the tile's turn when
+another one. The lead PR (core `leadPrKey`, shipped as
+`TileView.offers.leadPrKey`) now prefers the PR of the tile's turn when
 the turn is not `none`, then the newest unread reason, then the first open
 tracked PR.
 
@@ -1677,15 +1686,16 @@ updates it while I'm looking at it."
   (`prWhoseTurn`), `.afterRead` (core `prAfterMarkRead`: that PR's events
   seen, handled when tracked; never done for a pulled-in layer) and
   `.ownTeamRequests`.
-- Detail pane: `detailPr` / `prMarkAction` / `detailMarkLabel` /
-  `detailPrimary` in the renderer's `lib/mark-read.ts`; the mark goes to
+- Detail pane: core `paneOffers` (`core/offers.ts`, shipped as
+  `TileView.offers.pane` by PR key; was `detailPrimary` and friends in the
+  renderer's `lib/mark-read.ts` until the rules-layer batch); the mark goes to
   `EngineService.markPrRead` (origin `detail`, own batch and undo, handled
   unless pulled in). A mark-read of an unread PR that leaves it your move
   says so in the toast, without the tile Snooze offer.
 - The dot: `notDonePrKeys` in `lib/tiles.ts`, `NotDoneDot` in `pills.tsx`.
   A done PR that still has unseen news keeps the tile unread, so it keeps
   its dot until it is read.
-- Lead PR: `leadPr` in `lib/tiles.ts`.
+- Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
 - Marked when you move on: `OpenedReadTimer` in the renderer's
   `lib/opened-read.ts` (the dwell arms, `leave()` / `hidden()` fire,
   `setWanted` keeps `opensMarkRead` current) driven by `useOpenedRead`
@@ -1938,7 +1948,7 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
 
 **After a mark-read** (2026-09-29; core `tileAfterMarkRead` in
 `after-read.ts`, shipped as `TileView.afterRead`; labels in the renderer's
-`lib/mark-read.ts`). Done means nothing is asked of you, so a button must not
+core `tileOffers` in `offers.ts`, shipped as `TileView.offers`). Done means nothing is asked of you, so a button must not
 promise Done where a mark-read cannot deliver it (Julian pressed "Mark done"
 four times on a PR whose author addressed his changes; the thread went read,
 the tile stayed, nothing visible changed). `afterRead` runs the same
@@ -1955,18 +1965,20 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   footer and in the detail pane (2026-09-29: a done tile still offered
   "Mark read" in the pane and Snooze in the footer, both leftovers that did
   nothing visible; a user debugging a finished topic read them as "something
-  is still open here").
+  is still open here"). A snoozed tile whose tracked PRs are all done, their
+  news seen, leads with "Open" too, like its pane, and keeps Snooze so the
+  snooze can be taken back (2026-09-29: the footer said "Mark done" there).
 - Detail pane action bar (changed 2026-09-29, "Actions act on what you
   look at"): on a single-PR tile, same label rule as the footer; the mark
   button is left out while the tile is read and still your move (Snooze
   stays there, as the primary). On a stack or set it acts on the selected
-  PR: the same rule per PR (`prMarkAction` / `detailMarkLabel` in
-  `lib/mark-read.ts` over `PrSummary.afterRead`, core `prAfterMarkRead`):
+  PR: the same rule per PR (core `prMarkAction` in `offers.ts` over
+  `PrSummary.afterRead`, core `prAfterMarkRead`):
   "Mark read" while the PR has unseen news, "Mark done" when a mark-read of
   it makes it done, else "Mark read"; no mark button while that PR is read
   and still your move (`PrSummary.turn`), or done already, or a pulled-in
   layer without news. No Snooze in the pane there; Open on GitHub leads
-  when nothing is to mark. The primary comes from `detailPrimary`, see
+  when nothing is to mark. The primary comes from core `paneOffers`, see
   "Own PRs never ask for a review".
 - Read looks read: no strip, no NEW, title in regular weight. The honey
   your-move footer stays as the only reminder.
@@ -2012,7 +2024,7 @@ any review ask; on top of that:
   but calm (re-approving is harmless, it never nags). On your own PR, or a merged or closed one: Mark read while the
   tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
 - The pane leads with what it acts on (2026-09-29,
-  `detailPrimary` in the renderer's `lib/mark-read.ts`, on top of the
+  core `paneOffers` in `offers.ts`, on top of the
   tile's `tileFooterAction`): the one ink button, placed first, is Approve
   while it is due (someone else's open PR, not approved, not a draft), else
   on a single-PR tile the tile footer's Mark read / Mark done / Snooze, or
@@ -3829,6 +3841,154 @@ Julian under "Open questions".
   proposal, an outside agent gets "The name is empty after cleaning", and
   accepting such a stored proposal is refused. Existing names are cleaned once
   by a migration ("Untitled topic" when nothing is left).
+
+## Rules layer: one home per fact (2026-09-29)
+
+Since 28 Sept most fixes were two parts of the app deciding the same thing
+differently: a bot-made review request didn't ping while the tile said "your
+move", MCP said "your move" where the pane said "their move", a done tile
+still offered Mark read, a done tile stayed in the Unread list. Julian asked
+whether the decisions about pings, alerts and state transitions could live in
+"kind of a state machine or something", so rules stay maintainable as
+features are added. A mapping of the rules layer (published as "PostPile
+Rules Architecture") was cross-checked by Codex (gpt-6-astra) against
+v0.11.1; Julian: "I like all the suggestions", all of it in one batch.
+
+**Two kinds of rules, two shapes.**
+
+- Facts worked out from a PR's history (loudness, seen, whose move, tile
+  state, tier, done, dots, labels, ping or not) are a projection, not a state
+  machine. Each fact is computed in one place in `packages/core` and every
+  consumer (renderer, pings, quiet reads, MCP, the fake engine) reads the
+  result. The seam is the existing `buildPrSummary` / `buildTileView`, not a
+  second read-model system; Board caches them per snapshot. The fake engine
+  calls the same pure core functions.
+- Lifecycles with side effects (a PR being read, a snooze, a topic's status,
+  a waiting GitHub write) are small transition functions:
+  `(state, cause) -> (next state, effects)`, effects returned as data and
+  carried out in one place under the writes lock, like topic proposals.
+- No XState, no rule engine, no policy language: tile state is itself a
+  projection of five lifecycles, so a statechart over it would be a second
+  copy that can disagree with the history.
+
+**One home per predicate family.** "Is it automation", "who does this review
+request ask" (by target, not by who clicked), "did you act after X", and
+"which event kinds are asks" each get one module. Narrow variants become
+parameters, not copies. Distinctions that are on purpose stay: reading
+touches leave out pushes and merges; snooze reply kinds include ordinary
+comments; "routed" for Look-closer pings still ignores a teammate's review
+(see "Look closer pings").
+
+**Actions are a separate projection.** What the buttons say and do depends on
+more than PR facts (PR vs whole tile, snooze, lock, pending writes), so
+offers come from their own core function with that context passed in, and
+the renderer only displays them. Consequences:
+
+- A done PR in the detail pane offers only Open, like a done tile (a handled
+  PR by someone else with no ask still got a primary Approve).
+- Whether a person is automation comes from core (the renderer's `[bot]`
+  check missed the other automation accounts and decided whether Ask shows).
+
+**Reading a PR is one planner.** Every way a PR becomes read goes through one
+local read-change planner: which events turn seen (up to which cutoff), which
+PRs turn handled, and how to undo it. Each cause keeps its own eligibility
+and write path:
+
+- Button (PR or tile): seen, handled for tracked members; unlocked it is an
+  optimistic change with undo, locked with unread threads it becomes pending.
+- Opened in PostPile: seen and handled after the existing checks (no
+  snoozed tile, done after read, unlocked, fresh untruncated snapshot).
+- Read on GitHub: seen up to GitHub's read time, not handled; completing a
+  pending intent may handle.
+- Quiet reads (bots only, you acted after): seen, never handled.
+- Inbox cleanup stays a bulk write outside the per-PR planner.
+- After-read runs the planner's success branch on a copy instead of a
+  hand-written simulation, so a button never promises more than the action
+  does.
+
+Landed as `planRead({scope, cause, events, userStates, at})` in
+`core/read-plan.ts`, returning `{seenAt, handledAt, handleKeys, change}`
+(`change` is what undo puts back). Causes: `button`, `approved` (seen only),
+`opened`, `pending_completion` (seen up to the click), `read_on_github` and
+`quiet` (seen up to GitHub's read time, never handled); the switch is
+exhaustive. An earlier handled time is kept. The engine writes a plan through
+`writeReadPlan` / `readLocally` (`actions/local-change.ts`); one guarded
+`markThreadReadIfUnchanged` serves both the mark-read queue and quiet reads.
+A waiting GitHub write moves through `pendingWriteStep(write, cause)` in
+`core/pending-write.ts`, and `PendingWrites.apply` is the only place that
+carries out its effects. Not in the planner: the own-touch reconciliation in
+github-sync (stamps each event with its own time), undo and not-taken
+(`putBackLocalChange`, reversals rather than reads) and the inbox-cleanup
+baseline.
+
+**Handled is not reset by new activity (decided 2026-09-29).** Handled means
+"you dealt with this once", not "complete now". New loud activity already
+makes the tile unread before done is checked; once seen, done needs no move
+left for you. Resetting it would make a GitHub visit or quiet read leave the
+PR open with nothing asked.
+
+**Snoozes belong to PRs.** A snooze was keyed by the tile id, which changes
+when a PR joins a stack or set, so the snooze was lost (and could come back
+if the old tile returned). Snoozing a tile now writes one snooze per tracked
+PR with the same condition; a tile is snoozed while every tracked PR in it
+has an active snooze, so a new unsnoozed PR joining a snoozed tile shows the
+tile. Existing snoozes are carried over by migration 019 (`pr_snooze`; the
+old `snooze` table stays until 019 has shipped). A CI snooze on a multi-PR
+tile is now checked per PR, so the tile shows once any tracked PR is green
+(open question whether it should wait for all). Events on pulled-in,
+untracked stack layers no longer touch a snooze. A snooze waiting for
+a push or for green CI ends when the PR is merged or closed; it could never
+finish before and kept the topic from retiring. The human-only wake rule is
+unchanged: the app's own Look-closer event does not break a snooze (its
+ping already skips snoozed tiles).
+
+**Topic status has one writer.** All status changes (retire, revive,
+archive; nothing restores a topic today) go through `nextTopicStatus` in
+core and `changeTopicStatus` in the engine, and retiring records its own
+`retiredAt` (migration 020) instead of reading `updatedAt` (any rename moved
+it). In the full sync, revive runs after new events are classified (event
+classification now also covers retired topics) and reads effective loudness,
+so an event the agent turned quiet does not bring a retired topic back. The
+live poll does not classify, so it still revives on the rule's loudness.
+
+Landed as (projection step): `buildPrSummary` adds `PrSummary.facts`
+(`prFacts`: automation author, who a review request asks, last touch, open
+ask) next to the existing `turn`, `done` and `afterRead`; Board caches tile
+state and whose turn per snapshot (`stateOf`, `turnOf`). Offers are
+`tileOffers` / `paneOffers` in `core/offers.ts`, shipped as
+`TileView.offers` (footer action and label, GitHub link, lead PR, and the
+pane's buttons per PR key); `ActionBar` and `Tile` only lay them out. A done
+PR (or one on a done tile) gets no Approve, Ask or Remove team; a done PR
+whose news keeps its tile unread keeps Mark read. The renderer's tier order
+is typed with core's `PrTierOrder`, so a drift fails to compile. The fake
+engine reads through `planRead` and sends pending writes through
+`pendingWriteStep`.
+
+**Consumers agree.** MCP `pr_context` prints the move of the PR asked about,
+not of its tile (so does each `search_prs` row and its `whose_move` filter;
+the "Its tile:" line keeps the tile's). The MCP process runs as long as the
+Claude session; when the app was updated underneath it, its answers say so
+and ask for a reconnect: the engine that holds the lock records its version
+in meta (`app_version`), and every MCP answer compares it with its own.
+Tier "To review" and whose move "Review" agree for the dismissed-review case
+(a dismissed review no longer counts as reviewed for the tier either).
+
+**Decision tables for loudness and pings.** Plain TypeScript arrays, first
+match wins. Pings keep choosing the newest qualifying event within the
+winning class. Freshness, dedup, agent veto and delivery stay outside the
+tables. Tests cover input partitions and precedence collisions, not every
+combination.
+
+**Tests across rules.** Invariants over the sample boards and real-shaped
+fixtures: a done tile or PR offers only Open, the lead PR is the turn's PR,
+MCP and the pane name the same move, same events twice give the same facts.
+Where rules differ on purpose (routed team requests, team coverage) the
+invariant says so instead of asserting equality. One scenario test per bug
+fixed. Landed in `core/rules-invariants.test.ts` (real-shaped boards: a done
+PR on a live or snoozed tile, routed team requests),
+`apps/server/src/fake/rules-invariants.test.ts` (every sample tile) and
+`mcp/move-agreement.test.ts` (pr_context against the pane for every sample
+PR).
 
 ## Architecture
 

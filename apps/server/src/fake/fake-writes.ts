@@ -1,5 +1,6 @@
 import {
   indexActionLog,
+  pendingWriteStep,
   UNDO_WINDOW_MS,
   type ActionLogEntry,
   type ActionLogIndex,
@@ -8,9 +9,11 @@ import {
   type IsoTime,
   type NewActionLogEntry,
   type NotificationThread,
+  type PendingWrite,
   type PendingWriteView,
   type PendingWritesResult,
   type PrKey,
+  type ReadScope,
   type TilePendingWrite,
 } from '@postpile/core';
 
@@ -52,8 +55,8 @@ interface FakePending {
 export interface FakeSample {
   /** Puts back what a click changed, when its batch is parked. */
   revert(local: FakeLocalChange): void;
-  /** Marks PRs read in the sample, once their pending write is "sent". */
-  markReadHere(prKeys: PrKey[], handleKeys: PrKey[]): void;
+  /** Reads PRs in the sample once their pending write is "sent": what the user saw at `clickedAt` seen, handle keys handled. */
+  readHere(scope: ReadScope, clickedAt: IsoTime): void;
   /** Tile or PR title for the footer's pending list. */
   title(prKeys: PrKey[], threadId: string | null): string;
   /** Ids of sample threads unread "on GitHub" with no activity since `cutoff`. */
@@ -297,6 +300,37 @@ export class FakeWrites {
     return marks;
   }
 
+  /**
+   * A sent mark-read through core's `pendingWriteStep`, like the engine's
+   * `PendingWrites.apply`: every thread went out (the fake never fails), so
+   * their PRs turn read here up to the pending write's time, and PRs without
+   * an unread thread follow and are logged as local.
+   */
+  private completeSent(pending: FakePending, batch: FakeBatch): void {
+    const write: PendingWrite = {
+      id: pending.id,
+      kind: 'mark_read',
+      createdAt: pending.createdAt,
+      origin: batch.origin,
+      tileId: batch.tileId,
+      batch: batch.batchId,
+      prKeys: batch.prKeys,
+      handleKeys: batch.handleKeys,
+      threads: batch.threads.map((thread) => ({ id: thread.id, prKey: thread.prKey, updatedAt: pending.createdAt })),
+      readBefore: null,
+      error: null,
+      triedAt: null,
+    };
+    const step = pendingWriteStep(write, { kind: 'sent', outcomes: write.threads.map(() => ({ kind: 'sent' as const })) });
+    for (const effect of step.effects) {
+      if (effect.kind === 'read_here') {
+        this.sample.readHere({ prKeys: effect.prKeys, handleKeys: batch.handleKeys }, pending.createdAt);
+      } else if (effect.kind === 'log_local') {
+        this.record({ action: 'mark_read', origin: 'footer', outcome: 'local', prKey: effect.prKey, tileId: batch.tileId, batch: batch.batchId, detail: 'no unread GitHub thread' });
+      }
+    }
+  }
+
   /** "Send N to GitHub": refused while locked. The fake never fails a send. */
   sendPending(): PendingWritesResult {
     const writes = this.pending.splice(0);
@@ -310,7 +344,7 @@ export class FakeWrites {
         continue;
       }
       this.markThreads(write.batch, 'footer');
-      this.sample.markReadHere(write.batch.prKeys, write.batch.handleKeys);
+      this.completeSent(write, write.batch);
     }
     return { ok: true, message: `Sent ${writes.length} to GitHub (sample data: nothing left the app)`, done: writes.length, failed: 0, status: this.status() };
   }

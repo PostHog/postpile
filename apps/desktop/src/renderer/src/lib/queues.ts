@@ -1,8 +1,12 @@
-import type { PrSummary, PrTier, TileView, TopicListItem } from '@postpile/core';
+import type { PrSummary, PrTier, PrTierOrder, TileView, TopicListItem } from '@postpile/core';
 import type { Bucket } from './hold-place.ts';
 
-/** Queue tiers in section order, same as core's PR_TIER_ORDER (the renderer imports types only). */
-const TIER_ORDER: PrTier[] = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
+/**
+ * Queue tiers in section order: core's PR_TIER_ORDER. The renderer imports
+ * types only, so this copy is typed with core's `PrTierOrder` and fails to
+ * compile when the two differ.
+ */
+export const TIER_ORDER: PrTierOrder = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
 
 /** The sidebar's filter buttons. */
 export type QueueFilter = 'mine' | 'team' | 'reply' | 'review';

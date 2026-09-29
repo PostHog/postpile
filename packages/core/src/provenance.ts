@@ -1,3 +1,4 @@
+import { isMadeByAutomation } from './bots.ts';
 import type { EventKind, FoundPr, NotificationThread, PingReason, PrEvent, Provenance } from './types.ts';
 
 // Event kinds that mean GitHub notified the viewer, even when the
@@ -12,12 +13,19 @@ const pingKinds: Partial<Record<EventKind, PingReason>> = {
 function pingFromEvents(events: PrEvent[]): PingReason | null {
   for (const event of events) {
     const reason = pingKinds[event.kind];
-    if (!reason || event.isBot) {
+    if (!reason) {
       continue;
     }
-    // review_requested is only a ping when it was for the viewer, which the
-    // rule already decided.
-    if (event.kind === 'review_requested' && event.ruleLoudness !== 'loud') {
+    // A review request counts by whom it asks, whoever clicked it
+    // (`isAutomation`). The rule already decided that: loud means it asks the
+    // viewer or their team.
+    if (event.kind === 'review_requested') {
+      if (event.ruleLoudness === 'loud') {
+        return reason;
+      }
+      continue;
+    }
+    if (isMadeByAutomation(event)) {
       continue;
     }
     return reason;

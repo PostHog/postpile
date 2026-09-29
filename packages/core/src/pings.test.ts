@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
 import { pingRule, pingTemplate } from './pings.ts';
-import type { Pr, Viewer } from './types.ts';
+import type { EventKind, Loudness, Pr, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 const pr = makePr({ number: 7, title: 'Move CI to Depot', author: 'alice' });
@@ -151,5 +151,27 @@ describe('a review request counts by whom it asks, not who clicked it', () => {
     expect(prWhoseTurn({ pr, events: [], userState: null, viewer: withTeam })).toMatchObject({ kind: 'you', what: 'Review' });
     const teamPr = makePr({ number: 25, author: 'lyra', reviewerTeams: ['acme/team-platform'], timeline: [request('acme/team-platform')] });
     expect(prWhoseTurn({ pr: teamPr, events: [], userState: null, viewer: withTeam })).toMatchObject({ what: "Review for team-platform: lyra's PR" });
+  });
+});
+
+describe('ping table', () => {
+  it('has a row for every mix of loudness, kind, PR state and quiet repo', () => {
+    const kinds: EventKind[] = ['mention', 'review_requested', 'comment', 'ci', 'commits_after_approval'];
+    const loudnesses: Loudness[] = ['loud', 'quiet', 'muted'];
+    const prs = [pr, ownPr, makePr({ isDraft: true }), makePr({ state: 'MERGED' })];
+    for (const target of prs) {
+      // pingRule throws when no row matches.
+      expect(pingRule([], target, viewer, false).class).toBe('quiet');
+      for (const quietRepo of [false, true]) {
+        for (const loudness of loudnesses) {
+          for (const kind of kinds) {
+            for (const isBot of [false, true]) {
+              const events = [makeEvent({ kind, isBot, ruleLoudness: loudness })];
+              expect(() => pingRule(events, target, viewer, quietRepo)).not.toThrow();
+            }
+          }
+        }
+      }
+    }
   });
 });

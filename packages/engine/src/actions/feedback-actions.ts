@@ -1,10 +1,11 @@
-import { isTracked, setIdFromTileId, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@postpile/core';
+import { prReadScope, setIdFromTileId, tileReadScope, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@postpile/core';
 import type { NewFeedback, Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok, readMessage } from './results.ts';
 import type { PendingBatch } from '../mark-read-queue.ts';
+import { changeTopicStatus } from '../topic-status.ts';
 
 /**
  * User corrections. Each one is logged (the newest go back into prompts) and
@@ -32,12 +33,8 @@ export class FeedbackActions {
    */
   private notMine(tile: Tile, key: PrKey | null): PendingBatch {
     const origin = { origin: 'tile' as const, tileId: tile.id };
-    if (key) {
-      return this.readMarker.markRead([key], [key], origin);
-    }
-    const keys = tile.members.map((m) => m.prKey);
-    const pinged = tile.members.filter((m) => isTracked(m.provenance)).map((m) => m.prKey);
-    return this.readMarker.markRead(keys, pinged, origin);
+    const scope = key ? prReadScope(key, true) : tileReadScope(tile);
+    return this.readMarker.markRead(scope, { kind: 'button' }, origin);
   }
 
   /**
@@ -51,9 +48,7 @@ export class FeedbackActions {
       if (!target) {
         return failed(`no topic ${targetTopicId}`);
       }
-      if (target.status === 'retired') {
-        this.store.topics.setStatus(targetTopicId, 'active', this.now().toISOString());
-      }
+      changeTopicStatus(this.store, targetTopicId, 'revive', this.now().toISOString());
       for (const key of keys) {
         this.store.memberships.assign({
           prKey: key,

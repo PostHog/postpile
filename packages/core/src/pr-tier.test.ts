@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
 import { prTier, type PrTierInput } from './pr-tier.ts';
 import type { Viewer } from './types.ts';
+import { prWhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
 const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
@@ -133,5 +134,14 @@ describe('prTier: authorship', () => {
   it('keeps your own PR under mine in another team’s area, even with a team review request', () => {
     const pr = makePr({ author: me, repo: 'acme/infra', reviewerTeams: ['acme/team-platform', 'acme/team-infra'] });
     expect(tier({ pr, reason: 'team_mention' })).toBe('mine');
+  });
+});
+
+describe('a dismissed review on the head', () => {
+  it('is no review: tier To review and whose move Review agree', () => {
+    const dismissed = makeReview({ author: me, state: 'DISMISSED', commitOid: 'head1', submittedAt: at(10) });
+    const pr = makePr({ author: 'ada', headOid: 'head1', reviewerUsers: [me], reviews: [dismissed] });
+    expect(tier({ pr })).toBe('to_review');
+    expect(prWhoseTurn({ pr, events: [], userState: null, viewer: withTeam })).toMatchObject({ kind: 'you', move: 'review' });
   });
 });

@@ -163,6 +163,7 @@ describe('engine telemetry', () => {
       driver: null,
       userRole: 'reviewer',
       status: 'active',
+      retiredAt: null,
       createdAt: at(0),
       updatedAt: at(0),
     });

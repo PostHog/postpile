@@ -1,14 +1,24 @@
 // "Whose turn": is the next move on a tile the viewer's, someone else's, or
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
-import { isBot } from './bots.ts';
+import { isBot, isMadeByAutomation } from './bots.ts';
 import { changesAnswered, standingChanges, type ChangesAnswer } from './changes-answered.ts';
 import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
-import { PERSONAL_ASK_KINDS } from './kinds.ts';
+import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { lastTouch } from './last-touch.ts';
-import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
-import { changesRequestedBy, isApprovedByViewer, isPersonalRequest, reviewRequest, teamRequestHold, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
-import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
+import { isOwnTeam, sameLogin } from './mentions.ts';
+import {
+  changesRequestedBy,
+  isApprovedByViewer,
+  isPersonalRequest,
+  requestsOfViewer,
+  reviewRequest,
+  teamRequestHold,
+  teamRequestTakenBy,
+  viewerHeadReview,
+  type ReviewRequest,
+} from './review-request.ts';
+import type { EventKind, Pr, PrEvent, PrKey, Tile, UserPrState, Viewer } from './types.ts';
 
 export type WhoseTurnKind = 'you' | 'them' | 'none';
 
@@ -65,9 +75,6 @@ export const NO_TURN: WhoseTurn = { kind: 'none', who: null, what: '', prKey: nu
 
 const TURN_ORDER: Record<WhoseTurnKind, number> = { you: 0, them: 1, none: 2 };
 
-/** Events that ask the viewer something directly. */
-const ASK_KINDS: EventKind[] = ['question_to_user', 'mention', 'reply_to_user', 'team_mention'];
-
 interface PrContext {
   pr: Pr;
   events: PrEvent[];
@@ -120,8 +127,8 @@ function touchedSince(pr: Pr, events: PrEvent[], viewer: Viewer, since: string):
  * the events agent lowered to quiet or muted ("thanks, that's fine") asks
  * nothing (decided 2026-09-29).
  */
-export function isUnansweredAsk(pr: Pr, events: PrEvent[], event: PrEvent, viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): boolean {
-  if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
+export function isUnansweredAsk(pr: Pr, events: PrEvent[], event: PrEvent, viewer: Viewer, kinds: readonly EventKind[] = ADDRESSED_KINDS): boolean {
+  if (!kinds.includes(event.kind) || isMadeByAutomation(event) || sameLogin(event.actor, viewer.login)) {
     return false;
   }
   if (event.kind === 'team_mention' && event.seenAt !== null) {
@@ -134,7 +141,7 @@ export function isUnansweredAsk(pr: Pr, events: PrEvent[], event: PrEvent, viewe
 }
 
 /** The newest unanswered ask on the PR (`isUnansweredAsk`). Also used by `prTier`. */
-export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): PrEvent | null {
+export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readonly EventKind[] = ADDRESSED_KINDS): PrEvent | null {
   let newest: PrEvent | null = null;
   for (const event of events) {
     if (!isUnansweredAsk(pr, events, event, viewer, kinds)) {
@@ -147,23 +154,13 @@ export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: 
   return newest;
 }
 
-function viewerReviews(ctx: PrContext): Review[] {
-  return ctx.pr.reviews
-    .filter((r) => isViewer(ctx, r.author) && r.state !== 'PENDING' && r.state !== 'DISMISSED')
-    .sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
-}
-
-/** The viewer's newest review of the current head, if any. */
-function headReview(ctx: PrContext): Review | null {
-  const onHead = viewerReviews(ctx).filter((r) => r.commitOid === ctx.pr.headOid);
-  return onHead[onHead.length - 1] ?? null;
-}
-
-/** Who asked the viewer (or their team) for a review: the newest human request aimed at them in the timeline. */
+/**
+ * Who asked the viewer (or their team) for a review: the newest human
+ * request aimed at them in the timeline. A bot's request still asks (see
+ * `isAutomation`), the text just does not name the bot.
+ */
 function requester(ctx: PrContext): string | null {
-  const requests = ctx.pr.timeline
-    .filter((item) => item.kind === 'review_requested' && isViewerSubject(item.subject, ctx.viewer) && !isBot(item.actor))
-    .sort((a, b) => (a.at < b.at ? -1 : 1));
+  const requests = requestsOfViewer(ctx.pr, ctx.viewer).filter((item) => !isBot(item.actor));
   return requests[requests.length - 1]?.actor ?? null;
 }
 
@@ -249,7 +246,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   if (isApprovedByViewer(pr, ctx.userState, ctx.viewer.login)) {
     return them(ctx, pr.author, 'to merge');
   }
-  const reviewed = headReview(ctx);
+  const reviewed = viewerHeadReview(ctx.pr, ctx.viewer);
   const hold = reviewed === null ? teamRequestHold(pr, ctx.viewer, ctx.notYours) : null;
   if (hold?.kind === 'not_yours') {
     return NO_TURN;
@@ -332,7 +329,7 @@ function prTurn(ctx: PrContext): WhoseTurn {
   if (ask) {
     const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login)
       ? false
-      : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && headReview(ctx) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
+      : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && viewerHeadReview(ctx.pr, ctx.viewer) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
     return you(ctx, 'reply', askText(ask, reviewToo));
   }
   return sameLogin(ctx.pr.author, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);

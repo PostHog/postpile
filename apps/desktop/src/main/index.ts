@@ -319,7 +319,13 @@ async function start(): Promise<void> {
   // GitHub writes stay off until the footer lock is opened (kept in the store); POSTPILE_READ_ONLY=1 forces off.
   try {
     // The legacy folder move already ran at the top of this file, before userData existed.
-    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev', migrateLegacy: false, telemetry, mcpLauncher: mcpLauncher() });
+    engine = engineFromEnv({
+      lockKind: app.isPackaged ? 'packaged' : 'dev',
+      migrateLegacy: false,
+      telemetry,
+      mcpLauncher: mcpLauncher(),
+      appVersion: app.getVersion(),
+    });
   } catch (error) {
     if (error instanceof DataDirLockedError) {
       const holder = error.holder;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileView } from '@postpile/core';
-import { at } from '@postpile/core/fixtures';
+import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { tileOpenedProps } from './tile-telemetry.ts';
 
 function summary(overrides: Partial<PrSummary> = {}): PrSummary {
@@ -29,6 +29,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     ownTeamRequests: [],
     pendingWrite: null,
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     whatsNew: null,
     updatedAt: at(1),
@@ -39,7 +40,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
 }
 
 function view(prs: PrSummary[], forWhom: TileView['forWhom'] = { kind: 'you' }): TileView {
-  return {
+  return withOffers({
     tile: { id: 'pr:acme/app#1', topicId: 't1', kind: 'single', title: 'PR 1', members: [], stacks: [] },
     state: { kind: 'open', unreadBecause: [] },
     prs,
@@ -52,7 +53,7 @@ function view(prs: PrSummary[], forWhom: TileView['forWhom'] = { kind: 'you' }):
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
-  };
+  });
 }
 
 describe('tileOpenedProps', () => {

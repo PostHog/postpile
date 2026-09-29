@@ -1,7 +1,9 @@
 import { isBot, isMachineComment } from './bots.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
+import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { ruleLoudness } from './loudness.ts';
-import { isViewerSubject, mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
+import { mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
+import { viewerAskedToReview } from './review-request.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
 /** What deriveEvents knows about an event before it gets classified. */
@@ -35,18 +37,6 @@ function withText(prefix: string, body: string): string {
 }
 
 /**
- * A pending review is the viewer's unsent draft: GitHub shows it only to
- * them, so it never answers anything.
- */
-function viewerSpokeAfter(pr: Pr, viewer: Viewer, at: IsoTime): boolean {
-  const spokeInComment = pr.comments.some((c) => sameLogin(c.author, viewer.login) && c.createdAt > at);
-  const spokeInReview = pr.reviews.some(
-    (r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING' && r.submittedAt > at,
-  );
-  return spokeInComment || spokeInReview;
-}
-
-/**
  * A review request is answered once the viewer submitted a review after it,
  * or once the same request was removed later. Otherwise the first fetch of an
  * old PR would show a long-handled request as unread.
@@ -55,9 +45,7 @@ function requestAnswered(pr: Pr, viewer: Viewer, raw: RawEvent): boolean {
   if (raw.kind !== 'review_requested') {
     return false;
   }
-  const reviewedAfter = pr.reviews.some(
-    (r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING' && r.submittedAt > raw.at,
-  );
+  const reviewedAfter = spokeAfter(pr, viewer.login, raw.at, { reviewsOnly: true });
   const removedAfter = pr.timeline.some(
     (item) => item.kind === 'review_request_removed' && item.subject === raw.subject && item.at > raw.at,
   );
@@ -210,17 +198,11 @@ function commitEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): Ra
   }));
 }
 
-function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
-  const isViewer = (subject: string | null) => isViewerSubject(subject, viewer);
-  const requestedInTimeline = pr.timeline.some((item) => item.kind === 'review_requested' && isViewer(item.subject));
-  return requestedInTimeline || pr.reviewerUsers.some(isViewer) || pr.reviewerTeams.some(isViewer);
-}
-
 function mergedWithoutViewerReview(pr: Pr, viewer: Viewer): boolean {
-  if (sameLogin(pr.author, viewer.login) || !viewerWasAsked(pr, viewer)) {
+  if (sameLogin(pr.author, viewer.login) || !viewerAskedToReview(pr, viewer)) {
     return false;
   }
-  return !pr.reviews.some((r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING');
+  return lastSpokeAt(pr, viewer.login, { reviewsOnly: true }) === null;
 }
 
 function timelineKind(item: TimelineItem, pr: Pr, viewer: Viewer): EventKind {
@@ -244,6 +226,8 @@ const REVIEW_REQUEST_TEXT = [' requested a review from ', ' removed the review r
 /**
  * Who a review request (or its removal) names, read back from the summary
  * `timelineSummary` wrote: a login or "org/team-slug". Null for other events.
+ * Only for the activity list, which may have no PR at hand; rules read the
+ * target as data (`reviewRequestTarget`).
  */
 export function reviewRequestSubject(summary: string): string | null {
   for (const text of REVIEW_REQUEST_TEXT) {
@@ -352,7 +336,7 @@ export function deriveEvents(
       viewer,
       userState,
       subject: raw.subject,
-      userRepliedAfter: ADDRESSED_KINDS.includes(raw.kind) && viewerSpokeAfter(pr, viewer, raw.at),
+      userRepliedAfter: ADDRESSED_KINDS.includes(raw.kind) && spokeAfter(pr, viewer.login, raw.at),
       requestAnswered: requestAnswered(pr, viewer, raw),
     });
     return {

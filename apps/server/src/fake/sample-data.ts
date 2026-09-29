@@ -132,6 +132,7 @@ function buildTopics(clock: SampleClock): Topic[] {
         userRole: 'reviewer',
       }),
       status: 'retired',
+      retiredAt: clock.hoursAgo(48),
       updatedAt: clock.hoursAgo(48),
     },
   ];
@@ -759,8 +760,6 @@ function buildMembership(tiles: Tile[]): Map<PrKey, string> {
       }
     }
   }
-  membership.set(sampleKey(1855), TOPIC.frontend);
-  membership.set(sampleKey(1921), TOPIC.deps);
   return membership;
 }
 

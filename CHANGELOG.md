@@ -2,6 +2,27 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- A snooze on a stack or set wakes when any of its tracked PRs meets the condition, for example the first PR to go green, instead of waiting for all of them.
+- Under the hood: each rule (automation, who a review request asks, whose move, loudness, pings, button offers) is worked out once in core and read by the app, pings, MCP and sample mode alike, so they can no longer disagree.
+
+### Fixed
+
+- A review request a bot made for you counts as an ask everywhere: it pings, wakes a snooze, and keeps quiet reads from marking the thread read as bot activity.
+- A dismissed review no longer counts as reviewed for "To review" while whose move says "Review".
+- Snoozes belong to PRs, not tiles, so they survive a PR joining a stack or set. A new unsnoozed PR in a snoozed tile makes the tile show again.
+- A snooze waiting for a push or green CI ends when the PR is merged or closed, so its topic can retire.
+- A finished topic's retired time no longer moves when the topic is renamed.
+- A mention the agent turns quiet no longer brings back a finished topic when the full sync is first to see it.
+- A done PR in the detail pane offers only Open on GitHub, like a done tile, also on a snoozed tile. A handled PR by someone else with nothing asked still led with Approve.
+- A snoozed tile whose PRs are all done shows Open in its footer, like the detail pane, instead of "Mark done". Snooze stays to take the snooze back.
+- "Ask <author>" is hidden for every automation account PostPile knows, not only `[bot]` logins.
+- MCP `pr_context` and `search_prs` name the move of the PR itself, not of its tile, so they match the detail pane on stacks and sets.
+- The MCP server says so, and asks for a reconnect, when the app was updated while it kept running.
+
 ## 0.11.1 (2026-09-29)
 
 ### Fixed

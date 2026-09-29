@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
-import { at } from '@postpile/core/fixtures';
+import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, notDonePrKeys, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
@@ -29,6 +29,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     ownTeamRequests: [],
     pendingWrite: null,
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     whatsNew: null,
     updatedAt: at(number),
@@ -39,7 +40,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
 }
 
 function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
-  return {
+  return withOffers({
     tile: { id: 'set:s1', topicId: 't1', kind: 'set', title: 'Cache PRs', members: [], stacks: [] },
     state: {
       kind: unreadKeys.length > 0 ? 'unread' : 'open',
@@ -55,7 +56,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
-  };
+  });
 }
 
 const pulled = { kind: 'pulled_in', reason: 'same cache keys' } as const;
@@ -82,21 +83,8 @@ describe('isDraftTile', () => {
 });
 
 describe('tile helpers', () => {
-  it('picks the PR behind the newest unread reason as the lead', () => {
+  it('picks the lead row core names', () => {
     const view = setView([summary(1), summary(2), summary(3)], ['acme/app#1', 'acme/app#3']);
-    expect(leadPr(view)?.key).toBe('acme/app#3');
-  });
-
-  it('prefers the PR of the tile turn, so the verdict pill talks about the footer PR', () => {
-    const turn = { kind: 'them' as const, who: 'rowan', what: 'to merge on #2', prKey: 'acme/app#2' };
-    const view = { ...setView([summary(1), summary(2), summary(3)], ['acme/app#3']), turn };
-    expect(leadPr(view)?.key).toBe('acme/app#2');
-    // No turn: the newest unread reason again.
-    expect(leadPr({ ...view, turn: { kind: 'none', who: null, what: '', prKey: null } })?.key).toBe('acme/app#3');
-  });
-
-  it('falls back to the first open pinged PR', () => {
-    const view = setView([summary(1, { provenance: pulled }), summary(2, { state: 'MERGED' }), summary(3)]);
     expect(leadPr(view)?.key).toBe('acme/app#3');
   });
 
@@ -129,7 +117,6 @@ describe('tile helpers', () => {
     const found = { kind: 'found' as const, via: 'own_open' as const, reason: 'your open PR' };
     const view = setView([summary(1, { provenance: found }), summary(2), summary(3, { provenance: pulled })]);
     expect(countPrs([view])).toEqual({ pinged: 1, found: 1, pulledIn: 1 });
-    expect(leadPr(setView([summary(4, { provenance: pulled, state: 'OPEN' }), summary(5, { provenance: found })]))?.key).toBe('acme/app#5');
   });
 });
 

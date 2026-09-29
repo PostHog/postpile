@@ -34,7 +34,7 @@ export async function runMcpFromEnv(appVersion: string): Promise<void> {
   const telemetry = isFake()
     ? undefined
     : telemetryFromEnv({ env: process.env, appVersion, osVersion: release(), arch: arch(), telemetryIdFile: defaultPaths().telemetryIdFile });
-  const engine = engineFromEnv({ lockKind: 'cli', withoutLock: true, telemetry });
+  const engine = engineFromEnv({ lockKind: 'cli', withoutLock: true, telemetry, appVersion });
   const databaseFile = defaultPaths().databaseFile;
   // Sample data has no app to ask: it counts as running, and the fake engine answers requests in memory.
   const appRunning = isFake() ? () => true : appRunningCheck(databaseFile);

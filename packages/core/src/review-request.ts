@@ -1,10 +1,43 @@
-// Review requests as they concern the viewer: personal, for their team on a
-// teammate's PR (counts like personal), for their team on someone else's PR
-// (routed), or already taken by a teammate. Rules only. Whose turn, for
-// whom, tiers and the done rule all read the same answer.
+// Review requests as they concern the viewer: who a request asks (by its
+// target, never by who clicked it), and what the pending request means now:
+// personal, for their team on a teammate's PR (counts like personal), for
+// their team on someone else's PR (routed), or already taken by a teammate.
+// Rules only. Loudness, pings, whose turn, for whom, tiers and the done rule
+// all read the same answers.
 import { isBot } from './bots.ts';
-import { isOwnTeam, sameLogin } from './mentions.ts';
-import type { IsoTime, Pr, Review, UserPrState, Viewer } from './types.ts';
+import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
+import type { IsoTime, Pr, PrEvent, Review, TimelineItem, UserPrState, Viewer } from './types.ts';
+
+/**
+ * Who a review request event (or its removal) names: the login or
+ * "org/team-slug" of the timeline item it was derived from. Null for other
+ * events, and for one whose item is not in the snapshot. Stored events only
+ * exist for items of the latest snapshot (a store drops the rest), so the
+ * lookup finds every derived request.
+ */
+export function reviewRequestTarget(event: Pick<PrEvent, 'kind' | 'sourceId'>, pr: Pr): string | null {
+  if (event.kind !== 'review_requested' && event.kind !== 'review_request_removed') {
+    return null;
+  }
+  return pr.timeline.find((item) => item.id === event.sourceId)?.subject ?? null;
+}
+
+/** The review requests in the timeline that name the viewer or one of their teams, oldest first. */
+export function requestsOfViewer(pr: Pr, viewer: Viewer): TimelineItem[] {
+  return pr.timeline
+    .filter((item) => item.kind === 'review_requested' && isViewerSubject(item.subject, viewer))
+    .sort((a, b) => (a.at < b.at ? -1 : 1));
+}
+
+/**
+ * A review was asked of the viewer or one of their teams at some point:
+ * pending now, or requested in the timeline (answered or removed since
+ * included).
+ */
+export function viewerAskedToReview(pr: Pr, viewer: Viewer): boolean {
+  const pending = [...pr.reviewerUsers, ...pr.reviewerTeams].some((subject) => isViewerSubject(subject, viewer));
+  return pending || requestsOfViewer(pr, viewer).length > 0;
+}
 
 /**
  * you: the viewer is a requested reviewer.
@@ -145,10 +178,32 @@ export function isPersonalRequest(request: ReviewRequest): boolean {
   return request === 'you' || request === 'team_for_you';
 }
 
-/** The viewer reviewed the current head, or approved on any commit (an approval does not follow the head). */
+/**
+ * The viewer's newest review of the current head, or null. A pending review
+ * is their unsent draft, and a dismissed one no longer counts as a review:
+ * the request it answered is open again.
+ */
+export function viewerHeadReview(pr: Pr, viewer: Viewer): Review | null {
+  let newest: Review | null = null;
+  for (const review of pr.reviews) {
+    if (!sameLogin(review.author, viewer.login) || review.state === 'PENDING' || review.state === 'DISMISSED' || review.commitOid !== pr.headOid) {
+      continue;
+    }
+    if (newest === null || review.submittedAt >= newest.submittedAt) {
+      newest = review;
+    }
+  }
+  return newest;
+}
+
+/**
+ * The viewer reviewed the current head (`viewerHeadReview`, a dismissed
+ * review does not count), or approved on any commit (an approval does not
+ * follow the head). Tiers, Look closer pings and whose turn read the same
+ * head review, so "To review" and "Review" agree (2026-09-29).
+ */
 export function reviewedHead(pr: Pr, viewer: Viewer, userState: UserPrState | null = null): boolean {
-  const onHead = pr.reviews.some((review) => sameLogin(review.author, viewer.login) && review.state !== 'PENDING' && review.commitOid === pr.headOid);
-  return onHead || isApprovedByViewer(pr, userState, viewer.login);
+  return viewerHeadReview(pr, viewer) !== null || isApprovedByViewer(pr, userState, viewer.login);
 }
 
 /**

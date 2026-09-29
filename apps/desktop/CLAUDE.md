@@ -72,8 +72,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - No OpenAPI codegen. When a screen needs a new field, add it to the core view
   type (`views.ts`), fill it in the engine's `read-models.ts` and in
   `FakeEngine`, then read it here.
-- Derived UI values (lead PR, "1 pinged · 2 pulled", check counts, review
+- Derived UI values ("1 pinged · 2 pulled", check counts, review
   rows) are pure functions in `lib/`, unit tested. Components stay dumb.
+  Rules are not display: facts (whose move, done, automation) and offers
+  (which buttons, which leads, the lead PR) come from core as view fields,
+  and tier order is typed with core's `PrTierOrder`.
 
 ## Mutations: one guarded ActionsProvider
 
@@ -197,20 +200,17 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the action bar right under the assessment boxes.
 - The detail pane acts on the selected PR, the tile footer on the tile
-  (2026-09-29). `detailPr` (`lib/mark-read.ts`) gives the selected PR's
-  row on a stack or set and null on a single-PR tile, which behaves as the
-  tile. On a stack or set the mark button marks only that PR
-  (`useActions().markPrRead`, own undo, toast without the Snooze offer),
-  its label comes from `detailMarkLabel` over `PrSummary.afterRead` /
-  `.turn` / `.done`, and Snooze is not in the pane (it stays in the tile
-  footer).
-- The action bar's one ink button comes from `detailPrimary` in
-  `lib/mark-read.ts`: Approve while it is due, else on a single-PR tile
-  Mark read / Mark done / Snooze as on the tile (a done tile offers Open
-  on GitHub only: no mark button, no Snooze, in the pane and the footer), on a stack or set the selected PR's Mark read / Mark done, else
-  Open on GitHub. It goes first; "Approve again" / "Approve draft" stay
-  outlined. Don't pick a primary in the component.
-- "Remove <team>" (`RemoveTeamButton`, one per `PrSummary.ownTeamRequests`
+  (2026-09-29). What each button says, whether it shows and which one leads
+  come from core (`TileView.offers`: `footer`, `markLabel`, `github`,
+  `leadPrKey`, and `pane[prKey]` with `scope`, `lead`, `approve`, `open`,
+  `ask`, `markLabel`, `snooze`, `removeTeams`, `pendingWrite`). On a stack
+  or set (`scope: 'pr'`) the mark button marks only that PR
+  (`useActions().markPrRead`, own undo, toast without the Snooze offer) and
+  Snooze is not in the pane. A done tile or PR offers Open on GitHub only.
+  Don't pick a primary or decide a button's visibility in a component or
+  in `lib/`; add it to core's offers. Approve's label and look
+  (`approveButton`) stay display.
+- "Remove <team>" (`RemoveTeamButton`, one per `PaneOffers.removeTeams`
   entry via `removeTeamButtons` in `lib/team-request.ts`) removes the
   team's review request, unsubscribes and marks the PR done. It asks once
   in a small popover and has no undo. Never the primary.

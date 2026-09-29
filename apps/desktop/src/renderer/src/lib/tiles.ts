@@ -86,24 +86,9 @@ export function stripMoreCount(view: TileView, news: WhatsNew | null): number {
   return news.extraCount + reasons.filter((other) => other.prKey !== reason.prKey).length;
 }
 
-/**
- * The PR the tile is mostly about: the PR of the tile's turn when there is
- * one (so the verdict pill talks about the same PR as the footer,
- * 2026-09-29), else the one behind the newest unread reason, else the first
- * open pinged or found PR, else the first PR.
- */
-export function leadPr(view: TileView): PrSummary | null {
-  const fromTurn = view.turn.kind === 'none' ? undefined : view.prs.find((pr) => pr.key === view.turn.prKey);
-  if (fromTurn) {
-    return fromTurn;
-  }
-  const reason = newestUnreadReason(view);
-  const fromReason = reason ? view.prs.find((pr) => pr.key === reason.prKey) : undefined;
-  if (fromReason) {
-    return fromReason;
-  }
-  const openPinged = view.prs.find((pr) => pr.provenance.kind !== 'pulled_in' && pr.state === 'OPEN');
-  return openPinged ?? view.prs[0] ?? null;
+/** The PR the tile is mostly about, as core picks it (`TileView.offers.leadPrKey`). */
+export function leadPr(view: Pick<TileView, 'prs' | 'offers'>): PrSummary | null {
+  return view.prs.find((pr) => pr.key === view.offers.leadPrKey) ?? null;
 }
 
 /** Every open PR the tile tracks (not pulled-in context) is a draft: grey Draft chip, dashed frame, muted title. */

@@ -27,6 +27,9 @@ import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
+import type { TileOffers } from './offers.ts';
+import type { Touch } from './last-touch.ts';
+import type { ReviewRequest } from './review-request.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { ViewerApproval } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
@@ -170,6 +173,8 @@ export interface PrSummary {
   ownTeamRequests: string[];
   /** Whose move it is on this PR alone (`prWhoseTurn`), for the detail pane's buttons. */
   turn: WhoseTurn;
+  /** Automation, review request, last touch and open ask (`prFacts`). */
+  facts: PrFacts;
   /**
    * What a mark-read of this PR alone would leave (`prAfterMarkRead`): the
    * detail pane says "Mark done" only when `done` is true. Always not done
@@ -186,6 +191,26 @@ export interface PrSummary {
    * another repo than the chosen one (or the topic's main repo); else null.
    */
   repoLabel: string | null;
+}
+
+/** The newest ask of the viewer still unanswered on a PR (`unansweredAsk`). */
+export type OpenAsk = Pick<PrEvent, 'id' | 'kind' | 'actor' | 'summary' | 'at'>;
+
+/**
+ * Facts about one PR, worked out once in core (`prFacts`) so every consumer
+ * reads the same answer instead of deciding again (DESIGN.md "Rules layer:
+ * one home per fact"). Whose move, done and after-read sit next to them on
+ * `PrSummary`.
+ */
+export interface PrFacts {
+  /** The author is a bot or another automation account (`isBot`). */
+  authorIsAutomation: boolean;
+  /** Who a pending review request asks, seen from the viewer (`reviewRequest`); null without one or without a viewer. */
+  reviewRequest: ReviewRequest;
+  /** The viewer's newest touch (`lastTouch`): review, comment, push, merge or close. */
+  lastTouch: Touch | null;
+  /** The newest ask of the viewer still unanswered, null when none. */
+  openAsk: OpenAsk | null;
 }
 
 export interface TileView {
@@ -209,6 +234,8 @@ export interface TileView {
   afterRead: TileAfterRead;
   /** A mark-read of one of its PRs waits for the writes lock; null when none does. */
   pendingWrite: TilePendingWrite | null;
+  /** What the tile footer and the detail pane offer (`tileOffers`); the renderer only displays it. */
+  offers: TileOffers;
   /** Every PR of the tile is in a quiet repo; the tile shows a small "quiet repo" note. */
   quietRepo: boolean;
   /**

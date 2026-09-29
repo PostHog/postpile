@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { topicWithPrs } from './testing/topics.ts';
+import { changeTopicStatus } from './topic-status.ts';
 
 /** Four weeks after the fixture PRs' activity, so the 3 quiet days have passed. */
 const MONTH_LATER = new Date('2026-09-30T12:00:00Z');
@@ -215,7 +216,7 @@ describe('Engine.consolidate', () => {
     const h = makeHarness({ now: () => MONTH_LATER });
     const pr = mergedPr(1);
     await finishedTopic(h, [pr]);
-    h.store.topics.setStatus('depot', 'retired', MONTH_LATER.toISOString());
+    changeTopicStatus(h.store, 'depot', 'retire', MONTH_LATER.toISOString());
 
     const mention = { ...pr, comments: [makeComment({ id: 'c5', author: 'bob', body: `@${viewer.login} one more thing`, createdAt: at(100) })] };
     h.reader.addPr(mention, makeThreadFor(mention, { reason: 'mention', updatedAt: '2026-10-01T00:00:00.000Z' }));
@@ -228,7 +229,7 @@ describe('Engine.consolidate', () => {
   it('brings a retired topic back when a new PR is assigned to it', async () => {
     const h = makeHarness({ now: () => MONTH_LATER });
     await finishedTopic(h, [mergedPr(1)]);
-    h.store.topics.setStatus('depot', 'retired', MONTH_LATER.toISOString());
+    changeTopicStatus(h.store, 'depot', 'retire', MONTH_LATER.toISOString());
     const followUp = reviewRequestedPr(7);
     h.reader.addPr(followUp, makeThreadFor(followUp));
     h.reader.etag = 'etag-2';

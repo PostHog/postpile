@@ -3,6 +3,11 @@ import { makeEvent, makePr, makeThreadFor } from './fixtures.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
 
 describe('provenanceFor', () => {
+  it('is pinged by a loud review request a bot made: a request counts by whom it asks', () => {
+    const request = makeEvent({ kind: 'review_requested', actor: 'assignbot[bot]', isBot: true, ruleLoudness: 'loud' });
+    expect(provenanceFor(null, 'context', [request])).toEqual({ kind: 'pinged', reason: 'review_requested' });
+  });
+
   it('is pinged with the thread reason when GitHub notified the user', () => {
     const thread = makeThreadFor(makePr(), { reason: 'author' });
     expect(provenanceFor(thread, 'same area')).toEqual({ kind: 'pinged', reason: 'author' });
