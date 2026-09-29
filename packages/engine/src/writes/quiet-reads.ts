@@ -64,6 +64,7 @@ export class QuietReads {
       return [];
     }
     const unread = this.unreadKeys(board);
+    const fetchedAt = this.store.prs.fetchedAtByKey();
     const result: QuietCandidate[] = [];
     for (const [prKey, thread] of board.threads) {
       const pr = board.prs.get(prKey);
@@ -78,6 +79,7 @@ export class QuietReads {
         viewer,
         tileUnread: unread.has(prKey),
         notYours: board.notYours.has(prKey),
+        prFetchedAt: fetchedAt.get(prKey) ?? null,
         now: board.now,
       });
       if (check.kind === 'mark') {

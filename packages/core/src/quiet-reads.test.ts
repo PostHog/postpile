@@ -26,6 +26,7 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
     viewer,
     tileUnread: false,
     notYours: false,
+    prFetchedAt: at(50),
     now: at(60),
     ...overrides,
   };
@@ -67,6 +68,13 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ thread: makeThreadFor(pr, { lastReadAt: null, updatedAt: at(31) }) }))).toEqual({ kind: 'skip', why: 'never_read' });
   });
 
+  it('leaves it when the PR snapshot is older than the thread or unknown', () => {
+    expect(quietReadCheck(input({ prFetchedAt: null }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    // The thread moved at 31, the snapshot is from 30: a comment after it would be missing from the events.
+    expect(quietReadCheck(input({ prFetchedAt: at(30) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(quietReadCheck(input({ prFetchedAt: at(31) })).kind).toBe('mark');
+  });
+
   it('leaves it when a person did something since the last read', () => {
     expect(quietReadCheck(input({ events: [botComment(30), humanComment(33)] }))).toEqual({ kind: 'skip', why: 'human_activity' });
   });
@@ -94,7 +102,7 @@ describe('quietReadCheck', () => {
   it('waits the grace period after the newest bot activity or thread update', () => {
     expect(quietReadCheck(input({ now: at(40) }))).toEqual({ kind: 'skip', why: 'grace' });
     const lateThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(55), unread: true });
-    expect(quietReadCheck(input({ thread: lateThread }))).toEqual({ kind: 'skip', why: 'grace' });
+    expect(quietReadCheck(input({ thread: lateThread, prFetchedAt: at(56) }))).toEqual({ kind: 'skip', why: 'grace' });
     expect(quietReadCheck(input({ now: at(41) })).kind).toBe('mark');
   });
 });

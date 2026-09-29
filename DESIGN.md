@@ -2247,6 +2247,14 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    (`event.isBot`, or no actor at all: CI results carry an empty actor and
    are flagged as bots already). No known event after the read counts as
    "don't know": left alone.
+   The stored events only count when the PR snapshot was fetched at or
+   after the thread's `updated_at` (`snapshotCoversThread`). A sync
+   refreshes every thread but can leave a PR's snapshot stale (its PR cap, a
+   failed fetch); a human comment after the snapshot would then be missing
+   and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
+   Not "fetched in this very sync": a PR fetched while its bot activity was
+   still inside the grace period is not fetched again until it moves, and
+   the snapshot from then still covers the thread.
 2. *Not the user's own PR.* Bot reviews and CI on your own PR can mean work
    (a failing check, a review bot's finding), so they stay unread.
 3. *No unseen merge without the user's review* ("Merged without your

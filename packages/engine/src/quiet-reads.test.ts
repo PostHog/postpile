@@ -6,7 +6,7 @@ import { makeHarness, type Harness, type HarnessOptions } from './testing/fakes.
 // alice's PR, read by the viewer at minute 20; a bot commented at minute 30.
 const botComment = makeComment({ id: 'c-bot', author: 'github-actions[bot]', body: 'Bundle size: +2 kB', createdAt: at(30) });
 
-function alicePr(overrides: Partial<Pr> = {}): Pr {
+function alicePr(overrides: Partial<Pr> & { number?: number } = {}): Pr {
   return makePr({ number: 5, author: 'alice', title: 'Speed up the test shards', updatedAt: at(30), comments: [botComment], ...overrides });
 }
 
@@ -130,6 +130,65 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
 
     expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);
+  });
+
+  // Codex review on PR #5: a sync refreshes every thread but may leave a PR's snapshot stale.
+  describe('only with a PR snapshot at least as fresh as the thread', () => {
+    const humanReply = makeComment({ id: 'c-human', author: 'rowan', body: 'Why did the shard count change?', createdAt: at(45) });
+
+    /** Synced (locked) at minute 40 with only the bot comment; then rowan replies at 45 and GitHub moves the thread. */
+    async function staleAfterReply(overrides: Partial<Pr> = {}): Promise<{ h: Harness; pr: Pr; setNow: (minute: number) => void }> {
+      let now = new Date(at(40));
+      const pr = alicePr(overrides);
+      const h = await synced(pr, { writesEnabled: false, now: () => now });
+      const replied = { ...pr, comments: [botComment, humanReply], updatedAt: at(45) };
+      h.reader.addPr(replied, { ...threadFor(pr), updatedAt: at(45) });
+      h.reader.etag = 'etag-2';
+      await h.engine.setGitHubWrites(true);
+      return { h, pr, setNow: (minute) => (now = new Date(at(minute))) };
+    }
+
+    it('leaves the thread when the PR fetch failed: the stored events miss the human reply', async () => {
+      const { h, pr, setNow } = await staleAfterReply();
+      h.reader.failingPrs.add(pr.key);
+      setNow(70);
+
+      await h.engine.sync({ maxAgentCalls: 0 });
+
+      // The thread is fresh, the snapshot is not: without the check the stored bot-only events would pass.
+      expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.updatedAt).toBe(at(45));
+      expect(h.store.events.listForPr(pr.key).some((event) => event.actor === 'rowan')).toBe(false);
+      expect(h.writer.calls).toEqual([]);
+    });
+
+    it('leaves the thread when the sync left the PR out at its cap', async () => {
+      // Merged two days before the sync, so the freshness check (open PRs, merges of the last day) skips it too.
+      const merged = { state: 'MERGED' as const, mergedAt: at(10), timeline: [makeTimelineItem({ id: 't-merge', kind: 'merged', actor: 'alice', subject: null, at: at(10) })] };
+      const { h, pr, setNow } = await staleAfterReply(merged);
+      const other = makePr({ number: 6, author: 'alice', updatedAt: at(50) });
+      h.reader.addPr(other, makeThreadFor(other, { reason: 'subscribed', updatedAt: at(50) }));
+      setNow(40 + 2 * 24 * 60);
+
+      await h.engine.sync({ maxAgentCalls: 0, maxPrs: 1 });
+
+      expect(h.reader.fetchedRefs.flat().filter((ref) => ref.number === pr.ref.number)).toHaveLength(1);
+      expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.updatedAt).toBe(at(45));
+      expect(h.writer.calls).toEqual([]);
+    });
+
+    it('still marks a PR whose snapshot is fresh, and leaves it once the human reply is fetched', async () => {
+      const { h, pr, setNow } = await staleAfterReply();
+      setNow(70);
+
+      await h.engine.sync({ maxAgentCalls: 0 });
+
+      expect(h.store.events.listForPr(pr.key).some((event) => event.actor === 'rowan')).toBe(true);
+      expect(h.writer.calls).toEqual([]);
+
+      const fresh = alicePr({ number: 8 });
+      const h2 = await synced(fresh);
+      expect(h2.writer.calls).toEqual([`markThreadRead ${threadFor(fresh).id}`]);
+    });
   });
 
   it('leaves a thread that moved on GitHub since the sync for the next one', async () => {

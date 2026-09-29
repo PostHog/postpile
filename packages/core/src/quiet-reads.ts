@@ -52,6 +52,8 @@ export function botNames(events: PrEvent[]): string[] {
  * Why a thread is left alone:
  * - not_unread: GitHub has it read already
  * - never_read: the user never read it (no last_read_at), so it is not "back" because of bots
+ * - stale_snapshot: the stored PR snapshot is older than the thread's last update (a PR the
+ *   sync left out at its cap, or whose fetch failed), so a person's comment may be missing
  * - human_activity: a person did something since the last read, or nothing known happened
  * - own_pr: bot reviews and CI on the user's own PR can mean work for them
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
@@ -59,7 +61,7 @@ export function botNames(events: PrEvent[]): string[] {
  * - your_move: whose turn is the user's
  * - grace: the newest activity is less than QUIET_GRACE_MS old
  */
-export type QuietSkip = 'not_unread' | 'never_read' | 'human_activity' | 'own_pr' | 'unseen_merge' | 'tile_unread' | 'your_move' | 'grace';
+export type QuietSkip = 'not_unread' | 'never_read' | 'stale_snapshot' | 'human_activity' | 'own_pr' | 'unseen_merge' | 'tile_unread' | 'your_move' | 'grace';
 
 export type QuietReadCheck = { kind: 'mark'; bots: string[] } | { kind: 'skip'; why: QuietSkip };
 
@@ -73,7 +75,19 @@ export interface QuietReadInput {
   tileUnread: boolean;
   /** The PR's glance says NOT_YOURS; whose turn reads it the same way the tile does. */
   notYours: boolean;
+  /** When the stored PR snapshot was fetched; null when unknown. */
+  prFetchedAt: IsoTime | null;
   now: IsoTime;
+}
+
+/**
+ * The stored events can only vouch for "bots only" when the snapshot was
+ * fetched at or after the thread's last update. A sync refreshes every
+ * thread but may leave a PR out (its cap, a failed fetch): then the thread
+ * can be fresher than the snapshot, and a person's comment missing from it.
+ */
+export function snapshotCoversThread(input: Pick<QuietReadInput, 'thread' | 'prFetchedAt'>): boolean {
+  return input.prFetchedAt !== null && input.prFetchedAt >= input.thread.updatedAt;
 }
 
 /** Whether PostPile may mark this PR thread read on GitHub by itself, and if not, the first reason why not. */
@@ -84,6 +98,9 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   }
   if (thread.lastReadAt === null) {
     return { kind: 'skip', why: 'never_read' };
+  }
+  if (!snapshotCoversThread(input)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
   }
   const botEvents = botOnlySinceRead(events, thread.lastReadAt);
   if (botEvents === null) {
