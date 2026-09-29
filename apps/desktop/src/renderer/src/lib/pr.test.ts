@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Review } from '@postpile/core';
+import type { PrStatus, Review } from '@postpile/core';
 import { at, makePr } from '@postpile/core/fixtures';
-import { approvedText, checkCounts, mergeStatus, reviewRows, statusParts } from './pr.ts';
+import { approvedText, checkCounts, LIFECYCLE_WORDS, mergeStatus, reviewRows, reviewWord, rowStateWord } from './pr.ts';
 
 function review(author: string, state: Review['state'], minutes: number): Review {
   return { id: `${author}-${minutes}`, author, state, body: '', submittedAt: at(minutes), commitOid: null };
@@ -58,25 +58,34 @@ describe('pr helpers', () => {
   });
 });
 
-describe('statusParts', () => {
-  it('lists lifecycle, review and checks and leaves out what does not apply', () => {
-    expect(statusParts({ lifecycle: 'open', review: 'approved', checks: 'fail', agentApprovers: [] }).map((part) => [part.text, part.tone])).toEqual([
-      ['open', 'good'],
-      ['approved', 'good'],
-      ['ci ✗', 'bad'],
-    ]);
-    expect(statusParts({ lifecycle: 'merged', review: null, checks: null, agentApprovers: [] }).map((part) => part.text)).toEqual(['merged']);
-    expect(statusParts({ lifecycle: 'queued', review: 'changes', checks: 'pending', agentApprovers: [] }).map((part) => part.tone)).toEqual([
-      'queued',
-      'bad',
-      'neutral',
-    ]);
+describe('state words', () => {
+  const open: PrStatus = { lifecycle: 'open', review: null, checks: 'fail', agentApprovers: [] };
+
+  it('says the review state in words, never CI', () => {
+    expect(reviewWord({ ...open, review: 'review' })).toEqual({ kind: 'review', text: 'Needs review', title: 'Review required' });
+    expect(reviewWord({ ...open, review: 'approved' })?.text).toBe('Approved');
+    expect(reviewWord({ ...open, review: 'changes' })?.text).toBe('Changes requested');
+    expect(reviewWord(open)).toBeNull();
   });
 
-  it('says "approved by agent" in the same calm tone when only agents approved', () => {
-    const [, review] = statusParts({ lifecycle: 'open', review: 'approved', checks: null, agentApprovers: ['reviewbot'] });
-    expect(review).toEqual({ text: 'approved by agent', tone: 'good', title: 'Approved by reviewbot (agent)' });
-    const [, two] = statusParts({ lifecycle: 'open', review: 'approved', checks: null, agentApprovers: ['reviewbot', 'lintbot'] });
-    expect(two?.text).toBe('approved by agents');
+  it('says "approved by agent" when only agents approved, names in the tooltip', () => {
+    expect(reviewWord({ ...open, review: 'approved', agentApprovers: ['reviewbot'] })).toEqual({
+      kind: 'approved',
+      text: 'Approved by agent',
+      title: 'Approved by reviewbot (agent)',
+    });
+    expect(reviewWord({ ...open, review: 'approved', agentApprovers: ['reviewbot', 'lintbot'] })?.text).toBe('Approved by agents');
+  });
+
+  it('puts merged, closed and draft in place of the review on a row', () => {
+    expect(rowStateWord({ ...open, lifecycle: 'merged' })?.text).toBe('Merged');
+    expect(rowStateWord({ ...open, lifecycle: 'closed' })?.kind).toBe('closed');
+    expect(rowStateWord({ ...open, lifecycle: 'draft', review: 'approved' })?.kind).toBe('draft');
+    expect(rowStateWord({ ...open, lifecycle: 'queued', review: 'approved' })?.text).toBe('Approved');
+  });
+
+  it('names every lifecycle', () => {
+    expect(LIFECYCLE_WORDS.open.text).toBe('Open');
+    expect(LIFECYCLE_WORDS.queued.title).toBe('In the merge queue');
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, tileForYou } from './tiles.ts';
+import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, sameForWhom, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -82,6 +82,13 @@ describe('tile helpers', () => {
   it('falls back to the first open pinged PR', () => {
     const view = setView([summary(1, { provenance: pulled }), summary(2, { state: 'MERGED' }), summary(3)]);
     expect(leadPr(view)?.key).toBe('acme/app#3');
+  });
+
+  it('compares "for whom" by kind and team', () => {
+    expect(sameForWhom({ kind: 'you' }, { kind: 'you' })).toBe(true);
+    expect(sameForWhom({ kind: 'team', team: 'a/x' }, { kind: 'team', team: 'a/x' })).toBe(true);
+    expect(sameForWhom({ kind: 'team', team: 'a/x' }, { kind: 'team', team: 'a/y' })).toBe(false);
+    expect(sameForWhom({ kind: 'you' }, { kind: 'own' })).toBe(false);
   });
 
   it('labels kinds', () => {

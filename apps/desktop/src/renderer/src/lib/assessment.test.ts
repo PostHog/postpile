@@ -34,7 +34,7 @@ describe('splitRisk', () => {
 
 describe('assessment', () => {
   it('titles box 1 with the verdict and marks the main point and the check', () => {
-    const view = assessment(glance, { kind: 'you' }, false);
+    const view = assessment(glance, { kind: 'you' });
     expect(view.title).toBe('LOOK CLOSER');
     expect(view.tag).toBe('· for you');
     expect(view.lines).toEqual([
@@ -43,31 +43,28 @@ describe('assessment', () => {
     ]);
   });
 
-  it('puts the risk level only in the risk box title, with failing CI as a line', () => {
-    const view = assessment(glance, { kind: 'you' }, true);
+  it('puts the risk level only in the risk box title and never adds a CI line of its own', () => {
+    const view = assessment(glance, { kind: 'you' });
     expect(view.risk).toEqual({
       level: 'medium',
-      lines: [
-        { mark: '▲', text: 'A retry loop with no cap could spin forever.' },
-        { mark: '✕', text: 'CI is failing.' },
-      ],
+      lines: [{ mark: '▲', text: 'A retry loop with no cap could spin forever.' }],
     });
   });
 
   it('leaves the risk box out without risk content', () => {
-    expect(assessment({ ...glance, risk: '' }, null, false).risk).toBeNull();
+    expect(assessment({ ...glance, risk: '' }, null).risk).toBeNull();
   });
 
   it('caps each box at three lines', () => {
     const long = 'One. Two. Three. Four. Five.';
-    expect(assessment({ ...glance, forYou: long }, null, false).lines).toHaveLength(3);
-    expect(assessment({ ...glance, risk: `high - ${long}` }, null, true).risk?.lines).toHaveLength(3);
+    expect(assessment({ ...glance, forYou: long }, null).lines).toHaveLength(3);
+    expect(assessment({ ...glance, risk: `high - ${long}` }, null).risk?.lines).toHaveLength(3);
   });
 
   it('tags by for whom, and never on not-yours', () => {
-    expect(assessment(glance, { kind: 'team', team: 'team-platform' }, false).tag).toBe('· for team-platform');
-    expect(assessment(glance, { kind: 'own' }, false).tag).toBe('· your PR');
-    expect(assessment(glance, { kind: 'none' }, false).tag).toBe('');
-    expect(assessment({ ...glance, verdict: 'NOT_YOURS' }, { kind: 'you' }, false)).toMatchObject({ title: 'NOT YOURS', tag: '' });
+    expect(assessment(glance, { kind: 'team', team: 'team-platform' }).tag).toBe('· for team-platform');
+    expect(assessment(glance, { kind: 'own' }).tag).toBe('· your PR');
+    expect(assessment(glance, { kind: 'none' }).tag).toBe('');
+    expect(assessment({ ...glance, verdict: 'NOT_YOURS' }, { kind: 'you' })).toMatchObject({ title: 'NOT YOURS', tag: '' });
   });
 });

@@ -1,6 +1,6 @@
 // Line icons from the "Crisp native" mockup. They draw with currentColor, so
 // color them with text-* utilities.
-import type { TileKind } from '@postpile/core';
+import type { PrLifecycle, TileKind } from '@postpile/core';
 import type { EventGlyph } from '../lib/events.ts';
 
 interface IconProps {
@@ -230,6 +230,88 @@ export function Glyph(props: IconProps & { glyph: EventGlyph; strokeWidth?: numb
       aria-hidden="true"
     >
       <path d={GLYPH_PATHS[props.glyph]} />
+    </svg>
+  );
+}
+
+// PR state icons, drawn like GitHub's Octicons (simplified, stroked):
+// open pull request, dashed draft circle, merge, closed pull request.
+// Colors are fixed per state so a row reads at a glance.
+
+const LIFECYCLE_TONES: Record<PrLifecycle, string> = {
+  open: 'text-open',
+  draft: 'text-faint',
+  queued: 'text-status-queued',
+  merged: 'text-merged',
+  closed: 'text-closed',
+};
+
+const LIFECYCLE_GLYPHS: Record<Exclude<PrLifecycle, 'draft'>, EventGlyph> = {
+  open: 'ready',
+  queued: 'ready',
+  merged: 'merge',
+  closed: 'closed',
+};
+
+/** The PR's lifecycle as a colored icon; the word goes in `title` (LIFECYCLE_WORDS). */
+export function PrStateIcon(props: IconProps & { lifecycle: PrLifecycle; title: string }) {
+  const size = props.size ?? 14;
+  const tone = `shrink-0 ${LIFECYCLE_TONES[props.lifecycle]} ${props.className ?? ''}`;
+  if (props.lifecycle === 'draft') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeDasharray="2.4 2.2" className={tone} role="img" aria-label={props.title}>
+        <title>{props.title}</title>
+        <circle cx="8" cy="8" r="6" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={tone}
+      role="img"
+      aria-label={props.title}
+    >
+      <title>{props.title}</title>
+      <path d={GLYPH_PATHS[LIFECYCLE_GLYPHS[props.lifecycle]]} />
+    </svg>
+  );
+}
+
+/** Pencil, for the outlined DRAFT chip. */
+export function PencilIcon(props: IconProps) {
+  const size = props.size ?? 11;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" className={props.className} aria-hidden="true">
+      <path d="M10.8 2.7l2.5 2.5L6 12.5l-3.3.8.8-3.3z" />
+    </svg>
+  );
+}
+
+/** "Look closer": a ring with a dot. */
+export function RingDotIcon(props: IconProps) {
+  const size = props.size ?? 11;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className={props.className} aria-hidden="true">
+      <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="8" cy="8" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** "Not yours": a short dash. */
+export function DashIcon(props: IconProps) {
+  const size = props.size ?? 11;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={props.className} aria-hidden="true">
+      <path d="M4 8h8" />
     </svg>
   );
 }

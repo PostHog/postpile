@@ -1,8 +1,8 @@
 import type { ForWhom, Glance, Verdict } from '@postpile/core';
 import { forWhomLabel } from './why.ts';
 
-/** "!" main point, "?" what to check, "▲" a risk, "✕" a failing check. */
-export type AssessmentMark = '!' | '?' | '▲' | '✕';
+/** "!" main point, "?" what to check, "▲" a risk. */
+export type AssessmentMark = '!' | '?' | '▲';
 
 export interface AssessmentLine {
   mark: AssessmentMark;
@@ -64,21 +64,22 @@ function youLines(forYou: string): AssessmentLine[] {
     .map((text, index) => ({ mark: index > 0 && CHECK_WORDS.test(text) ? '?' : '!', text }));
 }
 
-function riskLines(rest: string, checksFailing: boolean): AssessmentLine[] {
-  const failing: AssessmentLine[] = checksFailing ? [{ mark: '✕', text: 'CI is failing.' }] : [];
-  const lines: AssessmentLine[] = sentences(rest).map((text) => ({ mark: '▲', text }));
-  return [...lines.slice(0, LINES_PER_BOX - failing.length), ...failing];
+/** The agent's own risk sentences. CI is never added here: checks only show in the facts (2026-09-29). */
+function riskLines(rest: string): AssessmentLine[] {
+  return sentences(rest)
+    .slice(0, LINES_PER_BOX)
+    .map((text) => ({ mark: '▲', text }));
 }
 
 /**
  * The detail pane's assessment from a glance ("verdict as the box title"):
  * box 1 titled with the verdict holds the for-you lines, box 2 "RISK · level"
- * the risk lines and a failing CI, then plain Does and Others lines. The
+ * the agent's risk lines, then plain Does and Others lines. The
  * verdict and the risk level each appear once.
  */
-export function assessment(glance: Glance, forWhom: ForWhom | null, checksFailing: boolean): Assessment {
+export function assessment(glance: Glance, forWhom: ForWhom | null): Assessment {
   const risk = splitRisk(glance.risk);
-  const lines = riskLines(risk.rest, checksFailing);
+  const lines = riskLines(risk.rest);
   const hasRisk = risk.level !== '' || lines.length > 0;
   return {
     verdict: glance.verdict,
