@@ -10,19 +10,24 @@ import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptConte
  * for its sources. Only the stored input hash records it: bumping the
  * shared PROMPT_VERSION would regenerate every glance and set for nothing,
  * and older dossiers read fine, their lines show "no source recorded".
+ * Dropping CI (NO_CI_RULE, 2026-09-29) kept d2: a dossier is rewritten on
+ * the topic's next real activity anyway.
  */
 export const DOSSIER_PROMPT_VERSION = 'd2';
 
 /**
  * Wording version of the glance batch prompt alone, like
  * DOSSIER_PROMPT_VERSION. g2 asks for keyFiles, so every glance regenerates
- * once to get them; sets and topic summaries stay as they are.
+ * once to get them; sets and topic summaries stay as they are. Dropping CI
+ * (NO_CI_RULE, 2026-09-29) kept g2: a glance that talks about CI goes stale
+ * on the PR's next push, review or human comment, so no mass regeneration.
  */
 export const GLANCE_PROMPT_VERSION = 'g2';
 
 // Input hashes decide when a stored answer is stale. They cover what the
-// answer depends on, not every byte of the prompt: a bot comment or a CI
-// re-run must not regenerate a glance, so those are left out on purpose.
+// answer depends on, not every byte of the prompt: a bot comment must not
+// regenerate a glance, so those are left out on purpose. Checks are not in
+// any prompt (NO_CI_RULE) and stay out of every hash too.
 
 /**
  * What a glance depends on: code, description, review state and human

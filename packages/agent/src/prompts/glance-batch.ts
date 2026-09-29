@@ -1,6 +1,6 @@
 import type { GlanceBatchInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { batchDetail, contextBlock, GITHUB_DATA_RULE, githubData, howItReached, jsonOnly, prDetails, viewerLine, workContextBlock } from './shared.ts';
+import { batchDetail, contextBlock, GITHUB_DATA_RULE, githubData, howItReached, jsonOnly, NO_CI_RULE, prDetails, viewerLine, workContextBlock } from './shared.ts';
 
 function topicBlock(input: GlanceBatchInput): string {
   if (!input.topic) {
@@ -63,6 +63,8 @@ so stay under the word limits:
 "Approved by" marks each approver as a person or an agent (an AI review agent or other
 automation account). Both are real approvals on GitHub. Who looked is a fact you may use in the
 verdict, forYou or risk, for example whether a person has reviewed a change in the user's areas.
+
+${NO_CI_RULE}
 
 Judge each PR on its own facts; do not copy one PR's verdict to the next. Be concrete and
 skeptical; say "unclear" rather than invent.

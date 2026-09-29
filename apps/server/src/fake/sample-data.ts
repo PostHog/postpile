@@ -97,7 +97,7 @@ function buildTopics(clock: SampleClock): Topic[] {
       id: TOPIC.deps,
       area: 'Dev env',
       name: 'Dependency bumps',
-      summary: 'Bot PRs, all green.',
+      summary: 'Bot PRs that bump pinned versions.',
       tailoring: 'Never ping me for these.',
       driver: null,
       userRole: 'watcher',
@@ -548,7 +548,7 @@ function buildGlances(clock: SampleClock): Glance[] {
       verdict: 'LOOKS_SAFE',
       forYou: 'You approved; since then Rowan raised the shard count and pinned the runner image.',
       does: 'Moves Playwright jobs to depot-ubuntu-24.04-8.',
-      risk: 'Low. CI green.',
+      risk: 'Low. Same jobs, bigger runners.',
       othersSaid: 'No comments yet.',
     }),
     sampleGlance(clock, 1915, {
@@ -653,7 +653,7 @@ function buildTiles(): Tile[] {
     ]),
     sampleTile(TOPIC.warmer, 'single', `pr:${sampleKey(1840)}`, 'Nightly cache warmer removed', [pinged(1840, 'review_requested')]),
     sampleTile(TOPIC.desktop, 'single', `pr:${sampleKey(1940)}`, 'Desktop 2.3 release thread', [pinged(1940, 'subscribed')]),
-    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1950)}`, 'Your pnpm cache PR waits for CI', [found(1950, 'own_open', 'your open PR')]),
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1950)}`, 'Your pnpm cache PR for the devbox image', [found(1950, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1955)}`, 'nell wants your review on the Playwright pin', [
       found(1955, 'review_requested', 'review requested from you'),
     ]),

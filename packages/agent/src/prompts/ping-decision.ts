@@ -1,6 +1,6 @@
 import type { PrEvent } from '@postpile/core';
 import type { PingDecisionInput, PingDecisionItem } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, workContextBlock } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, withoutCi, workContextBlock } from './shared.ts';
 
 function eventLine(event: PrEvent): string {
   const bot = event.isBot ? ' (bot)' : '';
@@ -31,7 +31,7 @@ function itemSection(item: PingDecisionItem): string {
   }
   lines.push(
     `Rules: ${item.rule.loudness} (${item.rule.reason}), why it reached them: ${item.rule.why}, ${turnLine(item)}`,
-    `New activity, newest first:\n${githubData(`${prLine(item.pr)}\n${item.events.map(eventLine).join('\n')}`)}`,
+    `New activity, newest first:\n${githubData(`${prLine(item.pr)}\n${withoutCi(item.events).map(eventLine).join('\n')}`)}`,
     // The template quotes the comment, so it is GitHub text too.
     `Default notification:\n${githubData(`title: ${item.template.title}\nbody: ${item.template.body.replaceAll('\n', ' / ')}`)}`,
   );

@@ -6,6 +6,7 @@ import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
+import { NO_CI_RULE } from './prompts/shared.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';
 import {
@@ -34,6 +35,7 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
         makeEvent({ id: 'ev-human', summary: 'bob asked: are release builds staying?' }),
         makeEvent({ id: 'ev-bot', actor: 'github-actions', isBot: true, kind: 'ci', summary: 'CI failed' }),
         makeEvent({ id: 'ev-bot2', actor: 'github-actions', isBot: true, kind: 'ci', summary: 'CI failed again' }),
+        makeEvent({ id: 'ev-bot3', actor: 'reviewbot[bot]', isBot: true, kind: 'bot_comment', summary: 'reviewbot left a summary' }),
       ],
       joinedPrKeys: [pr2.key],
       leftPrKeys: ['acme/app#7'],
@@ -68,7 +70,7 @@ describe('renderDossier', () => {
         'Open questions:',
         '- Q1 Do we keep GitHub runners for release builds? (asked by @carol, acme/app#1)',
         'PR timeline, oldest first (state from GitHub now, not from memory):',
-        '- acme/app#1 open, CI failing, @alice: moves test jobs',
+        '- acme/app#1 open, @alice: moves test jobs',
         'Recent changes, newest first:',
         '- C1 2026-09-19 Docker build PR opened',
       ].join('\n'),
@@ -97,8 +99,17 @@ describe('dossierUpdatePrompt', () => {
 
   it('gives human events short ids and compacts bots to counts', () => {
     expect(prompt).toContain('- e1 2026-09-02 acme/app#1 comment by @bob: bob asked: are release builds staying?');
+    expect(prompt).toContain('Bot activity, counted only:\n- acme/app#1: 1 (bot_comment)');
+  });
+
+  it('carries no CI status and says not to bring it up, while CI as a subject of the work stays', () => {
     expect(prompt).not.toContain('CI failed');
-    expect(prompt).toContain('- acme/app#1: 2 (ci)');
+    expect(prompt).not.toContain('(ci)');
+    expect(prompt).not.toContain('CI failing');
+    expect(prompt).not.toMatch(/CI: (failure|success|pending|none)/);
+    expect(prompt).toContain(NO_CI_RULE);
+    expect(prompt).toContain('Goal: Run all CI on Depot runners');
+    expect(prompt).toContain('I care about CI cost');
   });
 
   it('introduces joined PRs, lists left ones, facts and new feedback', () => {
@@ -159,6 +170,14 @@ describe('glanceBatchPrompt', () => {
     expect(prompt).toContain('pulled in for context because: same migration');
     expect(prompt).toContain('each of 2 GitHub pull requests');
     expect(prompt).toMatch(/<github_data>\nTopic: Move CI to Depot\n\nTopic dossier \(v7/);
+  });
+
+  it('carries no CI status and says not to bring it up, while CI files and topics stay', () => {
+    expect(prompt).not.toMatch(/CI: (failure|success|pending|none)/);
+    expect(prompt).not.toContain('CI failing');
+    expect(prompt).toContain(NO_CI_RULE);
+    expect(prompt).toContain('.github/workflows/ci.yml');
+    expect(prompt).toContain('Topic: Move CI to Depot');
   });
 
   it('works for Unsorted without a dossier', () => {
