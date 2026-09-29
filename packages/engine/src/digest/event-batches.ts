@@ -10,8 +10,17 @@ export const EVENT_BATCH_PRS = 20;
 /** Classify cursor scope for PRs without a topic. */
 const UNSORTED_SCOPE = 'unsorted';
 
-/** Set once the one-time re-judge of stuck asks ran for every topic (see `stuckAsks`). */
+/**
+ * Set once the one-time re-judge of stuck asks ran for every topic (see
+ * `stuckAsks`). Each topic (or Unsorted) also gets `<key>:<scope>` once its
+ * own batches ran, so a topic the call cap skipped does not make the others
+ * send their asks again.
+ */
 export const REJUDGE_ASKS_KEY = 'events_rejudge_asks_v1';
+
+function rejudgeKey(group: EventGroup): string {
+  return `${REJUDGE_ASKS_KEY}:${group.scope}`;
+}
 
 type EventItem = EventBatchInput['items'][number];
 
@@ -137,34 +146,37 @@ export class EventBatchClassifier {
     }
   }
 
-  /** False when a batch was skipped or failed, so the cursor (and the re-judge flag) stays put. */
-  private async runGroup(group: EventGroup, toSeq: number, rejudge: boolean): Promise<boolean> {
+  /** When a batch was skipped or failed, the cursor (and the group's re-judge key) stays put. */
+  private async runGroup(group: EventGroup, toSeq: number, rejudge: boolean): Promise<void> {
     const { store } = this.deps;
     const cursorSeq = store.cursors.get('classify', group.scope)?.seq ?? 0;
     const batches = chunk(this.items(group.prKeys, cursorSeq, rejudge), EVENT_BATCH_PRS);
     const done = await Promise.all(batches.map((batch) => this.classify(group.topicId, batch)));
     if (!done.every(Boolean)) {
-      return false;
+      return;
     }
     const updatedAt = this.deps.now().toISOString();
     store.cursors.advance({ kind: 'classify', scope: group.scope, seq: toSeq, dossierVersion: null, updatedAt });
-    return true;
+    if (rejudge) {
+      store.meta.set(rejudgeKey(group), updatedAt);
+    }
   }
 
   /**
    * Every topic and Unsorted, or only the scope's (a glance catch-up run).
-   * The first full run after the upgrade also re-judges the stuck asks; the
-   * flag is set once every group ran, so a capped or failed group tries
-   * again on the next sync.
+   * Full runs re-judge the stuck asks of each group that has not done it
+   * yet; a capped or failed group tries again on the next sync, the others
+   * do not send theirs again. Once every group did, the global flag ends it.
    */
   async run(scope: TopicScope | null = null): Promise<void> {
     const { store } = this.deps;
     // Taken once up front: events logged while calls run are left for the next sync.
     const toSeq = store.eventLog.maxSeq();
-    const rejudge = scope === null && store.meta.get(REJUDGE_ASKS_KEY) === null;
+    const rejudgeOpen = scope === null && store.meta.get(REJUDGE_ASKS_KEY) === null;
     const groups = this.groups().filter((group) => scope === null || group.topicId === scope.topicId);
-    const done = await Promise.all(groups.map((group) => this.runGroup(group, toSeq, rejudge)));
-    if (rejudge && done.every(Boolean)) {
+    const rejudged = (group: EventGroup) => store.meta.get(rejudgeKey(group)) !== null;
+    await Promise.all(groups.map((group) => this.runGroup(group, toSeq, rejudgeOpen && !rejudged(group))));
+    if (rejudgeOpen && groups.every(rejudged)) {
       store.meta.set(REJUDGE_ASKS_KEY, this.deps.now().toISOString());
     }
   }
