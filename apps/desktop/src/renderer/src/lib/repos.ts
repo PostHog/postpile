@@ -12,8 +12,13 @@ export function scopeLabel(overview: RepoOverview | undefined): string {
   return scope === null ? 'All repos' : shortRepo(scope);
 }
 
-/** "3 topics, 5 PRs" for a row's count. */
+/** "6 topics": a row's count in words, so it never reads as an unread badge. */
+export function topicCount(topics: number): string {
+  return `${topics} topic${topics === 1 ? '' : 's'}`;
+}
+
+/** "3 topics, 5 PRs" for a row's tooltip. */
 export function countTitle(topics: number, prs: number | null): string {
-  const topicText = `${topics} topic${topics === 1 ? '' : 's'}`;
+  const topicText = topicCount(topics);
   return prs === null ? topicText : `${topicText}, ${prs} PR${prs === 1 ? '' : 's'}`;
 }
