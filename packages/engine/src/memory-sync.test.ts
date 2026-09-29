@@ -2,6 +2,7 @@ import type { Dossier, Pr } from '@postpile/core';
 import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
+import { REJUDGE_ASKS_KEY } from './digest/event-batches.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { makeTopic, topicWithPrs } from './testing/topics.ts';
@@ -483,6 +484,45 @@ describe('replies that ask nothing', () => {
     expect(reply?.seenAt).not.toBeNull();
     const turn = (await h.engine.getTopic('depot'))?.tiles[0]?.turn;
     expect(turn).toMatchObject({ kind: 'them', who: 'bob', what: 'to address 1 thread' });
+  });
+
+  /** A database from before the re-judge: the reply was judged (kept loud) and the classify cursor moved past it. */
+  async function judgedBeforeUpgrade(h: Harness): Promise<void> {
+    topicWithPrs(h, 'depot', [thankedPr()]);
+    await h.engine.sync({ agentJobs: ['events'] });
+    h.store.meta.delete(REJUDGE_ASKS_KEY);
+    h.reader.etag = 'etag-2';
+  }
+
+  it('behind the classify cursor are judged once more on the first sync after the upgrade', async () => {
+    const h = makeHarness();
+    await judgedBeforeUpgrade(h);
+    h.agent.answerEvents((input) => {
+      const reply = input.items[0]!.events.find((event) => event.kind === 'reply_to_user')!;
+      return [{ eventId: reply.id, loudness: 'quiet', reason: 'Only says thanks.' }];
+    });
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    expect(h.agent.eventInputs).toHaveLength(2);
+    expect(h.agent.eventInputs[1]?.items[0]?.events.map((event) => event.kind)).toEqual(['reply_to_user']);
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.turn).toMatchObject({ kind: 'them', who: 'bob' });
+    h.reader.etag = 'etag-3';
+    await h.engine.sync({ agentJobs: ['events'] });
+    expect(h.agent.eventInputs).toHaveLength(2);
+  });
+
+  it('kept loud by the re-judge are not sent again', async () => {
+    const h = makeHarness();
+    await judgedBeforeUpgrade(h);
+
+    await h.engine.sync({ agentJobs: ['events'] });
+    h.reader.etag = 'etag-3';
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    expect(h.agent.eventInputs).toHaveLength(2);
+    expect(h.store.meta.get(REJUDGE_ASKS_KEY)).not.toBeNull();
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.turn).toMatchObject({ kind: 'you', what: 'Reply to bob' });
   });
 
   it('stay your move while the agent leaves them loud', async () => {

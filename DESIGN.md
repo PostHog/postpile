@@ -541,7 +541,12 @@ Each numbered step is one `AgentJob` or a deterministic pass.
    stay the user's move until answered (2026-09-29), plus
    unseen `commits_after_approval` events (quiet by rule). A reply or
    mention that asks nothing ("thanks", "yeah that's fine") goes quiet; a
-   question or request still waiting for the user stays loud. For pushes the
+   question or request still waiting for the user stays loud. Once, on the
+   first full sync after that rule came in (meta `events_rejudge_asks_v1`,
+   set when every topic's batches ran), every unanswered loud personal ask
+   without an override on an open PR goes along too, wherever the cursor
+   is (`isUnansweredAsk`), so asks judged by the older prompt get the new
+   rule. For pushes the
    prompt shows the PR's files and says plain follow-up pushes are
    normally not worth the user's attention; the agent raises one to loud,
    with a one-line reason, only for a substantial change in CI, build or

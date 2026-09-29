@@ -642,11 +642,11 @@ now".
 - A database from before the classify cursor gives a second opinion on its
   older loud unseen events once, on the first sync after the upgrade (one
   call per topic with such events, within `--max-agent-calls`).
-- Asks the events agent already judged before 2026-09-29 (behind the
-  topic's classify cursor, older prompt without the "asks nothing is quiet"
-  rule) are not judged again, read or not: an old "thanks, that's fine"
-  stays your move until you answer it. No cursor reset for now; new
-  replies get the new rule.
+- Asks the events agent judged before 2026-09-29 sit behind the classify
+  cursor. The first full sync after the upgrade sends every unanswered loud
+  personal ask on an open PR once more (meta `events_rejudge_asks_v1`,
+  within the call cap, merged into the topic's normal batch), so an old
+  "thanks, that's fine" can go quiet. No cursor reset.
 - Topics without a stored dossier context hash count as unchanged; the hash
   is written on their next dossier update.
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;

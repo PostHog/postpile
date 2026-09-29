@@ -105,26 +105,31 @@ function spokeSince(pr: Pr, viewer: Viewer, since: string): boolean {
 }
 
 /**
- * The newest human event of `kinds` aimed at the viewer that they have not
- * answered since (no comment or review after it). Also used by `prTier`.
- * A team mention only asks until it is read: once seen (mark-read in the
- * app or read on GitHub) it no longer counts (decided 2026-09-28). Personal
- * asks count until answered. An event the events agent lowered to quiet or
- * muted ("thanks, that's fine") asks nothing (decided 2026-09-29).
+ * A human event of `kinds` aimed at the viewer that they have not answered
+ * since (no comment or review after it). A team mention only asks until it
+ * is read: once seen (mark-read in the app or read on GitHub) it no longer
+ * counts (decided 2026-09-28). Personal asks count until answered. An event
+ * the events agent lowered to quiet or muted ("thanks, that's fine") asks
+ * nothing (decided 2026-09-29).
  */
-export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: EventKind[] = ASK_KINDS): PrEvent | null {
+export function isUnansweredAsk(pr: Pr, event: PrEvent, viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): boolean {
+  if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
+    return false;
+  }
+  if (event.kind === 'team_mention' && event.seenAt !== null) {
+    return false;
+  }
+  if (effectiveLoudness(event) !== 'loud') {
+    return false;
+  }
+  return !spokeSince(pr, viewer, event.at);
+}
+
+/** The newest unanswered ask on the PR (`isUnansweredAsk`). Also used by `prTier`. */
+export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): PrEvent | null {
   let newest: PrEvent | null = null;
   for (const event of events) {
-    if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
-      continue;
-    }
-    if (event.kind === 'team_mention' && event.seenAt !== null) {
-      continue;
-    }
-    if (effectiveLoudness(event) !== 'loud') {
-      continue;
-    }
-    if (spokeSince(pr, viewer, event.at)) {
+    if (!isUnansweredAsk(pr, event, viewer, kinds)) {
       continue;
     }
     if (newest === null || event.at > newest.at) {
@@ -269,7 +274,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
  * or merge.
  */
 function draftTurn(ctx: PrContext): WhoseTurn {
-  const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer, [...PERSONAL_ASK_KINDS]);
+  const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer, PERSONAL_ASK_KINDS);
   if (ask) {
     return you(ctx, 'reply', `Reply to ${ask.actor} on draft`);
   }
