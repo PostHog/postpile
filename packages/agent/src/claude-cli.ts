@@ -53,9 +53,25 @@ interface ClaudeJsonResult {
   is_error?: boolean;
   total_cost_usd?: number;
   duration_ms?: number;
+  /** Per model that answered, keyed by its full id (e.g. "claude-sonnet-5-5"). */
+  modelUsage?: Record<string, { costUSD?: number }>;
 }
 
-export function parseClaudeOutput(stdout: string): { text: string; costUsd: number | null } {
+/**
+ * The model that actually answered, from the CLI's own usage report: the one
+ * that cost the most when several took part. Null when the report is missing
+ * (older CLIs); the requested model is recorded then.
+ */
+function answeringModel(parsed: ClaudeJsonResult): string | null {
+  const entries = Object.entries(parsed.modelUsage ?? {});
+  if (entries.length === 0) {
+    return null;
+  }
+  entries.sort((a, b) => (b[1].costUSD ?? 0) - (a[1].costUSD ?? 0));
+  return entries[0][0];
+}
+
+export function parseClaudeOutput(stdout: string): { text: string; costUsd: number | null; model: string | null } {
   let parsed: ClaudeJsonResult;
   try {
     parsed = JSON.parse(stdout) as ClaudeJsonResult;
@@ -65,7 +81,22 @@ export function parseClaudeOutput(stdout: string): { text: string; costUsd: numb
   if (parsed.is_error || typeof parsed.result !== 'string') {
     throw new Error(`claude returned an error: ${stdout.slice(0, 500)}`);
   }
-  return { text: parsed.result.trim(), costUsd: parsed.total_cost_usd ?? null };
+  return { text: parsed.result.trim(), costUsd: parsed.total_cost_usd ?? null, model: answeringModel(parsed) };
+}
+
+/**
+ * Recorded in agent_call. An alias ("opus") resolves to a full id, which is
+ * expected; a full id that comes back different means something remapped it
+ * (user settings, CLI defaults), which is worth a log line.
+ */
+function recordedModel(requested: string, answered: string | null): string {
+  if (answered === null) {
+    return requested;
+  }
+  if (requested.startsWith('claude-') && answered !== requested) {
+    console.warn(`claude answered with ${answered}, asked for ${requested}`);
+  }
+  return answered;
 }
 
 export interface ClaudeCliRunnerOptions {
@@ -154,8 +185,8 @@ export class ClaudeCliRunner implements AgentRunner {
           return;
         }
         try {
-          const { text, costUsd } = parseClaudeOutput(stdout);
-          settle(null, { text, model: request.model, durationMs: Date.now() - started, costUsd });
+          const { text, costUsd, model } = parseClaudeOutput(stdout);
+          settle(null, { text, model: recordedModel(request.model, model), durationMs: Date.now() - started, costUsd });
         } catch (error) {
           settle(error instanceof Error ? error : new Error(String(error)));
         }

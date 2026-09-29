@@ -35,7 +35,14 @@ describe('claude cli runner', () => {
 
   it('parses the json result envelope', () => {
     const out = parseClaudeOutput('{"type":"result","result":" hi ","is_error":false,"total_cost_usd":0.001}');
-    expect(out).toEqual({ text: 'hi', costUsd: 0.001 });
+    expect(out).toEqual({ text: 'hi', costUsd: 0.001, model: null });
+  });
+
+  it('reads the answering model from the usage report, the costliest first', () => {
+    const out = parseClaudeOutput(
+      '{"type":"result","result":"x","is_error":false,"modelUsage":{"claude-haiku-4-5":{"costUSD":0.0001},"claude-sonnet-5-5":{"costUSD":0.008}}}',
+    );
+    expect(out.model).toBe('claude-sonnet-5-5');
   });
 
   it('rejects an error envelope', () => {
