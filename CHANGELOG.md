@@ -4,6 +4,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Changed
+
+- A snooze on a stack or set wakes when any of its tracked PRs meets the condition, for example the first PR to go green, instead of waiting for all of them.
+- Under the hood: each rule (automation, who a review request asks, whose move, loudness, pings, button offers) is worked out once in core and read by the app, pings, MCP and sample mode alike, so they can no longer disagree.
+
 ### Fixed
 
 - A review request a bot made for you counts as an ask everywhere: it pings, wakes a snooze, and keeps quiet reads from marking the thread read as bot activity.
