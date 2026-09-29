@@ -196,6 +196,8 @@ export interface SampleEventInput {
   text: string;
   hoursAgo: number;
   rule: Loudness;
+  /** The id of the sample comment or review this event is about, so the detail pane can show its full text. */
+  sourceId?: string;
   seen?: boolean;
   isBot?: boolean;
   /** Set when the agent muted the event, with its reason. */
@@ -207,7 +209,7 @@ export interface SampleEventInput {
 export function sampleEvents(clock: SampleClock, number: number, inputs: SampleEventInput[]): PrEvent[] {
   const key = sampleKey(number);
   return inputs.map((input, index) => {
-    const sourceId = `s${number}-${index}`;
+    const sourceId = input.sourceId ?? `s${number}-${index}`;
     const at = clock.hoursAgo(input.hoursAgo);
     return {
       id: `${key}:${input.kind}:${sourceId}`,

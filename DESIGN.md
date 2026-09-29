@@ -1839,6 +1839,13 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
   agent-muted events and review requests between others fold into one "N
   bot/CI events" line that expands (Unmute lives there).
+  Comments and reviews from people show in full (2026-09-29): the event
+  `summary` is one clipped line (100 chars, first line) for tiles, MCP and
+  the agent, so `activityList(events, viewer, since, pr)` also puts the
+  whole text on the line as `body`, read from `pr.comments` / `pr.reviews`
+  by the event's `sourceId`. The row shows the lead ("lyra commented") and
+  the body under it, wrapped, line breaks kept, never clamped. Bots keep
+  the one-line form; so do agent-muted people in the folded line.
 - **Resizable**: the two edges (sidebar | tiles, tiles | detail) are draggable
   (`PaneDivider`, pointer capture, a 12px invisible hit area, col-resize
   cursor). Limits: sidebar 200-440px, tile column 340-720px, and a drag never

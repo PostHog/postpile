@@ -406,7 +406,7 @@ export class ReadModels {
     return {
       pr,
       events,
-      activity: activityList(events, viewer, news?.anchor.at ?? null),
+      activity: activityList(events, viewer, news?.anchor.at ?? null, pr),
       whatsNew: news,
       glance,
       glanceStale: stale,

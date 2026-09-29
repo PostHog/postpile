@@ -842,7 +842,7 @@ export class FakeEngine implements EngineService {
     return {
       pr,
       events,
-      activity: activityList(events, this.viewer(), news?.anchor.at ?? null),
+      activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr),
       whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: false,

@@ -11,6 +11,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Your own PRs stay under My PRs whatever area or team the code belongs to; only Needs reply ranks above them.
 - The "your move" chip on a topic row names the most urgent move ("Reply", "Re-review", "Review", "Address changes", "Fix CI", "Merge") and how many more ("Reply +2"). Hover it to see every move.
 - A reply or mention that asks nothing of you ("thanks", "yeah that's fine") no longer makes it your move: when the agent judges it quiet, the tile stops saying "Reply to …", the topic leaves Needs reply, and marking it read no longer says "still your move". A real question still waits for your answer.
+- Comments and review texts from people now show in full in the detail pane, in "New since you looked" and in the activity list. They used to be cut to one short line. Bot and CI lines stay compact.
 
 ## 0.5.0 (2026-09-29)
 

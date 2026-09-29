@@ -61,3 +61,12 @@ export function splitActor(summary: string, actor: string): { actor: string; res
   }
   return null;
 }
+
+/**
+ * A summary is "<lead>: <first line of the body>". When the full body is
+ * shown under the line, only the lead ("lyra commented") stays on top.
+ */
+export function summaryLead(summary: string): string {
+  const colon = summary.indexOf(': ');
+  return colon === -1 ? summary : summary.slice(0, colon);
+}

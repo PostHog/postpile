@@ -188,7 +188,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         ['nell', 'COMMENTED', 'The first run after merge took 38 min on my fork.'],
       ],
       reviewerUsers: [SAMPLE_VIEWER], reviewerTeams: ['acme/team-platform'],
-      comments: [{ id: 'issuecomment-2', author: 'lyra', body: '@you does the warm-up job need a feature flag, or is one cold hour fine?', hoursAgo: 0.3 }],
+      comments: [{ id: 'issuecomment-2', author: 'lyra', body: '@you does the warm-up job need a feature flag, or is one cold hour fine?\n\nMy worry is the first run after a lockfile change: the cache is empty, the warm-up job competes with the real jobs for runners, and the cold hour can stretch to two on a busy morning. A flag would let us turn it off per repo without a deploy. If a cold hour is fine, I would rather drop the warm-up job than keep dead config around. See https://example.com/acme/app/actions/runs/1234567890/attempts/2/very/long/path/that/should/wrap/instead/of/widening/the/pane for the run where it stalled.', hoursAgo: 0.3 }],
       threads: [
         {
           id: 'thread-1902-1',
@@ -402,7 +402,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 1902, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 5, rule: 'loud', seen: true },
       { kind: 'deploy', actor: 'deploy-bot', text: 'deployed a preview', hoursAgo: 1, rule: 'quiet', isBot: true },
-      { kind: 'mention', actor: 'lyra', text: 'mentioned you: "does the warm-up need a flag?"', hoursAgo: 0.3, rule: 'loud' },
+      { kind: 'mention', actor: 'lyra', text: 'mentioned you: does the warm-up job need a feature flag, or is one cold hour fine?', sourceId: 'issuecomment-2', hoursAgo: 0.3, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1904, [
       { kind: 'review_requested', actor: 'lyra', text: 'requested a review from you', hoursAgo: 8, rule: 'loud', seen: true },
