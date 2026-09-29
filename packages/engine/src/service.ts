@@ -218,8 +218,12 @@ export interface EngineService {
   listProposals(): Promise<PendingProposals>;
   getChat(tileId: string): Promise<ChatMessage[]>;
 
-  /** Immediate and final: GitHub approvals cannot be undone. */
-  approve(prKey: PrKey): Promise<ActionResult>;
+  /**
+   * Immediate and final: GitHub approvals cannot be undone. `headOid` is the
+   * head commit the user looked at; a different stored head refuses the
+   * approval without calling GitHub.
+   */
+  approve(prKey: PrKey, headOid: string): Promise<ActionResult>;
   /**
    * "Remove <team>": removes the review request of one of the viewer's teams
    * (`team` as GitHub lists it, "acme/team-devex"), unsubscribes from the

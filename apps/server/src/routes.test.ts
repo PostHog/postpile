@@ -318,12 +318,16 @@ describe('server routes over the fake engine', () => {
 
   it('refuses to approve while GitHub writes are off, approves once the lock is open', async () => {
     const app = appWithFake();
-    const refused = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve');
+    const head = ((await (await app.request('/api/prs/acme/app/1911')).json()) as PrDetail).pr.headOid;
+    const refused = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve', { headOid: head });
     expect(refused.json.ok).toBe(false);
     const change = await post<GitHubWritesChange>(app, '/api/github-writes', { enabled: true });
     expect(change.json.status.enabled).toBe(true);
     expect(await (await app.request('/api/github-writes')).json()).toEqual({ enabled: true, forcedOffReason: null, pending: [] });
-    const res = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve');
+    expect((await post(app, '/api/prs/acme/app/1911/approve', {})).status).toBe(400);
+    const moved = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve', { headOid: 'older-head' });
+    expect(moved.json).toMatchObject({ ok: false, message: 'New commits since you looked; take another look' });
+    const res = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve', { headOid: head });
     expect(res.json.ok).toBe(true);
     const detail = (await (await app.request('/api/prs/acme/app/1911')).json()) as PrDetail;
     expect(detail.userState?.approvedAt).toBeTruthy();

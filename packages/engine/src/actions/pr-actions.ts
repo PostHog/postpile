@@ -8,6 +8,9 @@ import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
 
+/** Why an approval is refused when the stored head moved past the one on screen. */
+export const NEW_COMMITS_SINCE_LOOKED = 'New commits since you looked; take another look';
+
 /** Actions on one PR that write to GitHub right away: approve and comment. */
 export class PrActions {
   constructor(
@@ -29,14 +32,18 @@ export class PrActions {
   /**
    * Immediate and final. Approving answers the ping, so the PR's events are
    * marked read too; the returned undo token only brings back the unread
-   * state, never the approval. The review is pinned to the stored head, the
-   * commit the glance and the user looked at; a later push shows up as
-   * "new commits after approval" on the next sync.
+   * state, never the approval. The review is pinned to `headOid`, the commit
+   * the renderer showed. A poll can move the stored head a few seconds
+   * before the renderer refreshes; then the approval is refused without a
+   * GitHub call, so nobody approves commits they have not seen.
    */
-  async approve(key: PrKey): Promise<ActionResult> {
+  async approve(key: PrKey, headOid: string): Promise<ActionResult> {
     const pr = this.openPr(key);
     if (!pr) {
       return failed(`${key} is not an open PR in the store`);
+    }
+    if (pr.headOid !== headOid) {
+      return failed(NEW_COMMITS_SINCE_LOOKED);
     }
     const origin = { origin: 'tile' as const, prKey: key };
     try {

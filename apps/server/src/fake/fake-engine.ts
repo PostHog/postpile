@@ -144,7 +144,7 @@ import {
   type OpenedReadResult,
   type QuietReadView,
 } from '@postpile/core';
-import { AgentRefresher, AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, AutoSyncSchedule, LivePoller, NEW_COMMITS_SINCE_LOOKED, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
@@ -961,10 +961,13 @@ export class FakeEngine implements EngineService {
   // EngineService: actions
   // -------------------------------------------------------------------------
 
-  async approve(prKey: PrKey): Promise<ActionResult> {
+  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     if (!pr) {
       return fail(`no PR ${prKey}`);
+    }
+    if (pr.headOid !== headOid) {
+      return fail(NEW_COMMITS_SINCE_LOOKED);
     }
     if (!this.writes.isEnabled()) {
       this.writes.record({ action: 'approve', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });

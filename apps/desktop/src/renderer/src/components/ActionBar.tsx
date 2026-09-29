@@ -111,7 +111,7 @@ export function ActionBar(props: ActionBarProps) {
         size="md"
         disabled={actions.isBusy(`approve:${pr.key}`)}
         title={approveTitle(approveInput, approve, actions.blockedReason('approve'), now)}
-        onClick={() => void actions.approve(pr.key)}
+        onClick={() => void actions.approve(pr.key, pr.headOid)}
       >
         {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}
         <span className="flex items-center gap-1 opacity-75">

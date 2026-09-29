@@ -833,8 +833,8 @@ export class Engine implements EngineService {
     return this.chats.getChat(tileId);
   }
 
-  async approve(prKey: PrKey): Promise<ActionResult> {
-    const result = await this.prActions.approve(prKey);
+  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
+    const result = await this.prActions.approve(prKey, headOid);
     if (result.ok) {
       // Approve only ever runs from the detail pane's action bar (CLAUDE.md
       // "Approve is final"); was_agent_approved is reserved for a future

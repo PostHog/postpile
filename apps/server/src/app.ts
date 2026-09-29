@@ -371,8 +371,10 @@ export function createApp(
   app.post('/api/prs/:owner/:repo/:number/glance/retry', async (c) => {
     return c.json(await engine.retryGlance(prKeyFromParams(c.req.param())));
   });
+  // headOid: the head commit the renderer showed; the approval is pinned to it or refused.
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
-    return c.json(await engine.approve(prKeyFromParams(c.req.param())));
+    const body = z.object({ headOid: z.string().min(1).max(100) }).parse(await c.req.json());
+    return c.json(await engine.approve(prKeyFromParams(c.req.param()), body.headOid));
   });
   // "Remove <team>": removes a team review request and unsubscribes. Final; refused while writes are locked.
   app.post('/api/prs/:owner/:repo/:number/remove-team-request', async (c) => {

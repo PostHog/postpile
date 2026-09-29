@@ -242,7 +242,7 @@ describe('refresh after a write and on focus', () => {
     h.reader.prs.set(pr.key, approved);
     const fetches = h.reader.fetchedRefs.length;
 
-    const result = await h.engine.approve(pr.key);
+    const result = await h.engine.approve(pr.key, pr.headOid);
 
     expect(result.ok).toBe(true);
     expect(h.reader.fetchedRefs.slice(fetches)).toEqual([[pr.ref]]);
@@ -262,7 +262,7 @@ describe('refresh after a write and on focus', () => {
       reviews: [makeReview({ id: 'r-me', author: viewer.login, state: 'APPROVED' })],
     });
 
-    await h.engine.approve(pr.key);
+    await h.engine.approve(pr.key, pr.headOid);
 
     const fresh = h.store.events.listForPr(pr.key).filter((event) => event.sourceId === 'c-new');
     expect(fresh).toHaveLength(1);
