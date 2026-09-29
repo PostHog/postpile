@@ -27,7 +27,9 @@ describe('callStatsDetail', () => {
 describe('capNote', () => {
   it('says how much work waits for the next sync', () => {
     const stats: AgentCallStats = { total: 2, byKind: { dossier_update: count({ skippedByBudget: 3 }), glance_batch: count({ skippedByBudget: 4 }) } };
-    expect(capNote(stats)).toBe('stopped at call cap: 7 left for next sync');
+    expect(capNote(stats)).toBe('stopped at call cap: 7 left for the next sync');
+    expect(capNote(stats, 60)).toBe('stopped at call cap: 7 left for the hourly sync');
+    expect(capNote(stats, 15)).toBe('stopped at call cap: 7 left for the auto sync (every 15 min)');
     expect(capNote({ total: 1, byKind: { chat: count({}) } })).toBeNull();
   });
 });

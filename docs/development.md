@@ -71,6 +71,8 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
 - `POSTPILE_POLL_SECONDS`: the notification poll interval, default 10 (0 turns it off)
+- `POSTPILE_AUTO_SYNC_MINUTES`: minutes between background full syncs in the desktop app, default 60 (0 turns it off; the default is off when `POSTPILE_SYNC_ON_START=0`)
+- `POSTPILE_CATCHUP_CAP`: agent calls per rolling 24h for glance catch-up after the poll, default 300 (0 turns catch-up off; the default is 0 when `POSTPILE_MAX_AGENT_CALLS=0`)
 - `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac notifications
 - `POSTPILE_UPDATE_CHECK=0`: no update check (the title bar reminder asks `api.github.com` for releases ~30s after start, then every 6 hours)
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL` (default `claude-sonnet-5-5`), `POSTPILE_SWEEP_MODEL`, `POSTPILE_SETUP_MODEL` (default `opus`), `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs

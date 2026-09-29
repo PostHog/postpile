@@ -1,6 +1,14 @@
 import type { SyncPhase, SyncPhaseTimings, SyncReport } from '@postpile/core';
 import { callStatsDetail, skippedByCap } from './agent-stats.ts';
 
+/** The later of two reports: this window's last "Sync now" or the stored one, which a background sync may have replaced. */
+export function newerReport(a: SyncReport | null, b: SyncReport | null): SyncReport | null {
+  if (!a || !b) {
+    return a ?? b;
+  }
+  return a.finishedAt >= b.finishedAt ? a : b;
+}
+
 /** "12.3s" or "2m 05s". */
 export function durationLabel(report: SyncReport): string {
   const ms = Math.max(new Date(report.finishedAt).getTime() - new Date(report.startedAt).getTime(), 0);

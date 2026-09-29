@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SyncReport } from '@postpile/core';
-import { durationLabel, phaseTimingsLine, syncReportDetail } from './sync-report.ts';
+import { durationLabel, newerReport, phaseTimingsLine, syncReportDetail } from './sync-report.ts';
 
 function report(overrides: Partial<SyncReport>): SyncReport {
   return {
@@ -70,5 +70,16 @@ describe('phaseTimingsLine', () => {
     expect(phaseTimingsLine(phaseMs)).toBe('fetch 12.3s · topics 8.0s · glances 95.0s');
     expect(phaseTimingsLine(undefined)).toBe('');
     expect(syncReportDetail(report({ phaseMs }))).toContain('Phases (overlapping): fetch 12.3s · topics 8.0s · glances 95.0s');
+  });
+});
+
+describe('newerReport', () => {
+  it('takes the later finished report, or whichever exists', () => {
+    const early = { finishedAt: '2026-09-29T08:00:00.000Z' } as SyncReport;
+    const late = { finishedAt: '2026-09-29T09:00:00.000Z' } as SyncReport;
+    expect(newerReport(early, late)).toBe(late);
+    expect(newerReport(late, early)).toBe(late);
+    expect(newerReport(null, early)).toBe(early);
+    expect(newerReport(null, null)).toBeNull();
   });
 });

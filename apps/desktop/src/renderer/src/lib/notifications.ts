@@ -46,7 +46,7 @@ export function noTileReason(landing: NotificationLanding): string | null {
     case 'not_pr':
       return 'Not a pull request. Only PR threads become tiles.';
     case 'pr_not_synced':
-      return 'The PR was never fetched: the sync stopped at its PR limit or the fetch failed. The next sync picks it up.';
+      return 'The PR was never fetched: the sync stopped at its PR limit or the fetch failed. The hourly auto sync or Sync now picks it up.';
     case 'no_topic':
       return 'The PR is stored but sits in no topic and is not waiting in Unsorted.';
     case 'topic_hidden':

@@ -35,6 +35,8 @@ import type {
 } from '@postpile/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
+import { newerReport } from '../lib/sync-report.ts';
+import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
 import { useLastSyncReport } from './sync.ts';
 import { useGitHubWrites } from './writes.ts';
@@ -77,6 +79,7 @@ export interface Actions {
   writes: GitHubWritesStatus | undefined;
   notice: Notice | null;
   dismissNotice(): void;
+  /** A full sync runs: this window's "Sync now", or one the engine started (start sync elsewhere, the hourly auto sync). */
   syncing: boolean;
   lastSync: SyncReport | null;
   /** Mark-reads still inside their undo window, as far as this window knows. */
@@ -96,6 +99,8 @@ export interface Actions {
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo and lock as a tile. */
   markThreadRead(threadId: string): Promise<void>;
   approve(prKey: PrKey): Promise<void>;
+  /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
+  retryGlance(prKey: PrKey): Promise<void>;
   markRead(tileId: string): Promise<void>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
   unsnooze(tileId: string): Promise<void>;
@@ -179,6 +184,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const [lastSync, setLastSync] = useState<SyncReport | null>(null);
   // Before this window's first sync: the one the engine stored, e.g. a start sync that failed.
   const storedLastSync = useLastSyncReport().data ?? null;
+  // Syncs this window did not start (the hourly auto sync) show in the title bar the same way.
+  const backgroundSync = useLiveStatus().data?.syncRunning ?? false;
 
   // Notices fade on their own; problems stay a little longer.
   useEffect(() => {
@@ -264,7 +271,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
         return;
       }
       setLastSync(report);
-      const capped = capNote(report.agentCallStats);
+      const capped = capNote(report.agentCallStats, config?.autoSyncMinutes ?? 0);
       if (report.errors.length > 0) {
         show('error', `Synced with ${report.errors.length} problem(s): ${report.errors[0]}`);
       } else if (capped) {
@@ -490,8 +497,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     writes,
     notice,
     dismissNotice: () => setNotice(null),
-    syncing,
-    lastSync: lastSync ?? storedLastSync,
+    syncing: syncing || backgroundSync,
+    // A background sync after this window's last "Sync now" is the newer one.
+    lastSync: newerReport(lastSync, storedLastSync),
     // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
     pendingMarkReads: pendingUndos.filter((entry) => !entry.token.startsWith(MEMORY_UNDO_PREFIX)).length,
     isBusy: (key) => busy.includes(key),
@@ -507,6 +515,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     },
     approve: async (prKey) => {
       await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`));
+    },
+    retryGlance: async (prKey) => {
+      await run(`retryGlance:${prKey}`, null, () => request('POST', `${prPath(prKey)}/glance/retry`));
     },
     markRead: async (tileId) => {
       await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`));

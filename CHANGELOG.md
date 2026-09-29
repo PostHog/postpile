@@ -16,6 +16,9 @@ Notable changes per release. Versions follow semver, with `-alpha.N` pre-release
 - No more stray focus borders on tiles after going back and forward.
 - Stack layers show where they sit: a small blue tag like "1/3" (1 = bottom) before the PR title in tiles, in stacks inside sets and in the detail pane. The tooltip names the PR it is built on.
 - A low-risk glance no longer shows a red RISK box; the verdict box already covers it.
+- New PRs get their glance within a minute or so instead of waiting for a manual sync: when the live poll brings new activity or a PR without a glance, the app updates that topic's dossier and glances right away. Runs are coalesced per topic and capped per day (`POSTPILE_CATCHUP_CAP`, default 300 calls; 0 turns it off).
+- A full sync runs in the background every 60 minutes while the app is open (`POSTPILE_AUTO_SYNC_MINUTES`, 0 turns it off). The title bar shows it like any sync.
+- Clearer glance status instead of "the next sync picks it up": "Writing the glance…", "Glance queued", "Agent features are off", "Waiting: daily agent limit reached, next full sync in N min", and "Glance failed" with a Retry button.
 
 ## 0.1.0-alpha.0 (2026-09-28)
 

@@ -111,9 +111,11 @@ the thread stays unread, and the next sync fetches the new activity. Local
 failures (one failed thread never stops the rest) show up in the next sync
 report.
 
-**Sync** (the full one) is on demand: "Sync now" and on app start. On top of it
-the desktop app runs a fast notification poll with Mac pings, see "Live poll and
-Mac pings".
+**Sync** (the full one) runs on app start, on "Sync now" and every 60 minutes in
+the background (see "Auto sync"). On top of it the desktop app runs a fast
+notification poll with Mac pings, see "Live poll and Mac pings", and catches up
+dossiers and glances of the topics the poll brought news for, see "Glance
+catch-up".
 PR threads whose activity is newer than the stored snapshot's fetch time get
 enriched, unread ones first, read ones too (see "Reconciling with GitHub's
 read time") (a thread's `updated_at` runs ahead of the PR's own, so
@@ -1903,7 +1905,8 @@ standalone server never starts it.
   min. Other errors double from the interval up to 5 min. The footer shows
   "backing off, retry in Ns" (state `backoff`).
 - Overlap: `Engine.pollOnce()` answers `blocked` while a full sync or a
-  consolidation runs (footer: "paused: full sync running"); sync and
+  consolidation runs (glance catch-up runs go beside poll cycles, see
+  "Glance catch-up") (footer: "paused: full sync running"); sync and
   consolidation wait for a running poll cycle, so agent calls land in the
   right run (`poll:<time>` in `agent_call`). When a full sync ends, the
   poll runs one cycle right away (2026-09-28): a sync takes a minute or
@@ -1960,10 +1963,12 @@ get a topic (one `topic_assignment` call at most, asking only about the
 PRs that cycle fetched; the backlog without a topic stays with the full
 sync, and the poll never runs the retry batch). Tiles are derived on read,
 so they update by themselves; the renderer refetches when `changeCount` in
-`GET /api/live` moves. Dossiers, glances, sets, stack layers and the event
-second opinion stay with the full sync, which still finds the new events
-through the event log and walks stacks and verifies facts for the PRs the
-poll fetched (meta `poll_fetched_since_sync`). Never marks anything read (on GitHub or locally,
+`GET /api/live` moves. Topics whose fetched PRs brought a new loud event or
+have no glance yet get a glance catch-up run right after the ping decisions
+(see "Glance catch-up" below). Sets, stack layers and fact verification stay
+with the full sync, which still finds the new events through the event log
+and walks stacks and verifies facts for the PRs the poll fetched (meta
+`poll_fetched_since_sync`). Never marks anything read (on GitHub or locally,
 beyond what the full sync already does for threads that left the inbox).
 
 **Decision** (`PingDecider`), one per PR thread with new events, rules first:
@@ -2028,6 +2033,97 @@ tile every ~45s and pings for it with a fake rules decision, through the same
 instructions). One call per poll cycle with addressed news, so a normal day is
 roughly 10-40 calls, $0.40-1.50; the cap bounds it at 200 calls (about $8).
 Poll topic assignments add a few calls a day for PRs new to the app.
+
+## Glance catch-up
+
+Decided 2026-09-29: glances catch up automatically, as soon as possible,
+with one queued follow-up per topic. No manual refresh button per PR or
+topic; only Retry on a glance that failed. Before this, a new PR showed
+"no glance yet, the next sync picks it up" until the user pressed Sync now.
+
+**Trigger** (`topicsToCatchUp`, called by `PollRun` after topic assignment
+and the ping decisions, never on the first look at an empty store, not while
+the agent is off): a fetched PR with a new event whose effective loudness is
+loud, or a PR that should have a glance (open, pinged or found, in a tile)
+and has none. Quiet news (bot comments, CI) waits for the full sync. The
+topic is the PR's membership; Unsorted (null) counts as one topic.
+
+**Run** (`TopicCatchUp`, one topic): the full sync's digest jobs, scoped by
+`TopicScope`, in the same budget order: the topic's dossier update from the
+events after its digest cursor (`DossierUpdater.start(scope)`), the event
+second opinion for the topic (`EventBatchClassifier.run(scope)`; chosen
+because it is one cheap call and moves the classify cursor, so the sync
+does not repeat it), glances for its PRs that are missing or stale once the
+dossier landed, with the retry batch (`GlanceBatchWriter.run(dossiers,
+scope)`), the fact reconcile for the dossier's candidates, and the
+driver/role refresh when a dossier was written. Topic assignment is not
+part of it: the poll already did it. Sets and stack layers stay with the
+full sync. Calls land in their own run, `catchup:<topic>:<time>`:
+`AgentCallLog.withRun` scopes them with AsyncLocalStorage, since runs go
+side by side with poll cycles and each other (sync, consolidation and poll
+still use begin/end, they never overlap).
+
+**Coalescing** (`CatchUpQueue`): at most one run per topic at a time. A
+request for a topic whose run is going marks exactly one follow-up; more
+requests in the meantime change nothing. The follow-up starts when the run
+ends, so it sees everything that arrived meanwhile. Different topics run
+side by side; the runner's limiter (`POSTPILE_AGENT_CONCURRENCY`) caps the
+calls.
+
+**Never beside a full sync or consolidation**: a request while one runs is
+skipped (the sync covers every topic; the poll is blocked then anyway). A
+sync drops queued follow-ups and waits for running runs before it starts,
+like it waits for a poll cycle; consolidation waits for them too.
+
+**Caps**: per run `3 + 2 * ceil(glance targets in the topic / 18)` (dossier,
+events, reconcile, each glance batch with its retry). On top, a daily cap
+over all runs, a rolling 24h window in memory (`CatchUpCap`,
+`POSTPILE_CATCHUP_CAP`, default 300; a dev session with
+`POSTPILE_MAX_AGENT_CALLS=0` defaults to 0). 0 turns catch-up off. The
+daily cap is asked only after the run's cap said yes (`AgentBudget` with a
+`CallAllowance`). A glance it refuses gets the gap `daily_cap`; a dossier it
+refuses skips the topic's glances (`daily_cap` gaps too).
+
+**Glance state** (`glanceStateOf` in core, `PrSummary.glanceState`,
+`PrDetail.glanceState`): `ready` (a glance; stale shows separately),
+`writing` (a run on its topic is going and the glance is missing or
+stale), `queued` (a follow-up is queued, or nothing recorded yet: the next
+run or sync writes it), `agent_off`, `failed` (asked twice, no usable
+answer), `capped` (`call_cap` or `daily_cap` gap), `none` (merged, closed,
+pulled in: gets no glance). The renderer words them (`glanceStateText`):
+"Writing the glance…" with a spinner, "Glance queued", "Agent features are
+off", "Waiting: daily agent limit reached, next full sync in N min" (or
+"the last sync hit its agent-call cap"), "Glance failed" with Retry.
+Pulled-in stack layers keep "Pulled in to complete the stack".
+
+**Retry** (`POST /api/prs/:owner/:repo/:number/glance/retry`,
+`retryGlance`): clears the PR's glance gap and requests a run for its topic
+(or the one follow-up when a run is going). Refused while the agent is off,
+the daily cap is spent or consolidation runs; during a sync it answers that
+the sync retries it. Local, agent calls only, not on the `GithubWrite` list.
+
+**Refresh**: `LivePollStatus.catchUpChanges` grows on every queue, start and
+end; `useLivePoll` refetches everything when it moves, so a tile flips from
+"Writing" to its verdict within the 5s status poll.
+
+**Fake mode**: `FakeCatchUp` walks the first sample PR without a glance
+queued -> writing -> ready (4s + 6s) once the renderer first reads the live
+status, and marks the second one failed so Retry can be tried.
+
+## Auto sync
+
+A full sync every `POSTPILE_AUTO_SYNC_MINUTES` (default 60, 0 off; the
+default is off with `POSTPILE_SYNC_ON_START=0`, so no-traffic runs stay that
+way) while the desktop app runs. `AutoSyncSchedule` lives in the engine
+(like the work context schedule, on `Timers`), started by main with the
+app's sync call cap (`startAutoSync`). The interval counts from the end of
+the last sync, whoever started it (`reschedule` on every sync end), so a
+"Sync now" pushes it out; at the due time a running sync means skip. The
+renderer sees it through `LivePollStatus.syncRunning` (the title bar shows
+`syncing · agent 34/82` like for "Sync now", `useActions().syncing` covers
+both) and `nextAutoSyncAt` ("next full sync in N min"). The last sync shown
+is the newer of this window's and the stored report. Full syncs were
+start-only and manual before (2026-09-29).
 
 ## Work context sweep ("What you're working on")
 
@@ -2275,7 +2371,9 @@ preflight and does not know the token, so CORS stays open.
   writer and keeps the footer lock closed (smoke runs against a real account). Without it,
   writes are still off until the lock is opened. `POSTPILE_POLL_SECONDS`
   (default 10, 0 off), `POSTPILE_PING_CAP` (default 200 per 24h) and
-  `POSTPILE_MAC_NOTIFICATIONS=0` tune the live poll.
+  `POSTPILE_MAC_NOTIFICATIONS=0` tune the live poll. `POSTPILE_CATCHUP_CAP` (default
+  300 per 24h, 0 off) caps glance catch-up, `POSTPILE_AUTO_SYNC_MINUTES` (default 60,
+  0 off) the background sync.
 - **Test builders** live at `@postpile/core/fixtures` (incl. `FakeTimers`); engine tests use
   fake reader/writer and the agent's `FakeRunner`.
 

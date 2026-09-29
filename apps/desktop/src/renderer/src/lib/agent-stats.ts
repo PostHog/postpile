@@ -41,8 +41,15 @@ export function skippedByCap(stats: AgentCallStats): number {
   return Object.values(stats.byKind).reduce((sum, count) => sum + (count?.skippedByBudget ?? 0), 0);
 }
 
-/** "stopped at call cap: 7 left for next sync", or null when the cap was not reached. */
-export function capNote(stats: AgentCallStats): string | null {
+/**
+ * "stopped at call cap: 7 left for the hourly sync", or null when the cap
+ * was not reached. Without auto sync the leftovers wait for the next "Sync now".
+ */
+export function capNote(stats: AgentCallStats, autoSyncMinutes = 0): string | null {
   const left = skippedByCap(stats);
-  return left === 0 ? null : `stopped at call cap: ${left} left for next sync`;
+  if (left === 0) {
+    return null;
+  }
+  const next = autoSyncMinutes === 60 ? 'the hourly sync' : autoSyncMinutes > 0 ? `the auto sync (every ${autoSyncMinutes} min)` : 'the next sync';
+  return `stopped at call cap: ${left} left for ${next}`;
 }

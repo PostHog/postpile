@@ -50,6 +50,16 @@ export function KindIcon(props: IconProps & { kind: TileKind }) {
   return <PrIcon size={props.size} className={props.className} />;
 }
 
+/** A small turning arc for "Writing the glance…". Its own component: it carries the spin. */
+export function SpinnerIcon(props: IconProps) {
+  const size = props.size ?? 11;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={`animate-spin ${props.className ?? ''}`} aria-hidden="true">
+      <path d="M14 8a6 6 0 1 1-6-6" />
+    </svg>
+  );
+}
+
 export function SyncIcon(props: IconProps) {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className={props.className} aria-hidden="true">

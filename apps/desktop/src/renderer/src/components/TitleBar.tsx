@@ -48,7 +48,7 @@ function SyncStatus() {
     const when = age === 'now' ? 'just now' : `${age} ago`;
     text = `synced ${when} · ${report.prsFetched} PRs fetched · ${report.newEvents} new events`;
     detail = syncReportDetail(report);
-    const capped = capNote(report.agentCallStats);
+    const capped = capNote(report.agentCallStats, actions.config?.autoSyncMinutes ?? 0);
     if (capped) {
       dot = 'bg-closer';
       text = `${text} · ${capped}`;

@@ -1,13 +1,13 @@
 // Small status chips used across panes: verdict, why it's here, PR status.
 import type { ReactNode } from 'react';
-import type { ForWhom, GlanceGap, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
+import type { ForWhom, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
 import { pendingWriteTitle } from '../lib/guard.ts';
-import { glanceGapText } from '../lib/glance.ts';
+import type { GlanceStateText } from '../lib/glance.ts';
 import type { StateWord } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';
 import { type StackPlace, stackPlaceLabel, stackPlaceTitle } from '../lib/stacks.ts';
 import { forWhomLabel, whyTitle } from '../lib/why.ts';
-import { ClockIcon, DashIcon, Glyph, PencilIcon, RingDotIcon, StackIcon } from './icons.tsx';
+import { ClockIcon, DashIcon, Glyph, PencilIcon, RingDotIcon, SpinnerIcon, StackIcon } from './icons.tsx';
 
 const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }> = {
   LOOKS_SAFE: { icon: <Glyph glyph="check" size={11} strokeWidth={2.2} />, label: 'Looks safe', tone: 'border-safe-line bg-safe-soft text-safe' },
@@ -31,14 +31,22 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
   );
 }
 
-/** Greyed on done tiles; "stale" when the glance was made for an older state. Same height as the "for whom" chip. */
-export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean; gap?: GlanceGap | null }) {
+/**
+ * Greyed on done tiles; "stale" when the glance was made for an older state.
+ * Without a verdict it says where the glance stands (`glanceStateText`).
+ * Same height as the "for whom" chip.
+ */
+export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean; missing?: GlanceStateText | null }) {
   if (!props.verdict) {
-    const text = glanceGapText(props.gap ?? null);
-    const tone = props.gap?.reason === 'failed' ? 'border-status-bad text-status-bad' : 'border-frame text-faint';
+    const text = props.missing;
+    const tone = text?.problem ? 'border-status-bad text-status-bad' : 'border-frame text-faint';
     return (
-      <span title={text.card} className={`flex h-[22px] items-center rounded-full border border-dashed px-2 text-[11px] font-medium whitespace-nowrap ${tone}`}>
-        {text.pill}
+      <span
+        title={text?.card}
+        className={`flex h-[22px] items-center gap-[5px] rounded-full border border-dashed px-2 text-[11px] font-medium whitespace-nowrap ${tone}`}
+      >
+        {text?.spinner && <SpinnerIcon />}
+        {text?.pill ?? 'No glance yet'}
       </span>
     );
   }
@@ -47,7 +55,7 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; g
   return (
     <span
       className={`flex h-[22px] shrink-0 items-center gap-[5px] rounded-full border pr-2 pl-[7px] text-[11px] font-semibold whitespace-nowrap ${tone}`}
-      title={props.stale ? 'Stale: the PR or your instructions moved since this glance. Sync to refresh.' : undefined}
+      title={props.stale ? 'Stale: the PR or your instructions moved since this glance. The next catch-up or sync refreshes it.' : undefined}
     >
       {verdict.icon}
       {verdict.label}

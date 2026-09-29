@@ -39,7 +39,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`useGitHubWrites`, the footer lock), `repos.ts` (`useRepos`, the
   title bar repo menu), `cleanup.ts` (`useInboxCleanup`), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
-  refetches everything else when a poll cycle stored news), `sync.ts`
+  refetches everything else when a poll cycle stored news, a glance
+  catch-up run moved (`catchUpChanges`) or a sync started or ended;
+  `useLiveStatus` is the same query without that effect,
+  `useNextAutoSyncAt` for "next full sync in N min"), `sync.ts`
   (`useLastSyncReport`, the stored last sync, which `useActions().lastSync`
   falls back to before this window's first sync; `useSyncProgress`, polled
   every second only while a sync runs, for the title bar's
@@ -141,6 +144,11 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
   leaves a topic (another topic or the Inbox), not on a timer.
+- A missing glance is worded from `PrSummary.glanceState` /
+  `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
+  never "the next sync picks it up". Only a failed glance gets a button:
+  Retry (`useActions().retryGlance`, local, not on the `GithubWrite`
+  list). No manual refresh per PR or topic (decided 2026-09-29).
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the action bar right under the assessment boxes.
 
@@ -375,7 +383,12 @@ history entry, and clearing the filter brings the pick back.
   `last_sync_report` and shows in the footer's "last sync" and the title
   bar's sync status tooltips (`lib/sync-report.ts`) and in the notifications
   debug pane. Title bar elements with a `title` are no-drag, so tooltips work.
-- Sync runs once on app start and then only on "Sync now".
-  `POSTPILE_SYNC_ON_START=0` (`AppConfig.syncOnStart`) skips the start sync. The main process
+- Sync runs once on app start, on "Sync now", and every
+  `AppConfig.autoSyncMinutes` (default 60) in the background (the engine's
+  `AutoSyncSchedule`, started by main). `POSTPILE_SYNC_ON_START=0`
+  (`AppConfig.syncOnStart`) skips the start sync. `useActions().syncing` is
+  true for any running sync (`LivePollStatus.syncRunning`), so the title bar
+  shows background syncs too; `lastSync` is the newer of this window's and
+  the stored report (`newerReport`). The main process
   runs the live poll (`engine.startLivePoll`) and shows Mac notifications
   (`main/mac-notifier.ts`); closing the window hides it on macOS, Cmd+Q quits.

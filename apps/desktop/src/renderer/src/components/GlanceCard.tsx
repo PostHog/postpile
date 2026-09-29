@@ -1,8 +1,11 @@
 import type { PrDetail, PrSummary, TileView, Verdict } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useNextAutoSyncAt } from '../api/live.ts';
 import { assessment, type AssessmentLine, type AssessmentMark } from '../lib/assessment.ts';
-import { glanceGapText } from '../lib/glance.ts';
+import { glanceStateText } from '../lib/glance.ts';
+import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
+import { SpinnerIcon } from './icons.tsx';
 import { KeyFiles } from './KeyFiles.tsx';
 
 interface GlanceCardProps {
@@ -63,6 +66,33 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
 }
 
 /**
+ * Where a missing glance stands, in words (DESIGN.md "Glance catch-up"):
+ * writing with a spinner, queued, waiting for a limit, agent off, or failed
+ * with Retry, which runs a catch-up for the PR's topic.
+ */
+function MissingGlance(props: { detail: PrDetail }) {
+  const actions = useActions();
+  const nextAutoSyncAt = useNextAutoSyncAt();
+  const now = useNow();
+  const { pr, glanceState, glanceGap } = props.detail;
+  const text = glanceStateText({ state: glanceState, gap: glanceGap, nextAutoSyncAt, now });
+  const busy = actions.isBusy(`retryGlance:${pr.key}`);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <p className={`flex items-center gap-1.5 text-xs ${text.problem ? 'text-status-bad' : 'text-muted'}`}>
+        {text.spinner && <SpinnerIcon />}
+        {text.card}
+      </p>
+      {text.retry && (
+        <Button disabled={busy} title="Ask the agent again: one catch-up run for this PR's topic" onClick={() => void actions.retryGlance(pr.key)}>
+          Retry
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * The agent's assessment of the PR (mockup ForWhom2 part 2, variant 1):
  * box 1 is titled with the verdict and holds the for-you lines, box 2
  * "RISK · level" the agent's risks (never an auto CI line, none for a low
@@ -72,7 +102,7 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
  */
 export function GlanceCard(props: GlanceCardProps) {
   const actions = useActions();
-  const { glance, glanceStale, glanceGap } = props.detail;
+  const { glance, glanceStale } = props.detail;
   const summary = props.summary;
   const stackLayer = summary?.provenance.kind === 'pulled_in' && !glance;
   // Sets are grouped by the agent among pinged PRs; any member can be wrong there.
@@ -89,12 +119,16 @@ export function GlanceCard(props: GlanceCardProps) {
         </div>
       )}
       {glance && <KeyFiles keyFiles={glance.keyFiles} pr={props.detail.pr} />}
-      {!glance && !stackLayer && <p className="text-xs text-muted">{glanceGapText(glanceGap).card}</p>}
+      {!glance && !stackLayer && <MissingGlance detail={props.detail} />}
       {stackLayer && (
         <p className="text-xs text-muted">Pulled in to complete the stack. Stack layers get no glance until GitHub pings you about them.</p>
       )}
       {glanceStale && (
-        <p className="text-[11.5px] text-closer">This assessment is older than the PR or your instructions. Sync to refresh it.</p>
+        <p className="text-[11.5px] text-closer">
+          {props.detail.glanceState === 'writing'
+            ? 'This assessment is older than the PR or your instructions. A new one is being written.'
+            : 'This assessment is older than the PR or your instructions. The next catch-up or sync refreshes it.'}
+        </p>
       )}
       {canUnrelate && summary && (
         <div>

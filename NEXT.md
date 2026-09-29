@@ -6,6 +6,25 @@ now".
 
 ## Done
 
+- Glance catch-up and hourly auto sync (2026-09-29, DESIGN.md "Glance
+  catch-up", "Auto sync"): a poll cycle that brings a loud event or a PR
+  without a glance runs a scoped digest for that topic right away
+  (`TopicCatchUp`: dossier, event second opinion, glances with retry, fact
+  reconcile), coalesced per topic by `CatchUpQueue` (one running, one
+  queued follow-up), never beside a full sync or consolidation. Per-run cap
+  from the topic size plus a daily cap (`POSTPILE_CATCHUP_CAP`, default
+  300, in memory). Catch-up calls land in their own run
+  (`catchup:<topic>:<time>`, AsyncLocalStorage in `AgentCallLog`). A full
+  sync runs every 60 minutes in the background (`AutoSyncSchedule` in the
+  engine, `POSTPILE_AUTO_SYNC_MINUTES`, counted from the end of the last
+  sync). PRs carry `glanceState` (ready, queued, writing, failed, agent_off,
+  capped, none); the renderer says "Writing the glance…", "Glance queued",
+  "Glance failed" + Retry (`POST /api/prs/:owner/:repo/:number/glance/retry`),
+  "Agent features are off", "Waiting: daily agent limit reached, next full
+  sync in N min". The live status carries `syncRunning`, `nextAutoSyncAt`
+  and `catchUpChanges`, so background syncs show in the title bar and tiles
+  refresh when a run ends. FakeEngine walks one PR queued -> writing ->
+  ready and has one failed PR to retry.
 - Stack mark (2026-09-29, DESIGN.md "Stacks as one unit"): stack layers get
   a light-blue layers tag with "1/3" between `#number` and title on PR rows
   (stack tiles, stacks in sets, detail member list) and before the detail
@@ -824,6 +843,9 @@ the app meanwhile.
 
 ## Decided
 
+- **Glances catch up automatically** (2026-09-29): ASAP after the poll
+  brings news, with one queued follow-up per topic; hourly auto sync; no
+  manual refresh button, only Retry on a glance that failed.
 - **Stack mark: layers tag with 1/3 before the title, variant A**
   (2026-09-29). A stack layer's PR rows (stack tiles, stacks inside sets,
   the detail member list) and the detail title get a light-blue layers tag
@@ -991,8 +1013,10 @@ pnpm desktop       # Electron dev mode, server in-process on a random port + tok
 pnpm server        # standalone API on 127.0.0.1:4870, prints its token
 ```
 
-The desktop app syncs once on start, then only on "Sync now". Between syncs it
-polls notifications every 10s and pings the Mac for addressed activity. Without
+The desktop app syncs once on start, on "Sync now" and every 60 minutes in the
+background. Between syncs it polls notifications every 10s, pings the Mac for
+addressed activity and catches up dossiers and glances of the topics the poll
+brought news for. Without
 GitHub writes stay off until the lock in the status footer is opened (the
 choice is kept in the database); locked, approve and comment are blocked and
 mark-reads stay in the app:
