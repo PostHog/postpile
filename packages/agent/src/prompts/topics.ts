@@ -1,5 +1,5 @@
 import type { TopicAssignmentInput, TopicChoice } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, shortDetail, viewerLine, WORK_GLOSSARY, workContextBlock } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prDetails, shortDetail, viewerLine, WORK_GLOSSARY, workContextBlock } from './shared.ts';
 
 /** The dossier brief (goal, status, driver) says far more than a name; the summary is the fallback. */
 function topicLine(topic: TopicChoice): string {
@@ -45,5 +45,6 @@ Rules:
   release"), never after the PR's title. PRs above that serve the same goal get the same new
   name.
 - reason: one short sentence on why the PR belongs there.
+${NO_CI_RULE}
 ${jsonOnly('{"assignments": [{"prKey": "owner/repo#1", "kind": "existing", "topicId": "<id>", "reason": "..."} | {"prKey": "owner/repo#2", "kind": "new", "name": "...", "reason": "..."}]}')}`;
 }

@@ -1,13 +1,6 @@
-import type { CheckRollup, DossierCare, DossierQuestion, DossierVersion, Pr, PrKey } from '@postpile/core';
+import type { DossierCare, DossierQuestion, DossierVersion, Pr, PrKey } from '@postpile/core';
 
-const ciWords: Record<CheckRollup, string> = {
-  SUCCESS: 'CI passing',
-  FAILURE: 'CI failing',
-  PENDING: 'CI running',
-  NONE: '',
-};
-
-/** Where a PR stands right now, from its snapshot. Never from memory. */
+/** Where a PR stands right now, from its snapshot. Never from memory, never CI (NO_CI_RULE). */
 export function prStateWords(pr: Pr): string {
   if (pr.state === 'MERGED') {
     return `merged, @${pr.author}`;
@@ -16,7 +9,7 @@ export function prStateWords(pr: Pr): string {
     return `closed unmerged, @${pr.author}`;
   }
   const state = pr.isDraft ? 'draft' : 'open';
-  return [state, ciWords[pr.checks.rollup], `@${pr.author}`].filter(Boolean).join(', ');
+  return `${state}, @${pr.author}`;
 }
 
 function questionLine(question: DossierQuestion, index: number): string {
@@ -36,7 +29,7 @@ function section(title: string, lines: string[]): string[] {
 }
 
 /**
- * The dossier as prompt text. PR state, author and CI come from `prs` (the
+ * The dossier as prompt text. PR state and author come from `prs` (the
  * current snapshots), never from the stored dossier, so a prompt cannot
  * carry a stale state line. Stays under ~8k chars given DOSSIER_LIMITS.
  * Layout in DESIGN.md "Dossier as prompt text". Questions and changes carry

@@ -65,7 +65,7 @@ describe('pr helpers', () => {
 });
 
 describe('state words', () => {
-  const open: PrStatus = { lifecycle: 'open', review: null, checks: 'fail', agentApprovers: [] };
+  const open: PrStatus = { lifecycle: 'open', review: null, agentApprovers: [] };
 
   it('says the review state in words, never CI', () => {
     expect(reviewWord({ ...open, review: 'review' })).toEqual({ kind: 'review', text: 'Needs review', title: 'Review required' });

@@ -39,6 +39,13 @@ describe('ruleLoudness', () => {
     }
   });
 
+  it('never makes a CI result loud, not even a failure on the viewer own PR (CI is not a signal)', () => {
+    const own = makePr({ author: viewer.login, checks: { rollup: 'FAILURE', contexts: [] } });
+    for (const pr of [own, makePr({ checks: { rollup: 'FAILURE', contexts: [] } }), makePr({ isDraft: true })]) {
+      expect(ruleLoudness(input({ kind: 'ci', actor: '', isBot: true, pr })).loudness).toBe('quiet');
+    }
+  });
+
   it('mutes a bot rebase on a draft but not on a ready PR', () => {
     const draft = makePr({ isDraft: true });
     expect(ruleLoudness(input({ kind: 'force_pushed', actor: 'trunk-io', isBot: true, pr: draft }))).toEqual({

@@ -3,8 +3,10 @@ import { chatPrompt } from './prompts/chat.ts';
 import { draftCommentPrompt } from './prompts/comment.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
+import { memoryRecheckPrompt } from './prompts/memory-recheck.ts';
+import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
-import { contextBlock, githubData, OWN_PR_NOTE } from './prompts/shared.ts';
+import { contextBlock, githubData, NO_CI_RULE, OWN_PR_NOTE } from './prompts/shared.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { Pr, Provenance } from '@postpile/core';
 import type { PromptContext } from './service.ts';
@@ -25,6 +27,103 @@ describe('contextBlock', () => {
 
   it('is empty without any memory', () => {
     expect(contextBlock(emptyContext)).toBe('');
+  });
+});
+
+describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
+  const failing = makePr({
+    checks: { rollup: 'FAILURE', contexts: [{ name: 'backend-tests', conclusion: 'FAILURE', completedAt: '2026-09-02T09:30:00Z' }] },
+  });
+  const ciEvent = makeEvent({ id: 'acme/app#1:ci:x', kind: 'ci', actor: '', isBot: true, summary: 'CI failed: backend-tests', sourceId: 'abc:FAILURE' });
+  const mention = makeEvent({ kind: 'mention', summary: 'bob: can you look at the cache key?', ruleLoudness: 'loud', ruleReason: 'mentions you' });
+  const topic = makeTopic();
+  const prompts: Record<string, string> = {
+    glance: oneGlancePrompt(failing, { kind: 'pinged', reason: 'review_requested' }, fullContext),
+    topics: topicAssignmentPrompt({ prs: [failing], viewer, topics: [], context: fullContext }),
+    comment: draftCommentPrompt({ pr: failing, viewer, person: 'bob', intent: 'is the cache key stable?', context: fullContext }),
+    chat: chatPrompt({
+      topic,
+      tile: { id: `pr:${failing.key}`, topicId: topic.id, kind: 'single', title: failing.title, members: [], stacks: [] },
+      prs: [failing],
+      history: [],
+      message: 'what is left here?',
+      context: fullContext,
+    }),
+    ping: pingDecisionPrompt({
+      items: [
+        {
+          id: 't1',
+          pr: failing,
+          topicName: topic.name,
+          tailoring: '',
+          dossierBrief: '',
+          // A glance stored before the rule, as upgraded databases still have them.
+          glance: {
+            prKey: failing.key,
+            verdict: 'LOOK_CLOSER',
+            forYou: 'Hold approval until CI is green.',
+            does: 'Moves test jobs.',
+            risk: 'low',
+            othersSaid: 'nobody yet',
+            keyFiles: [],
+            pullInReason: null,
+            dossierVersion: null,
+            inputHash: 'h',
+            model: 'm',
+            createdAt: '2026-09-02T09:00:00Z',
+          },
+          events: [ciEvent, mention],
+          rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: failing.key }, why: '@' },
+          template: { title: 'bob mentioned you', body: 'can you look at the cache key?' },
+        },
+      ],
+      viewer,
+      context: fullContext,
+    }),
+    recheck: memoryRecheckPrompt({
+      claim: 'alice drives the Depot move.',
+      recordedIn: 'Fact',
+      topic,
+      dossier: null,
+      sources: [],
+      prs: [failing],
+      events: [ciEvent, mention],
+      viewer,
+      context: fullContext,
+    }),
+  };
+
+  for (const [name, prompt] of Object.entries(prompts)) {
+    it(name, () => {
+      expect(prompt).not.toMatch(/CI: (failure|success|pending|none)/);
+      expect(prompt).not.toContain('CI failed');
+      expect(prompt).not.toContain('backend-tests');
+    });
+  }
+
+  // The draft comment is the user's own ask, which may be about CI; every other writer gets the rule.
+  it('tells every agent that writes for the user not to mention CI status, stored notes included', () => {
+    for (const name of ['glance', 'topics', 'chat', 'ping', 'recheck']) {
+      expect(prompts[name], name).toContain(NO_CI_RULE);
+    }
+    const sets = setGroupingPrompt({ topic, prs: [failing, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext });
+    expect(sets).toContain(NO_CI_RULE);
+    expect(NO_CI_RULE).toContain('may still mention CI status: it is stale, ignore it');
+  });
+
+  it('never lets a recheck affirm a CI claim', () => {
+    expect(prompts.recheck).toContain('A line that is only about CI status is "drop"');
+    expect(prompts.recheck).toContain('Never "holds" for a CI claim.');
+  });
+
+  it('keeps changes to CI files in the glance prompt', () => {
+    expect(prompts.glance).toContain('.github/workflows/ci.yml (+10/-2)');
+  });
+
+  it('keeps CI as a subject of the work in the events prompt', () => {
+    const prompt = eventBatchPrompt({ topic, items: [{ pr: failing, events: [mention] }], viewer, context: fullContext });
+    expect(prompt).toContain('a substantial change in CI, build or developer-experience');
+    expect(prompt).not.toContain('backend-tests');
   });
 });
 

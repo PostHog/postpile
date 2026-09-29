@@ -317,7 +317,8 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   agents approved (`PrStatus.agentApprovers`) the word reads "Approved by
   agent", names in the tooltip; the detail uses `PrDetail.agentApprovers`
   with `approvedText` in `lib/pr.ts`. **No CI on rows, tiles, the detail
-  state line or the RISK box**: checks only show in `PrFacts`.
+  state line, the RISK box or the your-move chip**: checks only show in
+  `PrFacts` (DESIGN.md "CI is not a signal"; `PrStatus` has no checks).
 - PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
   false; the heading is the title). Every PR that keeps an unread tile
   unread gets `NewsDot` before its number, on the tile and in

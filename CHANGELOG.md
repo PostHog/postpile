@@ -17,6 +17,12 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - A repeated source chip shows once per block.
 - A coral dot marks the PR that keeps a tile unread.
 
+## 0.9.0 (2026-09-29)
+
+### Changed
+
+- CI is no longer a signal: the agents no longer see or mention check status (no more "hold approval until CI is green"), and failing CI on your own PR is no longer your move. The "Checks" line in the detail pane and the "Until CI is green" snooze stay.
+
 ## 0.8.0 (2026-09-29)
 
 ### Changed

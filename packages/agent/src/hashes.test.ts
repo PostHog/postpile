@@ -39,6 +39,13 @@ describe('glanceItemInputHash', () => {
     expect(glanceHash(makePr({ checks: { rollup: 'FAILURE', contexts: [] } }))).toBe(base);
   });
 
+  it('ignores every checks change: CI is not a signal', () => {
+    const failed = { name: 'backend-tests', conclusion: 'FAILURE', completedAt: '2026-09-02T09:30:00Z' };
+    expect(glanceHash(makePr({ checks: { rollup: 'FAILURE', contexts: [failed] } }))).toBe(base);
+    expect(glanceHash(makePr({ checks: { rollup: 'PENDING', contexts: [{ ...failed, conclusion: null, completedAt: null }] } }))).toBe(base);
+    expect(glanceHash(makePr({ checks: { rollup: 'NONE', contexts: [] } }))).toBe(base);
+  });
+
   it('ignores bot review comments but changes on an agent approval', () => {
     const botComment = { id: 'rb', author: 'reviewbot[bot]', state: 'COMMENTED', body: 'nit', submittedAt: '2026-09-01T00:00:00Z', commitOid: null } as const;
     expect(glanceHash(makePr({ reviews: [botComment] }))).toBe(base);
