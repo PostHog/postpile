@@ -10,6 +10,7 @@ import {
   type AppConfig,
 } from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
+import { UpdatesOff, type UpdateSource } from './update-check.ts';
 
 /** Every /api request must carry the server's token in this header. */
 export const TOKEN_HEADER = 'x-postpile-token';
@@ -165,7 +166,7 @@ function isClientError(error: Error): boolean {
  * POSTs. CORS can stay open because the token travels in a custom header, which
  * a page can only send after a preflight and only if it knows the token.
  */
-export function createApp(engine: EngineService, token: string, config: AppConfig): Hono {
+export function createApp(engine: EngineService, token: string, config: AppConfig, updates: UpdateSource = new UpdatesOff('')): Hono {
   if (token === '') {
     throw new Error('createApp needs a non-empty token');
   }
@@ -183,6 +184,8 @@ export function createApp(engine: EngineService, token: string, config: AppConfi
 
   app.get('/api/health', (c) => c.json({ ok: true }));
   app.get('/api/config', (c) => c.json(config));
+  // The title bar's update reminder: the last check's answer, never a live request to GitHub.
+  app.get('/api/update', (c) => c.json(updates.status()));
   // The bodies are optional. A sync without maxAgentCalls gets the app's cap, so
   // opening the app never starts an uncapped (and costly) first sync.
   app.get('/api/sync/last', async (c) => c.json(await engine.lastSyncReport()));

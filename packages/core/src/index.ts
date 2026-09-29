@@ -57,3 +57,4 @@ export * from './setup.ts';
 export * from './setup-draft.ts';
 export * from './tools.ts';
 export * from './mac-privacy.ts';
+export * from './updates.ts';

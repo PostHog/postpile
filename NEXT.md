@@ -51,6 +51,16 @@ now".
     refetch of the pulled-in layers every built stack (14, one pair
     merged into one) shows in a topic, and every set that holds a stack
     carries it in `stacks`.
+- Update reminder (2026-09-29): the server asks GitHub for the last 10
+  PostPile releases (unauthenticated, ETag kept in memory, 10s timeout)
+  ~30s after start and every 6 hours, `GET /api/update` serves the last
+  answer (`compareVersions` / `pickUpdate` in core; pre-releases count).
+  The title bar shows a neutral `UpdatePill` ("Update available ·
+  0.1.0-alpha.1") with a popover: date, release notes link, `brew upgrade
+  --cask postpile` with Copy, and "Later" (per version, localStorage).
+  `POSTPILE_UPDATE_CHECK=0` turns it off; sample data shows a sample
+  update unless `POSTPILE_FAKE_UPDATE=0`. Not tried against a real
+  release yet (fake mode and unit tests only).
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as
@@ -263,7 +273,9 @@ now".
   below #N"), get no glance / topic / dossier / event calls, show in the
   anchor's topic, and turn pinged once notified. Fake data has a Depot
   stack with two pulled-in lower layers.
-- Back / forward navigation in the desktop app: title bar chevrons, Cmd+[ /
+- Back / forward navigation in the desktop app: title bar chevrons (since
+  2026-09-29 at the right end of the left column, next to the search; the
+  logo and name come first after the traffic lights), Cmd+[ /
   Cmd+], mouse side buttons, trackpad swipe (only fires with the classic
   "Swipe between pages" setting; not tried on hardware yet).
 - Title bar search that filters topics and tiles (Cmd+F, Esc clears):

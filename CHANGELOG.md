@@ -9,6 +9,7 @@ Notable changes per release. Versions follow semver, with `-alpha.N` pre-release
 - The app runs its daily memory tidy-up (merge proposals for small topics, fact merges, retiring finished topics) by itself when it is due.
 - Stacks no longer go missing. A stack whose bottom layer merged (GitHub moved the next PR down by itself) now stays one stack, a closed attempt no longer pushes the open layers that replaced it out of the stack, and a stack with a layer in a retired topic still shows in its active topic. PRs from forks never join a stack by branch name.
 - Tiles now carry which PRs form a stack, bottom first, also for a stack inside a set, so the UI can draw it as a stack.
+- Update reminder: when a new release is out, the title bar shows "Update available" with the release notes link and `brew upgrade --cask postpile`. "Later" hides it for that version. The app asks api.github.com for releases every 6 hours, no token; `POSTPILE_UPDATE_CHECK=0` turns it off.
 
 ## 0.1.0-alpha.0 (2026-09-28)
 

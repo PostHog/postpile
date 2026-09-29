@@ -10,6 +10,7 @@ import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import logoUrl from '../assets/logo-64.png';
 import { BackIcon, ForwardIcon, SyncIcon } from './icons.tsx';
+import { UpdatePill } from './UpdatePill.tsx';
 
 function StatusText(props: { dot: string; text: string; detail: string }) {
   return (
@@ -111,14 +112,6 @@ export function TitleBar(props: TitleBarProps) {
   return (
     <header className="drag-region grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(220px,380px)_minmax(0,1fr)] items-center gap-4 border-b border-hairline-strong bg-titlebar px-4">
       <div className="flex min-w-0 items-center gap-3.5 overflow-hidden pl-[72px] whitespace-nowrap">
-        <span className="-ml-1.5 flex items-center">
-          <NavButton label="Back" shortcut="⌘[" disabled={!props.canBack} onClick={props.onBack}>
-            <BackIcon />
-          </NavButton>
-          <NavButton label="Forward" shortcut="⌘]" disabled={!props.canForward} onClick={props.onForward}>
-            <ForwardIcon />
-          </NavButton>
-        </span>
         <span className="flex items-center gap-2">
           <img src={logoUrl} alt="" width={20} height={20} className="shrink-0" draggable={false} />
           {/* The name gives way below 1280px so the centered search keeps its width. */}
@@ -143,9 +136,19 @@ export function TitleBar(props: TitleBarProps) {
             </span>
           </>
         )}
+        {/* Pushed to the end of the column, next to the search field. */}
+        <span className="-mr-1.5 ml-auto flex items-center">
+          <NavButton label="Back" shortcut="⌘[" disabled={!props.canBack} onClick={props.onBack}>
+            <BackIcon />
+          </NavButton>
+          <NavButton label="Forward" shortcut="⌘]" disabled={!props.canForward} onClick={props.onForward}>
+            <ForwardIcon />
+          </NavButton>
+        </span>
       </div>
       {props.search}
       <div className="flex min-w-0 items-center justify-end gap-3.5">
+        <UpdatePill />
         {props.repoScope}
         <SyncStatus />
         <SyncButton />

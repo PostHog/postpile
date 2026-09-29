@@ -80,6 +80,14 @@ The app is ad-hoc signed. It is not signed with an Apple Developer ID and not no
 
 On the first launch, macOS asks for permission to show notifications. The first sync takes a few minutes while the agent sorts your PRs into topics.
 
+### Updating
+
+```
+brew upgrade --cask postpile
+```
+
+Then quit and reopen PostPile. When a new version is out, the app shows "Update available" in the title bar, with the release notes and this command.
+
 ## Troubleshooting
 
 PostPile checks `gh` and `claude` on start. When one is missing, the window says what is wrong, shows the command to run, and has a Check again button. While something is wrong, the app checks again by itself every few minutes.
@@ -98,6 +106,7 @@ PostPile runs on your Mac only. There is no PostPile server and no telemetry.
 - **GitHub**: the app calls the GitHub API with the token from `gh auth token`. It reads your notifications and the PRs they point to. It writes (approve, comment, mark read) only after you unlock writes.
 - **Anthropic**: agent calls run through the `claude` CLI on your machine, so PR titles, bodies, comments and review threads go to Anthropic under your Claude account's terms. GitHub text is treated as untrusted input: it is fenced in prompts, and calls that read it run without tools.
 - **Work context sweep**: once a day the app reads your Claude Code folder (`~/.claude`: `CLAUDE.md` and its includes, each project's memory files, and light signals from the last 7 days of sessions), masks secrets, and asks Claude for a short digest of what you are working on. The digest helps rank and phrase things. Project folders on the skip list are never opened. The default list is `personal`, `private`. Your own list is edited under the digest and saved to `~/.config/postpile/config.json` as `{ "sweepSkip": ["taxes", "side-project"] }`; `POSTPILE_SWEEP_SKIP` (comma separated) wins over both. The digest shows under Your instructions, with its sources, and you can forget it.
+- **Update check**: every 6 hours the app asks `api.github.com` for the latest PostPile releases, without a token, to show the update reminder. Turn it off with `POSTPILE_UPDATE_CHECK=0`.
 - **Local data**: the database lives in `~/Library/Application Support/PostPile`, logs in `~/Library/Logs/PostPile`, and your instructions for the agent in `~/.config/postpile/instructions.md`.
 
 ## Development
