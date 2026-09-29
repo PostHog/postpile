@@ -2395,11 +2395,60 @@ message, are dropped.
    `graphql`/`rest`, read from the sync's own error text — GitHub's GraphQL
    and REST rate-limit errors are shaped differently at the point
    `packages/github` builds them), `consolidation_ran` (proposals_filed).
+6. *MCP server*: `mcp_tool_called` (tool, found: false when the PR, topic
+   or search found nothing). Sent by the separate `postpile-mcp` process
+   under the same install id, so it counts toward the same person.
 
 **Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
 and a scratch data dir sends one `telemetry_test` event (distinct id
 `postpile-dev-check`) and flushes; that event is not part of the catalogue
 the app sends in normal use.
+
+## MCP server (read-only)
+
+Other agents on the machine (Claude Code in a checkout, say) can ask
+PostPile what it knows before they act on a PR: `postpile-mcp`, a stdio MCP
+server on the official SDK (`packages/mcp`). Read-only, decided 2026-09-29;
+writes come later through the running app's API so they keep the writes
+lock, undo and the user's say.
+
+**Process**: its own process, not the app's. It opens the database the way
+`cli --read-only` does (`createEngine({ withoutLock: true })`: read-only
+SQLite, no migrations, no lock, no GitHub writes), so it works next to the
+running app and with the app closed, and needs no port or token discovery.
+The data is as fresh as the app's last sync and poll; every answer says when
+the last full sync finished. Stdout is the protocol, so `console.log` goes to
+stderr (`routeConsoleToStderr`).
+
+**Shipping**: electron-vite builds `apps/desktop/src/main/mcp.ts` next to the
+main process as `out/main/mcp.js`. `Contents/Resources/postpile-mcp`
+(`apps/desktop/build/postpile-mcp`, via `extraResources`) runs the app's own
+binary with `ELECTRON_RUN_AS_NODE=1` on it: no window, no dock icon, no Node
+install needed, the same engine code as the app. The cask links it into
+Homebrew's bin (`binary`); the script follows that symlink back into the
+bundle. From the repo: `pnpm cli mcp` (`POSTPILE_FAKE=1` for sample data).
+
+**Tools** (all `readOnlyHint`; inputs are small zod shapes):
+
+- `pr_context(pr)`: `owner/repo#123`, a PR URL, or `#123` when the number is
+  unique in the store. The PR (state, author, size), whose move, why it is
+  unread, stack layer, the viewer's approval, what is new since they looked,
+  the glance (verdict, for you, risk, files to open first), facts, the
+  activity list (the detail pane's, noise folded), then the topic: dossier
+  (`formatDossier`, shared with the CLI) and every tile with its PRs.
+- `topic(topic)`: an id, or part of a name when that picks one topic.
+- `search_prs(query)`: the search bar's matcher, 25 PRs at most.
+- `whats_on_me()`: live tiles in `needs_you` topics where it is the user's
+  move, then unread ones where it is not.
+
+Reads cover every repo (`listTopics` / `search` with `{ allRepos: true }`),
+whatever repo the window has chosen; quiet repos stay quiet. Answers are
+plain text: a freshness line, who the app works for, then one
+`<postpile-data>` fence around everything that comes from GitHub or from an
+agent summary of it, with a line telling the caller it is data, not
+instructions. A fence tag inside the data is broken up so a PR body can't
+close it. No structured content: text is what the calling model reads, and
+sending both would double the tokens.
 
 ## Architecture
 

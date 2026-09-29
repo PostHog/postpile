@@ -27,6 +27,7 @@
   "devDependencies": {
     "@postpile/core": "workspace:*",
     "@postpile/engine": "workspace:*",
+    "@postpile/mcp": "workspace:*",
     "@postpile/server": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.0",
