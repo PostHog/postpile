@@ -2,12 +2,16 @@ import {
   isLiveProposal,
   newTopic,
   OUTSIDE_PROPOSAL_DAYS,
+  planTopicChange,
   proposalOutcome,
   proposalOutcomeAt,
   type ActionResult,
   type PrKey,
   type Tile,
+  type TopicChangeRequest,
+  type TopicChangeResult,
   type TopicProposal,
+  type TopicSnapshot,
 } from '@postpile/core';
 import type { SampleData } from './sample-data.ts';
 
@@ -64,6 +68,62 @@ export class FakeTopicChanges {
     return this.data.proposals
       .filter((proposal) => proposal.topicId === topicId && proposalOutcome(proposal, now) !== 'pending' && (proposalOutcomeAt(proposal, now) ?? '') >= since)
       .sort((a, b) => (proposalOutcomeAt(b, now) ?? '').localeCompare(proposalOutcomeAt(a, now) ?? ''));
+  }
+
+  private topicSnapshot(topicId: string | null): TopicSnapshot | null {
+    const topic = this.data.topics.find((candidate) => candidate.id === topicId);
+    return topic ? { id: topic.id, name: topic.name, status: topic.status } : null;
+  }
+
+  /** The tile a PR shows in, like `Board.topicIdOf`. */
+  private tileOf(key: PrKey): Tile | undefined {
+    return this.data.tiles.find((tile) => tile.members.some((member) => member.prKey === key));
+  }
+
+  /**
+   * An outside agent's topic change, checked and previewed by the same
+   * planTopicChange as the engine, and filed in memory unless it is a dry
+   * run. A stack moves whole (its tile's stack); sample splits move whole
+   * tiles, which is the same for the sample's single-PR and stack tiles.
+   */
+  propose(change: TopicChangeRequest, client: string): TopicChangeResult {
+    const now = this.timestamp();
+    const dayAgo = new Date(this.now().getTime() - 24 * 3600_000).toISOString();
+    const fromAgents = this.data.proposals.filter((proposal) => proposal.source === 'agent');
+    const plan = planTopicChange(change, {
+      now,
+      topic: this.topicSnapshot(change.topicId),
+      intoTopic: this.topicSnapshot(change.intoTopicId),
+      members: [...new Set(this.topicPrKeys(change.topicId))],
+      topicIdOf: (key) => this.tileOf(key)?.topicId ?? null,
+      movesWith: (key) => this.tileOf(key)?.stacks.find((stack) => stack.prKeys.includes(key))?.prKeys ?? [key],
+      proposals: this.data.proposals.filter((proposal) => proposal.topicId === change.topicId),
+      pendingFromAgents: fromAgents.filter((proposal) => proposal.status === 'pending'),
+      filedLastDay: fromAgents.filter((proposal) => proposal.createdAt >= dayAgo).length,
+    });
+    if (!plan.ok) {
+      return { status: 'refused', proposalId: null, preview: [], reason: plan.reason, movedPrKeys: [] };
+    }
+    if (change.dryRun) {
+      return { status: 'dry_run', proposalId: null, preview: plan.preview, reason: null, movedPrKeys: plan.movedPrKeys };
+    }
+    const proposal: TopicProposal = {
+      id: `proposal-agent-${this.data.proposals.length + 1}`,
+      kind: change.kind,
+      topicId: change.topicId,
+      name: change.kind === 'merge' ? null : (change.name?.trim() ?? null),
+      intoTopicId: change.kind === 'merge' ? change.intoTopicId : null,
+      fromArea: null,
+      prKeys: change.kind === 'split' ? change.prKeys : [],
+      reason: change.reason.trim(),
+      status: 'pending',
+      createdAt: now,
+      decidedAt: null,
+      source: 'agent',
+      client,
+    };
+    this.data.proposals.push(proposal);
+    return { status: 'filed', proposalId: proposal.id, preview: plan.preview, reason: null, movedPrKeys: plan.movedPrKeys };
   }
 
   /** The tiles a split moves: every tile of the topic holding one of its PRs. */

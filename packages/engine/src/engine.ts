@@ -7,6 +7,8 @@ import type {
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
+  TopicChangeRequest,
+  TopicChangeResult,
   ChatMessage,
   ChatReply,
   ConsolidateOptions,
@@ -84,6 +86,7 @@ import { GitHubError, type GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.ts';
+import { OutsideProposals } from './agent-requests/topic-change.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
@@ -247,6 +250,7 @@ export class Engine implements EngineService {
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
   private readonly agentRefresher: AgentRefresher;
+  private readonly outsideProposals: OutsideProposals;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
@@ -323,6 +327,7 @@ export class Engine implements EngineService {
     const setupChecks = new SetupChecks(deps.reader, commands);
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
     this.mcp = new McpConnection({ store, commands, tools: this.toolHealth, launcher: deps.mcpLauncher ?? null, now, telemetry: this.telemetry });
+    this.outsideProposals = new OutsideProposals(store, now);
     this.agentRefresher = new AgentRefresher({
       now,
       quota: this.quota,
@@ -667,6 +672,10 @@ export class Engine implements EngineService {
 
   refreshNow(target: AgentRefreshTarget, options: AgentRefreshOptions): Promise<AgentRefreshResult> {
     return this.agentRefresher.refresh(target, options.client);
+  }
+
+  async proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult> {
+    return this.outsideProposals.propose(change, options.client);
   }
 
   /** The poll's own status, plus what the renderer refreshes on (syncs, the next auto sync, catch-up runs) and the GitHub quota while it is low. */

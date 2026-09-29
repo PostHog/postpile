@@ -114,3 +114,39 @@ describe('accepting a topic proposal', () => {
     expect(h.store.topics.get('depot')?.name).not.toBe('Depot runners');
   });
 });
+
+describe('proposeTopicChange from an outside agent', () => {
+  const client = { client: 'claude-code' };
+
+  it('files a split for the user with a preview that names the stack, and never applies it', async () => {
+    const { h } = clockedHarness();
+    const { bottom, top, lone } = await depotWithStack(h);
+    const change = { topicId: 'depot', kind: 'split' as const, prKeys: [top.key], name: 'Runner images', intoTopicId: null, reason: 'separate work', dryRun: false };
+
+    const result = await h.engine.proposeTopicChange(change, client);
+
+    expect(result).toMatchObject({ status: 'filed', movedPrKeys: [bottom.key, top.key], reason: null });
+    expect(result.preview).toContain(`${top.key} brings ${bottom.key} along (same stack).`);
+    expect(result.preview).toContain('1 PR stay in "depot".');
+    expect(h.store.proposals.get(result.proposalId!)).toMatchObject({ kind: 'split', source: 'agent', client: 'claude-code', status: 'pending', prKeys: [top.key] });
+    expect(h.store.memberships.get(top.key)?.topicId).toBe('depot');
+    expect(h.store.memberships.get(lone.key)?.topicId).toBe('depot');
+    expect((await h.engine.listProposals()).topics.map((p) => p.id)).toEqual([result.proposalId]);
+
+    const again = await h.engine.proposeTopicChange(change, client);
+    expect(again).toMatchObject({ status: 'refused', reason: expect.stringContaining('pending already') });
+  });
+
+  it('only previews on a dry run, and refuses a PR from another topic', async () => {
+    const { h } = clockedHarness();
+    const { lone } = await depotWithStack(h);
+    const dry = await h.engine.proposeTopicChange({ topicId: 'depot', kind: 'rename', prKeys: [], name: 'Depot CI', intoTopicId: null, reason: 'clearer', dryRun: true }, client);
+    expect(dry).toEqual({ status: 'dry_run', proposalId: null, preview: ['Rename "depot" to "Depot CI".'], reason: null, movedPrKeys: [] });
+    expect((await h.engine.listProposals()).topics).toEqual([]);
+
+    topicWithPrs(h, 'other', [reviewRequestedPr(7)]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const wrong = await h.engine.proposeTopicChange({ topicId: 'other', kind: 'split', prKeys: [lone.key], name: 'X', intoTopicId: null, reason: 'r', dryRun: false }, client);
+    expect(wrong).toMatchObject({ status: 'refused', reason: expect.stringContaining('is not in "other"') });
+  });
+});

@@ -4,6 +4,8 @@ import type {
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
+  TopicChangeRequest,
+  TopicChangeResult,
   ChatMessage,
   ChatReply,
   ConsolidationReport,
@@ -1226,6 +1228,10 @@ export class FakeEngine implements EngineService {
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     return this.topicChanges.decide(proposalId, accept);
+  }
+
+  async proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult> {
+    return this.topicChanges.propose(change, options.client);
   }
 
   // Engine memory v2, backed by FakeMemory.

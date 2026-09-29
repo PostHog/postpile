@@ -75,6 +75,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     decideTailoring: notImplemented,
     decideTopicProposal: notImplemented,
     refreshNow: notImplemented,
+    proposeTopicChange: notImplemented,
     listFacts: notImplemented,
     listProposals: notImplemented,
     decideRuleProposal: notImplemented,

@@ -71,7 +71,8 @@ export class ProposalActions {
     if (gone.length > 0) {
       return `${gone.join(', ')} left the topic since`;
     }
-    const moved = new Set<PrKey>(proposal.prKeys.flatMap((key) => board.movesWith(key)));
+    // Every layer: the whole stack shows wherever the moved layers go.
+    const moved = new Set<PrKey>(proposal.prKeys.flatMap((key) => board.stackKeysOf(key)));
     const members = board.tilesForTopic(proposal.topicId ?? '').flatMap((tile) => tile.members.map((member) => member.prKey));
     if (proposal.source === 'agent' && members.every((key) => moved.has(key))) {
       return 'no PR would stay behind';
