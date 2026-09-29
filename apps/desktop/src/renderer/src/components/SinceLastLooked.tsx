@@ -1,6 +1,7 @@
 import type { DossierView } from '@postpile/core';
 import { fixedText, sinceLastLooked } from '../lib/memory.ts';
 import { changePath, lineTarget } from '../lib/sources.ts';
+import { dossierBehindNote } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { MemoryLine } from './MemoryLine.tsx';
@@ -10,8 +11,12 @@ function sinceLabel(since: string, now: Date): string {
   return age === 'now' ? 'just now' : `${age} ago`;
 }
 
-/** The most prominent part of the topic header: what moved since the user was last here. */
-export function SinceLastLooked(props: { dossier: DossierView; topicId: string }) {
+/**
+ * The most prominent part of the topic header: what moved since the user was
+ * last here. `updating`: a sync or a catch-up run for the topic is going, so
+ * the newer-events note says "Updating now".
+ */
+export function SinceLastLooked(props: { dossier: DossierView; topicId: string; updating: boolean }) {
   const now = useNow();
   const { dossier } = props;
   const block = sinceLastLooked(dossier);
@@ -34,7 +39,7 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string }
               correction={{ kind: 'wrong', factId: null, topicId: props.topicId, text: change.text }}
               stale={null}
               corrected={dossier.correctedClaims.includes(change.text)}
-          fixedTo={fixedText(dossier, change.text)}
+              fixedTo={fixedText(dossier, change.text)}
               refs={change.refs}
               why={path === null ? undefined : lineTarget(props.topicId, dossier, path)}
             >
@@ -44,9 +49,7 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string }
         );
       })}
       {dossier.eventsBehind > 0 && (
-        <p className="text-[11.5px] text-muted">
-          {dossier.eventsBehind} newer {dossier.eventsBehind === 1 ? 'event is' : 'events are'} not in the dossier yet. Sync to refresh it.
-        </p>
+        <p className="text-[11.5px] text-hint">{dossierBehindNote(dossier.eventsBehind, props.updating)}</p>
       )}
     </section>
   );

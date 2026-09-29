@@ -2,6 +2,7 @@ import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postp
 import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
 import { glanceStateText } from '../lib/glance.ts';
+import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackPlaces } from '../lib/stacks.ts';
 import { isDraftTile, kindLabel, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
@@ -129,6 +130,7 @@ export function Tile(props: TileProps) {
   const lead = leadPr(view);
   const nextAutoSyncAt = useNextAutoSyncAt();
   const glanceText = lead ? glanceStateText({ state: lead.glanceState, gap: lead.glanceGap, nextAutoSyncAt, now }) : null;
+  const glanceUpdating = updatingNow({ syncing: actions.syncing, writing: lead?.glanceState === 'writing' });
   const forYou = tileForYou(view, props.sets);
   const updatedAt = tileUpdatedAt(view);
   const background = done ? 'bg-done' : props.filterMatch === true ? 'bg-warm-strip' : 'bg-surface';
@@ -191,7 +193,7 @@ export function Tile(props: TileProps) {
                 Draft
               </span>
             )}
-            <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} greyed={done} missing={glanceText} />
+            <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} updating={glanceUpdating} greyed={done} missing={glanceText} />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}
             {view.quietRepo && (

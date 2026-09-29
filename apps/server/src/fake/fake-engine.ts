@@ -210,6 +210,9 @@ const FAKE_LINE_MESSAGES: Record<MemoryCorrectionKind, string> = {
   fix: 'Fixed. The next sync writes the corrected line into the topic memory.',
 };
 
+/** Sample glances that read as older than the PR (its last push came after), for the stale verdict box. */
+const STALE_SAMPLE_GLANCES = new Set<PrKey>(['acme/app#1904']);
+
 const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 
 function ok(message: string, undoToken: string | null = null): ActionResult {
@@ -348,13 +351,18 @@ export class FakeEngine implements EngineService {
     return this.catchUp.gapOf(prKey);
   }
 
-  /** Same rule as the engine; sample glances are never stale. */
+  /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen. */
+  private isGlanceStale(prKey: PrKey): boolean {
+    return STALE_SAMPLE_GLANCES.has(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
+  }
+
+  /** Same rule as the engine. */
   private glanceStateOfPr(prKey: PrKey): GlanceState {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
     return glanceStateOf({
       hasGlance: this.data.glances.some((glance) => glance.prKey === prKey),
-      stale: false,
+      stale: this.isGlanceStale(prKey),
       wanted: pr?.state === 'OPEN' && tracked,
       gap: this.glanceGapOf(prKey),
       agentOff: this.toolStatus.agentOff() !== null,
@@ -452,7 +460,7 @@ export class FakeEngine implements EngineService {
           events: events.get(pr.key) ?? [],
           reason: member.provenance.kind === 'pinged' ? member.provenance.reason : null,
           glance: this.data.glances.find((candidate) => candidate.prKey === pr.key) ?? null,
-          glanceStale: false,
+          glanceStale: this.isGlanceStale(pr.key),
           glanceGap: this.glanceGapOf(pr.key),
           glanceState: this.glanceStateOfPr(pr.key),
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
@@ -884,7 +892,7 @@ export class FakeEngine implements EngineService {
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr),
       whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
-      glanceStale: false,
+      glanceStale: this.isGlanceStale(prKey),
       glanceGap: this.glanceGapOf(prKey),
       glanceState: this.glanceStateOfPr(prKey),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,

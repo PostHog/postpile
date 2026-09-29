@@ -6,7 +6,7 @@ import { changePath, checkLabel, targetKey, targetQuery } from './sources.ts';
 describe('checkLabel', () => {
   it('says whether a line still holds', () => {
     expect(checkLabel({ state: 'ok', reason: null, note: null })).toEqual({ text: 'Checks out against GitHub', tone: 'ok' });
-    expect(checkLabel({ state: 'stale', reason: 'head_moved', note: null })).toEqual({ text: 'Stale: PR moved since', tone: 'warn' });
+    expect(checkLabel({ state: 'stale', reason: 'head_moved', note: null })).toEqual({ text: 'Out of date: PR moved since', tone: 'warn' });
     expect(checkLabel({ state: 'closed', reason: null, note: 'the user said it is wrong' }).text).toBe('No longer believed: the user said it is wrong');
     expect(checkLabel({ state: 'unsourced', reason: null, note: null }).text).toBe('No source recorded');
   });

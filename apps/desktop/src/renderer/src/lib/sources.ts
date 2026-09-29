@@ -14,7 +14,7 @@ export function checkLabel(check: MemoryCheck): CheckLabel {
     return { text: 'Checks out against GitHub', tone: 'ok' };
   }
   if (check.state === 'stale') {
-    return { text: `Stale: ${check.reason ? staleLabel(check.reason) : 'a check failed'}`, tone: 'warn' };
+    return { text: `Out of date: ${check.reason ? staleLabel(check.reason) : 'a check failed'}`, tone: 'warn' };
   }
   if (check.state === 'closed') {
     return { text: `No longer believed${check.note ? `: ${check.note}` : ''}`, tone: 'muted' };

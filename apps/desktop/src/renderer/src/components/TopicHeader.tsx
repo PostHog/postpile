@@ -3,6 +3,7 @@ import type { DossierStatus, DossierView, TopicDetail, TopicGroup, TopicListItem
 import { useActions } from '../api/actions.tsx';
 import { fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
+import { updatingNow } from '../lib/staleness.ts';
 import { proposalText } from '../lib/proposals.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
@@ -47,7 +48,7 @@ function ProposalRow(props: { proposal: TopicProposal; topics: TopicListItem[] }
 }
 
 /** Status, goal and people from the dossier, the "since you last looked" block, and the full dossier on demand. */
-function DossierSummary(props: { dossier: DossierView; topicId: string }) {
+function DossierSummary(props: { dossier: DossierView; topicId: string; updating: boolean }) {
   const [open, setOpen] = useState(false);
   const { dossier: view, topicId } = props;
   const { dossier } = view;
@@ -81,7 +82,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string }) {
           </MemoryLine>
         )}
       </div>
-      <SinceLastLooked dossier={view} topicId={topicId} />
+      <SinceLastLooked dossier={view} topicId={topicId} updating={props.updating} />
       <div className="flex max-w-[680px] flex-wrap items-center gap-1.5">
         {dossier.people.map((person) => (
           <span key={person.login} className={`${chip} gap-1.5 pr-2 pl-[3px]`} title={person.note}>
@@ -110,8 +111,12 @@ function DossierSummary(props: { dossier: DossierView; topicId: string }) {
 /** Breadcrumb, name, who drives, the dossier (or the plain summary before one exists) and what the user told the agent. */
 export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; topics: TopicListItem[] }) {
   const { topic, tiles, pendingProposals, dossier, placement } = props.detail;
+  const actions = useActions();
   const counts = countPrs(tiles);
   const prCount = counts.pinged + counts.pulledIn;
+  // A catch-up run on the topic updates the dossier too; a PR of the topic writing its glance says one is going.
+  const writing = tiles.some((view) => view.prs.some((pr) => pr.glanceState === 'writing'));
+  const updating = updatingNow({ syncing: actions.syncing, writing });
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-1.5 text-[11.5px] text-faint">
@@ -142,7 +147,7 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
       </div>
       {placement && <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} />}
       {topic.summary && <p className="max-w-[680px] text-[13.5px] leading-normal text-pretty text-ink-2">{topic.summary}</p>}
-      {dossier && <DossierSummary dossier={dossier} topicId={topic.id} />}
+      {dossier && <DossierSummary dossier={dossier} topicId={topic.id} updating={updating} />}
       {topic.tailoring && (
         <div className="flex max-w-[680px] items-start gap-2 text-xs leading-normal text-muted">
           <span className="text-faint">

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { ForWhom, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
 import { pendingWriteTitle } from '../lib/guard.ts';
 import type { GlanceStateText } from '../lib/glance.ts';
+import { staleVerdictTitle, staleWord } from '../lib/staleness.ts';
 import type { StateWord } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';
 import { type StackPlace, stackPlaceLabel, stackPlaceTitle } from '../lib/stacks.ts';
@@ -32,11 +33,12 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
 }
 
 /**
- * Greyed on done tiles; "stale" when the glance was made for an older state.
- * Without a verdict it says where the glance stands (`glanceStateText`).
- * Same height as the "for whom" chip.
+ * Greyed on done tiles; "· out of date" when the glance was made for an
+ * older state, "· updating" while a sync or catch-up writes a new one
+ * (`lib/staleness.ts`). Without a verdict it says where the glance stands
+ * (`glanceStateText`). Same height as the "for whom" chip.
  */
-export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; greyed?: boolean; missing?: GlanceStateText | null }) {
+export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; updating?: boolean; greyed?: boolean; missing?: GlanceStateText | null }) {
   if (!props.verdict) {
     const text = props.missing;
     const tone = text?.problem ? 'border-status-bad text-status-bad' : 'border-frame text-faint';
@@ -55,11 +57,11 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; g
   return (
     <span
       className={`flex h-[22px] shrink-0 items-center gap-[5px] rounded-full border pr-2 pl-[7px] text-[11px] font-semibold whitespace-nowrap ${tone}`}
-      title={props.stale ? 'Stale: the PR or your instructions moved since this glance. The next catch-up or sync refreshes it.' : undefined}
+      title={props.stale ? staleVerdictTitle(props.updating ?? false) : undefined}
     >
       {verdict.icon}
       {verdict.label}
-      {props.stale && <span className="font-normal opacity-70">· stale</span>}
+      {props.stale && <span className="font-normal opacity-70">· {staleWord(props.updating ?? false)}</span>}
     </span>
   );
 }

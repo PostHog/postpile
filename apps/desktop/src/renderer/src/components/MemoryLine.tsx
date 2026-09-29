@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import type { FactRef, MemoryCorrection, MemoryTarget, StaleReason } from '@postpile/core';
+import { useActions } from '../api/actions.tsx';
 import { staleLabel } from '../lib/memory.ts';
+import { staleWord } from '../lib/staleness.ts';
 import { MemoryButton } from './MemoryButton.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';
 import { SourceChip } from './SourceChip.tsx';
@@ -25,12 +27,13 @@ interface MemoryLineProps {
 }
 
 /**
- * One thing the agent remembers: the text with its sources and a stale,
- * "marked wrong" or "fixed" badge after it, and Why? / Recheck / Forget on
+ * One thing the agent remembers: the text with its sources and an "out of
+ * date" ("updating" while a sync runs), "marked wrong" or "fixed" badge after it, and Why? / Recheck / Forget on
  * hover. Why? opens the sources panel under the line, Recheck the dialog.
  * Recheck and Forget only show on big claims (`canRecheck`, `canForget`).
  */
 export function MemoryLine(props: MemoryLineProps) {
+  const actions = useActions();
   const [whyOpen, setWhyOpen] = useState(false);
   const [recheckOpen, setRecheckOpen] = useState(false);
   const fixedTo = props.fixedTo ?? null;
@@ -50,7 +53,7 @@ export function MemoryLine(props: MemoryLineProps) {
           ))}
           {props.stale && (
             <span className="ml-1.5 rounded bg-closer-soft px-1.5 text-[10px] font-medium whitespace-nowrap text-closer">
-              stale · {staleLabel(props.stale)}
+              {staleWord(actions.syncing)} · {staleLabel(props.stale)}
             </span>
           )}
           {props.corrected && <span className="ml-1.5 text-[10.5px] whitespace-nowrap text-faint">marked wrong, fixed on next sync</span>}
