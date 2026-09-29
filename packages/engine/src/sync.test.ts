@@ -1,3 +1,4 @@
+import { SYNC_MAX_PRS } from '@postpile/core';
 import { at, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
@@ -71,6 +72,24 @@ describe('Engine.sync without the agent', () => {
 
     const third = await h.engine.sync({ maxAgentCalls: 0 });
     expect(third.prsFetched).toBe(0);
+  });
+
+  it('takes a big inbox in batches of SYNC_MAX_PRS and never fetches threads older than 30 days', async () => {
+    const h = makeHarness();
+    for (let n = 1; n <= SYNC_MAX_PRS + 10; n++) {
+      const pr = reviewRequestedPr(n, { updatedAt: at(n) });
+      h.reader.addPr(pr, makeThreadFor(pr));
+    }
+    const old = reviewRequestedPr(9001, { updatedAt: '2026-07-01T00:00:00Z' });
+    h.reader.addPr(old, makeThreadFor(old));
+
+    const first = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(first).toMatchObject({ threads: SYNC_MAX_PRS + 11, prsFetched: SYNC_MAX_PRS, prsSkipped: 10 });
+
+    const second = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(second).toMatchObject({ prsFetched: 10, prsSkipped: 0 });
+    const fetched = h.reader.fetchedRefs.flat().map((ref) => ref.number);
+    expect(fetched).not.toContain(9001);
   });
 
   it('refetches a PR only when its thread moved after the last fetch', async () => {

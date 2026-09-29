@@ -3,6 +3,7 @@ import {
   ALL_AGENT_JOBS,
   rateLimitSourceFromErrors,
   splitAgentOffErrors,
+  SYNC_MAX_PRS,
   type AgentCallStats,
   type SyncOptions,
   type SyncProgress,
@@ -97,7 +98,7 @@ export class SyncRun {
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
     this.live = { startedAt, phases, budget, stats: report.agentCallStats };
     try {
-      const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? Number.POSITIVE_INFINITY));
+      const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? SYNC_MAX_PRS));
       report.notificationsNotModified = fetched.notModified;
       report.threads = fetched.threads;
       report.prsFetched = fetched.prsFetched;

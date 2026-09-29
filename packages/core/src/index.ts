@@ -49,6 +49,7 @@ export * from './memory-sources.ts';
 export * from './instructions-views.ts';
 export * from './topic-relation.ts';
 export * from './search.ts';
+export * from './sync-selection.ts';
 export * from './repo-scope.ts';
 export * from './github-read.ts';
 export * from './inbox-cleanup.ts';

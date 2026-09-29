@@ -53,6 +53,16 @@ describe('AutoSyncSchedule', () => {
     expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 10 * MINUTE).toISOString());
   });
 
+  it('comes back in a few minutes when the last sync left PRs over', () => {
+    const { timers, auto } = schedule(60);
+    auto.start();
+
+    auto.reschedule(true);
+    expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 2 * MINUTE).toISOString());
+    auto.reschedule(false);
+    expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 60 * MINUTE).toISOString());
+  });
+
   it('skips when a sync is running at the due time', () => {
     const { timers, syncs, lines, auto } = schedule(60, () => true);
     auto.start();

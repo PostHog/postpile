@@ -879,6 +879,12 @@ the app meanwhile.
 
 ## Next after 0.2.0
 
+- First sync with a big inbox (fixed 2026-09-29): threads older than 30 days
+  are never fetched, a full sync takes at most 60 PRs, and a capped sync
+  brings the next background sync forward to 2 minutes. Still open: the live
+  poll starts glance catch-ups during setup, before Accept, and the first
+  sync waits for them.
+
 - MCP server for other agents on the machine (planned 2026-09-29, read-only
   first). The first question to answer well: "what does PostPile know about
   PR X, the topic around it and the progress".
