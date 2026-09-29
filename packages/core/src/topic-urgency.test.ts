@@ -50,7 +50,7 @@ describe('topicUrgency', () => {
 describe('topicUrgency: your moves', () => {
   it('lists the moves on live tiles, most urgent first, tile order on a tie', () => {
     const reply: TopicMove = { move: 'reply', text: "Answer lyra's question" };
-    const fix: TopicMove = { move: 'fix_ci', text: 'Fix failing CI' };
+    const fix: TopicMove = { move: 'address_changes', text: "Address ada's changes" };
     const other: TopicMove = { move: 'review', text: 'Review for team-platform' };
     const tiles = [tile({ move: merge }), tile({ move: review }), tile({ move: fix }), tile({ move: reply }), tile({ move: other }), tile({ state: 'snoozed', move: reply })];
     expect(topicUrgency(tiles).yourMoves).toEqual([reply, review, other, fix, merge]);
