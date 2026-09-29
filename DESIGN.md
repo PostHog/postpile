@@ -3788,13 +3788,15 @@ Julian under "Open questions".
   which a poll can move a few seconds before the renderer refreshes. The
   renderer now sends the head it showed; if the stored head differs, the
   approval is refused with "New commits since you looked; take another look".
-- **A cut-off snapshot never qualifies for a quiet read.** The PR query takes
-  the last 50 review threads and the first 30 comments of each, so a reply past
-  those caps never arrived while the freshness check still passed, and the
-  bot-only read could clear an unread human reply. The query now also asks for
-  the total counts; a PR whose threads or comments were cut off is marked
-  truncated, and `snapshotCoversThread` treats it as not covering the thread
-  (no bot-only, touched or opened mark-read on GitHub for it).
+- **A cut-off snapshot never qualifies for a quiet read.** The PR query caps
+  every activity list (the last 50 reviews, 60 comments, 50 review threads and
+  the first 30 comments of each, 50 commits, 60 timeline items), so an event
+  past a cap never arrived while the freshness check still passed, and the
+  bot-only read could clear an unread human reply (a human comment followed by
+  60 bot comments). The query now also asks for the total count of each; a PR
+  with any list cut off is marked truncated, and `snapshotCoversThread` treats
+  it as not covering the thread (no bot-only, touched or opened mark-read on
+  GitHub for it).
 - **The MCP process never writes, instructions included.** Reading a glance's
   freshness recorded a new instructions version when `instructions.md` had
   changed while the app was closed, and the read-only MCP process threw
@@ -3808,15 +3810,25 @@ Julian under "Open questions".
 - **A pending inbox cleanup survives a lock during Send.** Closing the lock
   while pending writes were being sent dropped a pending "mark all read before"
   cleanup as if sent. It now stays pending with "GitHub writes are off".
-- **Stale lock takeover re-checks before removing.** Two processes finding the
-  same stale `postpile.lock` could delete each other's fresh lock. The lock is
-  removed only when it is still the exact holder judged stale (pid and start
-  time).
-- **Topic names are cleaned where they are stored.** Topic names are written by
-  the agent from PR text and six prompts used them outside the data fence. On
-  storing a name: newlines and control characters collapse to spaces, and the
-  name is capped at 80 characters. Existing names are cleaned once by a
-  migration.
+- **Stale lock takeover runs under a mutex.** Two processes finding the same
+  stale `postpile.lock` could delete each other's fresh lock. A takeover now
+  holds `postpile.lock.takeover` (created with mkdir, so exactly one process
+  gets it; a folder older than 30 s was left by a crash and is removed). While
+  holding it, the process re-reads the lock, removes it only when it is still
+  the exact holder judged stale (pid and start time), creates its own lock
+  exclusively and reads it back, then removes the folder. Everyone else backs
+  off and tries again.
+- **Topic names are data, and are cleaned where they are stored.** Topic names
+  are written by the agent from PR text and six prompts used them outside the
+  data fence. Every prompt now shows topic and area names only inside
+  `<github_data>` and says "the topic named in the data below" instead of
+  putting the name into its prose (a test checks every prompt). On storing a
+  name: newlines and control characters collapse to spaces, and the name is
+  capped at 80 characters. A name that is empty after cleaning is refused: topic
+  assignment asks about the PR again, consolidation does not file the
+  proposal, an outside agent gets "The name is empty after cleaning", and
+  accepting such a stored proposal is refused. Existing names are cleaned once
+  by a migration ("Untitled topic" when nothing is left).
 
 ## Architecture
 

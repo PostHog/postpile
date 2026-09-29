@@ -12,14 +12,17 @@ now".
   never count (dropped in normalization, `viewerSpokeAfter` skips
   PENDING). Approve sends the head on screen and is refused when the
   stored head moved (`NEW_COMMITS_SINCE_LOOKED`). The PR query asks for
-  totalCount on review threads and thread comments; a cut-off snapshot
+  totalCount on every capped activity list; a cut-off snapshot
   (`Pr.truncated`) never passes `snapshotCoversThread`. The MCP process
   reads instructions without storing a version (`storeReadOnly`). Whose
   turn counts every standing change request (`standingChanges`). A
   pending cleanup the lock stops mid-send stays pending. Stale lock
-  takeover re-reads the lock before removing it (`removeStaleLock`).
-  Topic names are cleaned where stored (`cleanTopicName`, migration 018,
-  which also lets migrations carry a code step). The ninth (a broken
+  takeover runs under a mkdir mutex (`postpile.lock.takeover`, with
+  `removeStaleLock` inside it). Topic and area names only appear inside
+  the data fence in prompts (`prompts-fence.test.ts`) and are cleaned
+  where stored (`cleanTopicName`, `hasEmptyTopicName`, migration 018,
+  which also lets migrations carry a code step). The Codex review on
+  PR #18 tightened truncation, the lock, the fence and empty names. The ninth (a broken
   snooze comes back once the mention is read) waits under DESIGN.md
   "Open questions for Julian".
 
