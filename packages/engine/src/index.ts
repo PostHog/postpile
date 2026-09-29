@@ -2,7 +2,7 @@ export type { EngineService } from './service.ts';
 export { Engine, type EngineDeps } from './engine.ts';
 export { MarkReadQueue, type PendingBatch } from './mark-read-queue.ts';
 export { agentCwdFor, applyLegacyEnv, dataDirs, defaultPaths, profileFromEnv, realDataDirs, seedDevInstructions, type AppPaths, type Profile } from './paths.ts';
-export { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, type LockInfo, type LockKind } from './data-lock.ts';
+export { APP_LOCK_KINDS, DataDirLock, DataDirLockedError, LOCK_FILE_NAME, runningApp, type LockInfo, type LockKind } from './data-lock.ts';
 export { migrateLegacyData } from './legacy-data.ts';
 export { UNSORTED_TOPIC_ID } from './board.ts';
 export { ReadOnlyWriter } from './writes/read-only-writer.ts';
@@ -36,3 +36,6 @@ export {
   type TelemetryPersonInfo,
 } from './telemetry/telemetry.ts';
 export { telemetryEnabled } from './telemetry/telemetry-env.ts';
+export { AgentRefresher, type AgentRefreshDeps, type RefreshRun, type StoredPrInfo } from './agent-requests/agent-refresh.ts';
+export { AgentRequestInbox, type AgentRequestInboxOptions } from './agent-requests/inbox.ts';
+export { answerAgentRequest } from './agent-requests/answer.ts';

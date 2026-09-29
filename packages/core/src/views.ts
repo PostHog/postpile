@@ -230,7 +230,15 @@ export interface TopicDetail {
   placement: TopicPlacement | null;
   tiles: TileView[];
   sets: PrSet[];
+  /** Waiting for the user; an outside agent's expired ones are left out (`isLiveProposal`). */
   pendingProposals: TopicProposal[];
+  /**
+   * Accepted, rejected or expired in the last OUTSIDE_PROPOSAL_DAYS days,
+   * newest first, merges into this topic included (an accepted merge
+   * archives its source). The MCP topic tool shows them, so an outside agent sees
+   * what became of its suggestions and does not repeat itself.
+   */
+  decidedProposals: TopicProposal[];
   /** Null until the first dossier update for the topic (and always for Unsorted). */
   dossier: DossierView | null;
 }
@@ -242,6 +250,8 @@ export interface EventView {
 
 export interface PrDetail {
   pr: Pr;
+  /** When the stored snapshot was fetched from GitHub; null when unknown (sample data before a fake fetch). */
+  fetchedAt: IsoTime | null;
   /** Every event, unfiltered (search, debug, chat context). */
   events: EventView[];
   /** The detail pane's list (`activityList`): meaningful events, new first, noise folded. */

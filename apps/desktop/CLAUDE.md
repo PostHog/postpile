@@ -152,6 +152,14 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   the scope. A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
+- Topic proposals come from consolidation or, through the MCP server, from
+  an outside agent (`source: 'agent'`, `client`). Say who suggested an
+  outside one wherever it shows: the Inbox card's meta line
+  (`proposalMeta`: "topic · suggested by Claude Code · 2h ago") and the
+  topic header row ("Claude Code suggests: …"), both from `suggestedBy` in
+  `lib/proposals.ts` (unknown clients read "an outside agent"). Accept can
+  come back refused when the proposal no longer fits; show the message,
+  never retry.
 - Setup (`startSetupSweep`, `refineSetup`, `acceptSetup`, `skipSetup`) is
   local, not on the `GithubWrite` list. Accept is the only write and it
   writes a new instructions version; a result with `current` means the

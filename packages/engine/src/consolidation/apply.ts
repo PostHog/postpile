@@ -54,6 +54,8 @@ function toTopicProposal(idea: ConsolidationTopicProposal, at: string): TopicPro
     status: 'pending',
     createdAt: at,
     decidedAt: null,
+    source: 'consolidation',
+    client: null,
   };
 }
 
@@ -125,6 +127,8 @@ export class ConsolidationApplier {
       status: 'pending',
       createdAt: at,
       decidedAt: null,
+      source: 'consolidation',
+      client: null,
     });
     this.counts.topicProposalsFiled += 1;
   }

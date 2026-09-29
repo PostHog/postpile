@@ -1,7 +1,27 @@
 import { arch, release } from 'node:os';
-import { defaultPaths, telemetryFromEnv } from '@postpile/engine';
+import { dirname, join } from 'node:path';
+import { AGENT_REQUESTS_FOLDER } from '@postpile/core';
+import { defaultPaths, runningApp, telemetryFromEnv } from '@postpile/engine';
 import { engineFromEnv, isFake } from '@postpile/server';
+import { FileAgentRequests, InMemoryAgentRequests, type AgentRequests } from './agent-requests.ts';
 import { routeConsoleToStderr, serveStdio } from './server.ts';
+
+/** How long one look at postpile.lock counts: it runs ps, and a busy agent may call several tools a second. */
+const APP_CHECK_MS = 5000;
+
+/** Whether the desktop app holds the database folder, asked at most every APP_CHECK_MS. */
+function appRunningCheck(databaseFile: string): () => boolean {
+  let checkedAt = 0;
+  let running = false;
+  return () => {
+    const now = Date.now();
+    if (now - checkedAt >= APP_CHECK_MS) {
+      checkedAt = now;
+      running = runningApp(databaseFile) !== null;
+    }
+    return running;
+  };
+}
 
 /**
  * The whole MCP process, for `pnpm cli mcp` and the app bundle's
@@ -15,10 +35,20 @@ export async function runMcpFromEnv(appVersion: string): Promise<void> {
     ? undefined
     : telemetryFromEnv({ env: process.env, appVersion, osVersion: release(), arch: arch(), telemetryIdFile: defaultPaths().telemetryIdFile });
   const engine = engineFromEnv({ lockKind: 'cli', withoutLock: true, telemetry });
+  const databaseFile = defaultPaths().databaseFile;
+  // Sample data has no app to ask: it counts as running, and the fake engine answers requests in memory.
+  const appRunning = isFake() ? () => true : appRunningCheck(databaseFile);
+  const requests: AgentRequests = isFake()
+    ? new InMemoryAgentRequests(engine)
+    : // A fresh look at the lock before every request, not the cached one.
+      new FileAgentRequests({ folder: join(dirname(databaseFile), AGENT_REQUESTS_FOLDER), appRunning: () => runningApp(databaseFile) !== null });
   try {
     await serveStdio(engine, {
       version: appVersion,
-      onToolCall: (tool, found) => telemetry?.capture('mcp_tool_called', { tool, found }),
+      appRunning,
+      requests,
+      onToolCall: (tool, report) =>
+        telemetry?.capture('mcp_tool_called', { tool, found: report.found, response_chars: report.responseChars, error: report.error }),
     });
   } finally {
     // Also flushes the telemetry.

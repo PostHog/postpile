@@ -374,6 +374,10 @@ async function start(): Promise<void> {
       }
     },
   });
+  // Agents on this Mac (Claude Code through postpile-mcp) leave requests in the
+  // data folder: re-read a PR from GitHub, or suggest a topic change for the
+  // Inbox. Only while the app runs; the MCP process says so when it does not.
+  engine.startAgentRequests();
   // A background full sync every POSTPILE_AUTO_SYNC_MINUTES (default 60, 0 off),
   // counted from the end of the last sync and capped like "Sync now". The
   // engine skips it while a sync runs; the title bar shows it like any sync.
@@ -389,6 +393,7 @@ async function start(): Promise<void> {
 
 async function shutdown(): Promise<void> {
   try {
+    engine?.stopAgentRequests();
     engine?.stopLivePoll();
     engine?.stopAutoSync();
     engine?.stopWorkContextSchedule();

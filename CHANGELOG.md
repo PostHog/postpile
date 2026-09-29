@@ -4,6 +4,12 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### New
+
+- MCP `refresh_from_github`: an agent can have the running app re-read a PR, or a topic's open PRs, from GitHub now. It only reads, skips PRs fetched in the last minute, allows 20 refreshes an hour across all agents, and only single PRs while your GitHub quota is low. Each one is in the action log.
+- MCP `propose_topic_change`: an agent can suggest splitting PRs out of a topic, renaming it or merging it into another. The suggestion shows in the Inbox as "suggested by Claude Code", with the agent's reason, and nothing changes until you accept it. It comes with a preview of what accepting would do (a stack moves as a whole), at most 3 per topic, 10 in total and 20 a day, and expires after 14 days. The MCP `topic` tool shows agents what became of their suggestions.
+- "Remove <team>" in the detail pane on PRs with a pending review request for one of your teams: removes the team's review request, unsubscribes you from the PR's notifications and marks the PR done. Asks once, cannot be undone, blocked while GitHub writes are locked.
+
 ### Changed
 
 - The detail pane acts on the PR you look at: on a stack or set, Mark read and Mark done mark only the selected PR (with its own undo), the label follows that PR, and there is no mark button while that PR is still your move. Snooze stays in the tile footer for sets and stacks. Single-PR tiles behave as before, and the tile footer still acts on the whole tile.
@@ -15,10 +21,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - A review request a bot made for you or your team counts like one a person made: it makes the tile unread and pings the same way. Before, a reviewer-assigning bot's request to your team was taken for bot activity and never pinged.
 - Reviews routed to your team on PRs from outside the team no longer go through the ping check on every event. They ping once, when the PR's assessment says "Look closer" (even if a teammate reviewed already), and the tile turns unread with "Look closer: review routed to <team>". "Looks safe" and "Not yours" never ping for them.
 - Your own merged or closed PRs are marked read on GitHub when only bots came after your last read or touch (the own-PR exception now only applies while the PR is open). Your own review after the last read no longer counts as someone else's activity.
-
-### Added
-
-- "Remove <team>" in the detail pane on PRs with a pending review request for one of your teams: removes the team's review request, unsubscribes you from the PR's notifications and marks the PR done. Asks once, cannot be undone, blocked while GitHub writes are locked.
+- MCP answers are short by default: `pr_context` and `topic` take `detail: "full"` for everything. `search_prs` and `whats_on_me` page (`limit`, `offset`) and filter (`state`, `repo`, `whose_move`). Unknown PRs and topics, and bad filters, come back as errors with an example.
+- `pr_context` says when PostPile last fetched the PR and whether the running app checks it again within a minute.
+- Accepting a topic proposal that no longer fits (its topic was merged or retired, or a split's PRs moved elsewhere) is refused with the reason instead of moving PRs from other topics.
+- GitHub text in MCP answers sits in a fence with a random id, with control characters and invisible Unicode removed.
 
 ## 0.10.0 (2026-09-29)
 

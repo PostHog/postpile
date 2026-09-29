@@ -1,6 +1,7 @@
 import { arch, release } from 'node:os';
+import { dirname, join } from 'node:path';
 import { ClaudeCliRunner, RunnerAgentService } from '@postpile/agent';
-import { systemTimers, UNDO_WINDOW_MS, type McpLauncher } from '@postpile/core';
+import { AGENT_REQUESTS_FOLDER, systemTimers, UNDO_WINDOW_MS, type McpLauncher } from '@postpile/core';
 import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@postpile/github';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from './actions/local-change.ts';
@@ -155,5 +156,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     telemetry,
     appVersion: options.appVersion,
     quota,
+    // Only the lock holder answers agent requests; read-only access never does.
+    agentRequestsFolder: lock ? join(dirname(paths.databaseFile), AGENT_REQUESTS_FOLDER) : null,
   });
 }

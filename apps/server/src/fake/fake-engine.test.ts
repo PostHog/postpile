@@ -190,6 +190,46 @@ describe('FakeEngine memory', () => {
     const topics = await engine.listTopics();
     expect(topics.map((item) => item.topic.id)).not.toContain('topic-frontend-build');
   });
+
+  it('refreshes sample PRs for an outside agent under the real rules', async () => {
+    const engine = new FakeEngine();
+    const agent = { source: 'agent', client: 'claude-code' } as const;
+    const first = await engine.refreshNow({ kind: 'pr', prKey: 'acme/app#1902' }, agent);
+    expect(first).toMatchObject({ status: 'done', fetched: ['acme/app#1902'], changed: [] });
+    const again = await engine.refreshNow({ kind: 'pr', prKey: 'acme/app#1902' }, agent);
+    expect(again).toMatchObject({ status: 'done', fetched: [], fresh: [{ prKey: 'acme/app#1902' }] });
+    const topic = await engine.refreshNow({ kind: 'topic', topicId: 'topic-depot' }, agent);
+    expect(topic.prKeys.length).toBeGreaterThan(1);
+    expect(topic.fresh.map((entry) => entry.prKey)).toEqual(['acme/app#1902']);
+    expect((await engine.actionLog(1))[0]).toMatchObject({ action: 'agent_refresh', origin: 'agent' });
+  });
+
+  it('files an outside topic suggestion in memory with a stack-aware preview', async () => {
+    const engine = new FakeEngine();
+    const change = { topicId: 'topic-depot', kind: 'split' as const, prKeys: ['acme/app#1902'], name: 'Depot stack', intoTopicId: null, reason: 'one stack', dryRun: true };
+    const dry = await engine.proposeTopicChange(change, { client: 'claude-code' });
+    expect(dry.status).toBe('dry_run');
+    expect(dry.preview.join('\n')).toContain('acme/app#1902 brings acme/app#1851, acme/app#1862, acme/app#1911 and acme/app#1930 along (same stack).');
+
+    const filed = await engine.proposeTopicChange({ ...change, dryRun: false }, { client: 'claude-code' });
+    expect(filed.status).toBe('filed');
+    expect((await engine.listProposals()).topics.find((proposal) => proposal.id === filed.proposalId)).toMatchObject({ source: 'agent', client: 'claude-code' });
+    expect((await engine.getTopic('topic-depot'))?.pendingProposals.map((proposal) => proposal.id)).toContain(filed.proposalId);
+  });
+
+  it('shows who suggested a topic change and splits the topic on accept', async () => {
+    const engine = new FakeEngine();
+    const split = (await engine.listProposals()).topics.find((proposal) => proposal.id === 'proposal-split-sharding');
+    expect(split).toMatchObject({ kind: 'split', source: 'agent', client: 'claude-code' });
+
+    expect((await engine.decideTopicProposal('proposal-split-sharding', true)).ok).toBe(true);
+
+    const moved = (await engine.getPr('acme/app#1822'))?.topicId;
+    expect(moved).not.toBe('topic-ci-tests');
+    expect((await engine.getTopic(moved ?? ''))?.topic.name).toBe('Backend test sharding');
+    expect((await engine.getPr('acme/app#1955'))?.topicId).toBe('topic-ci-tests');
+    expect((await engine.getTopic('topic-ci-tests'))?.decidedProposals.map((proposal) => proposal.id)).toEqual(['proposal-split-sharding']);
+  });
 });
 
 describe('FakeEngine rechecks', () => {

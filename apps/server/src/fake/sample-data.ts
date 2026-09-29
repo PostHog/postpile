@@ -696,6 +696,8 @@ function buildProposals(clock: SampleClock): TopicProposal[] {
       status: 'pending',
       createdAt: clock.hoursAgo(2),
       decidedAt: null,
+      source: 'consolidation',
+      client: null,
     },
     // Filed by consolidation in the story of the sample.
     {
@@ -710,6 +712,24 @@ function buildProposals(clock: SampleClock): TopicProposal[] {
       status: 'pending',
       createdAt: clock.hoursAgo(2),
       decidedAt: null,
+      source: 'consolidation',
+      client: null,
+    },
+    // Suggested by an outside agent (Claude Code in a checkout) through the MCP server.
+    {
+      id: 'proposal-split-sharding',
+      kind: 'split',
+      topicId: TOPIC.ci,
+      name: 'Backend test sharding',
+      intoTopicId: null,
+      fromArea: null,
+      prKeys: [sampleKey(1822), sampleKey(1945)],
+      reason: 'Both PRs change how backend tests are sharded; the rest of the topic is timeouts and browsers.',
+      status: 'pending',
+      createdAt: clock.hoursAgo(1),
+      decidedAt: null,
+      source: 'agent',
+      client: 'claude-code',
     },
   ];
 }

@@ -4,6 +4,11 @@ import type {
   ListScope,
   ActionLogEntry,
   ActionResult,
+  AgentRefreshOptions,
+  AgentRefreshResult,
+  AgentRefreshTarget,
+  TopicChangeRequest,
+  TopicChangeResult,
   ChatMessage,
   ChatReply,
   ConsolidateOptions,
@@ -81,6 +86,10 @@ import { loadViewer } from './viewer-meta.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
+import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.ts';
+import { answerAgentRequest } from './agent-requests/answer.ts';
+import { AgentRequestInbox } from './agent-requests/inbox.ts';
+import { OutsideProposals } from './agent-requests/topic-change.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
@@ -191,16 +200,22 @@ export interface EngineDeps {
    * until a test feeds it readings.
    */
   quota?: GitHubQuota;
+  /** `<data folder>/agent-requests`, where MCP processes leave requests for the app. Missing: agent requests stay off. */
+  agentRequestsFolder?: string | null;
 }
 
 /**
- * proposal_resolved only tracks a topic merge or a rename (DESIGN.md "Agent
- * trust"); new_topic and split have no slot in that event's kind enum, so
- * they are left untracked rather than mapped to something misleading.
+ * proposal_resolved tracks a topic merge, a rename or a split (DESIGN.md
+ * "Agent trust"; splits since outside agents can suggest them); new_topic
+ * has no slot in that event's kind enum, so it is left untracked rather
+ * than mapped to something misleading.
  */
-function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic_merge' | 'rename' | null {
+function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic_merge' | 'rename' | 'topic_split' | null {
   if (kind === 'merge' || kind === 'area_merge') {
     return 'topic_merge';
+  }
+  if (kind === 'split') {
+    return 'topic_split';
   }
   return kind === 'rename' ? 'rename' : null;
 }
@@ -241,6 +256,9 @@ export class Engine implements EngineService {
   private readonly quota: GitHubQuota;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
+  private readonly agentRefresher: AgentRefresher;
+  private readonly outsideProposals: OutsideProposals;
+  private agentRequests: AgentRequestInbox | null = null;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
@@ -327,6 +345,55 @@ export class Engine implements EngineService {
     const setupChecks = new SetupChecks(deps.reader, commands);
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
     this.mcp = new McpConnection({ store, commands, tools: this.toolHealth, launcher: deps.mcpLauncher ?? null, now, telemetry: this.telemetry });
+    this.outsideProposals = new OutsideProposals(store, now);
+    this.agentRefresher = new AgentRefresher({
+      now,
+      quota: this.quota,
+      pr: (key) => {
+        const pr = store.prs.get(key);
+        return pr ? { fetchedAt: store.prs.fetchedAt(key), updatedAt: pr.updatedAt, state: pr.state } : null;
+      },
+      topic: async (topicId) => this.reads.getTopic(topicId),
+      eventCounts: (keys) => new Map([...store.events.listForPrs(keys)].map(([key, events]) => [key, events.length])),
+      read: (keys) => this.readForAgent(keys),
+      log: (outcome, detail) => log.record({ action: 'agent_refresh', origin: 'agent', outcome, detail }),
+    });
+  }
+
+  /** The next poll cycle's focus still holds one of these PRs: the cycle that ran was not ours. */
+  private focusHolds(keys: PrKey[]): boolean {
+    return this.focus.prRefs.some((ref) => keys.includes(`${ref.repo}#${ref.number}`));
+  }
+
+  /**
+   * An outside agent's refresh: these PRs fetched directly in one poll
+   * cycle, so new events get the usual ping handling and catch-up. A
+   * running full sync is joined instead (its freshness check covers every
+   * tracked PR). A cycle already running started before the request, so it
+   * is waited for, then one runs with these PRs in focus.
+   */
+  private async readForAgent(keys: PrKey[]): Promise<RefreshRun> {
+    const retryAt = new Date(this.deps.now().getTime() + 60_000).toISOString();
+    if (this.consolidating) {
+      return { kind: 'blocked', reason: 'A consolidation run is going; try again in a minute.', retryAt };
+    }
+    if (!this.syncing) {
+      await this.polling?.catch(() => {});
+      this.focus = { threadIds: this.focus.threadIds, prRefs: [...this.focus.prRefs, ...keys.map(parsePrKey)] };
+    }
+    try {
+      let cycle = await this.pollOnce();
+      if (cycle.kind === 'done' && this.focusHolds(keys)) {
+        cycle = await this.pollOnce();
+      }
+      if (this.syncing) {
+        await this.syncing.catch(() => {});
+        return { kind: 'joined_sync' };
+      }
+      return cycle.kind === 'blocked' ? { kind: 'blocked', reason: `PostPile's GitHub reads are paused: ${cycle.reason}.`, retryAt: null } : { kind: 'ran' };
+    } catch (error) {
+      return { kind: 'blocked', reason: `The GitHub read failed: ${errorText(error)}.`, retryAt };
+    }
   }
 
   /** The newest work context digest as the setup sweep reads it: prompt text, version and date. */
@@ -621,6 +688,32 @@ export class Engine implements EngineService {
     }
   }
 
+  refreshNow(target: AgentRefreshTarget, options: AgentRefreshOptions): Promise<AgentRefreshResult> {
+    return this.agentRefresher.refresh(target, options.client);
+  }
+
+  async proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult> {
+    return this.outsideProposals.propose(change, options.client);
+  }
+
+  startAgentRequests(): void {
+    const folder = this.deps.agentRequestsFolder;
+    if (this.agentRequests || !folder) {
+      return;
+    }
+    this.agentRequests = new AgentRequestInbox({
+      folder,
+      handle: (request) => answerAgentRequest(this, request),
+      now: this.deps.now,
+      log: this.deps.syncLog ?? ((line) => console.log(line)),
+    });
+    this.agentRequests.start();
+  }
+
+  stopAgentRequests(): void {
+    this.agentRequests?.stop();
+  }
+
   /** The poll's own status, plus what the renderer refreshes on (syncs, the next auto sync, catch-up runs) and the GitHub quota while it is low. */
   async livePollStatus(): Promise<LivePollStatus> {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
@@ -854,10 +947,11 @@ export class Engine implements EngineService {
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     // Read the kind before deciding: decide() marks the proposal accepted/rejected in place.
-    const kind = topicProposalTelemetryKind(this.deps.store.proposals.get(proposalId)?.kind);
+    const proposal = this.deps.store.proposals.get(proposalId);
+    const kind = topicProposalTelemetryKind(proposal?.kind);
     const result = await this.proposals.decide(proposalId, accept);
-    if (result.ok && kind) {
-      this.telemetry.capture('proposal_resolved', { kind, accepted: accept });
+    if (result.ok && kind && proposal) {
+      this.telemetry.capture('proposal_resolved', { kind, accepted: accept, source: proposal.source });
     }
     return result;
   }
@@ -1032,6 +1126,9 @@ export class Engine implements EngineService {
   }
 
   async close(): Promise<void> {
+    this.stopAgentRequests();
+    // Requests taken already finish and leave their answer before the store closes.
+    await this.agentRequests?.settled();
     this.stopLivePoll();
     this.stopAutoSync();
     this.catchUps.dropQueued();

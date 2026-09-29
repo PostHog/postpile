@@ -382,6 +382,8 @@ export interface HarnessOptions {
   firstRun?: boolean;
   /** How Claude Code starts the MCP server; none by default, so nothing runs claude mcp. */
   mcpLauncher?: McpLauncher;
+  /** Where agent requests arrive; none by default, so startAgentRequests does nothing. */
+  agentRequestsFolder?: string;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -440,6 +442,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     tools,
     telemetry,
     quota,
+    agentRequestsFolder: options.agentRequestsFolder ?? null,
   });
   return { engine, store, reader, writer, writes, runner, agent, timers, commands, tools, telemetry, quota };
 }

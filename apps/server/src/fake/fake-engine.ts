@@ -1,6 +1,11 @@
 import type {
   ActionLogEntry,
   ActionResult,
+  AgentRefreshOptions,
+  AgentRefreshResult,
+  AgentRefreshTarget,
+  TopicChangeRequest,
+  TopicChangeResult,
   ChatMessage,
   ChatReply,
   ConsolidationReport,
@@ -139,11 +144,12 @@ import {
   type OpenedReadResult,
   type QuietReadView,
 } from '@postpile/core';
-import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
 import { FakeMcp } from './fake-mcp.ts';
+import { FakeTopicChanges } from './fake-topic-changes.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
@@ -221,6 +227,9 @@ const STALE_SAMPLE_GLANCES = new Set<PrKey>(['acme/app#1904']);
 
 const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 
+/** How long before start the sample PRs count as fetched. */
+const SAMPLE_FETCH_AGE_MS = 4 * 60_000;
+
 function ok(message: string, undoToken: string | null = null): ActionResult {
   return { ok: true, message, undoToken };
 }
@@ -260,6 +269,8 @@ export class FakeEngine implements EngineService {
   private readonly setup: FakeSetup;
   private readonly toolStatus: FakeTools;
   private readonly mcp: FakeMcp;
+  private readonly topicChanges: FakeTopicChanges;
+  private readonly agentRefresher: AgentRefresher;
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
@@ -267,6 +278,7 @@ export class FakeEngine implements EngineService {
   private readonly catchUp: FakeCatchUp;
   private readonly quota: GitHubQuota;
   private readonly now: () => Date;
+  private readonly startedAt: Date;
   private readonly snoozes = new Map<string, Snooze>();
   private readonly chats = new Map<string, ChatMessage[]>();
   private readonly feedback: Feedback[];
@@ -288,10 +300,13 @@ export class FakeEngine implements EngineService {
   private baseline: string | null = null;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
+  /** When each sample PR was last "fetched": a few minutes before start, moved by a fake agent refresh. */
+  private readonly fetchedAt = new Map<PrKey, string>();
 
 
   constructor(options: FakeEngineOptions = {}) {
     this.now = options.now ?? (() => new Date());
+    this.startedAt = this.now();
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
     this.data = buildSampleData(this.now());
@@ -302,6 +317,24 @@ export class FakeEngine implements EngineService {
     this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
+    this.topicChanges = new FakeTopicChanges(this.data, this.now);
+    this.agentRefresher = new AgentRefresher({
+      now: this.now,
+      quota: this.quota,
+      pr: (key) => {
+        const pr = this.data.prs.find((candidate) => candidate.key === key);
+        return pr ? { fetchedAt: this.fetchedAtOf(key), updatedAt: pr.updatedAt, state: pr.state } : null;
+      },
+      topic: (topicId) => this.getTopic(topicId),
+      eventCounts: (keys) => new Map(keys.map((key) => [key, this.eventsOf(key).length])),
+      read: async (keys) => {
+        for (const key of keys) {
+          this.fetchedAt.set(key, this.timestamp());
+        }
+        return { kind: 'ran' };
+      },
+      log: (outcome, detail) => this.writes.record({ action: 'agent_refresh', origin: 'agent', outcome, detail }),
+    });
     this.feedback = [...this.memory.seedFeedback()];
     this.live = new FakeLivePoll(this.data, this.now, (prKey) => isPrInQuietRepo(prKey, this.repoSettings));
     this.writes = new FakeWrites(this.now, {
@@ -374,6 +407,11 @@ export class FakeEngine implements EngineService {
       agentOff: this.toolStatus.agentOff() !== null,
       catchUp: this.catchUp.stateOf(prKey),
     });
+  }
+
+  /** Sample PRs count as fetched SAMPLE_FETCH_AGE_MS before the engine started, until a fake refresh moves them. */
+  private fetchedAtOf(prKey: PrKey): string {
+    return this.fetchedAt.get(prKey) ?? new Date(this.startedAt.getTime() - SAMPLE_FETCH_AGE_MS).toISOString();
   }
 
   private findTile(tileId: string): Tile | undefined {
@@ -791,7 +829,8 @@ export class FakeEngine implements EngineService {
       placement: this.memory.placement(topic),
       tiles: this.topicTileViews(topicId),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
-      pendingProposals: this.data.proposals.filter((proposal) => proposal.topicId === topicId && proposal.status === 'pending'),
+      pendingProposals: this.topicChanges.pendingForTopic(topicId),
+      decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback, this.baseline),
     };
   }
@@ -897,6 +936,7 @@ export class FakeEngine implements EngineService {
     const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
       pr,
+      fetchedAt: this.fetchedAtOf(prKey),
       events,
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr),
       whatsNew: news,
@@ -1283,43 +1323,17 @@ export class FakeEngine implements EngineService {
   }
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    const proposal = this.data.proposals.find((candidate) => candidate.id === proposalId);
-    if (!proposal || proposal.status !== 'pending') {
-      return fail(`no pending proposal ${proposalId}`);
-    }
-    proposal.status = accept ? 'accepted' : 'rejected';
-    proposal.decidedAt = this.timestamp();
-    const topic = this.data.topics.find((candidate) => candidate.id === proposal.topicId);
-    if (accept && proposal.kind === 'rename' && topic && proposal.name) {
-      topic.name = proposal.name;
-    }
-    if (accept && proposal.kind === 'merge' && topic && proposal.intoTopicId) {
-      this.mergeTopic(topic.id, proposal.intoTopicId);
-    }
-    if (accept && proposal.kind === 'area_merge' && proposal.fromArea && proposal.name) {
-      for (const moved of this.data.topics.filter((candidate) => candidate.area === proposal.fromArea)) {
-        moved.area = proposal.name;
-      }
-    }
-    return ok(accept ? 'accepted' : 'rejected');
+    return this.topicChanges.decide(proposalId, accept);
   }
 
-  /** Moves tiles and members over and archives the source topic. */
-  private mergeTopic(fromTopicId: string, intoTopicId: string): void {
-    for (const tile of this.tilesOfTopic(fromTopicId)) {
-      tile.topicId = intoTopicId;
-    }
-    for (const [prKey, topicId] of this.data.membership) {
-      if (topicId === fromTopicId) {
-        this.data.membership.set(prKey, intoTopicId);
-      }
-    }
-    const topic = this.data.topics.find((candidate) => candidate.id === fromTopicId);
-    if (topic) {
-      topic.status = 'archived';
-      topic.updatedAt = this.timestamp();
-    }
+  async proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult> {
+    return this.topicChanges.propose(change, options.client);
   }
+
+  /** Sample data has no data folder: the MCP server over sample data answers agent requests in memory instead. */
+  startAgentRequests(): void {}
+
+  stopAgentRequests(): void {}
 
   // Engine memory v2, backed by FakeMemory.
 
@@ -1328,8 +1342,7 @@ export class FakeEngine implements EngineService {
   }
 
   async listProposals(): Promise<PendingProposals> {
-    const topics = this.data.proposals.filter((proposal) => proposal.status === 'pending');
-    return { topics, rules: this.memory.pendingRuleProposals() };
+    return { topics: this.topicChanges.pending(), rules: this.memory.pendingRuleProposals() };
   }
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
@@ -1564,6 +1577,11 @@ export class FakeEngine implements EngineService {
   /** Sample data never changes on GitHub; one poll cycle (debounced) keeps the flow the same as the real engine. */
   async refreshOnFocus(): Promise<void> {
     await this.livePoller?.runOnFocus();
+  }
+
+  /** The real refresh rules over sample data: a "read" only moves the PRs' fetch time; nothing changes on GitHub. */
+  refreshNow(target: AgentRefreshTarget, options: AgentRefreshOptions): Promise<AgentRefreshResult> {
+    return this.agentRefresher.refresh(target, options.client);
   }
 
   // -------------------------------------------------------------------------

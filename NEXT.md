@@ -920,9 +920,20 @@ the app meanwhile.
   poll starts glance catch-ups during setup, before Accept, and the first
   sync waits for them.
 
-- MCP server, read-only (built 2026-09-29, see DESIGN.md "MCP server"):
+- MCP server (built 2026-09-29, see DESIGN.md "MCP server"):
   `postpile-mcp` in the app bundle (Homebrew links it), `pnpm cli mcp` from
-  the repo. Tools `pr_context`, `topic`, `search_prs`, `whats_on_me`.
+  the repo. Reads `pr_context`, `topic`, `search_prs`, `whats_on_me` (brief
+  by default, paging, filters, tool errors, per-PR freshness), plus
+  `refresh_from_github` and `propose_topic_change` through the running app
+  (file outbox in the data folder, DESIGN.md "Agent requests"; built
+  2026-09-29 evening).
+  - Verify once for real with the app running on a real database: a
+    refresh from Claude Code reaches the app (action log `agent_refresh`),
+    a suggestion shows in the Inbox as "suggested by Claude Code" and its
+    Accept moves the PRs; with the app closed both say "PostPile is not
+    running". Check what Claude Code, Codex and Cursor send as
+    `clientInfo.name` (the renderer maps `claude-code`, `codex-mcp-client`,
+    `cursor-vscode`).
   - Verify once for real on the first signed release: `postpile-mcp` under
     the hardened runtime (ELECTRON_RUN_AS_NODE with the release
     entitlements), and `claude mcp add postpile -- postpile-mcp` from a
@@ -938,9 +949,13 @@ the app meanwhile.
     once for real in a signed build: the click adds it and `claude mcp get`
     finds it from the app's own folder. Open: a moved app leaves a stale
     path that still counts as connected.
-  - Later: writes (notes on topic/PR memory, snooze, instruction proposals)
-    through the running app's API, so they keep the writes lock, undo and
-    the user's say. The PR description is not in `pr_context` yet.
+  - Later: more asks (notes on topic/PR memory, snooze, instruction
+    proposals) through the same agent-request outbox, so they keep the
+    writes lock, undo and the user's say; the app's HTTP token stays in the
+    app. The PR description is not in `pr_context` yet. Auto-applying small
+    outside splits was raised and left out ("okay, don't do now").
+  - Open: the hourly refresh cap lives in memory, so an app restart resets
+    it.
 
 ## Later
 
@@ -1083,6 +1098,12 @@ the app meanwhile.
   work touches ("Data warehouse", "posthog-cli") and replace catch-alls on
   the next dossier update. No area filter for now: see first whether the
   breadcrumb and the area folds become useful with real labels.
+
+- **MCP asks go through the running app, never around it** (2026-09-29):
+  `refresh_from_github` and `propose_topic_change` leave a request file in
+  the data folder for the app; no port, and the app's HTTP token (it can
+  approve PRs) is never handed out. App closed: nothing is queued. Outside
+  topic suggestions are never applied without the user's Accept.
 
 - **MCP server: nudge, never install silently** (2026-09-29): a footer item
   ("agents: not connected") and an optional box on the setup Accept step

@@ -98,6 +98,9 @@ export interface GitHubWritesChange {
  * the lock. `bring_back` is gone (GitHub has no mark-unread, so it only split
  * the state); old rows may still carry it.
  * `mark_all_read_before` is the inbox cleanup (PUT /notifications).
+ * `agent_refresh` is an outside agent's refresh_from_github: a GitHub read,
+ * logged with no thread or PR (the detail lists the PRs) so it never shows
+ * as a thread's last action.
  * `remove_team_request` and `unsubscribe` are the detail pane's "Remove
  * <team>" (2026-09-29). mark_done and subscribe get added with their writer
  * methods; nothing sends them today.
@@ -112,7 +115,8 @@ export type LoggedAction =
   | 'unsubscribe'
   | 'bring_back'
   | 'writes_on'
-  | 'writes_off';
+  | 'writes_off'
+  | 'agent_refresh';
 
 /**
  * Who decided it.
@@ -127,8 +131,9 @@ export type LoggedAction =
  * - cleanup: the inbox cleanup dialog ("mark everything older than N days read")
  * - quiet: PostPile itself, after a full sync: a thread the user had read
  *   turned unread only because of bots ("Handled quietly")
+ * - agent: an outside agent through the MCP server (refresh_from_github); a GitHub read, never a write
  */
-export type ActionOrigin = 'tile' | 'detail' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet';
+export type ActionOrigin = 'tile' | 'detail' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet' | 'agent';
 
 /**
  * What came of it.

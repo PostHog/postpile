@@ -381,6 +381,8 @@ export interface TopicMembership {
 /** split: move prKeys out of topicId into a new topic called name. One proposal per new part. */
 export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split' | 'area_merge';
 export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
+/** Who filed a topic proposal: the consolidation job, or an outside agent through the MCP server (propose_topic_change). */
+export type ProposalSource = 'consolidation' | 'agent';
 
 /** Topic changes are never applied silently. The agent proposes, the user decides. */
 export interface TopicProposal {
@@ -400,6 +402,9 @@ export interface TopicProposal {
   status: ProposalStatus;
   createdAt: IsoTime;
   decidedAt: IsoTime | null;
+  source: ProposalSource;
+  /** agent: the MCP client's name from its initialize handshake ("claude-code"); null for consolidation. */
+  client: string | null;
 }
 
 export type PrSetStatus = 'active' | 'dissolved';

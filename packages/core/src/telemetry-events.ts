@@ -45,7 +45,9 @@ const topicSection = z.enum(['needs_reply', 'changes_requested', 'my_prs', 'team
 // -----------------------------------------------------------------------
 
 const recheckOutcome = z.enum(['keep', 'fix', 'drop']);
-const proposalKind = z.enum(['topic_merge', 'rename', 'rule', 'instructions']);
+const proposalKind = z.enum(['topic_merge', 'rename', 'topic_split', 'rule', 'instructions']);
+// Who filed a topic proposal: the app's consolidation or an outside agent (MCP propose_topic_change).
+const proposalSource = z.enum(['consolidation', 'agent']);
 
 // -----------------------------------------------------------------------
 // 5. Health
@@ -62,10 +64,10 @@ const quotaLevel = z.enum(['low', 'critical']);
 const percent = z.number().int().min(0).max(100);
 
 // -----------------------------------------------------------------------
-// 6. MCP server (postpile-mcp, a separate read-only process)
+// 6. MCP server (postpile-mcp, a separate process that reads the database and asks the app for the rest)
 // -----------------------------------------------------------------------
 
-const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me']);
+const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me', 'refresh_from_github', 'propose_topic_change']);
 const mcpConnectFrom = z.enum(['footer', 'setup']);
 
 /** No props: an empty object, so every event has a stable shape to validate against. */
@@ -119,7 +121,8 @@ export const TELEMETRY_EVENTS = {
   // The user's Accept on a recheck outcome (keep, fix or drop the line).
   recheck_resolved: z.object({ outcome: recheckOutcome }).strict(),
   memory_corrected: NO_PROPS,
-  proposal_resolved: z.object({ kind: proposalKind, accepted: z.boolean() }).strict(),
+  // source only for topic proposals (topic_merge, rename, topic_split).
+  proposal_resolved: z.object({ kind: proposalKind, accepted: z.boolean(), source: proposalSource.optional() }).strict(),
   instructions_edited: NO_PROPS,
 
   // 5. Health
@@ -147,8 +150,9 @@ export const TELEMETRY_EVENTS = {
   // One glance catch-up run after the poll (packages/engine/src/catch-up). Always one topic per run.
   catch_up_ran: z.object({ topics: z.literal(1), agent_calls: count, duration_ms: durationMs, ok: z.boolean() }).strict(),
 
-  // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing.
-  mcp_tool_called: z.object({ tool: mcpTool, found: z.boolean() }).strict(),
+  // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing;
+  // response_chars is the answer's length (are brief answers brief), error whether it was a tool error.
+  mcp_tool_called: z.object({ tool: mcpTool, found: z.boolean(), response_chars: count, error: z.boolean() }).strict(),
   // "Add to Claude Code" in the footer or the last setup step; ok is whether Claude Code has the server afterwards.
   mcp_connect_clicked: z.object({ from: mcpConnectFrom, ok: z.boolean() }).strict(),
   // "Not now" on the footer's offer.

@@ -83,7 +83,7 @@ Then quit and reopen PostPile. When a new version is out, the app shows "Update 
 
 ## Ask PostPile from other agents
 
-PostPile ships a read-only MCP server, so an agent working in your checkout can ask what PostPile knows about a PR before it acts: whose move it is, what changed since you looked, the agent glance, and the topic around it (goal, status, open questions, the other PRs and where each stands).
+PostPile ships an MCP server, so an agent working in your checkout can ask what PostPile knows about a PR before it acts: whose move it is, what changed since you looked, the agent glance, and the topic around it (goal, status, open questions, the other PRs and where each stands).
 
 ```
 claude mcp add postpile -- postpile-mcp
@@ -93,9 +93,12 @@ Homebrew links `postpile-mcp` onto your PATH. Without Homebrew, use `/Applicatio
 
 The app can do this for you. While Claude Code does not have the server, the status bar at the bottom shows "agents: not connected"; click it and pick **Add to Claude Code**, which runs `claude mcp add --scope user` with the full path. The last setup step offers the same. Nothing is added without that click. "Not now" hides the status bar item for good. The same popover shows the command for other agents.
 
-- Tools: `pr_context` (a PR and its topic), `topic`, `search_prs` and `whats_on_me`.
-- It reads the local database only. It never writes to GitHub or changes the app, and it works with the app closed.
-- It knows what the app knew at its last sync, and each answer says when that was.
+- Tools: `pr_context` (a PR and its topic), `topic`, `search_prs` and `whats_on_me` read. `refresh_from_github` and `propose_topic_change` ask the running app.
+- The four reads use the local database only and work with the app closed. Answers are short by default; `detail: "full"` gives everything.
+- `refresh_from_github` has the running app re-read a PR, or a topic's open PRs, from GitHub now. It only reads, skips PRs fetched in the last minute, and allows 20 refreshes an hour across all agents.
+- `propose_topic_change` files a topic split, rename or merge as a suggestion. It shows in the Inbox as "suggested by Claude Code" and changes nothing until you accept it. Unanswered suggestions expire after 14 days.
+- Nothing the MCP server does writes to GitHub. When the app is closed, the two app tools say so and do nothing.
+- It knows what the app knew at its last sync, and each answer says when that was. `pr_context` also says when the PR was fetched.
 - GitHub text comes back fenced and marked as data, because the calling agent may run with tools.
 
 ## Troubleshooting
@@ -116,7 +119,7 @@ PostPile runs on your Mac only. There is no PostPile server.
 - **GitHub**: the app calls the GitHub API with the token from `gh auth token`. It reads your notifications and the PRs they point to. It writes (approve, comment, mark read) only after you unlock writes.
 - **Anthropic**: agent calls run through the `claude` CLI on your machine, so PR titles, bodies, comments and review threads go to Anthropic under your Claude account's terms. GitHub text is treated as untrusted input: it is fenced in prompts, and calls that read it run without tools.
 - **Work context sweep**: once a day the app reads your Claude Code folder (`~/.claude`: `CLAUDE.md` and its includes, each project's memory files, and light signals from the last 7 days of sessions), masks secrets, and asks Claude for a short digest of what you are working on. The digest helps rank and phrase things. Project folders on the skip list are never opened. The default list is `personal`, `private`. Your own list is edited under the digest and saved to `~/.config/postpile/config.json` as `{ "sweepSkip": ["taxes", "side-project"] }`; `POSTPILE_SWEEP_SKIP` (comma separated) wins over both. The digest shows under Your instructions, with its sources, and you can forget it.
-- **MCP server**: `postpile-mcp` answers only the agent that started it, over stdin and stdout. It opens no port. Each tool call sends one `mcp_tool_called` event (which tool, whether it found something) under the same usage analytics rules. To show the status bar item, the app runs `claude mcp get postpile` in its own empty folder, at most every few minutes; it changes Claude Code's config only when you click Add to Claude Code.
+- **MCP server**: `postpile-mcp` answers only the agent that started it, over stdin and stdout. It opens no port. To reach the running app it leaves a small request file in the data folder (`agent-requests`, readable by you only) and reads the app's answer there; no token changes hands. Each tool call sends one `mcp_tool_called` event (which tool, whether it found something, how long the answer was, whether it was an error) under the same usage analytics rules. To show the status bar item, the app runs `claude mcp get postpile` in its own empty folder, at most every few minutes; it changes Claude Code's config only when you click Add to Claude Code.
 - **Update check**: every 6 hours the app asks `api.github.com` for the latest PostPile releases, without a token, to show the update reminder. Turn it off with `POSTPILE_UPDATE_CHECK=0`.
 - **Usage analytics**: on by default, sent to PostHog. What is sent: counts and enums (a sync finished and how long it took, a tile was opened and what kind, a proposal was accepted, a tool went missing, and the like) plus device facts (app version, OS version, arch, whether `claude` is installed). What is never sent: PR titles, bodies, repo or branch names, GitHub logins, prompts, agent text or topic names — every event is also checked in code and drops any prop that looks like a title, a path or a repo. Identity is your GitHub numeric user id, one-way hashed (`sha256`) before it ever leaves your Mac; the login itself never goes over the wire. Turn it off with `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`; there is no UI switch. The full event list is in [DESIGN.md](DESIGN.md#usage-analytics).
 - **Local data**: the database lives in `~/Library/Application Support/PostPile`, logs in `~/Library/Logs/PostPile`, and your instructions for the agent in `~/.config/postpile/instructions.md`.

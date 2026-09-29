@@ -104,6 +104,7 @@ const WHO: Record<ActionOrigin, string> = {
   footer: 'you from the lock',
   cleanup: 'you in the inbox cleanup',
   quiet: 'PostPile',
+  agent: 'an outside agent',
 };
 
 /**
@@ -206,6 +207,9 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
     case 'writes_on':
     case 'writes_off':
       return { text: last.action === 'writes_on' ? 'GitHub writes turned on' : 'GitHub writes turned off', tone: 'local' };
+    case 'agent_refresh':
+      // Logged without a thread or PR, so a debug row never shows it; here for completeness.
+      return { text: `re-read from GitHub for ${WHO[last.origin]}`, tone: 'outside' };
   }
 }
 

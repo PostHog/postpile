@@ -1,6 +1,11 @@
 import type {
   ActionLogEntry,
   ActionResult,
+  AgentRefreshOptions,
+  AgentRefreshResult,
+  AgentRefreshTarget,
+  TopicChangeRequest,
+  TopicChangeResult,
   ChatMessage,
   ChatReply,
   ConsolidateOptions,
@@ -109,6 +114,31 @@ export interface EngineService {
    * a full sync or consolidation runs.
    */
   refreshOnFocus(prKeys: PrKey[]): Promise<void>;
+  /**
+   * refresh_from_github from an outside agent (DESIGN.md
+   * "refresh_from_github"): re-reads one PR, or a topic's open PRs (at most
+   * 10), from GitHub now, in one poll cycle with them in focus; a running
+   * full sync is joined instead. Fresh PRs are skipped; the hourly cap, one
+   * at a time and the quota gate apply across all agents. Logged as
+   * agent_refresh. GitHub reads only, never a write.
+   */
+  refreshNow(target: AgentRefreshTarget, options: AgentRefreshOptions): Promise<AgentRefreshResult>;
+  /**
+   * propose_topic_change from an outside agent (DESIGN.md
+   * "propose_topic_change"): checks the change against the topics now, and
+   * files it as a pending topic proposal (source agent, with the client
+   * name) unless it is a dry run. Answers with a preview of what accepting
+   * would do, stacks included. Never applies it.
+   */
+  proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult>;
+  /**
+   * Answers agent requests from MCP processes (DESIGN.md "Agent requests"):
+   * watches `<data folder>/agent-requests` while the desktop app runs. A
+   * second call is ignored; a no-op without a data folder (sample data,
+   * read-only access).
+   */
+  startAgentRequests(): void;
+  stopAgentRequests(): void;
 
   /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
   listTopics(scope?: ListScope): Promise<TopicListItem[]>;
