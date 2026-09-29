@@ -2257,7 +2257,7 @@ Decided 2026-09-29 (evening), agreed before building. When the user acts on
 a PR on GitHub, whatever happened before that action has been seen by them,
 however they acted: github.com, the gh CLI, GitHub Mobile, or an agent
 commenting as them. GitHub clears the notification only for a visit on
-github.com, so an approval from the CLI left #106890's "ready for review"
+github.com, so an approval from the CLI left a PR's "ready for review"
 unread for days. Julian asked to make this general instead of a one-off.
 
 **"Acted" is the viewer's last touch**, the definition already agreed for
