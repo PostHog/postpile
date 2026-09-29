@@ -5,7 +5,7 @@ import { glanceStateText } from '../lib/glance.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { isDraftTile, kindLabel, leadPr, newsPrKeys, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { isDraftTile, kindLabel, leadPr, notDonePrKeys, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
@@ -87,14 +87,14 @@ function PeopleStack(props: { people: TilePerson[] }) {
 /**
  * The tile's PR rows. One PR: a white bordered box without the title (the
  * tile's heading is the title). A stack or set: one tinted box with rounded
- * member rows, the selected one highlighted. A PR with news that keeps the
- * tile unread gets the coral dot.
+ * member rows, the selected one highlighted. A PR that keeps the tile from
+ * being done gets the coral dot.
  */
 function PrRows(props: TileProps & { done: boolean }) {
   const { view } = props;
   const grouped = view.prs.length > 1;
   const places = stackPlaces(view.tile.stacks);
-  const news = newsPrKeys(view);
+  const notDone = notDonePrKeys(view);
   const box = grouped
     ? `gap-0.5 p-[3px] ${props.selected ? 'bg-accent-soft' : 'bg-subtle'} border ${props.selected ? 'border-accent-line' : 'border-hairline-soft'}`
     : `overflow-hidden border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`;
@@ -108,7 +108,7 @@ function PrRows(props: TileProps & { done: boolean }) {
           showForWhom={grouped && !sameForWhom(pr.forWhom, view.forWhom)}
           stackPlace={places.get(pr.key) ?? null}
           showTitle={grouped}
-          news={news.has(pr.key)}
+          notDone={notDone.has(pr.key)}
           selected={props.selected && pr.key === props.selectedPrKey}
           greyed={props.done}
           onClick={() => props.onSelect(pr.key)}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, newsPrKeys, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
+import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, notDonePrKeys, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -85,6 +85,14 @@ describe('tile helpers', () => {
     expect(leadPr(view)?.key).toBe('acme/app#3');
   });
 
+  it('prefers the PR of the tile turn, so the verdict pill talks about the footer PR', () => {
+    const turn = { kind: 'them' as const, who: 'rowan', what: 'to merge on #2', prKey: 'acme/app#2' };
+    const view = { ...setView([summary(1), summary(2), summary(3)], ['acme/app#3']), turn };
+    expect(leadPr(view)?.key).toBe('acme/app#2');
+    // No turn: the newest unread reason again.
+    expect(leadPr({ ...view, turn: { kind: 'none', who: null, what: '', prKey: null } })?.key).toBe('acme/app#3');
+  });
+
   it('falls back to the first open pinged PR', () => {
     const view = setView([summary(1, { provenance: pulled }), summary(2, { state: 'MERGED' }), summary(3)]);
     expect(leadPr(view)?.key).toBe('acme/app#3');
@@ -147,19 +155,40 @@ describe('strip news', () => {
   });
 });
 
-describe('newsPrKeys', () => {
-  it('marks the PR an unread reason points at, even among six', () => {
-    const prs = [1, 2, 3, 4, 5, 6].map((number) => summary(number));
-    expect([...newsPrKeys(setView(prs, ['acme/app#4']))]).toEqual(['acme/app#4']);
+describe('notDonePrKeys', () => {
+  const done = { done: true };
+
+  it('dots every tracked PR that is not done, on an open tile too', () => {
+    const prs = [summary(1), summary(2, done), summary(3)];
+    expect([...notDonePrKeys(setView(prs))]).toEqual(['acme/app#1', 'acme/app#3']);
   });
 
-  it('adds PRs with unseen loud events', () => {
-    const prs = [summary(1), summary(2, { unseenLoudEvents: 2 }), summary(3)];
-    expect([...newsPrKeys(setView(prs, ['acme/app#1']))].sort()).toEqual(['acme/app#1', 'acme/app#2']);
+  it('dots a done PR that still has an unseen loud event: it keeps the tile unread', () => {
+    const prs = [summary(1, done), summary(2, { ...done, unseenLoudEvents: 2 })];
+    expect([...notDonePrKeys(setView(prs, ['acme/app#2']))]).toEqual(['acme/app#2']);
   });
 
-  it('marks nothing on a tile that is not unread', () => {
-    const prs = [summary(1, { unseenLoudEvents: 1 })];
-    expect(newsPrKeys(setView(prs)).size).toBe(0);
+  it('never dots a pulled-in stack layer', () => {
+    expect(notDonePrKeys(setView([summary(1, done), summary(2, { provenance: pulled })])).size).toBe(0);
+  });
+
+  it('dots nothing on a done or snoozed tile', () => {
+    const prs = [summary(1)];
+    for (const kind of ['done', 'snoozed'] as const) {
+      expect(notDonePrKeys({ ...setView(prs), state: { kind, unreadBecause: [] } }).size).toBe(0);
+    }
+  });
+
+  it('follows the set as its PRs are marked done in the detail pane, one at a time', () => {
+    // A set of three: #1 was read (nothing asks, not handled yet), #2 asks for a review, #3 is merged.
+    const rows = [summary(1), summary(2), summary(3, { ...done, state: 'MERGED' })];
+    expect([...notDonePrKeys(setView(rows))]).toEqual(['acme/app#1', 'acme/app#2']);
+    // #1 marked done in the detail pane: its dot goes, #2 still keeps the set open.
+    const afterFirst = rows.map((pr) => (pr.key === 'acme/app#1' ? { ...pr, done: true } : pr));
+    expect([...notDonePrKeys(setView(afterFirst))]).toEqual(['acme/app#2']);
+    // The last one done: the tile turns done and shows no dots at all.
+    const allDone = afterFirst.map((pr) => ({ ...pr, done: true }));
+    expect([...notDonePrKeys(setView(allDone))]).toEqual([]);
+    expect(notDonePrKeys({ ...setView(allDone), state: { kind: 'done', unreadBecause: [] } }).size).toBe(0);
   });
 });

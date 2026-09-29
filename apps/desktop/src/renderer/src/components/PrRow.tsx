@@ -4,7 +4,7 @@ import type { StackPlace } from '../lib/stacks.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, NewsDot, RepoLabel, StackMark, StateWordLabel } from './pills.tsx';
+import { ForWhomChip, NotDoneDot, RepoLabel, StackMark, StateWordLabel } from './pills.tsx';
 
 interface PrRowProps {
   pr: PrSummary;
@@ -20,8 +20,8 @@ interface PrRowProps {
   stackPlace: StackPlace | null;
   /** Off on a single-PR tile: the tile's heading already is the PR's title. */
   showTitle: boolean;
-  /** The PR has news that keeps the tile unread (`newsPrKeys`): coral dot before the number. */
-  news: boolean;
+  /** The PR keeps the tile from being done (`notDonePrKeys`): coral dot before the number. */
+  notDone: boolean;
   onClick: () => void;
 }
 
@@ -66,7 +66,7 @@ export function PrRow(props: PrRowProps) {
       className={`flex h-8 min-w-0 items-center gap-2 px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${props.grouped ? 'rounded-[6px]' : ''} ${rowBackground(props, quiet)}`}
     >
       <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
-      {props.news && <NewsDot />}
+      {props.notDone && <NotDoneDot />}
       <span className={`shrink-0 font-mono text-[11px] ${greyed ? 'text-hint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
       {props.stackPlace && <StackMark place={props.stackPlace} greyed={props.greyed} />}
       {props.showTitle && <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>}
