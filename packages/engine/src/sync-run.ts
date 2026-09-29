@@ -86,6 +86,8 @@ export class SyncRun {
     const { store, now, callLog } = this.deps;
     const startedAt = now().toISOString();
     const errors: string[] = [];
+    // Set when the sync threw halfway; telemetry reports it as sync_failed.
+    let crashed = false;
     const tally: DigestTally = { dossiersUpdated: 0, facts: emptyFactCounts() };
     const report = emptyReport(startedAt, tally, errors);
     report.agentCallStats = callLog.begin(`sync:${startedAt}`);
@@ -128,6 +130,7 @@ export class SyncRun {
       // After the digest, so dossier changes about events already read on GitHub count as seen too.
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
     } catch (error) {
+      crashed = true;
       errors.push(`sync: ${errorText(error)}`);
       // The stack only goes to the log; the report keeps the message.
       this.log(`sync: failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
@@ -155,16 +158,29 @@ export class SyncRun {
     } catch (error) {
       this.log(`sync: could not store the report: ${errorText(error)}`);
     }
-    this.reportTelemetry(report, options.auto === true);
+    this.reportTelemetry(report, options.auto === true, crashed);
     return report;
   }
 
-  /** sync_completed always; rate_limited and first_sync_completed only when they apply. Never throws: telemetry never breaks a sync. */
-  private reportTelemetry(report: SyncReport, auto: boolean): void {
+  /**
+   * sync_completed for a sync that ran to the end, sync_failed for one that
+   * threw halfway (it used to count as completed, so failed syncs never
+   * showed); rate_limited and first_sync_completed only when they apply.
+   * Never throws: telemetry never breaks a sync.
+   */
+  private reportTelemetry(report: SyncReport, auto: boolean, crashed: boolean): void {
     try {
       const telemetry = runTelemetry(this.deps);
       const trigger = auto ? 'auto' : this.syncedOnceInProcess ? 'manual' : 'start';
       this.syncedOnceInProcess = true;
+      const rateLimitSource = rateLimitSourceFromErrors(report.errors);
+      if (rateLimitSource) {
+        telemetry.capture('rate_limited', { source: rateLimitSource });
+      }
+      if (crashed) {
+        telemetry.capture('sync_failed', { error_kind: rateLimitSource ? 'rate_limited' : 'other' });
+        return;
+      }
       const durationMs = Math.max(0, new Date(report.finishedAt).getTime() - new Date(report.startedAt).getTime());
       const summary = agentCallSummary(report.agentCallStats);
       telemetry.capture('sync_completed', {
@@ -177,10 +193,6 @@ export class SyncRun {
         stopped_at_cap: summary.stoppedAtCap,
         trigger,
       });
-      const rateLimitSource = rateLimitSourceFromErrors(report.errors);
-      if (rateLimitSource) {
-        telemetry.capture('rate_limited', { source: rateLimitSource });
-      }
       if (!hasCompletedFirstSync(this.deps.store)) {
         markFirstSyncCompleted(this.deps.store);
         telemetry.capture('first_sync_completed', {

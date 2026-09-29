@@ -34,6 +34,18 @@ describe('engine telemetry', () => {
     expect(h.telemetry.events.map((e) => e.event)).not.toContain('first_sync_completed');
   });
 
+  it('reports a sync that throws halfway as sync_failed, not sync_completed', async () => {
+    const h = makeHarness();
+    h.reader.addPr(pr, makeThreadFor(pr));
+    h.reader.failNext = new Error('GitHub answered 502');
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const names = h.telemetry.events.map((e) => e.event);
+    expect(names).not.toContain('sync_completed');
+    expect(names).not.toContain('first_sync_completed');
+    expect(h.telemetry.events.find((e) => e.event === 'sync_failed')?.props).toEqual({ error_kind: 'other' });
+  });
+
   it('marks the background sync as trigger auto, a later sync as manual', async () => {
     const h = makeHarness();
     h.reader.addPr(pr, makeThreadFor(pr));
