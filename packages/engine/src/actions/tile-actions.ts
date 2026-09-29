@@ -1,4 +1,4 @@
-import { isTracked, threadPrKey, type ActionResult, type PrKey, type SnoozeCondition, type Tile } from '@postpile/core';
+import { isTracked, prReadScope, threadPrKey, tileReadScope, type ActionResult, type PrKey, type SnoozeCondition, type Tile } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import type { ReadMarker } from './read-marker.ts';
@@ -33,9 +33,7 @@ export class TileActions {
     if (!tile) {
       return failed(`no tile ${tileId}`);
     }
-    const keys = tile.members.map((m) => m.prKey);
-    const pinged = tile.members.filter((m) => isTracked(m.provenance)).map((m) => m.prKey);
-    const batch = this.readMarker.markRead(keys, pinged, { origin: 'tile', tileId });
+    const batch = this.readMarker.markRead(tileReadScope(tile), { kind: 'button' }, { origin: 'tile', tileId });
     return ok(readMessage('Marked read', batch), batch.token);
   }
 
@@ -54,8 +52,8 @@ export class TileActions {
     if (!member) {
       return failed(`${key} is not in tile ${tileId}`);
     }
-    const handle = isTracked(member.provenance) ? [key] : [];
-    const batch = this.readMarker.markRead([key], handle, { origin: 'detail', tileId });
+    const scope = prReadScope(key, isTracked(member.provenance));
+    const batch = this.readMarker.markRead(scope, { kind: 'button' }, { origin: 'detail', tileId });
     return ok(readMessage('Marked read', batch), batch.token);
   }
 

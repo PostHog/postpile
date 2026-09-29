@@ -1,16 +1,26 @@
-import { unreadOlderThan, type GitHubWritesStatus, type IsoTime, type PendingThread, type PendingWrite, type PendingWriteView, type PendingWritesResult, type PrKey, type TilePendingWrite } from '@postpile/core';
+import {
+  pendingWriteStep,
+  PENDING_WRITES_OFF,
+  unreadOlderThan,
+  type GitHubWritesStatus,
+  type IsoTime,
+  type PendingWrite,
+  type PendingWriteCause,
+  type PendingWriteView,
+  type PendingWritesResult,
+  type PrKey,
+  type TilePendingWrite,
+} from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { putBackLocalChange } from '../actions/local-change.ts';
+import { putBackLocalChange, readLocally } from '../actions/local-change.ts';
 import { errorText } from '../errors.ts';
-import type { MarkReadQueue, ParkedBatch, ThreadOutcome } from '../mark-read-queue.ts';
+import type { MarkReadQueue, ParkedBatch } from '../mark-read-queue.ts';
 import { notTakenDetail, type GitHubWrites } from './github-writes.ts';
 
 export const PENDING_DETAIL = 'GitHub writes are locked: waits until you unlock and send it';
 export const DISCARDED_DETAIL = 'discarded while locked: stays unread, like on GitHub';
 export const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup waits until you unlock and send it';
 export const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
-/** Why a pending write the lock stopped mid-send stays pending. */
-const WRITES_OFF = 'GitHub writes are off';
 export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or another client; pending mark-read cleared';
 
 /**
@@ -21,6 +31,10 @@ export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or an
  * sends them when unlocking (the PRs turn read here as each thread reaches
  * GitHub; failures stay pending with the error), or discards them (nothing
  * changes, the tiles stay unread like GitHub has them).
+ *
+ * What happens to a stored write is decided by `pendingWriteStep` (core);
+ * `apply` carries out its effects and stores the next state, so every
+ * change to a pending write goes through one place.
  */
 export class PendingWrites {
   /** The send in flight; a second "Send" while it runs joins it instead of sending the same rows twice. */
@@ -135,45 +149,80 @@ export class PendingWrites {
     return marks;
   }
 
-  /** What the user saw at the click turns seen; later events stay unseen. */
-  private markReadHere(keys: PrKey[], handleKeys: PrKey[], seenUpTo: string): void {
-    if (keys.length === 0) {
-      return;
+  private logDiscarded(write: PendingWrite): void {
+    if (write.kind === 'mark_all_read_before') {
+      this.writes.log.record({
+        action: 'mark_all_read_before',
+        origin: 'footer',
+        outcome: 'discarded',
+        batch: write.batch,
+        detail: `last_read_at=${write.readBefore ?? ''}: ${CLEANUP_DISCARDED_DETAIL}`,
+      });
     }
-    const at = this.now().toISOString();
-    this.store.transaction(() => {
-      const eventIds: string[] = [];
-      for (const events of this.store.events.listForPrs(keys).values()) {
-        eventIds.push(...events.filter((event) => event.seenAt === null && event.at <= seenUpTo).map((event) => event.id));
-      }
-      this.store.events.markSeen(eventIds, at);
-      for (const key of handleKeys.filter((candidate) => keys.includes(candidate))) {
-        this.store.userPrStates.markHandled(key, at);
-      }
-    });
+    for (const thread of write.threads) {
+      this.writes.log.record({
+        action: 'mark_read',
+        origin: 'footer',
+        outcome: 'discarded',
+        threadId: thread.id,
+        prKey: thread.prKey,
+        tileId: write.tileId,
+        batch: write.batch,
+        detail: DISCARDED_DETAIL,
+      });
+    }
   }
 
   /**
-   * Every thread of the write is through (sent, already read, or left unread
-   * on purpose): PRs without an unread thread had nothing to send and follow
-   * the rest, then the row goes.
+   * Runs one transition (`pendingWriteStep`): carries out its effects in
+   * order and stores the next state. PRs that turn read here get what the
+   * user saw at the click seen (later events stay unseen) and the write's
+   * handle keys handled. Returns true when the write is gone; what the user
+   * should hear goes to `notes`.
    */
-  private finish(write: PendingWrite, origin: 'footer' | 'sync' | 'poll'): void {
-    const threadKeys = new Set(write.threads.map((thread) => thread.prKey));
-    const quiet = write.prKeys.filter((key) => !threadKeys.has(key));
-    this.markReadHere(quiet, write.handleKeys, write.createdAt);
-    for (const key of quiet) {
-      this.writes.log.record({
-        action: 'mark_read',
-        origin,
-        outcome: 'local',
-        prKey: key,
-        tileId: write.tileId,
-        batch: write.batch,
-        detail: 'no unread GitHub thread',
-      });
+  private apply(write: PendingWrite, cause: PendingWriteCause, origin: 'footer' | 'sync' | 'poll', notes: string[] = []): boolean {
+    const step = pendingWriteStep(write, cause);
+    const at = this.now().toISOString();
+    for (const effect of step.effects) {
+      switch (effect.kind) {
+        case 'read_here':
+          readLocally(this.store, { prKeys: effect.prKeys, handleKeys: write.handleKeys }, { kind: 'pending_completion', clickedAt: write.createdAt }, at);
+          break;
+        case 'log_local':
+          this.writes.log.record({
+            action: 'mark_read',
+            origin,
+            outcome: 'local',
+            prKey: effect.prKey,
+            tileId: write.tileId,
+            batch: write.batch,
+            detail: 'no unread GitHub thread',
+          });
+          break;
+        case 'not_taken':
+          notes.push(`${this.title(write)}: ${notTakenDetail(effect.reason)}`);
+          break;
+        case 'still_pending':
+          notes.push(`${this.title(write)}: GitHub didn't take it: ${effect.error}; still pending`);
+          break;
+        case 'log_discarded':
+          this.logDiscarded(write);
+          break;
+      }
     }
-    this.store.pendingWrites.remove(write.id);
+    switch (step.next.kind) {
+      case 'gone':
+        this.store.pendingWrites.remove(write.id);
+        return true;
+      case 'kept':
+        this.store.pendingWrites.keepAfterTry(write.id, step.next.threads, step.next.error, at);
+        return false;
+      case 'narrowed':
+        this.store.pendingWrites.replaceThreads(write.id, step.next.threads);
+        return false;
+      case 'unchanged':
+        return false;
+    }
   }
 
   /**
@@ -185,18 +234,12 @@ export class PendingWrites {
     try {
       const result = await this.writes.markAllReadBefore(write.readBefore ?? '', { origin: 'footer', batch: write.batch });
       if (result === 'off') {
-        this.store.pendingWrites.keepAfterTry(write.id, [], WRITES_OFF, this.now().toISOString());
-        notTaken.push(`${this.title(write)}: GitHub didn't take it: ${WRITES_OFF}; still pending`);
-        return false;
+        return this.apply(write, { kind: 'cleanup_not_taken', error: PENDING_WRITES_OFF }, 'footer', notTaken);
       }
     } catch (error) {
-      const message = errorText(error);
-      this.store.pendingWrites.keepAfterTry(write.id, [], message, this.now().toISOString());
-      notTaken.push(`${this.title(write)}: GitHub didn't take it: ${message}; still pending`);
-      return false;
+      return this.apply(write, { kind: 'cleanup_not_taken', error: errorText(error) }, 'footer', notTaken);
     }
-    this.store.pendingWrites.remove(write.id);
-    return true;
+    return this.apply(write, { kind: 'cleanup_sent' }, 'footer', notTaken);
   }
 
   /**
@@ -210,29 +253,7 @@ export class PendingWrites {
       return this.sendCleanup(write, notTaken);
     }
     const outcomes = await queue.markThreads(write.threads, { origin: 'footer', tileId: write.tileId, batchId: write.batch });
-    const left: PendingThread[] = [];
-    const errors: string[] = [];
-    write.threads.forEach((thread, index) => {
-      const outcome: ThreadOutcome | undefined = outcomes[index];
-      if (outcome?.kind === 'failed') {
-        left.push(thread);
-        errors.push(outcome.error);
-      } else if (outcome?.kind === 'off') {
-        left.push(thread);
-        errors.push(WRITES_OFF);
-      } else if (outcome?.kind === 'skipped') {
-        notTaken.push(`${this.title(write)}: ${notTakenDetail(outcome.reason)}`);
-      } else if (outcome && thread.prKey !== null) {
-        this.markReadHere([thread.prKey], write.handleKeys, write.createdAt);
-      }
-    });
-    if (left.length > 0) {
-      this.store.pendingWrites.keepAfterTry(write.id, left, errors[0] ?? 'failed', this.now().toISOString());
-      notTaken.push(`${this.title(write)}: GitHub didn't take it: ${errors[0] ?? 'failed'}; still pending`);
-      return false;
-    }
-    this.finish(write, 'footer');
-    return true;
+    return this.apply(write, { kind: 'sent', outcomes }, 'footer', notTaken);
   }
 
   /**
@@ -248,22 +269,10 @@ export class PendingWrites {
       if (write.kind === 'mark_all_read_before') {
         continue;
       }
-      const observed = write.threads.filter((thread) => threadIds.has(thread.id));
-      if (observed.length === 0) {
-        continue;
-      }
-      for (const thread of observed) {
+      for (const thread of write.threads.filter((candidate) => threadIds.has(candidate.id))) {
         cleared.add(thread.id);
-        if (thread.prKey !== null) {
-          this.markReadHere([thread.prKey], write.handleKeys, write.createdAt);
-        }
       }
-      const left = write.threads.filter((thread) => !threadIds.has(thread.id));
-      if (left.length > 0) {
-        this.store.pendingWrites.replaceThreads(write.id, left);
-      } else {
-        this.finish(write, origin);
-      }
+      this.apply(write, { kind: 'read_elsewhere', threadIds }, origin);
     }
     return cleared;
   }
@@ -302,28 +311,7 @@ export class PendingWrites {
   discard(status: () => GitHubWritesStatus): PendingWritesResult {
     const writes = this.list();
     for (const write of writes) {
-      this.store.pendingWrites.remove(write.id);
-      if (write.kind === 'mark_all_read_before') {
-        this.writes.log.record({
-          action: 'mark_all_read_before',
-          origin: 'footer',
-          outcome: 'discarded',
-          batch: write.batch,
-          detail: `last_read_at=${write.readBefore ?? ''}: ${CLEANUP_DISCARDED_DETAIL}`,
-        });
-      }
-      for (const thread of write.threads) {
-        this.writes.log.record({
-          action: 'mark_read',
-          origin: 'footer',
-          outcome: 'discarded',
-          threadId: thread.id,
-          prKey: thread.prKey,
-          tileId: write.tileId,
-          batch: write.batch,
-          detail: DISCARDED_DETAIL,
-        });
-      }
+      this.apply(write, { kind: 'discarded' }, 'footer');
     }
     const message = writes.length === 0 ? 'Nothing pending' : `Discarded ${writes.length}: still unread, like on GitHub`;
     return { ok: true, message, done: writes.length, failed: 0, status: status() };

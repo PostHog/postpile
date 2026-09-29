@@ -1,8 +1,8 @@
 import {
-  eventsReadOnGitHub,
   isTracked,
   openedReadCheck,
   prAfterMarkRead,
+  prReadScope,
   quietReadCheck,
   quietReadDetail,
   quietReasonDetail,
@@ -18,7 +18,9 @@ import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
+import { readLocally } from '../actions/local-change.ts';
 import type { GitHubWrites } from './github-writes.ts';
+import { markThreadReadIfUnchanged } from './thread-mark-read.ts';
 
 /** A thread that passed the rules, with the action log detail that says why. */
 interface QuietCandidate {
@@ -111,20 +113,20 @@ export class QuietReads {
     return result.slice(0, QUIET_READS_PER_RUN);
   }
 
-  /** True when GitHub took the mark-read. Read elsewhere or moved since the sync: left for the next run. */
+  /**
+   * True when GitHub took the mark-read. Read elsewhere or moved since the
+   * sync: left for the next run, nothing logged (unlike the queue, which
+   * mirrors an already-read thread to complete the user's intent).
+   */
   private async markOne(candidate: QuietCandidate): Promise<boolean> {
-    const current = await this.reader.getThread(candidate.thread.id);
-    if (current === null || !current.unread || current.updatedAt > candidate.thread.updatedAt) {
-      return false;
-    }
-    const result = await this.writes.markThreadRead(candidate.thread.id, { origin: 'quiet', prKey: candidate.prKey, detail: candidate.detail });
-    if (result === 'off') {
+    const context = { origin: 'quiet' as const, prKey: candidate.prKey, detail: candidate.detail };
+    const result = await markThreadReadIfUnchanged(this.reader, this.writes, candidate.thread, context);
+    if (result.kind !== 'sent') {
       return false;
     }
     // Mirror GitHub: the thread is read up to its last update, and so are the events before it.
-    this.store.notifications.markRead(candidate.thread.id, current.updatedAt);
-    const events = this.store.events.listForPr(candidate.prKey);
-    this.store.events.markSeen(eventsReadOnGitHub(events, current.updatedAt), current.updatedAt);
+    this.store.notifications.markRead(candidate.thread.id, result.readAt);
+    readLocally(this.store, prReadScope(candidate.prKey, false), { kind: 'quiet', readAt: result.readAt }, result.readAt);
     return true;
   }
 
@@ -161,20 +163,8 @@ export class QuietReads {
    * handled, like a mark-read of it. True when anything changed.
    */
   private handleOpened(prKey: PrKey, at: string): boolean {
-    let changed = false;
-    this.store.transaction(() => {
-      const unseen = this.store.events
-        .listForPr(prKey)
-        .filter((event) => event.seenAt === null)
-        .map((event) => event.id);
-      this.store.events.markSeen(unseen, at);
-      const handled = this.store.userPrStates.get(prKey)?.handledAt ?? null;
-      if (handled === null) {
-        this.store.userPrStates.markHandled(prKey, at);
-      }
-      changed = unseen.length > 0 || handled === null;
-    });
-    return changed;
+    const change = readLocally(this.store, prReadScope(prKey, true), { kind: 'opened' }, at);
+    return change.eventIds.length > 0 || change.handledKeys.length > 0;
   }
 
   /**

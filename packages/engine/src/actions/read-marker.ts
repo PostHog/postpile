@@ -1,8 +1,19 @@
-import { threadPrKey, type NotificationThread, type PendingThread, type PrKey } from '@postpile/core';
+import {
+  planRead,
+  prReadScope,
+  threadPrKey,
+  type NotificationThread,
+  type PendingThread,
+  type PrKey,
+  type ReadScope,
+} from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { NO_LOCAL_CHANGE, type BatchOrigin, type LocalChange, type MarkReadQueue, type PendingBatch } from '../mark-read-queue.ts';
+import { NO_LOCAL_CHANGE, type BatchOrigin, type MarkReadQueue, type PendingBatch } from '../mark-read-queue.ts';
 import type { ActionLog } from '../writes/action-log.ts';
-import { putBackLocalChange } from './local-change.ts';
+import { putBackLocalChange, writeReadPlan } from './local-change.ts';
+
+/** The causes that go through the undo queue: a button (tile, PR, Not mine, debug view, Remove team) or approve's follow-up. */
+export type QueuedReadCause = { kind: 'button' } | { kind: 'approved' };
 
 export const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending write after the undo window';
 
@@ -36,23 +47,6 @@ export class ReadMarker {
       .map(([key, thread]) => ({ id: thread.id, updatedAt: thread.updatedAt, prKey: key }));
   }
 
-  private applyLocally(keys: PrKey[], handleKeys: PrKey[]): LocalChange {
-    const at = this.now().toISOString();
-    const change: LocalChange = { eventIds: [], handledKeys: [] };
-    this.store.transaction(() => {
-      for (const events of this.store.events.listForPrs(keys).values()) {
-        change.eventIds.push(...events.filter((e) => e.seenAt === null).map((e) => e.id));
-      }
-      this.store.events.markSeen(change.eventIds, at);
-      const states = this.store.userPrStates.getMany(keys);
-      change.handledKeys = handleKeys.filter((key) => !states.get(key)?.handledAt);
-      for (const key of change.handledKeys) {
-        this.store.userPrStates.markHandled(key, at);
-      }
-    });
-    return change;
-  }
-
   private logQueued(batch: PendingBatch, threads: PendingThread[], keys: PrKey[], changedHere: boolean): void {
     const base = { action: 'mark_read' as const, origin: batch.origin, tileId: batch.tileId, batch: batch.batchId };
     for (const thread of threads) {
@@ -73,17 +67,32 @@ export class ReadMarker {
     }
   }
 
-  private enqueueBatch(threads: PendingThread[], keys: PrKey[], handleKeys: PrKey[], origin: BatchOrigin): PendingBatch {
+  /**
+   * Plans the read (`planRead`) and, when the app may change right away,
+   * writes it. Locked with an unread thread, nothing changes here; the batch
+   * keeps the handle keys so the pending write can handle them later.
+   */
+  private enqueueBatch(threads: PendingThread[], scope: ReadScope, cause: QueuedReadCause, origin: BatchOrigin): PendingBatch {
     const changeHere = this.queue.writesEnabled() || threads.length === 0;
-    const local = changeHere ? this.applyLocally(keys, handleKeys) : NO_LOCAL_CHANGE;
-    const batch = this.queue.enqueue({ threads, prKeys: keys, handleKeys, local }, origin);
-    this.logQueued(batch, threads, keys, changeHere);
+    const at = this.now().toISOString();
+    const { handleKeys, local } = this.store.transaction(() => {
+      const plan = planRead({
+        scope,
+        cause,
+        events: this.store.events.listForPrs(scope.prKeys),
+        userStates: this.store.userPrStates.getMany(scope.prKeys),
+        at,
+      });
+      return { handleKeys: plan.handleKeys, local: changeHere ? writeReadPlan(this.store, plan) : NO_LOCAL_CHANGE };
+    });
+    const batch = this.queue.enqueue({ threads, prKeys: scope.prKeys, handleKeys, local }, origin);
+    this.logQueued(batch, threads, scope.prKeys, changeHere);
     return batch;
   }
 
-  /** Every event of `keys` becomes seen, `handleKeys` also count as done. The batch's token is the undo token. */
-  markRead(keys: PrKey[], handleKeys: PrKey[], origin: BatchOrigin): PendingBatch {
-    return this.enqueueBatch(this.unreadThreads(keys), keys, handleKeys, origin);
+  /** The scope's events become seen, its handle keys count as done unless the cause says otherwise. The batch's token is the undo token. */
+  markRead(scope: ReadScope, cause: QueuedReadCause, origin: BatchOrigin): PendingBatch {
+    return this.enqueueBatch(this.unreadThreads(scope.prKeys), scope, cause, origin);
   }
 
   /**
@@ -94,10 +103,10 @@ export class ReadMarker {
   markThread(thread: NotificationThread, origin: BatchOrigin): PendingBatch {
     const key = threadPrKey(thread);
     if (key !== null && this.store.prs.get(key)) {
-      return this.markRead([key], [key], origin);
+      return this.markRead(prReadScope(key, true), { kind: 'button' }, origin);
     }
     const threads = thread.unread ? [{ id: thread.id, updatedAt: thread.updatedAt, prKey: key }] : [];
-    return this.enqueueBatch(threads, [], [], origin);
+    return this.enqueueBatch(threads, { prKeys: [], handleKeys: [] }, { kind: 'button' }, origin);
   }
 
   /** Null token undoes the newest pending batch. Returns null when nothing is left to undo. */

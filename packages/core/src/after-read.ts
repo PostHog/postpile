@@ -1,8 +1,11 @@
 // What a tile turns into once it is marked read, so the tile can say what
 // its button really does (2026-09-29: "Mark done" on a tile that stays your
 // move promised something it could not do). Same rules as the tile state and
-// whose turn, run over the data as a mark-read leaves it.
+// whose turn, run over the data as a mark-read leaves it: the read planner's
+// success branch applied to a copy, so the button never promises more than
+// the action does.
 import { isTracked } from './provenance.ts';
+import { applyReadPlan, planRead, prReadScope, tileReadScope } from './read-plan.ts';
 import { isPrDone } from './tiles.ts';
 import type { IsoTime, Pr, PrEvent, PrKey, Tile, UserPrState, Viewer } from './types.ts';
 import { NO_TURN, prWhoseTurn, whoseTurn, type WhoseTurn } from './whose-turn.ts';
@@ -27,33 +30,10 @@ export interface AfterReadInput {
   readAt: IsoTime;
 }
 
-/** The PR's events as a mark-read leaves them: every one seen. */
-function seenEvents(events: PrEvent[], readAt: IsoTime): PrEvent[] {
-  return events.map((event) => (event.seenAt === null ? { ...event, seenAt: readAt } : event));
-}
-
-/** The PR's user state as a mark-read leaves it: handled (an earlier handled time stays). */
-function handledState(prKey: PrKey, state: UserPrState | null, readAt: IsoTime): UserPrState {
-  const current = state ?? { prKey, approvedAt: null, approvedCommitOid: null, handledAt: null };
-  return { ...current, handledAt: current.handledAt ?? readAt };
-}
-
-/** Every event of the tile's PRs seen, like ReadMarker does it. */
-function eventsAfterRead(input: AfterReadInput): Map<PrKey, PrEvent[]> {
-  const events = new Map(input.events);
-  for (const member of input.tile.members) {
-    events.set(member.prKey, seenEvents(input.events.get(member.prKey) ?? [], input.readAt));
-  }
-  return events;
-}
-
-/** Pinged and found PRs handled, like ReadMarker does it; pulled-in stack layers stay as they are. */
-function userStatesAfterRead(input: AfterReadInput): Map<PrKey, UserPrState> {
-  const states = new Map(input.userStates);
-  for (const member of input.tile.members.filter((m) => isTracked(m.provenance))) {
-    states.set(member.prKey, handledState(member.prKey, input.userStates.get(member.prKey) ?? null, input.readAt));
-  }
-  return states;
+/** The tile's data as a Mark read of the whole tile leaves it: the planner's success branch, on a copy. */
+function tileAfterRead(input: AfterReadInput): { events: Map<PrKey, PrEvent[]>; userStates: Map<PrKey, UserPrState> } {
+  const plan = planRead({ scope: tileReadScope(input.tile), cause: { kind: 'button' }, events: input.events, userStates: input.userStates, at: input.readAt });
+  return applyReadPlan(plan, input.events, input.userStates);
 }
 
 /**
@@ -62,8 +42,7 @@ function userStatesAfterRead(input: AfterReadInput): Map<PrKey, UserPrState> {
  * "Mark done" is honest only when `done` is true.
  */
 export function tileAfterMarkRead(input: AfterReadInput): TileAfterRead {
-  const events = eventsAfterRead(input);
-  const userStates = userStatesAfterRead(input);
+  const { events, userStates } = tileAfterRead(input);
   const tracked = input.tile.members.filter((m) => isTracked(m.provenance));
   const done = tracked.every((member) => {
     const pr = input.prs.get(member.prKey);
@@ -95,8 +74,15 @@ export interface PrAfterReadInput {
  * "Mark done" only when `done` is true.
  */
 export function prAfterMarkRead(input: PrAfterReadInput): TileAfterRead {
-  const events = seenEvents(input.events, input.readAt);
-  const userState = input.tracked ? handledState(input.pr.key, input.userState, input.readAt) : input.userState;
+  const key = input.pr.key;
+  const before = {
+    events: new Map([[key, input.events]]),
+    userStates: new Map<PrKey, UserPrState>(input.userState ? [[key, input.userState]] : []),
+  };
+  const plan = planRead({ scope: prReadScope(key, input.tracked), cause: { kind: 'button' }, ...before, at: input.readAt });
+  const after = applyReadPlan(plan, before.events, before.userStates);
+  const events = after.events.get(key) ?? [];
+  const userState = after.userStates.get(key) ?? null;
   const done = input.tracked && isPrDone(input.pr, userState, input.viewer, events, input.notYours);
   const turn = input.viewer ? prWhoseTurn({ pr: input.pr, events, userState, viewer: input.viewer, notYours: input.notYours }) : NO_TURN;
   return { done, turn };

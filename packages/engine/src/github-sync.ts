@@ -1,11 +1,12 @@
 import {
   daysBefore,
   deriveEvents,
-  eventsReadOnGitHub,
   eventsSeenByTouch,
   nextWatchSince,
   ownEventsOnReadThread,
+  planRead,
   prKey,
+  prReadScope,
   threadPrKey,
   threadPrRef,
   type NotificationThread,
@@ -19,6 +20,7 @@ import {
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
+import { writeReadPlan } from './actions/local-change.ts';
 import { errorText } from './errors.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
@@ -310,6 +312,24 @@ export class GitHubSync {
   }
 
   /**
+   * GitHub's read time for the PR's thread, through the read planner
+   * (`read_on_github`): its events up to that time seen, stamped with it,
+   * never handled.
+   */
+  private markReadOnGitHub(key: PrKey, events: PrEvent[], lastReadAt: IsoTime): void {
+    const plan = planRead({
+      scope: prReadScope(key, false),
+      cause: { kind: 'read_on_github', readAt: lastReadAt },
+      events: new Map([[key, events]]),
+      userStates: new Map(),
+      at: lastReadAt,
+    });
+    if (writeReadPlan(this.store, plan).eventIds.length > 0) {
+      this.readOnGitHub.add(key);
+    }
+  }
+
+  /**
    * Every stored event of a PR from before its thread's last read on GitHub
    * counts as seen, stamped with that read time. Runs for the PRs whose
    * threads this run brought in or changed (`changedIds`), not only on a
@@ -328,7 +348,7 @@ export class GitHubSync {
     }
     const events = this.store.events.listForPrs([...readTimes.keys()]);
     for (const [key, lastReadAt] of readTimes) {
-      this.markSeenAt(key, eventsReadOnGitHub(events.get(key) ?? [], lastReadAt), lastReadAt);
+      this.markReadOnGitHub(key, events.get(key) ?? [], lastReadAt);
     }
   }
 
@@ -426,7 +446,7 @@ export class GitHubSync {
       const thread = this.store.notifications.getByPrKey(pr.key);
       const lastReadAt = thread?.lastReadAt ?? null;
       if (lastReadAt !== null) {
-        this.markSeenAt(pr.key, eventsReadOnGitHub(this.store.events.listForPr(pr.key), lastReadAt), lastReadAt);
+        this.markReadOnGitHub(pr.key, this.store.events.listForPr(pr.key), lastReadAt);
       }
       // A thread that stays read: the user's own merge, close, comment or review never made it unread.
       if (thread && !thread.unread) {
