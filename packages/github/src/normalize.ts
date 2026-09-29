@@ -171,8 +171,18 @@ function toReviewBodyComment(raw: RawReview): Comment {
   };
 }
 
+/**
+ * The viewer's own unsent review and its inline comments: GitHub shows them
+ * only to the viewer, as drafts. They never count as the viewer's reply,
+ * touch or comment, so normalization leaves them out.
+ */
+function isPending(raw: { state?: string }): boolean {
+  return raw.state === 'PENDING';
+}
+
 function toThread(raw: RawReviewThread): ReviewThread {
-  const comments: Comment[] = raw.comments.nodes.map((c) => ({
+  const submitted = raw.comments.nodes.filter((c) => !isPending(c));
+  const comments: Comment[] = submitted.map((c) => ({
     id: c.id,
     author: actorLogin(c.author),
     body: c.body,
@@ -186,13 +196,13 @@ function toThread(raw: RawReviewThread): ReviewThread {
 }
 
 /**
- * The flat list of every authored body: issue comments, non-empty review
- * bodies, and inline review comments. Oldest first.
+ * The flat list of every authored body: issue comments, non-empty submitted
+ * review bodies, and inline review comments. Oldest first.
  */
 function allComments(raw: RawPullRequest, threads: ReviewThread[]): Comment[] {
   const comments = raw.comments.nodes.map(toIssueComment);
   for (const review of raw.reviews.nodes) {
-    if (review.body.trim() !== '') {
+    if (!isPending(review) && review.body.trim() !== '') {
       comments.push(toReviewBodyComment(review));
     }
   }
@@ -280,7 +290,8 @@ function pendingReviewers(raw: RawPullRequest): { users: string[]; teams: string
 }
 
 export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
-  const threads = raw.reviewThreads.nodes.map(toThread);
+  // A thread started in a pending review holds only drafts: not there yet for anyone else.
+  const threads = raw.reviewThreads.nodes.map(toThread).filter((thread) => thread.comments.length > 0);
   const reviewers = pendingReviewers(raw);
   const timeline: TimelineItem[] = [];
   for (const item of raw.timelineItems.nodes) {

@@ -71,7 +71,7 @@ fragment prData on PullRequest {
   }
   comments(last: 60) { nodes { id url ...comment } }
   reviewThreads(last: 50) {
-    nodes { id path isResolved comments(first: 30) { nodes { id url ...comment } } }
+    nodes { id path isResolved comments(first: 30) { nodes { id url state ...comment } } }
   }
   commits(last: 50) {
     nodes { commit { oid messageHeadline committedDate author { name user { login } } committer { name user { login } } } }

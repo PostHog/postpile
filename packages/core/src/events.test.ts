@@ -56,6 +56,15 @@ describe('deriveEvents: comments', () => {
     expect(question?.ruleReason).toBe('you already replied');
   });
 
+  it('keeps an ask loud while the viewer only has a pending review after it', () => {
+    const pr = makePr({
+      comments: [makeComment({ id: 'c1', body: '@viewer can you look?', createdAt: at(10) })],
+      reviews: [makeReview({ id: 'r1', author: 'viewer', state: 'PENDING', body: '', submittedAt: at(12) })],
+    });
+    const question = only(deriveEvents(pr, viewer, null), 'question_to_user')[0];
+    expect(question?.ruleLoudness).toBe('loud');
+  });
+
   it('finds replies in review threads the viewer took part in, without any mention', () => {
     const thread = makeThread('th1', [
       makeComment({ id: 'a', author: 'viewer', body: 'why this?', createdAt: at(10) }),

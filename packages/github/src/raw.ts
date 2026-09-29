@@ -40,6 +40,8 @@ export interface RawComment {
   body: string;
   createdAt: string;
   url: string;
+  /** Review-thread comments only: PENDING or SUBMITTED. Missing in fixtures written before it was asked for. */
+  state?: string;
 }
 
 export interface RawReview {
