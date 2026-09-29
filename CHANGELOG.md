@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.2.1 (2026-09-29)
+
+### Fixed
+
+- Usage analytics: finishing or skipping setup is now recorded, so the activation funnel shows it.
+- Usage analytics: a sync that fails halfway is recorded as failed, not as completed.
+
 ## 0.2.0 (2026-09-29)
 
 ### New

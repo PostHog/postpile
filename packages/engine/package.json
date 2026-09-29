@@ -1,6 +1,6 @@
 {
   "name": "@postpile/engine",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "PostPile engine: sync, live poll, digest pipeline, writes and the work-context sweep",
   "private": true,
   "license": "MIT",
