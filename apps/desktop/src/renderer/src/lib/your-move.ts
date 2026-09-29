@@ -6,7 +6,6 @@ const MOVE_LABELS: Record<YourMove, string> = {
   re_review: 'Re-review',
   review: 'Review',
   address_changes: 'Address changes',
-  fix_ci: 'Fix CI',
   merge: 'Merge',
 };
 

@@ -2,6 +2,10 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+- CI is no longer a signal: the agents no longer see or mention check status (no more "hold approval until CI is green"), and failing CI on your own PR is no longer your move. The "Checks" line in the detail pane and the "Until CI is green" snooze stay.
+
 ## 0.8.0 (2026-09-29)
 
 ### Changed

@@ -3,7 +3,7 @@ import type { Fact, PrEvent } from '@postpile/core';
 import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, WORK_GLOSSARY, workContextBlock } from './shared.ts';
+import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine, withoutCi, WORK_GLOSSARY, workContextBlock } from './shared.ts';
 
 function factLine(fact: Fact, shortId: string, staleNote: string): string {
   const since = fact.validFrom.slice(0, 10);
@@ -14,10 +14,10 @@ function eventLine(event: PrEvent, shortId: string): string {
   return `- ${shortId} ${event.at.slice(0, 10)} ${event.prKey} ${event.kind} by @${event.actor}: ${clip(event.summary, 300)}`;
 }
 
-/** Bots and CI are most of the volume and none of the story: one count per PR. */
+/** Bots are most of the volume and none of the story: one count per PR. CI results are left out (NO_CI_RULE). */
 function botCounts(events: PrEvent[]): string[] {
   const byPr = new Map<string, { count: number; kinds: Set<string> }>();
-  for (const event of events.filter((e) => e.isBot)) {
+  for (const event of withoutCi(events).filter((e) => e.isBot)) {
     const entry = byPr.get(event.prKey) ?? { count: 0, kinds: new Set<string>() };
     entry.count += 1;
     entry.kinds.add(event.kind);
@@ -55,7 +55,7 @@ function eventsBlock(input: DossierUpdateInput, refs: DossierRefs): string {
   return (
     dataBlock(title, human, '(no new human activity)') +
     omitted +
-    block('Bot and CI activity, counted only:', botCounts(input.delta.events))
+    block('Bot activity, counted only:', botCounts(input.delta.events))
   );
 }
 
@@ -191,7 +191,7 @@ How to write the dossier:
 - openQuestions: max ${limits.openQuestions}, only questions still open; text max ${limits.questionText}.
 - timeline: member PRs only, oldest first, role = what the PR does for the initiative, max
   ${limits.timelineRole} chars. Max ${limits.timeline} entries; fold older ones into earlier (max ${limits.earlier}).
-  Do not write PR state, CI or reviewers anywhere: those are read from GitHub at display time.
+  Do not write PR state or reviewers anywhere: those are read from GitHub at display time.
 - userCares: max ${limits.userCares}, what this user cares about in this topic, judged by their
   instructions and corrections; text max ${limits.careText}. source says where it comes from;
   GitHub activity is never a source for what the user cares about.
@@ -202,6 +202,8 @@ How to write the dossier:
   user's own words. Every line carries refs: goalRefs, statusRefs, each question, timeline entry,
   care and change. Cite only what the line rests on, at most 3. A line you keep unchanged may
   leave refs empty; it keeps its old sources. Only an observed care may cite activity.
+
+${NO_CI_RULE}
 
 relation: how this topic relates to the user. "team" when their own team drives the work,
 "routed" when another team owns it and the user or their team was pulled in for their angle (a

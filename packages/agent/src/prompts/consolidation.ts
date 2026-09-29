@@ -1,7 +1,7 @@
 import { dossierBrief } from '@postpile/core';
 import type { Fact, Feedback, RuleProposal, TopicProposal } from '@postpile/core';
 import type { ConsolidationInput, ConsolidationTopic } from '../service.ts';
-import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, WORK_GLOSSARY } from './shared.ts';
+import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, WORK_GLOSSARY } from './shared.ts';
 
 function topicBlock(entry: ConsolidationTopic): string {
   const { topic, dossier } = entry;
@@ -102,6 +102,7 @@ What to return, all optional; empty lists are the usual answer:
   evidenceFeedbackIds = the # ids of the corrections behind it (at least two).
 - finished: topics whose work looks done. The engine double-checks before retiring any.
 reason: one short sentence each, the user will read it.
+${NO_CI_RULE}
 ${jsonOnly(`{
   "topicProposals": [{"kind": "rename", "topicId": "...", "name": "...", "reason": "..."}, {"kind": "merge", "topicId": "...", "intoTopicId": "...", "reason": "..."}, {"kind": "split", "topicId": "...", "name": "...", "prKeys": ["owner/repo#1"], "reason": "..."}],
   "areaMerges": [{"from": "...", "into": "...", "reason": "..."}],

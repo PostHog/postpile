@@ -37,6 +37,14 @@ function isMuted(event: PrEvent): boolean {
   return effectiveLoudness(event) === 'muted';
 }
 
+/**
+ * CI results are not a signal (DESIGN.md "CI is not a signal"): they never
+ * reach a dossier prompt, and a CI-only change must not start an update.
+ */
+function isCi(event: PrEvent): boolean {
+  return event.kind === 'ci';
+}
+
 function bySeq(a: LoggedEvent, b: LoggedEvent): number {
   return a.seq - b.seq;
 }
@@ -86,8 +94,8 @@ export function joinedMembers(
 
 /**
  * Picks what a dossier update gets to read: new events plus the history of
- * joined members (muted dropped, capped by DELTA_LIMITS, bots kept since the
- * prompt compacts them), members that joined after the previous version,
+ * joined members (muted and CI dropped, capped by DELTA_LIMITS, bots kept
+ * since the prompt compacts them), members that joined after the previous version,
  * members that left, stale facts and claims, and new feedback. toSeq is the
  * highest seq in `logged`, capped or not.
  */
@@ -100,7 +108,7 @@ export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
   const history = input.joinedHistory.filter(
     (entry) => entry.seq <= input.cursorSeq && joinedKeys.has(entry.event.prKey),
   );
-  const audible = [...history, ...fresh].sort(bySeq).filter((entry) => !isMuted(entry.event));
+  const audible = [...history, ...fresh].sort(bySeq).filter((entry) => !isMuted(entry.event) && !isCi(entry.event));
   const kept = capEvents(audible);
   const timelineKeys = new Set(input.previous?.dossier.timeline.map((entry) => entry.prKey) ?? []);
   const previousAt = input.previous?.createdAt ?? null;

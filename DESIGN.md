@@ -104,7 +104,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 | loudness | effect | examples |
 |---|---|---|
 | loud | tile becomes unread | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
-| quiet | dot, no state change | bots, CI, deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
+| quiet | dot, no state change | bots, CI (always, see "CI is not a signal"), deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading |
 
@@ -140,7 +140,7 @@ against the user's own instructions), `does`, `risk`, `othersSaid`. Cached by a
 hash of its inputs; regenerated only when the PR moves or instructions change.
 
 **User actions**: approve (single press, immediate, no undo), mark read, snooze
-(until someone replies | new push | CI green | a time), "ask <person>" (agent
+(until someone replies | new push | CI green, the user's own pick | a time), "ask <person>" (agent
 drafts a PR comment, user edits and sends), feedback on a tile ("not mine",
 "not related" for sets, "wrong topic"), chat on a tile. Lasting points from
 chat come back for the user to place: "Keep for this topic" (tailoring), "Keep
@@ -300,6 +300,59 @@ the reasons and does not flip back:
    stays the user's explicit choice, and it includes these threads (idea from
    2026-09-28: "when people come from vacation, I had 500").
 
+## CI is not a signal
+
+Decided 2026-09-29. Julian: "I don't think we should focus on or even take in
+any CI at any point because that's too fuzzy. It could flake, it could fail at
+any time, and it's always the responsibility of the author to bring the PR to
+green. Except for maybe some details in the detail pane, we shouldn't
+highlight it or put it into text or into any risk."
+
+**The rule.** CI status (the check rollup, check results, `ci` events) never
+drives anything the app says or ranks:
+
+- *No prompt gets it.* `prDetails` has no `CI:` line, the rendered dossier's
+  timeline has no "CI failing" (`prStateWords`), and `ci` events are left out
+  of the ping decision, memory recheck and dossier update prompts
+  (`withoutCi`). The topic delta drops them (`selectTopicDelta`), so a
+  CI-only change starts no dossier update and bumps no dossier version; the
+  digest cursor still moves past them, so they are not read again.
+  Checks were never in the glance hash (`prGlanceSnapshot`) and stay out, so
+  a re-run never makes a glance stale.
+- *The writing agents are told.* Every prompt that writes something the
+  user reads carries `NO_CI_RULE`: glance, dossier update, ping decision,
+  memory recheck, chat, topic assignment, sets, consolidation. No CI or check
+  status in any field, and CI status in older stored text (glances, dossiers,
+  summaries from before the rule) is stale and ignored. A recheck of a CI
+  claim answers drop (or fix without the CI part), never holds. The draft
+  comment prompt is the exception: it writes the user's own ask. The MCP
+  server's instructions say PostPile does not track CI.
+- *Not a move.* Whose turn has no `fix_ci`; failing CI on the user's own PR
+  is not their move by itself.
+- *Never loud.* `ci` events are machine activity: quiet by the rules, never a
+  ping (bot-only activity), never an unread reason. The events agent never
+  sees them (it only judges loud events and pushes after approval), so
+  nothing overrides that.
+
+**What stays, and why.** CI as a subject of the work is code, not status:
+topic names ("Move CI to Depot"), the "CI" area, changed workflow files in the
+prompt, and the events agent raising a push that makes a substantial change
+in CI, build or devex areas the user approved. The detail pane keeps the
+"Checks" fact (`PrFacts`) as a neutral detail, no more prominent than now,
+and the activity list keeps CI results in the folded bot/CI line. The snooze
+option "Until CI is green" (`ci_green`) stays: the user picks it.
+
+**History.** Design 3a (2026-09-29 morning) took CI off rows, tiles, the
+detail state line and the RISK box, leaving it only in the facts. CI still fed
+the agents and the rules: a stale glance said "Hold approval until CI is
+green" next to an approved PR, own PRs with failing CI got the "Fix failing
+CI" move, and dossiers wrote "CI failing" into timelines and status lines.
+Existing glances and dossiers that mention CI are not regenerated on purpose
+(no `GLANCE_PROMPT_VERSION` / `DOSSIER_PROMPT_VERSION` bump): a glance goes
+stale on the PR's next push, review or human comment, a dossier on the
+topic's next real activity, and a bump would rewrite every one of them in
+one go for a line that fades on its own.
+
 ## Memory / agentic digesting layer (v1 base)
 
 **Engine memory (v2)** below replaced the topic summaries, the per-PR glance
@@ -312,7 +365,7 @@ and only recomputes on change.
 | what | where | invalidated when |
 |---|---|---|
 | general instructions | `~/.config/postpile/instructions.md`, in every prompt; absent = none | file edited (part of every input hash) |
-| glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI), dossier version, instructions, tailoring, standing rules or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
+| glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI: checks are in no prompt and no hash), dossier version, instructions, tailoring, standing rules or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
 | topic | `topic`: name, summary, tailoring, driver, user_role, status | summary mirrors the latest `dossier.summary` |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
 | topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides | - |
@@ -600,7 +653,8 @@ stale facts and claims, and topic feedback. It:
 
 - adds `joinedHistory`: log entries of joined members at or below the
   cursor (`joinedMembers` decides who joined)
-- drops muted events, keeps bots (the prompt compacts them to counts)
+- drops muted events and CI results ("CI is not a signal"), keeps bots
+  (the prompt compacts them to counts)
 - caps at `DELTA_LIMITS.maxEvents` (120) with at most 15 per PR, newest
   kept; the rest are only counted in `omittedEvents`
 - sets `toSeq` to the highest `seq` after the cursor, capped or not, so
@@ -635,9 +689,10 @@ cuts after parsing, so one long answer cannot grow later prompts.
 | `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}`; an entry naming a source the prompt did not carry is dropped, `observed` renders as "observed, unconfirmed" | 6, text 160 |
 | `recentChanges[]` | `{at, text, refs}` newest first, rolling; `at` is the update time for new entries, carried entries (same text or cited C id) keep theirs | 12, text 160 |
 
-PR state, author, reviewers and CI are **not** stored in the dossier. The
+PR state, author and reviewers are **not** stored in the dossier. The
 renderer reads them from the current snapshot, so a dossier cannot carry a
-stale state line and those parts need no verification.
+stale state line and those parts need no verification. CI is not in the
+dossier at all, stored or rendered (see "CI is not a signal").
 
 `flags[]` (`needs_user`, `contradiction`, `looks_finished`, `off_topic_pr`)
 come with each version. `needs_user` shows in the topic view;
@@ -659,7 +714,7 @@ Open questions:
 - Q1 Do we keep GitHub runners for release builds? (asked by @carol, acme/app#1890)
 PR timeline, oldest first (state from GitHub now, not from memory):
 - acme/app#1880 merged by @alice: base runner image
-- acme/app#1899 open, CI failing, @alice: move Docker builds
+- acme/app#1899 open, @alice: move Docker builds
 Earlier: ...
 Recent changes, newest first:
 - 2026-09-19 Docker build PR opened, waits on the image
@@ -670,8 +725,9 @@ assignment and consolidation, where many topics share one prompt.
 
 **Dossier update prompt** input, in order: the rendered previous dossier
 (or "none yet"), the user's context block, member PR state lines, intros of
-joined PRs, the new events (short ids `e1..eN`, bots and CI compacted to
-counts per PR), left PRs, known facts (short ids `F1..Fn`), stale facts to
+joined PRs, the new events (short ids `e1..eN`, bots compacted to counts
+per PR; CI results are dropped from the delta, so a CI-only change starts no
+update), left PRs, known facts (short ids `F1..Fn`), stale facts to
 recheck with their stale reason, new feedback. The answer (JSON,
 `dossierUpdateOutput`) is the whole new dossier plus `flags`, `facts`,
 `closeFacts`, `confirmedFactIds`. Refs in the answer are the short ids; the
@@ -980,7 +1036,7 @@ Every line keeps "Why?"; Recheck (and Forget) only show on:
   shipped as `FactView.recheckable`): `drives`, `owns` (person roles),
   `decided` (decisions), `blocked_by` (risks), `user_cares`. Trivial and
   never rechecked: `reviews` (reviewer assigned), `works_on`, `part_of`,
-  `depends_on` (stack relations), `status` (CI and the like), `note`.
+  `depends_on` (stack relations), `status` (short state notes), `note`.
 - The PR's glance as a whole: "Recheck" in the detail pane's action bar
   ("Recheck this assessment") sends the joined glance as the claim with
   `MemoryRecheckRequest.prKey`; the engine reads it against that PR, its
@@ -1474,9 +1530,10 @@ long why-here reason. The table below is still the rule behind it.
 | ST | stack context | pulled in |
 
 **PR status** (`prStatus` in `pr-status.ts`): lifecycle (open, draft, queued
-while the newest merge-queue timeline entry is an add, merged, closed), review
-from `reviewDecision`, checks from the rollup. Merged and closed PRs drop
-review and checks, drafts drop review. Open threads = unresolved review threads.
+while the newest merge-queue timeline entry is an add, merged, closed) and review
+from `reviewDecision`. Merged and closed PRs drop review, drafts drop review.
+No checks (2026-09-29, see "CI is not a signal"). Open threads = unresolved
+review threads.
 
 How it shows (2026-09-29, design 3a; `LIFECYCLE_WORDS`, `reviewWord`,
 `rowStateWord` in the renderer's `lib/pr.ts`): the lifecycle is a
@@ -1489,8 +1546,8 @@ outlined "DRAFT" chip with a pencil and merged / closed PRs show the colored
 word ("Merged" purple, "Closed" red) in place of the review. State colors
 stay on done tiles; only titles and counts go grey. **CI shows only in the
 detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
-or the RISK box. `PrStatus.checks` stays in the view model for whose turn
-("Fix failing CI") and the agent can still mention CI in its own text.
+or the RISK box, and not in whose turn or any agent text (see "CI is not a
+signal").
 
 **PR rows** (`PrRow`): state icon, mono number, the stack mark for a stack
 layer ("1/3", see "Stacks as one unit"), bold title, (for-whom chip
@@ -1515,7 +1572,8 @@ authors.
 the kind of move for the sidebar row's chip: `reply` (rule 2, drafts too),
 `re_review` (addressed your changes), `review` (review request, personal or
 team), `address_changes` (threads or a change request on your own PR or
-draft), `fix_ci`, `merge`. Rules per pinged PR, first match wins:
+draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
+2026-09-29 ("CI is not a signal"). Rules per pinged PR, first match wins:
 
 1. merged or closed: none.
 2. you: a human mentioned you, your team, replied to you or asked you a
@@ -1539,7 +1597,7 @@ draft), `fix_ci`, `merge`. Rules per pinged PR, first match wins:
 3. On your own PR:
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
-     changes"), else failing CI ("Fix failing CI").
+     changes"). Failing CI alone is not your move (2026-09-29).
    - them: the first pending reviewer, user before team, shown as "Waiting
      on sol" (`WhoseTurn.lead`), "and N more" when several are asked. Your
      own team asked by CODEOWNERS counts as a reviewer here, never as a
@@ -1627,7 +1685,7 @@ it won't merge soon. Rules in core:
   question, mention or reply you have not answered ("Reply to ada on
   draft", `PERSONAL_ASK_KINDS`; a team mention is not enough). On your own
   draft also for review threads waiting on you ("Address 2 comments on your
-  draft") or a standing change request. Never Review, Fix CI or Merge.
+  draft") or a standing change request. Never Review or Merge.
 - tier: a draft never lands in To review (`prTier`); needs_reply still
   works for personal asks; a standing change request of yours puts a
   draft under Changes you requested. "Addressed your changes" does not apply to a
@@ -1917,7 +1975,7 @@ avatars and filters", QueuesB2).
   1100px row one has no room for the chip, so the summary truncates first
   and the chip stays.
 - **Your move chip** (2026-09-29): names the most urgent move in words
-  ("Reply", "Re-review", "Review", "Address changes", "Fix CI", "Merge", in
+  ("Reply", "Re-review", "Review", "Address changes", "Merge", in
   that order of urgency, the order of the sections) plus how many more
   ("Reply +2"); the tooltip lists every move's footer text joined by " · "
   (`yourMoveChip` in `lib/your-move.ts`, from `WhoseTurn.move`). Was "N your

@@ -15,6 +15,7 @@ import {
   verifyDossier,
   verifyFact,
   withoutStaleClaims,
+  type DossierVersion,
   type EntityRef,
   type Fact,
   type FactCandidate,
@@ -130,6 +131,19 @@ export class DossierUpdater {
       .slice(0, FACTS_IN_DOSSIER_PROMPT);
   }
 
+  /**
+   * A delta with nothing to read (only CI results or muted events after the
+   * cursor) still moves the digest cursor past them. Without it every sync
+   * would read the same history again. The dossier version stays.
+   */
+  private skipPast(topicId: string, cursorSeq: number, toSeq: number, previous: DossierVersion | null): void {
+    if (toSeq <= cursorSeq) {
+      return;
+    }
+    const at = this.deps.now().toISOString();
+    this.deps.store.cursors.advance({ kind: 'digest', scope: topicId, seq: toSeq, dossierVersion: previous?.version ?? null, updatedAt: at });
+  }
+
   private input(topic: Topic): DossierUpdateInput | null {
     const { store } = this.deps;
     const memberships = store.memberships.listForTopic(topic.id);
@@ -161,6 +175,7 @@ export class DossierUpdater {
     const storedContextHash = store.meta.get(contextHashKey(topic.id));
     const contextChanged = storedContextHash !== null && storedContextHash !== dossierContextHash(context);
     if (isEmptyDelta(delta) && !contextChanged) {
+      this.skipPast(topic.id, cursorSeq, delta.toSeq, previous);
       return null;
     }
     return {
