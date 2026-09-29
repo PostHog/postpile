@@ -16,6 +16,7 @@ import type {
   Stack,
   Tile,
   TileMember,
+  TileStack,
   TileState,
   TileStateKind,
   UnreadReason,
@@ -195,6 +196,10 @@ function prTitle(input: TopicTilesInput, prKey: PrKey): string {
   return input.prs.get(prKey)?.title ?? prKey;
 }
 
+function tileStack(stack: Stack): TileStack {
+  return { id: stack.id, prKeys: [...stack.prKeys] };
+}
+
 function stackTile(input: TopicTilesInput, stack: Stack): Tile {
   return {
     id: stack.id,
@@ -202,6 +207,7 @@ function stackTile(input: TopicTilesInput, stack: Stack): Tile {
     kind: 'stack',
     title: `${prTitle(input, stack.prKeys[0]!)} (stack of ${stack.prKeys.length})`,
     members: stack.prKeys.map((key) => memberFor(input, key, input.pullInReasons?.get(key) ?? 'stack layer')),
+    stacks: [tileStack(stack)],
   };
 }
 
@@ -223,7 +229,8 @@ function placeStacks(input: TopicTilesInput, memberKeys: Set<PrKey>): { here: St
 
 /**
  * A set member that is a stack layer brings its whole stack along, in stack
- * order, so a set never tears a layer out of its stack. A stack joins one
+ * order, so a set never tears a layer out of its stack. The tile lists those
+ * stacks in `stacks`, so the stack still reads as one inside the set. A stack joins one
  * set at most (`taken`, by stack id), and layers of a stack shown in another
  * topic are left out. A set that would be one stack and nothing else is
  * just that stack: returns null then, and takes no stack.
@@ -232,7 +239,7 @@ function setTile(input: TopicTilesInput, set: PrSet, stacks: Map<PrKey, Stack>, 
   const members: TileMember[] = [];
   const seen = new Set<PrKey>();
   const units = new Set<string>();
-  const joined: string[] = [];
+  const joined: Stack[] = [];
   for (const member of set.members) {
     if (away.has(member.prKey) || seen.has(member.prKey)) {
       continue;
@@ -248,7 +255,7 @@ function setTile(input: TopicTilesInput, set: PrSet, stacks: Map<PrKey, Stack>, 
       continue;
     }
     units.add(stack.id);
-    joined.push(stack.id);
+    joined.push(stack);
     for (const key of stack.prKeys) {
       if (!seen.has(key)) {
         seen.add(key);
@@ -260,8 +267,8 @@ function setTile(input: TopicTilesInput, set: PrSet, stacks: Map<PrKey, Stack>, 
   if (members.length === 0 || (units.size < 2 && joined.length > 0)) {
     return null;
   }
-  joined.forEach((stackId) => taken.set(stackId, set.id));
-  return { id: setTileId(set.id), topicId: input.topicId, kind: 'set', title: set.title, members };
+  joined.forEach((stack) => taken.set(stack.id, set.id));
+  return { id: setTileId(set.id), topicId: input.topicId, kind: 'set', title: set.title, members, stacks: joined.map(tileStack) };
 }
 
 function setTiles(input: TopicTilesInput, here: Stack[], away: Set<PrKey>, taken: Map<string, string>): Tile[] {
@@ -302,6 +309,7 @@ export function buildTopicTiles(input: TopicTilesInput): Tile[] {
       kind: 'single',
       title: prTitle(input, key),
       members: [memberFor(input, key, 'in this topic')],
+      stacks: [],
     }));
   return [...grouped, ...singles].filter((tile) => tile.members.some((m) => isTracked(m.provenance)));
 }

@@ -63,6 +63,7 @@ export class TopicAssigner {
     const { store } = this.deps;
     const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
     const memberships = new Map(store.memberships.listAll().map((m) => [m.prKey, m]));
+    const activeTopicIds = new Set(store.topics.listActive().map((topic) => topic.id));
     const split: StackSplit = { join: [], ask: [], followers: new Map() };
     const askedFor = new Map<string, PrKey>();
     for (const key of keys) {
@@ -71,7 +72,7 @@ export class TopicAssigner {
         split.ask.push(key);
         continue;
       }
-      const topicId = stackTopicId(stack, memberships);
+      const topicId = stackTopicId(stack, memberships, activeTopicIds);
       if (topicId !== null) {
         split.join.push({ prKey: key, topicId });
         continue;
@@ -92,6 +93,10 @@ export class TopicAssigner {
     const at = this.deps.now().toISOString();
     store.transaction(() => {
       for (const { prKey, topicId } of join) {
+        // A new layer is new work: it brings its stack's retired topic back, as an agent answer does.
+        if (store.topics.get(topicId)?.status === 'retired') {
+          store.topics.setStatus(topicId, 'active', at);
+        }
         store.memberships.assign({ prKey, topicId, assignedBy: 'agent', reason: 'joins its stack', createdAt: at });
       }
     });

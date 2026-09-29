@@ -311,6 +311,12 @@ describe('buildTopicTiles with stacks as units', () => {
   it('shows every layer in order, whatever its state', () => {
     const tiles = buildTopicTiles({ topicId: 'topic-1', memberKeys: [middle.key], prs, threads, stacks, sets: [] });
     expect(tiles.map((t) => [t.id, t.members.map((m) => m.prKey)])).toEqual([[stackId, [bottom.key, middle.key, top.key]]]);
+    expect(tiles[0]?.stacks).toEqual([{ id: stackId, prKeys: [bottom.key, middle.key, top.key] }]);
+  });
+
+  it('gives single tiles no stacks', () => {
+    const tiles = buildTopicTiles({ topicId: 'topic-1', memberKeys: [other.key], prs, threads, stacks, sets: [] });
+    expect(tiles.map((t) => [t.kind, t.stacks])).toEqual([['single', []]]);
   });
 
   it('shows a stack only in its own topic, and keeps its layers out of other topics', () => {
@@ -334,6 +340,8 @@ describe('buildTopicTiles with stacks as units', () => {
       ['set:s1', [other.key, bottom.key, middle.key, top.key]],
     ]);
     expect(tiles[0]?.members.map((m) => m.provenance.kind)).toEqual(['pinged', 'pulled_in', 'pinged', 'pulled_in']);
+    // The set still says which members form the stack, bottom first, so it reads as one.
+    expect(tiles[0]?.stacks).toEqual([{ id: stackId, prKeys: [bottom.key, middle.key, top.key] }]);
   });
 
   it('keeps the stack tile when a set would hold nothing but that stack', () => {
@@ -352,6 +360,7 @@ describe('buildTopicTiles with stacks as units', () => {
       sets: [setOf([other.key, middle.key])],
     });
     expect(tiles.map((t) => [t.id, t.members.map((m) => m.prKey)])).toEqual([['set:s1', [other.key]]]);
+    expect(tiles[0]?.stacks).toEqual([]);
   });
 });
 
@@ -373,7 +382,7 @@ describe('found PRs', () => {
   });
 
   it('never makes the tile unread from a found PR', () => {
-    const tile: Tile = { id: 'pr:x', topicId: 't', kind: 'single', title: 'x', members: [{ prKey: pr.key, provenance: { kind: 'found', via: 'review_requested', reason: 'r' } }] };
+    const tile: Tile = { id: 'pr:x', topicId: 't', kind: 'single', title: 'x', members: [{ prKey: pr.key, provenance: { kind: 'found', via: 'review_requested', reason: 'r' } }], stacks: [] };
     const loud = makeEvent({ prKey: pr.key, ruleLoudness: 'loud' });
     expect(deriveTileState(stateInput(tile, [pr], [loud])).kind).toBe('open');
   });

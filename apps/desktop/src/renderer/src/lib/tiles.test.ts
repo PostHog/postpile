@@ -33,7 +33,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
 
 function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
   return {
-    tile: { id: 'set:s1', topicId: 't1', kind: 'set', title: 'Cache PRs', members: [] },
+    tile: { id: 'set:s1', topicId: 't1', kind: 'set', title: 'Cache PRs', members: [], stacks: [] },
     state: {
       kind: unreadKeys.length > 0 ? 'unread' : 'open',
       unreadBecause: unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention', actor: 'lyra', summary: 'x', at: at(index) })),

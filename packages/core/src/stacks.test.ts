@@ -91,9 +91,38 @@ describe('buildStacks', () => {
     ]);
   });
 
+  it('continues a fork with the open PR over a closed one, so the open layers above stay in the stack', () => {
+    const prs = [
+      makePr({ number: 1, headRef: 'b1' }),
+      makePr({ number: 2, baseRef: 'b1', headRef: 'b2', state: 'CLOSED', createdAt: at(0), updatedAt: at(10) }),
+      makePr({ number: 5, baseRef: 'b1', headRef: 'b5', createdAt: at(20) }),
+      makePr({ number: 6, baseRef: 'b5', headRef: 'b6', createdAt: at(20) }),
+    ];
+    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['acme/app#1', 'acme/app#5', 'acme/app#6']]);
+  });
+
   it('survives a base/head cycle', () => {
     const prs = [makePr({ number: 1, baseRef: 'b2', headRef: 'b1' }), makePr({ number: 2, baseRef: 'b1', headRef: 'b2' })];
     expect(buildStacks(prs)).toEqual([]);
+  });
+});
+
+describe('buildStacks with forks', () => {
+  it('never links a PR from a fork, whose branch name belongs to the fork', () => {
+    const prs = [
+      makePr({ number: 1, baseRef: 'master', headRef: 'patch-1' }),
+      makePr({ number: 2, baseRef: 'patch-1', headRef: 'b2' }),
+      // An open fork PR from its own patch-1 would win the head over #1 and break the stack.
+      makePr({ number: 3, baseRef: 'master', headRef: 'patch-1', isCrossRepository: true }),
+      // A fork PR from main would sit on nothing here, but must not chain to a same-repo main either.
+      makePr({ number: 4, baseRef: 'b2', headRef: 'main', isCrossRepository: true }),
+    ];
+    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['acme/app#1', 'acme/app#2']]);
+  });
+
+  it('reads a snapshot without the field as same-repo', () => {
+    const prs = [makePr({ number: 1, headRef: 'b1' }), makePr({ number: 2, baseRef: 'b1', headRef: 'b2' })];
+    expect(buildStacks(prs).map((s) => s.prKeys)).toEqual([['acme/app#1', 'acme/app#2']]);
   });
 });
 
@@ -106,10 +135,20 @@ describe('stackTopicId', () => {
 
   it('picks the topic of the newest layer membership', () => {
     const memberships = new Map([membership('a#1', 'depot', 0), membership('a#3', 'billing', 10)]);
-    expect(stackTopicId(stack, memberships)).toBe('billing');
+    expect(stackTopicId(stack, memberships, new Set(['depot', 'billing']))).toBe('billing');
+  });
+
+  it('skips a newer membership in a topic that is not active, so the stack still shows', () => {
+    const memberships = new Map([membership('a#1', 'depot', 0), membership('a#3', 'retired-topic', 10)]);
+    expect(stackTopicId(stack, memberships, new Set(['depot']))).toBe('depot');
+  });
+
+  it('stays with the newest topic when none of the layer topics is active', () => {
+    const memberships = new Map([membership('a#1', 'old', 0), membership('a#3', 'older', 10)]);
+    expect(stackTopicId(stack, memberships, new Set(['depot']))).toBe('older');
   });
 
   it('is null while no layer has a topic', () => {
-    expect(stackTopicId(stack, new Map())).toBeNull();
+    expect(stackTopicId(stack, new Map(), new Set(['depot']))).toBeNull();
   });
 });

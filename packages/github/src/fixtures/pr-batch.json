@@ -106,6 +106,7 @@
         "author": { "__typename": "Bot", "login": "dependabot" },
         "baseRefName": "main",
         "headRefName": "dependabot/npm/foo",
+        "isCrossRepository": true,
         "headRefOid": "d1",
         "additions": 1,
         "deletions": 1,

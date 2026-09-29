@@ -53,6 +53,15 @@ describe('fetchPrs', () => {
     expect(fake.requests[0]?.url).toBe('https://api.github.com/graphql');
   });
 
+  it('marks fork PRs, and reads a node without the field as same-repo', async () => {
+    const fake = new FakeFetch([{ body: loadFixture('pr-batch.json') }]);
+    const prs = await new GitHubClient(fakeTokens, fake.fn).fetchPrs(refs);
+
+    expect(prs.get('acme/api#8')?.isCrossRepository).toBe(true);
+    expect(prs.get('acme/app#42')?.isCrossRepository).toBe(false);
+    expect(JSON.stringify(fake.requests[0]?.body)).toContain('isCrossRepository');
+  });
+
   it('maps PR fields, reviewers, reviews and commits', async () => {
     const fake = new FakeFetch([{ body: loadFixture('pr-batch.json') }]);
     const pr = (await new GitHubClient(fakeTokens, fake.fn).fetchPrs(refs)).get('acme/app#42')!;
@@ -217,10 +226,11 @@ describe('findPrsByBranch', () => {
     expect(query).toContain('b0: repository(owner: "acme", name: "app") { defaultBranchRef { name } pullRequests(headRefName: "alice/base"');
     expect(query).toContain('b2: repository(owner: "acme", name: "app") { defaultBranchRef { name } pullRequests(baseRefName: "alice/top"');
     expect(query).toContain('states: [OPEN, MERGED, CLOSED]');
-    expect(query).toContain('itemTypes: [BASE_REF_CHANGED_EVENT]');
+    expect(query).toContain('itemTypes: [BASE_REF_CHANGED_EVENT, AUTOMATIC_BASE_CHANGE_SUCCEEDED_EVENT]');
+    expect(query).toContain('... on AutomaticBaseChangeSucceededEvent { oldBase }');
   });
 
-  it('answers in lookup order, drops forks, and finds nothing below the default branch', async () => {
+  it('answers in lookup order, drops forks, reads hand and automatic base changes, and finds nothing below the default branch', async () => {
     const node = (number: number, extra: Record<string, unknown> = {}) => ({
       number,
       state: 'OPEN',
@@ -241,7 +251,7 @@ describe('findPrsByBranch', () => {
             b2: { defaultBranchRef: { name: 'master' }, pullRequests: { nodes: [node(13, {
                       state: 'MERGED',
                       mergedAt: '2026-09-18T10:00:00Z',
-                      baseRefChanges: { nodes: [{ previousRefName: 'alice/older' }, {}, { previousRefName: 'alice/older' }] },
+                      baseRefChanges: { nodes: [{ previousRefName: 'alice/older' }, {}, { oldBase: 'alice/auto' }, { previousRefName: 'alice/older' }] },
                     })] } },
             b3: null,
           },
@@ -260,7 +270,7 @@ describe('findPrsByBranch', () => {
       updatedAt: '2026-09-19T10:00:00.000Z',
       baseRef: 'master',
       headRef: 'branch-13',
-      previousBaseRefs: ['alice/older'],
+      previousBaseRefs: ['alice/older', 'alice/auto'],
     });
     expect(fake.requests).toHaveLength(1);
   });

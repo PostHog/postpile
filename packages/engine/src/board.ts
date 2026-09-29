@@ -81,11 +81,15 @@ export class Board {
     return this.threads.has(key) || this.found.has(key);
   }
 
-  /** A stack shows where its newest layer membership says, or in Unsorted while a tracked layer waits for a topic. */
+  /**
+   * A stack shows where its newest layer membership in an active topic says
+   * (see `stackTopicId`), or in Unsorted while a tracked layer waits for a topic.
+   */
   private placeStacks(): Map<string, string> {
     const result = new Map<string, string>();
+    const activeTopicIds = new Set(this.store.topics.listActive().map((topic) => topic.id));
     for (const stack of this.stacks) {
-      const topicId = stackTopicId(stack, this.memberships);
+      const topicId = stackTopicId(stack, this.memberships, activeTopicIds);
       if (topicId !== null) {
         result.set(stack.id, topicId);
       } else if (stack.prKeys.some((key) => this.isTracked(key))) {

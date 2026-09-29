@@ -152,6 +152,12 @@ export interface Pr {
    * snapshots stored before it existed.
    */
   previousBaseRefs?: string[];
+  /**
+   * The head branch lives in a fork. Its branch name says nothing about
+   * stacks in this repo (forks often use main or patch-1), so it never links
+   * to a stack. Missing on snapshots stored before it existed: read as false.
+   */
+  isCrossRepository?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -425,6 +431,17 @@ export interface TileMember {
 }
 
 /**
+ * A stack inside a tile, so the UI can draw it as one: which members form
+ * it and in which order. Every key is also in the tile's members.
+ */
+export interface TileStack {
+  /** The Stack id: "stack:<bottom prKey>". */
+  id: string;
+  /** Bottom (closest to the default branch) first; layer n is prKeys[n]. */
+  prKeys: PrKey[];
+}
+
+/**
  * The unit of attention inside a topic. Composition is derived on every read:
  * single = "pr:<prKey>", stack = Stack.id, set = "set:<PrSet.id>".
  * A tile only exists if at least one member is pinged.
@@ -436,6 +453,11 @@ export interface Tile {
   title: string;
   /** Stack order for stacks, set order for sets, one entry for singles. */
   members: TileMember[];
+  /**
+   * The stacks among the members: one for a stack tile, one per stack a set
+   * holds (in the order they appear), none for a single.
+   */
+  stacks: TileStack[];
 }
 
 export type TileStateKind = 'unread' | 'open' | 'done' | 'snoozed';

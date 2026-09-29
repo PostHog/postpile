@@ -286,6 +286,8 @@ export function pulledIn(number: number, reason: string): TileMember {
   return { prKey: sampleKey(number), provenance: { kind: 'pulled_in', reason } };
 }
 
+/** A stack tile's members are its layers, bottom first, so it carries that one stack. */
 export function sampleTile(topicId: string, kind: TileKind, id: string, title: string, members: TileMember[]): Tile {
-  return { id, topicId, kind, title, members };
+  const stacks = kind === 'stack' ? [{ id, prKeys: members.map((member) => member.prKey) }] : [];
+  return { id, topicId, kind, title, members, stacks };
 }

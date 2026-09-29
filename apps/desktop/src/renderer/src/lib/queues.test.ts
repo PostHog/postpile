@@ -62,7 +62,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
 
 function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
   return {
-    tile: { id, topicId: 't', kind: 'single', title: id, members: [] },
+    tile: { id, topicId: 't', kind: 'single', title: id, members: [], stacks: [] },
     state: { kind: 'open', unreadBecause: [] },
     prs,
     why: 'RV',

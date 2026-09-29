@@ -28,6 +28,29 @@ now".
   asked again next sync. Batches of 40 sorted by repo and branch, so related
   PRs meet. Migration 015 deletes the old `topic_deferred:*` rows. The
   desktop app now checks every 30 minutes whether consolidation is due.
+- Stack visibility (2026-09-29, DESIGN.md "Stack completion", "Stacks as
+  one unit"): stacks could go missing or read as plain sets. Fixed in
+  core and the GitHub reader:
+  - GitHub's own retarget after a merge is an
+    `AutomaticBaseChangeSucceededEvent`, not a `BaseRefChangedEvent`, so
+    the merged bottom layer fell off and the open layers above formed a
+    pulled-in-only chain with no tile. Both are read now. Stored
+    snapshots heal when the PR is next refetched (freshness check or a
+    new thread).
+  - A fork in a stack continues with the open child, not just the lowest
+    number, so a closed attempt no longer strands its open replacement.
+  - `stackTopicId` prefers active topics, so a newer membership in a
+    retired topic no longer hides the whole stack; joining a stack's
+    retired topic revives it.
+  - Fork PRs (`isCrossRepository`, now in the PR fragment) never link.
+  - `Tile.stacks` carries the stack structure (bottom first) for stack
+    tiles and for stacks inside sets. The renderer does not use it yet;
+    the stack redesign follows after mockups.
+  - Real-data check on a DB copy: 13 of 15 built stacks showed before
+    (4 of them inside sets, without structure); after the fixes and a
+    refetch of the pulled-in layers every built stack (14, one pair
+    merged into one) shows in a topic, and every set that holds a stack
+    carries it in `stacks`.
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as

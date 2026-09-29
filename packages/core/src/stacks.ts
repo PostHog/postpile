@@ -21,6 +21,11 @@ function byNumber(a: LayerShape, b: LayerShape): number {
   return a.ref.number - b.ref.number;
 }
 
+/** Open before merged before closed, then the lowest number. */
+function byStateThenNumber(a: LayerShape, b: LayerShape): number {
+  return STATE_RANK[a.state] - STATE_RANK[b.state] || byNumber(a, b);
+}
+
 /**
  * Several PRs can share a head branch (a closed PR opened again as a new
  * one). Only one of them is the layer: open first, then merged, then closed,
@@ -84,7 +89,7 @@ function parentOf(pr: Pr, byHead: Map<string, Pr>): Pr | undefined {
 }
 
 function stacksInRepo(repo: string, prs: Pr[]): Stack[] {
-  const layers = oneLayerPerHead(prs);
+  const layers = oneLayerPerHead(prs.filter((pr) => !pr.isCrossRepository));
   const byHead = new Map(layers.map((pr) => [pr.headRef, pr]));
   const children = new Map<Pr, Pr[]>();
   const starts: Pr[] = [];
@@ -110,7 +115,7 @@ function stacksInRepo(repo: string, prs: Pr[]): Stack[] {
       visited.add(current);
       chain.push(current);
       // Fork children start their own chain; see buildStacks for the rule.
-      const next: Pr[] = (children.get(current) ?? []).filter((child) => !visited.has(child)).sort(byNumber);
+      const next: Pr[] = (children.get(current) ?? []).filter((child) => !visited.has(child)).sort(byStateThenNumber);
       current = next[0];
       starts.push(...next.slice(1));
     }
@@ -128,9 +133,16 @@ function stacksInRepo(repo: string, prs: Pr[]): Stack[] {
  * closed, so a stack always shows whole. Only chains of two or more PRs
  * with at least one open PR are stacks.
  *
- * Stacks are linear. When two PRs sit on the same parent, the lowest-numbered
- * one continues the stack and the other starts a separate chain without the
- * parent, so it only becomes a stack if something sits on it in turn.
+ * A PR from a fork is never a layer: its head branch lives in the fork, so
+ * a name like main or patch-1 would otherwise take a real layer's place in
+ * `oneLayerPerHead` or chain it to an unrelated PR.
+ *
+ * Stacks are linear. When two PRs sit on the same parent, one continues the
+ * stack (open before merged before closed, then the lowest number) and the
+ * other starts a separate chain without the parent, so it only becomes a
+ * stack if something sits on it in turn. Preferring the open one keeps a
+ * closed attempt from taking the place of the open layers that replaced it:
+ * those would form a chain of pulled-in PRs only, which no tile shows.
  */
 export function buildStacks(prs: Pr[]): Stack[] {
   const byRepo = new Map<string, Pr[]>();
@@ -161,15 +173,27 @@ export function stackByPrKey(stacks: Stack[]): Map<PrKey, Stack> {
  * The one topic a stack shows in. Layers can end up with different topics
  * (assigned before they were known to be one stack, or moved one by one);
  * the newest membership among them wins, since it is the latest decision.
- * Null when no layer has a topic yet.
+ * Only active topics count while one of them has a layer: a retired topic
+ * lists no tiles, so picking it would hide the whole stack even though
+ * another layer sits in a topic that shows. With every layer in a retired
+ * topic the stack stays with the newest one, like any other PR of it, and
+ * comes back when that topic does. Null when no layer has a topic yet.
  */
-export function stackTopicId(stack: Stack, memberships: Map<PrKey, TopicMembership>): string | null {
+export function stackTopicId(stack: Stack, memberships: Map<PrKey, TopicMembership>, activeTopicIds: Set<string>): string | null {
   let newest: TopicMembership | null = null;
+  let newestActive: TopicMembership | null = null;
   for (const key of stack.prKeys) {
     const membership = memberships.get(key);
-    if (membership && (newest === null || membership.createdAt > newest.createdAt)) {
+    if (!membership) {
+      continue;
+    }
+    if (newest === null || membership.createdAt > newest.createdAt) {
       newest = membership;
     }
+    const active = activeTopicIds.has(membership.topicId);
+    if (active && (newestActive === null || membership.createdAt > newestActive.createdAt)) {
+      newestActive = membership;
+    }
   }
-  return newest?.topicId ?? null;
+  return (newestActive ?? newest)?.topicId ?? null;
 }

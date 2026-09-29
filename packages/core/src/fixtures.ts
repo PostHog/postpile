@@ -156,6 +156,7 @@ export function singleTile(pr: Pr, pinged = true): Tile {
         provenance: pinged ? { kind: 'pinged', reason: 'review_requested' } : { kind: 'pulled_in', reason: 'context' },
       },
     ],
+    stacks: [],
   };
 }
 
