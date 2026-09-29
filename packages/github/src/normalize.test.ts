@@ -104,3 +104,33 @@ describe('toPr: pending reviews', () => {
     expect(check).toEqual({ kind: 'skip', why: 'no_touch' });
   });
 });
+
+describe('toPr: truncation', () => {
+  it('reads a PR without counts, or within the caps, as complete', () => {
+    expect(toPr(ref, rawPr()).truncated).toBe(false);
+    const raw = rawPr();
+    raw.reviewThreads.totalCount = 1;
+    const thread = raw.reviewThreads.nodes[0];
+    if (thread) {
+      thread.comments.totalCount = 1;
+    }
+    expect(toPr(ref, raw).truncated).toBe(false);
+  });
+
+  it('flags a PR with more review threads than the query took', () => {
+    const raw = rawPr();
+    raw.reviewThreads.totalCount = 51;
+    expect(toPr(ref, raw).truncated).toBe(true);
+  });
+
+  it('flags a PR with more comments in one thread than the query took', () => {
+    const raw = rawPr();
+    raw.reviewThreads.totalCount = 1;
+    const thread = raw.reviewThreads.nodes[0];
+    if (!thread) {
+      throw new Error('fixture thread is missing');
+    }
+    thread.comments.totalCount = 31;
+    expect(toPr(ref, raw).truncated).toBe(true);
+  });
+});

@@ -289,6 +289,20 @@ function pendingReviewers(raw: RawPullRequest): { users: string[]; teams: string
   return { users, teams };
 }
 
+/** More of a list on GitHub than the query took. A missing count (old fixtures) is no evidence. */
+function cutOff(list: { totalCount?: number; nodes: unknown[] }): boolean {
+  return list.totalCount !== undefined && list.totalCount > list.nodes.length;
+}
+
+/**
+ * The query takes the last 50 review threads and the first 30 comments of
+ * each (queries.ts). Past either cap a reply never arrives, so the snapshot
+ * is flagged and no quiet mark-read trusts it.
+ */
+function isTruncated(raw: RawPullRequest): boolean {
+  return cutOff(raw.reviewThreads) || raw.reviewThreads.nodes.some((thread) => cutOff(thread.comments));
+}
+
 export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
   // A thread started in a pending review holds only drafts: not there yet for anyone else.
   const threads = raw.reviewThreads.nodes.map(toThread).filter((thread) => thread.comments.length > 0);
@@ -333,5 +347,6 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     mergedBy: raw.mergedBy ? actorLogin(raw.mergedBy) : null,
     previousBaseRefs: previousBaseRefs(raw.baseRefChanges),
     isCrossRepository: raw.isCrossRepository ?? false,
+    truncated: isTruncated(raw),
   };
 }

@@ -94,6 +94,10 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ prFetchedAt: at(31) })).kind).toBe('mark');
   });
 
+  it('never trusts a snapshot cut off at the query caps, however fresh', () => {
+    expect(quietReadCheck(input({ pr: { ...pr, truncated: true }, prFetchedAt: at(50) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+  });
+
   it('leaves it when a person did something since the last read', () => {
     expect(quietReadCheck(input({ events: [botComment(30), humanComment(33)] }))).toEqual({ kind: 'skip', why: 'human_activity' });
   });
@@ -220,6 +224,7 @@ describe('touchedReadCheck', () => {
   it('leaves read threads, stale snapshots and unread tiles alone', () => {
     expect(touchedReadCheck(touched({ thread: makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: false }) }))).toEqual({ kind: 'skip', why: 'not_unread' });
     expect(touchedReadCheck(touched({ prFetchedAt: at(29) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(touchedReadCheck(touched({ pr: { ...pr, truncated: true } }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
     expect(touchedReadCheck(touched({ tileUnread: true }))).toEqual({ kind: 'skip', why: 'tile_unread' });
   });
 });
@@ -246,7 +251,7 @@ describe('openedReadCheck', () => {
   const unreadThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: true });
   const tile = { snoozed: false };
   const opened = (overrides: Partial<Parameters<typeof openedReadCheck>[0]> = {}) =>
-    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), tiles: [tile], doneAfterRead: true, ...overrides });
+    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), prTruncated: false, tiles: [tile], doneAfterRead: true, ...overrides });
 
   it('marks an unread thread when a mark-read of that PR would leave it done', () => {
     expect(opened()).toEqual({ kind: 'mark' });
@@ -273,5 +278,6 @@ describe('openedReadCheck', () => {
     expect(opened({ thread: null })).toEqual({ kind: 'skip', why: 'no_thread' });
     expect(opened({ tiles: [] })).toEqual({ kind: 'skip', why: 'no_tile' });
     expect(opened({ prFetchedAt: at(29) })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(opened({ prTruncated: true })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
   });
 });

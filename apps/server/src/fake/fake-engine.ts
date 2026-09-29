@@ -1143,6 +1143,7 @@ export class FakeEngine implements EngineService {
       thread,
       // Sample snapshots are always as fresh as their threads.
       prFetchedAt: thread?.updatedAt ?? null,
+      prTruncated: false,
       tiles: views.map((view) => ({ snoozed: view.state.kind === 'snoozed' })),
       doneAfterRead: rows.some((pr) => pr.afterRead.done),
     });

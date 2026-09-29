@@ -59,7 +59,8 @@ export interface RawReviewThread {
   id: string;
   path: string;
   isResolved: boolean;
-  comments: { nodes: RawComment[] };
+  /** Missing in fixtures written before it was asked for. */
+  comments: { totalCount?: number; nodes: RawComment[] };
 }
 
 export interface RawCommit {
@@ -126,7 +127,8 @@ export interface RawPullRequest {
   reviewRequests: { nodes: { requestedReviewer: RawRequestedReviewer | null }[] };
   reviews: { nodes: RawReview[] };
   comments: { nodes: RawComment[] };
-  reviewThreads: { nodes: RawReviewThread[] };
+  /** totalCount is missing in fixtures written before it was asked for. */
+  reviewThreads: { totalCount?: number; nodes: RawReviewThread[] };
   commits: { nodes: RawCommit[] };
   /** commits(last: 1) again, only for the head commit's check rollup. */
   headCommit: { nodes: { commit: { statusCheckRollup: RawStatusCheckRollup | null } }[] };

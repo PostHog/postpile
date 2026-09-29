@@ -197,6 +197,7 @@ export class QuietReads {
     const check = openedReadCheck({
       thread,
       prFetchedAt: this.store.prs.fetchedAtByKey().get(prKey) ?? null,
+      prTruncated: this.store.prs.get(prKey)?.truncated === true,
       tiles: this.tilesHolding(board, prKey),
       doneAfterRead: this.prDoneAfterRead(board, prKey),
     });
