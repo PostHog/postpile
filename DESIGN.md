@@ -1499,6 +1499,91 @@ Small topics are consolidation's job: it proposes merging 1-2 PR topics
 into a bigger one. Migration 015 deleted the old `topic_deferred:*` meta
 rows.
 
+## Actions act on what you look at
+
+Decided 2026-09-29. Until then Mark read, Mark done and Snooze in the detail
+pane acted on the whole tile, even with one PR of a set or stack selected,
+while Approve acted on that PR. Nobody decided that; it fell out of the tile
+being the unit of state and the detail pane taking the tile's primary
+button. Julian pressed "Mark done" on #103364 in the detail pane and the
+whole eight-PR set went done: "this is honestly confusing. Why are these
+buttons, then, in the detail pane? I mean, approving also approves the PR
+and not the topic."
+
+**Rule: the detail pane acts on the selected PR, the tile footer on the
+tile.**
+
+- Detail pane: Approve, Mark read and Mark done apply to the selected PR
+  only: its events seen, it is handled (`handledAt`), its GitHub thread is
+  marked read, undo brings back that PR only. The label follows the same
+  rule as today but per PR: "Mark done" when that PR is done after a
+  mark-read, else "Mark read"; no mark button while that PR is still your
+  move. Snooze shows in the detail pane only on a single-PR tile (there the
+  tile and the PR are the same); on a set or stack it lives in the tile
+  footer.
+- Tile footer: unchanged, the whole tile (every member read, handled, all
+  threads marked read; Snooze for the tile).
+- A tile is done when every tracked member is done (`isPrDone`), which was
+  already the rule underneath; pulled-in stack layers don't count, as before.
+- Single-PR tiles behave exactly as before.
+
+**The dot marks what keeps the tile** (replaces "The new dot" rule of the
+same day). Julian on the Jev set: "What is not done there now? I'm still
+missing the dot", and on a second, read-only dot: "I would just fold it into
+the main ... there doesn't need to be a distinction". One coral dot before
+every tracked PR that keeps the tile from being done (`isPrDone` false), on
+unread and open tiles alike, in the tile's rows and the detail pane's PR
+list (aria-label "Not done yet"). No dots on done or snoozed tiles. The
+dots and the detail-pane buttons work together: mark a dotted PR done and its
+dot goes; no dots left, the tile is done. The tile's own unread styling (strip,
+bold title) stays as decided on 28 Sept.
+
+**Opening a PR in PostPile also marks it done there** (changes part 3 of
+"You already dealt with it"). The open marks the PR read on GitHub only when
+nothing is asked of the viewer, so leaving it undone in PostPile was
+inconsistent: #108333 was read on GitHub, asked nothing, and still held the
+Jev tile open. Julian: "why would marking it read on GitHub not also mark it
+[done] on PostPile, given all the conditions that we agreed upon". Now the
+open handles that PR too (`handledAt`), under the same conditions, checked
+per PR: that PR done after a mark-read, its tile not snoozed, writes
+unlocked. A visit on github.com keeps the old behaviour (events seen, no
+`handledAt`), since PostPile can't check the conditions at the moment of
+the visit.
+
+**The verdict pill follows the footer.** A multi-PR tile showed the lead
+PR's verdict ("Not yours" from #103364) while the footer talked about
+#103752. The lead PR (`leadPr`) now prefers the PR of the tile's turn when
+the turn is not `none`, then the newest unread reason, then the first open
+tracked PR.
+
+**Whose turn names the re-reviewer.** "bernatixer to address Radu-Raicea's
+changes" stayed after bernatixer pushed and re-requested Radu-Raicea's
+review. When the author pushed after a changes request and the requester is
+requested again, it is the requester's move: "Radu-Raicea to re-review"
+(whose-turn rule 4).
+
+**Own merged PRs clear on GitHub too** (changes rule 2 of "Handled quietly"
+and part 2 of "You already dealt with it"). The own-PR exception (bots after
+your last touch keep the thread unread, since on your own PR they can mean
+work) applies only while the PR is open. Every own PR merges through trunk
+after the last comment, so 14 merged own PRs stayed unread after 0.10.0.
+Julian: "my own merged or closed PRs can be cleared when only bots come in
+after my last touch."
+
+**Not marked read from a guess** (decided the same day, recorded to stop the
+question coming back). PostPile marks a thread read on GitHub only from what
+the viewer did: acted after everything unread, opened the PR in PostPile
+with nothing asked, marked it read or done, or only bots since they read it.
+It never marks read because it guessed the viewer isn't interested, not even
+for finished PRs whose review went to the team and was handled by a
+teammate, and not for mentions it can no longer find. Proposed and turned
+down: "extend Handled quietly to finished PRs with only quiet activity",
+and an inbox-cleanup entry "finished team requests handled by someone else".
+Julian: "routing to the team devex means I potentially could be interested
+in that, so at which point do we know I am not?" The GitHub count stays
+higher than what PostPile shows as yours; the gap is mostly finished team
+requests, and that is intended.
+
 ## Tile faces: why it's here, status, whose turn
 
 Every tile answers four questions without opening it. All four are derived in
