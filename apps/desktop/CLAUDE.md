@@ -171,8 +171,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - `markOpenedRead` is quiet too (no toast, no undo) and on the
   `GithubWrite` list as `openedRead`, blocked while locked (never a
   pending write). `useOpenedRead` in `App.tsx` calls it once per open,
-  after the PR stayed 1.5s in the detail pane with the window visible
-  (`OpenedReadTimer`; hiding the window restarts the wait), only when
+  when the user moves on (another PR or tile, the pane closed, the window
+  hidden or blurred) after the PR stayed 1.5s in the detail pane with the
+  window visible and focused (`OpenedReadTimer`: the dwell arms, leaving
+  fires; hidden before the dwell restarts the wait). Never while the PR is
+  still on screen: the status must not change under the user's eyes. Only when
   `opensMarkRead` (`lib/opened-read.ts`) says a mark-read of that PR
   leaves it done (`PrSummary.afterRead.done`, per PR, not the tile's). The
   server checks again, marks the GitHub thread read if it is unread
@@ -407,7 +410,10 @@ not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set
 (`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
 the ones a queue filter does not match and folds snoozed / done ones.
-Tiles stay in one column (DESIGN.md "Three-pane balance").
+Tiles stay in one column (DESIGN.md "Three-pane balance"). The selected
+tile keeps the place it had when it was selected (`useHeldPlace` over
+`holdPlace`, `lib/hold-place.ts`), and the open topic's sidebar row too,
+until the selection moves; its look still changes right away.
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
 "Your instructions", the notifications debug list and "Handled quietly",

@@ -1,4 +1,5 @@
 import type { PrSummary, PrTier, TileView, TopicListItem } from '@postpile/core';
+import type { Bucket } from './hold-place.ts';
 
 /** Queue tiers in section order, same as core's PR_TIER_ORDER (the renderer imports types only). */
 const TIER_ORDER: PrTier[] = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
@@ -110,6 +111,31 @@ export function queueLayout(items: TopicListItem[]): QueueLayout {
     }
   }
   return { sections, other: items.filter((item) => topicSectionTier(item) === null) };
+}
+
+/** The sidebar layout as lists to hold a row in (`holdPlace`): every section, empty ones too, then Other topics. */
+export function layoutBuckets(layout: QueueLayout): Bucket<QueueRow>[] {
+  const sections = TIER_ORDER.filter((tier) => tier !== 'rest').map((tier) => ({
+    key: tier,
+    items: layout.sections.find((section) => section.tier === tier)?.rows ?? [],
+  }));
+  return [...sections, { key: 'other', items: layout.other.map((item) => ({ item, count: 0 })) }];
+}
+
+/** Back from `layoutBuckets`: empty sections left out, counts from each row's topic for its section's tier. */
+export function layoutFromBuckets(buckets: Bucket<QueueRow>[]): QueueLayout {
+  const sections: QueueSection[] = [];
+  for (const bucket of buckets.filter((entry) => entry.key !== 'other' && entry.items.length > 0)) {
+    const tier = bucket.key as PrTier;
+    const rows = bucket.items.map((row) => ({ item: row.item, count: row.item.queues.tiers[tier] }));
+    sections.push({ tier, rows, count: rows.reduce((total, row) => total + row.count, 0) });
+  }
+  return { sections, other: buckets.find((entry) => entry.key === 'other')?.items.map((row) => row.item) ?? [] };
+}
+
+/** A sidebar row's topic id, for `holdPlace`. */
+export function queueRowId(row: QueueRow): string {
+  return row.item.topic.id;
 }
 
 /**

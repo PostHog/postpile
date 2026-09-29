@@ -973,8 +973,10 @@ the app meanwhile.
   teammate, lost mentions) stays turned down. Added the same day: "Remove
   <team>" in the detail pane removes a team review request, unsubscribes
   and marks the PR done (confirm once, no undo, blocked while locked);
-  moving read routed requests down on their own was turned down. DESIGN.md
-  "Actions act on what you look at".
+  moving read routed requests down on their own was turned down. Also the
+  same day: the opened mark fires when you move on (dwell arms, leaving
+  fires), and the selected tile and its topic row keep their place until
+  the selection moves. DESIGN.md "Actions act on what you look at".
 
 - **UI fixes from the screen review (2026-09-29)**: Julian signed off on ten
   items from the mockup page. A stale glance's verdict box goes grey and

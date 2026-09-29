@@ -1631,6 +1631,27 @@ not taken; instead the user asked for a PR button: "an unassign team button
   them in memory; tests for the engine flow (success, request removal
   fails, unsubscribe fails, locked) and the renderer visibility rule.
 
+**Marked when you move on** (decided 2026-09-29, after the build above).
+Julian, clicking through PostPile: "when clicking through much stuff in
+PostPile, now auto-mark status read, which is a bit jarring because the
+status changes while I look at it ... It almost feels like the agent
+updates it while I'm looking at it."
+
+- The opened-in-PostPile mark (GitHub read + PR handled) no longer fires
+  after 1.5s while the PR is still selected. The 1.5s visible dwell stays
+  as the proof the user looked; it only arms the open. The mark fires when
+  the user moves on: another PR or tile selected, the detail pane closed,
+  or the window hidden or blurred (leaving the app counts as moving on).
+  Clicking quickly through PRs (under 1.5s visible) still marks nothing.
+  Once per open.
+- While a tile is selected it keeps its place: no re-sort and no section
+  move (Done or Snoozed fold, a sidebar section) for the selected tile and
+  the topic row it sits in until the selection moves, even when its state
+  changed (the user's own detail-pane mark, the opened mark, a sync). Only
+  the selected item is held; everything else sorts as usual.
+- The user's own button presses still change the tile's look right away
+  (that is the feedback they asked for); only the position is held.
+
 **Built as** (2026-09-29):
 
 - Per-PR answers ship on the tile rows, since the renderer imports no
@@ -1647,6 +1668,17 @@ not taken; instead the user asked for a PR button: "an unassign team button
   A done PR that still has unseen news keeps the tile unread, so it keeps
   its dot until it is read.
 - Lead PR: `leadPr` in `lib/tiles.ts`.
+- Marked when you move on: `OpenedReadTimer` in the renderer's
+  `lib/opened-read.ts` (the dwell arms, `leave()` / `hidden()` fire,
+  `setWanted` keeps `opensMarkRead` current) driven by `useOpenedRead`
+  (leaves when the PR changes or the pane closes, `visibilitychange`,
+  window `blur` / `focus`). The held place is `holdPlace` in
+  `lib/hold-place.ts` with `useHeldPlace` (the place taken when the
+  selection starts): `TileGrid` holds the selected tile across its live,
+  Snoozed and Done lists (the Unread filter keeps that order),
+  `TopicSidebar` holds the open topic's row across the queue sections and
+  Other topics (`layoutBuckets` / `layoutFromBuckets` in `lib/queues.ts`)
+  while its selected tile stays selected.
 - Opened in PostPile: core `openedReadCheck` (per PR), engine
   `QuietReads.markOpened`, renderer `opensMarkRead`; see "You already dealt
   with it" part 3. When GitHub has the thread read already, only the
@@ -2668,7 +2700,10 @@ Merging or closing counts only when the viewer did it.
    - "Opened" means the PR stayed in the detail pane for 1.5s
      (`OPENED_READ_DELAY_MS`, renderer `useOpenedRead` with
      `OpenedReadTimer`) while the window was visible, so clicking through
-     tiles marks nothing. Hidden before that, the wait starts over when the
+     tiles marks nothing. Since 2026-09-29 that only arms the open: the
+     mark goes out when the user moves on (another PR or tile, the pane
+     closed, the window hidden or blurred), see "Actions act on what you
+     look at" › Marked when you move on. Hidden before that, the wait starts over when the
      window is visible again with the same PR open (Codex review on PR #10:
      the open used to be dropped). The first tile
      the app shows by itself counts too: it is on screen. One request per

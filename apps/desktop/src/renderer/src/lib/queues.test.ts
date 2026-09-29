@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, PrTier, TileView, Topic, TopicListItem } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
+import { holdPlace, placeIn } from './hold-place.ts';
 import {
   applyQueueFilter,
   filterCounts,
   prMatchesFilter,
+  layoutBuckets,
+  layoutFromBuckets,
   queueLayout,
+  queueRowId,
   tileMatchesFilter,
   firstGridTile,
   tilesInTierOrder,
@@ -86,6 +90,27 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
 function withAddressed(entry: TopicListItem, changesAddressed: number): TopicListItem {
   return { ...entry, queues: { ...entry.queues, changesAddressed } };
 }
+
+describe('holding the open topic row in place', () => {
+  it('round-trips a layout through its buckets', () => {
+    const layout = queueLayout([item('depot', { needs_reply: 1 }), item('docs', { rest: 1 })]);
+    expect(layoutFromBuckets(layoutBuckets(layout))).toEqual(layout);
+  });
+
+  it('keeps the open topic in its section while its selected tile turned done, then lets it move', () => {
+    const before = queueLayout([item('cache', { to_review: 1 }), item('ci', { to_review: 2 })]);
+    const held = placeIn(layoutBuckets(before), 'cache', queueRowId);
+    // The tile was marked done: the topic has nothing to review any more and would drop to Other topics.
+    const after = queueLayout([item('cache', { rest: 1 }), item('ci', { to_review: 2 })]);
+
+    const shown = layoutFromBuckets(holdPlace(layoutBuckets(after), held, queueRowId));
+
+    expect(shown.sections.map((section) => [section.tier, section.rows.map((row) => row.item.topic.id), section.count])).toEqual([['to_review', ['cache', 'ci'], 2]]);
+    expect(shown.other).toEqual([]);
+    // Once the selection moves, nothing is held and the real layout shows.
+    expect(layoutFromBuckets(holdPlace(layoutBuckets(after), null, queueRowId))).toEqual(after);
+  });
+});
 
 describe('queueLayout', () => {
   it('lists each topic once, in its highest section, and keeps rest-only topics apart', () => {
