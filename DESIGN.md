@@ -1447,6 +1447,37 @@ any review ask; on top of that:
   wrote the PR and cannot approve or re-review it, so glances do not advise
   approving.
 
+**Why now on a revisit** (2026-09-29, `whatsNew` in `whats-new.ts`, shipped
+as `PrSummary.whatsNew` and `PrDetail.whatsNew`; words from the renderer's
+`lib/whats-new.ts`). The unread strip keeps its layout, size and place;
+only its text changes, and only when the viewer already touched the PR
+before the new loud events. Rules:
+
+- New events are the unseen loud ones, the same ones that make the tile
+  unread. Quiet bot, CI and other events never change the text or the count.
+- A touch is one of the viewer's own events (review, approval, changes
+  request, comment, push; the loudness rules mark these "your own
+  activity"), else a mark-read: an event turned seen (mark read in the app,
+  or GitHub's `last_read_at` passed it, see "Reconciling with GitHub's read
+  time"). The anchor is the newest own action before the first new event; a
+  mark-read only anchors when the viewer never acted ("since you marked it
+  read"). No touch before the new events: a first-time ask, and the strip
+  keeps the event's own words.
+- The lead is the most important new event: a mention, question or reply
+  first, then a team mention, a (re-)requested review, a changes request or
+  approval by someone else, pushes, then anything else (its summary). The
+  newest wins a tie. Pushes count together ("6 commits since your changes
+  request"; these are loud as "addressed your changes", `changesAnswered`).
+- Texts, about 48 characters at most (`STRIP_TEXT_MAX`, else the short form
+  without the anchor): "6 commits since your changes request", "lyra
+  replied to your review", "lyra replied to your comment", "pushed after
+  your approval" (only when that push is loud, e.g. the agent raised it),
+  "lyra requested changes since you approved", "pim re-requested your
+  review", "lyra mentioned you since you marked it read".
+- "+N" counts the other new loud things (all pushes together as one) plus
+  unread events on the tile's other PRs. The avatar and badge are the lead's
+  actor and event, the age the newest new loud event.
+
 **Agent approvals are a neutral fact, in words** (2026-09-28). In a busy
 repo a good share of approved PRs are approved only by a bot, mostly an AI
 review agent, and nearly all of them merge. That is not a problem to flag:
@@ -1543,7 +1574,16 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   the open one boxed in accent. The body starts with a state line: big
   state icon + lifecycle word ("Open" green, "Draft", "Merged", ...), the
   review word, the mono `owner/repo#num` and the GitHub button. Then the
-  title and `head → base · layer 1 of 2`, then the assessment.
+  title and `head → base · layer 1 of 2`, then (only while something
+  loud is new) the "New since you looked" box, then the assessment.
+- **New since you looked** (2026-09-29, `NewSinceBox`): directly under
+  the title and branch line, above the assessment. Header "NEW SINCE YOU
+  LOOKED · since your changes request yesterday" (anchor from `whatsNew`,
+  relative day from `whenLabel`; plain header on a first look). Up to 3
+  loud lines (`activity.fresh`, same rows as the activity list), then "N
+  more"; the quiet bot and CI events since the touch fold into one line
+  (`activity.freshNoise`, `noiseSummary`: "10 bot comments, CI") that
+  expands. The activity list below no longer repeats any of it.
 - **Look at first** (2026-09-29, `KeyFiles`): the glance's `keyFiles`, up to
   3 changed files a reviewer should open first with the agent's why (max 12
   words), under Does / Others. Mono path middle-truncated (full path in the
@@ -1562,8 +1602,10 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   requests (and removals) naming you or your team, human pushes collapsed
   per burst (consecutive pushes by one person: "rowan pushed 3 commits",
   "... after your approval"), and lifecycle (ready, draft, merged, closed,
-  reopened). New-since-you-looked lines (an unseen loud event) come first in
-  a coral-edged "New since you looked" block, then "Earlier". About 12 lines
+  reopened). New-since-you-looked lines (an unseen loud event) and the
+  unseen noise after the viewer's last touch (`activityList(events,
+  viewer, since)`) go to the box under the title (2026-09-29); the list,
+  titled "Earlier activity" then, keeps only the rest. About 12 lines
   (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
   agent-muted events and review requests between others fold into one "N
   bot/CI events" line that expands (Unmute lives there).

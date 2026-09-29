@@ -201,7 +201,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
   `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`),
   `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
-  `PrDescription`, `PrFacts`, `ReviewList`,
+  `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
+  title; the activity list then shows only earlier events),
   `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
@@ -263,7 +264,10 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   `Tile.tsx`); PR rows get the small chip, no band. The tooltip keeps the
   long why-here reason (`whyTitle`). Grey on done tiles.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
-  badge (`Glyph`), a coral "NEW" pill, age. Only unread tiles have the
+  badge (`Glyph`), a coral "NEW" pill, age. On a revisit (`PrSummary.whatsNew`
+  of the strip's PR, `stripNews`) the text, avatar, badge, "+N" and age
+  come from core's `whatsNew`, worded by `whatsNewText` in
+  `lib/whats-new.ts`; never add a second line or change the strip's size. Only unread tiles have the
   strip; read tiles get a quieter (ink-2) title, done and draft tiles a
   muted one. Drafts (`isDraftTile`): grey "Draft" chip and a dashed frame
   or dashed left band.

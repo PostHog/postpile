@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- What is new on revisits (2026-09-29, DESIGN.md "Tile faces" › Why now on
+  a revisit, "Three-pane balance" › New since you looked): core
+  `whatsNew(events, viewer)` finds the viewer's last touch (own review,
+  approval, comment, push, else a mark-read) before the unseen loud events
+  and picks the lead (ask or reply > re-request > verdicts by others >
+  pushes > other), shipped as `PrSummary.whatsNew` / `PrDetail.whatsNew`.
+  The unread strip says "6 commits since your changes request" etc.
+  (`lib/whats-new.ts`, `stripNews` / `stripMoreCount` in `lib/tiles.ts`);
+  first-time asks keep the event's words. The "New since you looked" box
+  moved under the title (`NewSinceBox`) with 3 lines, "N more" and the
+  quiet events folded ("2 bot comments, CI", `activity.freshNoise`); the
+  activity list below only keeps earlier events. Sample #1960 is a revisit
+  (3 commits after your changes request, two bot comments, CI), #1801 a
+  first-time ask.
 - Glance catch-up and hourly auto sync (2026-09-29, DESIGN.md "Glance
   catch-up", "Auto sync"): a poll cycle that brings a loud event or a PR
   without a glance runs a scoped digest for that topic right away
@@ -855,6 +869,11 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Revisits** (2026-09-29): the why-now strip says what changed since
+  your last touch; New since you looked sits under the title; quiet events
+  never count. Layout, size and place of the strip stay; first-time asks
+  keep today's wording; nothing is shown twice in the detail pane.
 
 - **Versioning: no `-alpha` suffix, count up minors** (2026-09-29): after
   `0.1.0-alpha.0` every release is the next minor (`0.2.0`, `0.3.0`),

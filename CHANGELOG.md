@@ -16,6 +16,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- Coming back to a PR you already reviewed, commented on or marked read, the tile's "why now" line says what changed since then: "6 commits since your changes request", "lyra replied to your review", "lyra requested changes since you approved". Bot and CI activity never counts. First-time asks keep their wording.
+- The detail pane's "New since you looked" box moved up under the title and says since when ("since your changes request yesterday"). It shows up to 3 lines, folds bot and CI activity into one line, and the activity list below no longer repeats it.
 - Every PR lands in a topic on the sync that sees it: the agent picks an existing topic or starts a new one named after the work. Unsorted only holds PRs the agent could not get to yet (daily limit, `claude` missing, a failed call), and the next sync places them. PRs an earlier version left in Unsorted get placed on the next sync too.
 - The daily memory tidy-up (merge suggestions for small topics, merging duplicate facts, retiring finished topics) runs by itself when it is due.
 - PR state reads like GitHub: rows show a state icon (open, draft, merged, closed, queued) and the review state in words ("Needs review", "Approved", "Changes requested"), and drafts get a DRAFT chip. CI status moved out of rows and tiles; it only shows in the detail pane's Checks line.
