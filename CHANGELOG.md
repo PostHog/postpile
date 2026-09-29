@@ -8,6 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Topics are cut by goal: every agent gets the same definition of area, topic, tile and set, and a PR no longer lands in a broad topic it only shares a repo or a word with. With no live goal to join, it gets a new topic.
 - The nightly tidy-up applies small topic splits (up to 3 PRs) by itself. Bigger splits still wait in the Inbox.
+- Finished topics leave the sidebar on their own: every sync retires a topic once all its PRs are merged or closed, nothing is unread or snoozed, and it has been quiet for 3 days (was 14 days, and only in the nightly tidy-up). A new event or PR brings it back. Topics retired in the last 30 days wait in a folded "Finished" drawer at the bottom of the sidebar.
 - A team review request routed to your team is no longer your move while someone else's change request stands (it is the author's move), or when the agent glance says Not yours. Marking such a tile read makes it done.
 
 ## 0.2.1 (2026-09-29)

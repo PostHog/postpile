@@ -28,7 +28,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
 
 ## Data: typed query hooks, types from core
 
-- One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`),
+- One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,
+  `useFinishedTopics` for the sidebar's Finished drawer),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
   `viewer.ts` (`useViewer`, login and teammates for the filter buttons),
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
@@ -311,7 +312,10 @@ The sidebar lists topics in queue sections (`lib/queues.ts`,
 PRs, To review, Team mentioned, then Other topics, which keeps the old
 groups from `lib/sidebar.ts` (`sidebarGroups`: Needs you, Your team by
 area, Routed, FYI). A topic can sit in several sections on purpose. Fold
-state is local UI state; Routed and FYI start folded. The Mine / Team /
+state is local UI state; Routed, FYI and Finished start folded. The
+Finished drawer (retired topics, `useFinishedTopics`) hides while search
+or a queue filter narrows; a finished topic is not in `useTopics`, so
+`App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The Mine / Team /
 Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
 not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set

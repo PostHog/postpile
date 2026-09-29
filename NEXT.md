@@ -926,6 +926,12 @@ the app meanwhile.
   catch-all "fixes and upkeep" topic. Consolidation (still at most daily)
   applies splits of up to 3 PRs without asking and without undo ("Wrong
   topic" fixes a bad one); bigger splits stay proposals.
+- **Finished topics retire on every sync** (2026-09-29): a topic whose PRs
+  are all merged or closed, with nothing unread or snoozed and no events for
+  3 days (was 14), is retired by every full sync, no agent verdict needed.
+  Consolidation keeps its own retire path behind the same gate. Retired
+  topics from the last 30 days sit in a folded Finished drawer at the bottom
+  of the sidebar and open like any topic; a new event or PR brings them back.
 - **Routed team requests go on hold** (2026-09-29): while someone else's
   changes request stands it is the author's move; when the glance says Not
   yours it is nobody's move and a mark-read makes it done. Personal and
