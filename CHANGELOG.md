@@ -14,6 +14,8 @@ Notable changes per release. Versions follow semver, with `-alpha.N` pre-release
 - The PR description shows in the detail pane, in a small scroll box with Expand. Markdown is rendered without raw HTML, PR template comments are hidden and remote images are not loaded.
 - Glances name up to three files to look at first, with why and +/- counts, linking to the PR's files on GitHub. FYI: existing glances regenerate once on the next sync to get them.
 - No more stray focus borders on tiles after going back and forward.
+- Stack layers show where they sit: a small blue tag like "1/3" (1 = bottom) before the PR title in tiles, in stacks inside sets and in the detail pane. The tooltip names the PR it is built on.
+- A low-risk glance no longer shows a red RISK box; the verdict box already covers it.
 
 ## 0.1.0-alpha.0 (2026-09-28)
 

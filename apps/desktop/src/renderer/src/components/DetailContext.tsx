@@ -1,8 +1,9 @@
 import type { TileView } from '@postpile/core';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
+import { stackPlaces } from '../lib/stacks.ts';
 import { kindLabel, prNumber, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, StateWordLabel } from './pills.tsx';
+import { ForWhomChip, StackMark, StateWordLabel } from './pills.tsx';
 
 interface DetailContextProps {
   view: TileView;
@@ -28,6 +29,7 @@ function NavButton(props: { back: boolean; ariaLabel: string; onClick: () => voi
 export function DetailContext(props: DetailContextProps) {
   const { view } = props;
   const count = view.prs.length;
+  const places = stackPlaces(view.tile.stacks);
   const index = Math.max(
     view.prs.findIndex((pr) => pr.key === props.prKey),
     0,
@@ -61,6 +63,7 @@ export function DetailContext(props: DetailContextProps) {
             const lifecycle = pr.status.lifecycle;
             const quiet = lifecycle === 'draft' || lifecycle === 'closed';
             const word = rowStateWord(pr.status);
+            const place = places.get(pr.key);
             let look = 'border-transparent hover:bg-surface/70';
             let titleLook = 'font-medium text-ink';
             if (picked) {
@@ -79,6 +82,7 @@ export function DetailContext(props: DetailContextProps) {
               >
                 <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
                 <span className={`shrink-0 font-mono text-[11px] ${quiet && !picked ? 'text-faint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
+                {place && <StackMark place={place} />}
                 <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>
                 {!sameForWhom(pr.forWhom, view.forWhom) && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} size="row" />}
                 <span className="ml-auto flex shrink-0 items-center pl-1">{word && <StateWordLabel word={word} />}</span>

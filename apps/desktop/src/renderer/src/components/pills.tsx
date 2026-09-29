@@ -5,8 +5,9 @@ import { pendingWriteTitle } from '../lib/guard.ts';
 import { glanceGapText } from '../lib/glance.ts';
 import type { StateWord } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';
+import { type StackPlace, stackPlaceLabel, stackPlaceTitle } from '../lib/stacks.ts';
 import { forWhomLabel, whyTitle } from '../lib/why.ts';
-import { ClockIcon, DashIcon, Glyph, PencilIcon, RingDotIcon } from './icons.tsx';
+import { ClockIcon, DashIcon, Glyph, PencilIcon, RingDotIcon, StackIcon } from './icons.tsx';
 
 const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }> = {
   LOOKS_SAFE: { icon: <Glyph glyph="check" size={11} strokeWidth={2.2} />, label: 'Looks safe', tone: 'border-safe-line bg-safe-soft text-safe' },
@@ -154,6 +155,26 @@ export function RepoLabel(props: { label: string }) {
       className="shrink-0 rounded-[4px] border border-pill-line bg-subtle px-1 font-mono text-[10px] leading-[14px] text-muted"
     >
       {props.label}
+    </span>
+  );
+}
+
+/**
+ * The stack mark (variant A): a small light-blue tag with the layers glyph
+ * and the layer's position, "1/3" (1 = bottom). Sits between the #number
+ * and the title on PR rows, and before the detail pane's title. Lone PRs
+ * get none: callers only render it with a place. Grey on done tiles.
+ */
+// Semibold, not bold: the bundled JetBrains Mono stops at 600, and 700 would be faux bold.
+export function StackMark(props: { place: StackPlace; greyed?: boolean }) {
+  const look = props.greyed ? 'border-hairline bg-segment text-muted' : 'border-stack-tag-line bg-stack-tag text-stack-tag-ink';
+  return (
+    <span
+      title={stackPlaceTitle(props.place)}
+      className={`flex h-[18px] shrink-0 items-center gap-[3px] rounded-[5px] border px-[5px] font-mono text-[10.5px] font-semibold whitespace-nowrap ${look}`}
+    >
+      <StackIcon size={11} strokeWidth={1.6} />
+      {stackPlaceLabel(props.place)}
     </span>
   );
 }

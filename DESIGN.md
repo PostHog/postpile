@@ -1203,6 +1203,20 @@ A PR that is a stack layer is never shown apart from its stack.
   for a single. `kind` stays `single`, `stack` or `set`; a set holding a
   stack is still `set`, and the UI draws the stack inside it from
   `stacks` so it reads as a stack, not as loose set rows.
+- **Stack mark** (2026-09-29, variant A; `StackMark` in `pills.tsx`,
+  lookup `stackPlaces` in `lib/stacks.ts`): a PR that is a layer of a
+  stack gets a small light-blue tag with the layers glyph and its position,
+  "1/3" (1 = bottom, closest to the default branch), from `Tile.stacks`.
+  It sits between the mono `#number` and the title on PR rows (stack tiles,
+  stacks inside sets, the detail pane's member list) and in front of the
+  detail pane's title. Lone PRs get nothing. Tooltip: "Layer 2 of 3 in a
+  stack (built on #N)", or "(bottom of the stack)" for layer 1. 18px high,
+  radius 5px, `--stack-tag` fill with a `--stack-tag-line` border and
+  `--stack-tag-ink` text, mono 10.5px semibold (the bundled mono stops at
+  600), 11px icon; grey on done tiles. The tile header keeps "Stack · N",
+  and the detail branch line keeps `head → base · layer X of N`, now also
+  for a stack inside a set. The light blue is the one accent-family use
+  outside selection and focus, chosen by the user.
 
 ## Topic placement: relation and area
 
@@ -1303,7 +1317,8 @@ detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
 or the RISK box. `PrStatus.checks` stays in the view model for whose turn
 ("Fix failing CI") and the agent can still mention CI in its own text.
 
-**PR rows** (`PrRow`): state icon, mono number, bold title, (for-whom chip
+**PR rows** (`PrRow`): state icon, mono number, the stack mark for a stack
+layer ("1/3", see "Stacks as one unit"), bold title, (for-whom chip
 when it differs, repo label), then the state word, open threads (bubble +
 count) and the author's avatar. A single PR sits in a white bordered box; a
 stack or set's rows sit in one tinted rounded box, the selected row
@@ -1509,7 +1524,9 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   SAFE · for you", green; "NOT YOURS", grey; the tag follows the PR's for
   whom) and holds the glance's for-you text as short marked lines: "!" the
   main point, "?" a later sentence that asks for a check. Box 2 "RISK ·
-  <level>" (red) holds the risk text (▲), only when there is risk content.
+  <level>" (red) holds the risk text (▲), only when there is risk content
+  and the level is not low (2026-09-29: a red box around "Low. CI green."
+  read as an alarm; the verdict box covers a low risk).
   The renderer no longer adds a failing CI line (2026-09-29: CI only in
   the facts). Then plain lines "→ Does:" and "“ Others:". Each
   box caps at 3 lines. Nothing repeats: no verdict pill or for-whom chip in

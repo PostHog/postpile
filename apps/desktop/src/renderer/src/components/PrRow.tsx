@@ -1,9 +1,10 @@
 import type { PrSummary } from '@postpile/core';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
+import type { StackPlace } from '../lib/stacks.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, RepoLabel, StateWordLabel } from './pills.tsx';
+import { ForWhomChip, RepoLabel, StackMark, StateWordLabel } from './pills.tsx';
 
 interface PrRowProps {
   pr: PrSummary;
@@ -15,6 +16,8 @@ interface PrRowProps {
   grouped: boolean;
   /** Show the row's own "for whom" chip: only when it differs from the tile's. */
   showForWhom: boolean;
+  /** Where the PR sits in a GitHub stack; null for a lone PR (no mark). */
+  stackPlace: StackPlace | null;
   onClick: () => void;
 }
 
@@ -29,7 +32,8 @@ function rowBackground(props: PrRowProps, quiet: boolean): string {
 }
 
 /**
- * One PR line inside a tile (3a design): state icon, number, title, then
+ * One PR line inside a tile (3a design): state icon, number, the stack mark
+ * for a stack layer ("1/3"), title, then
  * the state word (review state, or the DRAFT chip, Merged, Closed), open
  * threads and the author. No CI here: checks only show in the detail
  * pane's facts. Drafts and closed layers sit on a grey row so they stay in
@@ -57,6 +61,7 @@ export function PrRow(props: PrRowProps) {
     >
       <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
       <span className={`shrink-0 font-mono text-[11px] ${greyed ? 'text-faint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
+      {props.stackPlace && <StackMark place={props.stackPlace} greyed={props.greyed} />}
       <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>
       {props.showForWhom && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={greyed} size="row" />}
       {pr.repoLabel && <RepoLabel label={pr.repoLabel} />}

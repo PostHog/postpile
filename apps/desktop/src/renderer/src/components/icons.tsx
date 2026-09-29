@@ -20,10 +20,11 @@ function PrIcon(props: IconProps & { strokeWidth?: number }) {
   );
 }
 
-function StackIcon(props: IconProps) {
+/** Layers: the stack kind icon, and the glyph on the stack mark. */
+export function StackIcon(props: IconProps & { strokeWidth?: number }) {
   const size = props.size ?? 13;
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={props.className} aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth ?? 1.4} className={props.className} aria-hidden="true">
       <path d="M8 1.8l6 3-6 3-6-3z" />
       <path d="M2 8l6 3 6-3M2 11.2l6 3 6-3" />
     </svg>

@@ -1,6 +1,7 @@
 import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { ageLabel } from '../lib/time.ts';
+import { stackPlaces } from '../lib/stacks.ts';
 import { isDraftTile, kindLabel, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
@@ -78,6 +79,7 @@ function PeopleStack(props: { people: TilePerson[] }) {
 function PrRows(props: TileProps & { done: boolean }) {
   const { view } = props;
   const grouped = view.prs.length > 1;
+  const places = stackPlaces(view.tile.stacks);
   const box = grouped
     ? `gap-0.5 p-[3px] ${props.selected ? 'bg-accent-soft' : 'bg-subtle'} border ${props.selected ? 'border-accent-line' : 'border-hairline-soft'}`
     : `overflow-hidden border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`;
@@ -89,6 +91,7 @@ function PrRows(props: TileProps & { done: boolean }) {
           pr={pr}
           grouped={grouped}
           showForWhom={grouped && !sameForWhom(pr.forWhom, view.forWhom)}
+          stackPlace={places.get(pr.key) ?? null}
           selected={props.selected && pr.key === props.selectedPrKey}
           greyed={props.done}
           onClick={() => props.onSelect(pr.key)}

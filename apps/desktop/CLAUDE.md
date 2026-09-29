@@ -198,7 +198,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `UpdatePill` (title bar update reminder, self-contained so it can move;
   neutral, never coral).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `ForWhomChip`,
-  `StateWordLabel`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
+  `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
+  `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,

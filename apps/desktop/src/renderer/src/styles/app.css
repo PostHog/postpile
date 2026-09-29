@@ -43,6 +43,11 @@
   --color-accent-line: var(--accent-line);
   --color-on-accent: var(--on-accent);
 
+  /* Stack mark */
+  --color-stack-tag: var(--stack-tag);
+  --color-stack-tag-line: var(--stack-tag-line);
+  --color-stack-tag-ink: var(--stack-tag-ink);
+
   /* Unread */
   --color-unread: var(--unread);
   --color-unread-soft: var(--unread-soft);

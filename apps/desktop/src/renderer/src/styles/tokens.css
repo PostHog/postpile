@@ -48,6 +48,12 @@
   --accent-line: #d5dcec;
   --on-accent: #ffffff;
 
+  /* Stack mark: the light-blue "1/3" tag on a stack layer's PR row and title.
+     A notch stronger than --accent-row so it still reads on a selected row. */
+  --stack-tag: #e0e9fc;
+  --stack-tag-line: #c8d6f6;
+  --stack-tag-ink: #2450c0;
+
   /* Unread (coral) */
   --unread: #e5533d;
   --unread-soft: #fdf1ee;

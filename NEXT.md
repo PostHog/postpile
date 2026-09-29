@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- Stack mark (2026-09-29, DESIGN.md "Stacks as one unit"): stack layers get
+  a light-blue layers tag with "1/3" between `#number` and title on PR rows
+  (stack tiles, stacks in sets, detail member list) and before the detail
+  title; lookup `stackPlaces` in `lib/stacks.ts`, tokens `--stack-tag*`.
+  The detail branch line's "layer X of N" now also shows for a stack inside
+  a set. Fake data: #1902 left the `set:turbo-cache` set (it was in the
+  Depot stack too, breaking the one-unit rule); lyra's two-layer stack
+  #1904/#1907 joined the set instead, so the mark shows inside a set.
+  Low-risk glances no longer get a RISK box.
 - No more permission prompts from PostPile's own children (2026-09-29,
   DESIGN.md "Missing tools" PATH, agent runner, sweep): fix-path removed,
   PATH built from `/etc/paths(.d)`, config `toolPath` and the usual install
@@ -44,8 +53,8 @@ now".
     retired topic revives it.
   - Fork PRs (`isCrossRepository`, now in the PR fragment) never link.
   - `Tile.stacks` carries the stack structure (bottom first) for stack
-    tiles and for stacks inside sets. The renderer does not use it yet;
-    the stack redesign follows after mockups.
+    tiles and for stacks inside sets. The renderer draws it as the stack
+    mark (see the next entry).
   - Real-data check on a DB copy: 13 of 15 built stacks showed before
     (4 of them inside sets, without structure); after the fixes and a
     refetch of the pulled-in layers every built stack (14, one pair
@@ -815,6 +824,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Stack mark: layers tag with 1/3 before the title, variant A**
+  (2026-09-29). A stack layer's PR rows (stack tiles, stacks inside sets,
+  the detail member list) and the detail title get a light-blue layers tag
+  with the position, 1 = bottom. Lone PRs get nothing; "Stack · N" in the
+  tile header stays.
+- **No RISK box for a low risk** (2026-09-29): the verdict box covers it;
+  medium, high and unlabeled risks keep the red box.
 - **The agent places every PR** (2026-09-29): "I want to make sure from the
   beginning that the agent places each PR. If it doesn't fit an existing
   topic, just make up a new one. I don't want to let it leave lingering and

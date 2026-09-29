@@ -4,8 +4,9 @@ import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { LIFECYCLE_WORDS, reviewWord } from '../lib/pr.ts';
+import { type StackPlace, stackPlaces } from '../lib/stacks.ts';
 import { ExternalIcon, PrStateIcon } from './icons.tsx';
-import { StateWordLabel } from './pills.tsx';
+import { StackMark, StateWordLabel } from './pills.tsx';
 import { PrDescription } from './PrDescription.tsx';
 import { PrFacts } from './PrFacts.tsx';
 import { ReviewList } from './ReviewList.tsx';
@@ -18,15 +19,14 @@ interface PrBodyProps {
   actions: ReactNode;
 }
 
-/** "head → base", plus the layer for stacks (bottom layer is 1). */
-function branchLine(props: PrBodyProps): string {
+/** "head → base", plus the layer for a stack layer, also inside a set (bottom layer is 1). */
+function branchLine(props: PrBodyProps, place: StackPlace | null): string {
   const { pr } = props.detail;
   const line = `${pr.headRef} → ${pr.baseRef}`;
-  if (props.view.tile.kind !== 'stack') {
+  if (!place) {
     return line;
   }
-  const layer = props.view.prs.findIndex((candidate) => candidate.key === pr.key) + 1;
-  return `${line} · layer ${layer} of ${props.view.prs.length}`;
+  return `${line} · layer ${place.layer} of ${place.of}`;
 }
 
 const LIFECYCLE_TEXT_TONES: Record<PrLifecycle, string> = {
@@ -71,12 +71,21 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus | 
 /** The scrolling part of the detail pane for one PR. */
 export function PrBody(props: PrBodyProps) {
   const { pr } = props.detail;
+  const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-[22px] py-[18px]">
       <StateLine pr={pr} status={props.summary?.status ?? null} />
       <div className="flex flex-col gap-1.5">
-        <h2 className="text-lg leading-tight font-[650] tracking-[-0.018em] select-text">{pr.title}</h2>
-        <span className="font-mono text-[11px] text-muted select-text">{branchLine(props)}</span>
+        <div className="flex items-start gap-2">
+          {/* The mark sits on the title's first line: 18px tag, nudged to its center. */}
+          {place && (
+            <span className="mt-[2px]">
+              <StackMark place={place} />
+            </span>
+          )}
+          <h2 className="min-w-0 text-lg leading-tight font-[650] tracking-[-0.018em] select-text">{pr.title}</h2>
+        </div>
+        <span className="font-mono text-[11px] text-muted select-text">{branchLine(props, place)}</span>
       </div>
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
       {props.actions}
