@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +13,9 @@ function fakeClaude(script: string): string {
   return path;
 }
 
+/** The empty folder claude runs in. */
+const cwd = mkdtempSync(join(tmpdir(), 'postpile-agent-cwd-'));
+
 const request = { purpose: 'glance_batch' as const, model: 'claude-haiku-4-5', prompt: 'hello', timeoutMs: 5000 };
 
 describe('claude cli runner', () => {
@@ -25,6 +28,9 @@ describe('claude cli runner', () => {
       'json',
     ]);
     expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual(['--tools', '']);
+    expect(args).toContain('--disable-slash-commands');
+    // --bare would drop the subscription login (it never reads the keychain).
+    expect(args).not.toContain('--bare');
   });
 
   it('parses the json result envelope', () => {
@@ -46,18 +52,26 @@ describe('claude cli runner', () => {
     const binary = fakeClaude(
       'input=$(cat); printf \'{"type":"result","is_error":false,"result":"%s|%s|%s"}\' "$input" "$MAX_THINKING_TOKENS" "$6"',
     );
-    const response = await new ClaudeCliRunner({ binary }).run(request);
+    const response = await new ClaudeCliRunner({ binary, cwd }).run(request);
     expect(response.text).toBe('hello|0|claude-haiku-4-5');
     expect(response.model).toBe('claude-haiku-4-5');
   });
 
+  it('runs in the given folder with updates, side traffic and memory files off', async () => {
+    const binary = fakeClaude(
+      'cat >/dev/null; printf \'{"type":"result","is_error":false,"result":"%s|%s|%s|%s|%s"}\' "$(pwd -P)" "$DISABLE_AUTOUPDATER" "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" "$CLAUDE_CODE_DISABLE_CLAUDE_MDS" "$ENABLE_CLAUDEAI_MCP_SERVERS"',
+    );
+    const response = await new ClaudeCliRunner({ binary, cwd }).run(request);
+    expect(response.text).toBe(`${realpathSync(cwd)}|1|1|1|false`);
+  });
+
   it('reports a non-zero exit with stderr', async () => {
     const binary = fakeClaude('cat >/dev/null; echo "not logged in" >&2; exit 1');
-    await expect(new ClaudeCliRunner({ binary }).run(request)).rejects.toThrow('claude exited with 1: not logged in');
+    await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow('claude exited with 1: not logged in');
   });
 
   it('kills a call that runs past its timeout', async () => {
     const binary = fakeClaude('sleep 5');
-    await expect(new ClaudeCliRunner({ binary }).run({ ...request, timeoutMs: 100 })).rejects.toThrow('timed out after 100ms');
+    await expect(new ClaudeCliRunner({ binary, cwd }).run({ ...request, timeoutMs: 100 })).rejects.toThrow('timed out after 100ms');
   });
 });

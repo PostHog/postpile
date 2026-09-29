@@ -8,6 +8,7 @@ import {
   claudeLoggedIn,
   claudeRetryAtMs,
   claudeStatus,
+  etcPathsEntries,
   extendedPath,
   findTool,
   ghBlocksSync,
@@ -16,7 +17,9 @@ import {
   recheckDelayMs,
   splitAgentOffErrors,
   TOOL_FIXES,
+  TOOL_PATH_HINT,
   TOOL_RECHECK_MAX_MS,
+  toolSearchPath,
 } from './tools.ts';
 
 describe('extendedPath', () => {
@@ -28,6 +31,38 @@ describe('extendedPath', () => {
 
   it('works from an empty PATH and drops empty parts', () => {
     expect(extendedPath('::', '/h').split(':')).toEqual(['/opt/homebrew/bin', '/usr/local/bin', '/h/.local/bin', '/h/.claude/local']);
+  });
+});
+
+describe('etcPathsEntries', () => {
+  it('takes one folder per line and drops blanks and comments', () => {
+    expect(etcPathsEntries('/usr/local/bin\n/usr/bin\n\n# comment\n  /bin  \n')).toEqual(['/usr/local/bin', '/usr/bin', '/bin']);
+  });
+});
+
+describe('toolSearchPath', () => {
+  it('puts toolPath first, then the start PATH, the system folders and the usual install folders, once each', () => {
+    const path = toolSearchPath({
+      toolPath: ['~/.local/share/mise/shims', '/opt/tools/bin'],
+      envPath: '/usr/bin:/bin',
+      systemDirs: ['/usr/local/bin', '/usr/bin', '/Library/Apple/usr/bin'],
+      home: '/Users/alice',
+    });
+    expect(path.split(':')).toEqual([
+      '/Users/alice/.local/share/mise/shims',
+      '/opt/tools/bin',
+      '/usr/bin',
+      '/bin',
+      '/usr/local/bin',
+      '/Library/Apple/usr/bin',
+      '/opt/homebrew/bin',
+      '/Users/alice/.local/bin',
+      '/Users/alice/.claude/local',
+    ]);
+  });
+
+  it('works with nothing configured and an empty start PATH', () => {
+    expect(toolSearchPath({ toolPath: [], envPath: '', systemDirs: [], home: '/h' })).toBe(extendedPath('', '/h'));
   });
 });
 
@@ -133,6 +168,7 @@ describe('status words', () => {
     const missing = ghStatus('missing', null);
     expect(missing.headline).toBe('GitHub CLI (gh) not found');
     expect(missing.fixes.map((fix) => fix.command)).toEqual([TOOL_FIXES.installGh, TOOL_FIXES.ghLogin]);
+    expect(missing.detail).toContain(TOOL_PATH_HINT);
     expect(ghStatus('rejected', '/opt/homebrew/bin/gh').fixes.map((fix) => fix.command)).toEqual(['gh auth login']);
     expect(ghStatus('ok', '/opt/homebrew/bin/gh', 'gh version 2.60.0').detail).toBe('Found at /opt/homebrew/bin/gh. gh version 2.60.0');
   });
@@ -141,6 +177,7 @@ describe('status words', () => {
     const missing = claudeStatus('missing', null);
     expect(missing.headline).toBe('Agent features are off: claude not found');
     expect(missing.detail).toContain('still work on rules');
+    expect(missing.detail).toContain('"toolPath" in ~/.config/postpile/config.json');
     expect(missing.fixes.map((fix) => fix.command)).toEqual([TOOL_FIXES.installClaude, TOOL_FIXES.claudeLogin]);
     expect(claudeStatus('limited', '/x/claude', '', '2026-09-28T15:00:00.000Z').retryAt).toBe('2026-09-28T15:00:00.000Z');
     expect(claudeStatus('ok', '/x/claude', '', '2026-09-28T15:00:00.000Z').retryAt).toBeNull();

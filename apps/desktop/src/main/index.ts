@@ -1,10 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
-import { extendedPath } from '@postpile/core';
-import fixPath from 'fix-path';
-import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
+import {
+  applyLegacyEnv,
+  DataDirLockedError,
+  dataDirs,
+  defaultPaths,
+  launchToolPath,
+  migrateLegacyData,
+  profileFromEnv,
+  type EngineService,
+} from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
@@ -13,14 +20,6 @@ import { OpenedPrs } from './opened-prs.ts';
 import { welcomeOnce } from './welcome.ts';
 
 const REPO_URL = 'https://github.com/PostHog/postpile';
-
-// A GUI launch (Finder, Dock, the packaged app) gets launchd's minimal PATH.
-// gh and claude live in Homebrew, ~/.local/bin (the Claude Code installer)
-// or ~/.claude/local, so take PATH from the login shell, and add those
-// folders in case the shell setup does not export them. The tool status
-// (GET /api/tools) looks programs up on this same PATH.
-fixPath();
-process.env.PATH = extendedPath(process.env.PATH ?? '', homedir(), delimiter);
 
 applyLegacyEnv();
 // A dev run (pnpm desktop, not the packaged app) gets its own database in
@@ -32,6 +31,16 @@ if (!app.isPackaged && process.env.POSTPILE_PROFILE === undefined) {
 const fileLog = new FileLog(logDirFromEnv(profileFromEnv(process.env) === 'dev'));
 fileLog.captureConsole();
 fileLog.captureUnhandled();
+// A GUI launch (Finder, Dock, the packaged app) gets launchd's minimal PATH.
+// gh and claude live in Homebrew, ~/.local/bin (the Claude Code installer)
+// or ~/.claude/local. PATH is built from plain file reads (/etc/paths,
+// /etc/paths.d, toolPath in config.json), never by running the login shell:
+// that ran the user's whole zsh setup in PostPile's name and macOS asked for
+// permissions for whatever it touched. After the profile is set, so the dev
+// run reads the dev config.json, and after the log capture, so a broken
+// config.json shows up in the log. The tool status (GET /api/tools) looks
+// programs up on this same PATH.
+process.env.PATH = launchToolPath({ envPath: process.env.PATH ?? '', home: homedir(), configFile: defaultPaths().configFile ?? '' });
 console.log(
   `PostPile ${app.getVersion()} starting: pid ${process.pid}, ${app.isPackaged ? 'packaged' : 'dev run'}, profile ${profileFromEnv(process.env)}, PATH ${process.env.PATH}`,
 );

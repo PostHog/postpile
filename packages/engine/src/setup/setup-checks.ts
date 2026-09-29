@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { claudeHasAuthStatus, claudeLoggedIn, TOOL_FIXES, type SetupCheck, type SetupChecksView } from '@postpile/core';
+import { claudeHasAuthStatus, claudeLoggedIn, TOOL_FIXES, TOOL_PATH_HINT, type SetupCheck, type SetupChecksView } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import { errorText } from '../errors.ts';
 
@@ -16,14 +16,21 @@ export type CommandRunner = (command: string, args: string[]) => Promise<Command
 
 const COMMAND_TIMEOUT_MS = 10_000;
 
-/** execFile with a timeout. A missing program answers missing instead of throwing. */
-export const systemCommands: CommandRunner = (command, args) =>
-  new Promise((resolve) => {
-    execFile(command, args, { timeout: COMMAND_TIMEOUT_MS }, (error, stdout, stderr) => {
-      const missing = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
-      resolve({ ok: error === null, missing, stdout: String(stdout), stderr: String(stderr) });
+/**
+ * execFile with a timeout, run in `cwd`. A missing program answers missing
+ * instead of throwing. `cwd` is the app's own empty folder (agentCwdFor): a
+ * child that inherits the repo or / as its folder may look around there, and
+ * macOS asks for permissions in PostPile's name.
+ */
+export function systemCommands(cwd: string): CommandRunner {
+  return (command, args) =>
+    new Promise((resolve) => {
+      execFile(command, args, { cwd, timeout: COMMAND_TIMEOUT_MS }, (error, stdout, stderr) => {
+        const missing = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
+        resolve({ ok: error === null, missing, stdout: String(stdout), stderr: String(stderr) });
+      });
     });
-  });
+}
 
 function firstLine(text: string): string {
   return text.trim().split('\n')[0] ?? '';
@@ -51,7 +58,7 @@ export class SetupChecks {
     if (result.ok) {
       return { id: 'gh', label, state: 'ok', detail: firstLine(result.stdout), fix: null };
     }
-    const detail = result.missing ? 'gh is not on your PATH.' : `gh --version failed: ${firstLine(result.stderr)}`;
+    const detail = result.missing ? `gh is not on your PATH. ${TOOL_PATH_HINT}` : `gh --version failed: ${firstLine(result.stderr)}`;
     return { id: 'gh', label, state: 'fail', detail, fix: TOOL_FIXES.installGh };
   }
 
@@ -99,7 +106,8 @@ export class SetupChecks {
       return { id: 'claude', label, state: 'ok', detail: version, fix: null };
     }
     const why = result.missing ? `${this.claudeBinary} is not on your PATH.` : `${this.claudeBinary} --version failed.`;
-    const detail = `${why} Agent features (topics, dossiers, glances, this draft) will not work without it.`;
+    const hint = result.missing ? ` ${TOOL_PATH_HINT}` : '';
+    const detail = `${why} Agent features (topics, dossiers, glances, this draft) will not work without it.${hint}`;
     return { id: 'claude', label, state: 'warn', detail, fix: TOOL_FIXES.installClaude };
   }
 

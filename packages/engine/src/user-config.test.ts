@@ -31,6 +31,14 @@ describe('UserConfigFile', () => {
     expect(file.read()).toEqual({ sweepSkip: ['taxes', 'side-project'] });
   });
 
+  it('reads toolPath next to sweepSkip and ignores a toolPath that is not a list of strings', () => {
+    expect(new UserConfigFile(tempConfig('{ "toolPath": ["~/.local/share/mise/shims", " "] }')).read()).toEqual({ toolPath: ['~/.local/share/mise/shims'] });
+    const logs: string[] = [];
+    const file = new UserConfigFile(tempConfig('{ "sweepSkip": ["taxes"], "toolPath": "/opt/bin" }'), (line) => logs.push(line));
+    expect(file.read()).toEqual({ sweepSkip: ['taxes'] });
+    expect(logs).toEqual([expect.stringContaining('ignoring toolPath')]);
+  });
+
   it('treats a missing file as empty and a broken one as empty, logged', () => {
     const logs: string[] = [];
     expect(new UserConfigFile(tempConfig()).read()).toEqual({});

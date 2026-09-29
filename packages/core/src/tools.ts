@@ -62,6 +62,14 @@ export const TOOL_FIXES = {
   claudeLogin: 'claude auth login',
 };
 
+/**
+ * Said whenever gh or claude is not found. The app no longer reads PATH from
+ * the login shell, so a tool that only a shell setup puts on PATH (mise, asdf,
+ * nix) needs its folder listed here.
+ */
+export const TOOL_PATH_HINT =
+  'Installed somewhere else, e.g. through mise or asdf? Add that folder to "toolPath" in ~/.config/postpile/config.json and restart PostPile.';
+
 /** Every claude headline starts with this, so agent-off errors can be told apart from real ones. */
 export const AGENT_OFF_MARK = 'Agent features are ';
 
@@ -81,6 +89,45 @@ export function extendedPath(path: string, home: string, delimiter = ':'): strin
   const parts = path.split(delimiter).filter((part) => part !== '');
   const extra = extraToolDirs(home).filter((dir) => !parts.includes(dir));
   return [...new Set([...parts, ...extra])].join(delimiter);
+}
+
+/** The folders in /etc/paths or a file in /etc/paths.d: one per line, blank lines and # comments dropped. */
+export function etcPathsEntries(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'));
+}
+
+/** "~/x" and "~" point into the home folder; other entries stay as they are. */
+function expandHome(dir: string, home: string): string {
+  if (dir === '~') {
+    return home;
+  }
+  return dir.startsWith('~/') ? `${home}/${dir.slice(2)}` : dir;
+}
+
+export interface ToolSearchPathParts {
+  /** toolPath from config.json: the user's own folders (mise or asdf shims, a custom install). First, so they win. */
+  toolPath: string[];
+  /** The PATH the app started with. A GUI launch gets launchd's short one. */
+  envPath: string;
+  /** Folders from /etc/paths and /etc/paths.d, what path_helper adds for a login shell. */
+  systemDirs: string[];
+  home: string;
+}
+
+/**
+ * The PATH gh and claude are looked up in, built without running a shell.
+ * Running the login shell ($SHELL -ilc) made every tool in the user's zsh
+ * setup run with PostPile as the responsible process, so macOS asked for
+ * privacy permissions on its behalf. Order: toolPath, the start PATH, the
+ * system folders, then extraToolDirs. No duplicates, empty parts dropped.
+ */
+export function toolSearchPath(parts: ToolSearchPathParts, delimiter = ':'): string {
+  const toolPath = parts.toolPath.map((dir) => expandHome(dir, parts.home));
+  const joined = [...toolPath, parts.envPath, ...parts.systemDirs].join(delimiter);
+  return extendedPath(joined, parts.home, delimiter);
 }
 
 /**
@@ -200,7 +247,7 @@ export function ghStatus(state: GhState, path: string | null, version = ''): Too
       return {
         ...base,
         headline: 'GitHub CLI (gh) not found',
-        detail: 'PostPile reads GitHub through gh, so nothing can sync until it is installed and logged in. Tiles you already have stay as they are.',
+        detail: `PostPile reads GitHub through gh, so nothing can sync until it is installed and logged in. Tiles you already have stay as they are. ${TOOL_PATH_HINT}`,
         fixes: [
           { label: 'Install it', command: TOOL_FIXES.installGh },
           { label: 'Log in', command: TOOL_FIXES.ghLogin },
@@ -238,7 +285,7 @@ export function claudeStatus(state: ClaudeState, path: string | null, version = 
       return {
         ...base,
         headline: `${AGENT_OFF_MARK}off: claude not found`,
-        detail: rulesOnly,
+        detail: `${rulesOnly} ${TOOL_PATH_HINT}`,
         fixes: [
           { label: 'Install Claude Code', command: TOOL_FIXES.installClaude },
           { label: 'Log in', command: TOOL_FIXES.claudeLogin },

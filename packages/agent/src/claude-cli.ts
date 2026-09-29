@@ -9,6 +9,9 @@ import type { AgentRequest, AgentResponse, AgentRunner } from './runner.ts';
  * --tools takes a variadic list and would swallow a trailing prompt, which is
  * why the prompt goes in on stdin. --no-session-persistence keeps every call
  * from leaving a resumable transcript under ~/.claude/projects.
+ * --disable-slash-commands and --no-chrome skip skills and the Chrome
+ * integration, which a prompt-only call never uses. Not --bare: it never
+ * reads the keychain, so a subscription login stops working.
  */
 export function claudeArgs(model: string): string[] {
   return [
@@ -21,13 +24,29 @@ export function claudeArgs(model: string): string[] {
     '--setting-sources',
     '',
     '--strict-mcp-config',
+    '--disable-slash-commands',
+    '--no-chrome',
     '--tools',
     '',
   ];
 }
 
-/** The user's effort setting leaks into -p calls; this turns thinking off. */
-export const claudeEnv = { MAX_THINKING_TOKENS: '0' };
+/**
+ * MAX_THINKING_TOKENS: the user's effort setting leaks into -p calls; this
+ * turns thinking off. The rest keeps each call to the prompt and the API:
+ * no self-update, no telemetry or other side traffic, no CLAUDE.md or auto
+ * memory files read (a CLAUDE.md can @-include files anywhere, and macOS
+ * asks for permissions in PostPile's name when claude opens them), no
+ * claude.ai MCP connectors.
+ */
+export const claudeEnv = {
+  MAX_THINKING_TOKENS: '0',
+  DISABLE_AUTOUPDATER: '1',
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+  CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1',
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+  ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
+};
 
 interface ClaudeJsonResult {
   result?: string;
@@ -50,6 +69,12 @@ export function parseClaudeOutput(stdout: string): { text: string; costUsd: numb
 }
 
 export interface ClaudeCliRunnerOptions {
+  /**
+   * The folder claude runs in: the app's own empty one, so claude finds no
+   * project files, settings or CLAUDE.md there and never looks around the
+   * folder the app happened to start in (/ or a repo).
+   */
+  cwd: string;
   /** Path or name of the claude binary. Default: POSTPILE_CLAUDE_BIN or "claude" on PATH. */
   binary?: string;
   /** Max claude processes at once. Default: POSTPILE_AGENT_CONCURRENCY or 8. */
@@ -72,13 +97,15 @@ function defaultMaxConcurrent(): number {
 /**
  * Runs the local `claude` CLI in print mode, one process per request. The
  * shell alias `claude` does not exist for a spawned process; the desktop app
- * fixes PATH at launch so ~/.local/bin/claude resolves.
+ * builds PATH at launch so ~/.local/bin/claude resolves.
  */
 export class ClaudeCliRunner implements AgentRunner {
   private readonly binary: string;
+  private readonly cwd: string;
   private readonly limiter: ConcurrencyLimiter;
 
-  constructor(options: ClaudeCliRunnerOptions = {}) {
+  constructor(options: ClaudeCliRunnerOptions) {
+    this.cwd = options.cwd;
     this.binary = options.binary ?? process.env.POSTPILE_CLAUDE_BIN ?? 'claude';
     this.limiter = new ConcurrencyLimiter(options.maxConcurrent ?? defaultMaxConcurrent());
   }
@@ -91,6 +118,7 @@ export class ClaudeCliRunner implements AgentRunner {
     const started = Date.now();
     return new Promise((resolve, reject) => {
       const child = spawn(this.binary, claudeArgs(request.model), {
+        cwd: this.cwd,
         env: { ...process.env, ...claudeEnv },
       });
       let stdout = '';

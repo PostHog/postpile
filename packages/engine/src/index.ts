@@ -1,7 +1,7 @@
 export type { EngineService } from './service.ts';
 export { Engine, type EngineDeps } from './engine.ts';
 export { MarkReadQueue, type PendingBatch } from './mark-read-queue.ts';
-export { applyLegacyEnv, dataDirs, defaultPaths, profileFromEnv, realDataDirs, seedDevInstructions, type AppPaths, type Profile } from './paths.ts';
+export { agentCwdFor, applyLegacyEnv, dataDirs, defaultPaths, profileFromEnv, realDataDirs, seedDevInstructions, type AppPaths, type Profile } from './paths.ts';
 export { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, type LockInfo, type LockKind } from './data-lock.ts';
 export { migrateLegacyData } from './legacy-data.ts';
 export { UNSORTED_TOPIC_ID } from './board.ts';
@@ -14,6 +14,7 @@ export { AgentCallLog, ACTION_RUN_ID, SWEEP_RUN_ID } from './agent-call-log.ts';
 export { claudeDirFromEnv, DEFAULT_COLLECT_BUDGET, SESSION_DAYS } from './work-context/collector.ts';
 export { DEFAULT_SWEEP_SKIP, resolveSweepSkip, sweepSkipFromEnv } from './work-context/skip-list.ts';
 export { UserConfigFile, type UserConfigData } from './user-config.ts';
+export { launchToolPath, systemPathDirs, type LaunchToolPathOptions } from './tool-path.ts';
 export { LivePoller, MAX_ERROR_BACKOFF_SECONDS, MAX_RATE_LIMIT_BACKOFF_SECONDS, RATE_LIMIT_BACKOFF_SECONDS } from './live/live-poller.ts';
 export { PingThrottle, PING_TILE_WINDOW_MS, PINGS_BEFORE_SUMMARY } from './live/ping-throttle.ts';
 export { PING_DECISIONS_PER_DAY, PING_FRESH_MS } from './live/ping-decider.ts';
