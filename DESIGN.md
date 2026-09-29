@@ -234,11 +234,20 @@ All agent calls go through one `AgentRunner` interface. Today:
 
 ```
 claude --no-session-persistence -p --output-format json --model <m> \
-  --setting-sources "" --strict-mcp-config --tools ""
+  --setting-sources "" --strict-mcp-config --disable-slash-commands \
+  --no-chrome --tools ""
 ```
 
 with `MAX_THINKING_TOKENS=0` and the prompt on stdin (flags carried over from
-ghatchup, where they took a PR summary from ~30s to ~3s). Everything runs on
+ghatchup, where they took a PR summary from ~30s to ~3s). Since 2026-09-29
+each call also runs in an empty app-owned folder (`<data dir>/agent-cwd`,
+same for every gh process), with `DISABLE_AUTOUPDATER=1`,
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`,
+`CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and
+`ENABLE_CLAUDEAI_MCP_SERVERS=false`: a child that looked around `/` or a
+repo, or opened files a CLAUDE.md @-includes, made macOS ask for privacy
+permissions in PostPile's name. Not `--bare`: it never reads the keychain,
+so a subscription login stops working. Everything runs on
 Sonnet 5.5, pinned by full id `claude-sonnet-5-5` (`POSTPILE_MODEL`; since
 2026-09-28, before that the `sonnet` alias). The alias maps to the same model
 in claude CLI 2.1.284 but moves with CLI updates and user settings, and the
@@ -1044,11 +1053,20 @@ need it, and never retry per call.
   `skipped: 'agent_off'`. The work context sweep returns "skipped" without
   recording a failure. Chat, Recheck, drafts and refine fail with the
   headline.
-- **PATH.** A Finder launch gets launchd's minimal PATH. Desktop main takes
-  PATH from the login shell (`fix-path`) and appends `extraToolDirs`:
-  `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` (native Claude Code
-  installer) and `~/.claude/local` (older local install). The check looks
-  on that same PATH, so what it finds is what runs.
+- **PATH.** A Finder launch gets launchd's minimal PATH. Desktop main
+  builds PATH without a shell (`launchToolPath`, pure part `toolSearchPath`
+  in core): `toolPath` from `~/.config/postpile/config.json` first (mise or
+  asdf shims, custom installs; read once at launch), then the start PATH,
+  then the folders in `/etc/paths` and `/etc/paths.d/*` (what path_helper
+  adds for a login shell), then `extraToolDirs`: `/opt/homebrew/bin`,
+  `/usr/local/bin`, `~/.local/bin` (native Claude Code installer) and
+  `~/.claude/local` (older local install). Until 2026-09-29 it ran the
+  login shell (`fix-path`, `$SHELL -ilc`); that ran the user's whole zsh
+  setup with PostPile as the responsible process, and macOS asked for
+  permissions for whatever it touched (a 1Password socket in a group
+  container, plugin managers, prompt tools). The "not found" words point at
+  `toolPath`. The check looks on that same PATH, so what it finds is what
+  runs.
 
 **UI** (renderer, words from the server, placement in `lib/tools.ts`):
 
@@ -1904,7 +1922,17 @@ from `POSTPILE_CLAUDE_DIR` (default `~/.claude`):
   against the including file's folder and its symlink target's folder, only
   under `~/.claude` or the folder the symlink points into (the dotfiles),
   checked on the path before any disk lookup (no stat outside those folders).
-  Lines in code fences do not count. Depth 3.
+  Lines in code fences do not count. Depth 3. Nothing is read from a macOS
+  privacy folder (`macPrivacyFolders` in core: `~/Documents`, `~/Desktop`,
+  `~/Downloads`, `~/Pictures`, `~/Movies`, `~/Music`, `~/Library/Mobile
+  Documents`, `~/Library/CloudStorage`, `~/Library/Group Containers`,
+  `~/Library/Containers`, `/Volumes`): a CLAUDE.md whose symlink or realpath
+  lands there, an include root there, or an include that links there is
+  logged ("skipped ... a macOS privacy folder"), counted as a drop and never
+  touched. Symlinks are checked one hop before realpath follows them.
+- **No symlinks under `projects/`**: project folders, memory folders, memory
+  files and session files that are symlinks are skipped (lstat). Claude
+  Code only makes real ones, and a link could point anywhere.
 - **Skip list first**: `projects/*` folders on the skip list are never
   opened, neither memory nor sessions, so private projects never leave the
   machine (`work-context/skip-list.ts`). Defaults: generic words only,
@@ -2017,12 +2045,13 @@ core  <- store, github, agent  <- engine  <- server, cli
   wires real dependencies; tests build `Engine` with fakes.
 - **apps/server**: Hono + `@hono/node-server`, binds 127.0.0.1 only.
 - **apps/desktop**: Electron via electron-vite. Main starts the server in-process on a random
-  port with a random token and loads the renderer with `?api=...&token=...`. PATH is taken from
-  the login shell (`fix-path`), plus `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`,
-  so `gh` and `claude` resolve on a GUI launch. Quit (Cmd+Q, SIGTERM, SIGINT) flushes the
+  port with a random token and loads the renderer with `?api=...&token=...`. PATH is built
+  without a shell (config `toolPath`, the start PATH, `/etc/paths(.d)`, then
+  `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`; see "Missing
+  tools"), so `gh` and `claude` resolve on a GUI launch. Quit (Cmd+Q, SIGTERM, SIGINT) flushes the
   mark-read queue, closes the engine and the server, then `app.exit(0)`.
-  **App bundle** (`pnpm dist`): electron-vite bundles main (workspace packages, hono,
-  fix-path included), preload and renderer into `out/`; electron-builder
+  **App bundle** (`pnpm dist`): electron-vite bundles main (workspace packages and hono
+  included), preload and renderer into `out/`; electron-builder
   (`apps/desktop/electron-builder.yml`) packs only `out/**` and `package.json` into an asar,
   no node_modules (the desktop package has devDependencies only). macOS, arm64, `dir` + `zip`,
   appId `com.postpile.app`, ad-hoc signed (`identity: "-"`, no hardened runtime, no

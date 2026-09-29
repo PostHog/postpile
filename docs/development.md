@@ -49,13 +49,18 @@ Dev runs use their own database: `pnpm desktop` (unpackaged Electron), `pnpm cli
 
 Only one process opens a database at a time (`postpile.lock` next to it). While the app runs, `pnpm cli topics --read-only` (also `topic`, `pr`) still reads; sync, poll and sweep refuse.
 
-The packaged app bundles main, preload, renderer, the workspace packages and the server, so it runs without tsx or node_modules. The server runs in-process on a random localhost port, protected by a random token. A Finder launch gets a minimal PATH, so the app reads PATH from the login shell and also looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local` for `gh` and `claude`.
+The packaged app bundles main, preload, renderer, the workspace packages and the server, so it runs without tsx or node_modules. The server runs in-process on a random localhost port, protected by a random token. A Finder launch gets a minimal PATH, so the app adds the folders from `/etc/paths`, `/etc/paths.d` and `toolPath` (see below), and also looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local` for `gh` and `claude`. It never runs your login shell.
 
 Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPile-dev`), rotated at 5 MB. Help › Reveal Logs opens the folder.
 
 ## Configuration
 
 Instructions for every prompt go in `~/.config/postpile/instructions.md` (honours `XDG_CONFIG_HOME`, or set `POSTPILE_INSTRUCTIONS`). The app also changes this file, but only through proposals you accept.
+
+`~/.config/postpile/config.json` (dev: `~/.config/postpile-dev/config.json`) holds settings that must also work for a Finder launch:
+
+- `toolPath`: folders to look for `gh` and `claude` in, before anything else, e.g. `{ "toolPath": ["~/.local/share/mise/shims"] }`. Read once at app launch. The app no longer runs your login shell, so tools that only your shell setup puts on PATH need this.
+- `sweepSkip`: `~/.claude/projects` folders the work context sweep never reads (also edited in the app).
 
 Environment variables. The packaged app only sees them when you start its binary from a terminal; `open` does not pass them.
 
