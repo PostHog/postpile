@@ -436,6 +436,7 @@ export class FakeEngine implements EngineService {
       pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
       quietRepo: isQuietTile(tile.members.map((member) => member.prKey), this.repoSettings),
       repoLabel: labels?.tile ?? null,
+      now: this.timestamp(),
     });
   }
 

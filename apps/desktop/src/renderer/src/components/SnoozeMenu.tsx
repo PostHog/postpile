@@ -1,6 +1,6 @@
 import type { SnoozeCondition } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { Button, type ButtonSize } from './Button.tsx';
+import { Button, type ButtonSize, type ButtonVariant } from './Button.tsx';
 import { Menu } from './Menu.tsx';
 
 function tomorrowAtNine(): string {
@@ -18,8 +18,12 @@ const OPTIONS: { label: string; condition: () => SnoozeCondition }[] = [
   { label: 'Until tomorrow 9:00', condition: () => ({ kind: 'until_time', until: tomorrowAtNine() }) },
 ];
 
-/** Snooze for a tile, or Unsnooze when it is snoozed. Local only, no GitHub write. */
-export function SnoozeMenu(props: { tileId: string; snoozed: boolean; size?: ButtonSize; up?: boolean }) {
+/**
+ * Snooze for a tile, or Unsnooze when it is snoozed. Local only, no GitHub
+ * write. `variant` primary: the tile is read and still your move, so Snooze
+ * is its main button.
+ */
+export function SnoozeMenu(props: { tileId: string; snoozed: boolean; size?: ButtonSize; up?: boolean; variant?: ButtonVariant }) {
   const actions = useActions();
   if (props.snoozed) {
     return (
@@ -32,5 +36,5 @@ export function SnoozeMenu(props: { tileId: string; snoozed: boolean; size?: But
     label: option.label,
     onSelect: () => void actions.snooze(props.tileId, option.condition()),
   }));
-  return <Menu label="Snooze" size={props.size} up={props.up} items={items} />;
+  return <Menu label="Snooze" variant={props.variant} size={props.size} up={props.up} items={items} />;
 }

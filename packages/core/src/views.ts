@@ -21,6 +21,7 @@ import type {
   Verdict,
 } from './types.ts';
 import type { ActivityList } from './activity.ts';
+import type { TileAfterRead } from './after-read.ts';
 import type { GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
@@ -159,6 +160,11 @@ export interface TileView {
   people: TilePerson[];
   /** Whose move it is on the tile. */
   turn: WhoseTurn;
+  /**
+   * What a mark-read would leave (`tileAfterMarkRead`): done or not, and
+   * whose move. The tile's button says "Mark done" only when it is done.
+   */
+  afterRead: TileAfterRead;
   /** A mark-read of one of its PRs waits for the writes lock; null when none does. */
   pendingWrite: TilePendingWrite | null;
   /** Every PR of the tile is in a quiet repo; the tile shows a small "quiet repo" note. */

@@ -20,7 +20,7 @@ import {
   repoOverview,
   searchTopics,
   tileRepoLabels,
-  TILE_STATE_ORDER,
+  tileListRank,
   topicFaces,
   topicPeople,
   topicQueues,
@@ -228,9 +228,10 @@ export class ReadModels {
         pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
         quietRepo: isQuietTile(memberKeys(tile), settings),
         repoLabel: labels.tile,
+        now: board.now,
       });
     });
-    return views.sort((a, b) => TILE_STATE_ORDER[a.state.kind] - TILE_STATE_ORDER[b.state.kind]);
+    return views.sort((a, b) => tileListRank(a) - tileListRank(b));
   }
 
   /** Each PR of the topic's tiles once, in tile order. */

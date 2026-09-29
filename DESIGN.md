@@ -161,8 +161,9 @@ Action details:
 
 - mark read: every member's events seen, pinged members handled (tile turns
   done until something loud happens, unless a review or another move is still
-  the user's, then it stays open and read), thread mark-read queued. Undo
-  reverts both.
+  the user's, then it stays open and read and keeps its place), thread
+  mark-read queued. Undo reverts both. The button says "Mark done" only where
+  that makes the tile done (see Tile faces › After a mark-read).
 - approve: GitHub approval right away, pinned with `commit_id` to the synced
   head (the commit the glance and the user saw), then the same mark-read for
   that PR. The undo token only brings back the unread state, never the approval.
@@ -1394,6 +1395,34 @@ authors.
      approved, else that reviewer "is reviewing".
    - else none (following, subscribed, took part earlier).
 
+**After a mark-read** (2026-09-29; core `tileAfterMarkRead` in
+`after-read.ts`, shipped as `TileView.afterRead`; labels in the renderer's
+`lib/mark-read.ts`). Done means nothing is asked of you, so a button must not
+promise Done where a mark-read cannot deliver it (Julian pressed "Mark done"
+four times on a PR whose author addressed his changes; the thread went read,
+the tile stayed, nothing visible changed). `afterRead` runs the same
+`isPrDone` and `whoseTurn` over the data as a mark-read leaves it (every
+event seen, pinged and found PRs handled): `done` and the `turn` left.
+
+- Tile footer: "Mark read" on an unread tile. On a read tile "Mark done"
+  only when `afterRead.done`, else "Mark read". A read (open) tile that is
+  still your move gets no mark button: Snooze is the primary (ink) button,
+  with its usual menu, and a quieter "Review on GitHub" opens the files tab
+  of the move's PR ("Open on GitHub" and the PR itself on your own PR),
+  through the external link path (so `opened_on_github` fires). Done tiles
+  keep "Open".
+- Detail pane action bar: same label rule; the mark button is left out
+  while the tile is read and still your move (Snooze stays there).
+- Read looks read: no strip, no NEW, title in regular weight. The honey
+  your-move footer stays as the only reminder.
+- Toast after a mark-read that leaves your move (writes on): "Marked read.
+  Still your move: re-review." (`moveWords`: the move after "addressed your
+  changes:", else the turn text), with Undo and "Snooze until next push"
+  (one click, `new_push`; the toast fades after 6s, so no menu inside it).
+- No re-sorting (`tileListRank`): a read tile that is still your move ranks
+  with the unread ones, so marking it read never moves it down. Queues and
+  sidebar sections do not change.
+
 **Drafts** (2026-09-28): nobody reviews or approves a draft right away and
 it won't merge soon. Rules in core:
 
@@ -1683,7 +1712,8 @@ avatars and filters", QueuesB2).
   back / forward history. The avatars come from `GET /api/viewer`.
 - **Topic column**: the whole topic, tiles sorted by `TileView.tier` (the
   most urgent tier among its PRs), needs reply first, rest last; inside a
-  tier the old order (unread before open). Single column as before.
+  tier the old order (unread before open; a read tile that is still your
+  move stays with the unread ones, `tileListRank`). Single column as before.
 
 ### Repo scope and quiet repos
 

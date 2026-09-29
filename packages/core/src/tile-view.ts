@@ -1,6 +1,7 @@
 // The PR rows and the tile view the UI gets, built from gathered inputs. The
 // engine and FakeEngine only collect the inputs (store or sample data); the
 // rules that turn them into a view live here, once.
+import { tileAfterMarkRead } from './after-read.ts';
 import { forWhom, tileForWhom } from './for-whom.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { prStatus, openThreadCount } from './pr-status.ts';
@@ -8,8 +9,9 @@ import { prTier } from './pr-tier.ts';
 import { prPrimaryAction } from './primary-action.ts';
 import { isApprovedByViewer } from './review-request.ts';
 import { tilePeople } from './tile-people.ts';
+import { TILE_STATE_ORDER } from './tiles.ts';
 import { memberTier, personRelation, tileTier } from './topic-queues.ts';
-import type { Glance, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
+import type { Glance, IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
 import type { GlanceState } from './glance-state.ts';
 import type { GlanceGap, PrSummary, TilePendingWrite, TileView } from './views.ts';
 import { whatsNew } from './whats-new.ts';
@@ -84,6 +86,8 @@ export interface TileViewInput {
   pendingWrite: TilePendingWrite | null;
   quietRepo: boolean;
   repoLabel: string | null;
+  /** Now, for what the tile would turn into once marked read (`afterRead`). */
+  now: IsoTime;
 }
 
 /** The tile as the UI shows it: the rows plus the tile-wide chip, tier, people and whose turn. */
@@ -99,8 +103,28 @@ export function buildTileView(input: TileViewInput): TileView {
     tier: tileTier(prs.map((pr) => pr.tier)),
     people: tilePeople(memberPrs, viewer?.login ?? null),
     turn: whoseTurn({ tile, prs: input.prsByKey, events: input.events, userStates: input.userStates, viewer }),
+    afterRead: tileAfterMarkRead({
+      tile,
+      prs: input.prsByKey,
+      events: input.events,
+      userStates: input.userStates,
+      viewer,
+      readAt: input.now,
+    }),
     pendingWrite: input.pendingWrite,
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
   };
+}
+
+/**
+ * Where a tile goes in a topic's list, lowest first: unread, open, snoozed,
+ * done. A read tile that is still the viewer's move ranks with the unread
+ * ones, so marking it read never moves it down the list (2026-09-29).
+ */
+export function tileListRank(view: Pick<TileView, 'state' | 'turn'>): number {
+  if (view.state.kind === 'open' && view.turn.kind === 'you') {
+    return TILE_STATE_ORDER.unread;
+  }
+  return TILE_STATE_ORDER[view.state.kind];
 }

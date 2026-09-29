@@ -19,13 +19,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
 }
 
+/** The button look as classes, also for links that should look like a button. */
+export function buttonClasses(variant: ButtonVariant = 'secondary', size: ButtonSize = 'sm'): string {
+  return `flex shrink-0 items-center gap-1.5 rounded-control whitespace-nowrap disabled:cursor-default disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${VARIANTS[variant]} ${SIZES[size]}`;
+}
+
 /** The two button looks from the mockup. Disabled buttons keep their title so the reason shows on hover. */
 export function Button({ variant = 'secondary', size = 'sm', className = '', type = 'button', ...rest }: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={`flex shrink-0 items-center gap-1.5 rounded-control whitespace-nowrap disabled:cursor-default disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
-      {...rest}
-    />
-  );
+  return <button type={type} className={`${buttonClasses(variant, size)} ${className}`} {...rest} />;
 }

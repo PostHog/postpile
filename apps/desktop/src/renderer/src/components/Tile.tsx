@@ -8,7 +8,7 @@ import { isDraftTile, kindLabel, leadPr, sameForWhom, tileForYou, tileUpdatedAt 
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
-import { Button } from './Button.tsx';
+import { Button, buttonClasses } from './Button.tsx';
 import { KindIcon } from './icons.tsx';
 import { ForWhomChip, PendingWritePill, RepoLabel, VerdictPill } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
@@ -17,6 +17,7 @@ import { TileMenu } from './TileMenu.tsx';
 import { TurnLine } from './TurnLine.tsx';
 import { UnreadStrip } from './UnreadStrip.tsx';
 import { markReadNote } from '../lib/guard.ts';
+import { githubLink, markButtonLabel, tileFooterAction } from '../lib/mark-read.ts';
 
 interface TileProps {
   view: TileView;
@@ -120,8 +121,8 @@ export function Tile(props: TileProps) {
   const done = state.kind === 'done';
   const unread = state.kind === 'unread';
   const draft = isDraftTile(view);
-  // Unread: full ink. Read: a notch quieter. Done and drafts: muted.
-  let titleLook = unread ? 'font-semibold text-ink' : 'font-semibold text-ink-2';
+  // Unread: bold, full ink. Read: regular weight, a notch quieter (the your-move footer stays the reminder). Done and drafts: muted.
+  let titleLook = unread ? 'font-semibold text-ink' : 'font-normal text-ink-2';
   if (done || draft) {
     titleLook = 'font-medium text-muted';
   }
@@ -136,6 +137,10 @@ export function Tile(props: TileProps) {
   const menuPrKey = props.selected ? props.selectedPrKey : (lead?.key ?? null);
   const yourMove = view.turn.kind === 'you' && !done;
   const footer = yourMove ? 'border-t border-move-line bg-move' : `border-t ${done ? 'border-hairline-done' : 'border-hairline-soft'}`;
+  // Never "Mark done" where a mark-read leaves the tile your move; read and still your move, Snooze leads.
+  const footerAction = tileFooterAction(view);
+  const markLabel = markButtonLabel(view);
+  const github = footerAction === 'snooze' ? githubLink(view) : null;
 
   function selectLead() {
     if (lead) {
@@ -210,9 +215,8 @@ export function Tile(props: TileProps) {
       <div className={`mt-auto flex min-h-[46px] items-center gap-2 rounded-b-[11px] px-3.5 ${footer}`}>
         <TurnLine turn={view.turn} greyed={done} />
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {done ? (
-            <Button onClick={selectLead}>Open</Button>
-          ) : (
+          {footerAction === 'open' && <Button onClick={selectLead}>Open</Button>}
+          {(footerAction === 'mark_read' || footerAction === 'mark_done') && (
             <Button
               variant="primary"
               title={
@@ -221,12 +225,17 @@ export function Tile(props: TileProps) {
                   : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks every PR here read; GitHub follows after 6s')
               }
               disabled={view.pendingWrite !== null || actions.isBusy(`markRead:${tile.id}`)}
-              onClick={() => void actions.markRead(tile.id)}
+              onClick={() => void actions.markRead(tile.id, view.afterRead)}
             >
-              {unread ? 'Mark read' : 'Mark done'}
+              {markLabel}
             </Button>
           )}
-          <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} />
+          <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : 'secondary'} />
+          {github && (
+            <a href={github.href} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={buttonClasses('secondary', 'sm')}>
+              {github.label}
+            </a>
+          )}
           <TileMenu view={view} topics={props.topics} prKey={menuPrKey} />
         </div>
       </div>

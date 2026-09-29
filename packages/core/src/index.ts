@@ -23,6 +23,7 @@ export * from './pr-status.ts';
 export * from './tile-people.ts';
 export * from './changes-answered.ts';
 export * from './whose-turn.ts';
+export * from './after-read.ts';
 export * from './primary-action.ts';
 export * from './pr-tier.ts';
 export * from './topic-queues.ts';
