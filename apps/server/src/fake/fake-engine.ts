@@ -1019,6 +1019,19 @@ export class FakeEngine implements EngineService {
     return this.markPrsRead(keys, pinged, 'tile', tileId);
   }
 
+  /** Like TileActions.markPrRead: one PR of the tile, handled unless it is a pulled-in layer. */
+  async markPrRead(tileId: string, prKey: PrKey): Promise<ActionResult> {
+    const tile = this.findTile(tileId);
+    if (!tile) {
+      return fail(`no tile ${tileId}`);
+    }
+    const member = tile.members.find((candidate) => candidate.prKey === prKey);
+    if (!member) {
+      return fail(`${prKey} is not in tile ${tileId}`);
+    }
+    return this.markPrsRead([prKey], member.provenance.kind === 'pulled_in' ? [] : [prKey], 'tile', tileId);
+  }
+
   private tilesHolding(prKey: PrKey): Tile[] {
     return this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey));
   }

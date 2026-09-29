@@ -748,6 +748,14 @@ export class Engine implements EngineService {
     return result;
   }
 
+  async markPrRead(tileId: string, prKey: PrKey): Promise<ActionResult> {
+    const result = await this.tiles.markPrRead(tileId, prKey);
+    if (result.ok) {
+      this.telemetry.capture('marked_read', { count: 1, origin: 'detail' });
+    }
+    return result;
+  }
+
   async markThreadRead(threadId: string): Promise<ActionResult> {
     const result = await this.tiles.markThreadRead(threadId);
     if (result.ok) {

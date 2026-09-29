@@ -30,7 +30,7 @@ const forWhom = z.enum(['you', 'team', 'your_pr', 'none']);
 // The glance's own verdict (packages/core/src/types.ts Verdict), lowercased; null when the tile has no glance yet.
 const verdict = z.enum(['looks_safe', 'look_closer', 'not_yours']).nullable();
 const approveFrom = z.enum(['detail', 'tile']);
-const markReadOrigin = z.enum(['tile', 'debug', 'cleanup']);
+const markReadOrigin = z.enum(['tile', 'detail', 'debug', 'cleanup']);
 // A snooze is either a time (bucketed) or a condition (someone replies, a
 // push, CI going green - see packages/core/src/snooze.ts SnoozeCondition):
 // the same prop name the spec uses ("duration bucket"), widened to the

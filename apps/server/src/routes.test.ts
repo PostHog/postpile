@@ -286,6 +286,22 @@ describe('server routes over the fake engine', () => {
     expect(topic.tiles.find((view) => view.tile.id === 'set:turbo-cache')?.state.kind).toBe('unread');
   });
 
+  it('marks one PR of a tile read from the detail pane, leaving the other PRs as they were', async () => {
+    const app = appWithFake();
+    await post(app, '/api/github-writes', { enabled: true });
+    const setView = async () =>
+      ((await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail).tiles.find((view) => view.tile.id === 'set:turbo-cache');
+    const unseen = async () => Object.fromEntries((await setView())?.prs.map((pr) => [pr.key, pr.unseenLoudEvents]) ?? []);
+    const before = await unseen();
+    expect(before['acme/app#1907']).toBeGreaterThan(0);
+
+    const marked = await post<ActionResult>(app, `/api/tiles/${setTile}/prs/acme/app/1907/mark-read`);
+
+    expect(marked.json.ok).toBe(true);
+    expect(await unseen()).toEqual({ ...before, 'acme/app#1907': 0 });
+    expect((await post(app, `/api/tiles/${setTile}/prs/acme/app/0/mark-read`)).status).toBe(400);
+  });
+
   it('refuses to approve while GitHub writes are off, approves once the lock is open', async () => {
     const app = appWithFake();
     const refused = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve');

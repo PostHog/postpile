@@ -196,6 +196,12 @@ export interface EngineService {
    * the window it becomes a pending write (the tile shows a marker).
    */
   markRead(tileId: string): Promise<ActionResult>;
+  /**
+   * Mark read / Mark done in the detail pane: only `prKey` of the tile. Its
+   * events seen, handled when the tile tracks it, its GitHub thread through
+   * the same queue, lock and undo as markRead; undo brings back that PR only.
+   */
+  markPrRead(tileId: string, prKey: PrKey): Promise<ActionResult>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
   markThreadRead(threadId: string): Promise<ActionResult>;
   /**

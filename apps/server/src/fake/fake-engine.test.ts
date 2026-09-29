@@ -282,6 +282,43 @@ describe('FakeEngine rechecks', () => {
   });
 });
 
+describe('FakeEngine markPrRead', () => {
+  it('marks one PR of a set, handled, with an undo for that PR only', async () => {
+    const engine = new FakeEngine();
+    await engine.setGitHubWrites(true);
+    const setOf = async () => (await engine.getTopic('topic-depot'))?.tiles.find((view) => view.tile.id === 'set:turbo-cache');
+    const before = await setOf();
+    const target = before?.prs.find((pr) => pr.provenance.kind !== 'pulled_in' && !pr.done);
+    expect(target).toBeDefined();
+    const othersBefore = before?.prs.filter((pr) => pr.key !== target!.key).map((pr) => [pr.key, pr.done, pr.unseenLoudEvents]);
+
+    const marked = await engine.markPrRead('set:turbo-cache', target!.key);
+
+    expect(marked.ok).toBe(true);
+    const after = await setOf();
+    expect(after?.prs.find((pr) => pr.key === target!.key)?.unseenLoudEvents).toBe(0);
+    expect(after?.prs.filter((pr) => pr.key !== target!.key).map((pr) => [pr.key, pr.done, pr.unseenLoudEvents])).toEqual(othersBefore);
+    expect((await engine.undo(marked.undoToken)).ok).toBe(true);
+    expect((await setOf())?.prs.find((pr) => pr.key === target!.key)?.unseenLoudEvents).toBe(target!.unseenLoudEvents);
+  });
+
+  it('marks a pulled-in stack layer read without touching the tracked layers, and refuses PRs outside the tile', async () => {
+    const engine = new FakeEngine();
+    await engine.setGitHubWrites(true);
+    const stackOf = async () => (await engine.getTopic('topic-depot'))?.tiles.find((view) => view.tile.id.startsWith('stack:'));
+    const stack = await stackOf();
+    const layer = stack?.prs.find((pr) => pr.provenance.kind === 'pulled_in');
+    expect(layer).toBeDefined();
+    const tracked = () => stackOf().then((view) => view?.prs.filter((pr) => pr.provenance.kind !== 'pulled_in').map((pr) => [pr.key, pr.done, pr.unseenLoudEvents]));
+    const trackedBefore = await tracked();
+
+    expect((await engine.markPrRead(stack!.tile.id, layer!.key)).ok).toBe(true);
+
+    expect(await tracked()).toEqual(trackedBefore);
+    expect((await engine.markPrRead(stack!.tile.id, 'acme/app#1')).ok).toBe(false);
+  });
+});
+
 describe('FakeEngine queues', () => {
   it('fills every queue section and gives some topics PRs in several tiers', async () => {
     const topics = await new FakeEngine().listTopics();

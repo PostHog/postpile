@@ -39,6 +39,26 @@ export class TileActions {
     return ok(readMessage('Marked read', batch), batch.token);
   }
 
+  /**
+   * Mark read / Mark done in the detail pane: the selected PR only
+   * (2026-09-29). Its events become seen and, when the tile tracks it (not a
+   * pulled-in stack layer), it counts as handled. Its own batch, so undo
+   * brings back that PR only.
+   */
+  markPrRead(tileId: string, key: PrKey): ActionResult {
+    const tile = this.findTile(tileId);
+    if (!tile) {
+      return failed(`no tile ${tileId}`);
+    }
+    const member = tile.members.find((candidate) => candidate.prKey === key);
+    if (!member) {
+      return failed(`${key} is not in tile ${tileId}`);
+    }
+    const handle = isTracked(member.provenance) ? [key] : [];
+    const batch = this.readMarker.markRead([key], handle, { origin: 'tile', tileId });
+    return ok(readMessage('Marked read', batch), batch.token);
+  }
+
   /** "Mark read" in the notifications debug view, by thread. Same queue and undo as a tile. */
   markThreadRead(threadId: string): ActionResult {
     const thread = this.store.notifications.get(threadId);

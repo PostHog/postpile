@@ -65,6 +65,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     getChat: notImplemented,
     approve: notImplemented,
     markRead: notImplemented,
+    markPrRead: notImplemented,
     undo: notImplemented,
     snooze: notImplemented,
     unsnooze: notImplemented,
