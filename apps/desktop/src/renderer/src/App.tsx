@@ -139,7 +139,7 @@ export function App() {
   const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile, tileFilter);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
-  const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown, selected.auto);
+  const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown, selected.auto && selected.view ? { tileFilter, state: selected.view.state.kind } : null);
   useEffect(() => {
     if (keptAfter !== kept) {
       setKept(keptAfter);

@@ -2381,8 +2381,14 @@ avatars and filters", QueuesB2).
   pane says "No tile selected" with one line ("Nothing unread in this
   topic. Pick a tile, or show All."; under All "Pick a tile to see it.").
   A tile the app picked is not the user's pick: it is not written into
-  history and the Unread list does not keep it once it stops being unread.
-  The keep-visible rule above stays for tiles the user selected. Why: "we
+  history.
+  Changing the All / Unread filter under an app-picked tile picks again
+  (All to Unread drops an auto-picked open tile, then the first unread or
+  "No tile selected"). When an app-picked tile changes state while it is
+  shown (read or done through a sync, the move-on mark), it stays in the
+  pane and counts as the user's pick from then on, so the grid keeps it
+  too: pane and grid never disagree, and it drops out once the user moves
+  on. The keep-visible rule above stays for tiles the user selected. Why: "we
   should rather not select any tile and show 'none selected' on the right
   ... then when collapsing all 'done' and having selected 'unread' it would
   actually make sense" (2026-09-29). Pure rules in `lib/selection.ts`

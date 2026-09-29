@@ -16,8 +16,18 @@ export interface KeptView {
   topicId: string | null;
   tileId: string | null;
   prKey: string | null;
-  /** The app picked this tile (`autoTile`), the user did not: it is not kept visible against the Unread list. */
-  auto?: boolean;
+  /**
+   * Set while the app picked this tile (`autoTile`), the user did not, with
+   * the grid filter and tile state it was picked under. An auto pick is
+   * re-run when the filter changes and turns into a user-like pick (kept
+   * visible in the grid) once its state changes while shown.
+   */
+  auto?: AutoPick | null;
+}
+
+export interface AutoPick {
+  tileFilter: TileFilter;
+  state: TileView['state']['kind'];
 }
 
 /** The grid's own filter: every live tile, or only the unread ones. */
@@ -63,13 +73,17 @@ export function keptFor(kept: KeptView | null, entry: NavEntry, key: string): Ke
   return kept;
 }
 
+function sameAuto(a: AutoPick | null, b: AutoPick | null): boolean {
+  return a === b || (a !== null && b !== null && a.tileFilter === b.tileFilter && a.state === b.state);
+}
+
 /**
  * What to keep after this render: what is shown now. Returns `previous`
  * itself when nothing changed, so a state update can be skipped. Another
  * pane keeps the last topic view for the way back; tiles still loading
  * (`shown.tileId` null on the same topic) keep the last tile.
  */
-export function nextKept(previous: KeptView | null, key: string, entry: NavEntry, shown: NavEntry, auto = false): KeptView | null {
+export function nextKept(previous: KeptView | null, key: string, entry: NavEntry, shown: NavEntry, auto: AutoPick | null = null): KeptView | null {
   if (entry.pane !== 'topic') {
     return previous;
   }
@@ -77,7 +91,7 @@ export function nextKept(previous: KeptView | null, key: string, entry: NavEntry
   if (still && shown.tileId === null && still.topicId === shown.topicId) {
     return still;
   }
-  if (still && still.topicId === shown.topicId && still.tileId === shown.tileId && still.prKey === shown.prKey && (still.auto ?? false) === auto) {
+  if (still && still.topicId === shown.topicId && still.tileId === shown.tileId && still.prKey === shown.prKey && sameAuto(still.auto ?? null, auto)) {
     return still;
   }
   return { filterKey: key, entry, topicId: shown.topicId, tileId: shown.tileId, prKey: shown.prKey, auto };
@@ -132,12 +146,15 @@ export function resolveSelection(
   tileFilter: TileFilter = 'all',
 ): { view: TileView | null; prKey: string | null; auto: boolean } {
   const picked = shownTiles.find((candidate) => candidate.tile.id === entry.tileId) ?? tileHolding(shownTiles, entry.prKey);
-  const keptView = picked ? undefined : keptTile(allTiles, kept);
+  // An auto pick made under another grid filter is picked again.
+  const usableKept = kept?.auto && kept.auto.tileFilter !== tileFilter ? null : kept;
+  const keptView = picked ? undefined : keptTile(allTiles, usableKept);
   const view = picked ?? keptView ?? autoTile(shownTiles, tileFilter);
   if (!view) {
     return { view: null, prKey: null, auto: false };
   }
-  const auto = !picked && (keptView ? (kept?.auto ?? false) : true);
+  // Auto until its state changes while shown: then it counts as the user's, so pane and grid agree.
+  const auto = !picked && (keptView ? usableKept?.auto?.state === view.state.kind : true);
   const matching = matchingPrKeys ? view.prs.find((pr) => matchingPrKeys.has(pr.key)) : undefined;
   const pr = prIn(view, entry.prKey) ?? prIn(view, kept?.prKey) ?? matching ?? leadPr(view);
   return { view, prKey: pr?.key ?? null, auto };

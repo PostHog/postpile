@@ -6,7 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- A topic opens with no tile selected when nothing in it is unread (under Unread), and the right pane says "No tile selected". The app only auto-selects an unread tile (under All, else the first open one), never a done one, and a tile it selected is not kept in the Unread list once it is read.
+- A topic opens with no tile selected when nothing in it is unread (under Unread), and the right pane says "No tile selected". The app only auto-selects an unread tile (under All, else the first open one), never a done one. Switching the All / Unread filter picks again under an app-picked tile; if that tile changes state while you look at it, it stays in the pane and in the grid until you move on.
 - Done tiles offer Open and nothing else: no Mark read button and no Snooze, in the tile footer and in the detail pane (where Open on GitHub leads).
 - The detail pane acts on the PR you look at: on a stack or set, Mark read and Mark done mark only the selected PR (with its own undo), the label follows that PR, and there is no mark button while that PR is still your move. Snooze stays in the tile footer for sets and stacks. Single-PR tiles behave as before, and the tile footer still acts on the whole tile.
 - The coral dot marks every PR of a stack or set that keeps the tile from being done ("Not done yet"), on read tiles too, so an open set says which PR still holds it. Mark a dotted PR done and its dot goes.

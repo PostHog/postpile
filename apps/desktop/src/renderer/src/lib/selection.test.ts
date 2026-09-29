@@ -213,13 +213,31 @@ describe('autoTile and the auto selection', () => {
     expect(resolveSelection(entry('t'), tiles, tiles, null, null, 'unread')).toEqual({ view: null, prKey: null, auto: false });
   });
 
-  it('stays auto while the kept view is the auto pick', () => {
+  it('stays auto while the kept auto pick keeps its state', () => {
     const tiles = [tile('t1', ['o/r#1'], UNREAD)];
-    const key = filterKey(null, null);
-    const kept = nextKept(null, key, entry('t'), entry('t', 't1', 'o/r#1'), true);
-    const read = [tile('t1', ['o/r#1'], DONE)];
-    expect(resolveSelection(entry('t'), read, read, null, kept, 'unread').auto).toBe(true);
-    expect(tiles).toHaveLength(1);
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 't1', 'o/r#1'), { tileFilter: 'all', state: 'unread' });
+    expect(resolveSelection(entry('t'), tiles, tiles, null, kept, 'all').auto).toBe(true);
+  });
+
+  it('turns into a user-like pick once the auto tile changes state while shown', () => {
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 't1', 'o/r#1'), { tileFilter: 'unread', state: 'unread' });
+    const read = [tile('t1', ['o/r#1'], DONE), tile('t2', ['o/r#2'], UNREAD)];
+    const selected = resolveSelection(entry('t'), read, read, null, kept, 'unread');
+    expect([selected.view?.tile.id, selected.auto]).toEqual(['t1', false]);
+  });
+
+  it('picks again when the grid filter changes under an auto pick', () => {
+    const tiles = [tile('open', ['o/r#1']), tile('unread', ['o/r#2'], UNREAD)];
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 'open', 'o/r#1'), { tileFilter: 'all', state: 'open' });
+    expect(resolveSelection(entry('t'), tiles, tiles, null, kept, 'unread').view?.tile.id).toBe('unread');
+    const onlyOpen = [tile('open', ['o/r#1'])];
+    expect(resolveSelection(entry('t'), onlyOpen, onlyOpen, null, kept, 'unread').view).toBeNull();
+  });
+
+  it('keeps a user pick across a grid filter change', () => {
+    const tiles = [tile('open', ['o/r#1'])];
+    const kept = nextKept(null, filterKey(null, null), entry('t', 'open', 'o/r#1'), entry('t', 'open', 'o/r#1'));
+    expect(resolveSelection(entry('t', 'open', 'o/r#1'), tiles, tiles, null, kept, 'unread').view?.tile.id).toBe('open');
   });
 
   it('words the empty pane by filter', () => {
