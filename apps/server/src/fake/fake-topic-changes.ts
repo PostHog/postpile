@@ -4,6 +4,7 @@ import {
   hasEmptyTopicName,
   isLiveProposal,
   newTopic,
+  nextTopicStatus,
   OUTSIDE_PROPOSAL_DAYS,
   planTopicChange,
   proposalOutcome,
@@ -213,8 +214,10 @@ export class FakeTopicChanges {
       }
     }
     const topic = this.data.topics.find((candidate) => candidate.id === fromTopicId);
-    if (topic) {
-      topic.status = 'archived';
+    const change = topic ? nextTopicStatus(topic, 'archive', this.timestamp()) : null;
+    if (topic && change) {
+      topic.status = change.status;
+      topic.retiredAt = change.retiredAt;
       topic.updatedAt = this.timestamp();
     }
   }

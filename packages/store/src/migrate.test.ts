@@ -117,4 +117,18 @@ describe('migrations', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM snooze').get()).toEqual({ n: 4 });
     db.close();
   });
+
+  it('backfills retired_at from updated_at for topics already retired', () => {
+    const db = new DatabaseSync(':memory:');
+    runMigrations(db, 19);
+    db.exec(`INSERT INTO topic (id, name, user_role, status, created_at, updated_at) VALUES
+      ('done', 'Done', 'watcher', 'retired', '2026-09-01T00:00:00.000Z', '2026-09-05T00:00:00.000Z'),
+      ('live', 'Live', 'watcher', 'active', '2026-09-01T00:00:00.000Z', '2026-09-06T00:00:00.000Z')`);
+
+    runMigrations(db);
+
+    const rows = db.prepare('SELECT id, retired_at FROM topic ORDER BY id').all();
+    expect(rows.map((row) => [row.id, row.retired_at])).toEqual([['done', '2026-09-05T00:00:00.000Z'], ['live', null]]);
+    db.close();
+  });
 });

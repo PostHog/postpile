@@ -84,6 +84,7 @@ import {
   buildPrSummary,
   buildTileView,
   deriveTileState,
+  isRetiredSince,
   snoozeWrites,
   displayState,
   compareTopicUrgency,
@@ -806,15 +807,15 @@ export class FakeEngine implements EngineService {
     const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
     const memberTopicIds = [...this.data.membership.values()];
     return this.data.topics
-      .filter((topic) => topic.status === 'retired' && topic.updatedAt >= since)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .filter((topic) => isRetiredSince(topic, since))
       .map((topic) => ({
         id: topic.id,
         name: topic.name,
         area: topic.area,
-        retiredAt: topic.updatedAt,
+        retiredAt: topic.retiredAt ?? topic.updatedAt,
         prCount: memberTopicIds.filter((topicId) => topicId === topic.id).length,
-      }));
+      }))
+      .sort((a, b) => b.retiredAt.localeCompare(a.retiredAt));
   }
 
   async getViewer(): Promise<ViewerView> {

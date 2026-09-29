@@ -7,7 +7,7 @@ import { visibleTopic } from './search.ts';
 import { autoTile, filterKey, noSelectionText, keptFor, listedTopics, nextKept, resolveSelection, unreadTiles, withSelectedTile, type KeptView } from './selection.ts';
 
 function item(id: string, toReview: number): TopicListItem {
-  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', area: null, createdAt: at(0), updatedAt: at(0) };
+  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
   return {
     topic,
     placement: null,

@@ -51,7 +51,13 @@ verdict is needed, and Unsorted never retires. It runs after the digest, so
 the sync's own events count; the sync log line and `SyncReport.topicsRetired`
 say how many. Retiring is reversible: a new loud event on a member PR
 (`reviveRetiredTopics`, full sync and live poll) or a new PR assigned to it
-(retired topics stay on offer for 30 days) makes it active again. Retired
+(retired topics stay on offer for 30 days) makes it active again. Every
+status change goes through `nextTopicStatus` (engine: `changeTopicStatus`),
+and retiring records `retiredAt` (migration 020; before, "retired at" read
+`updatedAt`, which any rename moved). Loud means effective loudness: the
+full sync classifies new events first (retired topics' events included) and
+revives after, so an event the agent turned quiet brings nothing back. The
+live poll does not classify and still revives on the rule's loudness. Retired
 topics leave the sidebar list and wait in its Finished drawer (see "Queue
 sections"). Until 2026-09-29 only the daily consolidation retired topics,
 and only when the agent said finished and 14 quiet days had passed; most

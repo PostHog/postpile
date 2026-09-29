@@ -370,6 +370,8 @@ export interface Topic {
   driver: string | null;
   userRole: UserRole;
   status: TopicStatus;
+  /** When it retired; null unless retired. Only `nextTopicStatus` sets it. */
+  retiredAt: IsoTime | null;
   /** Broad area the topic sits in ("CI", "Dev env"), agent-assigned. Null until the first dossier update. */
   area: string | null;
   createdAt: IsoTime;

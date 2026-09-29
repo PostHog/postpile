@@ -19,7 +19,7 @@ import {
 type Tiers = Partial<Record<PrTier, number>>;
 
 function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): TopicListItem {
-  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', area: null, createdAt: at(0), updatedAt: at(0) };
+  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
   return {
     topic,
     placement: null,

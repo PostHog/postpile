@@ -22,6 +22,7 @@ function makeTopic(overrides: Partial<Topic> = {}): Topic {
     name: 'Move CI to Depot',
     summary: '',
     summaryInputHash: null,
+    retiredAt: null,
     area: null,
     tailoring: '',
     driver: 'alice',
@@ -245,7 +246,7 @@ describe('TopicRepo and memberships', () => {
     store.topics.setTailoring('topic-1', 'Only flag runner cost changes', at(3));
     store.topics.rename('topic-1', 'Depot migration', at(4));
     store.topics.setDriverAndRole('topic-1', 'bob', 'driver', at(5));
-    store.topics.setStatus('topic-2', 'archived', at(6));
+    store.topics.setStatus('topic-2', { status: 'archived', retiredAt: null }, at(6));
     expect(store.topics.get('topic-1')).toMatchObject({
       name: 'Depot migration',
       summary: 'Moving CI',

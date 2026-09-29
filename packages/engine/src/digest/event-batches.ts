@@ -65,9 +65,15 @@ function needsOpinion(event: PrEvent): boolean {
 export class EventBatchClassifier {
   constructor(private readonly deps: DigestDeps) {}
 
+  /**
+   * Retired topics too: their new events are judged before the sync decides
+   * whether one brings the topic back (`reviveRetiredTopics`). A retired
+   * topic without news has nothing past its cursor and costs no call.
+   */
   private groups(): EventGroup[] {
     const { store } = this.deps;
-    const topics = store.topics.listActive().map((topic) => ({
+    const judged = store.topics.list().filter((topic) => topic.status !== 'archived');
+    const topics = judged.map((topic) => ({
       topicId: topic.id,
       scope: topic.id,
       prKeys: store.memberships.listForTopic(topic.id).map((m) => m.prKey),

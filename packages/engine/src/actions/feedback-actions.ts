@@ -5,6 +5,7 @@ import { prKeyOfEvent } from '../ids.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok, readMessage } from './results.ts';
 import type { PendingBatch } from '../mark-read-queue.ts';
+import { changeTopicStatus } from '../topic-status.ts';
 
 /**
  * User corrections. Each one is logged (the newest go back into prompts) and
@@ -51,9 +52,7 @@ export class FeedbackActions {
       if (!target) {
         return failed(`no topic ${targetTopicId}`);
       }
-      if (target.status === 'retired') {
-        this.store.topics.setStatus(targetTopicId, 'active', this.now().toISOString());
-      }
+      changeTopicStatus(this.store, targetTopicId, 'revive', this.now().toISOString());
       for (const key of keys) {
         this.store.memberships.assign({
           prKey: key,

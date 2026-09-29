@@ -132,6 +132,7 @@ function buildTopics(clock: SampleClock): Topic[] {
         userRole: 'reviewer',
       }),
       status: 'retired',
+      retiredAt: clock.hoursAgo(48),
       updatedAt: clock.hoursAgo(48),
     },
   ];

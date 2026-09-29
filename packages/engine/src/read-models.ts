@@ -1,5 +1,6 @@
 import {
   isLiveProposal,
+  isRetiredSince,
   OUTSIDE_PROPOSAL_DAYS,
   proposalOutcome,
   proposalOutcomeAt,
@@ -323,17 +324,16 @@ export class ReadModels {
   /** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. Ignores the repo scope. */
   listFinishedTopics(): FinishedTopic[] {
     const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
-    return this.store.topics
-      .list()
-      .filter((topic) => topic.status === 'retired' && topic.updatedAt >= since)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    const finished = this.store.topics.list().filter((topic) => isRetiredSince(topic, since));
+    return finished
       .map((topic) => ({
         id: topic.id,
         name: topic.name,
         area: topic.area,
-        retiredAt: topic.updatedAt,
+        retiredAt: topic.retiredAt ?? topic.updatedAt,
         prCount: this.store.memberships.listForTopic(topic.id).length,
-      }));
+      }))
+      .sort((a, b) => b.retiredAt.localeCompare(a.retiredAt));
   }
 
   /** The title bar's repo menu: topics and PRs per repo, counted over every topic, not the scope. */

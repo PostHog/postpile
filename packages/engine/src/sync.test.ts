@@ -233,7 +233,7 @@ describe('Engine.sync with the agent', () => {
       h.reader.addPr(pr, makeThreadFor(pr));
     }
     const topic = { id: 'depot', name: 'Depot', summary: '', summaryInputHash: null,
-    area: null, tailoring: '', driver: null, userRole: 'watcher' as const, status: 'active' as const, createdAt: at(0), updatedAt: at(0) };
+    area: null, tailoring: '', driver: null, userRole: 'watcher' as const, status: 'active' as const, retiredAt: null, createdAt: at(0), updatedAt: at(0) };
     h.store.topics.create(topic);
     for (const pr of prs) {
       h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
@@ -264,7 +264,7 @@ describe('Engine.sync with the agent', () => {
       h.reader.addPr(pr, makeThreadFor(pr));
     }
     const topic = { id: 'depot', name: 'Depot', summary: '', summaryInputHash: null,
-    area: null, tailoring: '', driver: null, userRole: 'watcher' as const, status: 'active' as const, createdAt: at(0), updatedAt: at(0) };
+    area: null, tailoring: '', driver: null, userRole: 'watcher' as const, status: 'active' as const, retiredAt: null, createdAt: at(0), updatedAt: at(0) };
     h.store.topics.create(topic);
     for (const pr of prs) {
       h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });

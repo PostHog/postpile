@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { makeTopic, topicWithPrs } from './testing/topics.ts';
+import { changeTopicStatus } from './topic-status.ts';
 
 /**
  * #1 (master <- s1) and #2 (s1 <- s2) are pinged, #3 (s2 <- s3) is a draft
@@ -70,7 +71,7 @@ describe('a stack is one unit in topic assignment', () => {
     topicWithPrs(h, 'depot', [bottom, middle]);
     h.reader.addStackPr(top);
     await h.engine.sync({ maxAgentCalls: 0 });
-    h.store.topics.setStatus('depot', 'retired', at(20));
+    changeTopicStatus(h.store, 'depot', 'retire', at(20));
 
     h.reader.addPr(top, makeThreadFor(top, { reason: 'mention', updatedAt: at(30) }));
     h.reader.etag = 'etag-2';
@@ -107,7 +108,7 @@ describe('a stack is one unit on the board', () => {
     h.store.memberships.assign({ prKey: middle.key, topicId: 'billing', assignedBy: 'agent', reason: '', createdAt: at(5) });
     h.reader.addStackPr(top);
     await h.engine.sync({ maxAgentCalls: 0 });
-    h.store.topics.setStatus('billing', 'retired', at(10));
+    changeTopicStatus(h.store, 'billing', 'retire', at(10));
 
     expect(await tileMembers(h, 'depot')).toEqual([[stackId, [bottom.key, middle.key, top.key]]]);
     expect((await h.engine.getPr(middle.key))?.topicId).toBe('depot');

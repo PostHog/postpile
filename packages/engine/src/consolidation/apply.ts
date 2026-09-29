@@ -5,6 +5,7 @@ import { ProposalActions } from '../actions/proposal-actions.ts';
 import { Board } from '../board.ts';
 import { newProposalId, newRuleProposalId } from '../ids.ts';
 import type { FactWriter } from '../memory/fact-writer.ts';
+import { changeTopicStatus } from '../topic-status.ts';
 import type { RetireGate } from './retire-gate.ts';
 
 export interface ConsolidationCounts {
@@ -172,11 +173,9 @@ export class ConsolidationApplier {
   }
 
   retire(topicId: string, at: string): void {
-    if (this.store.topics.get(topicId)?.status !== 'active' || !this.gate.passes(topicId)) {
-      return;
+    if (this.gate.passes(topicId) && changeTopicStatus(this.store, topicId, 'retire', at)) {
+      this.counts.topicsRetired += 1;
     }
-    this.store.topics.setStatus(topicId, 'retired', at);
-    this.counts.topicsRetired += 1;
   }
 
   apply(result: ConsolidationResult): void {

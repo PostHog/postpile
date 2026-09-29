@@ -1,5 +1,6 @@
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
+import { changeTopicStatus } from '../topic-status.ts';
 import { RetireGate } from './retire-gate.ts';
 
 /**
@@ -13,7 +14,7 @@ export function retireFinishedTopics(store: Store, at: string): number {
   const finished = store.topics.listActive().filter((topic) => gate.passes(topic.id));
   store.transaction(() => {
     for (const topic of finished) {
-      store.topics.setStatus(topic.id, 'retired', at);
+      changeTopicStatus(store, topic.id, 'retire', at);
     }
   });
   return finished.length;

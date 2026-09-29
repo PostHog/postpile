@@ -62,6 +62,7 @@ export function makeTopic(overrides: Partial<Topic> = {}): Topic {
     name: 'Move CI to Depot',
     summary: 'CI moves from GitHub runners to Depot.',
     summaryInputHash: null,
+    retiredAt: null,
     area: null,
     tailoring: '',
     driver: 'alice',

@@ -137,7 +137,6 @@ export class SyncRun {
       errors.push(...fetched.errors);
 
       new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, tally.facts);
-      reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
       // Without claude the fetch and the rules still ran; the agent jobs would only fail one by one.
       const agentOff = this.deps.agentOff();
       if (agentOff !== null) {
@@ -157,6 +156,8 @@ export class SyncRun {
         onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
       }, phases);
       await digester.run(agentOff === null ? (options.agentJobs ?? ALL_AGENT_JOBS) : []);
+      // After the digest classified the new events, so one the agent turned quiet brings no retired topic back.
+      reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
       // After the digest, so dossier changes about events already read on GitHub count as seen too.
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
       // Last, so the new events and what was read on GitHub both count.

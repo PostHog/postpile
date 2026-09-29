@@ -4,7 +4,7 @@ import { sidebarGroups } from './sidebar.ts';
 
 function topic(id: string): Topic {
   const at = '2026-09-27T00:00:00.000Z';
-  return { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', area: null, createdAt: at, updatedAt: at };
+  return { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at, updatedAt: at };
 }
 
 function item(id: string, unreadTiles: number, placement: Partial<TopicPlacement> | null): TopicListItem {
