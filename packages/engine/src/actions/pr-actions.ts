@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import { isOwnTeam, teamSlug, type ActionResult, type Pr, type PrKey } from '@postpile/core';
+import { isOwnTeam, prReadScope, teamSlug, type ActionResult, type Pr, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { errorText } from '../errors.ts';
@@ -55,7 +55,7 @@ export class PrActions {
     }
     this.store.userPrStates.markApproved(key, pr.headOid, this.now().toISOString());
     // Mark read first: what the refresh brings in is news the user has not seen.
-    const batch = this.readMarker.markRead([key], [], { origin: 'tile', tileId: null });
+    const batch = this.readMarker.markRead(prReadScope(key, true), { kind: 'approved' }, { origin: 'tile', tileId: null });
     await this.refreshPr(key);
     return ok('Approved', batch.token);
   }
@@ -102,7 +102,7 @@ export class PrActions {
       return failed(`Removing ${slug} failed: ${errorText(error)}`);
     }
     const unsubscribed = await this.unsubscribe(key);
-    const batch = this.readMarker.markRead([key], [key], { origin: 'detail', tileId: null });
+    const batch = this.readMarker.markRead(prReadScope(key, true), { kind: 'button' }, { origin: 'detail', tileId: null });
     await this.refreshPr(key);
     this.mirrorRemoval(key, team);
     // No undo (the removal is final), but the renderer watches the mark-read until it settles.

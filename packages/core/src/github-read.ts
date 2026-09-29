@@ -3,14 +3,12 @@
 // github.com (or in another client), whenever the app learns about it.
 // Rules only, no IO. DESIGN.md "Reconciling with GitHub's read time".
 import { sameLogin } from './mentions.ts';
+import { unseenUpTo } from './read-plan.ts';
 import type { IsoTime, NotificationThread, PrEvent } from './types.ts';
 
 /** Unseen events at or before the thread's last read on GitHub. None when the thread was never read. */
 export function eventsReadOnGitHub(events: PrEvent[], lastReadAt: IsoTime | null): string[] {
-  if (lastReadAt === null) {
-    return [];
-  }
-  return events.filter((event) => event.seenAt === null && event.at <= lastReadAt).map((event) => event.id);
+  return lastReadAt === null ? [] : unseenUpTo(events, lastReadAt);
 }
 
 /**
