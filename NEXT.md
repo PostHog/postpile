@@ -891,6 +891,12 @@ the app meanwhile.
     text answers without structured content (the calling model reads the
     text; both would double the tokens); list reads ignore the window's
     repo choice (`ListScope.allRepos`).
+  - Connecting (built 2026-09-29, DESIGN.md "MCP server" › Connecting):
+    footer "agents: not connected" and the setup Accept step offer "Add to
+    Claude Code" (`claude mcp add --scope user`), only on a click. Verify
+    once for real in a signed build: the click adds it and `claude mcp get`
+    finds it from the app's own folder. Open: a moved app leaves a stale
+    path that still counts as connected.
   - Later: writes (notes on topic/PR memory, snooze, instruction proposals)
     through the running app's API, so they keep the writes lock, undo and
     the user's say. The PR description is not in `pr_context` yet.
@@ -913,6 +919,12 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **MCP server: nudge, never install silently** (2026-09-29): a footer item
+  ("agents: not connected") and an optional box on the setup Accept step
+  offer "Add to Claude Code"; `claude mcp add --scope user` runs only on
+  that click, only in the installed app. "Not now" hides the footer item
+  for good; setup still offers it.
 
 - **Selection never moves on its own** (2026-09-29): after an action or a
   refresh the selection stays where it is; the fallback to the first match

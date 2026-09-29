@@ -20,6 +20,8 @@ import type {
   InstructionsView,
   ListScope,
   LivePollStatus,
+  McpConnectFrom,
+  McpConnectionView,
   SyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
@@ -262,6 +264,22 @@ export interface EngineService {
   tools(): Promise<ToolsView>;
   /** "Check again": checks gh and claude now, whatever the backoff says. */
   checkTools(): Promise<ToolsView>;
+
+  /**
+   * Whether Claude Code has PostPile's MCP server (`claude mcp get postpile`
+   * in the app's own folder, at most every few minutes), the commands to add
+   * it by hand, and the footer's "Not now". Runs nothing in a dev build or
+   * while claude is missing or logged out.
+   */
+  mcpConnection(): Promise<McpConnectionView>;
+  /**
+   * "Add to Claude Code": `claude mcp add --scope user postpile -- <launcher>`.
+   * Only from a click, only in the installed app. Local: it changes Claude
+   * Code's config, never GitHub.
+   */
+  connectMcp(from: McpConnectFrom): Promise<ActionResult>;
+  /** "Not now" on the footer's offer: kept in meta, the footer item stays away. */
+  hideMcpConnect(): Promise<ActionResult>;
 
   /** Setup flow: whether it shows on start (first run: no instructions, never accepted or skipped) and the stored flag. */
   setupStatus(): Promise<SetupStatus>;

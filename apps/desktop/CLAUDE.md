@@ -55,6 +55,9 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   `useActions().checkTools`),
   `update.ts` (`useUpdate`: the server's last update check, every minute;
   `UpdatePill` in the title bar, "Later" per version in localStorage),
+  `mcp.ts` (`useMcpConnection`: is PostPile's MCP server in Claude Code,
+  refetched on window focus; the server runs `claude mcp get` at most every
+  5 minutes),
   `telemetry.ts` (`sendTelemetry`, fire-and-forget
   POST to `/api/telemetry`; not a query hook, no cache, a dropped call is
   swallowed. Only the events in `RENDERER_TELEMETRY_EVENTS`
@@ -88,6 +91,10 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   (`cleanUpInbox`, "mark everything older than N days read") is on it as
   `cleanup` and behaves like mark read: locked, it becomes one pending
   write. Start fresh and "Not now" are local.
+- "Add to Claude Code" (`connectMcp(from)`) changes Claude Code's config,
+  never GitHub, so it is not on the `GithubWrite` list. Fire it only from a
+  click, never from an effect or along with Accept: the app never installs
+  the MCP server by itself. `hideMcpConnect` is the footer's "Not now".
 - **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
   asks in a small popover ("Mark-read and approvals will reach GitHub")
   that also lists the pending writes (`lib/pending.ts`) with "Send N to
@@ -210,7 +217,11 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `InboxCleanup` (sidebar footer line or middle-column banner, as the
   server's `look` says) + `InboxCleanupDialog`,
   `UpdatePill` (title bar update reminder, self-contained so it can move;
-  neutral, never coral).
+  neutral, never coral),
+  `McpFooterItem` ("agents: not connected" in the footer, only while
+  `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
+  `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
+  optional box; secondary button there so Accept stays the one primary).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,

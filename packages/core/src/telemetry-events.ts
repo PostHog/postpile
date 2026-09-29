@@ -58,6 +58,7 @@ const rateLimitSource = z.enum(['graphql', 'rest']);
 // -----------------------------------------------------------------------
 
 const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me']);
+const mcpConnectFrom = z.enum(['footer', 'setup']);
 
 /** No props: an empty object, so every event has a stable shape to validate against. */
 const NO_PROPS = z.object({}).strict();
@@ -125,6 +126,10 @@ export const TELEMETRY_EVENTS = {
 
   // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing.
   mcp_tool_called: z.object({ tool: mcpTool, found: z.boolean() }).strict(),
+  // "Add to Claude Code" in the footer or the last setup step; ok is whether Claude Code has the server afterwards.
+  mcp_connect_clicked: z.object({ from: mcpConnectFrom, ok: z.boolean() }).strict(),
+  // "Not now" on the footer's offer.
+  mcp_connect_dismissed: NO_PROPS,
 
   // Manual verification only (see NEXT.md "Verify once for real"). Never
   // sent from normal app code, not part of the analytics surface above.

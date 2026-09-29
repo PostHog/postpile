@@ -25,6 +25,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
   LivePollStatus,
+  McpConnectionView,
   SyncPhase,
   SyncProgress,
   MemoryCorrection,
@@ -125,6 +126,7 @@ import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService,
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
+import { FakeMcp } from './fake-mcp.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
@@ -233,6 +235,7 @@ export class FakeEngine implements EngineService {
   private readonly workContext: FakeWorkContext;
   private readonly setup: FakeSetup;
   private readonly toolStatus: FakeTools;
+  private readonly mcp: FakeMcp;
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
@@ -268,6 +271,7 @@ export class FakeEngine implements EngineService {
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);
+    this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
     this.feedback = [...this.memory.seedFeedback()];
@@ -1409,6 +1413,18 @@ export class FakeEngine implements EngineService {
   async checkTools(): Promise<ToolsView> {
     await new Promise((resolve) => setTimeout(resolve, this.checkDelayMs));
     return this.toolStatus.check();
+  }
+
+  async mcpConnection(): Promise<McpConnectionView> {
+    return this.mcp.view();
+  }
+
+  connectMcp(): Promise<ActionResult> {
+    return this.mcp.connect();
+  }
+
+  async hideMcpConnect(): Promise<ActionResult> {
+    return this.mcp.hide();
   }
 
   async startSetupSweep(): Promise<SetupSweepView> {

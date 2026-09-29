@@ -2398,6 +2398,9 @@ message, are dropped.
 6. *MCP server*: `mcp_tool_called` (tool, found: false when the PR, topic
    or search found nothing). Sent by the separate `postpile-mcp` process
    under the same install id, so it counts toward the same person.
+   `mcp_connect_clicked` (from `footer`/`setup`, ok: Claude Code has the
+   server afterwards) and `mcp_connect_dismissed` (the footer's "Not now"),
+   both sent by the engine from the action itself.
 
 **Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
 and a scratch data dir sends one `telemetry_test` event (distinct id
@@ -2449,6 +2452,42 @@ agent summary of it, with a line telling the caller it is data, not
 instructions. A fence tag inside the data is broken up so a PR body can't
 close it. No structured content: text is what the calling model reads, and
 sending both would double the tokens.
+
+**Connecting** (decided 2026-09-29): the app nudges, it never installs by
+itself. The status footer shows "agents: not connected" while Claude Code
+lacks the server; a click opens a small popover with one sentence on what it
+does, **Add to Claude Code**, the server command for other agents (copy
+only) and "Not now". The last setup step (Accept) has the same offer in its
+own box below Accept, with a secondary button so Accept stays the one
+primary; it is never part of Accept.
+
+- Engine: `McpConnection` (`packages/engine/src/mcp-connection.ts`) behind
+  `mcpConnection()`, `connectMcp(from)` and `hideMcpConnect()`. Routes:
+  `GET /api/mcp-connection`, `POST /api/mcp-connection {from}`, `POST
+  /api/mcp-connection/not-now`.
+- Detection: `claude mcp get postpile` (exit 0 = there; "No MCP server
+  named" = not there; anything else, e.g. a timeout, = unknown and no nag).
+  It runs through the setup checks' command runner, with the claude binary
+  `ToolHealth` found, in the app's own empty folder (`agentCwdFor`), so it
+  sees user-scope servers and macOS asks for nothing. Cached for 5 minutes;
+  the renderer asks again on window focus and after an add.
+- Install, only on the click: `claude mcp add --scope user postpile --
+  <Contents/Resources/postpile-mcp>`, then a fresh check. "Already exists"
+  counts as done when the check finds it.
+- The launcher path is only known to Electron main, which passes
+  `mcpLauncher` into `engineFromEnv` / `createEngine`: `{kind: 'app', path:
+  process.resourcesPath/postpile-mcp}` when packaged, `{kind: 'dev',
+  repoRoot}` in a dev run. Dev runs, the CLI and the standalone server never
+  run claude for this: the state stays unknown (no footer item), the button
+  is disabled with the reason, and the command shows to copy (dev:
+  `claude mcp add postpile -e POSTPILE_PROFILE=default -- pnpm -C <repo> cli
+  mcp`).
+- claude missing or logged out: nothing runs, state unknown, no footer item
+  (the tool note already covers claude). A usage limit does not matter.
+- "Not now" is kept in meta (`mcp_connect_hidden_at`) and hides the footer
+  item for good; the setup offer still shows on "Run setup again".
+- Sample data (`FakeMcp`): starts not connected, a click "adds" it in
+  memory; never runs claude or touches the real Claude Code config.
 
 ## Architecture
 
@@ -2514,6 +2553,9 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/inbox-cleanup/mark-read` `{olderThanDays: 14\|30}` | `cleanUpInbox()` (GitHub write, pending while locked) |
 | `POST`/`DELETE /api/inbox-cleanup/start-fresh` | `startFresh()` / `clearStartFresh()` |
 | `POST /api/inbox-cleanup/not-now` | `hideInboxCleanup()` (7 days) |
+| `GET /api/mcp-connection` | `mcpConnection()` (cached `claude mcp get postpile`, commands, "Not now") |
+| `POST /api/mcp-connection` `{from: footer\|setup}` | `connectMcp()` (`claude mcp add`, installed app only) |
+| `POST /api/mcp-connection/not-now` | `hideMcpConnect()` |
 | `GET /api/repos` | `listRepos()` (repo menu: counts, scope, quiet) |
 | `POST /api/repos/scope` `{repo}` | `setRepoScope()` (one repo, null = all) |
 | `POST /api/repos/quiet` `{repo, quiet}` | `setRepoQuiet()` |

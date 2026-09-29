@@ -7,9 +7,10 @@ import { syncReportDetail } from '../lib/sync-report.ts';
 import { useNow } from '../lib/use-now.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { toolsFooter } from '../lib/tools.ts';
+import { McpFooterItem } from './McpFooterItem.tsx';
 import { WritesLock } from './WritesLock.tsx';
 
-/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, what gh or claude leave off, agent calls of the last sync, mark-read queue, app version. */
+/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, what gh or claude leave off, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version. */
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
   const now = useNow(1000);
@@ -52,6 +53,7 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
           {actions.lastSync.errors.length > 0 && ` · ${actions.lastSync.errors.length} ${actions.lastSync.errors.length === 1 ? 'error' : 'errors'}`}
         </span>
       )}
+      <McpFooterItem />
       <span className="ml-auto">
         {actions.pendingMarkReads > 0 ? `${actions.pendingMarkReads} mark-read in the undo window` : 'mark-read queue empty'}
       </span>

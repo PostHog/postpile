@@ -270,6 +270,14 @@ export function createApp(
   app.post('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.startFresh()));
   app.delete('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.clearStartFresh()));
   app.post('/api/inbox-cleanup/not-now', async (c) => c.json(await engine.hideInboxCleanup()));
+  // PostPile's MCP server in Claude Code: the cached `claude mcp get`, "Add to Claude Code"
+  // (runs `claude mcp add` in the installed app only; local, never GitHub) and the footer's "Not now".
+  app.get('/api/mcp-connection', async (c) => c.json(await engine.mcpConnection()));
+  app.post('/api/mcp-connection', async (c) => {
+    const body = z.object({ from: z.enum(['footer', 'setup']) }).parse(await c.req.json());
+    return c.json(await engine.connectMcp(body.from));
+  });
+  app.post('/api/mcp-connection/not-now', async (c) => c.json(await engine.hideMcpConnect()));
   // Mark-reads made while locked. Send is refused (ok: false) while writes are off; discard changes nothing in the app.
   app.post('/api/github-writes/pending/send', async (c) => c.json(await engine.sendPendingWrites()));
   app.post('/api/github-writes/pending/discard', async (c) => c.json(await engine.discardPendingWrites()));

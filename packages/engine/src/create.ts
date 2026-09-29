@@ -1,6 +1,6 @@
 import { arch, release } from 'node:os';
 import { ClaudeCliRunner, RunnerAgentService } from '@postpile/agent';
-import { systemTimers, UNDO_WINDOW_MS } from '@postpile/core';
+import { systemTimers, UNDO_WINDOW_MS, type McpLauncher } from '@postpile/core';
 import { GhCliTokenSource, GitHubClient, GitHubWriteClient } from '@postpile/github';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from './actions/local-change.ts';
@@ -44,6 +44,8 @@ export interface CreateEngineOptions {
   appVersion?: string;
   /** Reuse an existing Telemetry (e.g. one a main process also uses directly); defaults to building one from env. */
   telemetry?: Telemetry;
+  /** How Claude Code starts the MCP server; only the desktop app knows. Missing: "Add to Claude Code" only shows the command. */
+  mcpLauncher?: McpLauncher | null;
 }
 
 /** POSTPILE_PING_CAP when it is a whole number >= 0, else the default. */
@@ -141,6 +143,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     dataLock: lock,
     userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
     setupCommands: commands,
+    mcpLauncher: options.mcpLauncher ?? null,
     tools,
     telemetry,
     appVersion: options.appVersion,
