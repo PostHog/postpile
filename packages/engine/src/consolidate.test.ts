@@ -62,32 +62,53 @@ describe('Engine.consolidate', () => {
 
     const report = await h.engine.consolidate();
 
-    expect(report.topicProposalsFiled).toBe(2);
+    // The one-PR split is small, so it was applied right away.
+    expect(report).toMatchObject({ topicProposalsFiled: 1, topicsSplit: 1 });
     const pending = await h.engine.listProposals();
-    expect(pending.topics.map((p) => `${p.kind} ${p.name}`).sort()).toEqual(['rename Depot runners', 'split Runner images']);
+    expect(pending.topics.map((p) => `${p.kind} ${p.name}`)).toEqual(['rename Depot runners']);
 
     const rename = pending.topics.find((p) => p.kind === 'rename');
     await h.engine.decideTopicProposal(rename!.id, false);
     h.agent.answerConsolidation(answer);
     const again = await h.engine.consolidate();
-    expect(again.topicProposalsFiled).toBe(0);
+    expect(again).toMatchObject({ topicProposalsFiled: 0, topicsSplit: 0 });
   });
 
-  it('moves the split PRs into a new topic when the user accepts', async () => {
+  it('applies a small split right away: the PRs move into a new topic', async () => {
     const h = makeHarness();
     const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
     topicWithPrs(h, 'depot', prs);
     h.agent.answerConsolidation(() => ({
       topicProposals: [{ kind: 'split', topicId: 'depot', name: 'Runner images', prKeys: [prs[1]!.key], reason: 'separate' }],
     }));
-    await h.engine.consolidate();
-    const [split] = (await h.engine.listProposals()).topics;
 
-    await h.engine.decideTopicProposal(split!.id, true);
+    await h.engine.consolidate();
 
     const newTopicId = h.store.memberships.get(prs[1]!.key)?.topicId;
     expect(newTopicId).not.toBe('depot');
     expect(h.store.topics.get(newTopicId!)?.name).toBe('Runner images');
+    expect(h.store.memberships.get(prs[0]!.key)?.topicId).toBe('depot');
+    expect((await h.engine.listProposals()).topics).toEqual([]);
+  });
+
+  it('proposes a bigger split, or one that would empty the topic, and moves the PRs once accepted', async () => {
+    const h = makeHarness();
+    const prs = [1, 2, 3, 4, 5].map((n) => reviewRequestedPr(n));
+    topicWithPrs(h, 'depot', prs);
+    topicWithPrs(h, 'tiny', [reviewRequestedPr(9)]);
+    h.agent.answerConsolidation(() => ({
+      topicProposals: [
+        { kind: 'split', topicId: 'depot', name: 'Runner images', prKeys: prs.slice(1).map((pr) => pr.key), reason: 'separate' },
+        { kind: 'split', topicId: 'tiny', name: 'Everything', prKeys: [reviewRequestedPr(9).key], reason: 'all of it' },
+      ],
+    }));
+
+    const report = await h.engine.consolidate();
+
+    expect(report).toMatchObject({ topicProposalsFiled: 2, topicsSplit: 0 });
+    const split = (await h.engine.listProposals()).topics.find((p) => p.topicId === 'depot');
+    await h.engine.decideTopicProposal(split!.id, true);
+    expect(h.store.topics.get(h.store.memberships.get(prs[4]!.key)!.topicId)?.name).toBe('Runner images');
     expect(h.store.memberships.get(prs[0]!.key)?.topicId).toBe('depot');
   });
 

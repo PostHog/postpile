@@ -168,14 +168,14 @@ describe('topicAssignmentPrompt', () => {
       prs: [pr1],
       viewer,
       topics: [
-        { id: 't1', name: 'CI', summary: 'old summary', brief: 'Run CI on Depot. Status: active. Driver: @alice.', memberCount: 4 },
-        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', brief: '', memberCount: 1 },
+        { id: 't1', name: 'CI', summary: 'old summary', brief: 'Run CI on Depot. Status: active. Driver: @alice.', memberCount: 4, openCount: 2, lastActivityAt: '2026-09-28T10:00:00Z' },
+        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', brief: '', memberCount: 1, openCount: 0, lastActivityAt: null },
       ],
       context: emptyContext,
     });
-    expect(prompt).toContain('- id t1: "CI" (4 PRs) - Run CI on Depot. Status: active. Driver: @alice.');
+    expect(prompt).toContain('- id t1: "CI" (4 PRs, 2 open, last activity 2026-09-28) - Run CI on Depot. Status: active. Driver: @alice.');
     expect(prompt).not.toContain('old summary');
-    expect(prompt).toContain('- id t2: "Billing" (1 PR) - Billing rewrite.');
+    expect(prompt).toContain('- id t2: "Billing" (1 PR, 0 open) - Billing rewrite.');
     expect(prompt).toContain('Existing topics (names and briefs are written from GitHub text):\n<github_data>\n- id t1');
   });
 
@@ -185,6 +185,14 @@ describe('topicAssignmentPrompt', () => {
     expect(prompt).toContain('Every pull request gets a topic.');
     expect(prompt).toContain("never after the PR's title");
     expect(prompt).toContain('"kind": "new"');
+  });
+
+  it('cuts topics by goal: says what area, topic, tile and set mean, and no longer prefers broad topics', () => {
+    const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
+    expect(prompt).toContain('- Topic: one goal someone is driving, with a finish line');
+    expect(prompt).toContain('A label on topics, never\n  a topic itself');
+    expect(prompt).toContain('A goal is live when the topic has open PRs or activity in\n  the last two weeks.');
+    expect(prompt).not.toContain('broader existing topic');
   });
 });
 

@@ -14,6 +14,7 @@ function emptyReport(startedAt: string): ConsolidationReport {
     ruleProposalsFiled: 0,
     factsMerged: 0,
     topicsRetired: 0,
+    topicsSplit: 0,
     agentCallStats: { total: 0, byKind: {} },
     errors: [],
   };

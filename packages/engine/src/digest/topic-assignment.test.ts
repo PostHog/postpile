@@ -45,7 +45,7 @@ describe('topic assignment places every PR', () => {
     const prompts = h.runner.promptsFor('topic_assignment');
     expect(prompts).toHaveLength(2);
     expect(prompts[1]).not.toContain(`${prs[0]!.key} "`);
-    expect(prompts[1]).toContain('"Move CI to Depot" (1 PR)');
+    expect(prompts[1]).toMatch(/"Move CI to Depot" \(1 PR, 1 open, last activity \d{4}-\d{2}-\d{2}\)/);
     // The retry reuses the topic the first answer created (names match in any case).
     expect(h.store.topics.list().map((t) => t.name)).toEqual(['Move CI to Depot']);
     expect(h.store.memberships.listUnassignedPrKeys()).toEqual([]);

@@ -36,6 +36,8 @@ export interface TileStateInput {
    * still asks something of the viewer out of done. Null: handled is enough.
    */
   viewer?: Viewer | null;
+  /** PRs whose agent glance says NOT_YOURS (see `teamRequestHold`). */
+  notYours?: ReadonlySet<PrKey>;
 }
 
 export interface TopicTilesInput {
@@ -91,13 +93,13 @@ export function setIdFromTileId(tileId: string): string | null {
  * viewer's review makes it read, not done. Without a viewer, handled is
  * enough.
  */
-export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer | null = null, events: PrEvent[] = []): boolean {
+export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer | null = null, events: PrEvent[] = [], notYours = false): boolean {
   if (pr.state !== 'OPEN') {
     return true;
   }
   if (isApprovedByViewer(pr, userState, viewer?.login)) {
     // A later question or mention to the viewer still keeps it out of done.
-    return viewer === null || prWhoseTurn({ pr, events, userState, viewer }).kind !== 'you';
+    return viewer === null || prWhoseTurn({ pr, events, userState, viewer, notYours }).kind !== 'you';
   }
   if (!userState?.handledAt) {
     return false;
@@ -105,10 +107,10 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer |
   if (viewer === null) {
     return true;
   }
-  if (reviewPending(pr, viewer, userState)) {
+  if (reviewPending(pr, viewer, userState, notYours)) {
     return false;
   }
-  return prWhoseTurn({ pr, events, userState, viewer }).kind !== 'you';
+  return prWhoseTurn({ pr, events, userState, viewer, notYours }).kind !== 'you';
 }
 
 /** A found PR (no notification thread) never makes its tile unread; its events are there for whose turn and memory. */
@@ -152,7 +154,7 @@ function allPingedDone(input: TileStateInput): boolean {
     if (!pr) {
       return false;
     }
-    return isPrDone(pr, input.userStates.get(member.prKey) ?? null, input.viewer ?? null, input.events.get(member.prKey) ?? []);
+    return isPrDone(pr, input.userStates.get(member.prKey) ?? null, input.viewer ?? null, input.events.get(member.prKey) ?? [], input.notYours?.has(member.prKey) ?? false);
   });
 }
 

@@ -227,6 +227,7 @@ export class ReadModels {
         events: board.events,
         userStates: board.userStates,
         viewer,
+        notYours: board.notYours,
         pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
         quietRepo: isQuietTile(memberKeys(tile), settings),
         repoLabel: labels.tile,
@@ -263,7 +264,7 @@ export class ReadModels {
       const states = tiles.map((tile) => board.stateOf(tile).kind);
       const urgency = topicUrgency(
         tiles.map((tile, index) => {
-          const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer });
+          const turn = whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer, notYours: board.notYours });
           const loudMembers = tile.members.filter((member) => !isPrInQuietRepo(member.prKey, settings));
           return {
             state: states[index] ?? 'open',

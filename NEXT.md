@@ -932,6 +932,17 @@ the app meanwhile.
   that click, only in the installed app. "Not now" hides the footer item
   for good; setup still offers it.
 
+- **Topics are cut by goal; small splits apply themselves** (2026-09-29):
+  one glossary (area, topic, tile, set) for every agent. A PR stays in a live
+  goal topic it serves or came out of; with no live goal, a new topic, no
+  catch-all "fixes and upkeep" topic. Consolidation (still at most daily)
+  applies splits of up to 3 PRs without asking and without undo ("Wrong
+  topic" fixes a bad one); bigger splits stay proposals.
+- **Routed team requests go on hold** (2026-09-29): while someone else's
+  changes request stands it is the author's move; when the glance says Not
+  yours it is nobody's move and a mark-read makes it done. Personal and
+  teammate requests never go on hold. Tiers are unchanged (still To review).
+
 - **Selection never moves on its own** (2026-09-29): after an action or a
   refresh the selection stays where it is; the fallback to the first match
   only runs when the user changes the filter or picks something, or the

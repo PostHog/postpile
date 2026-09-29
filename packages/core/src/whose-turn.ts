@@ -6,7 +6,7 @@ import { isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
-import { isApprovedByViewer, isPersonalRequest, isVerdict, reviewRequest, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
+import { changesRequestedBy, isApprovedByViewer, isPersonalRequest, reviewRequest, teamRequestHold, teamRequestTakenBy, type ReviewRequest } from './review-request.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer } from './types.ts';
 
 export type WhoseTurnKind = 'you' | 'them' | 'none';
@@ -35,6 +35,8 @@ export interface WhoseTurnInput {
   events: Map<PrKey, PrEvent[]>;
   userStates: Map<PrKey, UserPrState>;
   viewer: Viewer | null;
+  /** PRs whose agent glance says NOT_YOURS: a routed team request on them asks nothing of the viewer. */
+  notYours?: ReadonlySet<PrKey>;
 }
 
 /** The move on the viewer's own approved PR. It shows on the tile, but it is not urgent. */
@@ -54,6 +56,8 @@ interface PrContext {
   viewer: Viewer;
   /** " on #1850" on multi-PR tiles, "" on a single PR tile. */
   where: string;
+  /** The agent's glance says the PR is not the viewer's. */
+  notYours: boolean;
 }
 
 function you(ctx: PrContext, what: string): WhoseTurn {
@@ -178,25 +182,13 @@ function threadsViewerOpened(ctx: PrContext): number {
   return ctx.pr.threads.filter((thread) => !thread.isResolved && thread.comments[0] && isViewer(ctx, thread.comments[0].author)).length;
 }
 
-/** Reviewers whose standing review asks for changes (a later approval clears it). */
-function changesRequestedBy(ctx: PrContext): string | null {
-  const latest = new Map<string, Review>();
-  for (const review of [...ctx.pr.reviews].sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1))) {
-    if (isVerdict(review)) {
-      latest.set(review.author.toLowerCase(), review);
-    }
-  }
-  const asking = [...latest.values()].find((review) => review.state === 'CHANGES_REQUESTED');
-  return asking?.author ?? null;
-}
-
 function ownPrTurn(ctx: PrContext): WhoseTurn {
   const { pr } = ctx;
   const threads = threadsWaitingOnViewer(ctx);
   if (threads.count > 0) {
     return you(ctx, `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
   }
-  const changesBy = changesRequestedBy(ctx);
+  const changesBy = changesRequestedBy(ctx.pr);
   if (changesBy) {
     return you(ctx, `Address ${changesBy}'s changes`);
   }
@@ -222,6 +214,13 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return them(ctx, pr.author, 'to merge');
   }
   const reviewed = headReview(ctx);
+  const hold = reviewed === null ? teamRequestHold(pr, ctx.viewer, ctx.notYours) : null;
+  if (hold?.kind === 'not_yours') {
+    return NO_TURN;
+  }
+  if (hold?.kind === 'changes') {
+    return them(ctx, pr.author, `to address ${hold.by}'s changes`);
+  }
   if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
     return you(ctx, reviewText(ctx, ask));
   }
@@ -262,7 +261,7 @@ function draftTurn(ctx: PrContext): WhoseTurn {
   if (threads.count > 0) {
     return you(ctx, `Address ${plural(threads.count, 'comment')} on your draft`);
   }
-  const changesBy = changesRequestedBy(ctx);
+  const changesBy = changesRequestedBy(ctx.pr);
   if (changesBy) {
     return you(ctx, `Address ${changesBy}'s changes on your draft`);
   }
@@ -298,8 +297,8 @@ function prTurn(ctx: PrContext): WhoseTurn {
 }
 
 /** Whose move it is on one PR, as a single-PR tile would say it (tracked or not). */
-export function prWhoseTurn(input: { pr: Pr; events: PrEvent[]; userState: UserPrState | null; viewer: Viewer }): WhoseTurn {
-  return prTurn({ ...input, where: '' });
+export function prWhoseTurn(input: { pr: Pr; events: PrEvent[]; userState: UserPrState | null; viewer: Viewer; notYours?: boolean }): WhoseTurn {
+  return prTurn({ ...input, where: '', notYours: input.notYours ?? false });
 }
 
 /** When the newest unseen loud event on the PR happened, '' when there is none. */
@@ -345,6 +344,7 @@ export function whoseTurn(input: WhoseTurnInput): WhoseTurn {
       userState: input.userStates.get(pr.key) ?? null,
       viewer,
       where: multi ? ` on #${pr.ref.number}` : '',
+      notYours: input.notYours?.has(pr.key) ?? false,
     });
     const news = newestUnseenLoudAt(events);
     const moreUrgent = TURN_ORDER[turn.kind] < TURN_ORDER[best.kind];

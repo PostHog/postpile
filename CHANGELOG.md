@@ -2,12 +2,18 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## Unreleased
+## 0.3.0 (2026-09-29)
 
 ### New
 
 - Read-only MCP server, `postpile-mcp`: other agents can ask what PostPile knows about a PR and its topic (`pr_context`, `topic`, `search_prs`, `whats_on_me`). Set it up with `claude mcp add postpile -- postpile-mcp`. It ships inside the app and Homebrew links it. From the repo, run `pnpm cli mcp`.
 - "Add to Claude Code": while Claude Code does not have PostPile's MCP server, the status bar shows "agents: not connected". A click offers to add it (`claude mcp add --scope user`), shows the command for other agents, or hides the item with "Not now". The last setup step offers the same. Nothing is added without the click.
+
+### Changed
+
+- Topics are cut by goal: every agent gets the same definition of area, topic, tile and set, and a PR no longer lands in a broad topic it only shares a repo or a word with. With no live goal to join, it gets a new topic.
+- The nightly tidy-up applies small topic splits (up to 3 PRs) by itself. Bigger splits still wait in the Inbox.
+- A team review request routed to your team is no longer your move while someone else's change request stands (it is the author's move), or when the agent glance says Not yours. Marking such a tile read makes it done.
 
 ### Fixed
 

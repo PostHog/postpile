@@ -20,6 +20,8 @@ export interface AfterReadInput {
   events: Map<PrKey, PrEvent[]>;
   userStates: Map<PrKey, UserPrState>;
   viewer: Viewer | null;
+  /** PRs whose agent glance says NOT_YOURS (see `teamRequestHold`). */
+  notYours?: ReadonlySet<PrKey>;
   /** When the mark-read happens; the rules only look at whether seen / handled are set. */
   readAt: IsoTime;
 }
@@ -61,8 +63,8 @@ export function tileAfterMarkRead(input: AfterReadInput): TileAfterRead {
     if (!pr) {
       return false;
     }
-    return isPrDone(pr, userStates.get(member.prKey) ?? null, input.viewer, events.get(member.prKey) ?? []);
+    return isPrDone(pr, userStates.get(member.prKey) ?? null, input.viewer, events.get(member.prKey) ?? [], input.notYours?.has(member.prKey) ?? false);
   });
-  const turn = whoseTurn({ tile: input.tile, prs: input.prs, events, userStates, viewer: input.viewer });
+  const turn = whoseTurn({ tile: input.tile, prs: input.prs, events, userStates, viewer: input.viewer, notYours: input.notYours });
   return { done, turn };
 }

@@ -39,6 +39,25 @@ describe('whoseTurn: your move', () => {
     expect(single(pr).what).toBe('Review, rowan asked');
   });
 
+  it("waits on the author while an outsider's change request stands on a routed team request", () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'], reviews: [makeReview({ author: 'ada', state: 'CHANGES_REQUESTED' })] });
+    expect(turnOf(singleTile(pr), [pr], [], [], withTeam)).toMatchObject({ kind: 'them', who: 'rowan', what: "to address ada's changes" });
+    // Asked personally, the review is still yours.
+    const personal = { ...pr, reviewerUsers: [me] };
+    expect(turnOf(singleTile(personal), [personal], [], [], withTeam)).toMatchObject({ kind: 'you' });
+  });
+
+  it('gives no move on a routed team request when the glance says not yours', () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
+    const turn = (pr: Pr) =>
+      whoseTurn({ tile: singleTile(pr), prs: new Map([[pr.key, pr]]), events: new Map(), userStates: new Map(), viewer: withTeam, notYours: new Set([pr.key]) });
+    expect(turn(makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'] })).kind).toBe('none');
+    // A teammate's PR and a personal request stay yours, whatever the glance says.
+    expect(turn(makePr({ author: 'lyra', reviewerTeams: ['acme/team-platform'] })).kind).toBe('you');
+    expect(turn(makePr({ author: 'rowan', reviewerUsers: [me] })).kind).toBe('you');
+  });
+
   it('asks for a team review only while no one else reviewed', () => {
     const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'] });
     expect(single(pr)).toMatchObject({ kind: 'you', what: 'Review for team-platform' });
