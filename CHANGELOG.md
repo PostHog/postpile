@@ -2,6 +2,19 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- Your own unsubmitted review no longer counts as your reply. A pending review, or its pending inline comments, kept an ask quiet while the answer was still unsent, and could let PostPile mark the thread read on GitHub.
+- Approve approves the commit you looked at. If new commits arrived since the pane last refreshed, the approval is refused with "New commits since you looked; take another look".
+- PRs with more than 50 review threads, or more than 30 comments in one thread, are never marked read on GitHub by PostPile itself (bot-only, "you already dealt with it" or opened): a reply past those caps may be missing from what PostPile fetched.
+- The MCP server no longer fails on a PR or topic after `instructions.md` was edited while the app was closed. It shows the glance as out of date until the app records the edit.
+- With several reviewers asking for changes, the author's move stays until every one of them was asked to re-review after the author's push. Before, "Bob to re-review" could hide open work for Carol.
+- A pending inbox cleanup stays pending when the lock closes while pending writes are sent, instead of being dropped as sent.
+- Two processes taking over the same stale lock no longer delete each other's fresh lock.
+- Topic names are stored as one line of at most 80 characters. Existing names are cleaned once on update.
+
 ## 0.11.0 (2026-09-29)
 
 ### New

@@ -4054,6 +4054,9 @@ preflight and does not know the token, so CORS stays open.
     and does not retry them [yes, keeps the 304 path free]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
   snooze started ends it, so a mention is never hidden. Confirm.
+- **A broken snooze comes back**: a snooze broken by a mention comes back once the mention is
+  read (`packages/core/src/snooze.test.ts` asserts it). Keep, or end the snooze for good when it
+  breaks? (From the codebase review, 2026-09-29.)
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
   spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread. Commits after
