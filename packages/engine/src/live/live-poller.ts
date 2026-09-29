@@ -89,13 +89,14 @@ export class LivePoller {
   /**
    * The window got focus: one cycle now, so what happened while the user was
    * away shows up without waiting for the timer. Skipped while the poll is
-   * off or the quota pauses it, before the first cycle (the app's start sync
-   * goes first), and when a cycle started less than FOCUS_DEBOUNCE_SECONDS
-   * ago, so switching windows back and forth does not hammer GitHub.
+   * off, the quota pauses it or a backoff runs (the retry timer stays),
+   * before the first cycle (the app's start sync goes first), and when a
+   * cycle started less than FOCUS_DEBOUNCE_SECONDS ago, so switching windows
+   * back and forth does not hammer GitHub.
    */
   runOnFocus(): Promise<void> {
     const pausedUntil = this.quota?.pollPausedUntil() ?? null;
-    if (this.stopped || pausedUntil !== null || this.lastStartMs === null) {
+    if (this.stopped || pausedUntil !== null || this.status.state === 'backoff' || this.lastStartMs === null) {
       return Promise.resolve();
     }
     if (this.timers.now() - this.lastStartMs < FOCUS_DEBOUNCE_SECONDS * 1000) {
@@ -214,7 +215,7 @@ export class LivePoller {
     }
   }
 
-  /** Returns the delay before the next try, in seconds. */
+  /** Returns the delay before the next try, in seconds: never shorter than the interval, X-Poll-Interval included. */
   private backOff(error: unknown): number {
     this.failures += 1;
     const interval = this.status.everySeconds;
@@ -222,10 +223,10 @@ export class LivePoller {
     let note: string;
     if (error instanceof GitHubError && error.rateLimited) {
       const doubling = Math.min(RATE_LIMIT_BACKOFF_SECONDS * 2 ** (this.failures - 1), MAX_RATE_LIMIT_BACKOFF_SECONDS);
-      delay = error.retryAfterSeconds !== null ? Math.max(error.retryAfterSeconds, interval) : doubling;
+      delay = Math.max(error.retryAfterSeconds ?? doubling, interval);
       note = `rate limited (${error.status}), next try in ${delay}s`;
     } else {
-      delay = Math.min(interval * 2 ** this.failures, MAX_ERROR_BACKOFF_SECONDS);
+      delay = Math.max(Math.min(interval * 2 ** this.failures, MAX_ERROR_BACKOFF_SECONDS), interval);
       note = `error: ${errorText(error)}`;
     }
     const now = this.timers.now();

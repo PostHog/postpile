@@ -173,6 +173,19 @@ describe('LivePoller', () => {
     expect(waits).toEqual([60, 120, 240, 480, 900]);
   });
 
+  it('never retries a rate limit without Retry-After sooner than X-Poll-Interval', async () => {
+    const limited = new GitHubError('rate limit', 429, { rateLimited: true, retryAfterSeconds: null });
+    const poll = new ScriptedPoll().then(() => Promise.resolve(done({ githubPollIntervalSeconds: 120 }))).then(() => Promise.reject(limited));
+    const { timers, poller } = setup(poll);
+    poller.start();
+    await tick(timers, poller, 60_000);
+    await tick(timers, poller, 120_000);
+
+    const status = poller.currentStatus();
+    expect(status).toMatchObject({ state: 'backoff', note: 'rate limited (429), next try in 120s' });
+    expect(Date.parse(status.backoffUntil!) - Date.parse(status.lastPollAt!)).toBe(120_000);
+  });
+
   it('backs off on other errors from the interval up to five minutes', async () => {
     const hangUp = (): Promise<PollCycle> => Promise.reject(new Error('socket hang up'));
     const poll = new ScriptedPoll().then(hangUp).then(hangUp).then(hangUp);
@@ -306,5 +319,21 @@ describe('LivePoller', () => {
     await poller.runOnFocus();
     expect(poll.calls).toBe(1);
     expect(poller.currentStatus().state).toBe('waiting');
+  });
+
+  it('runs no focus cycle while backing off and keeps the retry timer', async () => {
+    const limited = new GitHubError('secondary rate limit', 403, { rateLimited: true, retryAfterSeconds: 600 });
+    const poll = new ScriptedPoll().then(() => Promise.reject(limited));
+    const { timers, poller } = setup(poll);
+    poller.start();
+    await tick(timers, poller, 60_000);
+    const retryAt = poller.currentStatus().nextPollAt;
+
+    timers.advance(30_000);
+    await poller.runOnFocus();
+    expect(poll.calls).toBe(1);
+    expect(poller.currentStatus()).toMatchObject({ state: 'backoff', nextPollAt: retryAt });
+    await tick(timers, poller, 570_000);
+    expect(poll.calls).toBe(2);
   });
 });

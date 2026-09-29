@@ -2337,13 +2337,16 @@ standalone server never starts it.
   happened while the user was elsewhere shows without waiting up to a
   minute. Skipped when a cycle started less than 15s ago
   (`FOCUS_DEBOUNCE_SECONDS`, so switching windows does not hammer GitHub),
-  before the first cycle, while the poll is off, while the quota is nearly
-  used, and while a full sync or consolidation runs. The regular timer then
+  before the first cycle, while the poll is off, while backing off (the
+  retry timer stays), while the quota is nearly used, and while a full sync
+  or consolidation runs. The regular timer then
   counts from that cycle.
 - Backoff: a rate limit (429, or 403 with Retry-After / no requests left / a
   "rate limit" message, or a GraphQL `RATE_LIMITED` error; `GitHubError.rateLimited`)
   waits Retry-After or until X-RateLimit-Reset, else doubles from 60s to 15
-  min. Other errors double from the effective interval up to 5 min. The footer shows
+  min. Other errors double from the effective interval up to 5 min. No
+  retry comes sooner than the effective interval (`X-Poll-Interval`
+  included), and window focus runs no cycle while a backoff is pending. The footer shows
   "backing off, retry in Ns" (state `backoff`). A rate-limit backoff sends
   `rate_limited` with `where: 'poll'`.
 - GitHub quota: once a minute at most while the quota is low, paused until
