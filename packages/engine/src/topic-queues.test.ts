@@ -11,7 +11,7 @@ function harnessWithTeam() {
 }
 
 describe('topic list queues', () => {
-  it('counts PRs per tier and shows only you and your team as faces', async () => {
+  it('counts PRs per tier and shows PR authors as faces, you and your team first', async () => {
     const h = harnessWithTeam();
     const review = reviewRequestedPr(1, { reviewerUsers: [viewer.login] });
     const mine = makePr({
@@ -32,9 +32,11 @@ describe('topic list queues', () => {
       byTeam: 0,
       changesAddressed: 0,
     });
+    // Authors only: ada reviewed and stays out; alice wrote the review-requested PR.
     expect(item?.people).toEqual([
       { login: viewer.login, relation: 'you' },
       { login: 'lyra', relation: 'team' },
+      { login: 'alice', relation: 'other' },
     ]);
     const detail = await h.engine.getTopic('queues');
     const tiers = Object.fromEntries((detail?.tiles ?? []).map((view) => [view.prs[0]?.key, view.tier]));

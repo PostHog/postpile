@@ -94,8 +94,9 @@ export interface TopicListItem {
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
   /**
-   * The row's faces (`topicFaces` over `topicPeople`): you and your teammates
-   * when involved, else the other people; three at most.
+   * The row's faces (`topicFaces` over `topicPeople`): PR authors only, you
+   * and your teammates first (the team pill), then others by PR count;
+   * three at most.
    */
   people: TopicPerson[];
 }

@@ -19,50 +19,51 @@ export function personRelation(login: string, viewer: Viewer | null): PersonRela
   return (viewer.teamMembers ?? []).some((member) => sameLogin(member, login)) ? 'team' : 'other';
 }
 
-/** A face in the sidebar row's stack. */
+/** A face in the sidebar row: a PR author of the topic. */
 export interface TopicPerson {
   login: string;
   relation: PersonRelation;
 }
 
+const RELATION_ORDER: PersonRelation[] = ['you', 'team', 'other'];
+
 /**
- * Authors, reviewers (submitted, then still requested) and commenters of the
- * PRs, bots left out, each login once. The viewer and their team come first,
- * then everyone else; inside each part the order of first appearance holds.
+ * The authors of the PRs, bots left out, each login once (2026-09-29:
+ * authors only; reviewers and commenters show in the topic header and the
+ * dossier's people line). Ordered you, your teammates, then everyone else;
+ * inside each part by number of PRs, most first, ties in order of first
+ * appearance.
  */
 export function topicPeople(prs: Pr[], viewer: Viewer | null): TopicPerson[] {
-  const people: TopicPerson[] = [];
-  const add = (login: string) => {
-    if (!isBot(login) && !people.some((person) => sameLogin(person.login, login))) {
-      people.push({ login, relation: personRelation(login, viewer) });
-    }
-  };
+  const authors: { person: TopicPerson; prs: number }[] = [];
   for (const pr of prs) {
-    add(pr.author);
-    pr.reviews.filter((review) => review.state !== 'PENDING').forEach((review) => add(review.author));
-    pr.reviewerUsers.forEach(add);
-    pr.comments.forEach((comment) => add(comment.author));
-    pr.threads.forEach((thread) => thread.comments.forEach((comment) => add(comment.author)));
+    if (isBot(pr.author)) {
+      continue;
+    }
+    const known = authors.find((entry) => sameLogin(entry.person.login, pr.author));
+    if (known) {
+      known.prs += 1;
+    } else {
+      authors.push({ person: { login: pr.author, relation: personRelation(pr.author, viewer) }, prs: 1 });
+    }
   }
-  const ours = people.filter((person) => person.relation !== 'other');
-  return [...ours, ...people.filter((person) => person.relation === 'other')];
+  // Array sort is stable, so equal counts keep the order of first appearance.
+  const sorted = [...authors].sort(
+    (a, b) => RELATION_ORDER.indexOf(a.person.relation) - RELATION_ORDER.indexOf(b.person.relation) || b.prs - a.prs,
+  );
+  return sorted.map((entry) => entry.person);
 }
 
 /** At most this many faces on a sidebar row. */
 export const MAX_TOPIC_FACES = 3;
 
 /**
- * The faces a sidebar row shows. When the viewer or teammates are involved,
- * only they show (viewer first, then teammates); everyone else is dropped,
- * since "am I or my team in this?" is what the row answers. Only when neither
- * is involved do the other people show. At most three, no "+N".
+ * The faces a sidebar row shows: the first three of `topicPeople`, no "+N".
+ * You and your teammates come first and sit together in the team pill; the
+ * other authors fill what is left.
  */
 export function topicFaces(people: TopicPerson[]): TopicPerson[] {
-  const you = people.filter((person) => person.relation === 'you');
-  const team = people.filter((person) => person.relation === 'team');
-  const ours = [...you, ...team];
-  const faces = ours.length > 0 ? ours : people.filter((person) => person.relation === 'other');
-  return faces.slice(0, MAX_TOPIC_FACES);
+  return people.slice(0, MAX_TOPIC_FACES);
 }
 
 /** What the sidebar needs to know about one PR of a topic. */
