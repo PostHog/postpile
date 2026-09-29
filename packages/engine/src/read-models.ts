@@ -291,6 +291,7 @@ export class ReadModels {
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
         yourMoveTiles: urgency.yourMoveTiles,
+        unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
         queues: topicQueues(
           prs.map((pr) => ({
             tier: this.tierOf(board, pr, viewer),

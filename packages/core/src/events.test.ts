@@ -214,10 +214,8 @@ describe('deriveEvents: reviews, commits, timeline, CI', () => {
         makeTimelineItem({ id: 't2', kind: 'merged', actor: 'alice', subject: null, at: at(9) }),
       ],
     });
-    const quietByDefault = only(deriveEvents(pr, viewer, null), 'merged_without_review')[0];
-    expect(quietByDefault?.ruleLoudness).toBe('quiet');
-    const caring = deriveEvents(pr, viewer, null, { caresAboutUnreviewedMerges: true });
-    expect(only(caring, 'merged_without_review')[0]?.ruleLoudness).toBe('loud');
+    const event = only(deriveEvents(pr, viewer, null), 'merged_without_review')[0];
+    expect(event?.ruleLoudness).toBe('quiet');
   });
 
   it('calls it a plain merge when the viewer reviewed or was never asked', () => {

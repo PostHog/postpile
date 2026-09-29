@@ -45,7 +45,10 @@ so stay under the word limits:
 - verdict: LOOKS_SAFE means a reasonable reviewer could approve from this summary alone.
   LOOK_CLOSER means something deserves a real read first: open concerns, risky changes, or a
   description that does not explain the change. NOT_YOURS means the change is clearly outside
-  what this user should sign off, judged by their instructions above.
+  what this user should sign off, judged by their instructions above. For a PR that already
+  merged without this user's review, judge after the fact: LOOK_CLOSER means they should look
+  now (say in forYou what they would have pushed back on), LOOKS_SAFE means nothing to follow up,
+  NOT_YOURS as above.
 - forYou: one or two sentences on what this PR means for this user specifically, written
   against their own instructions and what they care about in this topic. Say what they should
   do. Max 40 words.

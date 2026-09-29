@@ -655,6 +655,7 @@ export class FakeEngine implements EngineService {
         openTiles: views.filter((view) => view.state.kind === 'open').length,
         totalTiles: views.length,
         yourMoveTiles: urgency.yourMoveTiles,
+        unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
         queues: topicQueues(
           prs.map(({ pr, member }) => ({
             tier: this.tierOf(pr, member),

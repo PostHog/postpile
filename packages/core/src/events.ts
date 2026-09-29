@@ -4,11 +4,6 @@ import { ruleLoudness } from './loudness.ts';
 import { isViewerSubject, mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
-export interface DeriveEventsOptions {
-  /** From instructions/tailoring: should "merged without your review" be loud? */
-  caresAboutUnreviewedMerges: boolean;
-}
-
 /** What deriveEvents knows about an event before it gets classified. */
 interface RawEvent {
   kind: EventKind;
@@ -340,7 +335,6 @@ export function deriveEvents(
   pr: Pr,
   viewer: Viewer,
   userState: UserPrState | null,
-  options: DeriveEventsOptions = { caresAboutUnreviewedMerges: false },
 ): PrEvent[] {
   const events = collectRawEvents(pr, viewer, userState).map((raw): PrEvent => {
     const decision = ruleLoudness({
@@ -351,7 +345,6 @@ export function deriveEvents(
       pr,
       viewer,
       userState,
-      caresAboutUnreviewedMerges: options.caresAboutUnreviewedMerges,
       subject: raw.subject,
       userRepliedAfter: ADDRESSED_KINDS.includes(raw.kind) && viewerSpokeAfter(pr, viewer, raw.at),
       requestAnswered: requestAnswered(pr, viewer, raw),

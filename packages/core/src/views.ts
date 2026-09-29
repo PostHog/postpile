@@ -85,6 +85,8 @@ export interface TopicListItem {
   totalTiles: number;
   /** Live (not done) tiles where the turn is the user's ("Your move"). */
   yourMoveTiles: number;
+  /** Tiles with a merge without the user's review they have not seen (`TileState.unseenMerges`): the grey "merged without you" count. */
+  unseenMergeTiles: number;
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
   /**

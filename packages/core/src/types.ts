@@ -484,6 +484,11 @@ export interface TileState {
   kind: TileStateKind;
   /** Non-empty only when kind is unread: which PR and which event. */
   unreadBecause: UnreadReason[];
+  /**
+   * Only when kind is open: merges without the user's review they have not
+   * seen, oldest first, for the tile's quiet grey strip. Absent means none.
+   */
+  unseenMerges?: UnreadReason[];
 }
 
 // ---------------------------------------------------------------------------

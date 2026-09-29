@@ -272,7 +272,7 @@ export class Engine implements EngineService {
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff, telemetry: this.telemetry };
-    const github = new GitHubSync(store, deps.reader, contexts, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
+    const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);

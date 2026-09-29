@@ -13,8 +13,6 @@ export interface LoudnessInput {
   pr: Pr;
   viewer: Viewer;
   userState: UserPrState | null;
-  /** General instructions + topic tailoring, for rules that depend on what the user cares about. */
-  caresAboutUnreviewedMerges: boolean;
   /** review_requested / review_request_removed: login or "org/team-slug". */
   subject?: string | null;
   /** The viewer already spoke on the PR after this event, so it is handled. */
@@ -126,9 +124,7 @@ export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
       }
       return decide('quiet', 'ready for review');
     case 'merged_without_review':
-      if (input.caresAboutUnreviewedMerges) {
-        return decide('loud', 'merged without your review');
-      }
+      // Never loud: the done rule keeps the tile open until the user saw it (DESIGN "Merged without your review").
       return decide('quiet', 'merged without your review');
     case 'comment':
       if (isViewersPr(input)) {
@@ -149,6 +145,15 @@ export function displayState(event: PrEvent): EventDisplayState {
     return 'seen';
   }
   return effectiveLoudness(event);
+}
+
+/**
+ * A merge without the user's review they have not seen yet. Muted counts as
+ * seen: the agent or the user called it noise. Keeps the PR out of done
+ * (DESIGN "Merged without your review").
+ */
+export function isUnseenMergeWithoutReview(event: PrEvent): boolean {
+  return event.kind === 'merged_without_review' && event.seenAt === null && effectiveLoudness(event) !== 'muted';
 }
 
 export function isUnseenLoud(event: PrEvent): boolean {

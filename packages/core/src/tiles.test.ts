@@ -38,6 +38,15 @@ describe('isPrDone', () => {
     expect(isPrDone(makePr({ state: 'CLOSED' }), null)).toBe(true);
   });
 
+  it('stays open while a merge without your review is unseen, unless the glance says not yours', () => {
+    const merged = makePr({ state: 'MERGED' });
+    const merge = makeEvent({ kind: 'merged_without_review', summary: 'alice merged it without your review' });
+    expect(isPrDone(merged, null, viewer, [merge])).toBe(false);
+    expect(isPrDone(merged, null, viewer, [merge], true)).toBe(true);
+    expect(isPrDone(merged, null, viewer, [{ ...merge, seenAt: at(20) }])).toBe(true);
+    expect(isPrDone(merged, null, viewer, [{ ...merge, override: { loudness: 'muted', reason: 'noise', by: 'agent' } }])).toBe(true);
+  });
+
   it('is done when handled or approved at the current head', () => {
     const pr = makePr({ headOid: 'h2' });
     expect(isPrDone(pr, null)).toBe(false);
@@ -135,6 +144,17 @@ describe('isPrDone', () => {
 });
 
 describe('deriveTileState', () => {
+  it('keeps a tile open with its unseen merge without your review, done once seen or called not yours', () => {
+    const pr = makePr({ state: 'MERGED' });
+    const tile = singleTile(pr);
+    const merge = makeEvent({ id: 'm1', kind: 'merged_without_review', actor: 'nell', summary: 'nell merged it without your review' });
+    const open = deriveTileState(stateInput(tile, [pr], [merge]));
+    expect(open).toMatchObject({ kind: 'open', unreadBecause: [] });
+    expect(open.unseenMerges?.map((m) => m.eventId)).toEqual(['m1']);
+    expect(deriveTileState(stateInput(tile, [pr], [{ ...merge, seenAt: at(20) }])).kind).toBe('done');
+    expect(deriveTileState({ ...stateInput(tile, [pr], [merge]), notYours: new Set([pr.key]) }).kind).toBe('done');
+  });
+
   const pr = makePr();
   const tile = singleTile(pr);
 

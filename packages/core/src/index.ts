@@ -30,7 +30,6 @@ export * from './topic-queues.ts';
 export * from './topic-urgency.ts';
 export * from './topics.ts';
 export * from './topic-roles.ts';
-export * from './instructions.ts';
 export * from './deferred-queue.ts';
 export * from './memory.ts';
 export * from './memory-views.ts';

@@ -1,5 +1,4 @@
 import {
-  caresAboutUnreviewedMerges,
   daysBefore,
   deriveEvents,
   eventsReadOnGitHub,
@@ -19,7 +18,6 @@ import {
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { errorText } from './errors.ts';
-import type { PromptContextSource } from './prompt-context.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
 import { loadViewer, saveViewer } from './viewer-meta.ts';
@@ -129,7 +127,6 @@ export class GitHubSync {
   constructor(
     private readonly store: Store,
     private readonly reader: GitHubReader,
-    private readonly contexts: PromptContextSource,
     private readonly now: () => Date,
     private readonly log: ActionLog,
     private readonly pendingWrites: PendingWrites,
@@ -377,15 +374,6 @@ export class GitHubSync {
     return picked.map(({ ref, thread }) => ({ ref, thread }));
   }
 
-  /** A stack layer has no topic of its own; it reads the context of its anchor's topic. */
-  private caresAboutMerges(key: PrKey): boolean {
-    const anchor = this.store.pullIns.get(key)?.anchorPrKey;
-    const membership = this.store.memberships.get(key) ?? (anchor ? this.store.memberships.get(anchor) : null);
-    const topicId = membership?.topicId ?? null;
-    const context = this.contexts.forTopic(topicId);
-    return caresAboutUnreviewedMerges(context.instructions, context.tailoring);
-  }
-
   /**
    * Writes the snapshot and its events. Returns the ids of events that are new.
    * Every event goes to the event log, not only the new ones: the log ignores
@@ -396,7 +384,7 @@ export class GitHubSync {
     return this.store.transaction(() => {
       this.store.prs.upsert(pr, at);
       const userState = this.store.userPrStates.get(pr.key);
-      const events = deriveEvents(pr, viewer, userState, { caresAboutUnreviewedMerges: this.caresAboutMerges(pr.key) });
+      const events = deriveEvents(pr, viewer, userState);
       const created = this.store.events.upsertDerived(pr.key, events);
       const inTimeOrder = [...events].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
       this.store.eventLog.append(

@@ -10,7 +10,6 @@ function input(overrides: Partial<LoudnessInput>): LoudnessInput {
     pr: makePr(),
     viewer,
     userState: null,
-    caresAboutUnreviewedMerges: false,
     ...overrides,
   };
 }
@@ -70,11 +69,8 @@ describe('ruleLoudness', () => {
     expect(decision).toEqual({ loudness: 'quiet', reason: 'new commits after you approved' });
   });
 
-  it('makes merged without review loud only when the user cares', () => {
+  it('never makes merged without review loud: the done rule surfaces it instead', () => {
     expect(ruleLoudness(input({ kind: 'merged_without_review' })).loudness).toBe('quiet');
-    expect(ruleLoudness(input({ kind: 'merged_without_review', caresAboutUnreviewedMerges: true })).loudness).toBe(
-      'loud',
-    );
   });
 
   it('makes human reviews and comments loud on the viewer own PR only', () => {

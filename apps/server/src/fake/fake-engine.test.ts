@@ -71,7 +71,8 @@ describe('FakeEngine', () => {
     await engine.markRead('pr:acme/app#1790');
     await engine.undo(null);
     const topics = await engine.listTopics();
-    expect(topics.find((item) => item.topic.id === 'topic-ci-tests')?.unreadTiles).toBe(2);
+    // #1790 merged without your review: quiet, so an open grey tile, not an unread one.
+    expect(topics.find((item) => item.topic.id === 'topic-ci-tests')).toMatchObject({ unreadTiles: 1, unseenMergeTiles: 1 });
     expect(topics.find((item) => item.topic.id === 'topic-depot')?.unreadTiles).toBe(2);
   });
 

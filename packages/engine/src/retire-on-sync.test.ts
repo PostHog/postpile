@@ -1,5 +1,5 @@
 import type { Pr } from '@postpile/core';
-import { at, makeComment, makeThreadFor, viewer } from '@postpile/core/fixtures';
+import { at, makeComment, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -37,6 +37,62 @@ describe('Engine.sync retires finished topics', () => {
     ]);
     // Opened from the Finished drawer, the topic still shows its tile.
     expect((await h.engine.getTopic('depot'))?.tiles.map((view) => view.tile.id)).toEqual([`pr:${mergedPr(1).key}`]);
+  });
+
+  it('keeps a topic while a merge without your review is unseen, and retires it once read', async () => {
+    const h = makeHarness({ now: () => FOUR_DAYS_LATER });
+    const pr = reviewRequestedPr(1, {
+      state: 'MERGED',
+      mergedAt: at(5),
+      mergedBy: 'alice',
+      timeline: [
+        makeTimelineItem({ id: 't1', kind: 'review_requested', actor: 'alice', subject: viewer.login, at: at(1) }),
+        makeTimelineItem({ id: 't2', kind: 'merged', actor: 'alice', subject: null, at: at(5) }),
+      ],
+    });
+    topicWithPrs(h, 'depot', [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const events = h.store.events.listForPr(pr.key);
+    const merge = events.find((e) => e.kind === 'merged_without_review');
+    expect(merge?.ruleLoudness).toBe('quiet');
+    h.store.events.markSeen(events.filter((e) => e !== merge).map((e) => e.id), at(6));
+
+    const kept = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(kept.topicsRetired).toBe(0);
+    const tile = (await h.engine.getTopic('depot'))?.tiles[0];
+    expect(tile?.state.kind).toBe('open');
+    expect((await h.engine.listTopics())[0]).toMatchObject({ unreadTiles: 0, unseenMergeTiles: 1 });
+
+    h.store.events.markSeen([merge!.id], at(7));
+    const retired = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(retired.topicsRetired).toBe(1);
+  });
+
+  it('glances a PR merged without your review while the merge is unseen, and a Not yours glance settles it', async () => {
+    const h = makeHarness({ now: () => FOUR_DAYS_LATER });
+    const pr = reviewRequestedPr(1, {
+      state: 'MERGED',
+      mergedAt: at(5),
+      mergedBy: 'alice',
+      timeline: [
+        makeTimelineItem({ id: 't1', kind: 'review_requested', actor: 'alice', subject: viewer.login, at: at(1) }),
+        makeTimelineItem({ id: 't2', kind: 'merged', actor: 'alice', subject: null, at: at(5) }),
+      ],
+    });
+    topicWithPrs(h, 'depot', [pr]);
+    h.agent.answerGlances((input) => {
+      const all = h.agent.allGlances(input);
+      return { ...all, glances: all.glances.map((glance) => ({ ...glance, verdict: 'NOT_YOURS' as const })) };
+    });
+
+    await h.engine.sync({ agentJobs: ['glances'] });
+
+    expect(h.agent.glanceInputs.flatMap((input) => input.items.map((item) => item.pr.key))).toContain(pr.key);
+    const events = h.store.events.listForPr(pr.key);
+    h.store.events.markSeen(events.filter((e) => e.kind !== 'merged_without_review').map((e) => e.id), at(6));
+    expect(h.store.glances.get(pr.key)?.verdict).toBe('NOT_YOURS');
+    const tile = (await h.engine.getTopic('depot'))?.tiles[0];
+    expect(tile?.state.kind).toBe('done');
   });
 
   it('keeps a topic with an open PR', async () => {

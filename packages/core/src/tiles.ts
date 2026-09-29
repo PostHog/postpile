@@ -1,4 +1,4 @@
-import { isUnseenLoud } from './loudness.ts';
+import { isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
 import { isApprovedByViewer, reviewPending } from './review-request.ts';
 import { breaksSnooze, isSnoozeOver } from './snooze.ts';
@@ -85,7 +85,8 @@ export function setIdFromTileId(tileId: string): string | null {
 
 /**
  * A pinged PR is done only when nothing is asked of the viewer (2026-09-28):
- * merged or closed, or approved by them while whose turn is not theirs (on
+ * merged or closed (but not while a merge without their review is unseen,
+ * unless the glance says not theirs), or approved by them while whose turn is not theirs (on
  * any commit; a later push stays quiet, a later question or mention to them
  * is their move), or handled
  * (marked read) while whose turn is not theirs and no review is still
@@ -95,7 +96,8 @@ export function setIdFromTileId(tileId: string): string | null {
  */
 export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer | null = null, events: PrEvent[] = [], notYours = false): boolean {
   if (pr.state !== 'OPEN') {
-    return true;
+    // A merge without the user's review stays until they saw it, unless the glance says it is not theirs.
+    return notYours || !events.some(isUnseenMergeWithoutReview);
   }
   if (isApprovedByViewer(pr, userState, viewer?.login)) {
     // A later question or mention to the viewer still keeps it out of done.
@@ -114,11 +116,11 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer |
 }
 
 /** A found PR (no notification thread) never makes its tile unread; its events are there for whose turn and memory. */
-function unreadReasons(input: TileStateInput): UnreadReason[] {
+function reasonsWhere(input: TileStateInput, members: TileMember[], wanted: (event: PrEvent) => boolean): UnreadReason[] {
   const reasons: UnreadReason[] = [];
-  for (const member of input.tile.members.filter((m) => m.provenance.kind !== 'found')) {
+  for (const member of members) {
     for (const event of input.events.get(member.prKey) ?? []) {
-      if (!isUnseenLoud(event)) {
+      if (!wanted(event)) {
         continue;
       }
       reasons.push({
@@ -132,6 +134,16 @@ function unreadReasons(input: TileStateInput): UnreadReason[] {
     }
   }
   return reasons.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+}
+
+function unreadReasons(input: TileStateInput): UnreadReason[] {
+  return reasonsWhere(input, input.tile.members.filter((m) => m.provenance.kind !== 'found'), isUnseenLoud);
+}
+
+/** Merges without the user's review they have not seen, on PRs the glance did not call not theirs. */
+function unseenMergeReasons(input: TileStateInput): UnreadReason[] {
+  const members = input.tile.members.filter((m) => isTracked(m.provenance) && !input.notYours?.has(m.prKey));
+  return reasonsWhere(input, members, isUnseenMergeWithoutReview);
 }
 
 function isSnoozeActive(input: TileStateInput): boolean {
@@ -176,7 +188,8 @@ export function deriveTileState(input: TileStateInput): TileState {
   if (allPingedDone(input)) {
     return { kind: 'done', unreadBecause: [] };
   }
-  return { kind: 'open', unreadBecause: [] };
+  const unseenMerges = unseenMergeReasons(input);
+  return unseenMerges.length > 0 ? { kind: 'open', unreadBecause: [], unseenMerges } : { kind: 'open', unreadBecause: [] };
 }
 
 /** One line for the CLI and tooltips: why the tile is in its state. */

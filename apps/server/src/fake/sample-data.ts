@@ -437,7 +437,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'merged', actor: 'nell', text: 'merged it', hoursAgo: 120, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 1790, [
-      { kind: 'merged_without_review', actor: 'nell', text: 'merged it without your review', hoursAgo: 48, rule: 'loud' },
+      { kind: 'merged_without_review', actor: 'nell', text: 'merged it without your review', hoursAgo: 48, rule: 'quiet' },
     ]),
     ...sampleEvents(clock, 1822, [
       { kind: 'review_requested', actor: 'remy', text: 'requested @team-platform', hoursAgo: 72, rule: 'loud' },

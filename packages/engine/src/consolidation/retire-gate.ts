@@ -5,7 +5,9 @@ export const RETIRE_QUIET_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
  * When a topic is over: every member PR merged or closed, no events for 3
- * days, and no unread or snoozed tile left. Every full sync retires the
+ * days, and every tile done. "Done" rather than "nothing unread": a merge
+ * without the user's review they have not seen keeps its tile open, and its
+ * topic listed (DESIGN "Merged without your review"). Every full sync retires the
  * topics that pass (`retireFinishedTopics`); consolidation checks it too
  * before it follows the agent's "finished".
  */
@@ -23,11 +25,8 @@ export class RetireGate {
     return memberKeys.every((key) => (this.board.events.get(key) ?? []).every((event) => event.at <= cutoff));
   }
 
-  private nothingWaiting(topicId: string): boolean {
-    return this.board.tilesForTopic(topicId).every((tile) => {
-      const kind = this.board.stateOf(tile).kind;
-      return kind !== 'unread' && kind !== 'snoozed';
-    });
+  private everyTileDone(topicId: string): boolean {
+    return this.board.tilesForTopic(topicId).every((tile) => this.board.stateOf(tile).kind === 'done');
   }
 
   passes(topicId: string): boolean {
@@ -36,6 +35,6 @@ export class RetireGate {
       return false;
     }
     const cutoff = new Date(new Date(this.board.now).getTime() - RETIRE_QUIET_MS).toISOString();
-    return this.allPrsOver(memberKeys) && this.quietSince(memberKeys, cutoff) && this.nothingWaiting(topicId);
+    return this.allPrsOver(memberKeys) && this.quietSince(memberKeys, cutoff) && this.everyTileDone(topicId);
   }
 }
