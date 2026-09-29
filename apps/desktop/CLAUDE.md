@@ -171,6 +171,16 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   list). No manual refresh per PR or topic (decided 2026-09-29).
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the action bar right under the assessment boxes.
+- The action bar's one ink button is the tile's lead (`detailPrimary` in
+  `lib/mark-read.ts`, built on `tileFooterAction`): Approve while it is
+  due, else Mark read / Mark done / Snooze as on the tile, Open on GitHub on
+  a done tile. It goes first; "Approve again" / "Approve draft" stay
+  outlined. Don't pick a primary in the component.
+- "Not up to date" has one wording (`lib/staleness.ts`): "updating" while
+  `useActions().syncing` or a catch-up writes (`glanceState` `writing`),
+  else "out of date". Never write "stale" or "Sync to refresh" in the UI.
+  A stale glance shows `StaleVerdictBox` (grey, dashed) with the advice
+  folded behind "Show old assessment".
 
 ## Styling: tokens + Tailwind utilities
 
@@ -178,6 +188,13 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   shadow and font. `styles/app.css` maps them onto Tailwind names in `@theme`
   (`bg-surface`, `text-muted`, `border-hairline`, `bg-unread-soft`,
   `rounded-tile`, `shadow-selected`, `font-mono`, …).
+- **Small grey text**: `text-hint` (#666b79, at least 4.5:1 on white and
+  the sidebar) for small text that says something (why-here lines,
+  out-of-date notes, "Dossier v3", roles, fold labels, empty states, hover
+  actions). `text-faint` (2.3-2.6:1) is decoration only: separators,
+  chevrons, ages next to a louder line, done tiles.
+- **Diff red**: `--diff-red` for deletions in the Size fact. Coral
+  (`unread`) is never a diff or CI colour; the Checks fact is grey.
 - **Tailwind's default palette is switched off** (`--color-*: initial`). Only
   token colors exist as utilities. Need a new color? Add a token to
   `tokens.css` and a `--color-*` line to `@theme`, don't reach for hex in a
@@ -230,7 +247,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
   optional box; secondary button there so Accept stays the one primary).
-- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `ForWhomChip`,
+- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `NewsDot`
+  (the coral dot before a PR number, `newsPrKeys` in `lib/tiles.ts`), `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
@@ -300,6 +318,13 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   agent", names in the tooltip; the detail uses `PrDetail.agentApprovers`
   with `approvedText` in `lib/pr.ts`. **No CI on rows, tiles, the detail
   state line or the RISK box**: checks only show in `PrFacts`.
+- PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
+  false; the heading is the title). Every PR that keeps an unread tile
+  unread gets `NewsDot` before its number, on the tile and in
+  `DetailContext`'s list. `DetailContext` shows kind, title, "PR x of n"
+  and the arrows only for several PRs; one PR is just "PR".
+- Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):
+  pass its result as `MemoryLine` `refs` in lists.
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for
   "Your move".
 - Coral (`unread`) means "new since you looked" and nothing else on a tile.
@@ -326,6 +351,12 @@ are a `SetupPicks` (`picksFromDraft`: suggested quiet repos on, main repo
 keeps them and the main repo on a refine).
 
 ## Selection
+
+Sidebar faces (`FaceStack` in `TopicSidebar`): `TopicListItem.people` is
+PR authors only (core `topicFaces`); `teamPill` (`lib/faces.ts`) splits
+them into the team pill (you and teammates: sea tint, `border-sea-pale`,
+`PeopleIcon` first, avatars overlapping, tooltip "You and your team: …")
+and the other authors after it, overlapping the same way.
 
 The sidebar lists topics in queue sections (`lib/queues.ts`,
 `queueLayout`; DESIGN.md "Queue sections"): Needs reply, Changes you

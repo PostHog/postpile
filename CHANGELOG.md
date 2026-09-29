@@ -2,6 +2,21 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- A stale assessment looks stale: the verdict box goes grey and dashed, says "out of date" and folds the old advice behind "Show old assessment".
+- One wording for "not up to date": "updating" while a sync or catch-up runs, "out of date" otherwise. The live footer says "paused while syncing".
+- The detail pane's main button is the tile's main button (Mark read, Mark done, Snooze), with "Approve again" outlined next to it. The role chip reads "Reviewer", "Driver" and so on.
+- Deletions in the Size fact get their own red; the Checks fact is plain grey with "N checks · M not passing".
+- A single-PR tile shows its title once; the detail header shows just "PR" without a counter or arrows.
+- The status bar drops the dollar figure from "last sync".
+- Sidebar faces are PR authors only: you and your team in a sea team pill, then the other authors.
+- Small grey text that carries information is darker and readable (4.5:1 or more).
+- A repeated source chip shows once per block.
+- A coral dot marks the PR that keeps a tile unread.
+
 ## 0.8.0 (2026-09-29)
 
 ### Changed

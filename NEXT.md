@@ -542,7 +542,8 @@ now".
     double-click resets to the default clamps, widths kept per viewer in
     localStorage (DESIGN.md "Three-pane balance").
   - Sidebar faces: only you and teammates when involved (you first), else
-    the others; three at most, no "+N" (`topicFaces` in core).
+    the others; three at most, no "+N" (`topicFaces` in core). Replaced
+    2026-09-29 by PR authors with a team pill.
   - Sidebar numbers: one per row, the unread tile count in a bubble (coral
     when urgent, grey when calm); the per-row tier PR count and the loose
     unread dot are gone. Section headers keep their PR count.
@@ -948,6 +949,21 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **UI fixes from the screen review (2026-09-29)**: Julian signed off on ten
+  items from the mockup page. A stale glance's verdict box goes grey and
+  dashed with "out of date" and its advice folded; one wording, "updating"
+  while a sync or catch-up runs, else "out of date"; the detail pane leads
+  with the tile's action (Approve only while due, "Approve again"
+  outlined), role chips are nouns ("Reviewer"); deletions get their own
+  diff red and the Checks fact goes neutral grey ("N checks · M not
+  passing"); a single PR's title shows once and its detail header has no
+  counter or arrows; no cost in the status bar; sidebar faces are PR
+  authors with you and your team in a sea team pill; `--hint` for small
+  text that carries information (faint only for decoration); a repeated
+  source chip once per block; a coral dot on the PR that keeps a tile
+  unread. DESIGN.md "Tile faces", "Three-pane balance", "Queue sections",
+  "Glance catch-up" › "Out of date wording".
 
 - **The live poll obeys X-Poll-Interval, plus a cycle on focus**
   (2026-09-29): the poll waits the configured interval (default now 60s)

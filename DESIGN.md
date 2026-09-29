@@ -875,6 +875,9 @@ dossier save, not here.
 - CLI: `sync` prints one line per kind (`dossier_update 3 (1 skipped
   unchanged) glance_batch 4 (1 retry) ... total 9, $0.12`).
   `--max-agent-calls` caps sync and consolidation.
+- The app's status bar says "last sync: 40 agent calls", no dollar figure
+  (2026-09-29): the user is on a subscription and the cost read like a
+  bill. `costUsd` stays in the report, the CLI and `agent_call`.
 - Calls are only counted by the observer (`AgentCallLog`); the budget only
   records skips. Chat and draft calls get run id `action`.
 - Every finished sync stores its `SyncReport` in meta `last_sync_report`
@@ -1491,18 +1494,34 @@ stay on done tiles; only titles and counts go grey. **CI shows only in the
 detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
 or the RISK box. `PrStatus.checks` stays in the view model for whose turn
 ("Fix failing CI") and the agent can still mention CI in its own text.
+The Checks fact itself is neutral (2026-09-29): a grey bar (passing a notch
+darker than the rest) and "12 checks · 2 not passing" (failed and running
+together; "all passing" at none) in the normal muted text, no pass or fail
+colour. The Size fact next to it draws deletions (count and bar) in their
+own diff red (`--diff-red`), never coral: coral stays for "new".
 
-**PR rows** (`PrRow`): state icon, mono number, the stack mark for a stack
-layer ("1/3", see "Stacks as one unit"), bold title, (for-whom chip
-when it differs, repo label), then the state word, open threads (bubble +
-count) and the author's avatar. A single PR sits in a white bordered box; a
-stack or set's rows sit in one tinted rounded box, the selected row
-highlighted, drafts and closed layers on a grey row.
+**PR rows** (`PrRow`): state icon, the coral "new" dot for a PR that keeps
+the tile unread, mono number, the stack mark for a stack layer ("1/3", see
+"Stacks as one unit"), bold title, (for-whom chip when it differs, repo
+label), then the state word, open threads (bubble + count) and the author's
+avatar. A single PR sits in a white bordered box and its row leaves the
+title out (2026-09-29: the tile's heading already is the title; the row's
+tooltip keeps it); a stack or set's rows sit in one tinted rounded box, the
+selected row highlighted, drafts and closed layers on a grey row.
+
+**The new dot** (2026-09-29, `newsPrKeys` in the renderer's `lib/tiles.ts`):
+on an unread tile every PR with an unseen loud event
+(`PrSummary.unseenLoudEvents`) or named in `TileState.unreadBecause` gets a
+small coral dot before its number, in the tile's rows and the detail pane's
+PR list (aria-label "New since you looked"). A six-PR set once stayed
+unread because of one old "ready for review", and nothing showed which PR.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
 "Stack · 2"; dashed square + "Set · 3"; blue only while selected), the
 verdict pill with an icon ("Look closer" ring-dot on a honey ring, "Looks
-safe" check, "Not yours" dash, dashed "No glance yet"), then avatars and age
+safe" check, "Not yours" dash, dashed "No glance yet"; a stale glance adds
+"· out of date", or "· updating" while a sync or catch-up runs, see
+"Out of date wording"), then avatars and age
 on the right. Then the title, the agent's one-to-three-line take, the PR
 rows and the footer.
 
@@ -1609,7 +1628,9 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   through the external link path (so `opened_on_github` fires). Done tiles
   keep "Open".
 - Detail pane action bar: same label rule; the mark button is left out
-  while the tile is read and still your move (Snooze stays there).
+  while the tile is read and still your move (Snooze stays there, as the
+  primary). Its primary is the tile's (`detailPrimary`, see "Own PRs never
+  ask for a review").
 - Read looks read: no strip, no NEW, title in regular weight. The honey
   your-move footer stays as the only reminder.
 - Toast after a mark-read that leaves your move (writes on): "Marked read.
@@ -1652,6 +1673,15 @@ any review ask; on top of that:
   `approved` once you approved on any commit, where the button stays usable
   but calm (re-approving is harmless, it never nags). On your own PR, or a merged or closed one: Mark read while the
   tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
+- The pane leads with what the tile leads with (2026-09-29,
+  `detailPrimary` in the renderer's `lib/mark-read.ts`, on top of the
+  tile's `tileFooterAction`): the one ink button, placed first, is Approve
+  while it is due (someone else's open PR, not approved, not a draft), else
+  the tile footer's Mark read / Mark done / Snooze, or Open on GitHub on a
+  done tile. "Approve again" and "Approve draft" stay outlined next to it.
+  Before, a PR the viewer had approved got no primary at all while its tile
+  led with Mark read. The topic header's role chip is a noun: "Driver",
+  "Reviewer", "Stakeholder", "Watcher" (was "You review" and friends).
 - The Approve button says what you approve into (2026-09-28,
   `approveButton` / `approveStateGlyphs` in the renderer's `lib/approve.ts`):
   the lifecycle glyph (draft / ready) and the review glyph (approved /
@@ -1783,6 +1813,21 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   with a coral "NEW" pill (was a 7px dot); read tiles have no strip and a
   quieter title (ink-2 instead of ink). Coral stays "new since you looked"
   only. PR rows show their own for-whom chip only in multi-PR tiles.
+- **Readable small text** (2026-09-29): the faint grey (`--faint`, #9aa0ad)
+  measures 2.3-2.6:1 on PostPile's backgrounds. Small text that carries
+  information uses `--hint` (#666b79: 5.3:1 on white, 4.7:1 on the
+  sidebar): the why-here line ("Owner not known · you're here because…"),
+  out-of-date notes, "Dossier v3", people's roles, the sidebar's fold
+  labels (Routed to you, FYI, Finished), "Earlier activity", empty-state
+  lines, stale memory lines and hover actions (Why?, Recheck, Wrong,
+  Forget). Faint stays for decoration: separators, chevrons, the quote
+  mark, ages next to a louder line, done tiles. Light theme only; there is
+  no dark theme yet.
+- **Source chips once per block** (2026-09-29, `blockRefs` in the
+  renderer's `lib/memory.ts`): inside one block (since you last looked,
+  open questions, "What the agent knows") a source chip already shown on an
+  earlier line (same label and link) is left out, so "#1902" does not run
+  down the block. "Why?" still lists every source of a line.
 - **Detail pane assessment** (2026-09-28, mockup ForWhom2 part 2 variant
   1, "verdict as the box title"; `GlanceCard`, split in `lib/assessment.ts`).
   Box 1 is titled with the verdict ("LOOK CLOSER · for you", honey; "LOOKS
@@ -1795,7 +1840,14 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   The renderer no longer adds a failing CI line (2026-09-29: CI only in
   the facts). Then plain lines "→ Does:" and "“ Others:". Each
   box caps at 3 lines. Nothing repeats: no verdict pill or for-whom chip in
-  the pane, the risk level only in box 2's title. The glance schema stays
+  the pane, the risk level only in box 2's title.
+  A stale glance looks stale (2026-09-29, `StaleVerdictBox`): the verdict
+  box turns grey and dashed whatever the verdict, keeps the verdict word
+  with "· out of date" ("· updating" while something runs), and says one
+  line, "Written before the last change. A new assessment will be written
+  on the next sync." ("Updating now: a new assessment is being written.").
+  Its advice (for-you lines, RISK box, Does / Others, Look at first) folds
+  away behind "Show old assessment". The glance schema stays
   prose; sentences split into lines in the renderer (a dot followed by a
   space and a capital or digit ends one), so stored glances keep working.
   The action bar (primary, Ask, Mark read, Snooze, then Recheck and chat at
@@ -1803,7 +1855,10 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   activity list; the ask composer opens under it.
 - **Detail pane top** (2026-09-29, design 3a): the tinted header repeats
   the tile (kind, title, "PR 1 of 2", ‹ ›) and lists its PRs like tile rows,
-  the open one boxed in accent. The body starts with a state line: big
+  the open one boxed in accent, with the coral new dot where it applies.
+  A single-PR tile's header shows only the kind ("PR"): no title (the body
+  shows it right below), no counter and no arrows that lead nowhere
+  (2026-09-29). The body starts with a state line: big
   state icon + lifecycle word ("Open" green, "Draft", "Merged", ...), the
   review word, the mono `owner/repo#num` and the GitHub button. Then the
   title and `head → base · layer 1 of 2`, then (only while something
@@ -1938,13 +1993,20 @@ avatars and filters", QueuesB2).
   urgency rule says so (an unread tile is still open), grey bubble when
   every unread tile is merged or closed, no bubble when all is read. The old
   separate coral dot, grey dot + count and the per-row tier count are gone.
-- **Faces** (`TopicListItem.people` = `topicFaces(topicPeople(...))`):
-  `topicPeople` collects authors, reviewers (submitted, then requested) and
-  commenters, no bots. `topicFaces` then picks: if you or teammates
-  (`Viewer.teamMembers`) are involved, only those show, you first, then
-  teammates, with a sea ring; only when neither is involved do the other
-  people show. Three faces at most, no "+N" (2026-09-28: a row full of
-  strangers said nothing about whether it concerns you).
+- **Faces** (`TopicListItem.people` = `topicFaces(topicPeople(...))`,
+  2026-09-29): PR authors only, no bots; reviewers and commenters stay in
+  the topic header and the dossier's people line. `topicPeople` orders you,
+  your teammates (`Viewer.teamMembers`), then everyone else, each part by
+  number of PRs (ties in order of appearance); `topicFaces` takes the first
+  three, no "+N". You and your teammates sit together in one **team pill**
+  (`teamPill` in the renderer's `lib/faces.ts`): sea-tinted, thin sea
+  border, fully rounded, a small two-person icon first, then the avatars
+  overlapping; tooltip "You and your team: <logins>". Only you: the pill
+  holds just you; nobody from the team: no pill. Other authors follow
+  outside the pill as plain avatars, overlapping the same way (the first
+  onto the pill's edge). Replaced "only you and your team when involved,
+  with a sea ring" (2026-09-28), which dropped the other authors and mixed
+  in reviewers.
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
   (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
@@ -2354,7 +2416,7 @@ standalone server never starts it.
   quota pace and `X-Poll-Interval` wins.
 - Overlap: `Engine.pollOnce()` answers `blocked` while a full sync or a
   consolidation runs (glance catch-up runs go beside poll cycles, see
-  "Glance catch-up") (footer: "paused: full sync running"); sync and
+  "Glance catch-up") (footer: "paused while syncing"); sync and
   consolidation wait for a running poll cycle, so agent calls land in the
   right run (`poll:<time>` in `agent_call`). When a full sync ends, the
   poll runs one cycle right away (2026-09-28): a sync takes a minute or
@@ -2550,6 +2612,18 @@ Pulled-in stack layers keep "Pulled in to complete the stack".
 (or the one follow-up when a run is going). Refused while the agent is off,
 the daily cap is spent or consolidation runs; during a sync it answers that
 the sync retries it. Local, agent calls only, not on the `GithubWrite` list.
+
+**Out of date wording** (2026-09-29, the renderer's `lib/staleness.ts`):
+one wording everywhere for "not up to date". While a full sync runs
+(`useActions().syncing`) or a catch-up run writes for the PR or topic
+(`glanceState` `writing` on the PR, or on any PR of the topic for the
+dossier), every note says "updating": the tile's verdict chip "· updating",
+the stale verdict box "Updating now: a new assessment is being written.",
+the dossier's "Updating now: 3 newer events.", a stale memory badge
+"updating · PR moved since", the live footer "paused while syncing". When
+nothing runs: "out of date" ("· out of date", "Out of date: 3 newer events
+not in the dossier yet.", "Out of date: PR moved since" in "Why?"). "Stale"
+and "Sync to refresh it" are gone from the UI.
 
 **Refresh**: `LivePollStatus.catchUpChanges` grows on every queue, start and
 end; `useLivePoll` refetches everything when it moves, so a tile flips from
