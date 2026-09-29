@@ -13,6 +13,13 @@ import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptConte
  */
 export const DOSSIER_PROMPT_VERSION = 'd2';
 
+/**
+ * Wording version of the glance batch prompt alone, like
+ * DOSSIER_PROMPT_VERSION. g2 asks for keyFiles, so every glance regenerates
+ * once to get them; sets and topic summaries stay as they are.
+ */
+export const GLANCE_PROMPT_VERSION = 'g2';
+
 // Input hashes decide when a stored answer is stale. They cover what the
 // answer depends on, not every byte of the prompt: a bot comment or a CI
 // re-run must not regenerate a glance, so those are left out on purpose.
@@ -115,6 +122,7 @@ export function glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchIt
   const dossier = input.dossier ? [input.dossier.topicId, input.dossier.version] : null;
   return inputHash(
     'glance_batch',
+    GLANCE_PROMPT_VERSION,
     modelFor('glance_batch'),
     prGlanceSnapshot(item.pr),
     input.viewer,

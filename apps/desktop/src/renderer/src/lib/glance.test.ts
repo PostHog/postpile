@@ -19,6 +19,7 @@ describe('glanceClaim', () => {
       does: 'Moves the cache.',
       risk: 'medium - cold runs',
       othersSaid: '',
+      keyFiles: [],
       pullInReason: null,
       dossierVersion: null,
       inputHash: 'h',

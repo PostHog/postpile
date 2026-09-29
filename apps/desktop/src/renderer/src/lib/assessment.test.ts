@@ -9,6 +9,7 @@ const glance: Glance = {
   does: 'Moves the retry wrapper into the export job runner.',
   risk: 'medium - A retry loop with no cap could spin forever.',
   othersSaid: 'sol asked for a rollback note; no approvals yet.',
+  keyFiles: [],
   pullInReason: null,
   dossierVersion: null,
   inputHash: 'h',

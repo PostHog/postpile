@@ -391,6 +391,7 @@ describe('RunnerAgentService.glanceBatch', () => {
       {
         prKey: 'acme/app#1',
         ...glanceEntry,
+        keyFiles: [],
         pullInReason: null,
         dossierVersion: 7,
         inputHash: glanceItemInputHash(input, input.items[0]!),
@@ -435,6 +436,30 @@ describe('RunnerAgentService.glanceBatch', () => {
 
     expect(result.glances.map((glance) => [glance.prKey, glance.verdict])).toEqual([['acme/app#1', 'LOOKS_SAFE']]);
     expect(result.missing).toEqual([]);
+  });
+
+  it('keeps only key files that are among the changed files, at most three', async () => {
+    const { runner, service } = setup();
+    const files = ['a.ts', 'b.ts', 'c.ts', 'd.ts'].map((path) => ({ path, additions: 1, deletions: 0 }));
+    const withFiles = makePr({ files });
+    const keyFiles = [
+      { path: 'made-up.ts', why: 'not in the PR' },
+      { path: './a.ts', why: 'entry point' },
+      { path: 'a.ts', why: 'repeat' },
+      { path: 'b.ts', why: 'b' },
+      { path: 'c.ts', why: 'c' },
+      { path: 'd.ts', why: 'one too many' },
+    ];
+    runner.answer('glance_batch', { glances: [{ prKey: 'acme/app#1', ...glanceEntry, keyFiles }] });
+    const input = glanceInput({ items: [{ pr: withFiles, provenance: { kind: 'pinged', reason: 'review_requested' } }] });
+
+    const result = await service.glanceBatch(input);
+
+    expect(result.glances[0]?.keyFiles).toEqual([
+      { path: 'a.ts', why: 'entry point' },
+      { path: 'b.ts', why: 'b' },
+      { path: 'c.ts', why: 'c' },
+    ]);
   });
 
   it('fills pullInReason from provenance and labels the retry attempt', async () => {

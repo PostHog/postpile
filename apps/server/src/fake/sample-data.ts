@@ -128,6 +128,46 @@ function buildPrs(clock: SampleClock): Pr[] {
       number: 1902, title: 'Use Depot cache backend for Turbo', author: 'rowan', state: 'OPEN',
       size: [186, 42, 7], checks: 'FAILURE', openedHoursAgo: 5,
       baseRef: 'rowan/depot-2', headRef: 'rowan/depot-3',
+      body: `<!-- Thanks for the PR! Please fill in the sections below. -->
+
+## Problem
+
+Turbo's remote cache lives on GitHub's cache service, which evicts after 7 days and is slow from Depot runners.
+
+## Changes
+
+- Point \`TURBO_API\` at the Depot cache backend
+- Add a **warm-up job** that primes the cache on the first run after merge
+- Retry the warm-up once before failing
+
+\`\`\`yaml
+env:
+  TURBO_API: https://cache.example.com
+\`\`\`
+
+| Job | Before | After |
+| --- | --- | --- |
+| backend | 14 min | 9 min |
+| frontend | 11 min | 6 min |
+
+![cache hit chart](https://example.com/cache-hits.png)
+
+## How did you test this code?
+
+- [x] Ran CI twice on my fork
+- [ ] First run after merge (cold cache)
+
+<!-- Don't forget to request a review from team-platform -->
+See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
+      files: [
+        ['turbo.json', 12, 4],
+        ['.github/workflows/ci-backend.yml', 48, 10],
+        ['.github/workflows/ci-frontend.yml', 40, 12],
+        ['.github/workflows/turbo-warm-up.yml', 62, 0],
+        ['bin/turbo-cache-env.sh', 18, 0],
+        ['docs/ci/caching.md', 4, 14],
+        ['package.json', 2, 2],
+      ],
       reviews: [
         ['lyra', 'APPROVED', 'Cache config looks right. The warm-up job is the only open point.'],
         ['nell', 'COMMENTED', 'The first run after merge took 38 min on my fork.'],
@@ -206,6 +246,13 @@ function buildPrs(clock: SampleClock): Pr[] {
     samplePr(clock, {
       number: 1801, title: 'Move billing models to modules/', author: SAMPLE_VIEWER, state: 'OPEN',
       size: [410, 380, 24], checks: 'SUCCESS', openedHoursAgo: 48,
+      body: 'Moves the six billing models into `modules/billing/`. State-only: `db_table` stays, so no table is renamed.\n\nFollow-up: drop the old re-exports in #1808.',
+      files: [
+        ['modules/billing/models.py', 320, 0],
+        ['app/models/__init__.py', 6, 290],
+        ['modules/billing/apps.py', 22, 0],
+        ['app/migrations/0412_move_billing_models.py', 48, 0],
+      ],
       reviews: [['ada', 'CHANGES_REQUESTED'], ['lyra', 'APPROVED']],
       threads: [
         {
@@ -397,6 +444,11 @@ function buildGlances(clock: SampleClock): Glance[] {
       does: 'Points Turbo remote cache at Depot. First runs after merge are cold.',
       risk: 'Medium. Nothing breaks, CI slow for about an hour.',
       othersSaid: 'lyra approved. nell asked about warm-up, Rowan answered.',
+      keyFiles: [
+        { path: 'turbo.json', why: 'Cache keys change; check the runner image is in them.' },
+        { path: '.github/workflows/turbo-warm-up.yml', why: 'New job with DEPOT_TOKEN and a retry.' },
+        { path: 'bin/turbo-cache-env.sh', why: 'Sets TURBO_API for every job.' },
+      ],
     }),
     sampleGlance(clock, 1921, {
       verdict: 'LOOKS_SAFE',
@@ -453,6 +505,10 @@ function buildGlances(clock: SampleClock): Glance[] {
       does: 'Moves 6 models.',
       risk: 'Low.',
       othersSaid: 'Ada asked for changes.',
+      keyFiles: [
+        { path: 'app/migrations/0412_move_billing_models.py', why: 'Must be state-only: SeparateDatabaseAndState, no table rename.' },
+        { path: 'app/models/__init__.py', why: 'The re-export Ada flagged.' },
+      ],
     }),
     sampleGlance(clock, 1870, {
       verdict: 'LOOK_CLOSER',

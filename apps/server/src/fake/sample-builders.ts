@@ -6,6 +6,7 @@ import type {
   ReviewDecision,
   EventKind,
   Glance,
+  KeyFile,
   Loudness,
   Pr,
   PrEvent,
@@ -100,6 +101,8 @@ export interface SamplePrInput {
   queued?: boolean;
   /** A draft: never a review move, only personal asks count. */
   draft?: boolean;
+  /** Changed files with their +/- counts; empty by default like a PR fetched without files. */
+  files?: [path: string, additions: number, deletions: number][];
 }
 
 /** Like GitHub with a review rule: a standing change request wins, then any approval. */
@@ -130,7 +133,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     additions,
     deletions,
     changedFiles,
-    files: [],
+    files: (input.files ?? []).map(([path, fileAdditions, fileDeletions]) => ({ path, additions: fileAdditions, deletions: fileDeletions })),
     labels: [],
     reviewDecision: sampleReviewDecision(input.reviews ?? []),
     reviewerUsers: input.reviewerUsers ?? [],
@@ -234,6 +237,7 @@ export interface SampleGlanceInput {
   does: string;
   risk: string;
   othersSaid: string;
+  keyFiles?: KeyFile[];
   pullInReason?: string;
 }
 
@@ -245,6 +249,7 @@ export function sampleGlance(clock: SampleClock, number: number, input: SampleGl
     does: input.does,
     risk: input.risk,
     othersSaid: input.othersSaid,
+    keyFiles: input.keyFiles ?? [],
     pullInReason: input.pullInReason ?? null,
     dossierVersion: null,
     inputHash: `sample-${number}`,

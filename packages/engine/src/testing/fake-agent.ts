@@ -45,6 +45,7 @@ function fakeGlance(input: GlanceBatchInput, item: GlanceBatchItem, hash: string
     does: `Does ${item.pr.title}.`,
     risk: 'Low.',
     othersSaid: 'Nothing yet.',
+    keyFiles: [],
     pullInReason: item.provenance.kind === 'pulled_in' ? item.provenance.reason : null,
     dossierVersion: input.dossier?.version ?? null,
     inputHash: hash,

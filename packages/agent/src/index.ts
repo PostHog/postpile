@@ -4,7 +4,7 @@ export type { ClaudeCliRunnerOptions } from './claude-cli.ts';
 export { ConcurrencyLimiter } from './limiter.ts';
 export { FakeRunner } from './fake-runner.ts';
 export { inputHash, PROMPT_VERSION } from './hash.ts';
-export { DOSSIER_PROMPT_VERSION, dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
+export { DOSSIER_PROMPT_VERSION, GLANCE_PROMPT_VERSION, dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
 export { renderDossier } from './prompts/dossier.ts';
 export { AgentOutputError, extractJson, parseAgentJson } from './json.ts';
 export { modelFor } from './models.ts';

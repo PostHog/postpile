@@ -107,6 +107,9 @@ export function formatPr(detail: PrDetail): string {
     lines.push(`does: ${detail.glance.does}`);
     lines.push(`risk: ${detail.glance.risk}`);
     lines.push(`others said: ${detail.glance.othersSaid}`);
+    for (const file of detail.glance.keyFiles) {
+      lines.push(`look at first: ${file.path} (${file.why})`);
+    }
     if (detail.glance.pullInReason) {
       lines.push(`pulled in: ${detail.glance.pullInReason}`);
     }

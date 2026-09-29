@@ -464,6 +464,13 @@ export interface TileState {
 
 export type Verdict = 'LOOKS_SAFE' | 'LOOK_CLOSER' | 'NOT_YOURS';
 
+/** A file the agent says a reviewer should open first, with why in a few words. */
+export interface KeyFile {
+  /** One of the PR's changed files, exactly as GitHub lists it. */
+  path: string;
+  why: string;
+}
+
 /** The agent's per-PR "approve at a glance" summary. */
 export interface Glance {
   prKey: PrKey;
@@ -473,6 +480,8 @@ export interface Glance {
   does: string;
   risk: string;
   othersSaid: string;
+  /** Up to 3 changed files to open first; empty for trivial PRs and older glances. */
+  keyFiles: KeyFile[];
   /** Only for pulled-in PRs. */
   pullInReason: string | null;
   /** Dossier version the glance was read against. Null for v1 glances and Unsorted. */

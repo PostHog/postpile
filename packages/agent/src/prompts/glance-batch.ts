@@ -53,6 +53,9 @@ so stay under the word limits:
 - risk: "low", "medium" or "high", then " - " and what could break, max 15 words.
 - othersSaid: which humans weighed in and whether any concern is still open, max 25 words;
   "nobody yet" if no human commented.
+- keyFiles: up to 3 files a reviewer should open first, most important first, each as
+  {"path", "why"}. Pick only from the PR's "Changed files" above and copy the path exactly;
+  why is max 12 words (what to look for there). Give [] when the PR is trivial or lists no files.
 
 "Approved by" marks each approver as a person or an agent (an AI review agent or other
 automation account). Both are real approvals on GitHub. Who looked is a fact you may use in the
@@ -63,5 +66,5 @@ skeptical; say "unclear" rather than invent.
 Give exactly ${input.items.length} ${input.items.length === 1 ? 'entry' : 'entries'}, one per pull request above, also for the user's own
 PRs and drafts. Copy each prKey exactly as it appears after "===", and spell the verdict exactly
 as one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS.${retryNote(input)}
-${jsonOnly('{"glances": [{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "..."}]}')}`;
+${jsonOnly('{"glances": [{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "...", "keyFiles": [{"path": "src/app.ts", "why": "..."}]}]}')}`;
 }
