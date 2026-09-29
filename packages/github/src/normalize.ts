@@ -171,8 +171,18 @@ function toReviewBodyComment(raw: RawReview): Comment {
   };
 }
 
+/**
+ * The viewer's own unsent review and its inline comments: GitHub shows them
+ * only to the viewer, as drafts. They never count as the viewer's reply,
+ * touch or comment, so normalization leaves them out.
+ */
+function isPending(raw: { state?: string }): boolean {
+  return raw.state === 'PENDING';
+}
+
 function toThread(raw: RawReviewThread): ReviewThread {
-  const comments: Comment[] = raw.comments.nodes.map((c) => ({
+  const submitted = raw.comments.nodes.filter((c) => !isPending(c));
+  const comments: Comment[] = submitted.map((c) => ({
     id: c.id,
     author: actorLogin(c.author),
     body: c.body,
@@ -186,13 +196,13 @@ function toThread(raw: RawReviewThread): ReviewThread {
 }
 
 /**
- * The flat list of every authored body: issue comments, non-empty review
- * bodies, and inline review comments. Oldest first.
+ * The flat list of every authored body: issue comments, non-empty submitted
+ * review bodies, and inline review comments. Oldest first.
  */
 function allComments(raw: RawPullRequest, threads: ReviewThread[]): Comment[] {
   const comments = raw.comments.nodes.map(toIssueComment);
   for (const review of raw.reviews.nodes) {
-    if (review.body.trim() !== '') {
+    if (!isPending(review) && review.body.trim() !== '') {
       comments.push(toReviewBodyComment(review));
     }
   }
@@ -279,8 +289,26 @@ function pendingReviewers(raw: RawPullRequest): { users: string[]; teams: string
   return { users, teams };
 }
 
+/** More of a list on GitHub than the query took. A missing count (old fixtures) is no evidence. */
+function cutOff(list: { totalCount?: number; nodes: unknown[] }): boolean {
+  return list.totalCount !== undefined && list.totalCount > list.nodes.length;
+}
+
+/**
+ * Every activity list the query caps (queries.ts): the last 50 reviews, 60
+ * comments, 50 review threads (and the first 30 comments of each), 50
+ * commits and 60 timeline items. Past any cap an event never arrives (a
+ * human comment followed by 60 bot comments), so the snapshot is flagged
+ * and no quiet mark-read trusts it.
+ */
+function isTruncated(raw: RawPullRequest): boolean {
+  const lists = [raw.reviews, raw.comments, raw.reviewThreads, raw.commits, raw.timelineItems];
+  return lists.some(cutOff) || raw.reviewThreads.nodes.some((thread) => cutOff(thread.comments));
+}
+
 export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
-  const threads = raw.reviewThreads.nodes.map(toThread);
+  // A thread started in a pending review holds only drafts: not there yet for anyone else.
+  const threads = raw.reviewThreads.nodes.map(toThread).filter((thread) => thread.comments.length > 0);
   const reviewers = pendingReviewers(raw);
   const timeline: TimelineItem[] = [];
   for (const item of raw.timelineItems.nodes) {
@@ -322,5 +350,6 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     mergedBy: raw.mergedBy ? actorLogin(raw.mergedBy) : null,
     previousBaseRefs: previousBaseRefs(raw.baseRefChanges),
     isCrossRepository: raw.isCrossRepository ?? false,
+    truncated: isTruncated(raw),
   };
 }

@@ -116,7 +116,8 @@ export interface Actions {
    * never sent while GitHub writes are locked.
    */
   markOpenedRead(prKey: PrKey): Promise<void>;
-  approve(prKey: PrKey): Promise<void>;
+  /** `headOid`: the head commit on screen; the server refuses the approval when the PR moved past it. */
+  approve(prKey: PrKey, headOid: string): Promise<void>;
   /** "Remove <team>": removes the team's review request, unsubscribes and marks the PR done. Final, no undo; blocked while locked. */
   removeTeamRequest(prKey: PrKey, team: string): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
@@ -577,8 +578,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: async (prKey) => {
-      await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`));
+    approve: async (prKey, headOid) => {
+      await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`, { headOid }));
     },
     removeTeamRequest: async (prKey, team) => {
       await run(`removeTeam:${prKey}`, 'removeTeam', () => request('POST', `${prPath(prKey)}/remove-team-request`, { team }));

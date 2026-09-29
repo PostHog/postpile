@@ -1873,7 +1873,11 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      changes"). Failing CI alone is not your move (2026-09-29).
    - them: that change request, after you pushed and requested ada again
      (she is back in the requested reviewers): "ada to re-review"
-     (2026-09-29, `reReviewAsked` in `changes-answered.ts`).
+     (2026-09-29, `reReviewAsked` in `changes-answered.ts`). Every standing
+     change request counts: while any of them has no re-review asked after
+     your push, the move stays yours and names the first such reviewer
+     ("Address carol's changes"); "ada to re-review" only once all have
+     (`standingChanges`, 2026-09-29).
    - them: the first pending reviewer, user before team, shown as "Waiting
      on sol" (`WhoseTurn.lead`), "and N more" when several are asked. Your
      own team asked by CODEOWNERS counts as a reviewer here, never as a
@@ -1914,7 +1918,9 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      stands: the author "to address ada's changes" (the author moves
      first). Once the author pushed after it and requested ada again (she
      is back in `reviewerUsers`), it is ada's move: "ada to re-review"
-     (2026-09-29, `reReviewAsked`; the team request stays on hold).
+     (2026-09-29, `reReviewAsked`; the team request stays on hold). With
+     several change requests, the author moves while any of them lacks
+     that re-review (`standingChanges`).
    - none: a routed team request whose agent glance says NOT_YOURS (stored
      glance, stale or not, `Board.notYours`, so the tile state, whose turn
      and after-read agree). The PR stays in To review with its team chip;
@@ -3764,6 +3770,66 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   ("merged in from <source>"), and the propose answer for a merge points
   at the target's `topic(...)` for the outcome.
 
+## Fixes from the codebase review (2026-09-29)
+
+A Codex CLI review of v0.11.0 found nine issues; eight were confirmed in the
+code and are fixed here. One (a snooze broken by a mention comes back once the
+mention is read) is behaviour a test asserts on purpose and stays open for
+Julian under "Open questions".
+
+- **An unsubmitted review is not a reply.** GitHub shows the viewer's own
+  pending review (and its pending inline comments) to them. Normalization
+  turned a pending review with a body into a comment, and `viewerSpokeAfter`
+  counted even an empty pending review, so an ask went quiet exactly while the
+  answer was still unsent, and the touched read could mark the thread read on
+  GitHub. Pending reviews and pending review comments never count as the
+  viewer's reply, touch or comment anywhere.
+- **Approve pins the commit on screen.** The approval used the stored head,
+  which a poll can move a few seconds before the renderer refreshes. The
+  renderer now sends the head it showed; if the stored head differs, the
+  approval is refused with "New commits since you looked; take another look".
+- **A cut-off snapshot never qualifies for a quiet read.** The PR query caps
+  every activity list (the last 50 reviews, 60 comments, 50 review threads and
+  the first 30 comments of each, 50 commits, 60 timeline items), so an event
+  past a cap never arrived while the freshness check still passed, and the
+  bot-only read could clear an unread human reply (a human comment followed by
+  60 bot comments). The query now also asks for the total count of each; a PR
+  with any list cut off is marked truncated, and `snapshotCoversThread` treats
+  it as not covering the thread (no bot-only, touched or opened mark-read on
+  GitHub for it).
+- **The MCP process never writes, instructions included.** Reading a glance's
+  freshness recorded a new instructions version when `instructions.md` had
+  changed while the app was closed, and the read-only MCP process threw
+  instead of answering. In read-only mode the instructions history only reads:
+  the glance shows as stale until the app records the edit.
+- **Every standing change request counts.** With two reviewers asking for
+  changes, only the first was looked at, so "Bob to re-review" could hide the
+  author's open work for Carol. The author's move comes first while any change
+  request has no re-review asked since the author's last push; "X to
+  re-review" only when every one of them has.
+- **A pending inbox cleanup survives a lock during Send.** Closing the lock
+  while pending writes were being sent dropped a pending "mark all read before"
+  cleanup as if sent. It now stays pending with "GitHub writes are off".
+- **Stale lock takeover runs under a mutex.** Two processes finding the same
+  stale `postpile.lock` could delete each other's fresh lock. A takeover now
+  holds `postpile.lock.takeover` (created with mkdir, so exactly one process
+  gets it; a folder older than 30 s was left by a crash and is removed). While
+  holding it, the process re-reads the lock, removes it only when it is still
+  the exact holder judged stale (pid and start time), creates its own lock
+  exclusively and reads it back, then removes the folder. Everyone else backs
+  off and tries again.
+- **Topic names are data, and are cleaned where they are stored.** Topic names
+  are written by the agent from PR text and six prompts used them outside the
+  data fence. Every prompt now shows topic and area names only inside
+  `<github_data>` and says "the topic named in the data below" instead of
+  putting the name into its prose (a test checks every prompt). On storing a
+  name: newlines and control characters collapse to spaces, and the name is
+  capped at 80 characters. A name that is empty after cleaning is refused: topic
+  assignment asks about the PR again, consolidation does not file the
+  proposal, an outside agent gets "The name is empty after cleaning", and
+  accepting such a stored proposal is refused. Existing names are cleaned once
+  by a migration ("Untitled topic" when nothing is left).
+
 ## Architecture
 
 TypeScript everywhere, Node 24, pnpm workspaces (`pnpm-workspace.yaml`, workspace deps as `workspace:*`).
@@ -4000,6 +4066,9 @@ preflight and does not know the token, so CORS stays open.
     and does not retry them [yes, keeps the 304 path free]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
   snooze started ends it, so a mention is never hidden. Confirm.
+- **A broken snooze comes back**: a snooze broken by a mention comes back once the mention is
+  read (`packages/core/src/snooze.test.ts` asserts it). Keep, or end the snooze for good when it
+  breaks? (From the codebase review, 2026-09-29.)
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
   spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread. Commits after

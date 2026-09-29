@@ -153,6 +153,12 @@ export interface EngineDeps {
   /** Mark-reads parked while writes were locked. The queue must park into the same one. */
   pendingWrites: PendingWrites;
   instructionsFile: string;
+  /**
+   * The store was opened read-only (createEngine without the lock, as the
+   * MCP process does). Reads then never record anything, not even an
+   * instructions.md edited while the app was closed. Missing: false.
+   */
+  storeReadOnly?: boolean;
   now: () => Date;
   /** Clock for the live poll. Defaults to the system timers. */
   timers?: Timers;
@@ -268,7 +274,7 @@ export class Engine implements EngineService {
     const timers = deps.timers ?? systemTimers;
     this.quota = deps.quota ?? new GitHubQuota(() => timers.now());
     const agentOff = (): string | null => this.toolHealth.agentOffReason();
-    const history = new InstructionsHistory(store, deps.instructionsFile, now);
+    const history = new InstructionsHistory(store, deps.instructionsFile, now, deps.storeReadOnly === true);
     const proposer = new InstructionsProposer(store, deps.agent, history);
     this.sweeper = new WorkContextSweeper({
       store,
@@ -833,8 +839,8 @@ export class Engine implements EngineService {
     return this.chats.getChat(tileId);
   }
 
-  async approve(prKey: PrKey): Promise<ActionResult> {
-    const result = await this.prActions.approve(prKey);
+  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
+    const result = await this.prActions.approve(prKey, headOid);
     if (result.ok) {
       // Approve only ever runs from the detail pane's action bar (CLAUDE.md
       // "Approve is final"); was_agent_approved is reserved for a future

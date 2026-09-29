@@ -59,7 +59,8 @@ export function botNames(events: PrEvent[]): string[] {
  * - not_unread: GitHub has it read already
  * - never_read: the user never read it (no last_read_at), so it is not "back" because of bots
  * - stale_snapshot: the stored PR snapshot is older than the thread's last update (a PR the
- *   sync left out at its cap, or whose fetch failed), so a person's comment may be missing
+ *   sync left out at its cap, or whose fetch failed), or it was cut off at the query's caps
+ *   (`Pr.truncated`), so a person's comment may be missing
  * - human_activity: someone else did something since the last read, or nothing known happened
  * - own_pr: bot reviews and CI on the user's own open PR can mean work for them (merged or closed: they can't)
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
@@ -86,14 +87,33 @@ export interface QuietReadInput {
   now: IsoTime;
 }
 
+export interface SnapshotCoverInput {
+  thread: NotificationThread;
+  prFetchedAt: IsoTime | null;
+  /** The snapshot was cut off at the query's caps (`Pr.truncated`). */
+  prTruncated: boolean;
+}
+
 /**
  * The stored events can only vouch for "bots only" when the snapshot was
  * fetched at or after the thread's last update. A sync refreshes every
  * thread but may leave a PR out (its cap, a failed fetch): then the thread
  * can be fresher than the snapshot, and a person's comment missing from it.
+ * A snapshot cut off at the query's caps (any capped activity list: reviews,
+ * comments, review threads and their comments, commits, timeline) never
+ * covers the thread: an event past the caps never arrived, however fresh
+ * the fetch.
  */
-export function snapshotCoversThread(input: Pick<QuietReadInput, 'thread' | 'prFetchedAt'>): boolean {
+export function snapshotCoversThread(input: SnapshotCoverInput): boolean {
+  if (input.prTruncated) {
+    return false;
+  }
   return input.prFetchedAt !== null && input.prFetchedAt >= input.thread.updatedAt;
+}
+
+/** The snapshot check for an input that carries the PR itself. */
+function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetchedAt'>): boolean {
+  return snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt, prTruncated: input.pr.truncated === true });
 }
 
 /**
@@ -115,7 +135,7 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (thread.lastReadAt === null) {
     return { kind: 'skip', why: 'never_read' };
   }
-  if (!snapshotCoversThread(input)) {
+  if (!prCoversThread(input)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   const botEvents = botOnlySinceRead(events, thread.lastReadAt, viewer);
@@ -156,7 +176,7 @@ export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'repli
 /**
  * Why a thread is left alone by the "you acted after it" reason:
  * - not_unread: GitHub has it read already
- * - stale_snapshot: the stored PR snapshot is older than the thread's last update
+ * - stale_snapshot: the stored PR snapshot is older than the thread's last update, or cut off at the query's caps
  * - no_touch: the user never reviewed or commented on the PR (a push, merge or close does not count here)
  * - nothing_known: no event by someone else since the last read, so the thread is unread for a reason the app cannot see
  * - activity_after: a person did something after the user's touch
@@ -199,7 +219,7 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   if (!thread.unread) {
     return { kind: 'skip', why: 'not_unread' };
   }
-  if (!snapshotCoversThread(input)) {
+  if (!prCoversThread(input)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   const touch = lastTouch(pr, events, viewer, { kinds: READING_TOUCH_KINDS });
@@ -242,7 +262,7 @@ export interface OpenedTile {
  * - no_tile: no tile shows the PR
  * - snoozed: the user put a tile holding it away for later
  * - asks_you: a mark-read of the PR would leave something asked of the user
- * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, so the user did not see the newest activity
+ * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, or cut off at the query's caps, so the user did not see the newest activity
  */
 export type OpenedSkip = 'no_thread' | 'no_tile' | 'snoozed' | 'asks_you' | 'stale_snapshot';
 
@@ -257,6 +277,8 @@ export interface OpenedReadInput {
   /** The PR's notification thread, null when it has none (a found PR). */
   thread: NotificationThread | null;
   prFetchedAt: IsoTime | null;
+  /** The stored snapshot was cut off at the query's caps (`Pr.truncated`). */
+  prTruncated: boolean;
   /** Every tile that holds the PR. */
   tiles: OpenedTile[];
   /** A mark-read of this PR alone would leave it done: nothing asked of the user (`PrSummary.afterRead.done`). */
@@ -286,7 +308,7 @@ export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (!input.thread.unread) {
     return { kind: 'handle' };
   }
-  if (!snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt })) {
+  if (!snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt, prTruncated: input.prTruncated })) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   return { kind: 'mark' };

@@ -9,6 +9,7 @@ export { ReadOnlyWriter } from './writes/read-only-writer.ts';
 export { WriteSwitch, FORCED_READ_ONLY_REASON, GITHUB_WRITES_META_KEY } from './writes/write-switch.ts';
 export { GitHubWrites, type WriteContext, type WriteResult } from './writes/github-writes.ts';
 export { ActionLog } from './writes/action-log.ts';
+export { NEW_COMMITS_SINCE_LOOKED } from './actions/pr-actions.ts';
 export { catchUpCapFromEnv, createEngine, pingCapFromEnv, type CreateEngineOptions } from './create.ts';
 export { AutoSyncSchedule, DEFAULT_AUTO_SYNC_MINUTES, type AutoSyncOptions } from './auto-sync.ts';
 export { GitHubQuota, quotaFetch, type QuotaRunStats } from './github-quota.ts';

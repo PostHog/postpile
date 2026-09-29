@@ -121,12 +121,22 @@ describe('approve', () => {
   it('approves the synced head on GitHub, records it and clears the unread state', async () => {
     const h = await synced();
 
-    const result = await h.engine.approve(pr.key);
+    const result = await h.engine.approve(pr.key, pr.headOid);
 
     expect(result.ok).toBe(true);
     expect(h.writer.calls).toEqual(['approvePr acme/app#1@head']);
     expect(h.store.userPrStates.get(pr.key)?.approvedCommitOid).toBe('head');
     expect(await tileState(h)).toBe('done');
+  });
+
+  it('refuses without a GitHub call when the stored head moved past the one on screen', async () => {
+    const h = await synced();
+
+    const result = await h.engine.approve(pr.key, 'older-head');
+
+    expect(result).toMatchObject({ ok: false, message: 'New commits since you looked; take another look' });
+    expect(h.writer.calls).toEqual([]);
+    expect(h.store.userPrStates.get(pr.key)?.approvedCommitOid ?? null).toBeNull();
   });
 
   it('refuses PRs that are not open', async () => {
@@ -135,7 +145,7 @@ describe('approve', () => {
     h.reader.addPr(merged, makeThreadFor(merged));
     await h.engine.sync({ maxAgentCalls: 0 });
 
-    expect((await h.engine.approve(merged.key)).ok).toBe(false);
+    expect((await h.engine.approve(merged.key, merged.headOid)).ok).toBe(false);
     expect(h.writer.calls).toEqual([]);
   });
 });

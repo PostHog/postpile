@@ -1,5 +1,5 @@
 import type { TopicAssignment, TopicChoice } from '@postpile/agent';
-import { buildStacks, dossierBrief, newTopic, stackByPrKey, stackTopicId, type Pr, type PrKey, type Topic } from '@postpile/core';
+import { buildStacks, cleanTopicName, dossierBrief, newTopic, stackByPrKey, stackTopicId, type Pr, type PrKey, type Topic } from '@postpile/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
@@ -142,12 +142,13 @@ export class TopicAssigner {
 
   /** An offered topic of that name (any case), else a new one. */
   private findOrCreateTopic(name: string): Topic {
-    const wanted = name.trim().toLowerCase();
-    const existing = this.offeredTopics().find((t) => t.name.trim().toLowerCase() === wanted);
+    const clean = cleanTopicName(name);
+    const wanted = clean.toLowerCase();
+    const existing = this.offeredTopics().find((t) => cleanTopicName(t.name).toLowerCase() === wanted);
     if (existing) {
       return existing;
     }
-    const topic = newTopic(newTopicId(name), name.trim(), this.deps.now().toISOString());
+    const topic = newTopic(newTopicId(clean), clean, this.deps.now().toISOString());
     this.deps.store.topics.create(topic);
     return topic;
   }
@@ -194,8 +195,10 @@ export class TopicAssigner {
         topics: this.topicChoices(),
         context: this.deps.contexts.forTopic(null),
       });
-      this.apply(assignments);
-      const answered = new Set(assignments.map((assignment) => assignment.prKey));
+      // A new topic whose name is empty after cleaning is an unusable answer: the PR is asked again.
+      const usable = assignments.filter((assignment) => assignment.kind !== 'new' || cleanTopicName(assignment.name) !== '');
+      this.apply(usable);
+      const answered = new Set(usable.map((assignment) => assignment.prKey));
       return batch.filter((pr) => !answered.has(pr.key));
     } catch (error) {
       this.deps.errors.push(`topic assignment: ${errorText(error)}`);

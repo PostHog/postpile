@@ -22,7 +22,9 @@ function eventLine(event: PrEvent): string {
  * not fenced.
  */
 export function memoryRecheckPrompt(input: MemoryRecheckInput): string {
-  const topic = input.topic ? `in the topic "${input.topic.name}"` : 'outside any topic';
+  // Topic names are written from GitHub text: named only inside the fence.
+  const topic = input.topic ? 'in the topic named in the data below' : 'outside any topic';
+  const topicBlock = input.topic ? `\nThe topic:\n${githubData(input.topic.name)}\n` : '';
   const github = input.sources.filter((source) => source.who !== null).map(sourceLine);
   const own = input.sources.filter((source) => source.who === null).map(sourceLine);
   const prs = input.prs.map((pr) => prDetails(pr, input.viewer, shortDetail)).join('\n\n');
@@ -34,7 +36,7 @@ ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 The line (${input.recordedIn}):
 ${githubData(input.claim)}
-
+${topicBlock}
 Sources recorded for it on GitHub:
 ${github.length === 0 ? '(none recorded)' : githubData(github.join('\n'))}
 

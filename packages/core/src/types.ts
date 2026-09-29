@@ -165,6 +165,14 @@ export interface Pr {
    * to a stack. Missing on snapshots stored before it existed: read as false.
    */
   isCrossRepository?: boolean;
+  /**
+   * The snapshot was cut off at the query's caps: more reviews, comments,
+   * review threads, comments in one thread, commits or timeline items than
+   * it asked for. An event past the caps is missing, so no quiet mark-read
+   * trusts this snapshot. Missing on
+   * snapshots stored before it existed: read as false.
+   */
+  truncated?: boolean;
 }
 
 // ---------------------------------------------------------------------------

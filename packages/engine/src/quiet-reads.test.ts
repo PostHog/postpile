@@ -83,6 +83,13 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     expect(quietRows(h)).toEqual([]);
   });
 
+  it('leaves a PR whose snapshot was cut off at the query caps: a human reply may be past them', async () => {
+    const h = await synced(alicePr({ truncated: true }));
+
+    expect(h.writer.calls).toEqual([]);
+    expect(quietRows(h)).toEqual([]);
+  });
+
   it('leaves it when a person commented after the last read', async () => {
     const human = makeComment({ id: 'c-human', author: 'rowan', body: 'Should we keep the old shard count?', createdAt: at(32) });
     const h = await synced(alicePr({ comments: [botComment, human], updatedAt: at(32) }));

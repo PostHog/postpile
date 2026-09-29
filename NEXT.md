@@ -6,6 +6,26 @@ now".
 
 ## Done
 
+- Fixes from the codebase review (2026-09-29, DESIGN.md "Fixes from the
+  codebase review"): a Codex CLI review of v0.11.0 found nine issues,
+  eight confirmed and fixed. Pending reviews and pending review comments
+  never count (dropped in normalization, `viewerSpokeAfter` skips
+  PENDING). Approve sends the head on screen and is refused when the
+  stored head moved (`NEW_COMMITS_SINCE_LOOKED`). The PR query asks for
+  totalCount on every capped activity list; a cut-off snapshot
+  (`Pr.truncated`) never passes `snapshotCoversThread`. The MCP process
+  reads instructions without storing a version (`storeReadOnly`). Whose
+  turn counts every standing change request (`standingChanges`). A
+  pending cleanup the lock stops mid-send stays pending. Stale lock
+  takeover runs under a mkdir mutex (`postpile.lock.takeover`, with
+  `removeStaleLock` inside it). Topic and area names only appear inside
+  the data fence in prompts (`prompts-fence.test.ts`) and are cleaned
+  where stored (`cleanTopicName`, `hasEmptyTopicName`, migration 018,
+  which also lets migrations carry a code step). The Codex review on
+  PR #18 tightened truncation, the lock, the fence and empty names. The ninth (a broken
+  snooze comes back once the mention is read) waits under DESIGN.md
+  "Open questions for Julian".
+
 - Actions act on what you look at (2026-09-29, DESIGN.md "Actions act on
   what you look at"): PR-scoped mark read in the detail pane
   (`markPrRead`, per-PR label and undo), the not-done dot

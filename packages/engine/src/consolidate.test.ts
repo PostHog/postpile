@@ -47,15 +47,17 @@ describe('Engine.consolidate', () => {
     expect(second.skipped).toBe('not_due');
   });
 
-  it('files topic proposals once and never again after a rejection', async () => {
+  it('files topic proposals once, with clean names, and never again after a rejection', async () => {
     const h = makeHarness();
     const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
     topicWithPrs(h, 'depot', prs);
     const answer = () => ({
       topicProposals: [
-        { kind: 'rename' as const, topicId: 'depot', name: 'Depot runners', reason: 'clearer' },
+        { kind: 'rename' as const, topicId: 'depot', name: 'Depot\n  runners', reason: 'clearer' },
         { kind: 'split' as const, topicId: 'depot', name: 'Runner images', prKeys: [prs[1]!.key], reason: 'separate work' },
         { kind: 'rename' as const, topicId: 'nope', name: 'Made up', reason: 'unknown topic' },
+        // Nothing left after cleaning: never filed.
+        { kind: 'rename' as const, topicId: 'depot', name: '\u0000\n', reason: 'blank' },
       ],
     });
     h.agent.answerConsolidation(answer);

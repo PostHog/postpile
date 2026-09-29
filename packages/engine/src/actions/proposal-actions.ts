@@ -1,4 +1,4 @@
-import { newTopic, proposalOutcome, type ActionResult, type PrKey, type TopicProposal } from '@postpile/core';
+import { cleanTopicName, EMPTY_TOPIC_NAME, hasEmptyTopicName, newTopic, proposalOutcome, type ActionResult, type PrKey, type TopicProposal } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
@@ -17,7 +17,8 @@ export class ProposalActions {
    * never tears a stack apart.
    */
   private createTopic(proposal: TopicProposal, at: string): void {
-    const name = proposal.name ?? 'New topic';
+    // whyStale refused an empty name already.
+    const name = cleanTopicName(proposal.name ?? '');
     const topic = newTopic(newTopicId(name), name, at);
     this.store.topics.create(topic);
     const board = Board.load(this.store, at);
@@ -31,7 +32,7 @@ export class ProposalActions {
     if (proposal.kind === 'new_topic' || proposal.kind === 'split') {
       this.createTopic(proposal, at);
     } else if (proposal.kind === 'rename' && proposal.topicId && proposal.name) {
-      this.store.topics.rename(proposal.topicId, proposal.name, at);
+      this.store.topics.rename(proposal.topicId, cleanTopicName(proposal.name), at);
     } else if (proposal.kind === 'merge' && proposal.topicId && proposal.intoTopicId) {
       // A new created_at marks them as joined, so the target's next dossier update introduces them.
       for (const membership of this.store.memberships.listForTopic(proposal.topicId)) {
@@ -54,6 +55,9 @@ export class ProposalActions {
    * consolidation may propose emptying a topic on purpose.
    */
   whyStale(proposal: TopicProposal, at: string): string | null {
+    if (hasEmptyTopicName(proposal)) {
+      return EMPTY_TOPIC_NAME.toLowerCase();
+    }
     if (proposal.kind === 'new_topic' || proposal.kind === 'area_merge') {
       return null;
     }

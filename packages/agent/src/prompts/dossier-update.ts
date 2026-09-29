@@ -124,10 +124,12 @@ function placementBlock(input: DossierUpdateInput): string {
     ? `Rules decided: ${signals.relation} (why: ${signals.whyYou}). Use exactly that.`
     : `Rules could not decide between team and routed. Best guess for why: ${signals.whyYou}.`;
   const areas = input.areas.length === 0 ? '(none yet)' : input.areas.map((area) => `${area.name} (${area.topics})`).join(', ');
+  // Area names are written from GitHub text: fenced like it.
+  const areaData = githubData(`current area: ${input.currentArea ?? '(none)'}\nareas in use: ${areas}`);
   return block('How this topic reaches the user:', [
     ...signals.notes.map((note) => `- ${note}`),
     `- ${verdict}`,
-    `- current area: ${input.currentArea ?? '(none)'}; areas in use: ${areas}`,
+    `- the topic's area and the areas in use (topic counts):\n${areaData}`,
   ]);
 }
 

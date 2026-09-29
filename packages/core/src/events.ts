@@ -34,9 +34,15 @@ function withText(prefix: string, body: string): string {
   return text === '' ? prefix : `${prefix}: ${text}`;
 }
 
+/**
+ * A pending review is the viewer's unsent draft: GitHub shows it only to
+ * them, so it never answers anything.
+ */
 function viewerSpokeAfter(pr: Pr, viewer: Viewer, at: IsoTime): boolean {
   const spokeInComment = pr.comments.some((c) => sameLogin(c.author, viewer.login) && c.createdAt > at);
-  const spokeInReview = pr.reviews.some((r) => sameLogin(r.author, viewer.login) && r.submittedAt > at);
+  const spokeInReview = pr.reviews.some(
+    (r) => sameLogin(r.author, viewer.login) && r.state !== 'PENDING' && r.submittedAt > at,
+  );
   return spokeInComment || spokeInReview;
 }
 

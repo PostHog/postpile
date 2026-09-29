@@ -116,7 +116,7 @@ describe('engine telemetry', () => {
 
   it('fires pr_approved on a successful approve', async () => {
     const h = await synced();
-    const result = await h.engine.approve(pr.key);
+    const result = await h.engine.approve(pr.key, pr.headOid);
     expect(result.ok).toBe(true);
     expect(h.telemetry.events).toContainEqual({ event: 'pr_approved', props: { from: 'detail', was_agent_approved: false } });
   });

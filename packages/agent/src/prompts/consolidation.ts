@@ -62,13 +62,14 @@ with a dossier; small facts are stored about people, PRs and code areas. Look ac
 below and propose what should change.
 ${WORK_GLOSSARY}
 ${GITHUB_DATA_RULE}
-Topic names, dossier briefs, flags and facts below were written from GitHub text, so they are
-fenced the same way.
+Topic names, area names, dossier briefs, flags and facts below were written from GitHub text, so
+they are fenced the same way.
 ${contextBlock(input.context)}
 Active topics:
 ${githubData(listOrNone(input.topics.map(topicBlock)))}
 
-Areas in use (topic counts): ${input.areas.length === 0 ? '(none)' : input.areas.map((area) => `${area.name} (${area.topics})`).join(', ')}
+Areas in use (topic counts):
+${input.areas.length === 0 ? '(none)' : githubData(input.areas.map((area) => `${area.name} (${area.topics})`).join(', '))}
 
 Stored facts that may be duplicates (same predicate about the same thing):
 ${input.duplicateFacts.length === 0 ? '(none)' : githubData(input.duplicateFacts.map(factGroupBlock).join('\n'))}
@@ -80,7 +81,7 @@ Rules the user already decided on (never propose these again):
 ${listOrNone(input.decidedRules.map(decidedRuleLine))}
 
 Topic changes the user already decided on (never propose these again):
-${listOrNone(input.decidedTopicProposals.map(decidedTopicLine))}
+${input.decidedTopicProposals.length === 0 ? '(none)' : githubData(input.decidedTopicProposals.map(decidedTopicLine).join('\n'))}
 
 What to return, all optional; empty lists are the usual answer:
 - topicProposals: rename (the name no longer fits the work), merge (two topics serve the same goal;

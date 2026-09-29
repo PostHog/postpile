@@ -48,12 +48,12 @@ describe('GitHub writes switch', () => {
   it('uses the real writer after turning on and the read-only one after turning off, without a restart', async () => {
     const h = await synced({ writesEnabled: false });
 
-    expect((await h.engine.approve(pr.key)).ok).toBe(false);
+    expect((await h.engine.approve(pr.key, pr.headOid)).ok).toBe(false);
     expect(h.writer.calls).toEqual([]);
 
     const on = await h.engine.setGitHubWrites(true);
     expect(on.status.enabled).toBe(true);
-    expect((await h.engine.approve(pr.key)).ok).toBe(true);
+    expect((await h.engine.approve(pr.key, pr.headOid)).ok).toBe(true);
     expect(h.writer.calls).toEqual([`approvePr ${pr.key}@${pr.headOid}`]);
 
     await h.engine.setGitHubWrites(false);
@@ -147,7 +147,7 @@ describe('action log at every write path', () => {
 
   it('approve and comment log the GitHub call, then approve queues its mark-read', async () => {
     const h = await synced();
-    await h.engine.approve(pr.key);
+    await h.engine.approve(pr.key, pr.headOid);
     await h.engine.sendComment(pr.key, 'looks good');
     expect(logRows(h)).toEqual([
       ['approve', 'tile', 'github'],
@@ -158,7 +158,7 @@ describe('action log at every write path', () => {
 
   it('approve and comment while read-only are logged as skipped', async () => {
     const h = await synced({ writesEnabled: false });
-    await h.engine.approve(pr.key);
+    await h.engine.approve(pr.key, pr.headOid);
     await h.engine.sendComment(pr.key, 'looks good');
     expect(logRows(h)).toEqual([
       ['approve', 'tile', 'skipped'],
@@ -359,7 +359,7 @@ describe('pending writes while locked', () => {
 
   it('approve and comment stay blocked, with no pending queue', async () => {
     const h = await synced({ writesEnabled: false });
-    await h.engine.approve(pr.key);
+    await h.engine.approve(pr.key, pr.headOid);
     await h.engine.sendComment(pr.key, 'hi');
     await afterUndoWindow(h);
     expect((await h.engine.githubWrites()).pending).toEqual([]);

@@ -359,6 +359,8 @@ export interface Harness {
 
 export interface HarnessOptions {
   instructionsFile?: string;
+  /** The store was opened read-only, as in the MCP process: the engine must not record anything. */
+  storeReadOnly?: boolean;
   /** Clock for the engine; tests move it forward by changing what it returns. */
   now?: () => Date;
   pingDecisionsPerDay?: number;
@@ -430,6 +432,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     markReadQueue,
     pendingWrites,
     instructionsFile,
+    storeReadOnly: options.storeReadOnly,
     now,
     timers,
     pingDecisionsPerDay: options.pingDecisionsPerDay,

@@ -145,6 +145,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     ),
     pendingWrites,
     instructionsFile: paths.instructionsFile,
+    storeReadOnly: options.withoutLock === true,
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
     catchUpCallsPerDay: catchUpCapFromEnv(process.env.POSTPILE_CATCHUP_CAP, process.env.POSTPILE_MAX_AGENT_CALLS),

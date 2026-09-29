@@ -1,4 +1,7 @@
 import {
+  cleanTopicName,
+  EMPTY_TOPIC_NAME,
+  hasEmptyTopicName,
   isLiveProposal,
   newTopic,
   OUTSIDE_PROPOSAL_DAYS,
@@ -111,7 +114,7 @@ export class FakeTopicChanges {
       id: `proposal-agent-${this.data.proposals.length + 1}`,
       kind: change.kind,
       topicId: change.topicId,
-      name: change.kind === 'merge' ? null : (change.name?.trim() ?? null),
+      name: change.kind === 'merge' || change.name === null ? null : cleanTopicName(change.name),
       intoTopicId: change.kind === 'merge' ? change.intoTopicId : null,
       fromArea: null,
       prKeys: change.kind === 'split' ? change.prKeys : [],
@@ -133,6 +136,9 @@ export class FakeTopicChanges {
 
   /** Why accepting no longer fits (topics changed since it was filed), or null. The engine's ProposalActions checks the same. */
   whyStale(proposal: TopicProposal): string | null {
+    if (hasEmptyTopicName(proposal)) {
+      return EMPTY_TOPIC_NAME.toLowerCase();
+    }
     if (proposal.kind === 'area_merge') {
       return null;
     }
@@ -180,7 +186,7 @@ export class FakeTopicChanges {
   private apply(proposal: TopicProposal): void {
     const topic = this.data.topics.find((candidate) => candidate.id === proposal.topicId);
     if (proposal.kind === 'rename' && topic && proposal.name) {
-      topic.name = proposal.name;
+      topic.name = cleanTopicName(proposal.name);
       topic.updatedAt = this.timestamp();
     }
     if (proposal.kind === 'merge' && topic && proposal.intoTopicId) {

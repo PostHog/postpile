@@ -151,16 +151,23 @@ export function reviewedHead(pr: Pr, viewer: Viewer, userState: UserPrState | nu
   return onHead || isApprovedByViewer(pr, userState, viewer.login);
 }
 
-/** The reviewer whose standing review asks for changes (a later verdict by them clears it), or null. */
-export function changesRequestedBy(pr: Pr): string | null {
+/**
+ * Every reviewer whose standing review asks for changes (a later verdict by
+ * them clears it), in the order they first gave a verdict. Empty when none.
+ */
+export function changesRequestedByAll(pr: Pr): string[] {
   const latest = new Map<string, Review>();
   for (const review of [...pr.reviews].sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1))) {
     if (isVerdict(review)) {
       latest.set(review.author.toLowerCase(), review);
     }
   }
-  const asking = [...latest.values()].find((review) => review.state === 'CHANGES_REQUESTED');
-  return asking?.author ?? null;
+  return [...latest.values()].filter((review) => review.state === 'CHANGES_REQUESTED').map((review) => review.author);
+}
+
+/** The first reviewer whose standing review asks for changes (`changesRequestedByAll`), or null. */
+export function changesRequestedBy(pr: Pr): string | null {
+  return changesRequestedByAll(pr)[0] ?? null;
 }
 
 /** Why a routed team request asks nothing of the viewer for now. */
@@ -180,8 +187,8 @@ export function teamRequestHold(pr: Pr, viewer: Viewer, notYours: boolean): Team
   if (notYours) {
     return { kind: 'not_yours' };
   }
-  const by = changesRequestedBy(pr);
-  return by !== null && !sameLogin(by, viewer.login) ? { kind: 'changes', by } : null;
+  const by = changesRequestedByAll(pr).find((login) => !sameLogin(login, viewer.login));
+  return by !== undefined ? { kind: 'changes', by } : null;
 }
 
 /**
