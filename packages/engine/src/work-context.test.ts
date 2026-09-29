@@ -177,6 +177,49 @@ describe('WorkContextCollector', () => {
     expect(logs).toContain('work context: skipped 3 project folders (skip list)');
   });
 
+  it('never follows a symlink under ~/.claude/projects: project folders, memory folders, memory files, sessions', async () => {
+    fake.write('.claude/projects/-Users-me-workspace-app/memory/MEMORY.md', 'app work', RECENT);
+    fake.write('elsewhere/project/memory/MEMORY.md', 'LINKED project notes', RECENT);
+    fake.write('elsewhere/project/linked.jsonl', JSON.stringify(userLine('LINKED prompt', '2026-09-27T10:00:00.000Z')), RECENT);
+    fake.write('elsewhere/memory/MEMORY.md', 'LINKED memory folder', RECENT);
+    fake.write('elsewhere/note.md', 'LINKED memory file', RECENT);
+    fake.write('elsewhere/session.jsonl', JSON.stringify(userLine('LINKED session', '2026-09-27T10:00:00.000Z')), RECENT);
+    fake.link('.claude/projects/-Users-me-linked-project', `${fake.home}/elsewhere/project`);
+    fake.link('.claude/projects/-Users-me-workspace-other/memory', `${fake.home}/elsewhere/memory`);
+    fake.link('.claude/projects/-Users-me-workspace-app/memory/note.md', `${fake.home}/elsewhere/note.md`);
+    fake.link('.claude/projects/-Users-me-workspace-app/linked-session.jsonl', `${fake.home}/elsewhere/session.jsonl`);
+
+    const { items, stats } = await collector().collect();
+
+    expect(items.map((item) => item.text)).toEqual(['app work']);
+    expect(stats.sessionFilesScanned).toBe(0);
+  });
+
+  it('never reads CLAUDE.md or an include from a macOS privacy folder, and logs it', async () => {
+    fake.write('Documents/notes/CLAUDE.md', 'PRIVATE: CLAUDE.md in Documents');
+    fake.link('.claude/CLAUDE.md', `${fake.home}/Documents/notes/CLAUDE.md`);
+    const logs: string[] = [];
+
+    const refused = await collector(BIG, (message) => logs.push(message)).collect();
+
+    expect(refused.items).toEqual([]);
+    expect(logs).toContain('work context: skipped ~/Documents/notes/CLAUDE.md: inside ~/Documents, a macOS privacy folder');
+
+    fake.remove();
+    fake = makeFakeClaudeDir();
+    fake.write('.claude/CLAUDE.md', '# Jane\n@notes.md\n@synced.md');
+    fake.write('Library/Mobile Documents/com~apple~CloudDocs/notes.md', 'PRIVATE: iCloud notes');
+    fake.write('Library/CloudStorage/Drive/synced.md', 'PRIVATE: cloud drive');
+    fake.link('.claude/notes.md', `${fake.home}/Library/Mobile Documents/com~apple~CloudDocs/notes.md`);
+    fake.link('.claude/synced.md', `${fake.home}/Library/CloudStorage/Drive/synced.md`);
+
+    const { items, stats } = await collector().collect();
+
+    expect(items.map((item) => item.ref)).toEqual(['~/.claude/CLAUDE.md']);
+    expect(items.map((item) => item.text).join('\n')).not.toContain('PRIVATE');
+    expect(stats.dropped.map((drop) => drop.reason)).toEqual(['inside a macOS privacy folder', 'inside a macOS privacy folder']);
+  });
+
   it('works on an empty or missing folder', async () => {
     const empty = new WorkContextCollector({ claudeDir: '/nonexistent/claude', now: NOW });
     expect(await empty.collect()).toMatchObject({ items: [], lastSeenAt: null, stats: { sentChars: 0, droppedCount: 0 } });
