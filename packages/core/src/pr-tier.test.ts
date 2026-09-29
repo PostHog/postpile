@@ -26,7 +26,14 @@ describe('prTier', () => {
 
   it('drops the ask once you commented after it', () => {
     const answered = makePr({ author: me, comments: [makeComment({ author: me, createdAt: at(40) })] });
-    expect(tier({ pr: answered, events: [question] })).toBe('mine');
+    const reply = makeEvent({ id: 'own-reply', kind: 'comment', actor: me, at: at(40) });
+    expect(tier({ pr: answered, events: [question, reply] })).toBe('mine');
+  });
+
+  it('drops the ask on your own PR once you pushed after it', () => {
+    const pushed = makeEvent({ id: 'own-push', kind: 'commits_pushed', actor: me, at: at(40), sourceId: 'c-own' });
+    const own = makePr({ author: me, commits: [makeCommit({ oid: 'c-own', author: me, committedAt: at(40) })] });
+    expect(tier({ pr: own, events: [question, pushed] })).toBe('mine');
   });
 
   it('ignores bots and team mentions for needs_reply', () => {

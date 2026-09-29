@@ -16,55 +16,61 @@ describe('personRelation', () => {
 });
 
 describe('topicPeople', () => {
-  it('collects authors, reviewers and commenters once, bots left out', () => {
+  it('collects PR authors only, once each, bots left out', () => {
     const prs = [
       makePr({
         author: 'ada',
-        reviews: [makeReview({ author: 'bob' }), makeReview({ author: 'pending-pat', state: 'PENDING' })],
+        reviews: [makeReview({ author: 'bob' })],
         reviewerUsers: ['carl'],
-        comments: [makeComment({ author: 'github-actions' }), makeComment({ author: 'dora' })],
+        comments: [makeComment({ author: 'dora' })],
         threads: [makeThread('t1', [makeComment({ author: 'erin' })])],
       }),
       makePr({ number: 2, author: 'renovate[bot]', comments: [makeComment({ author: 'ada' })] }),
+      makePr({ number: 3, author: 'Ada' }),
     ];
-    expect(topicPeople(prs, withTeam).map((person) => person.login)).toEqual(['ada', 'bob', 'carl', 'dora', 'erin']);
+    expect(topicPeople(prs, withTeam)).toEqual([{ login: 'ada', relation: 'other' }]);
   });
 
-  it('puts you and your team first, keeping the order of appearance', () => {
-    const prs = [makePr({ author: 'ada', reviews: [makeReview({ author: 'lyra' }), makeReview({ author: me })], reviewerUsers: ['bob', 'rowan'] })];
+  it('orders you, your teammates, then others by number of PRs', () => {
+    const prs = [
+      makePr({ number: 1, author: 'ada' }),
+      makePr({ number: 2, author: 'lyra' }),
+      makePr({ number: 3, author: 'bob' }),
+      makePr({ number: 4, author: 'bob' }),
+      makePr({ number: 5, author: 'rowan' }),
+      makePr({ number: 6, author: 'rowan' }),
+      makePr({ number: 7, author: me }),
+    ];
     expect(topicPeople(prs, withTeam)).toEqual([
-      { login: 'lyra', relation: 'team' },
       { login: me, relation: 'you' },
       { login: 'rowan', relation: 'team' },
-      { login: 'ada', relation: 'other' },
+      { login: 'lyra', relation: 'team' },
       { login: 'bob', relation: 'other' },
+      { login: 'ada', relation: 'other' },
     ]);
+  });
+
+  it('keeps the order of first appearance on equal counts', () => {
+    const prs = [makePr({ number: 1, author: 'ada' }), makePr({ number: 2, author: 'bob' })];
+    expect(topicPeople(prs, withTeam).map((person) => person.login)).toEqual(['ada', 'bob']);
   });
 });
 
 describe('topicFaces', () => {
   const person = (login: string, relation: 'you' | 'team' | 'other') => ({ login, relation });
 
-  it('shows only you and your team when either is involved, you first', () => {
-    const people = [person('lyra', 'team'), person('ada', 'other'), person(me, 'you'), person('bob', 'other')];
-    expect(topicFaces(people)).toEqual([person(me, 'you'), person('lyra', 'team')]);
+  it('fills up to three faces: you and your team first, then others', () => {
+    const people = [person(me, 'you'), person('lyra', 'team'), person('ada', 'other'), person('bob', 'other')];
+    expect(topicFaces(people)).toEqual([person(me, 'you'), person('lyra', 'team'), person('ada', 'other')]);
   });
 
-  it('shows teammates alone when you are not involved', () => {
-    expect(topicFaces([person('ada', 'other'), person('rowan', 'team')])).toEqual([person('rowan', 'team')]);
-  });
-
-  it('shows only you when nobody from your team is involved', () => {
-    expect(topicFaces([person('ada', 'other'), person(me, 'you')])).toEqual([person(me, 'you')]);
-  });
-
-  it('falls back to the others, at most three', () => {
+  it('shows others when nobody from your team authored', () => {
     const others = ['a', 'b', 'c', 'd'].map((login) => person(login, 'other'));
     expect(topicFaces(others)).toEqual(others.slice(0, 3));
   });
 
-  it('caps you and teammates at three faces', () => {
-    const people = [person('t1', 'team'), person('t2', 'team'), person('t3', 'team'), person(me, 'you')];
+  it('leaves no room for others when you and two teammates authored', () => {
+    const people = [person(me, 'you'), person('t1', 'team'), person('t2', 'team'), person('t3', 'team'), person('ada', 'other')];
     expect(topicFaces(people).map((face) => face.login)).toEqual([me, 't1', 't2']);
   });
 

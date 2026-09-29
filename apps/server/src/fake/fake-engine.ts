@@ -132,10 +132,14 @@ import {
   type SearchResult,
   type Viewer,
   botsFromQuietDetail,
+  openedReadCheck,
+  quietReasonDetail,
+  quietReasonFromDetail,
   HANDLED_QUIETLY_DAYS,
   parsePrKey,
   pingDecisionsByThread,
   type PingDecision,
+  type OpenedReadResult,
   type QuietReadView,
 } from '@postpile/core';
 import { AgentRefresher, AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
@@ -215,6 +219,9 @@ const FAKE_LINE_MESSAGES: Record<MemoryCorrectionKind, string> = {
   confirm: 'Kept. The next sync keeps that line.',
   fix: 'Fixed. The next sync writes the corrected line into the topic memory.',
 };
+
+/** Sample glances that read as older than the PR (its last push came after), for the stale verdict box. */
+const STALE_SAMPLE_GLANCES = new Set<PrKey>(['acme/app#1904']);
 
 const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 
@@ -381,13 +388,18 @@ export class FakeEngine implements EngineService {
     return this.catchUp.gapOf(prKey);
   }
 
-  /** Same rule as the engine; sample glances are never stale. */
+  /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen. */
+  private isGlanceStale(prKey: PrKey): boolean {
+    return STALE_SAMPLE_GLANCES.has(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
+  }
+
+  /** Same rule as the engine. */
   private glanceStateOfPr(prKey: PrKey): GlanceState {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
     return glanceStateOf({
       hasGlance: this.data.glances.some((glance) => glance.prKey === prKey),
-      stale: false,
+      stale: this.isGlanceStale(prKey),
       wanted: pr?.state === 'OPEN' && tracked,
       gap: this.glanceGapOf(prKey),
       agentOff: this.toolStatus.agentOff() !== null,
@@ -490,7 +502,7 @@ export class FakeEngine implements EngineService {
           events: events.get(pr.key) ?? [],
           reason: member.provenance.kind === 'pinged' ? member.provenance.reason : null,
           glance: this.data.glances.find((candidate) => candidate.prKey === pr.key) ?? null,
-          glanceStale: false,
+          glanceStale: this.isGlanceStale(pr.key),
           glanceGap: this.glanceGapOf(pr.key),
           glanceState: this.glanceStateOfPr(pr.key),
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
@@ -877,6 +889,7 @@ export class FakeEngine implements EngineService {
           repo: ref.repo,
           number: ref.number,
           title: this.data.prs.find((pr) => pr.key === key)?.title ?? key,
+          reason: quietReasonFromDetail(entry.detail),
           bots: botsFromQuietDetail(entry.detail),
           landing: this.landingOf(key),
         };
@@ -916,7 +929,7 @@ export class FakeEngine implements EngineService {
     const events: EventView[] = this.eventsOf(prKey)
       .toSorted((a, b) => b.at.localeCompare(a.at))
       .map((event) => ({ event, display: displayState(event) }));
-    const news = whatsNew(this.eventsOf(prKey), this.viewer());
+    const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
       pr,
       fetchedAt: this.fetchedAtOf(prKey),
@@ -924,7 +937,7 @@ export class FakeEngine implements EngineService {
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr),
       whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
-      glanceStale: false,
+      glanceStale: this.isGlanceStale(prKey),
       glanceGap: this.glanceGapOf(prKey),
       glanceState: this.glanceStateOfPr(prKey),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
@@ -1059,6 +1072,31 @@ export class FakeEngine implements EngineService {
       return this.markPrsRead([key], [key], 'debug', this.tilesHolding(key)[0]?.id ?? null);
     }
     return this.markPrsRead([], [], 'debug', null, [thread]);
+  }
+
+  /** Like QuietReads.markOpened, in memory: the sample thread turns read and the PR's events seen. */
+  async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
+    this.writes.settle();
+    if (!this.writes.isEnabled()) {
+      return { marked: false };
+    }
+    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
+    if (!thread) {
+      return { marked: false };
+    }
+    const tiles = this.tilesHolding(prKey).map((tile) => {
+      const view = this.tileView(tile);
+      return { snoozed: view.state.kind === 'snoozed', doneAfterRead: view.afterRead.done };
+    });
+    // Sample snapshots are always as fresh as their threads.
+    if (openedReadCheck({ thread, prFetchedAt: thread.updatedAt, tiles }).kind === 'skip') {
+      return { marked: false };
+    }
+    this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
+    for (const event of this.eventsOf(prKey)) {
+      event.seenAt ??= this.timestamp();
+    }
+    return { marked: true };
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

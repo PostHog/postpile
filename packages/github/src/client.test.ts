@@ -89,8 +89,8 @@ describe('fetchPrs', () => {
       { id: 'R2', author: 'greptile-apps[bot]', state: 'COMMENTED', body: '  ', submittedAt: '2026-09-19T11:00:00.000Z', commitOid: 'c1' },
     ]);
     expect(pr.commits).toEqual([
-      { oid: 'c1', headline: 'Add depot config', author: 'alice', committedAt: '2026-09-18T09:00:00.000Z' },
-      { oid: 'c2', headline: 'Fix cache', author: 'Alice Laptop', committedAt: '2026-09-20T09:00:00.000Z' },
+      { oid: 'c1', headline: 'Add depot config', author: 'alice', committer: 'alice', committedAt: '2026-09-18T09:00:00.000Z' },
+      { oid: 'c2', headline: 'Fix cache', author: 'Alice Laptop', committer: 'web-flow', committedAt: '2026-09-20T09:00:00.000Z' },
     ]);
   });
 

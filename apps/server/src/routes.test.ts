@@ -10,6 +10,7 @@ import type {
   InstructionsView,
   MemorySources,
   NotificationDebugRow,
+  OpenedReadResult,
   QuietReadView,
   GitHubWritesStatus,
   InboxCleanupView,
@@ -182,12 +183,35 @@ describe('server routes over the fake engine', () => {
   it('lists the last 7 days of quiet mark-reads, newest first, and shows them and the ping decisions on debug rows', async () => {
     const app = appWithFake();
     const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
-    expect(quiet.map((item) => item.prKey)).toEqual(['acme/app#1904', 'acme/app#1899', 'acme/app#1921', 'acme/app#1963']);
-    expect(quiet[0]).toMatchObject({ repo: 'acme/app', number: 1904, title: 'Hash Turbo inputs by lockfile only', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quiet.map((item) => item.prKey)).toEqual(['acme/app#1904', 'acme/app#1911', 'acme/app#1899', 'acme/app#1960', 'acme/app#1921', 'acme/app#1963']);
+    expect(quiet[0]).toMatchObject({ repo: 'acme/app', number: 1904, title: 'Hash Turbo inputs by lockfile only', reason: 'bots', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quiet[1]).toMatchObject({ number: 1911, reason: 'approved', bots: [] });
 
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     expect(rows.find((row) => row.prKey === 'acme/app#1904')?.lastAction).toMatchObject({ origin: 'quiet', outcome: 'github' });
     expect(rows.find((row) => row.prKey === 'acme/app#1902')?.pingDecisions.map((decision) => decision.source)).toEqual(['agent', 'rules']);
+  });
+
+  it('marks an opened PR read in memory only when nothing is asked and writes are unlocked', async () => {
+    const app = appWithFake();
+    const topics = (await (await app.request('/api/topics')).json()) as TopicListItem[];
+    const details = await Promise.all(topics.map(async (item) => (await (await app.request(`/api/topics/${item.topic.id}`)).json()) as TopicDetail));
+    const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
+    const unreadKeys = new Set(rows.filter((row) => row.thread.unread).map((row) => row.prKey));
+    const views = details.flatMap((detail) => detail.tiles).filter((view) => view.tile.members.length === 1 && unreadKeys.has(view.tile.members[0]!.prKey));
+    const done = views.find((view) => view.afterRead.done && view.state.kind !== 'snoozed')!;
+    const yours = views.find((view) => !view.afterRead.done)!;
+    const doneKey = done.tile.members[0]!.prKey;
+    const opened = (key: string) => post<OpenedReadResult>(app, `/api/prs/${key.replace('#', '/')}/opened`);
+
+    expect((await opened(doneKey)).json).toEqual({ marked: false });
+    await post(app, '/api/github-writes', { enabled: true });
+    expect((await opened(yours.tile.members[0]!.prKey)).json).toEqual({ marked: false });
+    expect((await opened(doneKey)).json).toEqual({ marked: true });
+    expect((await opened(doneKey)).json).toEqual({ marked: false });
+
+    const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
+    expect(quiet[0]).toMatchObject({ prKey: doneKey, reason: 'opened' });
   });
 
   it('does not mark anything read when the debug list is read', async () => {

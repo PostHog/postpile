@@ -4,7 +4,7 @@ import type { StackPlace } from '../lib/stacks.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { Avatar } from './Avatar.tsx';
 import { Glyph, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, RepoLabel, StackMark, StateWordLabel } from './pills.tsx';
+import { ForWhomChip, NewsDot, RepoLabel, StackMark, StateWordLabel } from './pills.tsx';
 
 interface PrRowProps {
   pr: PrSummary;
@@ -18,6 +18,10 @@ interface PrRowProps {
   showForWhom: boolean;
   /** Where the PR sits in a GitHub stack; null for a lone PR (no mark). */
   stackPlace: StackPlace | null;
+  /** Off on a single-PR tile: the tile's heading already is the PR's title. */
+  showTitle: boolean;
+  /** The PR has news that keeps the tile unread (`newsPrKeys`): coral dot before the number. */
+  news: boolean;
   onClick: () => void;
 }
 
@@ -32,8 +36,9 @@ function rowBackground(props: PrRowProps, quiet: boolean): string {
 }
 
 /**
- * One PR line inside a tile (3a design): state icon, number, the stack mark
- * for a stack layer ("1/3"), title, then
+ * One PR line inside a tile (3a design): state icon, the coral dot when the
+ * PR keeps the tile unread, number, the stack mark for a stack layer
+ * ("1/3"), title (not on a single-PR tile, whose heading is the title), then
  * the state word (review state, or the DRAFT chip, Merged, Closed), open
  * threads and the author. No CI here: checks only show in the detail
  * pane's facts. Drafts and closed layers sit on a grey row so they stay in
@@ -56,13 +61,15 @@ export function PrRow(props: PrRowProps) {
     <button
       type="button"
       aria-pressed={props.selected}
+      title={props.showTitle ? undefined : pr.title}
       onClick={props.onClick}
       className={`flex h-8 min-w-0 items-center gap-2 px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${props.grouped ? 'rounded-[6px]' : ''} ${rowBackground(props, quiet)}`}
     >
       <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
-      <span className={`shrink-0 font-mono text-[11px] ${greyed ? 'text-faint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
+      {props.news && <NewsDot />}
+      <span className={`shrink-0 font-mono text-[11px] ${greyed ? 'text-hint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
       {props.stackPlace && <StackMark place={props.stackPlace} greyed={props.greyed} />}
-      <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>
+      {props.showTitle && <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>}
       {props.showForWhom && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={greyed} size="row" />}
       {pr.repoLabel && <RepoLabel label={pr.repoLabel} />}
       <span className="ml-auto flex shrink-0 items-center gap-2.5 pl-1">
@@ -70,7 +77,7 @@ export function PrRow(props: PrRowProps) {
         {pr.openThreads > 0 && (
           <span
             title={`${pr.openThreads} open review thread${pr.openThreads === 1 ? '' : 's'}`}
-            className={`flex items-center gap-[3px] font-mono text-[11px] ${greyed ? 'text-faint' : 'text-muted'}`}
+            className={`flex items-center gap-[3px] font-mono text-[11px] ${greyed ? 'text-hint' : 'text-muted'}`}
           >
             <Glyph glyph="bubble" size={12} strokeWidth={1.6} />
             {pr.openThreads}

@@ -150,6 +150,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
       oid: commit.oid,
       headline: commit.headline,
       author: input.author,
+      committer: input.author,
       committedAt: clock.hoursAgo(commit.hoursAgo),
     })),
     comments: (input.comments ?? []).map((comment) => ({

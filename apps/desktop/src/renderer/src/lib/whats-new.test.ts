@@ -31,6 +31,11 @@ describe('whatsNewText', () => {
     expect(whatsNewText(news('push', { kind: 'approved', actor: 'ada' }))).toBe('ada approved since your push');
   });
 
+  it('says a merge or close the viewer did', () => {
+    expect(whatsNewText(news('merge', { kind: 'reply', actor: 'lyra' }))).toBe('lyra commented since you merged it');
+    expect(whatsNewText(news('close', { kind: 'mention', actor: 'lyra' }))).toBe('lyra mentioned you since you closed it');
+  });
+
   it('says asks, mentions and re-requests', () => {
     expect(whatsNewText(news('read', { kind: 'mention', actor: 'lyra' }))).toBe('lyra mentioned you since you marked it read');
     expect(whatsNewText(news('review', { kind: 'review_request', actor: 'pim' }))).toBe('pim re-requested your review');

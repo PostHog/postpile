@@ -2,6 +2,7 @@ import {
   daysBefore,
   deriveEvents,
   eventsReadOnGitHub,
+  eventsSeenByTouch,
   nextWatchSince,
   ownEventsOnReadThread,
   prKey,
@@ -9,6 +10,7 @@ import {
   threadPrRef,
   type NotificationThread,
   type Pr,
+  type PrEvent,
   type PrKey,
   type PrRef,
   type IsoTime,
@@ -61,7 +63,7 @@ export interface GitHubSyncResult {
   fetchedPrKeys: PrKey[];
   /** New events on pinged PRs. Events on stack layers are logged but are not new work. */
   newEventIds: string[];
-  /** PRs with events that turned seen because GitHub says their thread was read after them. */
+  /** PRs with events that turned seen because GitHub says their thread was read after them, or the viewer touched the PR after them. */
   readOnGitHub: PrKey[];
   errors: string[];
 }
@@ -90,7 +92,7 @@ export interface InboxPollResult {
   viewer: Viewer | null;
   fetchedPrKeys: PrKey[];
   newEventIds: string[];
-  /** PRs with events that turned seen because GitHub says their thread was read after them. */
+  /** PRs with events that turned seen because GitHub says their thread was read after them, or the viewer touched the PR after them. */
   readOnGitHub: PrKey[];
 }
 
@@ -115,7 +117,7 @@ interface Candidate {
 export class GitHubSync {
   private readonly layers: StackLayerFinder;
   private readonly teamMembers: TeamMembers;
-  /** PRs reconciled with GitHub's read time during the current run; taken by run() and poll(). */
+  /** PRs reconciled with GitHub's read time or the viewer's last touch during the current run; taken by run() and poll(). */
   private readOnGitHub = new Set<PrKey>();
   /** The stored threads, loaded once per run and again after the run writes threads (`threads()`). */
   private storedThreads: NotificationThread[] | null = null;
@@ -326,13 +328,13 @@ export class GitHubSync {
     }
     const events = this.store.events.listForPrs([...readTimes.keys()]);
     for (const [key, lastReadAt] of readTimes) {
-      this.markReadOnGitHub(key, eventsReadOnGitHub(events.get(key) ?? [], lastReadAt), lastReadAt);
+      this.markSeenAt(key, eventsReadOnGitHub(events.get(key) ?? [], lastReadAt), lastReadAt);
     }
   }
 
-  private markReadOnGitHub(key: PrKey, eventIds: string[], lastReadAt: IsoTime): void {
+  private markSeenAt(key: PrKey, eventIds: string[], seenAt: IsoTime): void {
     if (eventIds.length > 0) {
-      this.store.events.markSeen(eventIds, lastReadAt);
+      this.store.events.markSeen(eventIds, seenAt);
       this.readOnGitHub.add(key);
     }
   }
@@ -347,7 +349,36 @@ export class GitHubSync {
     }
   }
 
-  /** PRs reconciled with GitHub's read time since the last call. */
+  /**
+   * Every stored event of the PR up to the viewer's last touch (their
+   * review, comment, push to their own PR, merge or close) counts as seen,
+   * stamped with the touch time. GitHub clears the notification only for a
+   * visit on github.com, so an approval from the gh CLI left what came
+   * before unread. DESIGN.md "You already dealt with it".
+   */
+  private markSeenBeforeTouch(pr: Pr, events: PrEvent[], viewer: Viewer): void {
+    const seen = eventsSeenByTouch(pr, events, viewer);
+    if (seen.touch !== null) {
+      this.markSeenAt(pr.key, seen.ids, seen.touch.at);
+    }
+  }
+
+  /**
+   * The touch rule over every stored PR, once per full sync. storePr applies
+   * it to each PR it writes; this also covers events stored before the rule
+   * existed, on PRs that have not moved since.
+   */
+  private reconcileTouches(viewer: Viewer): void {
+    const prs = this.store.prs.listAll();
+    const events = this.store.events.listForPrs(prs.map((pr) => pr.key));
+    this.store.transaction(() => {
+      for (const pr of prs) {
+        this.markSeenBeforeTouch(pr, events.get(pr.key) ?? [], viewer);
+      }
+    });
+  }
+
+  /** PRs reconciled with GitHub's read time or the viewer's last touch since the last call. */
   private takeReadOnGitHub(): PrKey[] {
     const keys = [...this.readOnGitHub];
     this.readOnGitHub = new Set();
@@ -395,12 +426,14 @@ export class GitHubSync {
       const thread = this.store.notifications.getByPrKey(pr.key);
       const lastReadAt = thread?.lastReadAt ?? null;
       if (lastReadAt !== null) {
-        this.markReadOnGitHub(pr.key, eventsReadOnGitHub(this.store.events.listForPr(pr.key), lastReadAt), lastReadAt);
+        this.markSeenAt(pr.key, eventsReadOnGitHub(this.store.events.listForPr(pr.key), lastReadAt), lastReadAt);
       }
       // A thread that stays read: the user's own merge, close, comment or review never made it unread.
       if (thread && !thread.unread) {
         this.markOwnEventsSeen(pr.key, viewer);
       }
+      // Whatever came before the user's own last action was seen by them, however they acted.
+      this.markSeenBeforeTouch(pr, this.store.events.listForPr(pr.key), viewer);
       return created;
     });
   }
@@ -632,6 +665,7 @@ export class GitHubSync {
     }
     // Only now: a run that threw above keeps the list for the next sync.
     this.store.meta.delete(POLLED_KEY);
+    this.reconcileTouches(viewer);
     return {
       viewer,
       notModified: notifications.notModified,

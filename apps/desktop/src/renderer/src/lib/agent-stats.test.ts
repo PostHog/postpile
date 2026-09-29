@@ -7,12 +7,12 @@ function count(overrides: Partial<AgentCallCount>): AgentCallCount {
 }
 
 describe('callStatsLabel', () => {
-  it('adds up calls and cost', () => {
+  it('counts calls and never shows a cost', () => {
     const stats: AgentCallStats = { total: 3, byKind: { dossier_update: count({ calls: 2, costUsd: 0.1 }), glance_batch: count({ costUsd: 0.04 }) } };
-    expect(callStatsLabel(stats)).toBe('3 agent calls · $0.14');
+    expect(callStatsLabel(stats)).toBe('3 agent calls');
   });
 
-  it('leaves the cost out when none was reported', () => {
+  it('says call for one', () => {
     expect(callStatsLabel({ total: 1, byKind: { chat: count({}) } })).toBe('1 agent call');
   });
 });

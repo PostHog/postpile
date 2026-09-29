@@ -94,8 +94,9 @@ export interface TopicListItem {
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
   /**
-   * The row's faces (`topicFaces` over `topicPeople`): you and your teammates
-   * when involved, else the other people; three at most.
+   * The row's faces (`topicFaces` over `topicPeople`): PR authors only, you
+   * and your teammates first (the team pill), then others by PR count;
+   * three at most.
    */
   people: TopicPerson[];
 }
@@ -347,6 +348,11 @@ export interface ActionResult {
   message: string;
   /** Set when the action queued a deferred GitHub write that can still be undone. */
   undoToken: string | null;
+}
+
+/** Opening a PR in PostPile: whether its GitHub thread was marked read ("opened in PostPile"). Nothing to show either way. */
+export interface OpenedReadResult {
+  marked: boolean;
 }
 
 export type TileFeedbackKind = 'not_mine' | 'not_related' | 'wrong_topic';

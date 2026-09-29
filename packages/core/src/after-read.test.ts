@@ -58,7 +58,15 @@ describe('tileAfterMarkRead', () => {
     const reply = makeEvent({ kind: 'reply_to_user', actor: 'ada', at: at(20), ruleLoudness: 'loud' });
     const result = afterRead(makePr({ author: 'ada' }), [reply]);
     expect(result.done).toBe(false);
-    expect(result.turn).toMatchObject({ kind: 'you', what: 'Reply to ada' });
+    expect(result.turn).toMatchObject({ kind: 'you', what: 'ada replied to you' });
+  });
+
+  it('is done on your own PR when your push came after the mention', () => {
+    const own = makePr({ author: viewer.login, commits: [makeCommit({ oid: 'c-own', author: viewer.login, committedAt: at(30) })] });
+    const mention = makeEvent({ kind: 'mention', actor: 'ada', at: at(20), ruleLoudness: 'loud' });
+    const pushed = makeEvent({ id: 'own-push', kind: 'commits_pushed', actor: viewer.login, at: at(30), sourceId: 'c-own' });
+    expect(afterRead(own, [mention]).done).toBe(false);
+    expect(afterRead(own, [mention, pushed])).toEqual({ done: true, turn: NO_TURN });
   });
 
   it('is done when the events agent lowered the reply: a plain thanks is not still your move', () => {

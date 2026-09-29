@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
 import { at } from '@postpile/core/fixtures';
-import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
+import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, newsPrKeys, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -141,5 +141,22 @@ describe('strip news', () => {
     expect(stripMoreCount(view, news)).toBe(2);
     expect(stripMoreCount(view, null)).toBe(3);
     expect(stripMoreCount(setView([summary(1)]), null)).toBe(0);
+  });
+});
+
+describe('newsPrKeys', () => {
+  it('marks the PR an unread reason points at, even among six', () => {
+    const prs = [1, 2, 3, 4, 5, 6].map((number) => summary(number));
+    expect([...newsPrKeys(setView(prs, ['acme/app#4']))]).toEqual(['acme/app#4']);
+  });
+
+  it('adds PRs with unseen loud events', () => {
+    const prs = [summary(1), summary(2, { unseenLoudEvents: 2 }), summary(3)];
+    expect([...newsPrKeys(setView(prs, ['acme/app#1']))].sort()).toEqual(['acme/app#1', 'acme/app#2']);
+  });
+
+  it('marks nothing on a tile that is not unread', () => {
+    const prs = [summary(1, { unseenLoudEvents: 1 })];
+    expect(newsPrKeys(setView(prs)).size).toBe(0);
   });
 });

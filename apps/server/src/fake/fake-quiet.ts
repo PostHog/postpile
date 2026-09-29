@@ -1,18 +1,24 @@
-import { quietReadDetail, type NewActionLogEntry, type PingDecision } from '@postpile/core';
+import { quietReadDetail, quietReasonDetail, type NewActionLogEntry, type PingDecision } from '@postpile/core';
 import { SAMPLE_REPO } from './sample-builders.ts';
 
 function hoursBefore(now: Date, hours: number): string {
   return new Date(now.getTime() - hours * 3600_000).toISOString();
 }
 
-/** Sample PRs whose read threads came back only because of bots, and which bots. Invented. */
-const QUIET_SAMPLES: { number: number; bots: string[]; hoursAgo: number }[] = [
-  { number: 1904, bots: ['trunk-io[bot]', 'CI'], hoursAgo: 2 },
-  { number: 1899, bots: ['github-actions[bot]'], hoursAgo: 26 },
-  { number: 1921, bots: ['renovate[bot]', 'CI'], hoursAgo: 50 },
-  { number: 1963, bots: ['chatgpt-codex-connector[bot]', 'coderabbitai[bot]'], hoursAgo: 75 },
+/**
+ * Sample PRs PostPile marked read by itself, with the log detail: threads
+ * that came back only because of bots (which bots), and threads the viewer
+ * reviewed after everything unread. Invented.
+ */
+const QUIET_SAMPLES: { number: number; detail: string; hoursAgo: number }[] = [
+  { number: 1904, detail: quietReadDetail(['trunk-io[bot]', 'CI']), hoursAgo: 2 },
+  { number: 1911, detail: quietReasonDetail('approved'), hoursAgo: 3.5 },
+  { number: 1899, detail: quietReadDetail(['github-actions[bot]']), hoursAgo: 26 },
+  { number: 1960, detail: quietReasonDetail('changes_requested'), hoursAgo: 29 },
+  { number: 1921, detail: quietReadDetail(['renovate[bot]', 'CI']), hoursAgo: 50 },
+  { number: 1963, detail: quietReadDetail(['chatgpt-codex-connector[bot]', 'coderabbitai[bot]']), hoursAgo: 75 },
   // Older than the view's 7 days: in the log, not in "Handled quietly".
-  { number: 1855, bots: ['vercel[bot]'], hoursAgo: 9 * 24 },
+  { number: 1855, detail: quietReadDetail(['vercel[bot]']), hoursAgo: 9 * 24 },
 ];
 
 /**
@@ -29,7 +35,7 @@ export function sampleQuietReads(now: Date): NewActionLogEntry[] {
     prKey: `${SAMPLE_REPO}#${sample.number}`,
     tileId: null,
     batch: null,
-    detail: quietReadDetail(sample.bots),
+    detail: sample.detail,
   }));
 }
 

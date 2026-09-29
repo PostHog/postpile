@@ -26,6 +26,17 @@ export function checkCounts(checks: Checks): CheckCounts {
   return { ok, failed, pending, total: checks.contexts.length };
 }
 
+/**
+ * The Checks fact's note, "12 checks · 2 not passing" ("all passing" at
+ * none). Neutral words: CI is not a signal here (2026-09-29), so failed and
+ * still running both count as not passing, without a colour.
+ */
+export function checksNote(counts: CheckCounts): string {
+  const total = `${counts.total} ${counts.total === 1 ? 'check' : 'checks'}`;
+  const notPassing = counts.failed + counts.pending;
+  return notPassing === 0 ? `${total} · all passing` : `${total} · ${notPassing} not passing`;
+}
+
 export type ReviewStatus = 'requested' | 'approved' | 'changes_requested' | 'commented' | 'dismissed';
 
 export interface ReviewRow {

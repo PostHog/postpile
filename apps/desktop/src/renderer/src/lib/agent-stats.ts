@@ -1,20 +1,8 @@
 import type { AgentCallKind, AgentCallStats } from '@postpile/core';
 
-function cost(stats: AgentCallStats): number | null {
-  let total: number | null = null;
-  for (const count of Object.values(stats.byKind)) {
-    if (count?.costUsd !== null && count?.costUsd !== undefined) {
-      total = (total ?? 0) + count.costUsd;
-    }
-  }
-  return total;
-}
-
-/** Footer text like "4 agent calls · $0.14". Cost is left out when the backend never reported one. */
+/** Footer text like "4 agent calls". No cost: the user is on a subscription, and a dollar figure read like a bill (2026-09-29). */
 export function callStatsLabel(stats: AgentCallStats): string {
-  const calls = `${stats.total} agent ${stats.total === 1 ? 'call' : 'calls'}`;
-  const total = cost(stats);
-  return total === null ? calls : `${calls} · $${total.toFixed(2)}`;
+  return `${stats.total} agent ${stats.total === 1 ? 'call' : 'calls'}`;
 }
 
 /** One line per kind for the hover title, e.g. "dossier_update: 2 calls, 1 failed". */

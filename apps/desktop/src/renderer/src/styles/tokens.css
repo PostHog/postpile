@@ -29,6 +29,12 @@
   --ink: #16181d;
   --ink-2: #3a3f4b;
   --muted: #6b7080;
+  /* Small text that carries information (why-here lines, out-of-date notes,
+     "Dossier v3", fold labels in the sidebar, empty-state lines, hover
+     actions like Why? and Recheck). At least 4.5:1 on white (5.3) and on the
+     sidebar (4.7). --faint (2.3-2.6:1) is for decoration only: separators,
+     chevrons, the quote mark, ages next to a louder line, done tiles. */
+  --hint: #666b79;
   --faint: #9aa0ad;
   --ghost: #c3c7d0;
 
@@ -126,6 +132,9 @@
   --diff-add-ink: #17633a;
   --diff-del: #fdecea;
   --diff-del-ink: #a3321f;
+  /* Deletions in the Size fact (count and bar). Its own red, never coral:
+     coral (--unread) means "new since you looked" only. */
+  --diff-red: #cf222e;
 
   /* Avatars: a few fixed tones, picked per login */
   --avatar-blue: #dbe7ff;

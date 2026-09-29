@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Pr } from '@postpile/core';
-import { checkCounts, lastPushAt, mergeStatus } from '../lib/pr.ts';
+import { checkCounts, checksNote, lastPushAt, mergeStatus } from '../lib/pr.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 
@@ -36,42 +36,34 @@ export function PrFacts(props: { pr: Pr; agentApprovers: string[] }) {
   const checks = checkCounts(pr.checks);
   const pushedAt = lastPushAt(pr);
   const age = pr.mergedAt ? `merged ${ageLabel(pr.mergedAt, now)}` : `opened ${ageLabel(pr.createdAt, now)}`;
-  const checksNote = checks.failed > 0 ? `${checks.failed} failed` : checks.pending > 0 ? `${checks.pending} running` : 'green';
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
       <Fact label="Size">
         <span className="font-mono text-xs">
-          <span className="text-open">+{pr.additions}</span> <span className="text-closed">−{pr.deletions}</span>{' '}
-          <span className="text-faint">· {pr.changedFiles} files</span>
+          <span className="text-open">+{pr.additions}</span> <span className="text-diff-red">−{pr.deletions}</span>{' '}
+          <span className="text-hint">· {pr.changedFiles} files</span>
         </span>
         <SplitBar
           parts={[
             { weight: pr.additions, tone: 'bg-open' },
-            { weight: pr.deletions, tone: 'bg-unread' },
+            { weight: pr.deletions, tone: 'bg-diff-red' },
           ]}
         />
       </Fact>
+      {/* Neutral on purpose: CI is not a signal in PostPile, so no pass or fail colour (2026-09-29). */}
       <Fact label="Checks">
-        {checks.total === 0 ? (
-          <span className="font-mono text-xs text-faint">none</span>
-        ) : (
-          <span className="font-mono text-xs">
-            {checks.ok}
-            <span className="text-faint">/{checks.total}</span> <span className="text-faint">· {checksNote}</span>
-          </span>
-        )}
+        <span className="font-mono text-xs text-muted">{checks.total === 0 ? 'none' : checksNote(checks)}</span>
         <SplitBar
           parts={[
-            { weight: checks.ok, tone: 'bg-open' },
-            { weight: checks.pending, tone: 'bg-pending' },
-            { weight: checks.failed, tone: 'bg-unread' },
+            { weight: checks.ok, tone: 'bg-dot-quiet' },
+            { weight: checks.failed + checks.pending, tone: 'bg-chip' },
           ]}
         />
       </Fact>
       <Fact label="Age">
         <span className="font-mono text-xs">
           {age}
-          {pushedAt && !pr.mergedAt && <span className="text-faint"> · pushed {ageLabel(pushedAt, now)}</span>}
+          {pushedAt && !pr.mergedAt && <span className="text-hint"> · pushed {ageLabel(pushedAt, now)}</span>}
         </span>
       </Fact>
       <Fact label="To merge">

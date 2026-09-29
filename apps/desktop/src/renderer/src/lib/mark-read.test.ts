@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileAfterRead, TileStateKind, TileView, WhoseTurn } from '@postpile/core';
-import { githubLink, markButtonLabel, markReadNotice, moveWords, tileFooterAction } from './mark-read.ts';
+import { detailPrimary, githubLink, markButtonLabel, markReadNotice, moveWords, tileFooterAction } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -35,6 +35,31 @@ describe('tileFooterAction and markButtonLabel', () => {
   it('keeps the mark button on a snoozed tile, with the honest label', () => {
     expect(markButtonLabel(view('snoozed', REREVIEW, stillYours))).toBe('Mark read');
     expect(markButtonLabel(view('snoozed', NONE, doneAfter))).toBe('Mark done');
+  });
+});
+
+describe('detailPrimary', () => {
+  it('keeps Approve in the lead while it is due', () => {
+    expect(detailPrimary({ view: view('unread', NONE, doneAfter), prAction: 'approve', approveVariant: 'primary' })).toBe('approve');
+  });
+
+  it('leads with the tile action next to an outlined Approve again', () => {
+    // Someone else's PR you approved, unread: the tile leads with Mark read, so does the pane.
+    expect(detailPrimary({ view: view('unread', NONE, doneAfter), prAction: 'approved', approveVariant: 'secondary' })).toBe('mark_read');
+    expect(detailPrimary({ view: view('open', NONE, doneAfter), prAction: 'approved', approveVariant: 'secondary' })).toBe('mark_done');
+    expect(detailPrimary({ view: view('open', REREVIEW, stillYours), prAction: 'approved', approveVariant: 'secondary' })).toBe('snooze');
+  });
+
+  it('leads with the tile action next to an outlined Approve draft', () => {
+    expect(detailPrimary({ view: view('unread', NONE, doneAfter), prAction: 'approve', approveVariant: 'secondary' })).toBe('mark_read');
+  });
+
+  it('follows the tile on your own PR too', () => {
+    expect(detailPrimary({ view: view('open', REREVIEW, stillYours), prAction: 'open_on_github', approveVariant: 'primary' })).toBe('snooze');
+  });
+
+  it('opens GitHub from a done tile, whose footer Open means nothing in the pane', () => {
+    expect(detailPrimary({ view: view('done', NONE, doneAfter), prAction: 'open_on_github', approveVariant: 'primary' })).toBe('open_on_github');
   });
 });
 

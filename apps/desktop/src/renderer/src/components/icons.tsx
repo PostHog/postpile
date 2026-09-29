@@ -199,6 +199,18 @@ export function BellIcon() {
   );
 }
 
+/** Two people in outline (Octicons "people"): the start of the sidebar's team pill. */
+export function PeopleIcon(props: IconProps) {
+  const size = props.size ?? 12;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={props.className} aria-hidden="true">
+      <circle cx="6" cy="5.5" r="2.5" />
+      <path d="M1.5 13.5a4.5 4.5 0 0 1 9 0" />
+      <path d="M10.5 3.2a2.5 2.5 0 0 1 0 4.6M12 9.6a4.5 4.5 0 0 1 2.5 3.9" />
+    </svg>
+  );
+}
+
 /** A circle as a path, so a glyph stays one <path>. */
 function ring(cx: number, cy: number, r: number): string {
   return `M${cx} ${cy - r}a${r} ${r} 0 1 0 0 ${2 * r}a${r} ${r} 0 1 0 0 -${2 * r}z`;

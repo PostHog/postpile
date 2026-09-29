@@ -430,7 +430,7 @@ export class ReadModels {
     );
     const events = (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) }));
     const viewer = loadViewer(this.store);
-    const news = whatsNew(board.events.get(key) ?? [], viewer);
+    const news = whatsNew(pr, board.events.get(key) ?? [], viewer);
     const stale = this.staleGlances(board, [key]).has(key);
     const gap = this.glanceGap(key, glance !== null);
     return {

@@ -374,6 +374,10 @@ export function createApp(
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
     return c.json(await engine.approve(prKeyFromParams(c.req.param())));
   });
+  // Opened in the detail pane: marks the GitHub thread read only when nothing is asked of the user and writes are unlocked.
+  app.post('/api/prs/:owner/:repo/:number/opened', async (c) => {
+    return c.json(await engine.markOpenedRead(prKeyFromParams(c.req.param())));
+  });
   app.post('/api/prs/:owner/:repo/:number/draft-ask', async (c) => {
     const body = z.object({ person: z.string(), intent: z.string().default('') }).parse(await c.req.json());
     return c.json(await engine.draftAsk(prKeyFromParams(c.req.param()), body.person, body.intent));

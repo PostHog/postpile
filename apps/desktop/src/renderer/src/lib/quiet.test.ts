@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QuietReadView } from '@postpile/core';
-import { botLabel, botsText, quietRef } from './quiet.ts';
+import { botLabel, botsText, quietReasonText, quietRef } from './quiet.ts';
 
 describe('Handled quietly helpers', () => {
   it('drops the [bot] suffix and joins the names', () => {
@@ -8,6 +8,13 @@ describe('Handled quietly helpers', () => {
     expect(botLabel('CI')).toBe('CI');
     expect(botsText(['trunk-io[bot]', 'CI'])).toBe('trunk-io, CI');
     expect(botsText([])).toBe('bots');
+  });
+
+  it('says why: the bots, or what the user did', () => {
+    expect(quietReasonText({ reason: 'bots', bots: ['trunk-io[bot]', 'CI'] })).toBe('only trunk-io, CI');
+    expect(quietReasonText({ reason: 'approved', bots: [] })).toBe('you approved after it');
+    expect(quietReasonText({ reason: 'replied', bots: [] })).toBe('you replied after it');
+    expect(quietReasonText({ reason: 'opened', bots: [] })).toBe('opened in PostPile');
   });
 
   it('names the PR as repo#number', () => {

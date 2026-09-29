@@ -1,7 +1,7 @@
 // What the tile's mark button says and what takes its place, so the label
 // never promises more than a mark-read does (2026-09-29). Core's
 // `TileView.afterRead` says what a mark-read would leave behind.
-import type { PrSummary, TileAfterRead, TileView } from '@postpile/core';
+import type { PrPrimaryAction, PrSummary, TileAfterRead, TileView } from '@postpile/core';
 import { filesTabUrl } from './key-files.ts';
 import { leadPr } from './tiles.ts';
 
@@ -36,6 +36,35 @@ export function markButtonLabel(view: Pick<TileView, 'state' | 'turn' | 'afterRe
     return null;
   }
   return action === 'mark_done' ? 'Mark done' : 'Mark read';
+}
+
+/**
+ * The detail pane's one ink button, so the pane leads with what the tile
+ * leads with (2026-09-29):
+ * - approve: Approve is due (someone else's open PR, not approved yet, not a
+ *   draft). The pane is where approving happens, so it keeps the lead.
+ * - mark_read / mark_done / snooze: the tile's footer action.
+ * - open_on_github: the tile is done (its footer "Open" means nothing in the
+ *   pane, which already shows it).
+ * "Approve again" and "Approve draft" stay outlined, and the tile's action
+ * leads next to them; before, an approved PR had no primary at all.
+ */
+export type DetailPrimary = 'approve' | 'mark_read' | 'mark_done' | 'snooze' | 'open_on_github';
+
+export interface DetailPrimaryInput {
+  view: Pick<TileView, 'state' | 'turn' | 'afterRead'>;
+  /** Core's primary action for the PR (`PrSummary.primaryAction`). */
+  prAction: PrPrimaryAction;
+  /** The Approve button's look (`approveButton`): outlined for "Approve again" and "Approve draft". */
+  approveVariant: 'primary' | 'secondary';
+}
+
+export function detailPrimary(input: DetailPrimaryInput): DetailPrimary {
+  if (input.prAction === 'approve' && input.approveVariant === 'primary') {
+    return 'approve';
+  }
+  const footer = tileFooterAction(input.view);
+  return footer === 'open' ? 'open_on_github' : footer;
 }
 
 export interface GitHubLink {

@@ -17,6 +17,25 @@ export function sameForWhom(a: ForWhom, b: ForWhom): boolean {
   return a.kind === b.kind;
 }
 
+/**
+ * The PRs that keep an unread tile unread: an unseen loud event on the PR
+ * (`PrSummary.unseenLoudEvents`) or a reason in `unreadBecause`. Their rows
+ * get the coral "new" dot, so a six-PR set shows which PR is new. Only on
+ * unread tiles: a snoozed or done tile shows nothing new.
+ */
+export function newsPrKeys(view: Pick<TileView, 'state' | 'prs'>): Set<string> {
+  if (view.state.kind !== 'unread') {
+    return new Set();
+  }
+  const keys = new Set(view.state.unreadBecause.map((reason) => reason.prKey));
+  for (const pr of view.prs) {
+    if (pr.unseenLoudEvents > 0) {
+      keys.add(pr.key);
+    }
+  }
+  return keys;
+}
+
 /** "PR", "Stack · 3", "Set · 3". */
 export function kindLabel(view: TileView): string {
   if (view.tile.kind === 'stack') {

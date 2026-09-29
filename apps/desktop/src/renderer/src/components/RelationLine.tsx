@@ -21,7 +21,7 @@ function lineText(placement: TopicPlacement): string {
  * the correction: "Wrong" offers the other two relations. A correction holds
  * until something new happens in the topic.
  */
-export function RelationLine(props: { placement: TopicPlacement; topicId: string; dossierVersion: number | null }) {
+export function RelationLine(props: { placement: TopicPlacement; topicId: string; dossierVersion: number | null; updating: boolean }) {
   const actions = useActions();
   const [whyOpen, setWhyOpen] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -35,13 +35,13 @@ export function RelationLine(props: { placement: TopicPlacement; topicId: string
 
   return (
     <div className="max-w-[680px]">
-      <div className="group flex items-center gap-2 text-xs text-muted">
+      <div className="group flex items-center gap-2 text-xs text-hint">
         <RelationBadge relation={placement.relation} />
         <span className="min-w-0 truncate select-text">{text}</span>
-        {placement.corrected && <span className="text-[10.5px] whitespace-nowrap text-faint">set by you</span>}
+        {placement.corrected && <span className="text-[10.5px] whitespace-nowrap text-hint">set by you</span>}
         <span className={`ml-auto flex shrink-0 gap-2 group-hover:opacity-100 ${whyOpen || choosing ? 'opacity-100' : 'opacity-0'}`}>
           {props.dossierVersion !== null && (
-            <button type="button" aria-expanded={whyOpen} onClick={() => setWhyOpen(!whyOpen)} className="text-[11px] text-faint hover:text-accent hover:underline">
+            <button type="button" aria-expanded={whyOpen} onClick={() => setWhyOpen(!whyOpen)} className="text-[11px] text-hint hover:text-accent hover:underline">
               Why?
             </button>
           )}
@@ -50,7 +50,7 @@ export function RelationLine(props: { placement: TopicPlacement; topicId: string
             aria-expanded={choosing}
             title="Say where this topic really belongs. Stays in local memory, nothing goes to GitHub."
             onClick={() => setChoosing(!choosing)}
-            className="text-[11px] text-faint hover:text-unread-ink hover:underline"
+            className="text-[11px] text-hint hover:text-unread-ink hover:underline"
           >
             Wrong
           </button>
@@ -73,7 +73,7 @@ export function RelationLine(props: { placement: TopicPlacement; topicId: string
         </div>
       )}
       {whyOpen && props.dossierVersion !== null && (
-        <WhyPanel target={{ kind: 'dossier_line', topicId: props.topicId, version: props.dossierVersion, path: 'relation' }} onClose={() => setWhyOpen(false)} />
+        <WhyPanel target={{ kind: 'dossier_line', topicId: props.topicId, version: props.dossierVersion, path: 'relation' }} updating={props.updating} onClose={() => setWhyOpen(false)} />
       )}
     </div>
   );

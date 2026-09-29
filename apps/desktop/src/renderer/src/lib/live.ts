@@ -8,6 +8,9 @@ export interface LiveLabel {
   title: string;
 }
 
+/** The engine's blocked note while a full sync runs (`pollOnce`). */
+const SYNC_RUNNING_NOTE = 'full sync running';
+
 function secondsUntil(iso: string | null, now: Date): number {
   return iso ? Math.max(0, Math.ceil((Date.parse(iso) - now.getTime()) / 1000)) : 0;
 }
@@ -25,7 +28,9 @@ export function liveLabel(status: LivePollStatus | undefined, now: Date): LiveLa
     return { text: `live · backing off, retry in ${secondsUntil(status.backoffUntil, now)}s`, warn: true, title: `${status.note ?? ''}. ${title}` };
   }
   if (status.state === 'blocked') {
-    return { text: `live · paused: ${status.note ?? 'busy'}`, warn: false, title };
+    // The engine's note stays "full sync running" for the CLI; here it reads like the rest of the "updating" wording.
+    const paused = status.note === SYNC_RUNNING_NOTE ? 'paused while syncing' : `paused: ${status.note ?? 'busy'}`;
+    return { text: `live · ${paused}`, warn: false, title };
   }
   return { text: `live · every ${every}s`, warn: false, title };
 }

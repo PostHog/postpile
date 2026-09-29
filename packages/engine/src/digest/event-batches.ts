@@ -92,7 +92,7 @@ export class EventBatchClassifier {
     const events = store.events.listForPrs(prKeys);
     const open = [...store.prs.getMany(prKeys).values()].filter((pr) => pr.state === 'OPEN');
     return open.flatMap((pr) =>
-      (events.get(pr.key) ?? []).filter((event) => event.override === null && isUnansweredAsk(pr, event, viewer, PERSONAL_ASK_KINDS)),
+      (events.get(pr.key) ?? []).filter((event) => event.override === null && isUnansweredAsk(pr, events.get(pr.key) ?? [], event, viewer, PERSONAL_ASK_KINDS)),
     );
   }
 

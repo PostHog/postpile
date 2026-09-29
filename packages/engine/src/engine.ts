@@ -60,6 +60,7 @@ import type {
   TopicProposalKind,
   ViewerView,
   NotificationDebugRow,
+  OpenedReadResult,
   QuietReadView,
   Timers,
   WorkContextSweepResult,
@@ -248,6 +249,7 @@ export class Engine implements EngineService {
   private readonly catchUpCap: CatchUpCap;
   private readonly catchUps: CatchUpQueue;
   private readonly github: GitHubSync;
+  private readonly quietReads: QuietReads;
   private readonly telemetry: Telemetry;
   private readonly pingSummary: PingSummary;
   private readonly quota: GitHubQuota;
@@ -297,8 +299,8 @@ export class Engine implements EngineService {
     const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff, telemetry: this.telemetry };
     const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
-    const quietReads = new QuietReads(store, deps.reader, deps.writes, now);
-    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, quietReads, deps.syncLog);
+    this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
+    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);
     const decider = new PingDecider({
       store,
@@ -845,6 +847,16 @@ export class Engine implements EngineService {
       this.telemetry.capture('marked_read', { count: 1, origin: 'debug' });
     }
     return result;
+  }
+
+  async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
+    try {
+      return { marked: await this.quietReads.markOpened(prKey) };
+    } catch (error) {
+      // GitHubWrites logged it as failed; the thread stays unread for the next open or sync.
+      (this.deps.syncLog ?? console.log)(`opened in PostPile: mark-read of ${prKey}: ${errorText(error)}`);
+      return { marked: false };
+    }
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

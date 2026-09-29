@@ -23,7 +23,7 @@ export function ReviewList(props: { pr: Pr }) {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[11px] font-semibold tracking-[0.04em] text-muted">Reviews</span>
-      {rows.length === 0 && <span className="text-xs text-faint">No reviews or requests yet.</span>}
+      {rows.length === 0 && <span className="text-xs text-hint">No reviews or requests yet.</span>}
       {rows.map((row) => {
         const status = STATUS[row.status];
         const label = row.status === 'requested' && isTeam(row.login) ? 'waiting · team' : status.label;
