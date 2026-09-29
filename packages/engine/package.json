@@ -1,6 +1,6 @@
 {
   "name": "@postpile/engine",
-  "version": "0.1.0-alpha.0",
+  "version": "0.2.0",
   "description": "PostPile engine: sync, live poll, digest pipeline, writes and the work-context sweep",
   "private": true,
   "license": "MIT",
@@ -24,10 +24,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@postpile/core": "workspace:*",
-    "@postpile/store": "workspace:*",
-    "@postpile/github": "workspace:*",
     "@postpile/agent": "workspace:*",
+    "@postpile/core": "workspace:*",
+    "@postpile/github": "workspace:*",
+    "@postpile/store": "workspace:*",
     "posthog-node": "^5.54.1"
   }
 }
