@@ -315,12 +315,18 @@ drives anything the app says or ranks:
   timeline has no "CI failing" (`prStateWords`), and `ci` events are left out
   of the ping decision, memory recheck and dossier update prompts
   (`withoutCi`). The topic delta drops them (`selectTopicDelta`), so a
-  CI-only change starts no dossier update and bumps no dossier version.
+  CI-only change starts no dossier update and bumps no dossier version; the
+  digest cursor still moves past them, so they are not read again.
   Checks were never in the glance hash (`prGlanceSnapshot`) and stay out, so
   a re-run never makes a glance stale.
-- *The writing agents are told.* The glance and dossier update prompts carry
-  `NO_CI_RULE`: no CI or check status in any field (verdict, forYou, risk,
-  status, open questions, changes, facts).
+- *The writing agents are told.* Every prompt that writes something the
+  user reads carries `NO_CI_RULE`: glance, dossier update, ping decision,
+  memory recheck, chat, topic assignment, sets, consolidation. No CI or check
+  status in any field, and CI status in older stored text (glances, dossiers,
+  summaries from before the rule) is stale and ignored. A recheck of a CI
+  claim answers drop (or fix without the CI part), never holds. The draft
+  comment prompt is the exception: it writes the user's own ask. The MCP
+  server's instructions say PostPile does not track CI.
 - *Not a move.* Whose turn has no `fix_ci`; failing CI on the user's own PR
   is not their move by itself.
 - *Never loud.* `ci` events are machine activity: quiet by the rules, never a

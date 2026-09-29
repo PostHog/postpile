@@ -298,6 +298,7 @@ describe('consolidationPrompt', () => {
     expect(prompt).toContain('pr acme/app#1: moves test jobs');
     expect(prompt).toContain('- id fact-9');
     expect(prompt).toContain('- #12 ');
+    expect(prompt).toContain(NO_CI_RULE);
     expect(prompt).toContain('- rejected: Skip docs PRs');
   });
 });

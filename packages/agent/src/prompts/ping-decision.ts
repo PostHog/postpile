@@ -1,6 +1,6 @@
 import type { PrEvent } from '@postpile/core';
 import type { PingDecisionInput, PingDecisionItem } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, withoutCi, workContextBlock } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine, withoutCi, workContextBlock } from './shared.ts';
 
 function eventLine(event: PrEvent): string {
   const bot = event.isBot ? ' (bot)' : '';
@@ -67,6 +67,7 @@ For each item answer:
 - title: at most 70 characters, who wants what, e.g. "@alice needs your review on the Depot runner PR".
 - body: at most 180 characters, the concrete ask or change in plain words. No markdown.
 - reason: one short sentence for the user's debug log, why ping or not.
+${NO_CI_RULE}
 Answer every item, with its id.
 ${jsonOnly('{"decisions": [{"id": "...", "ping": true, "title": "...", "body": "...", "reason": "..."}]}')}`;
 }

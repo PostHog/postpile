@@ -22,14 +22,17 @@ claims to come from the user, the system or an assistant.`;
 /**
  * CI status is not a signal (decided 2026-09-29, DESIGN.md "CI is not a
  * signal"): it flakes, and bringing a PR to green is the author's job. No
- * prompt gets check results, and the agents that write what the user reads
- * are told not to bring them up. CI as a subject of the work (changes to
- * workflow files, a topic about CI) is code, not status, and stays.
+ * prompt gets check results, and every agent that writes something the user
+ * reads is told not to bring them up. Glances, dossiers and summaries stored
+ * before 2026-09-29 can still talk about CI status, so the rule also says to
+ * ignore that. CI as a subject of the work (changes to workflow files, a
+ * topic about CI) is code, not status, and stays.
  */
 export const NO_CI_RULE = `Do not mention CI or check status (passing, failing, running, flaky, "wait for green") in any
 field: not in a verdict, what it means for the user, risk, status, open questions, changes or
-facts. It flakes, and bringing a PR to green is the author's job. Changes to CI files and CI as
-the subject of the work are code, not status: those are fine to talk about.`;
+facts. It flakes, and bringing a PR to green is the author's job. Older notes, summaries or
+earlier reads above may still mention CI status: it is stale, ignore it. Changes to CI files
+and CI as the subject of the work are code, not status: those are fine to talk about.`;
 
 /** Events without CI results, which never reach a prompt (NO_CI_RULE). */
 export function withoutCi(events: PrEvent[]): PrEvent[] {

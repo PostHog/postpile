@@ -6,7 +6,7 @@ import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { memoryRecheckPrompt } from './prompts/memory-recheck.ts';
 import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
-import { contextBlock, githubData, OWN_PR_NOTE } from './prompts/shared.ts';
+import { contextBlock, githubData, NO_CI_RULE, OWN_PR_NOTE } from './prompts/shared.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { Pr, Provenance } from '@postpile/core';
 import type { PromptContext } from './service.ts';
@@ -57,7 +57,21 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
           topicName: topic.name,
           tailoring: '',
           dossierBrief: '',
-          glance: null,
+          // A glance stored before the rule, as upgraded databases still have them.
+          glance: {
+            prKey: failing.key,
+            verdict: 'LOOK_CLOSER',
+            forYou: 'Hold approval until CI is green.',
+            does: 'Moves test jobs.',
+            risk: 'low',
+            othersSaid: 'nobody yet',
+            keyFiles: [],
+            pullInReason: null,
+            dossierVersion: null,
+            inputHash: 'h',
+            model: 'm',
+            createdAt: '2026-09-02T09:00:00Z',
+          },
           events: [ciEvent, mention],
           rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: failing.key }, why: '@' },
           template: { title: 'bob mentioned you', body: 'can you look at the cache key?' },
@@ -86,6 +100,21 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
       expect(prompt).not.toContain('backend-tests');
     });
   }
+
+  // The draft comment is the user's own ask, which may be about CI; every other writer gets the rule.
+  it('tells every agent that writes for the user not to mention CI status, stored notes included', () => {
+    for (const name of ['glance', 'topics', 'chat', 'ping', 'recheck']) {
+      expect(prompts[name], name).toContain(NO_CI_RULE);
+    }
+    const sets = setGroupingPrompt({ topic, prs: [failing, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext });
+    expect(sets).toContain(NO_CI_RULE);
+    expect(NO_CI_RULE).toContain('may still mention CI status: it is stale, ignore it');
+  });
+
+  it('never lets a recheck affirm a CI claim', () => {
+    expect(prompts.recheck).toContain('A line that is only about CI status is "drop"');
+    expect(prompts.recheck).toContain('Never "holds" for a CI claim.');
+  });
 
   it('keeps changes to CI files in the glance prompt', () => {
     expect(prompts.glance).toContain('.github/workflows/ci.yml (+10/-2)');

@@ -1,7 +1,7 @@
 import type { MemorySource, PrEvent } from '@postpile/core';
 import type { MemoryRecheckInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, shortDetail, viewerLine, withoutCi } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prDetails, shortDetail, viewerLine, withoutCi } from './shared.ts';
 
 function sourceLine(source: MemorySource): string {
   const who = source.who ? `@${source.who} ` : '';
@@ -56,6 +56,10 @@ Answer with one outcome:
   same style and length as the original. Only claim what the data above shows.
 - "drop": the line no longer holds or was never supported, and there is nothing true to say instead.
 "why" is one or two plain sentences with the evidence (who said or did what, when, on which PR).
+CI and check status (passing, failing, flaky, waiting for green) is not something PostPile
+tracks, so the data above never has it. A line that is only about CI status is "drop"; a line
+that also says something else is "fix" with the CI part left out. Never "holds" for a CI claim.
 If the data is not enough to tell, say "holds" and explain what is missing in "why".
+${NO_CI_RULE}
 ${jsonOnly('{"outcome": "holds" | "fix" | "drop", "text": "...", "why": "..."}')}`;
 }
