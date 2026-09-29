@@ -165,7 +165,7 @@ function depotDossierV3(clock: SampleClock): Dossier {
   return {
     ...v2,
     summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
-    statusNote: 'Cache and e2e layers wait on reviews; the cache PR fails its warm-up job.',
+    statusNote: 'Cache and e2e layers wait on reviews; the cache PR still has an open warm-up question.',
     // Written against the commit before the latest push, so "Why?" shows it as stale.
     statusSources: sources([{ ...ref(clock, 'commit', 1902, 4, 'a1b2c3'), headOid: 'a1b2c3' }, ref(clock, 'review', 1902, 1, 'review-1902-0')]),
     people: [
@@ -206,7 +206,7 @@ function depotDossierV3(clock: SampleClock): Dossier {
     recentChanges: [
       { at: clock.hoursAgo(0.3), text: 'lyra asked on #1902 whether the cache warm-up needs a flag.', refs: [ref(clock, 'comment', 1902, 0.3, 'issuecomment-2')] },
       { at: clock.hoursAgo(1), text: '#1911 opened: e2e moves to Depot runners, stacked on the cache PR.', refs: [ref(clock, 'pr', 1911, 1)] },
-      { at: clock.hoursAgo(5), text: '#1902 opened: Turbo remote cache moves to Depot. CI fails on the warm-up job.', refs: [ref(clock, 'pr', 1902, 5)] },
+      { at: clock.hoursAgo(5), text: '#1902 opened: Turbo remote cache moves to Depot, with a warm-up job for cold runs.', refs: [ref(clock, 'pr', 1902, 5)] },
       { at: clock.hoursAgo(14), text: 'Storybook turned its Turbo cache off in #1855 (Frontend build).', refs: [ref(clock, 'pr', 1855, 14)] },
       ...v2.recentChanges,
     ],
@@ -294,7 +294,7 @@ function buildFacts(clock: SampleClock): Fact[] {
     }),
     sampleFact(clock, {
       id: 'fact-1902-status', subject: pr(1902), predicate: 'status', object: null,
-      text: 'The warm-up job fails on the first cold run.', topicId: DEPOT, recordedHoursAgo: 4,
+      text: 'The warm-up job has no feature flag yet.', topicId: DEPOT, recordedHoursAgo: 4,
       refs: [{ ...ref(clock, 'commit', 1902, 4, 'a1b2c3'), headOid: 'a1b2c3' }],
     }),
     sampleFact(clock, {

@@ -64,6 +64,11 @@ describe('pingRule', () => {
     expect(pingRule([bot, botPush], pr, viewer, false).class).toBe('bot');
   });
 
+  it('never pings for CI, not even a failure on the viewer own PR', () => {
+    const ci = makeEvent({ id: 'ci', kind: 'ci', actor: '', isBot: true, summary: 'CI failed: test', ruleLoudness: 'quiet', ruleReason: 'bot activity' });
+    expect(pingRule([ci], ownPr, viewer, false)).toMatchObject({ class: 'bot', loudness: 'quiet' });
+  });
+
   it('falls back to quiet, then muted', () => {
     expect(pingRule([makeEvent({ ruleLoudness: 'quiet' })], pr, viewer, false).class).toBe('quiet');
     expect(pingRule([makeEvent({ ruleLoudness: 'muted' })], pr, viewer, false).class).toBe('muted');

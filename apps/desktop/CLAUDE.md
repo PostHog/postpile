@@ -309,7 +309,8 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   agents approved (`PrStatus.agentApprovers`) the word reads "Approved by
   agent", names in the tooltip; the detail uses `PrDetail.agentApprovers`
   with `approvedText` in `lib/pr.ts`. **No CI on rows, tiles, the detail
-  state line or the RISK box**: checks only show in `PrFacts`.
+  state line, the RISK box or the your-move chip**: checks only show in
+  `PrFacts` (DESIGN.md "CI is not a signal"; `PrStatus` has no checks).
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for
   "Your move".
 - Coral (`unread`) means "new since you looked" and nothing else on a tile.

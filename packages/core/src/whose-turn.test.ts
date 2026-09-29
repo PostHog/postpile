@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeTimelineItem, makeUserState, singleTile, viewer } from './fixtures.ts';
 import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
-import { isMergeApprovedMove, whoseTurn, type WhoseTurn } from './whose-turn.ts';
+import { isMergeApprovedMove, NO_TURN, whoseTurn, YOUR_MOVE_ORDER, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
 
@@ -196,13 +196,19 @@ describe('whoseTurn: on your own PR', () => {
     expect(single({ ...own, threads })).toMatchObject({ kind: 'you', what: 'Answer 2 threads from mira' });
   });
 
-  it('asks you to address requested changes, then to fix CI', () => {
+  it('asks you to address requested changes', () => {
     const changes = { ...own, reviews: [makeReview({ author: 'ada', state: 'CHANGES_REQUESTED' })] };
     expect(single(changes).what).toBe("Address ada's changes");
     const cleared = { ...changes, reviews: [...changes.reviews, makeReview({ id: 'r2', author: 'ada', submittedAt: at(30) })] };
     expect(single(cleared).what).not.toBe("Address ada's changes");
-    const failing = { ...own, checks: { rollup: 'FAILURE' as const, contexts: [] } };
-    expect(single(failing).what).toBe('Fix failing CI');
+  });
+
+  it('never makes failing CI on your own PR a move of yours: CI is not a signal', () => {
+    const failing = { name: 'backend-tests', conclusion: 'FAILURE', completedAt: at(20) };
+    const red = { ...own, checks: { rollup: 'FAILURE' as const, contexts: [failing] } };
+    expect(single(red)).toEqual(NO_TURN);
+    expect(single({ ...red, reviewerUsers: ['sol'] })).toMatchObject({ kind: 'them', who: 'sol', lead: 'Waiting on' });
+    expect(single({ ...red, reviewDecision: 'APPROVED' })).toMatchObject({ kind: 'you', move: 'merge' });
   });
 
   it('says it waits on the first requested reviewer', () => {
@@ -243,7 +249,7 @@ describe('whoseTurn: on your own PR', () => {
   it('asks you to merge once it is approved', () => {
     expect(single({ ...own, reviewDecision: 'APPROVED' }).what).toBe('Merge, it is approved');
     expect(isMergeApprovedMove(single({ ...own, reviewDecision: 'APPROVED' }))).toBe(true);
-    expect(isMergeApprovedMove(single({ ...own, checks: { ...own.checks, rollup: 'FAILURE' }, reviewDecision: 'APPROVED' }))).toBe(false);
+    expect(isMergeApprovedMove(single({ ...own, checks: { ...own.checks, rollup: 'FAILURE' }, reviewDecision: 'APPROVED' }))).toBe(true);
     expect(single({ ...own, reviewDecision: 'APPROVED', isDraft: true }).kind).toBe('none');
   });
 });
@@ -371,9 +377,9 @@ describe('whoseTurn: the kind of move', () => {
     expect(move(single({ ...own, isDraft: true, reviews: changes }))).toBe('address_changes');
   });
 
-  it('calls failing CI fix_ci and an approved PR merge', () => {
-    expect(move(single({ ...own, checks: { rollup: 'FAILURE', contexts: [] } }))).toBe('fix_ci');
+  it('calls an approved PR merge, and has no CI move', () => {
     expect(move(single({ ...own, reviewDecision: 'APPROVED' }))).toBe('merge');
+    expect(YOUR_MOVE_ORDER).toEqual(['reply', 're_review', 'review', 'address_changes', 'merge']);
   });
 
   it('calls a personal ask on a draft a reply', () => {

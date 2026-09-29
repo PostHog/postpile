@@ -961,6 +961,20 @@ the app meanwhile.
   GitHub (not for pushes); opening a PR in PostPile marks it read when
   nothing is asked of you. DESIGN.md "You already dealt with it".
 
+- **CI is not a signal** (2026-09-29): CI status feeds no agent prompt
+  (glance, dossier update, ping decision, memory recheck, chat, topics), no
+  hash and no dossier delta; the glance and dossier update prompts say not to
+  mention it in any field. Whose turn has no "Fix failing CI" move any more,
+  and CI events stay quiet: never a ping or an unread reason. Kept: CI as a
+  subject of the work (topic names, workflow files), the "Checks" fact in the
+  detail pane, the folded bot/CI activity line, and the user's own snooze
+  "Until CI is green". No prompt version bump: stale glances and dossiers
+  refresh on the next real change. Julian: "it's always the responsibility
+  of the author to bring the PR to green. Except for maybe some details in
+  the detail pane, we shouldn't highlight it or put it into text or into any
+  risk." Follows design 3a (CI off tiles, same morning). DESIGN.md "CI is
+  not a signal".
+
 - **The live poll obeys X-Poll-Interval, plus a cycle on focus**
   (2026-09-29): the poll waits the configured interval (default now 60s)
   or GitHub's X-Poll-Interval, whichever is longer; `POSTPILE_POLL_SECONDS`

@@ -1,6 +1,6 @@
 import type { PrSet } from '@postpile/core';
 import type { SetGroupingInput } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, WORK_GLOSSARY } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, WORK_GLOSSARY } from './shared.ts';
 
 function setLine(set: PrSet): string {
   const members = set.members.map((m) => m.prKey).join(', ');
@@ -50,5 +50,6 @@ Rules:
 - take: one or two sentences on what the set is doing as a whole.
 - Per member, reason: one short sentence on why it belongs.
 - No sets is a perfectly good answer.
+${NO_CI_RULE}
 ${jsonOnly('{"sets": [{"title": "...", "take": "...", "members": [{"prKey": "owner/repo#1", "reason": "..."}]}]}')}`;
 }

@@ -17,7 +17,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'to_review',
     authorRelation: 'team',
-    status: { lifecycle: 'open', review: 'review', checks: 'ok', agentApprovers: [] },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [] },
     openThreads: 0,
     verdict: 'LOOKS_SAFE',
     glanceStale: false,

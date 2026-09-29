@@ -17,7 +17,6 @@ describe('yourMoveChip', () => {
       title: 'pim addressed your changes: re-review',
     });
     expect(yourMoveChip([{ move: 'address_changes', text: "Address ada's changes" }])?.label).toBe('Address changes');
-    expect(yourMoveChip([{ move: 'fix_ci', text: 'Fix failing CI' }])?.label).toBe('Fix CI');
   });
 
   it('is null when nothing waits on you', () => {

@@ -1,18 +1,16 @@
-// The PR status pill: lifecycle, review and checks, each left out when it
-// does not apply. Pure, from the PR snapshot.
+// The PR status pill: lifecycle and review, each left out when it does not
+// apply. Pure, from the PR snapshot. No checks: CI is not a signal (DESIGN.md
+// "CI is not a signal"); the detail pane reads them from the PR itself.
 import { agentOnlyApprovers, standingApprovals } from './approvals.ts';
 import type { Pr } from './types.ts';
 
 export type PrLifecycle = 'open' | 'draft' | 'queued' | 'merged' | 'closed';
 export type PrReviewStatus = 'approved' | 'changes' | 'review';
-export type PrChecksStatus = 'ok' | 'fail' | 'pending';
 
 export interface PrStatus {
   lifecycle: PrLifecycle;
   /** Null for merged / closed PRs, drafts, and repos without a review rule. */
   review: PrReviewStatus | null;
-  /** Null for merged / closed PRs and PRs without checks. */
-  checks: PrChecksStatus | null;
   /**
    * Bot names ("reviewbot") when the review is approved and only agents
    * approved, so the pill can say "approved by agent". Empty otherwise,
@@ -54,23 +52,15 @@ const REVIEW: Record<Pr['reviewDecision'], PrReviewStatus | null> = {
   NONE: null,
 };
 
-const CHECKS: Record<Pr['checks']['rollup'], PrChecksStatus | null> = {
-  SUCCESS: 'ok',
-  FAILURE: 'fail',
-  PENDING: 'pending',
-  NONE: null,
-};
-
 export function prStatus(pr: Pr): PrStatus {
   const life = lifecycle(pr);
   if (life === 'merged' || life === 'closed') {
-    return { lifecycle: life, review: null, checks: null, agentApprovers: [] };
+    return { lifecycle: life, review: null, agentApprovers: [] };
   }
   const review = life === 'draft' ? null : REVIEW[pr.reviewDecision];
   return {
     lifecycle: life,
     review,
-    checks: CHECKS[pr.checks.rollup],
     agentApprovers: review === 'approved' ? agentOnlyApprovers(standingApprovals(pr)) : [],
   };
 }

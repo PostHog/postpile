@@ -6,13 +6,24 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- The live poll checks GitHub every minute, as GitHub's `X-Poll-Interval` asks, instead of every 10 seconds, and once right away when you switch to the app. `POSTPILE_POLL_SECONDS` can no longer go below GitHub's value.
 - Whatever happened on a PR before your own last action on it counts as seen, however you acted (github.com, the gh CLI, GitHub Mobile, an agent commenting as you): your review, a comment or reply, a push to your own PR, or merging or closing it yourself. A "ready for review" from before your CLI approval no longer keeps the tile unread, and never pings.
 - "New since you looked" can now say "since you merged it" or "since you closed it"; a push to someone else's PR no longer counts as your last look.
 - Threads where you reviewed or replied after everything unread (from the gh CLI, GitHub Mobile or an agent) are marked read on GitHub after a sync, your own PRs included, only while GitHub writes are unlocked. A push does not count, and a merge without your review stays unread unless you acted after it. "Handled quietly" lists them with the reason ("you approved after it").
 - A push to your own PR answers a mention or reply before it, like a comment would: "this needs a merge-in from master" stops being your move once you pushed.
 - The move for a mention or a reply says what happened ("lyra mentioned you", "lyra replied to you") instead of "Reply to …". A question still says "Answer lyra's question".
 - Opening a PR in the detail pane marks it read on GitHub, like a visit on github.com, when nothing is asked of you (the tile would be done after a mark-read), it is not snoozed and GitHub writes are unlocked. "Handled quietly" lists these as "opened in PostPile".
+
+## 0.9.0 (2026-09-29)
+
+### Changed
+
+- CI is no longer a signal: the agents no longer see or mention check status (no more "hold approval until CI is green"), and failing CI on your own PR is no longer your move. The "Checks" line in the detail pane and the "Until CI is green" snooze stay.
+
+## 0.8.0 (2026-09-29)
+
+### Changed
+
+- The live poll checks GitHub every minute, as GitHub's `X-Poll-Interval` asks, instead of every 10 seconds, and once right away when you switch to the app. `POSTPILE_POLL_SECONDS` can no longer go below GitHub's value.
 
 ## 0.7.0 (2026-09-29)
 

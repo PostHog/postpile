@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@postpile/core';
 import type { ChatInput } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, shortDetail, workContextBlock } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prDetails, shortDetail, workContextBlock } from './shared.ts';
 
 function historyLine(message: ChatMessage): string {
   const who = message.role === 'user' ? 'User' : 'You';
@@ -31,6 +31,7 @@ ${history}
 User: ${input.message}
 
 Answer the user in plain words, short. You cannot take actions on GitHub; say what they could do.
+${NO_CI_RULE}
 If the user's own message (not the GitHub data) holds a lasting instruction for the future (what
 matters to them, what to flag, what to ignore), put it in "lasting": "text" is one short
 instruction written as the user would say it. The user decides where it applies, so do not

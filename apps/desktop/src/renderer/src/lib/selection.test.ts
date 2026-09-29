@@ -37,7 +37,7 @@ function pr(key: string): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'rest',
     authorRelation: 'other',
-    status: { lifecycle: 'open', review: 'review', checks: 'ok', agentApprovers: [] },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [] },
     openThreads: 0,
     verdict: null,
     glanceStale: false,

@@ -17,13 +17,13 @@ export type WhoseTurnKind = 'you' | 'them' | 'none';
  * reply: an ask (question, mention, reply, team mention), also on a draft.
  * re_review: the author addressed your changes. review: a review request,
  * personal or for your team. address_changes: threads or a change request
- * on your own PR or draft. fix_ci: CI fails on your PR. merge: your PR is
- * approved.
+ * on your own PR or draft. merge: your PR is approved. CI is never a move
+ * (DESIGN.md "CI is not a signal").
  */
-export type YourMove = 'reply' | 're_review' | 'review' | 'address_changes' | 'fix_ci' | 'merge';
+export type YourMove = 'reply' | 're_review' | 'review' | 'address_changes' | 'merge';
 
 /** Most urgent first, in the order of the sidebar sections. */
-export const YOUR_MOVE_ORDER: YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'fix_ci', 'merge'];
+export const YOUR_MOVE_ORDER: YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'merge'];
 
 interface TurnFields {
   /** them: the login the move waits on. Null for you and none. */
@@ -223,9 +223,6 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
   const changesBy = changesRequestedBy(ctx.pr);
   if (changesBy) {
     return you(ctx, 'address_changes', `Address ${changesBy}'s changes`);
-  }
-  if (pr.checks.rollup === 'FAILURE') {
-    return you(ctx, 'fix_ci', 'Fix failing CI');
   }
   // Users before teams; the viewer's own team can sit here too (CODEOWNERS).
   const reviewers = [...pr.reviewerUsers, ...pr.reviewerTeams];
