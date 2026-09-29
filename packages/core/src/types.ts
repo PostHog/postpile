@@ -197,6 +197,12 @@ export interface Viewer {
    * fall back to treating any other reviewer as a teammate.
    */
   teamMembers?: string[];
+  /**
+   * GitHub's numeric user id, the input to the telemetry identity hash.
+   * Never shown in the UI. Missing on a viewer stored before it existed;
+   * the next sync backfills it.
+   */
+  databaseId?: number;
 }
 
 // ---------------------------------------------------------------------------

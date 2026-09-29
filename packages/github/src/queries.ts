@@ -133,7 +133,9 @@ export function buildBranchQuery(lookups: BranchLookup[]): string {
   return `query {\n${lines.join('\n')}\n}`;
 }
 
-export const VIEWER_LOGIN_QUERY = 'query { viewer { login } }';
+// databaseId is the viewer's numeric GitHub user id, the input to the
+// telemetry identity hash (never the login itself).
+export const VIEWER_LOGIN_QUERY = 'query { viewer { login databaseId } }';
 
 // Teams need the login first: `userLogins` filters each org's teams to the viewer's.
 export const VIEWER_TEAMS_QUERY = `query($login: String!) {
