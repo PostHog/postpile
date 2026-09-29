@@ -5,7 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell 
 import { extendedPath } from '@postpile/core';
 import fixPath from 'fix-path';
 import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
-import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
+import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, updateSourceFromEnv, type RunningServer } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
 import { MacNotifier } from './mac-notifier.ts';
@@ -268,7 +268,8 @@ async function start(): Promise<void> {
     throw error;
   }
   const config = appConfigFromEnv();
-  server = await startServer({ engine, port: 0, token, config });
+  // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours.
+  server = await startServer({ engine, port: 0, token, config, updates: updateSourceFromEnv(app.getVersion()) });
   console.log(`server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}`);
   serveConnection(server.url, token);
   mainWindow = await openWindow();

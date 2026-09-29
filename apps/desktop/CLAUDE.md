@@ -49,7 +49,9 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   refetch), `useSetupSweep`, polled every second while the job runs),
   `tools.ts` (`useTools`: gh and claude status with fix commands, every
   30s while something is wrong, else every 5 min; "Check again" is
-  `useActions().checkTools`).
+  `useActions().checkTools`),
+  `update.ts` (`useUpdate`: the server's last update check, every minute;
+  `UpdatePill` in the title bar, "Later" per version in localStorage).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
@@ -191,7 +193,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
   `InboxCleanup` (sidebar footer line or middle-column banner, as the
-  server's `look` says) + `InboxCleanupDialog`.
+  server's `look` says) + `InboxCleanupDialog`,
+  `UpdatePill` (title bar update reminder, self-contained so it can move;
+  neutral, never coral).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `ForWhomChip`,
   `StatusPill`), `icons.tsx` (`Glyph` event set), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),

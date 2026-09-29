@@ -2,6 +2,8 @@ import type { AppConfig } from '@postpile/core';
 import { createEngine, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
+import { FakeUpdates } from './fake/fake-update.ts';
+import { UpdateChecker, UpdatesOff, type UpdateSource } from './update-check.ts';
 
 export function isFake(): boolean {
   return process.env.POSTPILE_FAKE === '1';
@@ -73,4 +75,19 @@ export const DEFAULT_POLL_SECONDS = 10;
 export function pollSecondsFromEnv(value: string | undefined): number {
   const parsed = Number(value);
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_POLL_SECONDS;
+}
+
+/**
+ * The update reminder's check for the app at `current`. POSTPILE_UPDATE_CHECK=0
+ * turns it off. Sample data never asks GitHub: it shows a sample update,
+ * unless POSTPILE_FAKE_UPDATE=0.
+ */
+export function updateSourceFromEnv(current: string): UpdateSource {
+  if (process.env.POSTPILE_UPDATE_CHECK === '0') {
+    return new UpdatesOff(current);
+  }
+  if (isFake()) {
+    return new FakeUpdates(current, process.env.POSTPILE_FAKE_UPDATE !== '0');
+  }
+  return new UpdateChecker({ current });
 }

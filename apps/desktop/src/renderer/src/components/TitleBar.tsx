@@ -10,6 +10,7 @@ import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import logoUrl from '../assets/logo-64.png';
 import { BackIcon, ForwardIcon, SyncIcon } from './icons.tsx';
+import { UpdatePill } from './UpdatePill.tsx';
 
 function StatusText(props: { dot: string; text: string; detail: string }) {
   return (
@@ -146,6 +147,7 @@ export function TitleBar(props: TitleBarProps) {
       </div>
       {props.search}
       <div className="flex min-w-0 items-center justify-end gap-3.5">
+        <UpdatePill />
         {props.repoScope}
         <SyncStatus />
         <SyncButton />
