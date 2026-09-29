@@ -10,7 +10,7 @@ const tileId = `pr:${pr.key}`;
 
 function topic(id: string): Topic {
   return { id, name: id, summary: '', summaryInputHash: null,
-    area: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', createdAt: at(0), updatedAt: at(0) };
+    area: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', retiredAt: null, createdAt: at(0), updatedAt: at(0) };
 }
 
 async function synced(): Promise<Harness> {

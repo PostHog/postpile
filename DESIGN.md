@@ -51,7 +51,13 @@ verdict is needed, and Unsorted never retires. It runs after the digest, so
 the sync's own events count; the sync log line and `SyncReport.topicsRetired`
 say how many. Retiring is reversible: a new loud event on a member PR
 (`reviveRetiredTopics`, full sync and live poll) or a new PR assigned to it
-(retired topics stay on offer for 30 days) makes it active again. Retired
+(retired topics stay on offer for 30 days) makes it active again. Every
+status change goes through `nextTopicStatus` (engine: `changeTopicStatus`),
+and retiring records `retiredAt` (migration 020; before, "retired at" read
+`updatedAt`, which any rename moved). Loud means effective loudness: the
+full sync classifies new events first (retired topics' events included) and
+revives after, so an event the agent turned quiet brings nothing back. The
+live poll does not classify and still revives on the rule's loudness. Retired
 topics leave the sidebar list and wait in its Finished drawer (see "Queue
 sections"). Until 2026-09-29 only the daily consolidation retired topics,
 and only when the agent said finished and 14 quiet days had passed; most
@@ -135,7 +141,9 @@ team-devex" instead of the bot's name.
 **Tile state is derived, never stored**:
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
-- `snoozed`: a snooze is active and its condition is not met yet.
+- `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
+  yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); a push or CI snooze also
+  ends when its PR is merged or closed.
 - `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
   without their review they have not seen yet, see "Merged without your review"), or approved by
@@ -431,8 +439,8 @@ else watcher.
 Sets (`set_grouping`) run per topic with 2+ open PRs; hash = PRs + dissolved
 sets + topic feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active
 sets are not in the hash, they are the agent's own last answer. A set the
-agent keeps under the same title keeps its id (tile id, snooze and chat
-survive); sets it drops are deleted; dissolved sets are never brought back.
+agent keeps under the same title keeps its id (tile id and chat survive;
+snoozes are per PR and survive regrouping anyway); sets it drops are deleted; dissolved sets are never brought back.
 A set holds a stack whole or not at all (see "Stacks as one unit").
 The full job order is in the v2 sync flow below.
 

@@ -1,7 +1,7 @@
 import { isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
 import { isApprovedByViewer, reviewPending } from './review-request.ts';
-import { breaksSnooze, isSnoozeOver } from './snooze.ts';
+import { snoozePhase } from './snooze.ts';
 import { stackByPrKey } from './stacks.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 import type {
@@ -29,7 +29,8 @@ export interface TileStateInput {
   prs: Map<PrKey, Pr>;
   events: Map<PrKey, PrEvent[]>;
   userStates: Map<PrKey, UserPrState>;
-  snooze: Snooze | null;
+  /** Snoozes by PR (see `isTileSnoozed`). */
+  snoozes: ReadonlyMap<PrKey, Snooze>;
   now: IsoTime;
   /**
    * Lets an approval made on github.com count as done, and keeps a PR that
@@ -146,19 +147,24 @@ function unseenMergeReasons(input: TileStateInput): UnreadReason[] {
   return reasonsWhere(input, members, isUnseenMergeWithoutReview);
 }
 
-function isSnoozeActive(input: TileStateInput): boolean {
-  const snooze = input.snooze;
-  if (!snooze) {
+/**
+ * A tile is snoozed while every tracked PR in it has an active snooze. A PR
+ * that joins it unsnoozed, or whose snooze broke or ended, shows the tile.
+ */
+function isTileSnoozed(input: TileStateInput): boolean {
+  const tracked = input.tile.members.filter((member) => isTracked(member.provenance));
+  if (tracked.length === 0) {
     return false;
   }
-  const memberKeys = input.tile.members.map((m) => m.prKey);
-  const prs = memberKeys.map((key) => input.prs.get(key)).filter((pr): pr is Pr => pr !== undefined);
-  const events = memberKeys.flatMap((key) => input.events.get(key) ?? []);
-  const context = { prs, events, now: input.now, viewer: input.viewer ?? null };
-  if (events.some((event) => breaksSnooze(event, snooze, context))) {
-    return false;
-  }
-  return !isSnoozeOver(snooze, context);
+  return tracked.every((member) => {
+    const snooze = input.snoozes.get(member.prKey);
+    const pr = input.prs.get(member.prKey);
+    if (!snooze || !pr) {
+      return false;
+    }
+    const context = { pr, events: input.events.get(member.prKey) ?? [], now: input.now, viewer: input.viewer ?? null };
+    return snoozePhase(snooze, context) === 'active';
+  });
 }
 
 function allPingedDone(input: TileStateInput): boolean {
@@ -172,14 +178,14 @@ function allPingedDone(input: TileStateInput): boolean {
 }
 
 /**
- * snoozed: a snooze is active, its condition is not met, and no human made a
- * loud event since it started.
+ * snoozed: every tracked PR has a snooze whose condition is not met and that
+ * no human broke with a loud event since it started.
  * unread: some member has an unseen loud event; unreadBecause says which.
  * done: every pinged member is done and nothing loud is unseen.
  * open: everything else.
  */
 export function deriveTileState(input: TileStateInput): TileState {
-  if (isSnoozeActive(input)) {
+  if (isTileSnoozed(input)) {
     return { kind: 'snoozed', unreadBecause: [] };
   }
   const reasons = unreadReasons(input);

@@ -6,11 +6,11 @@ import { breaksSnooze, isSnoozeOver, snoozeTelemetryBucket, type SnoozeContext }
 import type { Snooze, SnoozeCondition } from './types.ts';
 
 function snooze(condition: SnoozeCondition): Snooze {
-  return { tileId: 'pr:acme/app#1', condition, since: at(10) };
+  return { prKey: 'acme/app#1', condition, since: at(10) };
 }
 
 function context(overrides: Partial<SnoozeContext> = {}): SnoozeContext {
-  return { prs: [makePr()], events: [], now: at(20), viewer, ...overrides };
+  return { pr: makePr(), events: [], now: at(20), viewer, ...overrides };
 }
 
 describe('isSnoozeOver', () => {
@@ -36,14 +36,19 @@ describe('isSnoozeOver', () => {
     expect(isSnoozeOver(push, context({ events: [makeEvent({ kind: 'force_pushed', at: at(11) })] }))).toBe(true);
   });
 
-  it('ci_green ends when every open PR in the tile is green', () => {
+  it('ci_green ends when the PR is green', () => {
     const green = snooze({ kind: 'ci_green' });
-    const ok = makePr({ number: 1, checks: { rollup: 'SUCCESS', contexts: [] } });
-    const failing = makePr({ number: 2, checks: { rollup: 'FAILURE', contexts: [] } });
-    const merged = makePr({ number: 3, state: 'MERGED', checks: { rollup: 'FAILURE', contexts: [] } });
-    expect(isSnoozeOver(green, context({ prs: [ok, failing] }))).toBe(false);
-    expect(isSnoozeOver(green, context({ prs: [ok, merged] }))).toBe(true);
-    expect(isSnoozeOver(green, context({ prs: [] }))).toBe(false);
+    expect(isSnoozeOver(green, context({ pr: makePr({ checks: { rollup: 'FAILURE', contexts: [] } }) }))).toBe(false);
+    expect(isSnoozeOver(green, context({ pr: makePr({ checks: { rollup: 'SUCCESS', contexts: [] } }) }))).toBe(true);
+  });
+
+  it('a push or CI snooze ends when the PR is merged or closed', () => {
+    const failingMerged = makePr({ state: 'MERGED', checks: { rollup: 'FAILURE', contexts: [] } });
+    const closed = makePr({ state: 'CLOSED', checks: { rollup: 'FAILURE', contexts: [] } });
+    expect(isSnoozeOver(snooze({ kind: 'ci_green' }), context({ pr: failingMerged }))).toBe(true);
+    expect(isSnoozeOver(snooze({ kind: 'new_push' }), context({ pr: failingMerged }))).toBe(true);
+    expect(isSnoozeOver(snooze({ kind: 'new_push' }), context({ pr: closed }))).toBe(true);
+    expect(isSnoozeOver(snooze({ kind: 'someone_replies' }), context({ pr: closed }))).toBe(false);
   });
 });
 
@@ -63,9 +68,9 @@ describe('breaksSnooze', () => {
     const pr = makePr({ author: 'rowan', reviewerUsers: [viewer.login], timeline: [request] });
     const event = deriveEvents(pr, viewer, null).find((candidate) => candidate.kind === 'review_requested')!;
     expect(event).toMatchObject({ isBot: true, ruleLoudness: 'loud' });
-    expect(breaksSnooze(event, s, context({ prs: [pr] }))).toBe(true);
+    expect(breaksSnooze(event, s, context({ pr }))).toBe(true);
     const lookCloser = lookCloserEvent(pr, 'acme/team-platform', 'rr', at(16));
-    expect(breaksSnooze(lookCloser, s, context({ prs: [pr] }))).toBe(false);
+    expect(breaksSnooze(lookCloser, s, context({ pr }))).toBe(false);
   });
 });
 

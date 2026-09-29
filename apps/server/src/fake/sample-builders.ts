@@ -276,6 +276,7 @@ export function sampleTopic(clock: SampleClock, input: SampleTopicInput): Topic 
     ...input,
     summaryInputHash: null,
     status: 'active',
+    retiredAt: null,
     createdAt: clock.hoursAgo(24 * 14),
     updatedAt: clock.hoursAgo(1),
   };

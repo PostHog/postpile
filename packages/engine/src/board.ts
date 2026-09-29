@@ -78,7 +78,8 @@ export class Board {
     readonly events: Map<PrKey, PrEvent[]>,
     readonly userStates: Map<PrKey, UserPrState>,
     readonly memberships: Map<PrKey, TopicMembership>,
-    private readonly snoozes: Map<string, Snooze>,
+    /** Snoozes by PR. */
+    private readonly snoozes: Map<PrKey, Snooze>,
     readonly pullIns: Map<PrKey, PullIn>,
     readonly found: Map<PrKey, FoundPr>,
     /** PRs whose stored glance says NOT_YOURS, stale or not, so tile state and whose turn agree (see `teamRequestHold`). */
@@ -152,7 +153,7 @@ export class Board {
       events,
       store.userPrStates.getMany(keys),
       new Map(store.memberships.listAll().map((m) => [m.prKey, m])),
-      new Map(store.snoozes.list().map((s) => [s.tileId, s])),
+      new Map(store.snoozes.list().map((snooze) => [snooze.prKey, snooze])),
       store.pullIns.listAll(),
       store.foundPrs.listAll(),
       notYoursKeys(store, keys),
@@ -225,7 +226,7 @@ export class Board {
       prs: this.prs,
       events: this.events,
       userStates: this.userStates,
-      snooze: this.snoozes.get(tile.id) ?? null,
+      snoozes: this.snoozes,
       now: this.now,
       viewer: this.viewer,
       notYours: this.notYours,

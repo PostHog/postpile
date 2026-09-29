@@ -33,6 +33,7 @@ export * from './pr-tier.ts';
 export * from './topic-queues.ts';
 export * from './topic-urgency.ts';
 export * from './topics.ts';
+export * from './topic-status.ts';
 export * from './topic-proposals.ts';
 export * from './agent-requests.ts';
 export * from './topic-change-plan.ts';

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Topic, TopicStatus, UserRole } from '@postpile/core';
+import type { Topic, TopicStatus, TopicStatusChange, UserRole } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface TopicRow {
@@ -11,6 +11,7 @@ interface TopicRow {
   driver: string | null;
   user_role: string;
   status: string;
+  retired_at: string | null;
   area: string | null;
   created_at: string;
   updated_at: string;
@@ -26,6 +27,7 @@ function toTopic(row: TopicRow): Topic {
     driver: row.driver,
     userRole: row.user_role as UserRole,
     status: row.status as TopicStatus,
+    retiredAt: row.retired_at,
     area: row.area,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -39,8 +41,8 @@ export class TopicRepo {
     run(
       this.db,
       `INSERT INTO topic
-         (id, name, summary, summary_input_hash, tailoring, driver, user_role, status, area, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, name, summary, summary_input_hash, tailoring, driver, user_role, status, retired_at, area, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       topic.id,
       topic.name,
       topic.summary,
@@ -49,6 +51,7 @@ export class TopicRepo {
       topic.driver,
       topic.userRole,
       topic.status,
+      topic.retiredAt,
       topic.area,
       topic.createdAt,
       topic.updatedAt,
@@ -103,8 +106,8 @@ export class TopicRepo {
     return run(this.db, 'UPDATE topic SET area = ?, updated_at = ? WHERE area = ?', into, at, from);
   }
 
-  /** Archive after a merge proposal was accepted. The id is never reused. */
-  setStatus(id: string, status: TopicStatus, at: string): void {
-    run(this.db, 'UPDATE topic SET status = ?, updated_at = ? WHERE id = ?', status, at, id);
+  /** Only for a change `nextTopicStatus` worked out (see TopicStatusWriter in the engine). */
+  setStatus(id: string, change: TopicStatusChange, at: string): void {
+    run(this.db, 'UPDATE topic SET status = ?, retired_at = ?, updated_at = ? WHERE id = ?', change.status, change.retiredAt, at, id);
   }
 }

@@ -53,6 +53,7 @@ export function newTopic(id: string, name: string, at: IsoTime): Topic {
     driver: null,
     userRole: 'watcher',
     status: 'active',
+    retiredAt: null,
     area: null,
     createdAt: at,
     updatedAt: at,

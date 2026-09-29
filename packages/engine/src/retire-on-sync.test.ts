@@ -35,6 +35,9 @@ describe('Engine.sync retires finished topics', () => {
     expect(await h.engine.listFinishedTopics()).toEqual([
       { id: 'depot', name: 'depot', area: null, retiredAt: FOUR_DAYS_LATER.toISOString(), prCount: 1 },
     ]);
+    // A later rename does not move the retire time.
+    h.store.topics.rename('depot', 'Depot runners', '2026-09-20T00:00:00.000Z');
+    expect((await h.engine.listFinishedTopics())[0]?.retiredAt).toBe(FOUR_DAYS_LATER.toISOString());
     // Opened from the Finished drawer, the topic still shows its tile.
     expect((await h.engine.getTopic('depot'))?.tiles.map((view) => view.tile.id)).toEqual([`pr:${mergedPr(1).key}`]);
   });
@@ -118,7 +121,7 @@ describe('Engine.sync retires finished topics', () => {
     const h = makeHarness({ now: () => FOUR_DAYS_LATER });
     const pr = mergedPr(1);
     await syncedAndRead(h, [pr]);
-    h.store.snoozes.put({ tileId: `pr:${pr.key}`, condition: { kind: 'until_time', until: '2099-01-01T00:00:00.000Z' }, since: at(6) });
+    h.store.snoozes.put({ prKey: pr.key, condition: { kind: 'until_time', until: '2099-01-01T00:00:00.000Z' }, since: at(6) });
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
@@ -153,5 +156,28 @@ describe('Engine.sync retires finished topics', () => {
     expect(report.topicsRetired).toBe(0);
     expect(h.store.topics.get('depot')?.status).toBe('active');
     expect(await h.engine.listFinishedTopics()).toEqual([]);
+  });
+
+  it('keeps a retired topic retired when the agent turns the new event quiet', async () => {
+    let now = FOUR_DAYS_LATER;
+    const h = makeHarness({ now: () => now });
+    const pr = mergedPr(1);
+    await syncedAndRead(h, [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
+    h.agent.answerEvents((input) =>
+      input.items.flatMap((item) => item.events.map((event) => ({ eventId: event.id, loudness: 'quiet' as const, reason: 'thanks only' }))),
+    );
+
+    now = new Date('2026-09-06T12:00:00Z');
+    const mentionAt = '2026-09-06T11:00:00.000Z';
+    const mention = { ...pr, comments: [makeComment({ id: 'c5', author: 'bob', body: `@${viewer.login} thanks!`, createdAt: mentionAt })] };
+    h.reader.addPr(mention, makeThreadFor(mention, { reason: 'mention', updatedAt: mentionAt }));
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    expect(h.agent.eventInputs.map((input) => input.topic?.id)).toContain('depot');
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
+    expect(h.store.topics.get('depot')?.retiredAt).toBe(FOUR_DAYS_LATER.toISOString());
   });
 });

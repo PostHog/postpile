@@ -1,8 +1,9 @@
 import type { TopicAssignment, TopicChoice } from '@postpile/agent';
-import { buildStacks, cleanTopicName, dossierBrief, newTopic, stackByPrKey, stackTopicId, type Pr, type PrKey, type Topic } from '@postpile/core';
+import { buildStacks, cleanTopicName, dossierBrief, isRetiredSince, newTopic, stackByPrKey, stackTopicId, type Pr, type PrKey, type Topic } from '@postpile/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
+import { changeTopicStatus } from '../topic-status.ts';
 import type { DigestDeps } from './deps.ts';
 
 /**
@@ -105,9 +106,7 @@ export class TopicAssigner {
     store.transaction(() => {
       for (const { prKey, topicId } of join) {
         // A new layer is new work: it brings its stack's retired topic back, as an agent answer does.
-        if (store.topics.get(topicId)?.status === 'retired') {
-          store.topics.setStatus(topicId, 'active', at);
-        }
+        changeTopicStatus(store, topicId, 'revive', at);
         store.memberships.assign({ prKey, topicId, assignedBy: 'agent', reason: 'joins its stack', createdAt: at });
       }
     });
@@ -118,7 +117,7 @@ export class TopicAssigner {
     const retiredSince = new Date(this.deps.now().getTime() - RETIRED_OFFER_MS).toISOString();
     return this.deps.store.topics
       .list()
-      .filter((t) => t.status === 'active' || (t.status === 'retired' && t.updatedAt >= retiredSince));
+      .filter((t) => t.status === 'active' || isRetiredSince(t, retiredSince));
   }
 
   private topicChoices(): TopicChoice[] {
@@ -168,9 +167,8 @@ export class TopicAssigner {
         // The rest of a stack follows the layer the agent was asked about.
         const keys = [assignment.prKey, ...(this.followers.get(assignment.prKey) ?? [])];
         const topicId = this.topicIdFor(assignment);
-        if (store.topics.get(topicId)?.status === 'retired') {
-          store.topics.setStatus(topicId, 'active', at);
-        }
+        // A new PR is news: it brings a retired topic back.
+        changeTopicStatus(store, topicId, 'revive', at);
         for (const prKey of keys) {
           store.memberships.assign({ prKey, topicId, assignedBy: 'agent', reason: assignment.reason, createdAt: at });
         }

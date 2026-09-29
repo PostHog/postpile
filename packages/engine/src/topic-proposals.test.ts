@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { topicWithPrs } from './testing/topics.ts';
+import { changeTopicStatus } from './topic-status.ts';
 
 /** Harness clock that tests move forward. */
 function clockedHarness(start = '2026-09-02T12:00:00Z'): { h: Harness; setNow: (iso: string) => void } {
@@ -110,7 +111,7 @@ describe('accepting a topic proposal', () => {
     h.store.proposals.add(proposal({ id: 'all', kind: 'split', name: 'Everything', prKeys: [top.key, lone.key] }));
     h.store.proposals.add(proposal({ id: 'merge', kind: 'merge', name: null, intoTopicId: 'other' }));
     h.store.memberships.assign({ prKey: lone.key, topicId: 'other', assignedBy: 'user', reason: '', createdAt: '2026-09-02T12:00:00.000Z' });
-    h.store.topics.setStatus('other', 'archived', '2026-09-02T12:00:00.000Z');
+    changeTopicStatus(h.store, 'other', 'archive', '2026-09-02T12:00:00.000Z');
 
     expect((await h.engine.decideTopicProposal('gone', true)).message).toBe(`Can't accept: ${lone.key} left the topic since. Nothing changed; reject it instead.`);
     expect((await h.engine.decideTopicProposal('merge', true)).message).toContain('the topic to merge into is no longer active');
