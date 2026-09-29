@@ -1,6 +1,6 @@
 {
   "name": "@postpile/mcp",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "PostPile MCP server: read-only tools that let other agents ask what PostPile knows about a PR and its topic",
   "private": true,
   "license": "MIT",
