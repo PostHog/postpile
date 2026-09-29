@@ -228,6 +228,10 @@ export class FakeWriter implements GitHubWriter {
   readonly calls: string[] = [];
   /** markThreadRead throws for these ids. */
   readonly failingThreads = new Set<string>();
+  /** removeTeamReviewRequest throws while set. */
+  failRemoveTeamRequest = false;
+  /** unsubscribeThread throws while set. */
+  failUnsubscribe = false;
 
   async markThreadRead(threadId: string): Promise<void> {
     if (this.failingThreads.has(threadId)) {
@@ -246,6 +250,20 @@ export class FakeWriter implements GitHubWriter {
 
   async commentOnPr(ref: PrRef, body: string): Promise<void> {
     this.calls.push(`commentOnPr ${ref.repo}#${ref.number} ${body}`);
+  }
+
+  async removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void> {
+    if (this.failRemoveTeamRequest) {
+      throw new Error('boom: remove team request');
+    }
+    this.calls.push(`removeTeamReviewRequest ${ref.repo}#${ref.number} ${teamSlug}`);
+  }
+
+  async unsubscribeThread(threadId: string): Promise<void> {
+    if (this.failUnsubscribe) {
+      throw new Error('boom: unsubscribe');
+    }
+    this.calls.push(`unsubscribeThread ${threadId}`);
   }
 }
 

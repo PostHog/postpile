@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import type { ActionResult, Pr, PrKey } from '@postpile/core';
+import { isOwnTeam, teamSlug, type ActionResult, type Pr, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { errorText } from '../errors.ts';
@@ -51,6 +51,69 @@ export class PrActions {
     const batch = this.readMarker.markRead([key], [], { origin: 'tile', tileId: null });
     await this.refreshPr(key);
     return ok('Approved', batch.token);
+  }
+
+  /** Unsubscribes from the PR's thread; says what happened, never throws. */
+  private async unsubscribe(key: PrKey): Promise<string> {
+    const thread = this.store.notifications.getByPrKeys([key]).get(key);
+    if (!thread) {
+      return 'no notification thread known, so not unsubscribed';
+    }
+    try {
+      if ((await this.writes.unsubscribeThread(thread.id, { origin: 'detail', prKey: key })) === 'off') {
+        return 'GitHub writes turned off, so not unsubscribed';
+      }
+    } catch (error) {
+      return `unsubscribe failed: ${errorText(error)}`;
+    }
+    return 'unsubscribed';
+  }
+
+  /**
+   * "Remove <team>" in the detail pane (2026-09-29): removes the review
+   * request of one of the viewer's teams, unsubscribes from the PR's thread
+   * and marks the PR done here (events seen, handled, thread marked read
+   * through the queue). Final: no undo, re-adding the team would notify every
+   * teammate again. Blocked while writes are locked, never a pending write.
+   * A failed removal stops; a failed unsubscribe still marks the PR done.
+   */
+  async removeTeamRequest(key: PrKey, team: string): Promise<ActionResult> {
+    const pr = this.openPr(key);
+    const viewer = loadViewer(this.store);
+    if (!pr || !viewer) {
+      return failed(`${key} is not an open PR in the store`);
+    }
+    if (!pr.reviewerTeams.includes(team) || !isOwnTeam(team, viewer.teams)) {
+      return failed(`${team} has no pending review request of your team on ${key}`);
+    }
+    const slug = teamSlug(team);
+    try {
+      if ((await this.writes.removeTeamReviewRequest(pr.ref, slug, { origin: 'detail', prKey: key })) === 'off') {
+        return failed('GitHub writes are off (lock in the footer): nothing was removed');
+      }
+    } catch (error) {
+      return failed(`Removing ${slug} failed: ${errorText(error)}`);
+    }
+    const unsubscribed = await this.unsubscribe(key);
+    const batch = this.readMarker.markRead([key], [key], { origin: 'detail', tileId: null });
+    await this.refreshPr(key);
+    this.mirrorRemoval(key, team);
+    // No undo (the removal is final), but the renderer watches the mark-read until it settles.
+    return { ...ok(`Removed ${slug}'s review request, ${unsubscribed}`), settleToken: batch.token };
+  }
+
+  /**
+   * GitHub took the removal; when the stored snapshot still lists the team
+   * (the refresh failed or GitHub lagged), it drops it too, so the handled PR
+   * is done until the next sync brings the PR back. The fetch time stays, so
+   * the snapshot is not taken for fresher than it is.
+   */
+  private mirrorRemoval(key: PrKey, team: string): void {
+    const stored = this.store.prs.get(key);
+    const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
+    if (stored && fetchedAt && stored.reviewerTeams.includes(team)) {
+      this.store.prs.upsert({ ...stored, reviewerTeams: stored.reviewerTeams.filter((candidate) => candidate !== team) }, fetchedAt);
+    }
   }
 
   async draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {

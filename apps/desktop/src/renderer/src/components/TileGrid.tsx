@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
 import { unreadTiles } from '../lib/selection.ts';
+import { useHeldPlace } from '../lib/use-held-place.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';
 
@@ -84,9 +85,17 @@ function emptyText(filter: TileFilter, total: number, searching: boolean): strin
   return filter === 'unread' ? 'No unread tiles here.' : 'Nothing open here.';
 }
 
+function tileId(view: TileView): string {
+  return view.tile.id;
+}
+
 /**
  * The whole topic, tiles in queue order (needs reply first, rest last; unread
  * before open inside a tier). Snoozed and done ones fold into a row each.
+ * The selected tile keeps the place it had when it was selected, even when
+ * its state changed (a mark, the opened mark, a sync), until the selection
+ * moves ("Marked when you move on", `useHeldPlace`); its look changes
+ * right away.
  */
 export function TileGrid(props: TileGridProps) {
   const [filter, setFilter] = useState<TileFilter>('all');
@@ -94,9 +103,18 @@ export function TileGrid(props: TileGridProps) {
   const ordered = tilesInTierOrder(props.detail.tiles);
   const tiles = matching ? ordered.filter((view) => matching.has(view.tile.id)) : ordered;
   const unread = tiles.filter((view) => view.state.kind === 'unread');
-  const live = tiles.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
-  // The selected tile stays in the Unread list while selected: reading or approving it must not hide it.
-  const shown = filter === 'unread' ? unreadTiles(tiles, props.selectedTileId) : live;
+  const [live, snoozed, done] = useHeldPlace(
+    props.selectedTileId,
+    props.selectedTileId,
+    [
+      { key: 'live', items: tiles.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open') },
+      { key: 'snoozed', items: tiles.filter((view) => view.state.kind === 'snoozed') },
+      { key: 'done', items: tiles.filter((view) => view.state.kind === 'done') },
+    ],
+    tileId,
+  ).map((bucket) => bucket.items) as [TileView[], TileView[], TileView[]];
+  // The selected tile stays in the Unread list while selected, at its held place: reading or approving it must not hide or move it.
+  const shown = filter === 'unread' ? unreadTiles([...live, ...snoozed, ...done], props.selectedTileId) : live;
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center gap-2.5 border-t border-hairline pt-3">
@@ -116,8 +134,8 @@ export function TileGrid(props: TileGridProps) {
         </p>
       )}
       <Grid {...props} views={shown} />
-      {filter === 'all' && <FoldedTiles {...props} label="Snoozed" views={tiles.filter((view) => view.state.kind === 'snoozed')} />}
-      {filter === 'all' && <FoldedTiles {...props} label="Done" views={tiles.filter((view) => view.state.kind === 'done')} />}
+      {filter === 'all' && <FoldedTiles {...props} label="Snoozed" views={snoozed} />}
+      {filter === 'all' && <FoldedTiles {...props} label="Done" views={done} />}
     </div>
   );
 }

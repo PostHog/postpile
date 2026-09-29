@@ -512,8 +512,8 @@ describe('PingDecisionRepo', () => {
 
     expect(store.pingDecisions.listForThreads(['t1']).map((decision) => decision.at)).toEqual([at(2), at(1)]);
     expect(store.pingDecisions.listForThreads([])).toEqual([]);
-    expect(store.pingDecisions.countBetween(at(1), at(4))).toEqual({ pinged: 1, withheldRules: 1, withheldAgent: 1 });
-    expect(store.pingDecisions.countBetween(at(4), at(9))).toEqual({ pinged: 0, withheldRules: 0, withheldAgent: 0 });
+    expect(store.pingDecisions.countBetween(at(1), at(4))).toEqual({ pinged: 1, withheldRules: 1, withheldAgent: 1, glance: 0 });
+    expect(store.pingDecisions.countBetween(at(4), at(9))).toEqual({ pinged: 0, withheldRules: 0, withheldAgent: 0, glance: 0 });
   });
 });
 

@@ -105,6 +105,7 @@ import { McpConnection } from './mcp-connection.ts';
 import { InstructionsHistory } from './instructions/history.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
+import { GlancePings } from './live/glance-pings.ts';
 import { PING_DECISIONS_PER_DAY, PingDecider } from './live/ping-decider.ts';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 import { PollRun } from './live/poll-run.ts';
@@ -278,7 +279,17 @@ export class Engine implements EngineService {
     this.memorySources = new MemorySourcesReads(store, now);
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
-    const runDeps = { store, agent: deps.agent, contexts, callLog: deps.callLog, facts: new FactWriter(store, now), now, agentOff, telemetry: this.telemetry };
+    const runDeps = {
+      store,
+      agent: deps.agent,
+      contexts,
+      callLog: deps.callLog,
+      facts: new FactWriter(store, now),
+      now,
+      agentOff,
+      telemetry: this.telemetry,
+      glancePings: new GlancePings(store, now),
+    };
     const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
@@ -740,10 +751,26 @@ export class Engine implements EngineService {
     return result;
   }
 
+  async removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult> {
+    const result = await this.prActions.removeTeamRequest(prKey, team);
+    if (result.ok) {
+      this.telemetry.capture('team_request_removed', {});
+    }
+    return result;
+  }
+
   async markRead(tileId: string): Promise<ActionResult> {
     const result = await this.tiles.markRead(tileId);
     if (result.ok) {
       this.telemetry.capture('marked_read', { count: 1, origin: 'tile' });
+    }
+    return result;
+  }
+
+  async markPrRead(tileId: string, prKey: PrKey): Promise<ActionResult> {
+    const result = await this.tiles.markPrRead(tileId, prKey);
+    if (result.ok) {
+      this.telemetry.capture('marked_read', { count: 1, origin: 'detail' });
     }
     return result;
   }

@@ -51,6 +51,20 @@ describe('GitHubWriteClient', () => {
     });
   });
 
+  it('removes one team review request with DELETE and an empty user list', async () => {
+    const fake = new FakeFetch([{ status: 200, body: { number: 42 } }]);
+    await new GitHubWriteClient(fakeTokens, fake.fn).removeTeamReviewRequest(ref, 'team-platform');
+    expect(fake.requests.map((r) => [r.method, r.url, r.body])).toEqual([
+      ['DELETE', 'https://api.github.com/repos/acme/app/pulls/42/requested_reviewers', { reviewers: [], team_reviewers: ['team-platform'] }],
+    ]);
+  });
+
+  it('unsubscribes from a thread by deleting its subscription', async () => {
+    const fake = new FakeFetch([{ status: 204 }]);
+    await new GitHubWriteClient(fakeTokens, fake.fn).unsubscribeThread('1001');
+    expect(fake.requests.map((r) => [r.method, r.url, r.body])).toEqual([['DELETE', 'https://api.github.com/notifications/threads/1001/subscription', undefined]]);
+  });
+
   it('throws GitHubError on a failed write', async () => {
     const fake = new FakeFetch([{ status: 422, body: { message: 'Can not approve your own pull request' } }]);
     const call = new GitHubWriteClient(fakeTokens, fake.fn).approvePr(ref, '', 'abc123');

@@ -45,6 +45,7 @@ import {
   type PrDetail,
   type PrKey,
   type PrSummary,
+  type TilePendingWrite,
   type PrTier,
   type RepoOverview,
   type RepoSettings,
@@ -183,6 +184,7 @@ export class ReadModels {
     repoLabels: (string | null)[],
     tileUnread: boolean,
     wanted: Set<PrKey>,
+    pending: Map<PrKey, TilePendingWrite>,
   ): PrSummary[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     return tile.members.flatMap((member, index) => {
@@ -207,6 +209,8 @@ export class ReadModels {
           quietRepo: isPrInQuietRepo(pr.key, settings),
           repoLabel: repoLabels[index] ?? null,
           tileUnread,
+          now: board.now,
+          pendingWrite: pending.get(pr.key) ?? null,
         }),
       ];
     });
@@ -228,7 +232,7 @@ export class ReadModels {
       return buildTileView({
         tile,
         state,
-        prs: this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted),
+        prs: this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted, pending),
         prsByKey: board.prs,
         events: board.events,
         userStates: board.userStates,

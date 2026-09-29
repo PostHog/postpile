@@ -154,6 +154,7 @@ export class SyncRun {
         errors,
         tally,
         now,
+        onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
       }, phases);
       await digester.run(agentOff === null ? (options.agentJobs ?? ALL_AGENT_JOBS) : []);
       // After the digest, so dossier changes about events already read on GitHub count as seen too.

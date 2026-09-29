@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
-import { isApprovedByViewer, isPersonalRequest, newestVerdictBy, viewerApproval, reviewPending, reviewRequest, teamRequestTakenBy } from './review-request.ts';
+import { isApprovedByViewer, isPersonalRequest, newestVerdictBy, ownTeamRequests, viewerApproval, reviewPending, reviewRequest, teamRequestTakenBy, teamSlug } from './review-request.ts';
 import type { Viewer } from './types.ts';
 
 const me = viewer.login;
@@ -122,5 +122,19 @@ describe('newestVerdictBy', () => {
       makeReview({ id: 'c', author: 'lyra', state: 'APPROVED', submittedAt: at(30) }),
     ];
     expect(newestVerdictBy(reviews, me)?.id).toBe('a');
+  });
+});
+
+describe('ownTeamRequests and teamSlug', () => {
+  it('lists the viewer teams with a pending request on an open PR', () => {
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform', 'acme/team-web'] });
+    expect(ownTeamRequests(pr, viewer)).toEqual(['acme/team-platform']);
+    expect(ownTeamRequests({ ...pr, state: 'MERGED' }, viewer)).toEqual([]);
+    expect(ownTeamRequests(makePr({ reviewerUsers: [me] }), viewer)).toEqual([]);
+  });
+
+  it('turns "org/slug" into the slug GitHub takes', () => {
+    expect(teamSlug('acme/team-platform')).toBe('team-platform');
+    expect(teamSlug('team-platform')).toBe('team-platform');
   });
 });

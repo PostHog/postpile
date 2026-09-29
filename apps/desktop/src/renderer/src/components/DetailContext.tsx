@@ -1,9 +1,9 @@
 import type { TileView } from '@postpile/core';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindLabel, newsPrKeys, prNumber, sameForWhom } from '../lib/tiles.ts';
+import { kindLabel, notDonePrKeys, prNumber, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, NewsDot, StackMark, StateWordLabel } from './pills.tsx';
+import { ForWhomChip, NotDoneDot, StackMark, StateWordLabel } from './pills.tsx';
 
 interface DetailContextProps {
   view: TileView;
@@ -28,7 +28,7 @@ function NavButton(props: { back: boolean; ariaLabel: string; onClick: () => voi
 /**
  * Tinted header that repeats the selected tile. Several PRs: kind, title,
  * "PR x of n" with arrows, and the PR list (coral dot on the PRs that keep
- * the tile unread). One PR: just the kind; the title is right below in the
+ * the tile from being done). One PR: just the kind; the title is right below in the
  * body, and a counter or arrows would lead nowhere.
  */
 export function DetailContext(props: DetailContextProps) {
@@ -36,7 +36,7 @@ export function DetailContext(props: DetailContextProps) {
   const count = view.prs.length;
   const several = count > 1;
   const places = stackPlaces(view.tile.stacks);
-  const news = newsPrKeys(view);
+  const notDone = notDonePrKeys(view);
   const index = Math.max(
     view.prs.findIndex((pr) => pr.key === props.prKey),
     0,
@@ -92,7 +92,7 @@ export function DetailContext(props: DetailContextProps) {
                 className={`flex h-8 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${look}`}
               >
                 <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
-                {news.has(pr.key) && <NewsDot />}
+                {notDone.has(pr.key) && <NotDoneDot />}
                 <span className={`shrink-0 font-mono text-[11px] ${quiet && !picked ? 'text-hint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
                 {place && <StackMark place={place} />}
                 <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>

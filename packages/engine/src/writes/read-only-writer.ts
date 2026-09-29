@@ -26,4 +26,12 @@ export class ReadOnlyWriter implements GitHubWriter {
   commentOnPr(ref: PrRef): Promise<void> {
     return this.refuse(`comment on ${ref.repo}#${ref.number}`);
   }
+
+  removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void> {
+    return this.refuse(`remove ${teamSlug}'s review request from ${ref.repo}#${ref.number}`);
+  }
+
+  unsubscribeThread(threadId: string): Promise<void> {
+    return this.refuse(`unsubscribe from thread ${threadId}`);
+  }
 }

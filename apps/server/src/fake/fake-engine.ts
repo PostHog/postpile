@@ -128,6 +128,8 @@ import {
   type Viewer,
   botsFromQuietDetail,
   openedReadCheck,
+  ownTeamRequests,
+  teamSlug,
   quietReasonDetail,
   quietReasonFromDetail,
   HANDLED_QUIETLY_DAYS,
@@ -470,6 +472,8 @@ export class FakeEngine implements EngineService {
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
+          now: this.timestamp(),
+          pendingWrite: pending.get(pr.key) ?? null,
         }),
       ];
     });
@@ -937,6 +941,38 @@ export class FakeEngine implements EngineService {
   }
 
   /**
+   * Like PrActions.removeTeamRequest, in memory: the team leaves the PR's
+   * requested teams, the sample thread is unsubscribed (logged only) and the
+   * PR is marked done through the fake queue. Nothing leaves the process.
+   */
+  async removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
+    const pr = this.data.prs[index];
+    if (!pr) {
+      return fail(`${prKey} is not an open PR in the sample`);
+    }
+    if (!ownTeamRequests(pr, this.viewer()).includes(team)) {
+      return fail(`${team} has no pending review request of your team on ${prKey}`);
+    }
+    const slug = teamSlug(team);
+    if (!this.writes.isEnabled()) {
+      this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'skipped', prKey, detail: `team ${slug}: GitHub writes are off` });
+      return fail('GitHub writes are off (lock in the footer): nothing was removed');
+    }
+    this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'github', prKey, detail: `team ${slug}` });
+    this.data.prs[index] = { ...pr, reviewerTeams: pr.reviewerTeams.filter((candidate) => candidate !== team) };
+    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
+    let unsubscribed = 'no notification thread known, so not unsubscribed';
+    if (thread) {
+      this.writes.record({ action: 'unsubscribe', origin: 'detail', outcome: 'github', prKey, threadId: thread.id, detail: 'sample data: nothing left the process' });
+      unsubscribed = 'unsubscribed';
+    }
+    const marked = this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
+    const removed = ok(`Removed ${slug}'s review request, ${unsubscribed}`);
+    return marked.undoToken ? { ...removed, settleToken: marked.undoToken } : removed;
+  }
+
+  /**
    * Events seen, `handleKeys` handled; the unread sample
    * threads go through the fake queue, which logs like the real one.
    * `extraThreads` are threads without a stored PR (debug view).
@@ -980,7 +1016,7 @@ export class FakeEngine implements EngineService {
   private markPrsRead(
     prKeys: PrKey[],
     handleKeys: PrKey[],
-    origin: 'tile' | 'debug',
+    origin: 'tile' | 'detail' | 'debug',
     tileId: string | null,
     extraThreads: NotificationThread[] = [],
   ): ActionResult {
@@ -1018,6 +1054,19 @@ export class FakeEngine implements EngineService {
     return this.markPrsRead(keys, pinged, 'tile', tileId);
   }
 
+  /** Like TileActions.markPrRead: one PR of the tile, handled unless it is a pulled-in layer. */
+  async markPrRead(tileId: string, prKey: PrKey): Promise<ActionResult> {
+    const tile = this.findTile(tileId);
+    if (!tile) {
+      return fail(`no tile ${tileId}`);
+    }
+    const member = tile.members.find((candidate) => candidate.prKey === prKey);
+    if (!member) {
+      return fail(`${prKey} is not in tile ${tileId}`);
+    }
+    return this.markPrsRead([prKey], member.provenance.kind === 'pulled_in' ? [] : [prKey], 'detail', tileId);
+  }
+
   private tilesHolding(prKey: PrKey): Tile[] {
     return this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey));
   }
@@ -1034,29 +1083,38 @@ export class FakeEngine implements EngineService {
     return this.markPrsRead([], [], 'debug', null, [thread]);
   }
 
-  /** Like QuietReads.markOpened, in memory: the sample thread turns read and the PR's events seen. */
+  /**
+   * Like QuietReads.markOpened, in memory: when a mark-read of that PR would
+   * leave it done, the sample thread turns read (if it is unread) and the PR
+   * is handled, its events seen.
+   */
   async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
     this.writes.settle();
     if (!this.writes.isEnabled()) {
       return { marked: false };
     }
-    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
-    if (!thread) {
-      return { marked: false };
-    }
-    const tiles = this.tilesHolding(prKey).map((tile) => {
-      const view = this.tileView(tile);
-      return { snoozed: view.state.kind === 'snoozed', doneAfterRead: view.afterRead.done };
+    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey) ?? null;
+    const views = this.tilesHolding(prKey).map((tile) => this.tileView(tile));
+    const rows = views.flatMap((view) => view.prs.filter((pr) => pr.key === prKey));
+    const check = openedReadCheck({
+      thread,
+      // Sample snapshots are always as fresh as their threads.
+      prFetchedAt: thread?.updatedAt ?? null,
+      tiles: views.map((view) => ({ snoozed: view.state.kind === 'snoozed' })),
+      doneAfterRead: rows.some((pr) => pr.afterRead.done),
     });
-    // Sample snapshots are always as fresh as their threads.
-    if (openedReadCheck({ thread, prFetchedAt: thread.updatedAt, tiles }).kind === 'skip') {
+    if (check.kind === 'skip' || thread === null) {
       return { marked: false };
     }
-    this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
-    for (const event of this.eventsOf(prKey)) {
-      event.seenAt ??= this.timestamp();
+    if (check.kind === 'mark') {
+      this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
     }
-    return { marked: true };
+    const change = this.markSampleRead([prKey], [prKey]);
+    const handled = change.eventIds.length > 0 || change.handledPrKeys.length > 0;
+    if (check.kind === 'handle' && handled) {
+      this.writes.record({ action: 'mark_read', origin: 'quiet', outcome: 'local', threadId: thread.id, prKey, detail: 'no unread GitHub thread' });
+    }
+    return { marked: check.kind === 'mark' || handled };
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

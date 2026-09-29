@@ -30,7 +30,7 @@ const forWhom = z.enum(['you', 'team', 'your_pr', 'none']);
 // The glance's own verdict (packages/core/src/types.ts Verdict), lowercased; null when the tile has no glance yet.
 const verdict = z.enum(['looks_safe', 'look_closer', 'not_yours']).nullable();
 const approveFrom = z.enum(['detail', 'tile']);
-const markReadOrigin = z.enum(['tile', 'debug', 'cleanup']);
+const markReadOrigin = z.enum(['tile', 'detail', 'debug', 'cleanup']);
 // A snooze is either a time (bucketed) or a condition (someone replies, a
 // push, CI going green - see packages/core/src/snooze.ts SnoozeCondition):
 // the same prop name the spec uses ("duration bucket"), widened to the
@@ -94,12 +94,15 @@ export const TELEMETRY_EVENTS = {
   snoozed: z.object({ duration_bucket: snoozeDurationBucket }).strict(),
   opened_on_github: NO_PROPS,
   ask_sent: NO_PROPS,
+  // "Remove <team>" in the detail pane: a team review request removed. No PR, no team slug.
+  team_request_removed: NO_PROPS,
   chat_message_sent: NO_PROPS,
   mac_ping_shown: z.object({ count }).strict(),
   mac_ping_clicked: NO_PROPS,
   // At most hourly, only when a count is above 0: ping decisions since the last summary (pinged, or
   // withheld by the rules or the agent) and threads PostPile marked read itself ("Handled quietly").
-  pings_summarized: z.object({ pinged: count, withheld_rules: count, withheld_agent: count, handled_quietly: count }).strict(),
+  // pinged_glance: routed reviews whose glance said Look closer (their own source, not a poll decision).
+  pings_summarized: z.object({ pinged: count, withheld_rules: count, withheld_agent: count, pinged_glance: count, handled_quietly: count }).strict(),
   search_used: z.object({ query_length_bucket: queryLengthBucket }).strict(),
   queue_filter_changed: z.object({ filter: queueFilter }).strict(),
   topic_opened: z.object({ section: topicSection }).strict(),

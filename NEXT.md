@@ -6,6 +6,17 @@ now".
 
 ## Done
 
+- Actions act on what you look at (2026-09-29, DESIGN.md "Actions act on
+  what you look at"): PR-scoped mark read in the detail pane
+  (`markPrRead`, per-PR label and undo), the not-done dot
+  (`notDonePrKeys` over the new `PrSummary.done`), opened-in-PostPile
+  handles the PR (checked per PR), `leadPr` follows the turn, "X to
+  re-review" (`reReviewAsked`), own merged PRs clear quietly, and "Remove
+  <team>" (removes a team review request, unsubscribes, marks done).
+  Checked in fake mode: set dots, detail pane on a set (no Snooze, no mark
+  button on a PR that is still your move), Remove team-platform with its
+  confirm, and an opened stack layer turning done by itself.
+
 - Setup fit check (2026-09-29, DESIGN.md "Setup flow" › Fit check): a
   tester's Preferences came out as rules for coding agents ("don't push
   write-ups onto PR branches", "signed PRs land only with my approval"),
@@ -949,6 +960,32 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Review requests by whom they ask; routed reviews ping on Look closer**
+  (2026-09-29): a `review_requested` event aimed at the viewer or their team
+  counts whoever made it, bot or person. A routed team request never pings
+  from the poll; it pings once per request when its glance says
+  LOOK_CLOSER, even after a teammate reviewed, and marks the tile unread
+  ("Look closer: review routed to <team>"). "Ping all unless not yours" was
+  turned down (30-40 pings a day). DESIGN.md "Events" and "Live poll and
+  Mac pings".
+
+- **Actions act on what you look at** (2026-09-29): the detail pane's
+  Mark read / Mark done / Approve act on the selected PR (per-PR label, per-PR
+  undo, Snooze in the pane only on single-PR tiles), the tile footer on the
+  tile. One coral dot per tracked PR that keeps the tile from being done
+  ("Not done yet"), on unread and open tiles, no second read-only dot.
+  Opening a PR in PostPile also handles it, checked per PR. `leadPr`
+  prefers the turn's PR. Whose turn names the re-reviewer after a push and
+  a re-request. The own-PR bot exception only applies while the PR is
+  open. Marking read from a guess (finished team requests handled by a
+  teammate, lost mentions) stays turned down. Added the same day: "Remove
+  <team>" in the detail pane removes a team review request, unsubscribes
+  and marks the PR done (confirm once, no undo, blocked while locked);
+  moving read routed requests down on their own was turned down. Also the
+  same day: the opened mark fires when you move on (dwell arms, leaving
+  fires), and the selected tile and its topic row keep their place until
+  the selection moves. DESIGN.md "Actions act on what you look at".
 
 - **UI fixes from the screen review (2026-09-29)**: Julian signed off on ten
   items from the mockup page. A stale glance's verdict box goes grey and

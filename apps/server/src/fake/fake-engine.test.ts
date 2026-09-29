@@ -282,6 +282,69 @@ describe('FakeEngine rechecks', () => {
   });
 });
 
+describe('FakeEngine markPrRead', () => {
+  it('marks one PR of a set, handled, with an undo for that PR only', async () => {
+    const engine = new FakeEngine();
+    await engine.setGitHubWrites(true);
+    const setOf = async () => (await engine.getTopic('topic-depot'))?.tiles.find((view) => view.tile.id === 'set:turbo-cache');
+    const before = await setOf();
+    const target = before?.prs.find((pr) => pr.provenance.kind !== 'pulled_in' && !pr.done);
+    expect(target).toBeDefined();
+    const othersBefore = before?.prs.filter((pr) => pr.key !== target!.key).map((pr) => [pr.key, pr.done, pr.unseenLoudEvents]);
+
+    const marked = await engine.markPrRead('set:turbo-cache', target!.key);
+
+    expect(marked.ok).toBe(true);
+    const after = await setOf();
+    expect(after?.prs.find((pr) => pr.key === target!.key)?.unseenLoudEvents).toBe(0);
+    expect(after?.prs.filter((pr) => pr.key !== target!.key).map((pr) => [pr.key, pr.done, pr.unseenLoudEvents])).toEqual(othersBefore);
+    expect((await engine.undo(marked.undoToken)).ok).toBe(true);
+    expect((await setOf())?.prs.find((pr) => pr.key === target!.key)?.unseenLoudEvents).toBe(target!.unseenLoudEvents);
+  });
+
+  it('marks a pulled-in stack layer read without touching the tracked layers, and refuses PRs outside the tile', async () => {
+    const engine = new FakeEngine();
+    await engine.setGitHubWrites(true);
+    const stackOf = async () => (await engine.getTopic('topic-depot'))?.tiles.find((view) => view.tile.id.startsWith('stack:'));
+    const stack = await stackOf();
+    const layer = stack?.prs.find((pr) => pr.provenance.kind === 'pulled_in');
+    expect(layer).toBeDefined();
+    const tracked = () => stackOf().then((view) => view?.prs.filter((pr) => pr.provenance.kind !== 'pulled_in').map((pr) => [pr.key, pr.done, pr.unseenLoudEvents]));
+    const trackedBefore = await tracked();
+
+    expect((await engine.markPrRead(stack!.tile.id, layer!.key)).ok).toBe(true);
+
+    expect(await tracked()).toEqual(trackedBefore);
+    expect((await engine.markPrRead(stack!.tile.id, 'acme/app#1')).ok).toBe(false);
+  });
+});
+
+describe('FakeEngine removeTeamRequest', () => {
+  async function teamRequested(engine: FakeEngine) {
+    const topics = await engine.listTopics();
+    const details = await Promise.all(topics.map((item) => engine.getTopic(item.topic.id)));
+    return details.flatMap((detail) => detail?.tiles ?? []).flatMap((view) => view.prs.filter((pr) => pr.ownTeamRequests.length > 0).map((pr) => ({ view, pr })));
+  }
+
+  it('offers it on sample PRs with a pending team request, refuses while locked, then removes and logs both writes', async () => {
+    const engine = new FakeEngine();
+    const [found] = await teamRequested(engine);
+    expect(found).toBeDefined();
+    const team = found!.pr.ownTeamRequests[0]!;
+
+    expect((await engine.removeTeamRequest(found!.pr.key, team)).ok).toBe(false);
+    await engine.setGitHubWrites(true);
+    const removed = await engine.removeTeamRequest(found!.pr.key, team);
+
+    expect(removed).toMatchObject({ ok: true, undoToken: null });
+    const log = (await engine.actionLog(10)).map((entry) => `${entry.action} ${entry.outcome}`);
+    expect(log).toContain('remove_team_request github');
+    expect(log).toContain('remove_team_request skipped');
+    expect((await teamRequested(engine)).some((entry) => entry.pr.key === found!.pr.key)).toBe(false);
+    expect((await engine.removeTeamRequest(found!.pr.key, team)).ok).toBe(false);
+  });
+});
+
 describe('FakeEngine queues', () => {
   it('fills every queue section and gives some topics PRs in several tiers', async () => {
     const topics = await new FakeEngine().listTopics();

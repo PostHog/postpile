@@ -3,7 +3,8 @@ import type { PrTier, TopicListItem, TopicMove, TopicPerson, ViewerView } from '
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
-import { queueLayout, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { layoutBuckets, layoutFromBuckets, queueLayout, queueRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { useHeldPlace } from '../lib/use-held-place.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
@@ -257,6 +258,8 @@ function InboxItem(props: { count: number; active: boolean; onSelect: () => void
 interface TopicSidebarProps {
   topics: TopicListItem[];
   activeTopicId: string | null;
+  /** The tile selected in the open topic: while it stays selected, the topic's row keeps its place. */
+  selectedTileId: string | null;
   onSelect: (topicId: string) => void;
   inboxCount: number;
   inboxOpen: boolean;
@@ -311,7 +314,8 @@ export function TopicSidebar(props: TopicSidebarProps) {
   const tools = useTools().data;
   const filter = props.filter;
   const narrowed = filter !== null || props.queueFilter !== null;
-  const layout = queueLayout(props.shown);
+  // The open topic keeps its row while a tile in it stays selected ("Marked when you move on").
+  const layout = layoutFromBuckets(useHeldPlace(props.selectedTileId, props.activeTopicId, layoutBuckets(queueLayout(props.shown)), queueRowId));
   const groups = sidebarGroups(layout.other);
   // While filtering every fold is open, so no match hides in one.
   const isOpen = (key: SectionKey) => narrowed || !folded.includes(key);

@@ -114,6 +114,24 @@ a classification. The effective loudness (override over rule) of a reply,
 mention or question also decides whether it is still an ask for whose turn:
 lowered to quiet or muted, it asks nothing (see "Whose turn", rule 2).
 
+**A review request counts by whom it asks, not who clicked it** (decided
+2026-09-29). A teammate's PR was marked ready, then a reviewer-assigning bot
+requested the viewer's team. The request event was classified "bot activity"
+(quiet) because its actor is a bot, so the ping was withheld as
+`not_addressed: ready for your review`, while whose turn said "Review for
+team-devex: <teammate>'s PR". Rule: a `review_requested` event is classified
+by its target (the viewer, one of the viewer's teams), whether a person or a
+bot made the request; the bot-actor shortcut never applies to a review
+request aimed at the viewer or their team (`ruleLoudness`, and the bot-only
+class in `pingRule`). Loudness and ping class then follow the path of a
+human-made request: a personal request and a team request on a teammate's
+PR are addressed; a routed team request goes the way a human-made routed
+request goes (see "Routed team requests ping when the glance says Look
+closer" under the pings). Requests to other people or teams stay quiet bot
+activity. Whose turn never names a bot as the requester ("Review for
+team-devex", "Review"), and the ping template says "Review requested for
+team-devex" instead of the bot's name.
+
 **Tile state is derived, never stored**:
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
@@ -226,11 +244,19 @@ github.com while the app was closed turns calm on the next start.
 
 Action details:
 
-- mark read: every member's events seen, pinged members handled (tile turns
+- mark read (tile footer): every member's events seen, pinged members handled (tile turns
   done until something loud happens, unless a review or another move is still
   the user's, then it stays open and read and keeps its place), thread
   mark-read queued. Undo reverts both. The button says "Mark done" only where
   that makes the tile done (see Tile faces › After a mark-read).
+- mark read (detail pane, 2026-09-29): the selected PR only (see "Actions
+  act on what you look at"): its events seen, handled unless it is a
+  pulled-in layer, its thread mark-read queued, origin `detail`, its own
+  undo. `POST /api/tiles/:tileId/prs/:owner/:repo/:number/mark-read` ->
+  `EngineService.markPrRead`. On a single-PR tile the pane uses the tile's
+  mark read, which is the same thing.
+- remove team request (detail pane, 2026-09-29): see "Actions act on what
+  you look at" › Remove a team review request.
 - approve: GitHub approval right away, pinned with `commit_id` to the synced
   head (the commit the glance and the user saw), then the same mark-read for
   that PR. The undo token only brings back the unread state, never the approval.
@@ -1499,6 +1525,205 @@ Small topics are consolidation's job: it proposes merging 1-2 PR topics
 into a bigger one. Migration 015 deleted the old `topic_deferred:*` meta
 rows.
 
+## Actions act on what you look at
+
+Decided 2026-09-29. Until then Mark read, Mark done and Snooze in the detail
+pane acted on the whole tile, even with one PR of a set or stack selected,
+while Approve acted on that PR. Nobody decided that; it fell out of the tile
+being the unit of state and the detail pane taking the tile's primary
+button. Julian pressed "Mark done" on one PR of a set in the detail pane and the
+whole eight-PR set went done: "this is honestly confusing. Why are these
+buttons, then, in the detail pane? I mean, approving also approves the PR
+and not the topic."
+
+**Rule: the detail pane acts on the selected PR, the tile footer on the
+tile.**
+
+- Detail pane: Approve, Mark read and Mark done apply to the selected PR
+  only: its events seen, it is handled (`handledAt`), its GitHub thread is
+  marked read, undo brings back that PR only. The label follows the same
+  rule as today but per PR: "Mark done" when that PR is done after a
+  mark-read, else "Mark read"; no mark button while that PR is still your
+  move. Snooze shows in the detail pane only on a single-PR tile (there the
+  tile and the PR are the same); on a set or stack it lives in the tile
+  footer.
+- Tile footer: unchanged, the whole tile (every member read, handled, all
+  threads marked read; Snooze for the tile).
+- A tile is done when every tracked member is done (`isPrDone`), which was
+  already the rule underneath; pulled-in stack layers don't count, as before.
+- Single-PR tiles behave exactly as before.
+
+**The dot marks what keeps the tile** (replaces "The new dot" rule of the
+same day). Julian on that set: "What is not done there now? I'm still
+missing the dot", and on a second, read-only dot: "I would just fold it into
+the main ... there doesn't need to be a distinction". One coral dot before
+every tracked PR that keeps the tile from being done (`isPrDone` false), on
+unread and open tiles alike, in the tile's rows and the detail pane's PR
+list (aria-label "Not done yet"). No dots on done or snoozed tiles. Not on
+single-PR tiles either (a tile with one tracked PR, decided the same day):
+the dot says which PR of a stack or set holds the tile; on one PR it would
+only repeat the tile's own state. The
+dots and the detail-pane buttons work together: mark a dotted PR done and its
+dot goes; no dots left, the tile is done. The tile's own unread styling (strip,
+bold title) stays as decided on 28 Sept.
+
+**Opening a PR in PostPile also marks it done there** (changes part 3 of
+"You already dealt with it"). The open marks the PR read on GitHub only when
+nothing is asked of the viewer, so leaving it undone in PostPile was
+inconsistent: one PR of that set was read on GitHub, asked nothing, and still held the
+tile open. Julian: "why would marking it read on GitHub not also mark it
+[done] on PostPile, given all the conditions that we agreed upon". Now the
+open handles that PR too (`handledAt`), under the same conditions, checked
+per PR: that PR done after a mark-read, its tile not snoozed, writes
+unlocked. A visit on github.com keeps the old behaviour (events seen, no
+`handledAt`), since PostPile can't check the conditions at the moment of
+the visit.
+
+**The verdict pill follows the footer.** A multi-PR tile showed the lead
+PR's verdict ("Not yours" from the first PR) while the footer talked about
+another one. The lead PR (`leadPr`) now prefers the PR of the tile's turn when
+the turn is not `none`, then the newest unread reason, then the first open
+tracked PR.
+
+**Whose turn names the re-reviewer.** "rowan to address ada's
+changes" stayed after rowan pushed and re-requested ada's
+review. When the author pushed after a changes request and the requester is
+requested again, it is the requester's move: "ada to re-review"
+(whose-turn rule 4).
+
+**Own merged PRs clear on GitHub too** (changes rule 2 of "Handled quietly"
+and part 2 of "You already dealt with it"). The own-PR exception (bots after
+your last touch keep the thread unread, since on your own PR they can mean
+work) applies only while the PR is open. Every own PR merges through trunk
+after the last comment, so 14 merged own PRs stayed unread after 0.10.0.
+Julian: "my own merged or closed PRs can be cleared when only bots come in
+after my last touch."
+
+**Not marked read from a guess** (decided the same day, recorded to stop the
+question coming back). PostPile marks a thread read on GitHub only from what
+the viewer did: acted after everything unread, opened the PR in PostPile
+with nothing asked, marked it read or done, or only bots since they read it.
+It never marks read because it guessed the viewer isn't interested, not even
+for finished PRs whose review went to the team and was handled by a
+teammate, and not for mentions it can no longer find. Proposed and turned
+down: "extend Handled quietly to finished PRs with only quiet activity",
+and an inbox-cleanup entry "finished team requests handled by someone else".
+Julian: "routing to the team devex means I potentially could be interested
+in that, so at which point do we know I am not?" The GitHub count stays
+higher than what PostPile shows as yours; the gap is mostly finished team
+requests, and that is intended.
+
+**Remove a team review request** (decided 2026-09-29). A routed team
+request stayed in To review after the user marked it read (a stack by
+someone outside the team, review routed to team-devex, no teammate
+reviewed). Moving read routed requests down automatically was proposed and
+not taken; instead the user asked for a PR button: "an unassign team button
+... also trigger the unsubscribe on the PR. The button would do both."
+
+- Detail pane only, shown when the selected PR has a pending review request
+  for one of the viewer's teams (`Viewer` teams / reviewerTeams). Label
+  "Remove <team slug>" (e.g. "Remove team-devex"); several teams pending =
+  one button per team, or a small menu; pick the boring option.
+- Confirm once (small popover, one sentence): "Remove the review request
+  for all of <team> and unsubscribe you?" No undo: re-adding the team would
+  notify every teammate again.
+- On confirm, in order: (1) GitHub `DELETE
+  /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` with `{reviewers: [],
+  team_reviewers: ["<slug>"]}`; (2) `DELETE
+  /notifications/threads/{thread_id}/subscription` for the PR's thread
+  (mutes further notifications until the viewer comments or is @mentioned;
+  mentions and direct requests still arrive); (3) the per-PR mark done in
+  PostPile (events seen, handledAt, thread marked read). If (1) fails, stop
+  and show the error; if (2) fails after (1) succeeded, still do (3) and say
+  the unsubscribe failed. No thread known = skip (2) and say so.
+- Goes through the writes lock (`WriteSwitch` / `GitHubWrites`) like
+  Approve: blocked with the reason while writes are locked, never queued as
+  a pending write. Action log entries `remove_team_request` and
+  `unsubscribe` (origin detail pane), telemetry event through the catalogue
+  allowlist (no PR keys, team slug not sent either, just the action).
+- PostPile side: after a sync the removed request is gone from
+  reviewerTeams, so the PR is no longer "your move"; until then the
+  handledAt keeps the tile done. It comes back like any tile when something
+  loud is aimed at the viewer again (a new request, a mention, a question).
+- GitHubWriter gets the two new methods; FakeEngine/fake GitHub handles
+  them in memory; tests for the engine flow (success, request removal
+  fails, unsubscribe fails, locked) and the renderer visibility rule.
+
+**Marked when you move on** (decided 2026-09-29, after the build above).
+Julian, clicking through PostPile: "when clicking through much stuff in
+PostPile, now auto-mark status read, which is a bit jarring because the
+status changes while I look at it ... It almost feels like the agent
+updates it while I'm looking at it."
+
+- The opened-in-PostPile mark (GitHub read + PR handled) no longer fires
+  after 1.5s while the PR is still selected. The 1.5s visible dwell stays
+  as the proof the user looked; it only arms the open. The mark fires when
+  the user moves on: another PR or tile selected, the detail pane closed,
+  or the window hidden or blurred (leaving the app counts as moving on).
+  Clicking quickly through PRs (under 1.5s visible) still marks nothing.
+  Once per open.
+- While a tile is selected it keeps its place: no re-sort and no section
+  move (Done or Snoozed fold, a sidebar section) for the selected tile and
+  the topic row it sits in until the selection moves, even when its state
+  changed (the user's own detail-pane mark, the opened mark, a sync). Only
+  the selected item is held; everything else sorts as usual.
+- The user's own button presses still change the tile's look right away
+  (that is the feedback they asked for); only the position is held.
+
+**Built as** (2026-09-29):
+
+- Per-PR answers ship on the tile rows, since the renderer imports no
+  runtime code from core: `PrSummary.done` (`isPrDone`), `.turn`
+  (`prWhoseTurn`), `.afterRead` (core `prAfterMarkRead`: that PR's events
+  seen, handled when tracked; never done for a pulled-in layer) and
+  `.ownTeamRequests`.
+- Detail pane: `detailPr` / `prMarkAction` / `detailMarkLabel` /
+  `detailPrimary` in the renderer's `lib/mark-read.ts`; the mark goes to
+  `EngineService.markPrRead` (origin `detail`, own batch and undo, handled
+  unless pulled in). A mark-read of an unread PR that leaves it your move
+  says so in the toast, without the tile Snooze offer.
+- The dot: `notDonePrKeys` in `lib/tiles.ts`, `NotDoneDot` in `pills.tsx`.
+  A done PR that still has unseen news keeps the tile unread, so it keeps
+  its dot until it is read.
+- Lead PR: `leadPr` in `lib/tiles.ts`.
+- Marked when you move on: `OpenedReadTimer` in the renderer's
+  `lib/opened-read.ts` (the dwell arms, `leave()` / `hidden()` fire,
+  `setWanted` keeps `opensMarkRead` current) driven by `useOpenedRead`
+  (leaves when the PR changes or the pane closes, `visibilitychange`,
+  window `blur` / `focus`). The held place is `holdPlace` in
+  `lib/hold-place.ts` with `useHeldPlace` (the place taken when the
+  selection starts): `TileGrid` holds the selected tile across its live,
+  Snoozed and Done lists (the Unread filter keeps that order),
+  `TopicSidebar` holds the open topic's row across the queue sections and
+  Other topics (`layoutBuckets` / `layoutFromBuckets` in `lib/queues.ts`)
+  while its selected tile stays selected.
+- Opened in PostPile: core `openedReadCheck` (per PR), engine
+  `QuietReads.markOpened`, renderer `opensMarkRead`; see "You already dealt
+  with it" part 3. When GitHub has the thread read already, only the
+  PostPile side runs (PR handled, a local log row).
+- Re-reviewer: core `reReviewAsked` (`changes-answered.ts`), used by
+  whose turn on the routed team hold, on a team request a teammate picked
+  up with a change request, and on the viewer's own PR.
+- Own merged PRs: `isOwnOpenPr` in core `quiet-reads.ts`, in both the
+  bot-only and the "you acted after it" rule; `botOnlySinceRead` leaves the
+  viewer's own events out.
+- Remove a team review request: `PrActions.removeTeamRequest` (engine),
+  `GitHubWriter.removeTeamReviewRequest` / `unsubscribeThread`, `POST
+  /api/prs/:owner/:repo/:number/remove-team-request` `{team}`, renderer
+  `RemoveTeamButton` (one per team, `removeTeamButtons` in
+  `lib/team-request.ts`), `removeTeam` on the `GithubWrite` list. After the
+  refresh, a stored snapshot that still lists the team drops it (fetch time
+  kept), so the handled PR is done until the next sync. Telemetry
+  `team_request_removed`, no props. The answer carries no undo token but a
+  `settleToken` (Codex review on PR #15): the renderer watches the
+  mark-read like an undo window and refetches when it settled, so a
+  mark-read GitHub did not take (or one parked as pending when the lock
+  closed in the window) shows the PR as not done again.
+- Pending writes per PR: `PrSummary.pendingWrite`. The detail pane's mark
+  button on a stack or set waits only on the selected PR's own pending
+  write (`detailPendingWrite`), not the tile's, so a locked mark-read of
+  one PR does not block its neighbours (Codex review on PR #15).
+
 ## Tile faces: why it's here, status, whose turn
 
 Every tile answers four questions without opening it. All four are derived in
@@ -1561,8 +1786,8 @@ together; "all passing" at none) in the normal muted text, no pass or fail
 colour. The Size fact next to it draws deletions (count and bar) in their
 own diff red (`--diff-red`), never coral: coral stays for "new".
 
-**PR rows** (`PrRow`): state icon, the coral "new" dot for a PR that keeps
-the tile unread, mono number, the stack mark for a stack layer ("1/3", see
+**PR rows** (`PrRow`): state icon, the coral dot for a PR that keeps
+the tile from being done ("Not done yet", see below), mono number, the stack mark for a stack layer ("1/3", see
 "Stacks as one unit"), bold title, (for-whom chip when it differs, repo
 label), then the state word, open threads (bubble + count) and the author's
 avatar. A single PR sits in a white bordered box and its row leaves the
@@ -1570,12 +1795,23 @@ title out (2026-09-29: the tile's heading already is the title; the row's
 tooltip keeps it); a stack or set's rows sit in one tinted rounded box, the
 selected row highlighted, drafts and closed layers on a grey row.
 
-**The new dot** (2026-09-29, `newsPrKeys` in the renderer's `lib/tiles.ts`):
-on an unread tile every PR with an unseen loud event
-(`PrSummary.unseenLoudEvents`) or named in `TileState.unreadBecause` gets a
-small coral dot before its number, in the tile's rows and the detail pane's
-PR list (aria-label "New since you looked"). A six-PR set once stayed
-unread because of one old "ready for review", and nothing showed which PR.
+**The not-done dot** (2026-09-29, `notDonePrKeys` in the renderer's
+`lib/tiles.ts`; replaced "the new dot" of the same morning, which only
+showed on unread tiles for PRs with unseen news, see "Actions act on what
+you look at"): on an unread or open tile every tracked PR that keeps the
+tile from being done gets a small coral dot before its number, in the
+tile's rows and the detail pane's PR list (aria-label "Not done yet"):
+`PrSummary.done` false (core `isPrDone`, shipped per row), or an unseen
+loud event left (that keeps the tile unread, so not done either). Pulled-in
+stack layers never get one; done and snoozed tiles show none, and neither
+does a tile with one tracked PR (the dot would only repeat the tile's
+state). Mark a
+dotted PR done in the detail pane and its dot goes; no dots left, the tile
+is done. It is the one coral mark that is not "new since you looked"; there
+is no second, read-only dot. History: a six-PR set once stayed unread
+because of one old "ready for review" and nothing showed which PR, which
+gave the first dot; an open set that never said which PR held it gave this
+one.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
 "Stack · 2"; dashed square + "Set · 3"; blue only while selected), the
@@ -1635,6 +1871,9 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
      changes"). Failing CI alone is not your move (2026-09-29).
+   - them: that change request, after you pushed and requested ada again
+     (she is back in the requested reviewers): "ada to re-review"
+     (2026-09-29, `reReviewAsked` in `changes-answered.ts`).
    - them: the first pending reviewer, user before team, shown as "Waiting
      on sol" (`WhoseTurn.lead`), "and N more" when several are asked. Your
      own team asked by CODEOWNERS counts as a reviewer here, never as a
@@ -1673,7 +1912,9 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      on hold (`teamRequestHold`, 2026-09-29).
    - them: a routed team request while someone else's changes request
      stands: the author "to address ada's changes" (the author moves
-     first).
+     first). Once the author pushed after it and requested ada again (she
+     is back in `reviewerUsers`), it is ada's move: "ada to re-review"
+     (2026-09-29, `reReviewAsked`; the team request stays on hold).
    - none: a routed team request whose agent glance says NOT_YOURS (stored
      glance, stale or not, `Board.notYours`, so the tile state, whose turn
      and after-read agree). The PR stays in To review with its team chip;
@@ -1684,7 +1925,9 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      requested changes on the head: the author "to address 2 threads" (open
      threads you started), "to address your changes" or "to reply".
    - them: a team request someone else picked up: the author "to merge" when
-     approved, else that reviewer "is reviewing".
+     approved, else that reviewer "is reviewing", or "ada to re-review" when
+     a standing change request was answered by a push and ada was requested
+     again (same rule as above).
    - else none (following, subscribed, took part earlier).
 
 **After a mark-read** (2026-09-29; core `tileAfterMarkRead` in
@@ -1703,10 +1946,18 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   of the move's PR ("Open on GitHub" and the PR itself on your own PR),
   through the external link path (so `opened_on_github` fires). Done tiles
   keep "Open".
-- Detail pane action bar: same label rule; the mark button is left out
-  while the tile is read and still your move (Snooze stays there, as the
-  primary). Its primary is the tile's (`detailPrimary`, see "Own PRs never
-  ask for a review").
+- Detail pane action bar (changed 2026-09-29, "Actions act on what you
+  look at"): on a single-PR tile, same label rule as the footer; the mark
+  button is left out while the tile is read and still your move (Snooze
+  stays there, as the primary). On a stack or set it acts on the selected
+  PR: the same rule per PR (`prMarkAction` / `detailMarkLabel` in
+  `lib/mark-read.ts` over `PrSummary.afterRead`, core `prAfterMarkRead`):
+  "Mark read" while the PR has unseen news, "Mark done" when a mark-read of
+  it makes it done, else "Mark read"; no mark button while that PR is read
+  and still your move (`PrSummary.turn`), or done already, or a pulled-in
+  layer without news. No Snooze in the pane there; Open on GitHub leads
+  when nothing is to mark. The primary comes from `detailPrimary`, see
+  "Own PRs never ask for a review".
 - Read looks read: no strip, no NEW, title in regular weight. The honey
   your-move footer stays as the only reminder.
 - Toast after a mark-read that leaves your move (writes on): "Marked read.
@@ -1750,12 +2001,13 @@ any review ask; on top of that:
   `approved` once you approved on any commit, where the button stays usable
   but calm (re-approving is harmless, it never nags). On your own PR, or a merged or closed one: Mark read while the
   tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
-- The pane leads with what the tile leads with (2026-09-29,
+- The pane leads with what it acts on (2026-09-29,
   `detailPrimary` in the renderer's `lib/mark-read.ts`, on top of the
   tile's `tileFooterAction`): the one ink button, placed first, is Approve
   while it is due (someone else's open PR, not approved, not a draft), else
-  the tile footer's Mark read / Mark done / Snooze, or Open on GitHub on a
-  done tile. "Approve again" and "Approve draft" stay outlined next to it.
+  on a single-PR tile the tile footer's Mark read / Mark done / Snooze, or
+  Open on GitHub on a done tile; on a stack or set the selected PR's Mark
+  read / Mark done, else Open on GitHub (see "After a mark-read"). "Approve again" and "Approve draft" stay outlined next to it.
   Before, a PR the viewer had approved got no primary at all while its tile
   led with Mark read. The topic header's role chip is a noun: "Driver",
   "Reviewer", "Stakeholder", "Watcher" (was "You review" and friends).
@@ -1928,12 +2180,13 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   away behind "Show old assessment". The glance schema stays
   prose; sentences split into lines in the renderer (a dot followed by a
   space and a capital or digit ends one), so stored glances keep working.
-  The action bar (primary, Ask, Mark read, Snooze, then Recheck and chat at
+  The action bar (primary, Ask, Mark read, Snooze (single-PR tiles only),
+  "Remove <team>" per pending team request of yours, then Recheck and chat at
   the end) sits right under the assessment, above the PR facts and the
   activity list; the ask composer opens under it.
 - **Detail pane top** (2026-09-29, design 3a): the tinted header repeats
   the tile (kind, title, "PR 1 of 2", ‹ ›) and lists its PRs like tile rows,
-  the open one boxed in accent, with the coral new dot where it applies.
+  the open one boxed in accent, with the coral not-done dot where it applies.
   A single-PR tile's header shows only the kind ("PR"): no title (the body
   shows it right below), no counter and no arrows that lead nowhere
   (2026-09-29). The body starts with a state line: big
@@ -2194,10 +2447,11 @@ only: the REST docs and a GraphQL schema introspection,
 
 | want | API | notes |
 |---|---|---|
-| mark a thread read | REST `PATCH /notifications/threads/{id}` ([docs](https://docs.github.com/en/rest/activity/notifications#mark-a-thread-as-read)) | 205 Reset Content. The app's only notification write today (`GitHubWriteClient.markThreadRead`). |
+| mark a thread read | REST `PATCH /notifications/threads/{id}` ([docs](https://docs.github.com/en/rest/activity/notifications#mark-a-thread-as-read)) | 205 Reset Content. The app's main notification write (`GitHubWriteClient.markThreadRead`). |
 | mark a thread done | REST `DELETE /notifications/threads/{id}` ([docs](https://docs.github.com/en/rest/activity/notifications#mark-a-thread-as-done)) | 204. Removes it from the inbox for good (also from `?all=true` listings). Not used. |
 | subscribe / ignore a thread | REST `PUT /notifications/threads/{id}/subscription` `{ignored}` ([docs](https://docs.github.com/en/rest/activity/notifications#set-a-thread-subscription)) | `ignored: true` mutes future notifications until you comment or get @mentioned. Changes future pings only, never read state. |
-| unsubscribe (mute) a thread | REST `DELETE /notifications/threads/{id}/subscription` ([docs](https://docs.github.com/en/rest/activity/notifications#delete-a-thread-subscription)) | 204. Same: future notifications only. |
+| unsubscribe (mute) a thread | REST `DELETE /notifications/threads/{id}/subscription` ([docs](https://docs.github.com/en/rest/activity/notifications#delete-a-thread-subscription)) | 204. Same: future notifications only. Used by "Remove <team>" (`GitHubWriteClient.unsubscribeThread`, 2026-09-29). |
+| remove a team review request | REST `DELETE /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` `{reviewers: [], team_reviewers: [slug]}` ([docs](https://docs.github.com/en/rest/pulls/review-requests#remove-requested-reviewers-from-a-pull-request)) | Used by "Remove <team>" (`GitHubWriteClient.removeTeamReviewRequest`, 2026-09-29). Re-adding the team notifies everyone again, so no undo. |
 | subscription on the PR itself | GraphQL `updateSubscription(subscribableId, state: SUBSCRIBED/UNSUBSCRIBED/IGNORED)` ([docs](https://docs.github.com/en/graphql/reference/mutations#updatesubscription)) | Per issue/PR/repo, not per thread. Future notifications only. |
 | mark a thread **unread** | none | No REST endpoint. The public GraphQL schema has no notification type and no notification mutation at all (the ones github.com uses internally are not exposed). |
 | "Saved" notifications | none | Neither REST nor GraphQL can list or set them. `GET /notifications?all=true` only adds read threads. |
@@ -2277,10 +2531,12 @@ locked stays pending even if the lock opens inside its window: the unlock
 popover is where the user decides).
 
 **Action log** (`action_log`, migration 008): `id`, `at`, `action`
-(`mark_read`, `undo_mark_read`, `approve`, `comment`, `writes_on`,
-`writes_off`; `bring_back` only on old rows, see below; `mark_done` / `subscribe` / `unsubscribe` get
-added with their writer methods), `origin` (who decided: `tile` = the user in
-a tile or the detail pane, `debug` = the notifications view, `queue` = the
+(`mark_read`, `undo_mark_read`, `approve`, `comment`, `remove_team_request`,
+`unsubscribe`, `writes_on`, `writes_off`; `bring_back` only on old rows, see
+below; `mark_done` / `subscribe` get added with their writer methods),
+`origin` (who decided: `tile` = the user in a tile (and the detail pane
+before 2026-09-29), `detail` = the user in the detail pane (PR-scoped mark
+read, remove team request), `debug` = the notifications view, `queue` = the
 deferred queue when a batch's window ran out, `quit` = the flush on quit,
 `sync` / `poll` = a thread left the inbox, `footer` = the lock, also sending
 or discarding pending writes, `cleanup` = the inbox cleanup, `quiet` =
@@ -2439,9 +2695,11 @@ Merging or closing counts only when the viewer did it.
      one when the thread was never read. None known: left alone, like the
      bot-only rule.
    - Bots after the touch are fine as in the bot-only rule (CI and the merge
-     queue follow most approvals), except on the viewer's own PR, where they
-     can mean work. The grace counts from the newest of the touch, those
-     bots and the thread's update.
+     queue follow most approvals), except on the viewer's own open PR, where
+     they can mean work. Once the own PR is merged or closed they are fine
+     there too (2026-09-29, "Own merged PRs clear on GitHub too" in "Actions
+     act on what you look at"). The grace counts from the newest of the
+     touch, those bots and the thread's update.
    - The tile must not be unread. Whose turn is not checked: every event
      before the touch is seen already (part 1), so the mark-read changes
      nothing PostPile shows, and a move that is still the viewer's (their
@@ -2450,11 +2708,17 @@ Merging or closing counts only when the viewer did it.
      "you reviewed after it", "you replied after it" (the newest touch);
      `QuietReadView.reason` carries it to the view.
 3. *Opening a PR in PostPile*: opening a PR in the detail pane marks its
-   GitHub thread read, only when a mark-read would leave the tile done
-   (`TileView.afterRead.done`: nothing asked of the viewer), and only while
-   writes are unlocked. It mirrors what github.com does on a visit, limited
-   to cases where it cannot hide a to-do. Also listed under Handled quietly
-   ("opened in PostPile").
+   GitHub thread read and handles the PR in PostPile too (events seen,
+   `handledAt`; since 2026-09-29, before it only marked the thread read),
+   only when a mark-read of that PR would leave it done
+   (`PrSummary.afterRead.done`: nothing asked of the viewer; checked per PR
+   since 2026-09-29, before it was the whole tile's `afterRead.done`), no
+   tile holding it is snoozed, and only while writes are unlocked. It
+   mirrors what github.com does on a visit, limited to cases where it
+   cannot hide a to-do. Also listed under Handled quietly ("opened in
+   PostPile") when the thread was unread on GitHub. A visit on github.com
+   keeps its old effect (events seen, no `handledAt`): PostPile cannot
+   check the conditions at the moment of the visit.
 
    Built as `POST /api/prs/:owner/:repo/:number/opened` ->
    `EngineService.markOpenedRead` -> `QuietReads.markOpened`, with the rule
@@ -2462,22 +2726,36 @@ Merging or closing counts only when the viewer did it.
    - "Opened" means the PR stayed in the detail pane for 1.5s
      (`OPENED_READ_DELAY_MS`, renderer `useOpenedRead` with
      `OpenedReadTimer`) while the window was visible, so clicking through
-     tiles marks nothing. Hidden before that, the wait starts over when the
+     tiles marks nothing. Since 2026-09-29 that only arms the open: the
+     mark goes out when the user moves on (another PR or tile, the pane
+     closed, the window hidden or blurred), see "Actions act on what you
+     look at" › Marked when you move on. Hidden before that, the wait starts over when the
      window is visible again with the same PR open (Codex review on PR #10:
      the open used to be dropped). The first tile
      the app shows by itself counts too: it is on screen. One request per
      open; re-renders and refetches of the same PR send nothing.
-   - The renderer asks only when `TileView.afterRead.done`, the tile is not
-     snoozed and the lock is open (`openedRead` on the `GithubWrite` list,
-     blocked while locked, never a pending write); the engine checks every
-     tile holding the PR again, plus an unread thread and a snapshot at
-     least as fresh as the thread (the user cannot have seen newer
-     activity). A PR only in a finished topic has no tile and is left.
+   - The renderer asks only when the opened PR's `afterRead.done`, the
+     tile is not snoozed and the lock is open (`openedRead` on the
+     `GithubWrite` list, blocked while locked, never a pending write); the
+     engine checks again (core `openedReadCheck`: a thread, a tile, none
+     snoozed, the PR done after a mark-read of it), plus, for an unread
+     thread, a snapshot at least as fresh as the thread (the user cannot
+     have seen newer activity). A PR only in a finished topic has no tile
+     and is left, and so is a PR without a thread (a found PR): nothing on
+     GitHub to mirror.
+   - A thread GitHub has read already (an earlier open, a github.com visit)
+     gets only the PostPile side: the PR is handled, a `local` action log
+     row (origin `quiet`, detail "no unread GitHub thread") is written,
+     nothing reaches GitHub or shows under Handled quietly. This is the
+     case from "Actions act on what you look at": a PR an earlier open had
+     read on GitHub still held its set open.
    - The write is the sync's quiet mark-read: thread read again right
      before, origin `quiet`, detail "opened in PostPile", no undo window,
-     thread and events up to its update mirrored as read. Like a
-     github.com visit it sets no `handledAt`, so the tile turns read, and
-     done only where the done rules say so.
+     thread and events up to its update mirrored as read. Then the PR is
+     handled (every event seen, `handledAt`), so it is done, and the tile
+     with it once every tracked member is. Until 2026-09-29 it set no
+     `handledAt`, like a github.com visit, and a read PR that asked nothing
+     kept its set open.
    - Fake mode does it in memory (`FakeEngine.markOpenedRead`), nothing
      leaves the process.
 
@@ -2493,10 +2771,13 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
 **The rules**, all of them must hold:
 
 1. *Read before, bots since.* GitHub has the thread unread, it has a
-   `last_read_at`, and every stored event after it is automation
-   (`event.isBot`, or no actor at all: CI results carry an empty actor and
-   are flagged as bots already). No known event after the read counts as
-   "don't know": left alone.
+   `last_read_at`, and every stored event by someone else after it is
+   automation (`event.isBot`, or no actor at all: CI results carry an empty
+   actor and are flagged as bots already). The viewer's own events (a
+   review from the CLI does not move the read time) are not someone else's
+   activity and are left out (2026-09-29; before they blocked the rule). No
+   known event by someone else after the read counts as "don't know": left
+   alone.
    The stored events only count when the PR snapshot was fetched at or
    after the thread's `updated_at` (`snapshotCoversThread`). A sync
    refreshes every thread but can leave a PR's snapshot stale (its PR cap, a
@@ -2505,8 +2786,11 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    Not "fetched in this very sync": a PR fetched while its bot activity was
    still inside the grace period is not fetched again until it moves, and
    the snapshot from then still covers the thread.
-2. *Not the user's own PR.* Bot reviews and CI on your own PR can mean work
-   (a failing check, a review bot's finding), so they stay unread.
+2. *Not the user's own open PR.* Bot reviews and CI on your own PR can mean
+   work (a failing check, a review bot's finding), so they stay unread while
+   it is open. A merged or closed own PR is fine (2026-09-29: every own PR
+   merges through trunk after the last comment, so 14 merged own PRs stayed
+   unread after 0.10.0).
 3. *No unseen merge without the user's review* ("Merged without your
    review", rule 5: PostPile never marks those read by itself). Checked on
    its own, since a merge queue bot merging counts as bot activity.
@@ -2553,7 +2837,8 @@ action. They count toward the hourly `pings_summarized` telemetry
 merges Julian wants to see (see "Merged without your review"). Bot-only
 activity since the last read is the safe case: the user already read
 everything a person said, and what came after can't ask them anything. Own
-PRs are excluded because bot reviews there can mean work.
+open PRs are excluded because bot reviews there can mean work; merged or
+closed ones are not (2026-09-29).
 
 **Fake mode**: seven sample quiet mark-reads in the action log (two for
 "you acted after it", one older than 7 days, so it stays out of the view)
@@ -2680,11 +2965,16 @@ beyond what the full sync already does for threads that left the inbox).
 - `pingRule` in core classes the events: `bot` (bot-only), `muted`, `quiet`,
   `not_addressed` (loud, but not aimed at the user in person: a comment or
   approval on their PR, merged without their review) or `addressed` (mention,
-  team mention, question, reply, and on an open PR: review request, a push
+  team mention, question, reply, and on an open PR: review request (made by
+  a person or a bot, see "A review request counts by whom it asks"), a push
   after approval the agent raised, changes requested on their own PR, and
   on a non-draft PR the author's push or comment after the user's changes
   request, headline "@pim addressed your changes"). Agent and user
   overrides count.
+- `routed` (2026-09-29): a review request routed to the viewer's team on a
+  PR from outside the team (not theirs, not a teammate's), made by a person
+  or a bot. It never pings from the poll and never reaches the agent; it
+  pings when the glance says Look closer (below).
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
   instructions, topic tailoring, dossier brief, glance, the new events (fenced
@@ -2698,6 +2988,47 @@ beyond what the full sync already does for threads that left the inbox).
   `pingTemplate` text ("@bob asked you something · app#1850").
 - Every decision lands in `ping_decision` (migration 007): thread, PR, ping
   yes/no, source rules / agent / fallback, title, body, reason, time.
+
+**Routed team requests ping when the glance says Look closer** (decided
+2026-09-29). Data from Julian's last week: about 120 routed team-devex PRs,
+only 6 of the 63 glanced ones were NOT_YOURS, so "ping all unless not yours"
+would be 30-40 pings a day; LOOK_CLOSER was 27 a week. Julian: "'Look
+closer' is exactly what I want on these, and the minutes delay doesn't
+matter at all because currently I might look in the evening or the next
+day." And on teammates: "if the verdict was look closer we can ignore
+teammate even".
+
+- A routed team request (class `routed` above) pings when the PR's glance is
+  written or rewritten with verdict LOOK_CLOSER while that team request is
+  still pending (not removed), the viewer has not reviewed the head (or
+  approved), and no tile holding the PR is snoozed. A teammate's review
+  does not stop it, and whose turn does not have to be the viewer's.
+- Hooked where glances are stored (`GlanceBatchWriter` tells
+  `DigestDeps.onGlancesStored`, in a full sync's digest and in a catch-up
+  run), not in the poll. Rule in core `lookCloserPingCheck`
+  (`glance-pings.ts`), engine `GlancePings`.
+- Once per request: the request is the newest timeline request for the team
+  (`teamRequestId`), kept in meta `look_closer_ping:<pr>`. A rewritten glance
+  does not ping again for the same request; a new request after a removal
+  can.
+- Recorded as a `ping_decision` row with source `glance` and reason "Look
+  closer: review routed to team-devex"; the debug view shows it ("pinged by
+  the glance"). Text like other review pings: "Look closer: review for
+  team-devex · app#1850", body the PR title and the glance's first for-you
+  sentence (`lookCloserPingText`).
+- A ping must lead to something visible: it adds an app-made loud event
+  (kind `look_closer`, summary "Look closer: review routed to team-devex",
+  `lookCloserEvent`), so the tile is unread with that reason even when a
+  teammate reviewed; a mark-read clears it as usual. Snapshot stores keep
+  app-made events (`APP_EVENT_KINDS` in the store's `upsertDerived`).
+- Delivery: the ping waits in `GlancePings` and goes out with the next poll
+  cycle's pings (`PollRun` drains it), through the same throttle.
+- Other verdicts (LOOKS_SAFE, NOT_YOURS) never ping for routed requests; the
+  tile still shows in To review as before. Personal requests and team
+  requests on a teammate's PR keep pinging from the poll (class
+  `addressed`).
+- `pings_summarized` counts these as `pinged_glance`, apart from the poll's
+  decisions.
 
 **Mac notifications** (desktop main, `MacNotifier`):
 
@@ -3058,12 +3389,15 @@ message, are dropped.
    (tool, reason — once per state change, from `ToolHealth`).
 2. *Retention*: `app_active` (once per calendar day), `window_focused`
    (throttled to once per 30 minutes).
-3. *Core actions*: `tile_opened`, `pr_approved`, `marked_read`, `snoozed`
+3. *Core actions*: `tile_opened`, `pr_approved`, `marked_read` (origin
+   `tile`, `detail`, `debug` or `cleanup`), `team_request_removed` (no
+   props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,
    `ask_sent` (AskComposer's send), `chat_message_sent`, `mac_ping_shown` /
    `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
-   withheld_agent, handled_quietly: counts since the last summary, from
+   withheld_agent, pinged_glance (Look closer on routed reviews),
+   handled_quietly: counts since the last summary, from
    `ping_decision` and the action log's `quiet` mark-reads; the engine sends
    it at most once an hour after a sync or a poll cycle, window end kept in
    meta `pings_summarized_at`; nothing when every count is 0, the first call
@@ -3263,8 +3597,10 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/prs/:owner/:repo/:number/approve` | `approve()` |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |
 | `POST /api/prs/:owner/:repo/:number/comment` `{body}` | `sendComment()` |
-| `POST /api/prs/:owner/:repo/:number/opened` | `markOpenedRead()` (opened in the detail pane; `{marked}`) |
+| `POST /api/prs/:owner/:repo/:number/opened` | `markOpenedRead()` (opened in the detail pane; `{marked}`: thread marked read or PR handled) |
+| `POST /api/prs/:owner/:repo/:number/remove-team-request` `{team}` | `removeTeamRequest()` (final; refused while locked) |
 | `POST /api/tiles/:tileId/mark-read` | `markRead()` |
+| `POST /api/tiles/:tileId/prs/:owner/:repo/:number/mark-read` | `markPrRead()` (detail pane, one PR) |
 | `POST /api/tiles/:tileId/snooze` `{condition}` / `DELETE` | `snooze()` / `unsnooze()` |
 | `GET`/`POST /api/tiles/:tileId/chat` `{message}` | `getChat()` / `chat()` |
 | `POST /api/undo` `{undoToken}` | `undo()` |

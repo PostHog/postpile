@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tileAfterMarkRead } from './after-read.ts';
+import { prAfterMarkRead, tileAfterMarkRead } from './after-read.ts';
 import { at, makeCommit, makeEvent, makePr, makeReview, makeUserState, singleTile, viewer } from './fixtures.ts';
 import { tileListRank } from './tile-view.ts';
 import type { Pr, PrEvent, UserPrState } from './types.ts';
@@ -85,6 +85,49 @@ describe('tileAfterMarkRead', () => {
   it('never changes the data it gets', () => {
     const events = [push];
     afterRead(addressed, events);
+    expect(events[0]!.seenAt).toBeNull();
+  });
+});
+
+describe('prAfterMarkRead', () => {
+  function prAfter(pr: Pr, events: PrEvent[], options: { userState?: UserPrState | null; tracked?: boolean; notYours?: boolean } = {}) {
+    return prAfterMarkRead({
+      pr,
+      events,
+      userState: options.userState ?? null,
+      viewer,
+      notYours: options.notYours ?? false,
+      tracked: options.tracked ?? true,
+      readAt: at(100),
+    });
+  }
+
+  it('is done when reading the PR answers everything on it', () => {
+    const mention = makeEvent({ kind: 'team_mention', actor: 'ada', at: at(20), ruleLoudness: 'loud' });
+    expect(prAfter(makePr({ author: 'ada' }), [mention])).toEqual({ done: true, turn: NO_TURN });
+  });
+
+  it('stays not done, and says whose move, while the PR asks something of you', () => {
+    const result = prAfter(addressed, [push]);
+    expect(result.done).toBe(false);
+    // One PR on its own: no " on #n".
+    expect(result.turn).toMatchObject({ kind: 'you', what: 'pim addressed your changes: re-review' });
+  });
+
+  it('is never done for a pulled-in stack layer: it does not keep its tile and a mark-read does not handle it', () => {
+    const comment = makeEvent({ kind: 'comment', actor: 'bob', at: at(20), ruleLoudness: 'loud' });
+    expect(prAfter(makePr({ author: 'ada' }), [comment], { tracked: false }).done).toBe(false);
+  });
+
+  it('reads a routed team request as the tile does when the glance says not yours', () => {
+    const routed = makePr({ author: 'ada', reviewerTeams: ['acme/team-platform'] });
+    expect(prAfter(routed, []).done).toBe(false);
+    expect(prAfter(routed, [], { notYours: true }).done).toBe(true);
+  });
+
+  it('keeps an earlier handled time and never changes the data it gets', () => {
+    const events = [push];
+    prAfter(addressed, events, { userState: makeUserState({ prKey: addressed.key, handledAt: at(40) }) });
     expect(events[0]!.seenAt).toBeNull();
   });
 });

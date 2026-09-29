@@ -98,4 +98,14 @@ export class GitHubWrites {
   commentOnPr(ref: PrRef, body: string, context: WriteContext): Promise<WriteResult> {
     return this.send('comment', context, () => this.writeSwitch.writer().commentOnPr(ref, body));
   }
+
+  /** Removes one team's review request (`teamSlug` without the org). */
+  removeTeamReviewRequest(ref: PrRef, teamSlug: string, context: WriteContext): Promise<WriteResult> {
+    const detail = `team ${teamSlug}`;
+    return this.send('remove_team_request', { detail, ...context }, () => this.writeSwitch.writer().removeTeamReviewRequest(ref, teamSlug), (reason) => `${detail}: ${reason}`);
+  }
+
+  unsubscribeThread(threadId: string, context: WriteContext): Promise<WriteResult> {
+    return this.send('unsubscribe', { ...context, threadId }, () => this.writeSwitch.writer().unsubscribeThread(threadId));
+  }
 }

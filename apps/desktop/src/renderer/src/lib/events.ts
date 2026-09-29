@@ -48,6 +48,7 @@ const GLYPHS: Record<EventKind, EventGlyph> = {
   deploy: 'deploy',
   merge_queue: 'queue',
   bot_comment: 'bot',
+  look_closer: 'eye',
 };
 
 export function eventGlyph(kind: EventKind): EventGlyph {

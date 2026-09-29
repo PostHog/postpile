@@ -1,6 +1,7 @@
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import type { AgentCallLog } from './agent-call-log.ts';
+import type { GlancePings } from './live/glance-pings.ts';
 import type { FactWriter } from './memory/fact-writer.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
@@ -17,6 +18,8 @@ export interface RunDeps {
   agentOff: () => string | null;
   /** Optional so existing test fixtures keep compiling; runTelemetry() below is what call sites use. */
   telemetry?: Telemetry;
+  /** Look closer pings on routed reviews, told after glances are stored; the poll hands them to the Mac. */
+  glancePings?: GlancePings;
 }
 
 /** RunDeps.telemetry defaults to a no-op, so SyncRun and ConsolidationRun never have to branch on whether it is set. */

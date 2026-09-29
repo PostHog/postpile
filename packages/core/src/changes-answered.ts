@@ -49,16 +49,17 @@ function viewerLastWord(pr: Pr, viewer: Viewer): IsoTime | null {
 }
 
 /**
- * A push counts from any human but the viewer: a commit's author can be a
+ * A push counts from any human but the reviewer: a commit's author can be a
  * git name ("Pim Laptop") rather than the login, and bots only rebase.
  */
-function isPusher(login: string, viewer: Viewer): boolean {
-  return !isBot(login) && !sameLogin(login, viewer.login);
+function isPusher(login: string, reviewer: string): boolean {
+  return !isBot(login) && !sameLogin(login, reviewer);
 }
 
-function pushedAfter(pr: Pr, viewer: Viewer, since: IsoTime): boolean {
-  const commit = pr.commits.some((c) => c.committedAt > since && isPusher(c.author, viewer));
-  const forcePush = pr.timeline.some((item) => item.kind === 'head_ref_force_pushed' && item.at > since && isPusher(item.actor, viewer));
+/** Someone other than `reviewer` (and not a bot) pushed commits or force-pushed after `since`. */
+function pushedAfter(pr: Pr, reviewer: string, since: IsoTime): boolean {
+  const commit = pr.commits.some((c) => c.committedAt > since && isPusher(c.author, reviewer));
+  const forcePush = pr.timeline.some((item) => item.kind === 'head_ref_force_pushed' && item.at > since && isPusher(item.actor, reviewer));
   return commit || forcePush;
 }
 
@@ -84,7 +85,7 @@ export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
     return null;
   }
   const since = newest([verdict.submittedAt, viewerLastWord(pr, viewer) ?? verdict.submittedAt])!;
-  const pushed = pushedAfter(pr, viewer, since);
+  const pushed = pushedAfter(pr, viewer.login, since);
   const replied = repliedAfter(pr, since);
   if (!pushed && !replied) {
     return null;
@@ -106,7 +107,25 @@ export function isChangesAnswerEvent(event: { kind: EventKind; actor: string; at
     return false;
   }
   if (PUSH_KINDS.includes(event.kind)) {
-    return isPusher(event.actor, viewer);
+    return isPusher(event.actor, viewer.login);
   }
   return sameLogin(event.actor, pr.author);
+}
+
+/**
+ * The move is back with a reviewer who asked for changes: their newest
+ * verdict asks for changes, someone else pushed after it, and they are a
+ * requested reviewer again (re-requested; GitHub drops a reviewer from the
+ * requested list once they review). Whose turn then names them, "ada to
+ * re-review", instead of the author (2026-09-29).
+ */
+export function reReviewAsked(pr: Pr, reviewer: string): boolean {
+  if (pr.state !== 'OPEN' || !pr.reviewerUsers.some((login) => sameLogin(login, reviewer))) {
+    return false;
+  }
+  const verdict = newestVerdictBy(pr.reviews, reviewer);
+  if (verdict === null || verdict.state !== 'CHANGES_REQUESTED') {
+    return false;
+  }
+  return pushedAfter(pr, reviewer, verdict.submittedAt);
 }

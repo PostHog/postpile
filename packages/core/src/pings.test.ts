@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeEvent, makePr, viewer } from './fixtures.ts';
+import { deriveEvents } from './events.ts';
+import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
 import { pingRule, pingTemplate } from './pings.ts';
+import type { Pr, Viewer } from './types.ts';
+import { prWhoseTurn } from './whose-turn.ts';
 
 const pr = makePr({ number: 7, title: 'Move CI to Depot', author: 'alice' });
 const ownPr = makePr({ number: 8, author: viewer.login });
@@ -103,5 +106,50 @@ describe('pingRule on drafts', () => {
     expect(pingRule([request], draft, viewer, false).class).toBe('not_addressed');
     expect(pingRule([team], draft, viewer, false).class).toBe('not_addressed');
     expect(pingRule([mention], draft, viewer, false).class).toBe('addressed');
+  });
+});
+
+describe('a review request counts by whom it asks, not who clicked it', () => {
+  const withTeam = { ...viewer, teamMembers: ['lyra'] };
+  const request = (subject: string) => makeTimelineItem({ id: `rr-${subject}`, actor: 'assignbot[bot]', subject, at: at(20) });
+
+  function requestEvent(pr: Pr, who: Viewer = withTeam) {
+    const event = deriveEvents(pr, who, null).find((candidate) => candidate.kind === 'review_requested');
+    if (!event) {
+      throw new Error('no review request event');
+    }
+    return event;
+  }
+
+  it('makes a bot-made team request on a teammate PR loud and addressed, and names no bot in the ping', () => {
+    const pr = makePr({ number: 21, author: 'lyra', reviewerTeams: ['acme/team-platform'], timeline: [request('acme/team-platform')] });
+    const event = requestEvent(pr);
+    expect(event).toMatchObject({ isBot: true, ruleLoudness: 'loud', ruleReason: 'review requested from you' });
+    expect(pingRule([event], pr, withTeam, false)).toMatchObject({ class: 'addressed', event: { id: event.id } });
+    expect(pingTemplate(event, pr).title).toBe('Review requested for team-platform · app#21');
+  });
+
+  it('sends a bot-made routed team request the way a human-made one goes: no poll ping, the glance decides', () => {
+    const pr = makePr({ number: 22, author: 'rowan', reviewerTeams: ['acme/team-platform'], timeline: [request('acme/team-platform')] });
+    const event = requestEvent(pr);
+    expect(event.ruleLoudness).toBe('loud');
+    expect(pingRule([event], pr, withTeam, false).class).toBe('routed');
+    const human = { ...event, actor: 'rowan', isBot: false };
+    expect(pingRule([human], pr, withTeam, false).class).toBe('routed');
+  });
+
+  it('keeps a bot-made request to another team quiet bot activity', () => {
+    const pr = makePr({ number: 23, author: 'rowan', reviewerTeams: ['acme/team-web'], timeline: [request('acme/team-web')] });
+    const event = requestEvent(pr);
+    expect(event).toMatchObject({ ruleLoudness: 'quiet', ruleReason: 'bot activity' });
+    expect(pingRule([event], pr, withTeam, false).class).toBe('bot');
+  });
+
+  it('keeps a personal bot request loud, and whose turn does not name the bot', () => {
+    const pr = makePr({ number: 24, author: 'rowan', reviewerUsers: [viewer.login], timeline: [request(viewer.login)] });
+    expect(requestEvent(pr).ruleLoudness).toBe('loud');
+    expect(prWhoseTurn({ pr, events: [], userState: null, viewer: withTeam })).toMatchObject({ kind: 'you', what: 'Review' });
+    const teamPr = makePr({ number: 25, author: 'lyra', reviewerTeams: ['acme/team-platform'], timeline: [request('acme/team-platform')] });
+    expect(prWhoseTurn({ pr: teamPr, events: [], userState: null, viewer: withTeam })).toMatchObject({ what: "Review for team-platform: lyra's PR" });
   });
 });

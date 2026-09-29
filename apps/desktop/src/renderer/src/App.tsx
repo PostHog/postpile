@@ -323,6 +323,7 @@ export function App() {
           <TopicSidebar
             topics={items}
             activeTopicId={shownTopicId}
+            selectedTileId={pane === 'topic' ? (selected.view?.tile.id ?? null) : null}
             onSelect={(topicId) => {
               const item = items.find((candidate) => candidate.topic.id === topicId);
               if (item) {
