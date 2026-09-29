@@ -11,7 +11,8 @@ import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptConte
  * shared PROMPT_VERSION would regenerate every glance and set for nothing,
  * and older dossiers read fine, their lines show "no source recorded".
  * Dropping CI (NO_CI_RULE, 2026-09-29) kept d2: a dossier is rewritten on
- * the topic's next real activity anyway.
+ * the topic's next real activity anyway. So did fencing the area names
+ * (2026-09-29): the same data, only moved inside <github_data>.
  */
 export const DOSSIER_PROMPT_VERSION = 'd2';
 

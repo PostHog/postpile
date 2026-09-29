@@ -32,7 +32,9 @@ function prSection(pr: Pr, events: PrEvent[]): string {
  * lowering a plain "thanks" clears that too.
  */
 export function eventBatchPrompt(input: EventBatchInput): string {
-  const topic = input.topic ? ` They belong to the topic "${input.topic.name}".` : '';
+  // Topic names are written from GitHub text: named only inside the fence.
+  const topic = input.topic ? ' They belong to one topic, named in the data below.' : '';
+  const topicLine = input.topic ? `Topic: ${input.topic.name}\n\n` : '';
   const sections = input.items.map((item) => prSection(item.pr, item.events)).join('\n\n');
   return `You are deciding which activity on GitHub pull requests deserves a developer's attention.${topic}
 ${viewerLine(input.viewer)}
@@ -58,7 +60,7 @@ areas they approved, or new files well beyond what was reviewed. The reason says
 
 Pull requests and their new events, with what simple rules decided:
 
-${githubData(sections)}
+${githubData(`${topicLine}${sections}`)}
 
 Only list events where the rules got it wrong. Most of the time the rules are right and the
 list is empty. reason: one short sentence the user will see.

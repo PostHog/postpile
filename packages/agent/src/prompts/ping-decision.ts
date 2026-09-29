@@ -19,7 +19,9 @@ function turnLine(item: PingDecisionItem): string {
 }
 
 function itemSection(item: PingDecisionItem): string {
-  const lines = [`## Item ${item.id}`, `Topic: ${item.topicName ?? '(not sorted into a topic yet)'}`];
+  // Topic names are written from GitHub text: fenced like it.
+  const topic = item.topicName === null ? 'Topic: (not sorted into a topic yet)' : `Topic:\n${githubData(item.topicName)}`;
+  const lines = [`## Item ${item.id}`, topic];
   if (item.tailoring.trim()) {
     lines.push(`The user's instructions for this topic: ${clip(item.tailoring, 800)}`);
   }

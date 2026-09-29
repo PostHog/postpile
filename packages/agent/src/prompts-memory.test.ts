@@ -252,7 +252,7 @@ describe('eventBatchPrompt', () => {
     });
     expect(prompt).toContain('- id a |');
     expect(prompt).toContain('- id b |');
-    expect(prompt).toContain('topic "Move CI to Depot"');
+    expect(prompt).toContain('<github_data>\nTopic: Move CI to Depot\n');
   });
 
   it('says plain pushes after approval stay quiet and shows the files for PRs with one', () => {
