@@ -1,7 +1,7 @@
 import { PUSH_KINDS } from './kinds.ts';
 import { effectiveLoudness } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
-import type { EventKind, IsoTime, Pr, PrEvent, Snooze } from './types.ts';
+import type { EventKind, IsoTime, Pr, PrEvent, Snooze, SnoozeCondition } from './types.ts';
 
 export interface SnoozeContext {
   /** The PRs in the snoozed tile. */
@@ -68,4 +68,24 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
  */
 export function breaksSnooze(event: PrEvent, snooze: Snooze): boolean {
   return event.at > snooze.since && !event.isBot && event.seenAt === null && effectiveLoudness(event) === 'loud';
+}
+
+export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'ci_green';
+
+/** The `snoozed` telemetry event's prop: a time bucket for `until_time`, the condition name otherwise. */
+export function snoozeTelemetryBucket(condition: SnoozeCondition, nowMs: number): SnoozeTelemetryBucket {
+  if (condition.kind !== 'until_time') {
+    return condition.kind;
+  }
+  const hours = (new Date(condition.until).getTime() - nowMs) / 3_600_000;
+  if (hours <= 6) {
+    return 'hours';
+  }
+  if (hours <= 30) {
+    return 'a_day';
+  }
+  if (hours <= 24 * 6) {
+    return 'days';
+  }
+  return 'a_week';
 }

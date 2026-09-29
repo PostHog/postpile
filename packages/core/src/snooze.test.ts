@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeEvent, makePr } from './fixtures.ts';
-import { breaksSnooze, isSnoozeOver, type SnoozeContext } from './snooze.ts';
+import { breaksSnooze, isSnoozeOver, snoozeTelemetryBucket, type SnoozeContext } from './snooze.ts';
 import type { Snooze, SnoozeCondition } from './types.ts';
 
 function snooze(condition: SnoozeCondition): Snooze {
@@ -53,5 +53,23 @@ describe('breaksSnooze', () => {
     expect(breaksSnooze(makeEvent({ ruleLoudness: 'quiet', at: at(11) }), s)).toBe(false);
     expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', isBot: true, at: at(11) }), s)).toBe(false);
     expect(breaksSnooze(makeEvent({ ruleLoudness: 'loud', seenAt: at(12), at: at(11) }), s)).toBe(false);
+  });
+});
+
+describe('snoozeTelemetryBucket', () => {
+  const nowMs = new Date('2026-01-01T00:00:00.000Z').getTime();
+
+  it('names the condition directly for an event-based snooze', () => {
+    expect(snoozeTelemetryBucket({ kind: 'someone_replies' }, nowMs)).toBe('someone_replies');
+    expect(snoozeTelemetryBucket({ kind: 'new_push' }, nowMs)).toBe('new_push');
+    expect(snoozeTelemetryBucket({ kind: 'ci_green' }, nowMs)).toBe('ci_green');
+  });
+
+  it('buckets a time-based snooze by how far out it is', () => {
+    const hoursAway = (hours: number) => new Date(nowMs + hours * 3_600_000).toISOString();
+    expect(snoozeTelemetryBucket({ kind: 'until_time', until: hoursAway(2) }, nowMs)).toBe('hours');
+    expect(snoozeTelemetryBucket({ kind: 'until_time', until: hoursAway(20) }, nowMs)).toBe('a_day');
+    expect(snoozeTelemetryBucket({ kind: 'until_time', until: hoursAway(72) }, nowMs)).toBe('days');
+    expect(snoozeTelemetryBucket({ kind: 'until_time', until: hoursAway(24 * 10) }, nowMs)).toBe('a_week');
   });
 });
