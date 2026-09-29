@@ -10,7 +10,7 @@ function item(id: string, unreadTiles: number): TopicListItem {
     openTiles: 0,
     totalTiles: 1,
     yourMoveTiles: 0, unseenMergeTiles: 0,
-    queues: { tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 1 }, byYou: 0, byTeam: 0 },
+    queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 1 }, byYou: 0, byTeam: 0, changesAddressed: 0 },
     people: [],
   };
 }
@@ -44,7 +44,7 @@ describe('sidebarOrder', () => {
   });
 
   it('puts queue sections before other topics and lists a topic once', () => {
-    const queued = { ...item('queued', 0), queues: { tiers: { needs_reply: 1, mine: 1, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: 1, byTeam: 0 } };
+    const queued = { ...item('queued', 0), queues: { tiers: { needs_reply: 1, changes_requested: 0, mine: 1, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: 1, byTeam: 0, changesAddressed: 0 } };
     expect(sidebarOrder([...items, queued]).map((i) => i.topic.id)).toEqual(['queued', 'loud', 'quiet-a', 'quiet-b']);
   });
 });

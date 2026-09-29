@@ -14,7 +14,7 @@ Read this file first. Details live elsewhere:
 ## What the app is for (focus)
 
 1. **Tell the user what needs them, and why, at a glance.** Every tile answers four questions in fixed spots: for whom (word chip + left band), why now (actor avatar + event), status (segment pill), and whose turn (footer). Attention goes where it's the user's move, not where the unread count is highest.
-2. **Keep topics as the structure.** The agent layer's job is to cluster work into topics and remember what's going on in them (dossiers, facts). Queues (Needs reply, My PRs, Team's PRs, To review, Team mentioned) are sections that *contain topics*. They never become a flat pile of PRs.
+2. **Keep topics as the structure.** The agent layer's job is to cluster work into topics and remember what's going on in them (dossiers, facts). Queues (Needs reply, Changes you requested, My PRs, Team's PRs, To review, Team mentioned) are sections that *contain topics*. They never become a flat pile of PRs.
 3. **Memory the user can trust and correct.** The user owns `instructions.md` (changed only through accepted diffs or hand edits). The agent owns dossiers, facts and the work-context digest. Every agent claim shows its sources ("Why?") and can be rechecked or forgotten.
 4. **GitHub is the source of truth for read and unread.** The app never holds a read state GitHub doesn't have. The only local-only state is the explicit, visible pending-writes queue while writes are locked.
 

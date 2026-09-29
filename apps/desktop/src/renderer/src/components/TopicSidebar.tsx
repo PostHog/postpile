@@ -30,6 +30,7 @@ function topicSnippet(item: TopicListItem): string {
 /** Section title, dot and count colors. Honey = aimed at you, ink = yours, sea = your team, grey = the rest. */
 const SECTION_LOOK: Record<PrTier | 'other', { label: string; text: string; dot: string }> = {
   needs_reply: { label: 'Needs reply', text: 'text-honey-ink', dot: 'bg-honey' },
+  changes_requested: { label: 'Changes you requested', text: 'text-honey-ink', dot: 'bg-honey' },
   mine: { label: 'My PRs', text: 'text-ink', dot: 'bg-ink' },
   team: { label: "Team's PRs", text: 'text-sea-ink', dot: 'bg-sea' },
   to_review: { label: 'To review', text: 'text-honey-ink', dot: 'bg-honey' },

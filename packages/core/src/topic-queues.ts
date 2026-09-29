@@ -74,11 +74,14 @@ export interface QueuedPr {
   pulledIn: boolean;
   /** In a quiet repo ("Let it go stale"). */
   quiet: boolean;
+  /** The author addressed the viewer's change request (`changesAnswered`). */
+  changesAddressed: boolean;
 }
 
 /**
- * PR counts per tier, plus open PRs by author for the Mine and Team filters.
- * Tiers only put open PRs in the queues; merged and closed ones are `rest`.
+ * PR counts per tier, plus open PRs by author for the Mine and Team filters,
+ * and how many Changes you requested PRs the author addressed. Tiers only
+ * put open PRs in the queues; merged and closed ones are `rest`.
  * Pulled-in stack layers and PRs in quiet repos stay out of every count.
  */
 export interface TopicQueues {
@@ -87,21 +90,27 @@ export interface TopicQueues {
   byYou: number;
   /** Open PRs someone else on the viewer's teams wrote. */
   byTeam: number;
+  /** changes_requested PRs whose author addressed the changes: the viewer's move again. */
+  changesAddressed: number;
 }
 
 export function emptyTierCounts(): Record<PrTier, number> {
-  return { needs_reply: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0 };
+  return { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0 };
 }
 
 export function topicQueues(prs: QueuedPr[]): TopicQueues {
   const tiers = emptyTierCounts();
   let byYou = 0;
   let byTeam = 0;
+  let changesAddressed = 0;
   for (const pr of prs) {
     if (pr.pulledIn || pr.quiet) {
       continue;
     }
     tiers[pr.tier] += 1;
+    if (pr.tier === 'changes_requested' && pr.changesAddressed) {
+      changesAddressed += 1;
+    }
     if (pr.state !== 'OPEN') {
       continue;
     }
@@ -111,7 +120,7 @@ export function topicQueues(prs: QueuedPr[]): TopicQueues {
       byTeam += 1;
     }
   }
-  return { tiers, byYou, byTeam };
+  return { tiers, byYou, byTeam, changesAddressed };
 }
 
 /** The tile sorts under its most urgent PR's tier. A tile without PRs is `rest`. */

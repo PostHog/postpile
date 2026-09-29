@@ -1601,7 +1601,8 @@ it won't merge soon. Rules in core:
   draft also for review threads waiting on you ("Address 2 comments on your
   draft") or a standing change request. Never Review, Fix CI or Merge.
 - tier: a draft never lands in To review (`prTier`); needs_reply still
-  works for personal asks. "Addressed your changes" does not apply to a
+  works for personal asks; a standing change request of yours puts a
+  draft under Changes you requested. "Addressed your changes" does not apply to a
   draft: only the author's reply in your thread counts, as a personal ask.
 - loudness: a review request naming you on a draft is quiet (commits after
   your approval are quiet everywhere), so neither makes the tile unread or the
@@ -1721,7 +1722,9 @@ the sync.
 **PR tiers** (`prTier` in `pr-tier.ts`, ported from ghatchup's
 `triage.Classify`): one tier per open PR, first match wins: `needs_reply`
 (a human mention, question or reply the viewer has not answered, same
-check as whose-turn), `mine`, `team` (author in `teamMembers`),
+check as whose-turn), `changes_requested` (the viewer's newest verdict
+review on someone else's PR asks for changes, drafts included; added
+2026-09-29), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
 A personal request and a team request on a teammate's PR (see whose turn)
@@ -1731,9 +1734,12 @@ another teammate covered stays `team`; routed team requests stay
 `to_review` after the authorship checks. Inside To review the topic column
 puts "For you" tiles (personal and teammate team requests) before routed
 team requests (`tilesInTierOrder` in the renderer).
-Addressed your changes (see whose turn) is `to_review` and checked right
-after needs_reply, before `team`: a re-review is owed even to a teammate,
-and the author's own thread replies do not push it into needs_reply.
+Addressed your changes (see whose turn) is `changes_requested` (was
+`to_review` until 2026-09-29), like a change request still waiting on the
+author: a re-review is owed even to a teammate, and the author's own
+thread replies do not push it into needs_reply; an ask from anyone else
+does. `TopicQueues.changesAddressed` counts the addressed ones, for the
+order inside the section.
 Pure and tested; the sidebar's queue sections are built on it.
 
 ### Three-pane balance
@@ -1827,7 +1833,9 @@ avatars and filters", QueuesB2).
   that section's count on the row. Other topics holds topics with only
   `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
   Routed, FYI; Routed and FYI folded). The queue filters (Mine, Team,
-  Reply, Review) still match a topic by any of its PRs. Section tint: honey
+  Reply, Review) still match a topic by any of its PRs; Review covers To
+  review and Changes you requested (the addressed case was To review
+  before). Section tint: honey
   for reply, changes and review, ink for mine, sea for team and team
   mentioned, grey for other.
   History: until 2026-09-29 a topic sat in every section where it had a PR
@@ -1841,7 +1849,9 @@ avatars and filters", QueuesB2).
   viewer's own open loop: Julian, "this should surface very high up, maybe
   directly below needs reply". Rows whose author addressed the changes
   ("addressed your changes: re-review", the viewer's move, unread) sort
-  first; rows still waiting on the author follow, quiet. Before, only the
+  first (`TopicQueues.changesAddressed`); rows still waiting on the author
+  follow, quiet. The topic column does the same with the section's tiles
+  (your move first, `tilesInTierOrder`). Before, only the
   addressed case had a section (To review), and a change request the author
   had not touched fell to Team's PRs or Other topics.
 - **Authorship**: the viewer's own PR stays under My PRs whatever area or

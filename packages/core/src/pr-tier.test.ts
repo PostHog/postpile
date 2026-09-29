@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeComment, makeEvent, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
+import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
 import { prTier, type PrTierInput } from './pr-tier.ts';
 import type { Viewer } from './types.ts';
 
@@ -80,5 +80,44 @@ describe('prTier on drafts', () => {
     expect(tier({ pr: draft })).toBe('rest');
     expect(tier({ pr: { ...draft, isDraft: false } })).toBe('to_review');
     expect(tier({ pr: draft, events: [question] })).toBe('needs_reply');
+  });
+});
+
+describe('prTier: Changes you requested', () => {
+  const changes = makeReview({ id: 'r-changes', author: me, state: 'CHANGES_REQUESTED', submittedAt: at(20), commitOid: 'c0' });
+  const standing = makePr({ author: 'ada', headOid: 'c0', reviews: [changes], commits: [makeCommit({ oid: 'c0', author: 'ada', committedAt: at(5) })] });
+  const addressed = { ...standing, headOid: 'c1', commits: [...standing.commits, makeCommit({ oid: 'c1', author: 'ada', committedAt: at(40) })] };
+
+  it('files a standing change request, whoever wrote the PR', () => {
+    expect(tier({ pr: standing })).toBe('changes_requested');
+    expect(tier({ pr: { ...standing, author: 'lyra' } })).toBe('changes_requested');
+    expect(tier({ pr: { ...standing, isDraft: true } })).toBe('changes_requested');
+  });
+
+  it('keeps it there once the author addressed the changes, before any review request', () => {
+    expect(tier({ pr: { ...addressed, reviewerUsers: [me] } })).toBe('changes_requested');
+  });
+
+  it('lets a later approval or dismissal clear it', () => {
+    const approval = makeReview({ id: 'r-ok', author: me, state: 'APPROVED', submittedAt: at(50), commitOid: 'c1' });
+    expect(tier({ pr: { ...addressed, reviews: [changes, approval] } })).toBe('rest');
+    expect(tier({ pr: { ...standing, reviews: [{ ...changes, state: 'DISMISSED' }] } })).toBe('rest');
+    // Someone else's change request is not the viewer's loop.
+    expect(tier({ pr: { ...standing, reviews: [{ ...changes, author: 'rowan' }] } })).toBe('rest');
+  });
+
+  it('lets an ask from someone other than the author go first', () => {
+    const lyra = makeEvent({ kind: 'question_to_user', actor: 'lyra', at: at(45) });
+    expect(tier({ pr: addressed, events: [lyra] })).toBe('needs_reply');
+    const author = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(45) });
+    const authorComment = makeComment({ author: 'ada', createdAt: at(45) });
+    expect(tier({ pr: { ...standing, comments: [authorComment] }, events: [author] })).toBe('changes_requested');
+  });
+});
+
+describe('prTier: authorship', () => {
+  it('keeps your own PR under mine in another team’s area, even with a team review request', () => {
+    const pr = makePr({ author: me, repo: 'acme/infra', reviewerTeams: ['acme/team-platform', 'acme/team-infra'] });
+    expect(tier({ pr, reason: 'team_mention' })).toBe('mine');
   });
 });

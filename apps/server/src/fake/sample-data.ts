@@ -374,6 +374,22 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         { oid: 'sha1960', headline: 'Stable chunk names for the toolbar', hoursAgo: 2.2 },
       ],
     }),
+    // Changes you requested, still waiting on the author: you asked tove for
+    // changes yesterday and nothing moved since. Listed under Changes you
+    // requested after the addressed #1960, quiet.
+    samplePr(clock, {
+      number: 1963, title: 'Inline small SVG icons into the bundle', author: 'tove', state: 'OPEN',
+      size: [80, 30, 5], checks: 'SUCCESS', openedHoursAgo: 40,
+      reviews: [[SAMPLE_VIEWER, 'CHANGES_REQUESTED', 'Inlining drops the long cache on the icon sprite.', 'sha1963', 20]],
+      threads: [
+        {
+          id: 'thread-1963-1',
+          path: 'frontend/icons/index.ts',
+          comments: [{ author: SAMPLE_VIEWER, body: 'Keep the sprite for icons over 1 kB?', hoursAgo: 20 }],
+        },
+      ],
+      commits: [{ oid: 'sha1963', headline: 'Inline icons under 4 kB', hoursAgo: 38 }],
+    }),
     samplePr(clock, {
       number: 1955, title: 'Pin the Playwright browser version', author: 'nell', state: 'OPEN',
       size: [12, 4, 2], checks: 'SUCCESS', openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
@@ -475,6 +491,9 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'bot_comment', actor: 'reviewbot[bot]', text: 'commented: "No issues found in 9 files"', hoursAgo: 2.1, rule: 'quiet', isBot: true },
       { kind: 'bot_comment', actor: 'sizebot[bot]', text: 'commented: "toolbar.js -18 kB"', hoursAgo: 2, rule: 'quiet', isBot: true },
       { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 1.9, rule: 'quiet', isBot: true },
+    ]),
+    ...sampleEvents(clock, 1963, [
+      { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 20, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
@@ -622,6 +641,9 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.frontend, 'single', `pr:${sampleKey(1857)}`, 'Vite 7 landed; jude asks about snapshots', [pinged(1857, 'mention')]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1960)}`, 'pim addressed your toolbar bundle changes', [
       pinged(1960, 'comment'),
+    ]),
+    sampleTile(TOPIC.frontend, 'single', `pr:${sampleKey(1963)}`, 'Your icon sprite changes wait on tove', [
+      pinged(1963, 'comment'),
     ]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1870)}`, 'devbox start would default to minimal stack', [
       pinged(1870, 'review_requested'),

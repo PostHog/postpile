@@ -18,7 +18,7 @@ function item(id: string, toReview: number): TopicListItem {
     openTiles: 0,
     totalTiles: 1,
     yourMoveTiles: 0, unseenMergeTiles: 0,
-    queues: { tiers: { needs_reply: 0, mine: 0, team: 0, to_review: toReview, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0 },
+    queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: toReview, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0, changesAddressed: 0 },
     people: [],
   };
 }

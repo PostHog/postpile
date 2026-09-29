@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- New sidebar section "Changes you requested", right under Needs reply: open PRs where your latest review asks for changes. The ones where the author pushed or replied since come first; the ones still waiting on the author follow. The "author addressed your changes" case used to sit under To review. The Review filter covers both.
+- Your own PRs stay under My PRs whatever area or team the code belongs to; only Needs reply ranks above them.
+
 ## 0.5.0 (2026-09-29)
 
 ### Changed

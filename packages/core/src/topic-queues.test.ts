@@ -76,33 +76,45 @@ describe('topicFaces', () => {
 describe('topicQueues', () => {
   it('counts PRs per tier and open PRs by author', () => {
     const queues = topicQueues([
-      { tier: 'needs_reply', author: 'you', state: 'OPEN', pulledIn: false, quiet: false },
-      { tier: 'mine', author: 'you', state: 'OPEN', pulledIn: false, quiet: false },
-      { tier: 'team', author: 'team', state: 'OPEN', pulledIn: false, quiet: false },
-      { tier: 'rest', author: 'team', state: 'MERGED', pulledIn: false, quiet: false },
-      { tier: 'rest', author: 'you', state: 'CLOSED', pulledIn: false, quiet: false },
-      { tier: 'to_review', author: 'other', state: 'OPEN', pulledIn: false, quiet: false },
+      { tier: 'needs_reply', author: 'you', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: false },
+      { tier: 'mine', author: 'you', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: false },
+      { tier: 'team', author: 'team', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: false },
+      { tier: 'rest', author: 'team', state: 'MERGED', pulledIn: false, quiet: false, changesAddressed: false },
+      { tier: 'rest', author: 'you', state: 'CLOSED', pulledIn: false, quiet: false, changesAddressed: false },
+      { tier: 'to_review', author: 'other', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: false },
     ]);
-    expect(queues.tiers).toEqual({ needs_reply: 1, mine: 1, team: 1, to_review: 1, team_mentioned: 0, rest: 2 });
+    expect(queues.tiers).toEqual({ needs_reply: 1, changes_requested: 0, mine: 1, team: 1, to_review: 1, team_mentioned: 0, rest: 2 });
     expect(queues.byYou).toBe(2);
+    expect(queues.byTeam).toBe(1);
+  });
+
+  it('counts Changes you requested PRs, and the addressed ones apart', () => {
+    const queues = topicQueues([
+      { tier: 'changes_requested', author: 'other', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: true },
+      { tier: 'changes_requested', author: 'team', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: false },
+      // An ask from someone else wins the tier, so the addressed PR counts under needs_reply only.
+      { tier: 'needs_reply', author: 'other', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: true },
+    ]);
+    expect(queues.tiers).toMatchObject({ needs_reply: 1, changes_requested: 2 });
+    expect(queues.changesAddressed).toBe(1);
     expect(queues.byTeam).toBe(1);
   });
 
   it('leaves PRs in quiet repos out of every count', () => {
     const queues = topicQueues([
-      { tier: 'needs_reply', author: 'you', state: 'OPEN', pulledIn: false, quiet: true },
-      { tier: 'to_review', author: 'other', state: 'OPEN', pulledIn: false, quiet: false },
+      { tier: 'needs_reply', author: 'you', state: 'OPEN', pulledIn: false, quiet: true, changesAddressed: false },
+      { tier: 'to_review', author: 'other', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: false },
     ]);
-    expect(queues).toEqual({ tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 1, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0 });
+    expect(queues).toEqual({ tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 1, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0, changesAddressed: 0 });
   });
 
   it('leaves pulled-in stack layers out of every count', () => {
     const queues = topicQueues([
-      { tier: 'to_review', author: 'other', state: 'OPEN', pulledIn: false, quiet: false },
-      { tier: 'mine', author: 'you', state: 'OPEN', pulledIn: true, quiet: false },
-      { tier: 'team', author: 'team', state: 'OPEN', pulledIn: true, quiet: false },
+      { tier: 'to_review', author: 'other', state: 'OPEN', pulledIn: false, quiet: false, changesAddressed: false },
+      { tier: 'mine', author: 'you', state: 'OPEN', pulledIn: true, quiet: false, changesAddressed: false },
+      { tier: 'team', author: 'team', state: 'OPEN', pulledIn: true, quiet: false, changesAddressed: false },
     ]);
-    expect(queues).toEqual({ tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 1, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0 });
+    expect(queues).toEqual({ tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 1, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0, changesAddressed: 0 });
   });
 });
 

@@ -27,9 +27,10 @@ describe('topic list queues', () => {
 
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'queues');
     expect(item?.queues).toEqual({
-      tiers: { needs_reply: 0, mine: 1, team: 0, to_review: 1, team_mentioned: 0, rest: 1 },
+      tiers: { needs_reply: 0, changes_requested: 0, mine: 1, team: 0, to_review: 1, team_mentioned: 0, rest: 1 },
       byYou: 1,
       byTeam: 0,
+      changesAddressed: 0,
     });
     expect(item?.people).toEqual([
       { login: viewer.login, relation: 'you' },
@@ -80,9 +81,10 @@ describe('topic list queues', () => {
 
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'stack');
     expect(item?.queues).toEqual({
-      tiers: { needs_reply: 0, mine: 0, team: 1, to_review: 0, team_mentioned: 0, rest: 0 },
+      tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 1, to_review: 0, team_mentioned: 0, rest: 0 },
       byYou: 0,
       byTeam: 1,
+      changesAddressed: 0,
     });
     const stack = (await h.engine.getTopic('stack'))?.tiles.find((view) => view.tile.kind === 'stack');
     expect(stack?.prs.map((pr) => [pr.key, pr.provenance.kind, pr.tier])).toEqual([
