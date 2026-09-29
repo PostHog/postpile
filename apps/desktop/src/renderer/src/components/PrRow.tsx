@@ -40,7 +40,7 @@ export function PrRow(props: PrRowProps) {
       type="button"
       aria-pressed={props.selected}
       onClick={props.onClick}
-      className={`grid h-8 grid-cols-[44px_minmax(0,1fr)_auto_18px] items-center gap-[7px] px-[9px] text-left text-xs ${
+      className={`grid h-8 grid-cols-[44px_minmax(0,1fr)_auto_18px] items-center gap-[7px] px-[9px] text-left text-xs focus-visible:-outline-offset-2 ${
         props.first ? '' : 'border-t border-hairline-soft'
       } ${background}`}
     >

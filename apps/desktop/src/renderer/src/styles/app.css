@@ -170,3 +170,17 @@ body {
 .drag-region [title] {
   -webkit-app-region: no-drag;
 }
+
+/* Focus: no ring after a mouse click, one accent ring for the keyboard.
+   Without these, a button keeps Chromium's default ring once a later key
+   press switches to keyboard mode, and inside a rounded, overflow-hidden
+   box that ring is clipped into a stray border. The offset keeps the ring
+   outside the control; rows inside a box use an inset one instead. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:where(button, a, summary, [role='button'], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
