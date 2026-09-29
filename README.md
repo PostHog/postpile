@@ -23,7 +23,6 @@ You work from that list and the GitHub inbox stays in sync.
 
 ```
 brew install --cask posthog/tap/postpile
-xattr -dr com.apple.quarantine /Applications/PostPile.app
 open /Applications/PostPile.app
 ```
 
@@ -41,7 +40,7 @@ The first sync then takes a few minutes while the agent sorts your pull requests
 - Sends Mac notifications only for the pings that an agent judged worth it, from a poll every 10 seconds.
 - Uses GitHub as the source of truth for read and unread. Writes (approve, comment, mark read) stay locked until you open the lock in the status bar.
 
-**Status: alpha.** Its author uses it every day at PostHog. Expect rough edges, database migrations between versions, and features that fit that workflow first. The app is not notarized by Apple (see [First open](#first-open)).
+**Status: alpha.** Its author uses it every day at PostHog. Expect rough edges, database migrations between versions, and features that fit that workflow first.
 
 ## When not to use it
 
@@ -68,15 +67,9 @@ Or download `PostPile-<version>-mac-arm64.zip` from [Releases](https://github.co
 
 ### First open
 
-The app is ad-hoc signed. It is not signed with an Apple Developer ID and not notarized, so macOS blocks the first open. Do one of these:
+Since 0.2.0 the app is signed with PostHog's Apple Developer ID and notarized, so it opens like any other Mac app.
 
-- Clear the quarantine flag:
-
-  ```
-  xattr -dr com.apple.quarantine /Applications/PostPile.app
-  ```
-
-- Open the app once, then go to System Settings › Privacy & Security and click Open Anyway. On macOS 14 and older, right-click the app and choose Open.
+Coming from 0.1.0-alpha.0 (ad-hoc signed): run `brew upgrade --cask postpile` once, then `tccutil reset All com.posthog.postpile` to clear the permission entries macOS kept for the old builds.
 
 On the first launch, macOS asks for permission to show notifications. The first sync takes a few minutes while the agent sorts your PRs into topics.
 
@@ -97,7 +90,7 @@ PostPile checks `gh` and `claude` on start. When one is missing, the window says
 - **"Agent features are off: claude not found"** or **"claude is not logged in"**: install Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`) and run `claude auth login`. Until then the app runs on rules only.
 - **"Agent features are paused: Claude usage limit reached"**: the app tries the agent again when the limit resets. The rules keep working.
 - **It works in a terminal but not from Finder**: a Finder launch gets a minimal PATH. The app does not run your shell to find the real one. It adds the folders from `/etc/paths` and `/etc/paths.d`, and looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local`. For a binary somewhere else (mise, asdf, nix), add its folder to `~/.config/postpile/config.json` as `{ "toolPath": ["~/.local/share/mise/shims"] }` and restart the app. `POSTPILE_CLAUDE_BIN` still works for claude when started from a terminal. The log (Help › Reveal Logs) shows the PATH at start and every tool state change.
-- **macOS asks for permissions** ("access data from other apps", "files in your Documents folder" and similar): the current alpha is ad-hoc signed, so macOS treats each update as a new app and old grants do not carry over. Since 0.2.0 the app no longer runs your login shell (which ran everything in your `.zshrc` in PostPile's name), runs `gh` and `claude` in its own empty folder, and the work context sweep stays out of Documents, Desktop, Downloads, iCloud, cloud drives, other apps' containers and `/Volumes`. You can deny such a prompt. To clear old entries, run `tccutil reset All com.posthog.postpile`.
+- **macOS asks for permissions** ("access data from other apps", "files in your Documents folder" and similar): 0.1.0-alpha.0 was ad-hoc signed, so macOS treated each update as a new app and forgot old grants; since 0.2.0 the app is Developer ID signed and grants carry over between updates. The app also no longer runs your login shell (which ran everything in your `.zshrc` in PostPile's name), runs `gh` and `claude` in its own empty folder, and the work context sweep stays out of Documents, Desktop, Downloads, iCloud, cloud drives, other apps' containers and `/Volumes`. You can deny such a prompt. To clear old entries, run `tccutil reset All com.posthog.postpile`.
 
 ## Privacy
 

@@ -89,10 +89,8 @@ How to get access: PostHog already has these for its desktop app, as `APPLE_*` o
 - Share the five org secrets above with this repo. Simple, but org secrets shared this way are readable by any workflow in the repo, not gated by the environment and its tag rule.
 - Or copy the values into the `desktop-signing` environment of PostHog/postpile (`gh secret set <name> -R PostHog/postpile --env desktop-signing`). Only `v*` tag runs can read them then; the copies have to be updated by hand when the certificate or password rotates.
 
-After the first signed release: drop the xattr steps from README's Quick start and First open, and the "not notarized" line in its status paragraph.
-
 ## Notes
 
-- Until the Apple secrets are in place, releases are ad-hoc signed and not notarized. Gatekeeper blocks the first open until the quarantine flag is cleared or the user clicks Open Anyway, and macOS forgets privacy grants on every update. See [Signing and notarization](#signing-and-notarization).
+- Releases are Developer ID signed and notarized since 0.2.0 (the first one, 2026-09-29). Without the Apple secrets the workflow falls back to ad-hoc: Gatekeeper then blocks the first open until the quarantine flag is cleared or the user clicks Open Anyway, and macOS forgets privacy grants on every update. See [Signing and notarization](#signing-and-notarization).
 - The bundle id changed from `com.postpile.app` to `com.posthog.postpile` in 0.1.0-alpha.0. macOS asks for notification permission again on the first launch of the new id. Data in `~/Library/Application Support/PostPile` is unaffected.
 - Local builds never publish: the desktop `dist` script passes `--publish never` to electron-builder.
