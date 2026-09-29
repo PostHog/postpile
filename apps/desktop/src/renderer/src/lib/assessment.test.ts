@@ -55,6 +55,16 @@ describe('assessment', () => {
     expect(assessment({ ...glance, risk: '' }, null).risk).toBeNull();
   });
 
+  it('leaves the risk box out for a low risk, keeps it for medium, high and unlabeled ones', () => {
+    expect(assessment({ ...glance, risk: 'low - CI green.' }, null).risk).toBeNull();
+    expect(assessment({ ...glance, risk: 'Low alone.' }, null).risk).toBeNull();
+    expect(assessment({ ...glance, risk: 'High. Drops a table.' }, null).risk?.level).toBe('high');
+    expect(assessment({ ...glance, risk: 'Jobs could share cache entries.' }, null).risk).toEqual({
+      level: '',
+      lines: [{ mark: '▲', text: 'Jobs could share cache entries.' }],
+    });
+  });
+
   it('caps each box at three lines', () => {
     const long = 'One. Two. Three. Four. Five.';
     expect(assessment({ ...glance, forYou: long }, null).lines).toHaveLength(3);

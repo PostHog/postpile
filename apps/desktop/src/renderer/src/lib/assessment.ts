@@ -16,7 +16,7 @@ export interface Assessment {
   /** "· for you", "· for team-devex", "· your PR"; empty when for nobody in particular or not yours. */
   tag: string;
   lines: AssessmentLine[];
-  /** Null when there is no risk content at all. */
+  /** Null when there is no risk content at all, or the level is low (the verdict box covers it). */
   risk: { level: string; lines: AssessmentLine[] } | null;
   does: string;
   others: string;
@@ -75,12 +75,14 @@ function riskLines(rest: string): AssessmentLine[] {
  * The detail pane's assessment from a glance ("verdict as the box title"):
  * box 1 titled with the verdict holds the for-you lines, box 2 "RISK · level"
  * the agent's risk lines, then plain Does and Others lines. The
- * verdict and the risk level each appear once.
+ * verdict and the risk level each appear once. A low risk gets no box: a red
+ * box around "Low. CI green." reads as an alarm, and the verdict already
+ * says it looks fine; medium, high and an unlabeled risk keep it.
  */
 export function assessment(glance: Glance, forWhom: ForWhom | null): Assessment {
   const risk = splitRisk(glance.risk);
   const lines = riskLines(risk.rest);
-  const hasRisk = risk.level !== '' || lines.length > 0;
+  const hasRisk = risk.level !== 'low' && (risk.level !== '' || lines.length > 0);
   return {
     verdict: glance.verdict,
     title: TITLES[glance.verdict],

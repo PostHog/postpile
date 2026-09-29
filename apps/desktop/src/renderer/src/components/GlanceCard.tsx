@@ -65,8 +65,8 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
 /**
  * The agent's assessment of the PR (mockup ForWhom2 part 2, variant 1):
  * box 1 is titled with the verdict and holds the for-you lines, box 2
- * "RISK · level" the agent's risks (never an auto CI line), then plain Does
- * and Others lines.
+ * "RISK · level" the agent's risks (never an auto CI line, none for a low
+ * risk), then plain Does and Others lines.
  * The verdict and the risk level each show once. Pulled-in stack layers get
  * no glance; the card says so.
  */
