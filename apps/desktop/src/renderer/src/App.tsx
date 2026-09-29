@@ -6,6 +6,7 @@ import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
 import { useSearch } from './api/search.ts';
 import { useSetupStatus } from './api/setup.ts';
+import { sendTelemetry } from './api/telemetry.ts';
 import { useTools } from './api/tools.ts';
 import { useTopic, useTopics } from './api/topics.ts';
 import { useViewer } from './api/viewer.ts';
@@ -32,8 +33,10 @@ import type { SetupStepKey } from './lib/setup.ts';
 import { applyQueueFilter, filterCounts, firstGridTile, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
+import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { leadPr } from './lib/tiles.ts';
 import { toolsNotice } from './lib/tools.ts';
+import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 
@@ -79,6 +82,10 @@ export function App() {
   const [query, setQuery] = useState('');
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
   const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
+  const changeQueueFilter = (filter: QueueFilter | null): void => {
+    setQueueFilter(filter);
+    sendTelemetry('queue_filter_changed', { filter: filter ?? 'none' });
+  };
   // "Tell the agent what's wrong" from a memory line opens the selected tile's chat with a draft.
   const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
   const search = useSearch(query);
@@ -87,7 +94,11 @@ export function App() {
   // finishes or closes it, even though Accept makes the server stop asking for it.
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupRerun, setSetupRerun] = useState(false);
-  const [setupStep, setSetupStep] = useState<SetupStepKey>('checks');
+  const [setupStep, setSetupStepState] = useState<SetupStepKey>('checks');
+  const setSetupStep = (step: SetupStepKey): void => {
+    setSetupStepState(step);
+    sendTelemetry('setup_step_viewed', { step });
+  };
   const setupNeeded = setupStatus.data?.needed === true;
   useEffect(() => {
     if (setupNeeded) {
@@ -145,7 +156,13 @@ export function App() {
     }
     // pinKey stands for pin, whose object is new on every render.
   }, [pinKey]);
-  const pickTile = (tileId: string, prKey: string) => go({ pane: 'topic', topicId: activeItem?.topic.id ?? null, tileId, prKey });
+  const pickTile = (tileId: string, prKey: string) => {
+    const view = topic.data?.tiles.find((candidate) => candidate.tile.id === tileId);
+    if (view) {
+      sendTelemetry('tile_opened', tileOpenedProps(view));
+    }
+    go({ pane: 'topic', topicId: activeItem?.topic.id ?? null, tileId, prKey });
+  };
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 
   // A topic counts as seen when the user leaves it: picks another topic, the
@@ -293,7 +310,13 @@ export function App() {
           <TopicSidebar
             topics={items}
             activeTopicId={shownTopicId}
-            onSelect={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })}
+            onSelect={(topicId) => {
+              const item = items.find((candidate) => candidate.topic.id === topicId);
+              if (item) {
+                sendTelemetry('topic_opened', { section: topicTelemetrySection(item.queues) });
+              }
+              go({ pane: 'topic', topicId, tileId: null, prKey: null });
+            }}
             inboxCount={inboxCount}
             inboxOpen={pane === 'inbox'}
             onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
@@ -307,7 +330,7 @@ export function App() {
             onClearFilter={() => setQuery('')}
             shown={shownItems}
             queueFilter={queueFilter}
-            onQueueFilter={setQueueFilter}
+            onQueueFilter={changeQueueFilter}
             filterCounts={filterCounts(items)}
             viewer={viewer.data}
           />

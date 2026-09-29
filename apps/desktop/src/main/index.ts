@@ -1,16 +1,27 @@
 import { randomBytes } from 'node:crypto';
-import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
+import { arch, homedir, release } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
 import { extendedPath } from '@postpile/core';
 import fixPath from 'fix-path';
-import { applyLegacyEnv, DataDirLockedError, dataDirs, migrateLegacyData, profileFromEnv, type EngineService } from '@postpile/engine';
+import {
+  applyLegacyEnv,
+  DataDirLockedError,
+  dataDirs,
+  defaultPaths,
+  migrateLegacyData,
+  profileFromEnv,
+  telemetryFromEnv,
+  type EngineService,
+  type Telemetry,
+} from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, type RunningServer } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
-import { welcomeOnce } from './welcome.ts';
+import { welcomeOnce, WELCOME_FLAG_FILE } from './welcome.ts';
 
 const REPO_URL = 'https://github.com/PostHog/postpile';
 
@@ -35,6 +46,20 @@ fileLog.captureUnhandled();
 console.log(
   `PostPile ${app.getVersion()} starting: pid ${process.pid}, ${app.isPackaged ? 'packaged' : 'dev run'}, profile ${profileFromEnv(process.env)}, PATH ${process.env.PATH}`,
 );
+// One Telemetry instance for the whole process: main-process events below,
+// and the same instance is handed to engineFromEnv/startServer so the
+// engine's own events and the renderer's POST /api/telemetry share it.
+// Off by default in dev/fake/tests (DESIGN.md "Usage analytics"); flushed by
+// Engine.close() in shutdown() below.
+const telemetry: Telemetry = telemetryFromEnv({
+  env: process.env,
+  appVersion: app.getVersion(),
+  osVersion: release(),
+  arch: arch(),
+  telemetryIdFile: isFake() ? undefined : defaultPaths().telemetryIdFile,
+});
+process.on('uncaughtException', (error) => telemetry.captureException(error));
+process.on('unhandledRejection', (reason) => telemetry.captureException(reason));
 // Before Electron touches userData: it is the same folder as the database, and
 // the one-time move from the code-manager folder wants the new one absent.
 // The move only targets the real folder and never runs in dev.
@@ -91,7 +116,21 @@ function openExternalLink(url: string): void {
     return;
   }
   openedPrs.remember(url, Date.now());
+  telemetry.capture('opened_on_github', {});
   void shell.openExternal(url);
+}
+
+// window_focused, at most once per WINDOW_FOCUS_TELEMETRY_MS: a retention
+// signal ("did they come back to the app"), not a click counter.
+const WINDOW_FOCUS_TELEMETRY_MS = 30 * 60_000;
+let lastWindowFocusTelemetryMs = 0;
+
+function reportWindowFocused(): void {
+  const now = Date.now();
+  if (now - lastWindowFocusTelemetryMs >= WINDOW_FOCUS_TELEMETRY_MS) {
+    lastWindowFocusTelemetryMs = now;
+    telemetry.capture('window_focused', {});
+  }
 }
 
 /**
@@ -204,6 +243,7 @@ async function openWindow(): Promise<BrowserWindow> {
   });
   window.once('ready-to-show', () => window.show());
   window.on('focus', refreshOpenedPrs);
+  window.on('focus', reportWindowFocused);
   // Links (e.g. "GitHub") open in the browser; the app window never navigates away.
   window.webContents.setWindowOpenHandler(({ url }) => {
     openExternalLink(url);
@@ -252,7 +292,7 @@ async function start(): Promise<void> {
   // GitHub writes stay off until the footer lock is opened (kept in the store); POSTPILE_READ_ONLY=1 forces off.
   try {
     // The legacy folder move already ran at the top of this file, before userData existed.
-    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev', migrateLegacy: false });
+    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev', migrateLegacy: false, telemetry });
   } catch (error) {
     if (error instanceof DataDirLockedError) {
       const holder = error.holder;
@@ -268,14 +308,18 @@ async function start(): Promise<void> {
     throw error;
   }
   const config = appConfigFromEnv();
-  server = await startServer({ engine, port: 0, token, config });
+  server = await startServer({ engine, port: 0, token, config, telemetry });
   console.log(`server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}`);
   serveConnection(server.url, token);
+  // Before welcomeOnce below writes its flag file: whether this run is the very first one.
+  const firstLaunch = !existsSync(join(app.getPath('userData'), WELCOME_FLAG_FILE));
+  telemetry.capture('app_launched', { first_launch: firstLaunch });
   mainWindow = await openWindow();
   // A click opens the tile: show the window, then let the renderer navigate.
   const notifier = new MacNotifier({
     enabled: process.env.POSTPILE_MAC_NOTIFICATIONS !== '0',
     onClick: (target) => {
+      telemetry.capture('mac_ping_clicked', {});
       showWindow();
       if (target) {
         mainWindow?.webContents.send('postpile:open-ping', target);
@@ -291,7 +335,11 @@ async function start(): Promise<void> {
   // The fast notification poll runs as long as the app does, window open or not.
   engine.startLivePoll({
     intervalSeconds: pollSecondsFromEnv(process.env.POSTPILE_POLL_SECONDS),
-    onNotify: (notifications) => notifier.show(notifications),
+    onNotify: (notifications) => {
+      if (notifier.show(notifications) === 'shown') {
+        telemetry.capture('mac_ping_shown', { count: notifications.length });
+      }
+    },
   });
   // "What you're working on": checked now and every 30 minutes, runs once a day from 06:00.
   engine.startWorkContextSchedule();
