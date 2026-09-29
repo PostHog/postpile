@@ -1513,7 +1513,7 @@ Decided 2026-09-29. Until then Mark read, Mark done and Snooze in the detail
 pane acted on the whole tile, even with one PR of a set or stack selected,
 while Approve acted on that PR. Nobody decided that; it fell out of the tile
 being the unit of state and the detail pane taking the tile's primary
-button. Julian pressed "Mark done" on #103364 in the detail pane and the
+button. Julian pressed "Mark done" on one PR of a set in the detail pane and the
 whole eight-PR set went done: "this is honestly confusing. Why are these
 buttons, then, in the detail pane? I mean, approving also approves the PR
 and not the topic."
@@ -1536,7 +1536,7 @@ tile.**
 - Single-PR tiles behave exactly as before.
 
 **The dot marks what keeps the tile** (replaces "The new dot" rule of the
-same day). Julian on the Jev set: "What is not done there now? I'm still
+same day). Julian on that set: "What is not done there now? I'm still
 missing the dot", and on a second, read-only dot: "I would just fold it into
 the main ... there doesn't need to be a distinction". One coral dot before
 every tracked PR that keeps the tile from being done (`isPrDone` false), on
@@ -1552,8 +1552,8 @@ bold title) stays as decided on 28 Sept.
 **Opening a PR in PostPile also marks it done there** (changes part 3 of
 "You already dealt with it"). The open marks the PR read on GitHub only when
 nothing is asked of the viewer, so leaving it undone in PostPile was
-inconsistent: #108333 was read on GitHub, asked nothing, and still held the
-Jev tile open. Julian: "why would marking it read on GitHub not also mark it
+inconsistent: one PR of that set was read on GitHub, asked nothing, and still held the
+tile open. Julian: "why would marking it read on GitHub not also mark it
 [done] on PostPile, given all the conditions that we agreed upon". Now the
 open handles that PR too (`handledAt`), under the same conditions, checked
 per PR: that PR done after a mark-read, its tile not snoozed, writes
@@ -1562,15 +1562,15 @@ unlocked. A visit on github.com keeps the old behaviour (events seen, no
 the visit.
 
 **The verdict pill follows the footer.** A multi-PR tile showed the lead
-PR's verdict ("Not yours" from #103364) while the footer talked about
-#103752. The lead PR (`leadPr`) now prefers the PR of the tile's turn when
+PR's verdict ("Not yours" from the first PR) while the footer talked about
+another one. The lead PR (`leadPr`) now prefers the PR of the tile's turn when
 the turn is not `none`, then the newest unread reason, then the first open
 tracked PR.
 
-**Whose turn names the re-reviewer.** "bernatixer to address Radu-Raicea's
-changes" stayed after bernatixer pushed and re-requested Radu-Raicea's
+**Whose turn names the re-reviewer.** "rowan to address ada's
+changes" stayed after rowan pushed and re-requested ada's
 review. When the author pushed after a changes request and the requester is
-requested again, it is the requester's move: "Radu-Raicea to re-review"
+requested again, it is the requester's move: "ada to re-review"
 (whose-turn rule 4).
 
 **Own merged PRs clear on GitHub too** (changes rule 2 of "Handled quietly"
