@@ -1,4 +1,6 @@
 import type {
+  ReadCause,
+  ReadScope,
   ActionLogEntry,
   ActionResult,
   AgentRefreshOptions,
@@ -83,6 +85,8 @@ import {
   viewerApproval,
   buildPrSummary,
   buildTileView,
+  planRead,
+  prReadScope,
   deriveTileState,
   isRetiredSince,
   snoozeWrites,
@@ -160,7 +164,7 @@ import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
-import { FakeWrites } from './fake-writes.ts';
+import { FakeWrites, type FakeLocalChange } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
 interface MarkReadBatch {
@@ -343,7 +347,7 @@ export class FakeEngine implements EngineService {
     this.live = new FakeLivePoll(this.data, this.now, (prKey) => isPrInQuietRepo(prKey, this.repoSettings));
     this.writes = new FakeWrites(this.now, {
       revert: (local) => this.revertLocal(local.eventIds, local.handledPrKeys),
-      markReadHere: (prKeys, handleKeys) => this.markSampleRead(prKeys, handleKeys),
+      readHere: (scope, clickedAt) => this.readSample(scope, { kind: 'pending_completion', clickedAt }),
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
       unreadBefore: (cutoff) => this.threadsOnGitHub().filter((thread) => thread.unread && thread.updatedAt < cutoff).map((thread) => thread.id),
     });
@@ -1025,25 +1029,22 @@ export class FakeEngine implements EngineService {
   }
 
   /**
-   * Events seen, `handleKeys` handled; the unread sample
-   * threads go through the fake queue, which logs like the real one.
-   * `extraThreads` are threads without a stored PR (debug view).
+   * A read of the sample through core's read planner, like the engine's
+   * `readLocally`: the cause says which events turn seen (up to which
+   * cutoff) and whether the scope's handle keys turn handled. Returns what
+   * changed, for undo and for parking a locked batch.
    */
-  /** Events of `prKeys` seen, `handleKeys` handled; returns what changed. */
-  private markSampleRead(prKeys: PrKey[], handleKeys: PrKey[]): { eventIds: string[]; handledPrKeys: PrKey[] } {
-    const change = { eventIds: [] as string[], handledPrKeys: [] as PrKey[] };
-    for (const prKey of prKeys) {
-      for (const event of this.eventsOf(prKey).filter((candidate) => !candidate.seenAt)) {
-        event.seenAt = this.timestamp();
-        change.eventIds.push(event.id);
-      }
-      const state = this.userStateOf(prKey);
-      if (handleKeys.includes(prKey) && !state.handledAt) {
-        state.handledAt = this.timestamp();
-        change.handledPrKeys.push(prKey);
-      }
+  private readSample(scope: ReadScope, cause: ReadCause): FakeLocalChange {
+    const userStates = new Map(scope.prKeys.map((key) => [key, this.data.userStates.find((state) => state.prKey === key) ?? null]));
+    const plan = planRead({ scope, cause, events: this.eventsByKey(scope.prKeys), userStates, at: this.timestamp() });
+    const seen = new Set(plan.change.eventIds);
+    for (const event of this.data.events.filter((candidate) => seen.has(candidate.id))) {
+      event.seenAt = plan.seenAt;
     }
-    return change;
+    for (const key of plan.change.handledKeys) {
+      this.userStateOf(key).handledAt = plan.handledAt;
+    }
+    return { eventIds: plan.change.eventIds, handledPrKeys: plan.change.handledKeys };
   }
 
   private revertLocal(eventIds: string[], handledPrKeys: PrKey[]): void {
@@ -1080,7 +1081,7 @@ export class FakeEngine implements EngineService {
     const writesOn = this.writes.isEnabled();
     // Like ReadMarker: locked with something unread on GitHub, nothing changes until the write goes out.
     const changeHere = writesOn || threads.length === 0;
-    const local = changeHere ? this.markSampleRead(prKeys, handleKeys) : { eventIds: [], handledPrKeys: [] };
+    const local = changeHere ? this.readSample({ prKeys, handleKeys }, { kind: 'button' }) : { eventIds: [], handledPrKeys: [] };
     const batch: MarkReadBatch = {
       token: `undo-${this.newId()}`,
       batchId: `fake-batch-${this.newId()}`,
@@ -1162,7 +1163,7 @@ export class FakeEngine implements EngineService {
     if (check.kind === 'mark') {
       this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
     }
-    const change = this.markSampleRead([prKey], [prKey]);
+    const change = this.readSample(prReadScope(prKey, true), { kind: 'opened' });
     const handled = change.eventIds.length > 0 || change.handledPrKeys.length > 0;
     if (check.kind === 'handle' && handled) {
       this.writes.record({ action: 'mark_read', origin: 'quiet', outcome: 'local', threadId: thread.id, prKey, detail: 'no unread GitHub thread' });
