@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- Rules layer: one home per fact (2026-09-29, DESIGN.md "Rules layer: one
+  home per fact"): one module per predicate family (automation, who a
+  review request asks, did you act after X, which events ask). Every read
+  goes through one planner (`planRead` in `core/read-plan.ts`), waiting
+  GitHub writes through `pendingWriteStep`. Snoozes are per PR (migration
+  019 `pr_snooze`); push and CI snoozes end on merge or close. Topic status
+  has one writer (`nextTopicStatus` / `changeTopicStatus`, `retiredAt` in
+  migration 020). Loudness and pings are decision tables. PR facts
+  (`PrSummary.facts`) and button offers (`TileView.offers`) come from
+  core; the renderer and the fake engine only read them. Invariant tests
+  over real-shaped boards, every sample tile and MCP `pr_context` against
+  the pane. A snoozed tile with nothing left to mark leads with Open in
+  footer and pane.
+
 - Fixes from the codebase review (2026-09-29, DESIGN.md "Fixes from the
   codebase review"): a Codex CLI review of v0.11.0 found nine issues,
   eight confirmed and fixed. Pending reviews and pending review comments
@@ -30,9 +44,10 @@ now".
   what you look at"): PR-scoped mark read in the detail pane
   (`markPrRead`, per-PR label and undo), the not-done dot
   (`notDonePrKeys` over the new `PrSummary.done`), opened-in-PostPile
-  handles the PR (checked per PR), `leadPr` follows the turn, "X to
-  re-review" (`reReviewAsked`), own merged PRs clear quietly, and "Remove
-  <team>" (removes a team review request, unsubscribes, marks done).
+  handles the PR (checked per PR), the lead PR follows the turn (core
+  `leadPrKey`, shipped in `TileView.offers`), "X to re-review"
+  (`reReviewAsked`), own merged PRs clear quietly, and "Remove <team>"
+  (removes a team review request, unsubscribes, marks done).
   Checked in fake mode: set dots, detail pane on a set (no Snooze, no mark
   button on a PR that is still your move), Remove team-platform with its
   confirm, and an opened stack layer turning done by itself.
@@ -70,12 +85,13 @@ now".
 - Honest mark button, Snooze after read (2026-09-29, DESIGN.md "Tile
   faces" › After a mark-read): core `tileAfterMarkRead` runs `isPrDone` and
   `whoseTurn` over the data as a mark-read leaves it, shipped as
-  `TileView.afterRead`. Tile footer and detail action bar pick the label in
-  `lib/mark-read.ts`: "Mark read" on unread tiles, "Mark done" only where a
+  `TileView.afterRead`. Core `tileOffers` / `paneOffers` (`offers.ts`,
+  shipped as `TileView.offers`) pick the label for the tile footer and the
+  detail action bar: "Mark read" on unread tiles, "Mark done" only where a
   mark-read makes the tile done; read and still your move, Snooze is the
   ink button plus "Review on GitHub" (files tab; "Open on GitHub" on own
-  PRs) and the action bar drops the mark button. Read titles go regular
-  weight. The toast says "Marked read. Still your move: re-review." with
+  PRs) and the action bar drops the mark button. `lib/mark-read.ts` keeps
+  only the toast. Read titles go regular weight. The toast says "Marked read. Still your move: re-review." with
   Undo and "Snooze until next push". `tileListRank` keeps read your-move
   tiles with the unread ones, so a mark-read never moves a tile down.
   Checked on sample #1960 and #1870.
@@ -638,9 +654,22 @@ now".
   marker until it is sent (then logged `observed`) or discarded; the sync
   does not clear it.
 - Pending writes in fake mode live in memory (gone on restart).
+- Rules layer leftovers (2026-09-29, DESIGN.md "Rules layer: one home per
+  fact"):
+  - The live poll does not classify events, so its revive of a retired
+    topic still reads the rule's loudness; only the full sync revives on
+    effective loudness.
+  - `PrSummary.primaryAction` is only read by core's offers now and could
+    be dropped from the DTO.
+  - The old `snooze` table stays until migration 019 has shipped
+    everywhere; a later migration can drop it.
+  - Glance pings (Look closer) and opened-in-PostPile reads check snooze
+    per tile on purpose: they skip a PR while any tile holding it is
+    snoozed.
 - Fake mode (`POSTPILE_FAKE=1`) runs `FakeEngine`, a second
-  EngineService with its own copies of the tile/loudness/undo rules. It can
-  drift from the real engine. See decisions below.
+  EngineService. Tile state, views, offers, reads (`planRead`) and pending
+  writes (`pendingWriteStep`) come from core; its store, sync and undo are
+  its own and can drift from the real engine. See decisions below.
 - The full sync is on demand only (Sync now, app start); the live poll only
   syncs PRs whose threads moved and leaves dossiers, glances and sets to it.
 - Live poll, not tried by hand yet: clicking a real macOS notification (click
@@ -1010,9 +1039,9 @@ the app meanwhile.
   undo, Snooze in the pane only on single-PR tiles), the tile footer on the
   tile. One coral dot per tracked PR that keeps the tile from being done
   ("Not done yet"), on unread and open tiles, no second read-only dot.
-  Opening a PR in PostPile also handles it, checked per PR. `leadPr`
-  prefers the turn's PR. Whose turn names the re-reviewer after a push and
-  a re-request. The own-PR bot exception only applies while the PR is
+  Opening a PR in PostPile also handles it, checked per PR. The lead PR
+  (core `leadPrKey`) prefers the turn's PR. Whose turn names the
+  re-reviewer after a push and a re-request. The own-PR bot exception only applies while the PR is
   open. Marking read from a guess (finished team requests handled by a
   teammate, lost mentions) stays turned down. Added the same day: "Remove
   <team>" in the detail pane removes a team review request, unsubscribes
