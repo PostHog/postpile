@@ -209,8 +209,11 @@ review for CI, CODEOWNERS), "fyi" when they only follow along. ownerTeam: the ow
 "org/team" when you can tell, else null. whyYou: short, concrete, max ${limits.whyYou} chars ("team-devex review
 requested on .github/workflows", "subscribed"). When the rules decided, use their answer.
 
-area: one broad area for the topic, 1 to 3 words ("CI", "Dev env", "Desktop"). Reuse an area in
-use whenever it fits; a new one only for work that fits none of them.
+area: the part of the product or codebase the topic's work touches, 1 to 3 words ("Hogland",
+"Data warehouse", "posthog-cli"). Never the user's own field or team ("Dev tooling", "DevEx"):
+every topic they see would fit it. Reuse an area in use when the work touches that part; replace
+the current area when it is such a catch-all or no longer fits; a new one when no area in use
+names that part.
 
 flags: needs_user when the user should act or decide something; contradiction when new activity
 contradicts the dossier or a fact; looks_finished when the work seems done; off_topic_pr (with

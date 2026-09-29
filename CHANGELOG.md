@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Topic areas name the part of the product or codebase the work touches ("Data warehouse", "posthog-cli") instead of a catch-all like "Dev tooling". Existing topics get a better area the next time their dossier updates.
+
 ## 0.3.1 (2026-09-29)
 
 ### Changed

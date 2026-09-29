@@ -126,6 +126,11 @@ describe('dossierUpdatePrompt', () => {
     expect(text).toContain('(and 1 more merged or closed PRs)');
   });
 
+  it('asks for the part of the codebase as the area, never a catch-all like the user\'s field', () => {
+    expect(prompt).toContain('area: the part of the product or codebase the topic\'s work touches');
+    expect(prompt).toContain('replace\nthe current area when it is such a catch-all');
+  });
+
   it('says so when there is no dossier yet', () => {
     const first = dossierInput({ previous: null });
     expect(dossierUpdatePrompt(first, new DossierRefs(first))).toContain('None yet. This is the first write-up');
@@ -190,7 +195,8 @@ describe('topicAssignmentPrompt', () => {
   it('cuts topics by goal: says what area, topic, tile and set mean, and no longer prefers broad topics', () => {
     const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
     expect(prompt).toContain('- Topic: one goal someone is driving, with a finish line');
-    expect(prompt).toContain('A label on topics, never\n  a topic itself');
+    expect(prompt).toContain('A label on topics, never a topic itself');
+    expect(prompt).toContain('Never the developer\'s own field or team ("Dev tooling", "DevEx")');
     expect(prompt).toContain('A goal is live when the topic has open PRs or activity in\n  the last two weeks.');
     expect(prompt).not.toContain('broader existing topic');
   });
