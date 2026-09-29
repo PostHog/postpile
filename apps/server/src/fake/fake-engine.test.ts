@@ -301,15 +301,16 @@ describe('FakeEngine queues', () => {
     const layers = stack?.prs.filter((pr) => pr.provenance.kind === 'pulled_in') ?? [];
     expect(layers.map((pr) => pr.tier)).toEqual(['rest', 'rest', 'rest']);
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-depot');
-    // rowan's two open layers would add 2 to team and byTeam; only pinged PRs count.
+    // rowan's two pulled-in layers would add 2 to team and byTeam; only pinged PRs count.
+    // lyra's #1904 and #1907 in the set count for byTeam; their tier is a review or a reply.
     expect(item?.queues.tiers.team).toBe(2);
-    expect(item?.queues.byTeam).toBe(3);
+    expect(item?.queues.byTeam).toBe(5);
   });
 
   it('gives tiles and PRs their tier', async () => {
     const depot = (await new FakeEngine().getTopic('topic-depot'))?.tiles ?? [];
     const set = depot.find((view) => view.tile.id === 'set:turbo-cache');
-    expect(set?.prs.map((pr) => pr.tier)).toEqual(['needs_reply', 'to_review', 'rest']);
+    expect(set?.prs.map((pr) => pr.tier)).toEqual(['to_review', 'needs_reply', 'to_review', 'rest']);
     expect(set?.tier).toBe('needs_reply');
     expect(set?.prs[0]?.authorRelation).toBe('team');
   });

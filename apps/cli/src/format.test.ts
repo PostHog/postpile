@@ -11,11 +11,11 @@ describe('format over the fake engine', () => {
     const topic = await engine.getTopic('topic-depot');
     expect(topic).not.toBeNull();
     const topicText = formatTopic(topic!);
-    expect(topicText).toContain('[unread] set: Three PRs change how Turbo caches');
+    expect(topicText).toContain('[unread] set: Four PRs change how Turbo caches');
     expect(topicText).toContain('! acme/app#1902: lyra mentioned you');
 
     const pr = await engine.getPr('acme/app#1921');
-    expect(formatPr(pr!)).toContain('LOOKS_SAFE: Landing it apart from #1902');
+    expect(formatPr(pr!)).toContain('LOOKS_SAFE: Landing it apart from #1904');
   });
 
   it('prints a poll cycle with its ping decisions', async () => {

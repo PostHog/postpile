@@ -132,7 +132,7 @@ describe('server routes over the fake engine', () => {
     const kinds = new Set(rows.map((row) => row.landing.kind));
     expect(kinds).toEqual(new Set(['tile', 'not_pr', 'pr_not_synced']));
     const depot = rows.find((row) => row.prKey === 'acme/app#1902');
-    expect(depot?.landing).toMatchObject({ kind: 'tile', topicId: 'topic-depot', tileId: 'set:turbo-cache' });
+    expect(depot?.landing).toMatchObject({ kind: 'tile', topicId: 'topic-depot', tileId: 'stack:acme/app#1851' });
     expect(depot?.recentEvents.length).toBeGreaterThan(0);
 
     const limited = (await (await app.request('/api/debug/notifications?limit=2')).json()) as NotificationDebugRow[];
@@ -162,7 +162,7 @@ describe('server routes over the fake engine', () => {
     const detail = (await res.json()) as TopicDetail;
     const set = detail.tiles.find((view) => view.tile.id === 'set:turbo-cache');
     expect(set?.state.kind).toBe('unread');
-    expect(set?.state.unreadBecause[0]?.prKey).toBe('acme/app#1902');
+    expect(set?.state.unreadBecause[0]?.prKey).toBe('acme/app#1907');
     expect(detail.tiles.find((view) => view.tile.id === 'pr:acme/app#1899')?.state.kind).toBe('done');
     expect(detail.pendingProposals).toEqual([]);
   });
@@ -177,7 +177,8 @@ describe('server routes over the fake engine', () => {
     const res = await appWithFake().request('/api/prs/acme/app/1902');
     const detail = (await res.json()) as PrDetail;
     expect(detail.glance?.verdict).toBe('LOOK_CLOSER');
-    expect(detail.tileIds).toEqual(['set:turbo-cache', 'stack:acme/app#1851']);
+    // One unit per PR: #1902 is a stack layer, so it is in the stack tile only.
+    expect(detail.tileIds).toEqual(['stack:acme/app#1851']);
     expect(detail.events[0]?.display).toBe('loud');
   });
 
@@ -258,7 +259,8 @@ describe('server routes over the fake engine', () => {
     await post(app, '/api/feedback', { kind: 'not_related', tileId: 'set:turbo-cache', prKey: 'acme/app#1855' });
     const topic = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
     const set = topic.tiles.find((view) => view.tile.id === 'set:turbo-cache');
-    expect(set?.prs.map((pr) => pr.key)).toEqual(['acme/app#1902', 'acme/app#1921']);
+    expect(set?.prs.map((pr) => pr.key)).toEqual(['acme/app#1904', 'acme/app#1907', 'acme/app#1921']);
+    expect(set?.tile.stacks).toEqual([{ id: 'stack:acme/app#1904', prKeys: ['acme/app#1904', 'acme/app#1907'] }]);
   });
 
   it('turns a lasting chat point into tailoring once confirmed', async () => {

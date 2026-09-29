@@ -186,6 +186,18 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         { oid: 'sha1902', headline: 'Retry the warm-up once before failing', hoursAgo: 0.5 },
       ],
     }),
+    // lyra's two-layer stack, inside the Turbo cache set: the stack mark shows in a set too.
+    samplePr(clock, {
+      number: 1904, title: 'Hash Turbo inputs by lockfile only', author: 'lyra', state: 'OPEN',
+      size: [22, 9, 2], checks: 'SUCCESS', openedHoursAgo: 8,
+      baseRef: 'master', headRef: 'lyra/turbo-keys-1', reviewerUsers: [SAMPLE_VIEWER],
+    }),
+    samplePr(clock, {
+      number: 1907, title: 'Drop the per-job Turbo cache salt', author: 'lyra', state: 'OPEN',
+      size: [6, 14, 2], checks: 'SUCCESS', openedHoursAgo: 7,
+      baseRef: 'lyra/turbo-keys-1', headRef: 'lyra/turbo-keys-2', reviewerUsers: [SAMPLE_VIEWER],
+      comments: [{ id: 'issuecomment-5', author: 'lyra', body: '@you ok to drop the salt now that keys come from the lockfile?', hoursAgo: 0.8 }],
+    }),
     samplePr(clock, {
       number: 1921, title: 'Bump turbo to 2.5', author: 'renovate[bot]', state: 'OPEN',
       size: [4, 4, 2], checks: 'SUCCESS', openedHoursAgo: 3, reviewerTeams: ['acme/team-platform'],
@@ -356,6 +368,13 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'deploy', actor: 'deploy-bot', text: 'deployed a preview', hoursAgo: 1, rule: 'quiet', isBot: true },
       { kind: 'mention', actor: 'lyra', text: 'mentioned you: "does the warm-up need a flag?"', hoursAgo: 0.3, rule: 'loud' },
     ]),
+    ...sampleEvents(clock, 1904, [
+      { kind: 'review_requested', actor: 'lyra', text: 'requested a review from you', hoursAgo: 8, rule: 'loud', seen: true },
+    ]),
+    ...sampleEvents(clock, 1907, [
+      { kind: 'review_requested', actor: 'lyra', text: 'requested a review from you', hoursAgo: 7, rule: 'loud', seen: true },
+      { kind: 'mention', actor: 'lyra', text: 'mentioned you: "ok to drop the salt?"', hoursAgo: 0.8, rule: 'loud' },
+    ]),
     ...sampleEvents(clock, 1921, [
       { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 3, rule: 'quiet', isBot: true },
     ]),
@@ -450,9 +469,23 @@ function buildGlances(clock: SampleClock): Glance[] {
         { path: 'bin/turbo-cache-env.sh', why: 'Sets TURBO_API for every job.' },
       ],
     }),
+    sampleGlance(clock, 1904, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Changes Turbo cache keys, which you asked to hear about.',
+      does: 'Hashes task inputs by the lockfile instead of every package.json.',
+      risk: 'Low. One cold run after merge.',
+      othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 1907, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'lyra asks you whether the salt can go.',
+      does: 'Removes the per-job salt from Turbo cache keys, built on #1904.',
+      risk: 'Medium. Jobs could share cache entries they should not.',
+      othersSaid: 'lyra asked you directly.',
+    }),
     sampleGlance(clock, 1921, {
       verdict: 'LOOKS_SAFE',
-      forYou: 'Landing it apart from #1902 would make the cache go cold twice.',
+      forYou: 'Landing it apart from #1904 would make the cache go cold twice.',
       does: 'Minor Turbo bump.',
       risk: 'Low alone.',
       othersSaid: 'No human comments.',
@@ -522,11 +555,15 @@ function buildGlances(clock: SampleClock): Glance[] {
 
 function buildTiles(): Tile[] {
   return [
-    sampleTile(TOPIC.depot, 'set', 'set:turbo-cache', 'Three PRs change how Turbo caches', [
-      pinged(1902, 'review_requested'),
-      pinged(1921, 'review_requested'),
-      pinged(1855, 'subscribed'),
-    ]),
+    // #1902 sits only in the Depot stack below (one unit per PR); lyra's stack joins the set whole.
+    sampleTile(
+      TOPIC.depot,
+      'set',
+      'set:turbo-cache',
+      'Four PRs change how Turbo caches',
+      [pinged(1904, 'review_requested'), pinged(1907, 'mention'), pinged(1921, 'review_requested'), pinged(1855, 'subscribed')],
+      [[1904, 1907]],
+    ),
     sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(1851)}`, 'rowan/depot: e2e layer waits on you', [
       // Stack layers the sync pulled in by branch: no thread, no glance, no agent call.
       pulledIn(1851, 'stack layer below #1902'),
@@ -577,10 +614,11 @@ function buildSets(clock: SampleClock): PrSet[] {
     {
       id: 'turbo-cache',
       topicId: TOPIC.depot,
-      title: 'Three PRs change how Turbo caches',
-      take: 'All three touch the same Turbo cache keys; land them together.',
+      title: 'Four PRs change how Turbo caches',
+      take: 'All four touch the same Turbo cache keys; land them together.',
       members: [
-        { prKey: sampleKey(1902), reason: 'Moves the Turbo remote cache to Depot.' },
+        { prKey: sampleKey(1904), reason: 'Hashes Turbo inputs by the lockfile.' },
+        { prKey: sampleKey(1907), reason: 'Drops the per-job cache salt.' },
         { prKey: sampleKey(1921), reason: '2.5 changes cache hashing.' },
         { prKey: sampleKey(1855), reason: 'Turns off the cache for Storybook.' },
       ],

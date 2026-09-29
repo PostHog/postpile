@@ -1007,8 +1007,13 @@ export class FakeEngine implements EngineService {
       note: input.note,
     });
     if (input.kind === 'not_related' && input.prKey) {
-      tile.members = tile.members.filter((member) => member.prKey !== input.prKey);
-      return ok(`dropped ${input.prKey} from the set`);
+      // A set never tears a layer out of its stack: a stack layer takes its whole stack along.
+      const prKey = input.prKey;
+      const stack = tile.stacks.find((candidate) => candidate.prKeys.includes(prKey));
+      const dropped = stack ? stack.prKeys : [prKey];
+      tile.members = tile.members.filter((member) => !dropped.includes(member.prKey));
+      tile.stacks = tile.stacks.filter((candidate) => candidate !== stack);
+      return ok(`dropped ${dropped.join(', ')} from the set`);
     }
     if (input.kind === 'wrong_topic' && input.targetTopicId) {
       tile.topicId = input.targetTopicId;

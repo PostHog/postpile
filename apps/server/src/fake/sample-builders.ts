@@ -291,8 +291,14 @@ export function pulledIn(number: number, reason: string): TileMember {
   return { prKey: sampleKey(number), provenance: { kind: 'pulled_in', reason } };
 }
 
-/** A stack tile's members are its layers, bottom first, so it carries that one stack. */
-export function sampleTile(topicId: string, kind: TileKind, id: string, title: string, members: TileMember[]): Tile {
-  const stacks = kind === 'stack' ? [{ id, prKeys: members.map((member) => member.prKey) }] : [];
+/**
+ * A stack tile's members are its layers, bottom first, so it carries that one
+ * stack. A set passes the stacks inside it as PR numbers, bottom first.
+ */
+export function sampleTile(topicId: string, kind: TileKind, id: string, title: string, members: TileMember[], setStacks: number[][] = []): Tile {
+  if (kind === 'stack') {
+    return { id, topicId, kind, title, members, stacks: [{ id, prKeys: members.map((member) => member.prKey) }] };
+  }
+  const stacks = setStacks.map((numbers) => ({ id: `stack:${sampleKey(numbers[0]!)}`, prKeys: numbers.map(sampleKey) }));
   return { id, topicId, kind, title, members, stacks };
 }
