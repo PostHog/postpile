@@ -37,6 +37,10 @@ describe('repo scope', () => {
     expect(items[0]?.queues.tiers.to_review).toBe(2);
     expect((await h.engine.search('#3')).topics).toEqual([]);
     expect((await h.engine.search('#2')).topics.map((topic) => topic.topicId)).toEqual(['mixed']);
+    // The MCP server reads past the chosen repo; the choice itself stays.
+    expect((await h.engine.listTopics({ allRepos: true })).map((item) => item.topic.id).sort()).toEqual(['mixed', 'other-only']);
+    expect((await h.engine.search('#3', { allRepos: true })).topics.map((topic) => topic.topicId)).toEqual(['other-only']);
+    expect((await h.engine.listRepos()).scope).toBe('acme/app');
 
     // "All repos" again.
     expect((await h.engine.setRepoScope(null)).scope).toBeNull();

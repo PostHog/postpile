@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 import type { AgentService } from '@postpile/agent';
 import type {
+  ListScope,
   ActionLogEntry,
   ActionResult,
   ChatMessage,
@@ -542,8 +543,8 @@ export class Engine implements EngineService {
     return loadLastSyncReport(this.deps.store);
   }
 
-  async listTopics(): Promise<TopicListItem[]> {
-    return this.reads.listTopics();
+  async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
+    return this.reads.listTopics(scope);
   }
 
   async listRepos(): Promise<RepoOverview> {
@@ -729,8 +730,8 @@ export class Engine implements EngineService {
     return result;
   }
 
-  async search(query: string): Promise<SearchResult> {
-    return this.reads.search(query);
+  async search(query: string, scope?: ListScope): Promise<SearchResult> {
+    return this.reads.search(query, scope);
   }
 
   async listFacts(query: FactQuery): Promise<FactView[]> {

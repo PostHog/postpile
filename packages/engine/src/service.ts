@@ -18,6 +18,7 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  ListScope,
   LivePollStatus,
   SyncProgress,
   MemoryCorrection,
@@ -100,7 +101,8 @@ export interface EngineService {
    */
   refreshOnFocus(prKeys: PrKey[]): Promise<void>;
 
-  listTopics(): Promise<TopicListItem[]>;
+  /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
+  listTopics(scope?: ListScope): Promise<TopicListItem[]>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */
   getViewer(): Promise<ViewerView>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */
@@ -121,7 +123,7 @@ export interface EngineService {
    */
   setRepoQuiet(repo: string, quiet: boolean): Promise<RepoOverview>;
   /** Search bar: topics, tiles and PRs matching every term of `query`. Empty query, empty result. */
-  search(query: string): Promise<SearchResult>;
+  search(query: string, scope?: ListScope): Promise<SearchResult>;
   /**
    * Debug view of the raw notification stream: the newest `limit` stored
    * threads with where each landed in the app. Read only, never marks anything read.

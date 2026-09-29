@@ -86,6 +86,8 @@ import {
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
+  scopedSettings,
+  type ListScope,
   isTracked,
   glanceStateOf,
   type GlanceState,
@@ -449,10 +451,11 @@ export class FakeEngine implements EngineService {
   }
 
   /** Active topics the sidebar lists: with a PR in the chosen repo, like the engine. Their tiles are never narrowed. */
-  private listedTopics(): Topic[] {
+  private listedTopics(scope?: ListScope): Topic[] {
+    const settings = scopedSettings(this.repoSettings, scope);
     return this.data.topics.filter((topic) => {
       const keys = this.topicPrKeys(topic.id);
-      return topic.status === 'active' && keys.length > 0 && isTopicInScope(keys, this.repoSettings);
+      return topic.status === 'active' && keys.length > 0 && isTopicInScope(keys, settings);
     });
   }
 
@@ -601,14 +604,14 @@ export class FakeEngine implements EngineService {
   }
 
   /** Same urgency rule and order as the engine; ties keep the sample's order. */
-  async listTopics(): Promise<TopicListItem[]> {
+  async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     // A first run without gh: nothing synced yet, so the empty state shows.
     if (this.toolStatus.neverSynced()) {
       return [];
     }
     this.writes.settle();
     const viewer = this.viewer();
-    const items = this.listedTopics().map((topic): TopicListItem => {
+    const items = this.listedTopics(scope).map((topic): TopicListItem => {
       const tiles = this.tilesOfTopic(topic.id);
       const views = tiles.map((tile) => this.tileView(tile));
       const urgency = topicUrgency(
@@ -726,8 +729,8 @@ export class FakeEngine implements EngineService {
   }
 
   /** Same matcher as the engine, over the sample topics the sidebar lists. */
-  async search(query: string): Promise<SearchResult> {
-    const topics: SearchableTopic[] = this.listedTopics().map((topic) => ({
+  async search(query: string, scope?: ListScope): Promise<SearchResult> {
+    const topics: SearchableTopic[] = this.listedTopics(scope).map((topic) => ({
       topicId: topic.id,
       name: topic.name,
       area: topic.area,
