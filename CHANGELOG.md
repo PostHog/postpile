@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Comments and review texts from people now show in full in the detail pane, in "New since you looked" and in the activity list. They used to be cut to one short line. Bot and CI lines stay compact.
+
 ## 0.5.0 (2026-09-29)
 
 ### Changed
