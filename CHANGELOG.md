@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - New sidebar section "Changes you requested", right under Needs reply: open PRs where your latest review asks for changes. The ones where the author pushed or replied since come first; the ones still waiting on the author follow. The "author addressed your changes" case used to sit under To review. The Review filter covers both.
+- Each topic shows once in the sidebar, in its most urgent section, instead of in every section where it has a PR. The Mine, Team, Reply and Review filters still find a topic by any of its PRs.
 - Your own PRs stay under My PRs whatever area or team the code belongs to; only Needs reply ranks above them.
 
 ## 0.5.0 (2026-09-29)

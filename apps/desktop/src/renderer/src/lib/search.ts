@@ -26,18 +26,17 @@ export function filterTopics(items: TopicListItem[], filter: SearchFilter | null
   return filter ? items.filter((item) => filter.tilesByTopic.has(item.topic.id)) : items;
 }
 
-/** Topics top to bottom as the sidebar shows them, each once (its first section). */
+/** Topics top to bottom as the sidebar shows them; the layout lists each once. */
 export function sidebarOrder(items: TopicListItem[]): TopicListItem[] {
   const layout = queueLayout(items);
   const groups = sidebarGroups(layout.other);
-  const all = [
+  return [
     ...layout.sections.flatMap((section) => section.rows.map((row) => row.item)),
     ...groups.needsYou,
     ...groups.team.flatMap((group) => group.items),
     ...groups.routed,
     ...groups.fyi,
   ];
-  return all.filter((item, index) => all.indexOf(item) === index);
 }
 
 /**

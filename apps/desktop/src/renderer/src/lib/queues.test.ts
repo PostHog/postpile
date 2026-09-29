@@ -84,16 +84,26 @@ function withAddressed(entry: TopicListItem, changesAddressed: number): TopicLis
 }
 
 describe('queueLayout', () => {
-  it('lists a topic in every section it has PRs for and keeps rest-only topics apart', () => {
+  it('lists each topic once, in its highest section, and keeps rest-only topics apart', () => {
     const depot = item('depot', { needs_reply: 1, team: 2, rest: 3 });
     const ci = item('ci', { team: 1 });
     const docs = item('docs', { rest: 2 });
     const layout = queueLayout([depot, ci, docs]);
     expect(layout.sections.map((section) => [section.tier, section.count, section.rows.map((row) => [row.item.topic.id, row.count])])).toEqual([
       ['needs_reply', 1, [['depot', 1]]],
-      ['team', 3, [['depot', 2], ['ci', 1]]],
+      ['team', 1, [['ci', 1]]],
     ]);
     expect(layout.other.map((entry) => entry.topic.id)).toEqual(['docs']);
+  });
+
+  it('puts Changes you requested under Needs reply and above My PRs', () => {
+    const cache = item('cache', { changes_requested: 1, mine: 2 });
+    const own = item('own', { mine: 1, to_review: 1 });
+    const layout = queueLayout([own, cache]);
+    expect(layout.sections.map((section) => [section.tier, section.rows.map((row) => [row.item.topic.id, row.count])])).toEqual([
+      ['changes_requested', [['cache', 1]]],
+      ['mine', [['own', 1]]],
+    ]);
   });
 
   it('lists addressed change requests before ones waiting on the author, else keeps the API order', () => {

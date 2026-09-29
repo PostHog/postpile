@@ -74,10 +74,15 @@ export interface QueueSection {
 }
 
 export interface QueueLayout {
-  /** Needs reply to Team mentioned; empty sections are left out. A topic can sit in several. */
+  /** Needs reply to Team mentioned; empty sections are left out. Each topic sits in one at most. */
   sections: QueueSection[];
   /** Topics with only rest PRs (or none). */
   other: TopicListItem[];
+}
+
+/** The highest section the topic has a PR in, or null when it only has rest PRs (or none). */
+export function topicSectionTier(item: TopicListItem): PrTier | null {
+  return TIER_ORDER.find((tier) => tier !== 'rest' && item.queues.tiers[tier] > 0) ?? null;
 }
 
 /**
@@ -91,20 +96,20 @@ function changesRequestedRows(rows: QueueRow[]): QueueRow[] {
 }
 
 /**
- * Topics keep the API order (urgent first) inside every section, except that
+ * Each topic once, in its highest section, with that section's PR count.
+ * Topics keep the API order (urgent first) inside a section, except that
  * Changes you requested lists addressed ones first.
  */
 export function queueLayout(items: TopicListItem[]): QueueLayout {
   const sections: QueueSection[] = [];
   for (const tier of TIER_ORDER.filter((entry) => entry !== 'rest')) {
-    const inTier = items.filter((item) => item.queues.tiers[tier] > 0).map((item) => ({ item, count: item.queues.tiers[tier] }));
+    const inTier = items.filter((item) => topicSectionTier(item) === tier).map((item) => ({ item, count: item.queues.tiers[tier] }));
     const rows = tier === 'changes_requested' ? changesRequestedRows(inTier) : inTier;
     if (rows.length > 0) {
       sections.push({ tier, rows, count: rows.reduce((total, row) => total + row.count, 0) });
     }
   }
-  const inSomeTier = (item: TopicListItem) => TIER_ORDER.some((tier) => tier !== 'rest' && item.queues.tiers[tier] > 0);
-  return { sections, other: items.filter((item) => !inSomeTier(item)) };
+  return { sections, other: items.filter((item) => topicSectionTier(item) === null) };
 }
 
 /**

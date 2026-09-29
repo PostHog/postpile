@@ -321,12 +321,13 @@ keeps them and the main repo on a refine).
 ## Selection
 
 The sidebar lists topics in queue sections (`lib/queues.ts`,
-`queueLayout`; DESIGN.md "Queue sections"): Needs reply, My PRs, Team's
-PRs, To review, Team mentioned, then Other topics, which keeps the old
-groups from `lib/sidebar.ts` (`sidebarGroups`: Needs you, Your team by
-area, Routed, FYI). A topic can sit in several sections on purpose. Fold
-state is local UI state; Routed, FYI and Finished start folded. The
-Finished drawer (retired topics, `useFinishedTopics`) hides while search
+`queueLayout`; DESIGN.md "Queue sections"): Needs reply, Changes you
+requested, My PRs, Team's PRs, To review, Team mentioned, then Other
+topics, which keeps the old groups from `lib/sidebar.ts` (`sidebarGroups`:
+Needs you, Your team by area, Routed, FYI). Each topic sits once, in its
+highest section (`topicSectionTier`); the queue filters still match it by
+any PR. Fold state is local UI state; Routed, FYI and Finished start
+folded. The Finished drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so
 `App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The Mine / Team /
 Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
