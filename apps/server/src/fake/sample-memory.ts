@@ -178,7 +178,7 @@ function depotDossierV3(clock: SampleClock): Dossier {
       {
         text: 'Does the Turbo cache warm-up need a feature flag?',
         askedBy: 'lyra',
-        refs: [ref(clock, 'comment', 1902, 0.3, 'issuecomment-2'), ref(clock, 'event', 1902, 0.3, `${sampleKey(1902)}:mention:s1902-2`)],
+        refs: [ref(clock, 'comment', 1902, 0.3, 'issuecomment-2'), ref(clock, 'event', 1902, 0.3, `${sampleKey(1902)}:mention:issuecomment-2`)],
       },
       ...v2.openQuestions,
     ],
