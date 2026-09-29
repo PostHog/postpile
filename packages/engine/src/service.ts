@@ -30,6 +30,7 @@ import type {
   MemorySources,
   MemoryTarget,
   NotificationDebugRow,
+  QuietReadView,
   PendingProposals,
   PrDetail,
   PrKey,
@@ -138,6 +139,12 @@ export interface EngineService {
    * threads with where each landed in the app. Read only, never marks anything read.
    */
   debugNotifications(limit: number): Promise<NotificationDebugRow[]>;
+  /**
+   * "Handled quietly": PR threads PostPile marked read on GitHub by itself in
+   * the last HANDLED_QUIETLY_DAYS days (only bot activity since the user's
+   * last read), newest first, from the action log.
+   */
+  handledQuietly(): Promise<QuietReadView[]>;
   /** The newest `limit` action log entries: every GitHub-affecting action and local mark-reads. */
   actionLog(limit: number): Promise<ActionLogEntry[]>;
 

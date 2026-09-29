@@ -3,7 +3,7 @@
 // back drops the forward entries.
 
 /** What the middle pane shows. */
-export type Pane = 'topic' | 'inbox' | 'instructions' | 'notifications';
+export type Pane = 'topic' | 'inbox' | 'instructions' | 'notifications' | 'quiet';
 
 /**
  * One place the user went. Null ids mean "not picked": the app falls back to

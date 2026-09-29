@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActionLogEntry, NotificationDebugRow, NotificationLanding, NotificationThread } from '@postpile/core';
-import { actionLine, filterNotifications, landingLabel, NO_NOTIFICATION_FILTER, noTileReason, reasonsIn, threadRef } from './notifications.ts';
+import { actionLine, filterNotifications, landingLabel, NO_NOTIFICATION_FILTER, noTileReason, pingDecisionLine, reasonsIn, threadRef } from './notifications.ts';
 
 function row(thread: Partial<NotificationThread>, landing: NotificationLanding = { kind: 'not_pr' }): NotificationDebugRow {
   return {
@@ -21,6 +21,7 @@ function row(thread: Partial<NotificationThread>, landing: NotificationLanding =
     recentEvents: [],
     lastAction: null,
     decidedBy: null,
+    pingDecisions: [],
   };
 }
 
@@ -109,5 +110,27 @@ describe('notification debug helpers', () => {
     expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'pending' }) }, NOW)?.text).toMatch(/^pending while locked/);
     expect(actionLine({ ...row({}), lastAction: entry({ origin: 'footer', outcome: 'discarded' }) }, NOW)?.text).toMatch(/discarded: unread, like on GitHub/);
     expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'queued', detail: 'locked' }) }, NOW)?.text).toMatch(/turns pending/);
+  });
+});
+
+describe('quiet mark-reads and ping decisions', () => {
+  const now = new Date('2026-09-27T12:00:00Z');
+
+  it('says PostPile marked it read because only bots acted since the last read', () => {
+    const quiet = entry({ origin: 'quiet', outcome: 'github', batch: null, detail: 'only bot activity since your last read: trunk-io[bot], CI' });
+    const line = actionLine({ ...row({ unread: false }), lastAction: quiet }, now);
+    expect(line).toMatchObject({ text: 'marked read by PostPile: only bot activity since your last read · 2h ago', tone: 'app' });
+    expect(line?.title).toContain('trunk-io[bot], CI');
+  });
+
+  it('words a ping decision: pinged or withheld, by whom, why and when', () => {
+    const base = { threadId: 't', prKey: 'acme/app#1', title: '', body: '', at: '2026-09-27T09:00:00Z' };
+    expect(pingDecisionLine({ ...base, ping: false, source: 'agent', reason: 'an FYI, nothing asked' }, now)).toMatchObject({
+      text: 'withheld by the agent: an FYI, nothing asked · 3h ago',
+      pinged: false,
+    });
+    const pinged = pingDecisionLine({ ...base, ping: true, source: 'rules', reason: 'asks you', title: 'alice asks', body: 'Can you look?', at: '2026-09-27T11:59:30Z' }, now);
+    expect(pinged).toMatchObject({ text: 'pinged by the rules: asks you · just now', pinged: true });
+    expect(pinged.title).toContain('alice asks');
   });
 });

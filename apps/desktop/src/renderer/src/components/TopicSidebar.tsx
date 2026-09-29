@@ -241,6 +241,8 @@ interface TopicSidebarProps {
   onOpenInstructions: () => void;
   notificationsOpen: boolean;
   onOpenNotifications: () => void;
+  quietOpen: boolean;
+  onOpenQuiet: () => void;
   loading: boolean;
   error: string | null;
   /** The search bar's filter; null shows every topic. */
@@ -377,9 +379,12 @@ export function TopicSidebar(props: TopicSidebarProps) {
         </button>
         <button
           type="button"
-          disabled
-          title="Not wired yet: the API has no list of quietly handled PRs"
-          className="flex items-center gap-2 rounded-control px-2.5 py-[7px] text-[12.5px] text-ink-2 opacity-60"
+          onClick={props.onOpenQuiet}
+          aria-current={props.quietOpen ? 'true' : undefined}
+          title="Threads you had read that came back only because of bots, which PostPile marked read on GitHub in the last 7 days"
+          className={`flex items-center gap-2 rounded-control px-2.5 py-[7px] text-left text-[12.5px] ${
+            props.quietOpen ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
+          }`}
         >
           <span className="text-muted">
             <CheckIcon />

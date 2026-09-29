@@ -2035,9 +2035,15 @@ landed (`NotificationLanding`: tile with topic, or not a PR / PR not synced
 / no topic / topic hidden / no tile). Filters: reason, unread only, text.
 A click jumps to the tile through `go()`, so Back returns to the list;
 without a tile the row says why inline. The chevron shows the PR's five
-newest stored events. Opening a row never marks anything read; the row's
-"Mark read" button and its last logged action are described in "GitHub
-writes: lock, action log".
+newest stored events and the live poll's last three ping decisions for the
+thread; the row itself shows the newest one under its last action
+("withheld by the agent: the mention is an FYI · 3h ago", "pinged by the
+rules: …", "pinged by the fallback (agent unavailable): …"), from
+`ping_decision` (`NotificationDebugRow.pingDecisions`). A quiet mark-read
+("Handled quietly") shows as the last action: "marked read by PostPile:
+only bot activity since your last read", the bots in the tooltip. Opening a
+row never marks anything read; the row's "Mark read" button and its last
+logged action are described in "GitHub writes: lock, action log".
 
 ## GitHub writes: lock, action log
 
@@ -2137,7 +2143,8 @@ added with their writer methods), `origin` (who decided: `tile` = the user in
 a tile or the detail pane, `debug` = the notifications view, `queue` = the
 deferred queue when a batch's window ran out, `quit` = the flush on quit,
 `sync` / `poll` = a thread left the inbox, `footer` = the lock, also sending
-or discarding pending writes), `outcome` (`queued`, `pending`, `discarded`,
+or discarding pending writes, `cleanup` = the inbox cleanup, `quiet` =
+PostPile itself after a full sync, see "Handled quietly"), `outcome` (`queued`, `pending`, `discarded`,
 `github`, `local`, `skipped`, `failed`, `observed`), `thread_id`,
 `pr_key`, `tile_id`, `batch` (a UUID per mark-read batch, links the queue
 send to the click that queued it), `detail`. Rows at queue time: one per
@@ -2149,7 +2156,9 @@ may carry `local` for a read-only mark-read from before pending writes. Rows at 
 `observed` (already read on GitHub). `GET /api/debug/actions?limit=` lists the newest.
 
 **What marks read without a click** (grepped: `markThreadRead`,
-`notifications.markRead`, `markSeen`): nothing writes to GitHub on its own.
+`notifications.markRead`, `markSeen`): one thing writes to GitHub on its
+own, "Handled quietly" (bot-only activity since the user's last read, only
+while the lock is open, logged with origin `quiet`; see that section).
 Locally, the full sync and the live poll mark a stored thread read when it
 drops out of the inbox (read on github.com or another client); those rows
 are logged as `observed` with origin `sync` / `poll`. Every sync and poll
@@ -2221,6 +2230,82 @@ vacation). Rules in core `inbox-cleanup.ts`, engine `InboxCleanup`
     `inbox_cleanup_hidden_until`).
 - **Fake mode**: three old unread sample threads (16, 22, 45 days), the
   banner on every start, pending and send handled by `FakeWrites`.
+
+## Handled quietly
+
+Decided 2026-09-29. A PR thread the user had read comes back unread only
+because of bots (trunk-io, github-actions, review bots like codex or
+coderabbit, deploy bots, CI). PostPile marks it read on GitHub by itself.
+Real data on the day: 36 of 165 unread PR threads were bot-only since their
+last read. Rules only, no agent: core `quietReadCheck` (`quiet-reads.ts`),
+engine `QuietReads` (`writes/quiet-reads.ts`).
+
+**The rules**, all of them must hold:
+
+1. *Read before, bots since.* GitHub has the thread unread, it has a
+   `last_read_at`, and every stored event after it is automation
+   (`event.isBot`, or no actor at all: CI results carry an empty actor and
+   are flagged as bots already). No known event after the read counts as
+   "don't know": left alone.
+   The stored events only count when the PR snapshot was fetched at or
+   after the thread's `updated_at` (`snapshotCoversThread`). A sync
+   refreshes every thread but can leave a PR's snapshot stale (its PR cap, a
+   failed fetch); a human comment after the snapshot would then be missing
+   and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
+   Not "fetched in this very sync": a PR fetched while its bot activity was
+   still inside the grace period is not fetched again until it moves, and
+   the snapshot from then still covers the thread.
+2. *Not the user's own PR.* Bot reviews and CI on your own PR can mean work
+   (a failing check, a review bot's finding), so they stay unread.
+3. *No unseen merge without the user's review* ("Merged without your
+   review", rule 5: PostPile never marks those read by itself). Checked on
+   its own, since a merge queue bot merging counts as bot activity.
+4. *Nothing asked of the user.* The PR's tile is not unread (any PR of the
+   tile) and whose turn (`prWhoseTurn`, with the glance's NOT_YOURS as the
+   tile reads it) is not `you`.
+5. *Grace.* 10 minutes (`QUIET_GRACE_MS`) after the newer of the newest
+   bot event and the thread's `updated_at` (a bot push can carry an older
+   commit date), so a person answering the bot right away still counts.
+6. *Lock open.* Only while GitHub writes are unlocked. Locked, nothing
+   happens and nothing piles up as a pending write.
+
+**Where it runs**: at the end of every full sync (start, "Sync now", the
+hourly auto sync), after the digest and the retire step. The full sync has
+just fetched the inbox and every moved PR, so threads, events and read times
+are fresh, and the hourly auto sync is also what comes back once a grace
+period ran out. The live poll only fetches what moved and would need its own
+timer for the grace, so it is left out. At most 50 threads per sync
+(`QUIET_READS_PER_RUN`).
+
+**The write**: each thread is read again right before (`GET
+/notifications/threads/{id}`); read elsewhere or updated since the sync
+means leave it for the next sync. Else `GitHubWrites.markThreadRead` with
+origin `quiet`, detail "only bot activity since your last read: trunk-io[bot],
+CI", no undo window (nobody clicked). The app mirrors it: thread read up to
+its `updated_at`, the bot events before it seen, the topic's seen cursor
+moved (`advanceSeenFromGitHub`). A failure is logged `failed`, lands in the
+sync report and the next sync tries again. The sync log says how many.
+
+**The view**: sidebar footer "Handled quietly" (was a disabled stub) opens a
+list over the middle and detail columns: the quiet mark-reads that reached
+GitHub in the last 7 days (`HANDLED_QUIETLY_DAYS`), newest first, with
+repo#number, title, the bots and when (`GET /api/handled-quietly`,
+`EngineService.handledQuietly`, read from the action log). A click opens the
+tile when one holds the PR. Quiet on purpose: no coral, the count is faint
+mono. The notifications debug view shows the same entry as the row's last
+action. They count toward the hourly `pings_summarized` telemetry
+(`handled_quietly`).
+
+**History**: the idea was parked on 2026-09-29 when "merged, nothing new"
+(mark merged PRs read when nothing happened since) turned out to hide
+merges Julian wants to see (see "Merged without your review"). Bot-only
+activity since the last read is the safe case: the user already read
+everything a person said, and what came after can't ask them anything. Own
+PRs are excluded because bot reviews there can mean work.
+
+**Fake mode**: five sample quiet mark-reads in the action log (one older
+than 7 days, so it stays out of the view) and sample ping decisions
+(`fake-quiet.ts`); the fake poll's decisions are kept too.
 
 ## Live poll and Mac pings
 
@@ -2706,7 +2791,12 @@ message, are dropped.
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,
    `ask_sent` (AskComposer's send), `chat_message_sent`, `mac_ping_shown` /
-   `mac_ping_clicked`, `search_used` (throttled, query length bucket only),
+   `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
+   withheld_agent, handled_quietly: counts since the last summary, from
+   `ping_decision` and the action log's `quiet` mark-reads; the engine sends
+   it at most once an hour after a sync or a poll cycle, window end kept in
+   meta `pings_summarized_at`; nothing when every count is 0, the first call
+   only starts the clock; no per-notification events), `search_used` (throttled, query length bucket only),
    `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked`
    (the title bar pill opened) / `update_later_clicked`,
    `glance_retry_clicked` (Retry on a failed glance).

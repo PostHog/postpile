@@ -126,6 +126,12 @@ import {
   type SearchableTopic,
   type SearchResult,
   type Viewer,
+  botsFromQuietDetail,
+  HANDLED_QUIETLY_DAYS,
+  parsePrKey,
+  pingDecisionsByThread,
+  type PingDecision,
+  type QuietReadView,
 } from '@postpile/core';
 import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
@@ -138,6 +144,7 @@ import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { sampleThreads } from './fake-notifications.ts';
+import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
 import { FakeWrites } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -256,6 +263,8 @@ export class FakeEngine implements EngineService {
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
   private readonly writes: FakeWrites;
+  /** Sample decisions plus the fake poll's own, oldest sample first. */
+  private readonly pingDecisions: PingDecision[];
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
   private readonly recheckDelayMs: number;
   private readonly syncStepMs: number;
@@ -292,6 +301,11 @@ export class FakeEngine implements EngineService {
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
       unreadBefore: (cutoff) => this.threadsOnGitHub().filter((thread) => thread.unread && thread.updatedAt < cutoff).map((thread) => thread.id),
     });
+    // "Handled quietly" samples, logged like the real sync's quiet mark-reads.
+    for (const entry of sampleQuietReads(this.now())) {
+      this.writes.record(entry);
+    }
+    this.pingDecisions = samplePingDecisions(this.now());
     this.workContext = new FakeWorkContext(this.data.topics, this.now, options.sweepDelayMs ?? 2000);
     this.instructions = new FakeInstructions({
     now: this.now,
@@ -791,6 +805,7 @@ export class FakeEngine implements EngineService {
   async debugNotifications(limit: number): Promise<NotificationDebugRow[]> {
     this.writes.settle();
     const actions = this.writes.index();
+    const decisions = pingDecisionsByThread(this.pingDecisions);
     return this.threadsOnGitHub()
       .slice(0, limit)
       .map((thread) => {
@@ -801,6 +816,30 @@ export class FakeEngine implements EngineService {
           landing: this.landingOf(key),
           recentEvents: key === null ? [] : debugEventLines(this.eventsOf(key)),
           ...actionTrail(actions, thread.id, key),
+          pingDecisions: decisions.get(thread.id) ?? [],
+        };
+      });
+  }
+
+  async handledQuietly(): Promise<QuietReadView[]> {
+    this.writes.settle();
+    const since = new Date(this.now().getTime() - HANDLED_QUIETLY_DAYS * 24 * 3600_000).toISOString();
+    return this.writes
+      .recent(1000)
+      .filter((entry) => entry.origin === 'quiet' && entry.action === 'mark_read' && entry.outcome === 'github' && entry.prKey !== null && entry.at > since)
+      .map((entry) => {
+        const key = entry.prKey as PrKey;
+        const ref = parsePrKey(key);
+        return {
+          id: entry.id,
+          at: entry.at,
+          threadId: entry.threadId,
+          prKey: key,
+          repo: ref.repo,
+          number: ref.number,
+          title: this.data.prs.find((pr) => pr.key === key)?.title ?? key,
+          bots: botsFromQuietDetail(entry.detail),
+          landing: this.landingOf(key),
         };
       });
   }
@@ -1366,7 +1405,11 @@ export class FakeEngine implements EngineService {
     if (ghOff !== null) {
       return { kind: 'blocked', reason: ghOff };
     }
-    return this.live.poll();
+    const cycle = this.live.poll();
+    if (cycle.kind === 'done') {
+      this.pingDecisions.push(...cycle.decisions);
+    }
+    return cycle;
   }
 
   /** The real scheduler and burst grouping over the fake poll. */

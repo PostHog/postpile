@@ -14,6 +14,7 @@ import { InboxCleanup } from './components/InboxCleanup.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { NotificationsPane } from './components/NotificationsPane.tsx';
+import { HandledQuietlyPane } from './components/HandledQuietlyPane.tsx';
 import { PaneDivider } from './components/PaneDivider.tsx';
 import { RepoScopeMenu } from './components/RepoScopeMenu.tsx';
 import { SearchField } from './components/SearchField.tsx';
@@ -228,6 +229,8 @@ export function App() {
   } else if (pane === 'notifications') {
     // A jump goes through go(), so back returns to this list.
     main = <NotificationsPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
+  } else if (pane === 'quiet') {
+    main = <HandledQuietlyPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
   } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
   } else if (!topics.isPending && items.length === 0 && finishedId === null && toolsNotice(tools.data).gh) {
@@ -287,6 +290,7 @@ export function App() {
     onReset: () => panes.reset(pane),
   });
   const columns = paneColumns(panes.widths);
+  const wideList = pane === 'notifications' || pane === 'quiet';
 
   const tellAgent = {
     available: selected.view !== null,
@@ -329,6 +333,8 @@ export function App() {
             onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
             notificationsOpen={pane === 'notifications'}
             onOpenNotifications={() => go({ ...shown, pane: 'notifications' })}
+            quietOpen={pane === 'quiet'}
+            onOpenQuiet={() => go({ ...shown, pane: 'quiet' })}
             loading={topics.isPending}
             error={topics.error?.message ?? null}
             filter={filter}
@@ -360,8 +366,8 @@ export function App() {
             />
           )}
           {!showSetup && main}
-          {/* The notifications list is wide and has no tile of its own; it takes the detail pane's column too. */}
-          {!showSetup && pane !== 'notifications' && (
+          {/* The notifications and Handled quietly lists are wide and have no tile of their own; they take the detail pane's column too. */}
+          {!showSetup && !wideList && (
             <DetailPane
               key={selected.view?.tile.id ?? 'none'}
               view={selected.view}
@@ -371,8 +377,8 @@ export function App() {
             />
           )}
           <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />
-          {/* The notifications list spans both right columns, so there is no tile edge to drag. */}
-          {!showSetup && pane !== 'notifications' && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
+          {/* The wide lists span both right columns, so there is no tile edge to drag. */}
+          {!showSetup && !wideList && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
         </div>
         <StatusFooter topics={items} detail={topic.data} live={live.data} />
         <Toast />

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { debugEventLines, threadPrKey } from './debug-notifications.ts';
+import { debugEventLines, pingDecisionsByThread, threadPrKey } from './debug-notifications.ts';
+import type { PingDecision } from './pings.ts';
 import type { NotificationThread, PrEvent } from './types.ts';
 
 function thread(overrides: Partial<NotificationThread>): NotificationThread {
@@ -52,5 +53,18 @@ describe('debugEventLines', () => {
     expect(lines.map((line) => line.id)).toEqual(['e06', 'e05', 'e04', 'e03', 'e02']);
     expect(lines[0]).toMatchObject({ loudness: 'muted', seen: true });
     expect(lines[1]).toMatchObject({ loudness: 'loud', seen: false });
+  });
+});
+
+describe('pingDecisionsByThread', () => {
+  function decision(threadId: string, at: string): PingDecision {
+    return { threadId, prKey: 'acme/app#12', ping: false, source: 'rules', title: '', body: '', reason: 'quiet', at };
+  }
+
+  it('groups by thread, newest first, at most three each', () => {
+    const decisions = ['01', '02', '03', '04'].map((minute) => decision('t1', `2026-09-27T10:${minute}:00Z`));
+    const grouped = pingDecisionsByThread([...decisions, decision('t2', '2026-09-27T09:00:00Z')]);
+    expect(grouped.get('t1')?.map((d) => d.at)).toEqual(['2026-09-27T10:04:00Z', '2026-09-27T10:03:00Z', '2026-09-27T10:02:00Z']);
+    expect(grouped.get('t2')).toHaveLength(1);
   });
 });

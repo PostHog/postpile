@@ -588,7 +588,7 @@ now".
 ## Stubbed or thin
 
 - Desktop UI follows the chosen style, but the layout is still open. Not in
-  the UI yet: a "handled quietly" list (shown disabled), keyboard
+  the UI yet: keyboard
   navigation between tiles, dark mode, one-press approve from a tile (Approve lives in the
   detail pane, next to the glance).
 - The footer lock is enforced in the engine (`GitHubWrites`), not only in the
@@ -959,6 +959,16 @@ the app meanwhile.
   misbehaving integrations. Julian: "switch to 60s plus poll on focus".
   Replaces the 10s poll of 2026-09-28. DESIGN.md "Live poll and Mac pings".
 
+- **Handled quietly: bot-only activity gets marked read** (2026-09-29): a
+  thread you had read that turned unread only because of bots is marked read
+  on GitHub by PostPile after a full sync, 10 minutes after the last bot
+  activity at the earliest, only while writes are unlocked. Never your own PR
+  (bot reviews can mean work), never with an unseen merge without your
+  review, never while the tile is unread or it is your move. Rules only, no
+  agent. The sidebar's "Handled quietly" lists the last 7 days. Pings get
+  one hourly telemetry summary (`pings_summarized`, counts only), and the
+  notifications debug view shows ping decisions. DESIGN.md "Handled
+  quietly".
 - **A reply that asks nothing is not your move** (2026-09-29): whose turn,
   Needs reply and the after-read toast skip an ask (reply, mention,
   question) the events agent lowered to quiet or muted. The agent prompt

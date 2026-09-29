@@ -229,7 +229,8 @@ describe('FakeEngine rechecks', () => {
     expect(sent.length).toBeGreaterThan(0);
     expect(sent.every((row) => !row.thread.unread && row.lastAction?.outcome === 'github' && row.decidedBy?.origin === 'tile')).toBe(true);
     const log = await engine.actionLog(50);
-    expect(log.at(-1)).toMatchObject({ action: 'writes_on', origin: 'footer' });
+    // The oldest entry after the sample "Handled quietly" rows.
+    expect(log.filter((entry) => entry.origin !== 'quiet').at(-1)).toMatchObject({ action: 'writes_on', origin: 'footer' });
   });
 
   it('turns a locked mark-read into a pending write: the tile stays unread until it is sent', async () => {

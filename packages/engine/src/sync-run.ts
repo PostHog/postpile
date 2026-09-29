@@ -27,6 +27,7 @@ import { PhaseClock } from './phase-clock.ts';
 import type { RunDeps } from './run-deps.ts';
 import { runTelemetry } from './run-deps.ts';
 import { hasCompletedFirstSync, markFirstSyncCompleted } from './telemetry/first-sync.ts';
+import type { QuietReads } from './writes/quiet-reads.ts';
 
 function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): SyncReport {
   return {
@@ -56,7 +57,10 @@ interface LiveSync {
   stats: AgentCallStats;
 }
 
-/** One sync: fetch -> verify facts -> agent digest -> retire finished topics. Tiles are derived on read. */
+/**
+ * One sync: fetch -> verify facts -> agent digest -> retire finished topics
+ * -> mark bot-only threads read ("Handled quietly"). Tiles are derived on read.
+ */
 export class SyncRun {
   private live: LiveSync | null = null;
   /** The first sync in this process is "start" (the app's own auto-sync); every later one is "manual" ("Sync now"). */
@@ -67,8 +71,22 @@ export class SyncRun {
     private readonly github: GitHubSync,
     private readonly markReadQueue: MarkReadQueue,
     private readonly quota: GitHubQuota,
+    private readonly quietReads: QuietReads,
     private readonly log: (line: string) => void = (line) => console.log(line),
   ) {}
+
+  /**
+   * Last, on fresh threads and snapshots, with every event and read time of
+   * this sync counted. The hourly auto sync is also what comes back after
+   * the grace period.
+   */
+  private async handleQuietly(errors: string[]): Promise<void> {
+    const quiet = await this.quietReads.run();
+    errors.push(...quiet.errors);
+    if (quiet.marked.length > 0) {
+      this.log(`sync: handled quietly: ${quiet.marked.length} threads marked read on GitHub (only bot activity since the last read)`);
+    }
+  }
 
   /**
    * The running sync, null between syncs. Planned is what the budget granted
@@ -141,6 +159,7 @@ export class SyncRun {
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
       // Last, so the new events and what was read on GitHub both count.
       report.topicsRetired = retireFinishedTopics(store, now().toISOString());
+      await this.handleQuietly(errors);
     } catch (error) {
       crashed = true;
       errors.push(`sync: ${errorText(error)}`);

@@ -121,8 +121,10 @@ export type LoggedAction =
  *   (read on github.com or another client) and mirrored it locally
  * - footer: the lock in the status footer (also sending or discarding pending writes)
  * - cleanup: the inbox cleanup dialog ("mark everything older than N days read")
+ * - quiet: PostPile itself, after a full sync: a thread the user had read
+ *   turned unread only because of bots ("Handled quietly")
  */
-export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup';
+export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet';
 
 /**
  * What came of it.

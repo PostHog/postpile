@@ -8,6 +8,14 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - The live poll checks GitHub every minute, as GitHub's `X-Poll-Interval` asks, instead of every 10 seconds, and once right away when you switch to the app. `POSTPILE_POLL_SECONDS` can no longer go below GitHub's value.
 
+## 0.7.0 (2026-09-29)
+
+### Changed
+
+- Threads you had read that came back only because of bots (CI, merge queue, review and deploy bots) are marked read on GitHub by PostPile after a sync, 10 minutes after the last bot activity at the earliest. Never your own PRs, never when something is your move or new for you, never a merge without your review, and only while GitHub writes are unlocked. "Handled quietly" in the sidebar lists the last 7 days.
+- The notifications debug view shows each thread's ping decisions: pinged or withheld, by the rules or the agent, and why.
+- One hourly usage event counts pings sent and withheld and threads handled quietly (counts only).
+
 ## 0.6.0 (2026-09-29)
 
 ### Changed

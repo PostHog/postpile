@@ -44,8 +44,9 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Notifications</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
-          The raw GitHub notification threads as the last sync stored them, where each one landed, and what the app last did to it. A click opens its
-          tile. "Mark read" goes through the same queue, undo and footer lock as a tile. GitHub has no mark-unread, so nothing brings a read thread back.
+          The raw GitHub notification threads as the last sync stored them, where each one landed, what the app last did to it (PostPile's own quiet
+          mark-reads included), and the live poll's newest ping decision: pinged or withheld, by the rules or the agent, and why. A click opens its
+          tile; the chevron shows recent events and the last ping decisions. "Mark read" goes through the same queue, undo and footer lock as a tile. GitHub has no mark-unread, so nothing brings a read thread back.
         </p>
       </div>
       <LastSyncBlock />
