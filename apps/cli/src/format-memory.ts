@@ -81,7 +81,7 @@ export function formatConsolidation(report: ConsolidationReport): string {
     return 'consolidation skipped: agent features are off (claude missing, logged out or at its usage limit)';
   }
   const lines = [
-    `topic proposals ${report.topicProposalsFiled}, rule proposals ${report.ruleProposalsFiled}, facts merged ${report.factsMerged}, topics retired ${report.topicsRetired}`,
+    `topic proposals ${report.topicProposalsFiled}, rule proposals ${report.ruleProposalsFiled}, facts merged ${report.factsMerged}, topics retired ${report.topicsRetired}, small splits applied ${report.topicsSplit}`,
     `agent: ${formatCallStats(report.agentCallStats)}`,
   ];
   for (const error of report.errors) {

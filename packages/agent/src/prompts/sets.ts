@@ -1,6 +1,6 @@
 import type { PrSet } from '@postpile/core';
 import type { SetGroupingInput } from '../service.ts';
-import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine } from './shared.ts';
+import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, WORK_GLOSSARY } from './shared.ts';
 
 function setLine(set: PrSet): string {
   const members = set.members.map((m) => m.prKey).join(', ');
@@ -28,7 +28,9 @@ export function setGroupingPrompt(input: SetGroupingInput): string {
     .join('\n\n');
   const existing = input.existingSets.length === 0 ? '(none)' : input.existingSets.map(setLine).join('\n');
   return `You are grouping related GitHub pull requests inside one topic so a developer can review
-them together. The topic, as written from GitHub activity:
+them together.
+${WORK_GLOSSARY}
+The topic, as written from GitHub activity:
 ${githubData(`${input.topic.name}\n${input.topic.summary}`)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}

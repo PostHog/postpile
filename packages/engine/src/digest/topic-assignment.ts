@@ -14,6 +14,17 @@ export const ASSIGNMENT_BATCH_SIZE = 40;
 /** Retired topics stay on offer this long, so a late follow-up PR finds its old topic. */
 const RETIRED_OFFER_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** The newest updatedAt among the PRs, or null for none. ISO strings sort by time. */
+function newestUpdate(prs: Pr[]): string | null {
+  let newest: string | null = null;
+  for (const pr of prs) {
+    if (newest === null || pr.updatedAt > newest) {
+      newest = pr.updatedAt;
+    }
+  }
+  return newest;
+}
+
 /** How the PRs waiting for a topic split up, treating each stack as one unit. */
 interface StackSplit {
   /** Layers whose stack already shows in a topic: they join it without an agent call. */
@@ -116,12 +127,15 @@ export class TopicAssigner {
     return topics.map((t) => {
       const dossier = dossiers.get(t.id);
       const brief = dossier ? dossierBrief(dossier.dossier) : '';
+      const prs = [...this.deps.store.prs.getMany(this.deps.store.memberships.listForTopic(t.id).map((m) => m.prKey)).values()];
       return {
         id: t.id,
         name: t.name,
         summary: t.summary,
         brief: t.status === 'retired' ? `Finished, retired. ${brief}`.trim() : brief,
-        memberCount: this.deps.store.memberships.listForTopic(t.id).length,
+        memberCount: prs.length,
+        openCount: prs.filter((pr) => pr.state === 'OPEN').length,
+        lastActivityAt: newestUpdate(prs),
       };
     });
   }

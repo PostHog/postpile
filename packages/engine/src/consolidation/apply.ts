@@ -1,6 +1,8 @@
 import type { AreaMerge, ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@postpile/agent';
 import type { TopicProposal } from '@postpile/core';
 import type { Store } from '@postpile/store';
+import { ProposalActions } from '../actions/proposal-actions.ts';
+import { Board } from '../board.ts';
 import { newProposalId, newRuleProposalId } from '../ids.ts';
 import type { FactWriter } from '../memory/fact-writer.ts';
 import type { RetireGate } from './retire-gate.ts';
@@ -10,7 +12,17 @@ export interface ConsolidationCounts {
   ruleProposalsFiled: number;
   factsMerged: number;
   topicsRetired: number;
+  /** Small splits applied right away (`AUTO_SPLIT_MAX_PRS`). */
+  topicsSplit: number;
 }
+
+/**
+ * A split that moves at most this many PRs (stack layers included) is
+ * applied right away instead of waiting in the Inbox (decided 2026-09-29).
+ * A wrong one is fixed with "Wrong topic" on the PR, and that correction
+ * reaches the next consolidation prompt.
+ */
+export const AUTO_SPLIT_MAX_PRS = 3;
 
 /** How many decided rules are checked for "already proposed". */
 const DECIDED_RULES_CHECKED = 500;
@@ -60,6 +72,24 @@ export class ConsolidationApplier {
     private readonly now: () => Date,
   ) {}
 
+  /**
+   * Small enough to apply without asking: every named PR is in the topic
+   * now, the move (with its stack layers) is at most AUTO_SPLIT_MAX_PRS
+   * PRs, and at least one PR stays behind.
+   */
+  private isSmallSplit(idea: ConsolidationTopicProposal, at: string): boolean {
+    if (idea.kind !== 'split') {
+      return false;
+    }
+    const members = new Set(this.store.memberships.listForTopic(idea.topicId).map((m) => m.prKey));
+    if (!idea.prKeys.every((key) => members.has(key))) {
+      return false;
+    }
+    const board = Board.load(this.store, at);
+    const moved = new Set(idea.prKeys.flatMap((key) => board.movesWith(key)));
+    return moved.size <= AUTO_SPLIT_MAX_PRS && members.size > moved.size;
+  }
+
   private fileTopicProposal(idea: ConsolidationTopicProposal, at: string): void {
     if (this.store.topics.get(idea.topicId)?.status !== 'active') {
       return;
@@ -67,7 +97,13 @@ export class ConsolidationApplier {
     if (this.store.proposals.listForTopic(idea.topicId).some((filed) => sameIdea(filed, idea))) {
       return;
     }
-    this.store.proposals.add(toTopicProposal(idea, at));
+    const proposal = toTopicProposal(idea, at);
+    this.store.proposals.add(proposal);
+    if (this.isSmallSplit(idea, at)) {
+      new ProposalActions(this.store, this.now).decide(proposal.id, true);
+      this.counts.topicsSplit += 1;
+      return;
+    }
     this.counts.topicProposalsFiled += 1;
   }
 

@@ -68,6 +68,10 @@ export interface TopicChoice {
   brief: string;
   /** PRs in the topic now. Small topics are where fragmentation shows. */
   memberCount: number;
+  /** Open PRs among them: with none, the goal is likely reached or parked. */
+  openCount: number;
+  /** The newest updatedAt among its PRs; null when it has none. How live the goal still is. */
+  lastActivityAt: string | null;
 }
 
 export interface TopicAssignmentInput {

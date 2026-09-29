@@ -278,6 +278,7 @@ export class FakeMemory {
       ruleProposalsFiled: filed.length,
       factsMerged: 0,
       topicsRetired: 0,
+      topicsSplit: 0,
       agentCallStats,
       errors: [],
     };

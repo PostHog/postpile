@@ -3,7 +3,7 @@ import type { Fact, PrEvent } from '@postpile/core';
 import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, workContextBlock } from './shared.ts';
+import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, prLine, viewerLine, WORK_GLOSSARY, workContextBlock } from './shared.ts';
 
 function factLine(fact: Fact, shortId: string, staleNote: string): string {
   const since = fact.validFrom.slice(0, 10);
@@ -172,6 +172,7 @@ export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs
 for a developer who follows it on GitHub. You get the previous dossier and only what happened
 since. Rewrite the dossier so it is true now. The topic's current name:
 ${githubData(input.topic.name)}
+${WORK_GLOSSARY}
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}
@@ -213,7 +214,8 @@ use whenever it fits; a new one only for work that fits none of them.
 
 flags: needs_user when the user should act or decide something; contradiction when new activity
 contradicts the dossier or a fact; looks_finished when the work seems done; off_topic_pr (with
-prKey) when a member PR does not belong here. Usually empty.
+prKey) when a member PR fails the topic test above: it neither serves the goal nor came out
+of that work. Usually empty.
 
 facts: short statements worth remembering across topics, only when new or changed by the
 activity above. Each needs at least one ref. Entities: person (login, lowercase), pr

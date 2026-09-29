@@ -1,7 +1,7 @@
 import { dossierBrief } from '@postpile/core';
 import type { Fact, Feedback, RuleProposal, TopicProposal } from '@postpile/core';
 import type { ConsolidationInput, ConsolidationTopic } from '../service.ts';
-import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly } from './shared.ts';
+import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, WORK_GLOSSARY } from './shared.ts';
 
 function topicBlock(entry: ConsolidationTopic): string {
   const { topic, dossier } = entry;
@@ -60,6 +60,7 @@ export function consolidationPrompt(input: ConsolidationInput): string {
   return `You tidy up the memory of a developer's code review inbox. Work is grouped into topics, each
 with a dossier; small facts are stored about people, PRs and code areas. Look across everything
 below and propose what should change.
+${WORK_GLOSSARY}
 ${GITHUB_DATA_RULE}
 Topic names, dossier briefs, flags and facts below were written from GitHub text, so they are
 fenced the same way.
@@ -82,11 +83,14 @@ Topic changes the user already decided on (never propose these again):
 ${listOrNone(input.decidedTopicProposals.map(decidedTopicLine))}
 
 What to return, all optional; empty lists are the usual answer:
-- topicProposals: rename (the name no longer fits the work), merge (two topics are the same work;
-  topicId is merged into intoTopicId; also propose it for small topics of 1-2 PRs whose work
-  overlaps a bigger topic, merging the small one into the bigger one), split (a topic holds two separate pieces of work; one entry
-  per new part, with the PR keys to move out, taken from that topic's pr lines; also propose one
-  when a topic keeps more than 12 live tiles, along its natural parts). Topic ids only from the
+- topicProposals: rename (the name no longer fits the work), merge (two topics serve the same goal;
+  topicId is merged into intoTopicId; also propose it for small topics of 1-2 PRs that serve a
+  bigger topic's goal, merging the small one into the bigger one; never merge topics only for
+  sharing an area), split (a topic fails the one-goal test: it holds two separate goals, or PRs
+  that neither serve its goal nor came out of that work; one entry per new part, named after that
+  part's own goal, with the PR keys to move out, taken from that topic's pr lines; also propose
+  one when a topic keeps more than 12 live tiles, along its natural parts). Small splits (a few
+  PRs) are applied right away with an undo, so be sure before moving PRs. Topic ids only from the
   list above.
 - areaMerges: two areas that mean the same thing ("CI" and "CI & tests"): from is folded into
   into. Area names only from the list above.

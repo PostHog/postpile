@@ -128,6 +128,8 @@ export interface ConsolidationReport {
   ruleProposalsFiled: number;
   factsMerged: number;
   topicsRetired: number;
+  /** Small splits applied without asking; a wrong one is fixed with "Wrong topic". */
+  topicsSplit: number;
   agentCallStats: AgentCallStats;
   errors: string[];
 }
