@@ -228,7 +228,9 @@ now".
   below #N"), get no glance / topic / dossier / event calls, show in the
   anchor's topic, and turn pinged once notified. Fake data has a Depot
   stack with two pulled-in lower layers.
-- Back / forward navigation in the desktop app: title bar chevrons, Cmd+[ /
+- Back / forward navigation in the desktop app: title bar chevrons (since
+  2026-09-29 at the right end of the left column, next to the search; the
+  logo and name come first after the traffic lights), Cmd+[ /
   Cmd+], mouse side buttons, trackpad swipe (only fires with the classic
   "Swipe between pages" setting; not tried on hardware yet).
 - Title bar search that filters topics and tiles (Cmd+F, Esc clears):

@@ -312,7 +312,9 @@ history entry, and clearing the filter brings the pick back.
 - Names on the wire: preload global `window.postpile`, IPC channels
   `postpile:*`, API header `x-postpile-token`.
 - `titleBarStyle: 'hiddenInset'`: the renderer draws the 52px title bar and
-  keeps 88px free on the left for the traffic lights. Interactive elements in
+  keeps 88px free on the left for the traffic lights. Left column: logo +
+  name, DEV badge / Sample data pill, then the back / forward chevrons at
+  the right end (`ml-auto`), next to the centered search. Interactive elements in
   the bar must stay clickable (`.drag-region` sets them to no-drag).
 - The preload hands over only the API URL and token (asked from main with
   `ipcRenderer.sendSync('postpile:connection')`; main answers only its own
