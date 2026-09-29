@@ -70,6 +70,7 @@ The full dated list is under "Decided" in `NEXT.md`. Add to it when the user dec
 - `packages/github`: reader (ETag, batched GraphQL, `gh auth token`) and writer.
 - `packages/agent`: the claude CLI runner, prompts, zod schemas, models (`models.ts`).
 - `packages/engine`: sync, live poll, digest pipeline, actions, writes lock and action log, work-context sweep.
+- `packages/mcp`: read-only MCP server (`pr_context`, `topic`, `search_prs`, `whats_on_me`) over the engine's read methods.
 - `apps/server`: Hono API, token-protected, bound to 127.0.0.1, with the fake engine in `src/fake/`.
 - `apps/desktop`: Electron main (poll, Mac notifications) and the React renderer.
-- `apps/cli`: dev CLI (`sync`, `poll`, `sweep`, `topics`, `topic`, `pr`, …).
+- `apps/cli`: dev CLI (`sync`, `poll`, `sweep`, `topics`, `topic`, `pr`, `mcp`, …).

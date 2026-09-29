@@ -885,27 +885,27 @@ the app meanwhile.
   poll starts glance catch-ups during setup, before Accept, and the first
   sync waits for them.
 
-- MCP server for other agents on the machine (planned 2026-09-29, read-only
-  first). The first question to answer well: "what does PostPile know about
-  PR X, the topic around it and the progress".
-  - `postpile mcp`: a stdio subcommand of the CLI on the official MCP SDK;
-    `claude mcp add postpile -- postpile mcp`.
-  - Reads open the database read-only in-process through the same
-    `EngineService` read methods as `cli pr|topic --read-only` (no migrations,
-    no lock, safe next to the running app, works with the app closed). No
-    second API, no port or token discovery.
-  - Outputs are the existing read models (`PrDetail`, `TopicDetail`, dossier,
-    facts) as structured content, plus text from the CLI's formatters. Input
-    schemas are small zod objects. Nothing is written twice.
-  - Tools: `pr_context(pr)` (glance, key files, facts, what's new, stack
-    place, whose turn, plus the topic's status, goal, timeline, open
-    questions and the other PRs and where each stands), `topic(topic)`,
-    `search_prs(query)`, `whats_on_me()`.
-  - GitHub text is fenced as untrusted data in every answer: the calling
-    agent may have full tools.
-  - Writes later (notes on topic/PR memory, snooze, instruction proposals)
-    go through the running app's API, so they keep the writes lock, undo
-    and the user's say.
+- MCP server, read-only (built 2026-09-29, see DESIGN.md "MCP server"):
+  `postpile-mcp` in the app bundle (Homebrew links it), `pnpm cli mcp` from
+  the repo. Tools `pr_context`, `topic`, `search_prs`, `whats_on_me`.
+  - Verify once for real on the first signed release: `postpile-mcp` under
+    the hardened runtime (ELECTRON_RUN_AS_NODE with the release
+    entitlements), and `claude mcp add postpile -- postpile-mcp` from a
+    fresh brew install.
+  - Deviations from the plan: an app-bundle launcher instead of only a CLI
+    subcommand (the CLI is dev-only, users have no `postpile` binary); plain
+    text answers without structured content (the calling model reads the
+    text; both would double the tokens); list reads ignore the window's
+    repo choice (`ListScope.allRepos`).
+  - Connecting (built 2026-09-29, DESIGN.md "MCP server" › Connecting):
+    footer "agents: not connected" and the setup Accept step offer "Add to
+    Claude Code" (`claude mcp add --scope user`), only on a click. Verify
+    once for real in a signed build: the click adds it and `claude mcp get`
+    finds it from the app's own folder. Open: a moved app leaves a stale
+    path that still counts as connected.
+  - Later: writes (notes on topic/PR memory, snooze, instruction proposals)
+    through the running app's API, so they keep the writes lock, undo and
+    the user's say. The PR description is not in `pr_context` yet.
 
 ## Later
 
@@ -925,6 +925,12 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **MCP server: nudge, never install silently** (2026-09-29): a footer item
+  ("agents: not connected") and an optional box on the setup Accept step
+  offer "Add to Claude Code"; `claude mcp add --scope user` runs only on
+  that click, only in the installed app. "Not now" hides the footer item
+  for good; setup still offers it.
 
 - **Selection never moves on its own** (2026-09-29): after an action or a
   refresh the selection stays where it is; the fallback to the first match

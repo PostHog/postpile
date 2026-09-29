@@ -1,4 +1,6 @@
 import {
+  scopedSettings,
+  type ListScope,
   glanceStateOf,
   activityList,
   whatsNew,
@@ -246,12 +248,12 @@ export class ReadModels {
     return [...prs.values()];
   }
 
-  listTopics(): TopicListItem[] {
+  listTopics(scope?: ListScope): TopicListItem[] {
     const board = this.board();
     const topics = board.topics();
     const dossiers = this.store.dossiers.latestMany(topics.map((topic) => topic.id));
     const viewer = loadViewer(this.store);
-    const settings = loadRepoSettings(this.store);
+    const settings = scopedSettings(loadRepoSettings(this.store), scope);
     const items: TopicListItem[] = [];
     for (const topic of topics) {
       const tiles = board.tilesForTopic(topic.id);
@@ -342,9 +344,9 @@ export class ReadModels {
   }
 
   /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */
-  search(query: string): SearchResult {
+  search(query: string, scope?: ListScope): SearchResult {
     const board = this.board();
-    const settings = loadRepoSettings(this.store);
+    const settings = scopedSettings(loadRepoSettings(this.store), scope);
     // Only the topics the sidebar lists, each with all its tiles, like an opened topic.
     const listed = board.topics().filter((topic) => this.isListed(board.tilesForTopic(topic.id), settings));
     const topics: SearchableTopic[] = listed.map((topic) => ({

@@ -18,7 +18,10 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  ListScope,
   LivePollStatus,
+  McpConnectFrom,
+  McpConnectionView,
   SyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
@@ -100,7 +103,8 @@ export interface EngineService {
    */
   refreshOnFocus(prKeys: PrKey[]): Promise<void>;
 
-  listTopics(): Promise<TopicListItem[]>;
+  /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
+  listTopics(scope?: ListScope): Promise<TopicListItem[]>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */
   getViewer(): Promise<ViewerView>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */
@@ -121,7 +125,7 @@ export interface EngineService {
    */
   setRepoQuiet(repo: string, quiet: boolean): Promise<RepoOverview>;
   /** Search bar: topics, tiles and PRs matching every term of `query`. Empty query, empty result. */
-  search(query: string): Promise<SearchResult>;
+  search(query: string, scope?: ListScope): Promise<SearchResult>;
   /**
    * Debug view of the raw notification stream: the newest `limit` stored
    * threads with where each landed in the app. Read only, never marks anything read.
@@ -260,6 +264,22 @@ export interface EngineService {
   tools(): Promise<ToolsView>;
   /** "Check again": checks gh and claude now, whatever the backoff says. */
   checkTools(): Promise<ToolsView>;
+
+  /**
+   * Whether Claude Code has PostPile's MCP server (`claude mcp get postpile`
+   * in the app's own folder, at most every few minutes), the commands to add
+   * it by hand, and the footer's "Not now". Runs nothing in a dev build or
+   * while claude is missing or logged out.
+   */
+  mcpConnection(): Promise<McpConnectionView>;
+  /**
+   * "Add to Claude Code": `claude mcp add --scope user postpile -- <launcher>`.
+   * Only from a click, only in the installed app. Local: it changes Claude
+   * Code's config, never GitHub.
+   */
+  connectMcp(from: McpConnectFrom): Promise<ActionResult>;
+  /** "Not now" on the footer's offer: kept in meta, the footer item stays away. */
+  hideMcpConnect(): Promise<ActionResult>;
 
   /** Setup flow: whether it shows on start (first run: no instructions, never accepted or skipped) and the stored flag. */
   setupStatus(): Promise<SetupStatus>;

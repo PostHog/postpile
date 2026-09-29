@@ -17,6 +17,20 @@ export interface RepoSettings {
   quiet: string[];
 }
 
+/**
+ * For reads that list topics. allRepos ignores the title bar's repo choice:
+ * the MCP server answers other agents about any repo, whatever the window
+ * shows. Quiet repos stay quiet either way.
+ */
+export interface ListScope {
+  allRepos?: boolean;
+}
+
+/** The settings a read filters by: the chosen scope, or all repos. */
+export function scopedSettings(settings: RepoSettings, scope: ListScope = {}): RepoSettings {
+  return scope.allRepos ? { ...settings, scope: null } : settings;
+}
+
 export const DEFAULT_REPO_SETTINGS: RepoSettings = { scope: null, quiet: [] };
 
 /** One row of the repo menu. */

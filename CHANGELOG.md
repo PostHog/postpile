@@ -4,9 +4,15 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### New
+
+- Read-only MCP server, `postpile-mcp`: other agents can ask what PostPile knows about a PR and its topic (`pr_context`, `topic`, `search_prs`, `whats_on_me`). Set it up with `claude mcp add postpile -- postpile-mcp`. It ships inside the app and Homebrew links it. From the repo, run `pnpm cli mcp`.
+- "Add to Claude Code": while Claude Code does not have PostPile's MCP server, the status bar shows "agents: not connected". A click offers to add it (`claude mcp add --scope user`), shows the command for other agents, or hides the item with "Not now". The last setup step offers the same. Nothing is added without the click.
+
 ### Fixed
 
 - The first sync no longer runs for 20+ minutes on a big inbox. Notifications older than 30 days are left alone, one sync takes at most 60 PRs (newest and unread first), and when there are more, the next background sync follows 2 minutes later instead of an hour.
+- The repo menu says "6 topics" instead of a bare "6" that read like an unread count.
 
 ## 0.2.1 (2026-09-29)
 

@@ -22,6 +22,7 @@
   "dependencies": {
     "@postpile/core": "workspace:*",
     "@postpile/engine": "workspace:*",
+    "@postpile/mcp": "workspace:*",
     "@postpile/server": "workspace:*"
   },
   "bin": {

@@ -2407,11 +2407,99 @@ message, are dropped.
    `graphql`/`rest`, read from the sync's own error text — GitHub's GraphQL
    and REST rate-limit errors are shaped differently at the point
    `packages/github` builds them), `consolidation_ran` (proposals_filed).
+6. *MCP server*: `mcp_tool_called` (tool, found: false when the PR, topic
+   or search found nothing). Sent by the separate `postpile-mcp` process
+   under the same install id, so it counts toward the same person.
+   `mcp_connect_clicked` (from `footer`/`setup`, ok: Claude Code has the
+   server afterwards) and `mcp_connect_dismissed` (the footer's "Not now"),
+   both sent by the engine from the action itself.
 
 **Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
 and a scratch data dir sends one `telemetry_test` event (distinct id
 `postpile-dev-check`) and flushes; that event is not part of the catalogue
 the app sends in normal use.
+
+## MCP server (read-only)
+
+Other agents on the machine (Claude Code in a checkout, say) can ask
+PostPile what it knows before they act on a PR: `postpile-mcp`, a stdio MCP
+server on the official SDK (`packages/mcp`). Read-only, decided 2026-09-29;
+writes come later through the running app's API so they keep the writes
+lock, undo and the user's say.
+
+**Process**: its own process, not the app's. It opens the database the way
+`cli --read-only` does (`createEngine({ withoutLock: true })`: read-only
+SQLite, no migrations, no lock, no GitHub writes), so it works next to the
+running app and with the app closed, and needs no port or token discovery.
+The data is as fresh as the app's last sync and poll; every answer says when
+the last full sync finished. Stdout is the protocol, so `console.log` goes to
+stderr (`routeConsoleToStderr`).
+
+**Shipping**: electron-vite builds `apps/desktop/src/main/mcp.ts` next to the
+main process as `out/main/mcp.js`. `Contents/Resources/postpile-mcp`
+(`apps/desktop/build/postpile-mcp`, via `extraResources`) runs the app's own
+binary with `ELECTRON_RUN_AS_NODE=1` on it: no window, no dock icon, no Node
+install needed, the same engine code as the app. The cask links it into
+Homebrew's bin (`binary`); the script follows that symlink back into the
+bundle. From the repo: `pnpm cli mcp` (`POSTPILE_FAKE=1` for sample data).
+
+**Tools** (all `readOnlyHint`; inputs are small zod shapes):
+
+- `pr_context(pr)`: `owner/repo#123`, a PR URL, or `#123` when the number is
+  unique in the store. The PR (state, author, size), whose move, why it is
+  unread, stack layer, the viewer's approval, what is new since they looked,
+  the glance (verdict, for you, risk, files to open first), facts, the
+  activity list (the detail pane's, noise folded), then the topic: dossier
+  (`formatDossier`, shared with the CLI) and every tile with its PRs.
+- `topic(topic)`: an id, or part of a name when that picks one topic.
+- `search_prs(query)`: the search bar's matcher, 25 PRs at most.
+- `whats_on_me()`: live tiles in `needs_you` topics where it is the user's
+  move, then unread ones where it is not.
+
+Reads cover every repo (`listTopics` / `search` with `{ allRepos: true }`),
+whatever repo the window has chosen; quiet repos stay quiet. Answers are
+plain text: a freshness line, who the app works for, then one
+`<postpile-data>` fence around everything that comes from GitHub or from an
+agent summary of it, with a line telling the caller it is data, not
+instructions. A fence tag inside the data is broken up so a PR body can't
+close it. No structured content: text is what the calling model reads, and
+sending both would double the tokens.
+
+**Connecting** (decided 2026-09-29): the app nudges, it never installs by
+itself. The status footer shows "agents: not connected" while Claude Code
+lacks the server; a click opens a small popover with one sentence on what it
+does, **Add to Claude Code**, the server command for other agents (copy
+only) and "Not now". The last setup step (Accept) has the same offer in its
+own box below Accept, with a secondary button so Accept stays the one
+primary; it is never part of Accept.
+
+- Engine: `McpConnection` (`packages/engine/src/mcp-connection.ts`) behind
+  `mcpConnection()`, `connectMcp(from)` and `hideMcpConnect()`. Routes:
+  `GET /api/mcp-connection`, `POST /api/mcp-connection {from}`, `POST
+  /api/mcp-connection/not-now`.
+- Detection: `claude mcp get postpile` (exit 0 = there; "No MCP server
+  named" = not there; anything else, e.g. a timeout, = unknown and no nag).
+  It runs through the setup checks' command runner, with the claude binary
+  `ToolHealth` found, in the app's own empty folder (`agentCwdFor`), so it
+  sees user-scope servers and macOS asks for nothing. Cached for 5 minutes;
+  the renderer asks again on window focus and after an add.
+- Install, only on the click: `claude mcp add --scope user postpile --
+  <Contents/Resources/postpile-mcp>`, then a fresh check. "Already exists"
+  counts as done when the check finds it.
+- The launcher path is only known to Electron main, which passes
+  `mcpLauncher` into `engineFromEnv` / `createEngine`: `{kind: 'app', path:
+  process.resourcesPath/postpile-mcp}` when packaged, `{kind: 'dev',
+  repoRoot}` in a dev run. Dev runs, the CLI and the standalone server never
+  run claude for this: the state stays unknown (no footer item), the button
+  is disabled with the reason, and the command shows to copy (dev:
+  `claude mcp add postpile -e POSTPILE_PROFILE=default -- pnpm -C <repo> cli
+  mcp`).
+- claude missing or logged out: nothing runs, state unknown, no footer item
+  (the tool note already covers claude). A usage limit does not matter.
+- "Not now" is kept in meta (`mcp_connect_hidden_at`) and hides the footer
+  item for good; the setup offer still shows on "Run setup again".
+- Sample data (`FakeMcp`): starts not connected, a click "adds" it in
+  memory; never runs claude or touches the real Claude Code config.
 
 ## Architecture
 
@@ -2477,6 +2565,9 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/inbox-cleanup/mark-read` `{olderThanDays: 14\|30}` | `cleanUpInbox()` (GitHub write, pending while locked) |
 | `POST`/`DELETE /api/inbox-cleanup/start-fresh` | `startFresh()` / `clearStartFresh()` |
 | `POST /api/inbox-cleanup/not-now` | `hideInboxCleanup()` (7 days) |
+| `GET /api/mcp-connection` | `mcpConnection()` (cached `claude mcp get postpile`, commands, "Not now") |
+| `POST /api/mcp-connection` `{from: footer\|setup}` | `connectMcp()` (`claude mcp add`, installed app only) |
+| `POST /api/mcp-connection/not-now` | `hideMcpConnect()` |
 | `GET /api/repos` | `listRepos()` (repo menu: counts, scope, quiet) |
 | `POST /api/repos/scope` `{repo}` | `setRepoScope()` (one repo, null = all) |
 | `POST /api/repos/quiet` `{repo, quiet}` | `setRepoQuiet()` |

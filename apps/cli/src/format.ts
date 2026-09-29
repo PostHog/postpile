@@ -1,6 +1,6 @@
-import type { PrDetail, SyncReport, TopicDetail, TopicListItem } from '@postpile/core';
+import { formatDossier, formatFacts, type PrDetail, type SyncReport, type TopicDetail, type TopicListItem } from '@postpile/core';
 import type { PollCycle } from '@postpile/engine';
-import { formatCallStats, formatDossier, formatFactCounts, formatFacts } from './format-memory.ts';
+import { formatCallStats, formatFactCounts } from './format-memory.ts';
 
 export function formatSync(report: SyncReport): string {
   if (report.blockedBy) {

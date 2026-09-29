@@ -11,12 +11,18 @@ const workspacePackages = [
   '@postpile/agent',
   '@postpile/engine',
   '@postpile/server',
+  '@postpile/mcp',
 ];
 
 export default defineConfig({
   main: {
     build: {
       externalizeDeps: { exclude: workspacePackages },
+      // mcp.js is the read-only MCP server that Resources/postpile-mcp runs
+      // under ELECTRON_RUN_AS_NODE; it shares the engine code, not the process.
+      rollupOptions: {
+        input: { index: 'src/main/index.ts', mcp: 'src/main/mcp.ts' },
+      },
     },
   },
   preload: {

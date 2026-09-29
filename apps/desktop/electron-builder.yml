@@ -27,6 +27,11 @@ files:
   # finds no production deps today; this keeps it that way if one is added.
   - "!**/node_modules/**"
 asar: true
+# The MCP launcher (see the file). Lands in Contents/Resources, executable,
+# and is signed and notarized with the rest of the bundle.
+extraResources:
+  - from: build/postpile-mcp
+    to: postpile-mcp
 mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools

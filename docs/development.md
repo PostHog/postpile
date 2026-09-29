@@ -90,6 +90,7 @@ packages/store    SQLite schema, migrations, repositories
 packages/github   gh token, REST notifications, GraphQL PRs, writer
 packages/agent    AgentRunner (claude CLI), prompts, answer schemas
 packages/engine   sync orchestration, live poll, work context sweep, EngineService
+packages/mcp      read-only MCP server over the engine's read methods
 apps/server       Hono JSON API over EngineService, plus the sample-data engine
 apps/desktop      Electron shell, Mac notifications, React UI
 apps/cli          dev CLI, plain text

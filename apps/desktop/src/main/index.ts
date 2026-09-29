@@ -15,6 +15,7 @@ import {
   type EngineService,
   type Telemetry,
 } from '@postpile/engine';
+import type { McpLauncher } from '@postpile/core';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, updateSourceFromEnv, type RunningServer } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { ConsolidationSchedule } from './consolidation-schedule.ts';
@@ -103,6 +104,19 @@ if (!firstInstance) {
 const iconFile = join(import.meta.dirname, '../../build/icon.png');
 // The bundled renderer page; the only page (besides the dev server) that gets the API token.
 const rendererFile = join(import.meta.dirname, '../renderer/index.html');
+
+/**
+ * How Claude Code starts the read-only MCP server: the launcher in
+ * Contents/Resources (electron-builder's extraResources) when packaged, the
+ * repo's `pnpm cli mcp` in a dev run (apps/desktop is the app path). Only the
+ * packaged one is ever added by the app itself, and only on a click.
+ */
+function mcpLauncher(): McpLauncher {
+  if (app.isPackaged) {
+    return { kind: 'app', path: join(process.resourcesPath, 'postpile-mcp') };
+  }
+  return { kind: 'dev', repoRoot: join(app.getAppPath(), '..', '..') };
+}
 
 let engine: EngineService | null = null;
 let server: RunningServer | null = null;
@@ -307,7 +321,7 @@ async function start(): Promise<void> {
   // GitHub writes stay off until the footer lock is opened (kept in the store); POSTPILE_READ_ONLY=1 forces off.
   try {
     // The legacy folder move already ran at the top of this file, before userData existed.
-    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev', migrateLegacy: false, telemetry });
+    engine = engineFromEnv({ lockKind: app.isPackaged ? 'packaged' : 'dev', migrateLegacy: false, telemetry, mcpLauncher: mcpLauncher() });
   } catch (error) {
     if (error instanceof DataDirLockedError) {
       const holder = error.holder;

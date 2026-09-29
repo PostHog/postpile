@@ -1,0 +1,19 @@
+#!/bin/sh
+# PostPile's read-only MCP server on stdin/stdout, for other agents:
+#   claude mcp add postpile -- postpile-mcp
+# (Homebrew links it into its bin; without Homebrew use the full path,
+# /Applications/PostPile.app/Contents/Resources/postpile-mcp.)
+# Runs the app's own binary as plain Node (no window, no dock icon) on the
+# bundled server. Reads the database next to the running app, or with the
+# app closed; never writes to GitHub.
+self="$0"
+# Follow the Homebrew symlink back into the app bundle.
+while [ -L "$self" ]; do
+  link="$(readlink "$self")"
+  case "$link" in
+    /*) self="$link" ;;
+    *) self="$(dirname "$self")/$link" ;;
+  esac
+done
+app="$(cd "$(dirname "$self")/../.." && pwd)"
+ELECTRON_RUN_AS_NODE=1 exec "$app/Contents/MacOS/PostPile" "$app/Contents/Resources/app.asar/out/main/mcp.js" "$@"
