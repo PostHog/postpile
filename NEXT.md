@@ -877,6 +877,30 @@ the app meanwhile.
   unlock popover is where the user decides). Keep that? Should the lock also
   be persisted in fake mode?
 
+## Next after 0.2.0
+
+- MCP server for other agents on the machine (planned 2026-09-29, read-only
+  first). The first question to answer well: "what does PostPile know about
+  PR X, the topic around it and the progress".
+  - `postpile mcp`: a stdio subcommand of the CLI on the official MCP SDK;
+    `claude mcp add postpile -- postpile mcp`.
+  - Reads open the database read-only in-process through the same
+    `EngineService` read methods as `cli pr|topic --read-only` (no migrations,
+    no lock, safe next to the running app, works with the app closed). No
+    second API, no port or token discovery.
+  - Outputs are the existing read models (`PrDetail`, `TopicDetail`, dossier,
+    facts) as structured content, plus text from the CLI's formatters. Input
+    schemas are small zod objects. Nothing is written twice.
+  - Tools: `pr_context(pr)` (glance, key files, facts, what's new, stack
+    place, whose turn, plus the topic's status, goal, timeline, open
+    questions and the other PRs and where each stands), `topic(topic)`,
+    `search_prs(query)`, `whats_on_me()`.
+  - GitHub text is fenced as untrusted data in every answer: the calling
+    agent may have full tools.
+  - Writes later (notes on topic/PR memory, snooze, instruction proposals)
+    go through the running app's API, so they keep the writes lock, undo
+    and the user's say.
+
 ## Later
 
 - Replace FakeEngine with the real Engine over a seeded store. Not now
