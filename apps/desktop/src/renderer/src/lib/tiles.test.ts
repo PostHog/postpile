@@ -61,7 +61,7 @@ describe('own PR helpers', () => {
   it('calls news on your own PR FYI unless whose-turn says it is your move', () => {
     const view = setView([mine(1)], ['acme/app#1']);
     expect(isFyiNews(view)).toBe(true);
-    expect(isFyiNews({ ...view, turn: { kind: 'you', who: null, what: 'Answer 1 thread', prKey: 'acme/app#1' } })).toBe(false);
+    expect(isFyiNews({ ...view, turn: { kind: 'you', move: 'address_changes', who: null, what: 'Answer 1 thread', prKey: 'acme/app#1' } })).toBe(false);
     expect(isFyiNews(setView([summary(1)], ['acme/app#1']))).toBe(false);
     expect(isFyiNews(setView([mine(1)]))).toBe(false);
   });

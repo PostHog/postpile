@@ -38,7 +38,7 @@ const markReadOrigin = z.enum(['tile', 'debug', 'cleanup']);
 const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push', 'ci_green']);
 const queryLengthBucket = z.enum(['short', 'medium', 'long']);
 const queueFilter = z.enum(['mine', 'team', 'reply', 'review', 'none']);
-const topicSection = z.enum(['needs_reply', 'my_prs', 'team_prs', 'to_review', 'team_mentioned', 'other']);
+const topicSection = z.enum(['needs_reply', 'changes_requested', 'my_prs', 'team_prs', 'to_review', 'team_mentioned', 'other']);
 
 // -----------------------------------------------------------------------
 // 4. Agent trust

@@ -110,7 +110,9 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 Rules classify first (`ruleLoudness` in core). The agent may override with a
 reason; overrides are stored on the event. `seen` is user state (`seenAt`), not
-a classification.
+a classification. The effective loudness (override over rule) of a reply,
+mention or question also decides whether it is still an ask for whose turn:
+lowered to quiet or muted, it asks nothing (see "Whose turn", rule 2).
 
 **Tile state is derived, never stored**:
 
@@ -535,7 +537,18 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 9. **events** (`event_classification`, v2: one call per topic, up to 20 PRs
    per call, `classifyEventBatch`): second opinion on loud, unseen events
    without an override logged after the topic's classify cursor, plus
-   unseen `commits_after_approval` events (quiet by rule). For those the
+   loud personal asks (mention, question, reply) already read, since those
+   stay the user's move until answered (2026-09-29), plus
+   unseen `commits_after_approval` events (quiet by rule). A reply or
+   mention that asks nothing ("thanks", "yeah that's fine") goes quiet; a
+   question or request still waiting for the user stays loud. Once per
+   topic, on the first full syncs after that rule came in, every unanswered
+   loud personal ask without an override on an open PR goes along too,
+   wherever the cursor is (`isUnansweredAsk`), so asks judged by the older
+   prompt get the new rule. Meta `events_rejudge_asks_v1:<topic>` (or
+   `:unsorted`) marks a topic whose batches ran, so a topic the call cap
+   skipped does not make the others send theirs again; the global
+   `events_rejudge_asks_v1` ends it once every topic did. For pushes the
    prompt shows the PR's files and says plain follow-up pushes are
    normally not worth the user's attention; the agent raises one to loud,
    with a one-line reason, only for a substantial change in CI, build or
@@ -1498,7 +1511,11 @@ other reviewers (submitted, then requested), four at most, bots only as
 authors.
 
 **Whose turn** (`whoseTurn` in `whose-turn.ts`): `{ kind: 'you' | 'them' |
-'none', who, what, prKey }`. Rules per pinged PR, first match wins:
+'none', who, what, prKey }`. A `you` turn also carries `move` (2026-09-29),
+the kind of move for the sidebar row's chip: `reply` (rule 2, drafts too),
+`re_review` (addressed your changes), `review` (review request, personal or
+team), `address_changes` (threads or a change request on your own PR or
+draft), `fix_ci`, `merge`. Rules per pinged PR, first match wins:
 
 1. merged or closed: none.
 2. you: a human mentioned you, your team, replied to you or asked you a
@@ -1508,6 +1525,17 @@ authors.
    seen (mark-read in the app, or read on GitHub) it no longer makes it your
    move, so it no longer keeps the tile off Done or the topic in needs-you.
    Personal asks (mention, question, reply) stay until answered.
+   An ask the events agent lowered to quiet or muted (`effectiveLoudness`,
+   override over rule) is no ask (2026-09-29): not your move, not Needs
+   reply (`prTier`), not "still your move" after a mark-read. Until the
+   agent has weighed in, the rule's loud stands. History: the rule was
+   ported from ghatchup ("a human asked something and there is no sign you
+   answered"), which also had "ADDRESSED YOU: a human spoke to you, but
+   nothing is owed". The agent's second opinion on events exists since
+   2026-09-27 to tell "can you take a look?" from "thanks!", but whose turn
+   never consulted it, so a plain "thanks, that's fine" kept saying "Reply
+   to …". Julian, 2026-09-29: "if the author just replies 'Oh yeah, that's
+   fine,' that's not my move to reply again".
 3. On your own PR:
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
@@ -1601,7 +1629,8 @@ it won't merge soon. Rules in core:
   draft also for review threads waiting on you ("Address 2 comments on your
   draft") or a standing change request. Never Review, Fix CI or Merge.
 - tier: a draft never lands in To review (`prTier`); needs_reply still
-  works for personal asks. "Addressed your changes" does not apply to a
+  works for personal asks; a standing change request of yours puts a
+  draft under Changes you requested. "Addressed your changes" does not apply to a
   draft: only the author's reply in your thread counts, as a personal ask.
 - loudness: a review request naming you on a draft is quiet (commits after
   your approval are quiet everywhere), so neither makes the tile unread or the
@@ -1720,8 +1749,10 @@ the sync.
 
 **PR tiers** (`prTier` in `pr-tier.ts`, ported from ghatchup's
 `triage.Classify`): one tier per open PR, first match wins: `needs_reply`
-(a human mention, question or reply the viewer has not answered, same
-check as whose-turn), `mine`, `team` (author in `teamMembers`),
+(a human mention, question or reply the viewer has not answered and the
+events agent did not lower, same check as whose-turn), `changes_requested` (the viewer's newest verdict
+review on someone else's PR asks for changes, drafts included; added
+2026-09-29), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
 A personal request and a team request on a teammate's PR (see whose turn)
@@ -1731,9 +1762,12 @@ another teammate covered stays `team`; routed team requests stay
 `to_review` after the authorship checks. Inside To review the topic column
 puts "For you" tiles (personal and teammate team requests) before routed
 team requests (`tilesInTierOrder` in the renderer).
-Addressed your changes (see whose turn) is `to_review` and checked right
-after needs_reply, before `team`: a re-review is owed even to a teammate,
-and the author's own thread replies do not push it into needs_reply.
+Addressed your changes (see whose turn) is `changes_requested` (was
+`to_review` until 2026-09-29), like a change request still waiting on the
+author: a re-review is owed even to a teammate, and the author's own
+thread replies do not push it into needs_reply; an ask from anyone else
+does. `TopicQueues.changesAddressed` counts the addressed ones, for the
+order inside the section.
 Pure and tested; the sidebar's queue sections are built on it.
 
 ### Three-pane balance
@@ -1807,6 +1841,13 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
   (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
   agent-muted events and review requests between others fold into one "N
   bot/CI events" line that expands (Unmute lives there).
+  Comments and reviews from people show in full (2026-09-29): the event
+  `summary` is one clipped line (100 chars, first line) for tiles, MCP and
+  the agent, so `activityList(events, viewer, since, pr)` also puts the
+  whole text on the line as `body`, read from `pr.comments` / `pr.reviews`
+  by the event's `sourceId`. The row shows the lead ("lyra commented") and
+  the body under it, wrapped, line breaks kept, never clamped. Bots keep
+  the one-line form; so do agent-muted people in the folded line.
 - **Resizable**: the two edges (sidebar | tiles, tiles | detail) are draggable
   (`PaneDivider`, pointer capture, a 12px invisible hit area, col-resize
   cursor). Limits: sidebar 200-440px, tile column 340-720px, and a drag never
@@ -1820,13 +1861,38 @@ Grid: `clamp(248px, 22vw, 330px) | clamp(420px, 33vw, 480px) | 1fr`. At
 The sidebar lists topics under ghatchup's PR queues (mockup "B with
 avatars and filters", QueuesB2).
 
-- **Sections**, in order: Needs reply, My PRs, Team's PRs, To review, Team
-  mentioned (one per `prTier`), then Other topics. Each lists topics, not
-  PRs: a topic sits in every section where it has at least one PR of that
-  tier, with that count on the row. Other topics holds topics with only
+- **Sections**, in order: Needs reply, Changes you requested, My PRs,
+  Team's PRs, To review, Team mentioned (one per `prTier`), then Other
+  topics. Each lists topics, not PRs, and **each topic once in the whole
+  sidebar** (2026-09-29): in the highest section where it has a PR, with
+  that section's count on the row. Other topics holds topics with only
   `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
-  Routed, FYI; Routed and FYI folded). Section tint: honey for reply and
-  review, ink for mine, sea for team and team mentioned, grey for other.
+  Routed, FYI; Routed and FYI folded). The queue filters (Mine, Team,
+  Reply, Review) still match a topic by any of its PRs; Review covers To
+  review and Changes you requested (the addressed case was To review
+  before). Section tint: honey
+  for reply, changes and review, ink for mine, sea for team and team
+  mentioned, grey for other.
+  History: until 2026-09-29 a topic sat in every section where it had a PR
+  of that tier. That came with the picked mockup (QueuesB2, 2026-09-28) as a
+  side effect of per-PR sections over per-topic rows, not as a decision;
+  Julian: "If it's highlighted in my PRs, I will naturally click on it and
+  check it".
+- **Changes you requested** (tier `changes_requested`, 2026-09-29): open PRs
+  where the viewer's newest verdict review asks for changes, whoever wrote
+  them. Directly under Needs reply because a standing change request is the
+  viewer's own open loop: Julian, "this should surface very high up, maybe
+  directly below needs reply". Rows whose author addressed the changes
+  ("addressed your changes: re-review", the viewer's move, unread) sort
+  first (`TopicQueues.changesAddressed`); rows still waiting on the author
+  follow, quiet. The topic column does the same with the section's tiles
+  (your move first, `tilesInTierOrder`). Before, only the
+  addressed case had a section (To review), and a change request the author
+  had not touched fell to Team's PRs or Other topics.
+- **Authorship**: the viewer's own PR stays under My PRs whatever area or
+  team the code belongs to; only Needs reply ranks above it (as in
+  ghatchup). An area is a label for where the code lives and never moves a
+  topic between sections.
 - **Finished drawer** (2026-09-29): under the sections, a folded "Finished"
   group header lists topics retired in the last 30 days, newest first
   (`GET /api/topics/finished`, `FinishedTopic`: name and how long ago it
@@ -1845,10 +1911,19 @@ avatars and filters", QueuesB2).
   (`memberTier`) and filters never match them. They stay on their stack
   tile as context.
 - **Rows**: name, face stack, one count bubble, then a one-line summary
-  with a honey "N your move" chip at its end, right under the bubble
-  (`yourMoveTiles`: live tiles, not done and not snoozed, where whose-turn
-  says it's your move, merging your approved PR included). At 1100px row one has no room for the
-  chip, so the summary truncates first and the chip stays.
+  with the honey your-move chip at its end, right under the bubble
+  (`TopicListItem.yourMoves`: live tiles, not done and not snoozed, where
+  whose-turn says it's your move, merging your approved PR included). At
+  1100px row one has no room for the chip, so the summary truncates first
+  and the chip stays.
+- **Your move chip** (2026-09-29): names the most urgent move in words
+  ("Reply", "Re-review", "Review", "Address changes", "Fix CI", "Merge", in
+  that order of urgency, the order of the sections) plus how many more
+  ("Reply +2"); the tooltip lists every move's footer text joined by " · "
+  (`yourMoveChip` in `lib/your-move.ts`, from `WhoseTurn.move`). Was "N your
+  move". Because each topic now shows once, the chip is where the row hints
+  at what else is inside. The grey "merged without you" chip stays next to
+  it.
 - **No counts on section headers** (2026-09-28, later the same day):
   Julian read the PR counts on headers and rows as unread counts, and how
   many PRs a queue holds does not matter. Section and group headers show

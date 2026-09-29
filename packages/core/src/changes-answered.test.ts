@@ -71,13 +71,13 @@ describe('addressed your changes: the #4521 timeline', () => {
 
   it('hands the move back to the viewer', () => {
     expect(changesAnswered(pr, viewer)).toEqual({ pushed: true, replied: true, since: changesRequested.submittedAt });
-    expect(turn(pr)).toEqual({ kind: 'you', who: null, what: 'bob addressed your changes: re-review', prKey: pr.key });
+    expect(turn(pr)).toEqual({ kind: 'you', move: 're_review', who: null, what: 'bob addressed your changes: re-review', prKey: pr.key });
   });
 
-  it('files the PR under To review, even when the author is a teammate', () => {
-    expect(tier(pr)).toBe('to_review');
+  it('files the PR under Changes you requested, even when the author is a teammate', () => {
+    expect(tier(pr)).toBe('changes_requested');
     const teammate = { ...viewer, teamMembers: ['bob'] };
-    expect(prTier({ pr, events: deriveEvents(pr, teammate, null), viewer: teammate, userState: null, reason: 'comment' })).toBe('to_review');
+    expect(prTier({ pr, events: deriveEvents(pr, teammate, null), viewer: teammate, userState: null, reason: 'comment' })).toBe('changes_requested');
   });
 
   it('shows the tile as for you, whatever the notification reason', () => {
@@ -105,13 +105,13 @@ describe('addressed your changes: variants', () => {
   it('counts a push alone', () => {
     const pushed = prWith({ reviews: [changesRequested], threads: [makeThread('th1', [threadStart])], comments: [threadStartInline] });
     expect(turn(pushed)).toMatchObject({ kind: 'you', what: 'bob addressed your changes: re-review' });
-    expect(tier(pushed)).toBe('to_review');
+    expect(tier(pushed)).toBe('changes_requested');
   });
 
   it('counts replies alone, with softer words', () => {
     const replied = prWith({ headOid: 'c0', commits: [commits[0]!] });
     expect(turn(replied)).toMatchObject({ kind: 'you', what: 'bob replied to your review' });
-    expect(tier(replied)).toBe('to_review');
+    expect(tier(replied)).toBe('changes_requested');
     const onlyComment = prWith({ headOid: 'c0', commits: [commits[0]!], reviews: [changesRequested], threads: [], comments: [bobComment] });
     expect(turn(onlyComment)).toMatchObject({ kind: 'you', what: 'bob replied to your review' });
   });
@@ -119,7 +119,8 @@ describe('addressed your changes: variants', () => {
   it('leaves the move with the author while they did nothing', () => {
     expect(changesAnswered(untouched, viewer)).toBeNull();
     expect(turn(untouched)).toMatchObject({ kind: 'them', who: 'bob', what: 'to address 1 thread' });
-    expect(tier(untouched)).toBe('rest');
+    // The change request still stands: listed, waiting on the author.
+    expect(tier(untouched)).toBe('changes_requested');
   });
 
   it('does not re-list once the viewer re-reviewed after the push', () => {
@@ -127,7 +128,8 @@ describe('addressed your changes: variants', () => {
     const reviewed = prWith({ reviews: [changesRequested, bobReview, reReview] });
     expect(changesAnswered(reviewed, viewer)).toBeNull();
     expect(turn(reviewed).kind).toBe('them');
-    expect(tier(reviewed)).toBe('rest');
+    // A comment review is no verdict: the change request stands, waiting on the author.
+    expect(tier(reviewed)).toBe('changes_requested');
     const events = deriveEvents(reviewed, viewer, null);
     expect(events.find((event) => event.sourceId === 'c3')?.ruleLoudness).toBe('quiet');
     // A later push makes it the viewer's move again.
@@ -162,7 +164,8 @@ describe('addressed your changes: variants', () => {
     expect(tier(draft)).toBe('needs_reply');
     const pushedDraft = prWith({ isDraft: true, reviews: [changesRequested], threads: [makeThread('th1', [threadStart])], comments: [threadStartInline] });
     expect(turn(pushedDraft).kind).toBe('none');
-    expect(tier(pushedDraft)).toBe('rest');
+    // The change request stands on a draft too, as the viewer's open loop.
+    expect(tier(pushedDraft)).toBe('changes_requested');
     expect(forWhom('CM', pushedDraft, viewer)).toEqual({ kind: 'none' });
     expect(changesAnswered(pushedDraft, viewer)).toBeNull();
     const events = deriveEvents(pushedDraft, viewer, null);

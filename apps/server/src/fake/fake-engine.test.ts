@@ -90,13 +90,22 @@ describe('FakeEngine', () => {
 });
 
 describe('FakeEngine tile faces', () => {
-  it('counts live "your move" tiles per topic in the topic list', async () => {
+  it('lists the moves of live "your move" tiles per topic in the topic list', async () => {
     const engine = new FakeEngine();
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
-    const expected = depot.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length;
+    const expected = depot.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').map((view) => view.turn.what);
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-depot');
-    expect(expected).toBeGreaterThan(0);
-    expect(item?.yourMoveTiles).toBe(expected);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(item?.yourMoves.map((move) => move.text).toSorted()).toEqual(expected.toSorted());
+  });
+
+  it('names the most urgent move first', async () => {
+    const topics = await new FakeEngine().listTopics();
+    const devEnv = topics.find((entry) => entry.topic.id === 'topic-dev-env');
+    expect(devEnv?.yourMoves).toEqual([
+      { move: 're_review', text: 'pim addressed your changes: re-review' },
+      { move: 'review', text: "Review for team-platform: sol's PR" },
+    ]);
   });
 
   it('shows all three turn kinds with the core rules', async () => {
@@ -273,9 +282,9 @@ describe('FakeEngine rechecks', () => {
 });
 
 describe('FakeEngine queues', () => {
-  it('fills every queue section and puts some topics in several', async () => {
+  it('fills every queue section and gives some topics PRs in several tiers', async () => {
     const topics = await new FakeEngine().listTopics();
-    const tiers = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned'] as const;
+    const tiers = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned'] as const;
     for (const tier of tiers) {
       expect(topics.some((item) => item.queues.tiers[tier] > 0)).toBe(true);
     }
@@ -301,7 +310,7 @@ describe('FakeEngine queues', () => {
     // An agent's approval counts like any other; the pill only names who gave it.
     expect(approved?.prs[0]?.status).toMatchObject({ review: 'approved', agentApprovers: ['reviewbot'] });
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-migrations');
-    expect(item?.yourMoveTiles).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
+    expect(item?.yourMoves.length).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
   });
 
   it('keeps pulled-in stack layers out of the queues', async () => {
@@ -327,12 +336,24 @@ describe('FakeEngine queues', () => {
 });
 
 describe('FakeEngine addressed your changes', () => {
-  it('lists a PR whose author pushed after your changes request under To review, for you', async () => {
+  it('lists a PR whose author pushed after your changes request under Changes you requested, for you', async () => {
     const devEnv = (await new FakeEngine().getTopic('topic-dev-env'))?.tiles ?? [];
     const view = devEnv.find((item) => item.tile.id === 'pr:acme/app#1960');
     expect(view?.turn).toMatchObject({ kind: 'you', what: 'pim addressed your changes: re-review' });
-    expect(view?.prs[0]?.tier).toBe('to_review');
+    expect(view?.prs[0]?.tier).toBe('changes_requested');
     expect(view?.forWhom).toEqual({ kind: 'you' });
+  });
+
+  it('lists a change request still waiting on the author there too, and counts only the addressed one', async () => {
+    const engine = new FakeEngine();
+    const frontend = (await engine.getTopic('topic-frontend-build'))?.tiles ?? [];
+    const waiting = frontend.find((item) => item.tile.id === 'pr:acme/app#1963');
+    expect(waiting?.turn).toMatchObject({ kind: 'them', who: 'tove' });
+    expect(waiting?.prs[0]?.tier).toBe('changes_requested');
+    const topics = await engine.listTopics();
+    const queues = (id: string) => topics.find((item) => item.topic.id === id)?.queues;
+    expect(queues('topic-dev-env')).toMatchObject({ tiers: { changes_requested: 1 }, changesAddressed: 1 });
+    expect(queues('topic-frontend-build')).toMatchObject({ tiers: { changes_requested: 1 }, changesAddressed: 0 });
   });
 });
 

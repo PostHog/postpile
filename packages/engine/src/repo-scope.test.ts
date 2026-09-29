@@ -91,7 +91,7 @@ describe('quiet repos', () => {
 
     const item = (await h.engine.listTopics())[0];
     expect(item).toMatchObject({ group: 'quiet', unreadTiles: 1, urgentUnreadTiles: 0 });
-    expect(item?.queues.tiers).toEqual({ needs_reply: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0 });
+    expect(item?.queues.tiers).toEqual({ needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0 });
     const tile = (await h.engine.getTopic('infra'))?.tiles[0];
     expect(tile).toMatchObject({ quietRepo: true, tier: 'rest', state: { kind: 'unread' } });
     expect(tile?.prs[0]).toMatchObject({ quietRepo: true, tier: 'rest' });

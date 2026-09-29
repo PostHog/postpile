@@ -12,7 +12,7 @@ import {
   compareTopicUrgency,
   displayState,
   FINISHED_TOPICS_MS,
-  isMergeApprovedMove,
+  topicMove,
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
@@ -20,6 +20,7 @@ import {
   personRelation,
   pingedPrKeys,
   prTier,
+  changesAnswered,
   repoOverview,
   searchTopics,
   tileRepoLabels,
@@ -271,8 +272,7 @@ export class ReadModels {
           return {
             state: states[index] ?? 'open',
             prStates: loudMembers.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
-            yourMove: turn.kind === 'you',
-            mergeApproved: isMergeApprovedMove(turn),
+            move: topicMove(turn),
             quiet: isQuietTile(memberKeys(tile), settings),
           };
         }),
@@ -290,7 +290,7 @@ export class ReadModels {
         urgentUnreadTiles: urgency.urgentUnreadTiles,
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
-        yourMoveTiles: urgency.yourMoveTiles,
+        yourMoves: urgency.yourMoves,
         unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
         queues: topicQueues(
           prs.map((pr) => ({
@@ -299,6 +299,7 @@ export class ReadModels {
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
             quiet: isPrInQuietRepo(pr.key, settings),
+            changesAddressed: viewer !== null && changesAnswered(pr, viewer) !== null,
           })),
         ),
         people: topicFaces(topicPeople(prs, viewer)),
@@ -405,7 +406,7 @@ export class ReadModels {
     return {
       pr,
       events,
-      activity: activityList(events, viewer, news?.anchor.at ?? null),
+      activity: activityList(events, viewer, news?.anchor.at ?? null, pr),
       whatsNew: news,
       glance,
       glanceStale: stale,

@@ -3,24 +3,26 @@
 // are built on it (`topicQueues`).
 import { changesAnswered } from './changes-answered.ts';
 import { sameLogin } from './mentions.ts';
-import { isPersonalRequest, isTeammate, reviewedHead, reviewRequest } from './review-request.ts';
+import { isPersonalRequest, isTeammate, newestVerdictBy, reviewedHead, reviewRequest } from './review-request.ts';
 import type { EventKind, NotificationReason, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';
 
 /**
  * needs_reply: a human spoke to the viewer (mention, question, reply) and
- * they have not answered. mine: the viewer wrote it. team: a teammate wrote
- * it. to_review: a review is asked of the viewer or their team and they have
- * not reviewed the head, or the author addressed the viewer's changes request
- * (pushed or replied after it, no re-request needed). A personal request and
- * a team request on a teammate's PR go before `team`; a teammate's PR with
- * only a taken team request stays `team`. team_mentioned: the team was @-mentioned. rest:
- * everything else, and every PR that is not open.
+ * they have not answered. changes_requested: the viewer's newest verdict on
+ * someone else's PR asks for changes, whether the author addressed them
+ * (pushed or replied after it, no re-request needed) or not yet. mine: the
+ * viewer wrote it. team: a teammate wrote it. to_review: a review is asked
+ * of the viewer or their team and they have not reviewed the head. A
+ * personal request and a team request on a teammate's PR go before `team`;
+ * a teammate's PR with only a taken team request stays `team`.
+ * team_mentioned: the team was @-mentioned. rest: everything else, and every
+ * PR that is not open.
  */
-export type PrTier = 'needs_reply' | 'mine' | 'team' | 'to_review' | 'team_mentioned' | 'rest';
+export type PrTier = 'needs_reply' | 'changes_requested' | 'mine' | 'team' | 'to_review' | 'team_mentioned' | 'rest';
 
 /** First match wins, in this order. */
-export const PR_TIER_ORDER: PrTier[] = ['needs_reply', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
+export const PR_TIER_ORDER: PrTier[] = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
 
 /** Asks that want an answer from the viewer. Team mentions have their own tier. */
 const REPLY_KINDS: EventKind[] = ['question_to_user', 'mention', 'reply_to_user'];
@@ -43,6 +45,18 @@ function teamMentioned(input: PrTierInput): boolean {
   return input.reason === 'team_mention' || input.events.some((event) => event.kind === 'team_mention');
 }
 
+/**
+ * The viewer's newest verdict on someone else's PR asks for changes: their
+ * own open loop, drafts included. The viewer cannot review their own PR, and
+ * it stays `mine` either way.
+ */
+function viewerRequestedChanges(pr: Pr, viewer: Viewer): boolean {
+  if (sameLogin(pr.author, viewer.login)) {
+    return false;
+  }
+  return newestVerdictBy(pr.reviews, viewer.login)?.state === 'CHANGES_REQUESTED';
+}
+
 /** The one tier an open PR goes into; an unanswered ask wins over authorship, like in ghatchup. */
 export function prTier(input: PrTierInput): PrTier {
   const { pr, viewer } = input;
@@ -50,14 +64,14 @@ export function prTier(input: PrTierInput): PrTier {
     return 'rest';
   }
   const ask = unansweredAsk(pr, input.events, viewer, REPLY_KINDS);
-  // Addressed your changes: a re-review, even from a teammate. The author's
-  // thread replies are part of it; an ask from anyone else still wins.
+  // Addressed your changes: the author's thread replies are part of it, so
+  // they stay under Changes you requested; an ask from anyone else still wins.
   const answered = changesAnswered(pr, viewer) !== null;
   if (ask !== null && !(answered && sameLogin(ask.actor, pr.author))) {
     return 'needs_reply';
   }
-  if (answered) {
-    return 'to_review';
+  if (viewerRequestedChanges(pr, viewer)) {
+    return 'changes_requested';
   }
   if (sameLogin(pr.author, viewer.login)) {
     return 'mine';

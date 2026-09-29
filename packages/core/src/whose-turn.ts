@@ -2,7 +2,7 @@
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
 import { isBot } from './bots.ts';
 import { changesAnswered, type ChangesAnswer } from './changes-answered.ts';
-import { isUnseenLoud } from './loudness.ts';
+import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
@@ -11,8 +11,20 @@ import type { EventKind, Pr, PrEvent, PrKey, Review, Tile, UserPrState, Viewer }
 
 export type WhoseTurnKind = 'you' | 'them' | 'none';
 
-export interface WhoseTurn {
-  kind: WhoseTurnKind;
+/**
+ * The kind of move a `you` turn asks for, so the sidebar row can name it.
+ * reply: an ask (question, mention, reply, team mention), also on a draft.
+ * re_review: the author addressed your changes. review: a review request,
+ * personal or for your team. address_changes: threads or a change request
+ * on your own PR or draft. fix_ci: CI fails on your PR. merge: your PR is
+ * approved.
+ */
+export type YourMove = 'reply' | 're_review' | 'review' | 'address_changes' | 'fix_ci' | 'merge';
+
+/** Most urgent first, in the order of the sidebar sections. */
+export const YOUR_MOVE_ORDER: YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'fix_ci', 'merge'];
+
+interface TurnFields {
   /** them: the login the move waits on. Null for you and none. */
   who: string | null;
   /**
@@ -28,6 +40,9 @@ export interface WhoseTurn {
    */
   lead?: string;
 }
+
+/** A `you` turn always says what kind of move it is. */
+export type WhoseTurn = (TurnFields & { kind: 'you'; move: YourMove }) | (TurnFields & { kind: 'them' | 'none' });
 
 export interface WhoseTurnInput {
   tile: Tile;
@@ -60,8 +75,8 @@ interface PrContext {
   notYours: boolean;
 }
 
-function you(ctx: PrContext, what: string): WhoseTurn {
-  return { kind: 'you', who: null, what: `${what}${ctx.where}`, prKey: ctx.pr.key };
+function you(ctx: PrContext, move: YourMove, what: string): WhoseTurn {
+  return { kind: 'you', move, who: null, what: `${what}${ctx.where}`, prKey: ctx.pr.key };
 }
 
 function them(ctx: PrContext, who: string, what: string): WhoseTurn {
@@ -90,22 +105,31 @@ function spokeSince(pr: Pr, viewer: Viewer, since: string): boolean {
 }
 
 /**
- * The newest human event of `kinds` aimed at the viewer that they have not
- * answered since (no comment or review after it). Also used by `prTier`.
- * A team mention only asks until it is read: once seen (mark-read in the
- * app or read on GitHub) it no longer counts (decided 2026-09-28). Personal
- * asks count until answered.
+ * A human event of `kinds` aimed at the viewer that they have not answered
+ * since (no comment or review after it). A team mention only asks until it
+ * is read: once seen (mark-read in the app or read on GitHub) it no longer
+ * counts (decided 2026-09-28). Personal asks count until answered. An event
+ * the events agent lowered to quiet or muted ("thanks, that's fine") asks
+ * nothing (decided 2026-09-29).
  */
-export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: EventKind[] = ASK_KINDS): PrEvent | null {
+export function isUnansweredAsk(pr: Pr, event: PrEvent, viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): boolean {
+  if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
+    return false;
+  }
+  if (event.kind === 'team_mention' && event.seenAt !== null) {
+    return false;
+  }
+  if (effectiveLoudness(event) !== 'loud') {
+    return false;
+  }
+  return !spokeSince(pr, viewer, event.at);
+}
+
+/** The newest unanswered ask on the PR (`isUnansweredAsk`). Also used by `prTier`. */
+export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readonly EventKind[] = ASK_KINDS): PrEvent | null {
   let newest: PrEvent | null = null;
   for (const event of events) {
-    if (!kinds.includes(event.kind) || event.isBot || sameLogin(event.actor, viewer.login)) {
-      continue;
-    }
-    if (event.kind === 'team_mention' && event.seenAt !== null) {
-      continue;
-    }
-    if (spokeSince(pr, viewer, event.at)) {
+    if (!isUnansweredAsk(pr, event, viewer, kinds)) {
       continue;
     }
     if (newest === null || event.at > newest.at) {
@@ -186,14 +210,14 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
   const { pr } = ctx;
   const threads = threadsWaitingOnViewer(ctx);
   if (threads.count > 0) {
-    return you(ctx, `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
+    return you(ctx, 'address_changes', `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
   }
   const changesBy = changesRequestedBy(ctx.pr);
   if (changesBy) {
-    return you(ctx, `Address ${changesBy}'s changes`);
+    return you(ctx, 'address_changes', `Address ${changesBy}'s changes`);
   }
   if (pr.checks.rollup === 'FAILURE') {
-    return you(ctx, 'Fix failing CI');
+    return you(ctx, 'fix_ci', 'Fix failing CI');
   }
   // Users before teams; the viewer's own team can sit here too (CODEOWNERS).
   const reviewers = [...pr.reviewerUsers, ...pr.reviewerTeams];
@@ -201,7 +225,7 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
     return waitingOn(ctx, reviewers[0]!, reviewers.length - 1);
   }
   if (!pr.isDraft && pr.reviewDecision === 'APPROVED') {
-    return you(ctx, MERGE_APPROVED_MOVE);
+    return you(ctx, 'merge', MERGE_APPROVED_MOVE);
   }
   return NO_TURN;
 }
@@ -222,7 +246,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return them(ctx, pr.author, `to address ${hold.by}'s changes`);
   }
   if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
-    return you(ctx, reviewText(ctx, ask));
+    return you(ctx, 'review', reviewText(ctx, ask));
   }
   if (reviewed?.state === 'APPROVED') {
     return them(ctx, pr.author, 'to merge');
@@ -250,20 +274,20 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
  * or merge.
  */
 function draftTurn(ctx: PrContext): WhoseTurn {
-  const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer, [...PERSONAL_ASK_KINDS]);
+  const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer, PERSONAL_ASK_KINDS);
   if (ask) {
-    return you(ctx, `Reply to ${ask.actor} on draft`);
+    return you(ctx, 'reply', `Reply to ${ask.actor} on draft`);
   }
   if (!sameLogin(ctx.pr.author, ctx.viewer.login)) {
     return NO_TURN;
   }
   const threads = threadsWaitingOnViewer(ctx);
   if (threads.count > 0) {
-    return you(ctx, `Address ${plural(threads.count, 'comment')} on your draft`);
+    return you(ctx, 'address_changes', `Address ${plural(threads.count, 'comment')} on your draft`);
   }
   const changesBy = changesRequestedBy(ctx.pr);
   if (changesBy) {
-    return you(ctx, `Address ${changesBy}'s changes on your draft`);
+    return you(ctx, 'address_changes', `Address ${changesBy}'s changes on your draft`);
   }
   return NO_TURN;
 }
@@ -285,13 +309,13 @@ function prTurn(ctx: PrContext): WhoseTurn {
   // request says more. An ask from anyone else still goes first.
   const answer = changesAnswered(ctx.pr, ctx.viewer);
   if (answer && (ask === null || sameLogin(ask.actor, ctx.pr.author))) {
-    return you(ctx, changesAnsweredText(ctx.pr.author, answer));
+    return you(ctx, 're_review', changesAnsweredText(ctx.pr.author, answer));
   }
   if (ask) {
     const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login)
       ? false
       : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && headReview(ctx) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
-    return you(ctx, askText(ask, reviewToo));
+    return you(ctx, 'reply', askText(ask, reviewToo));
   }
   return sameLogin(ctx.pr.author, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
 }
@@ -314,7 +338,7 @@ function newestUnseenLoudAt(events: PrEvent[]): string {
 
 /** Your move, and it is only merging your own approved PR (multi-PR tiles add " on #n"). */
 export function isMergeApprovedMove(turn: WhoseTurn): boolean {
-  return turn.kind === 'you' && turn.what.startsWith(MERGE_APPROVED_MOVE);
+  return turn.kind === 'you' && turn.move === 'merge';
 }
 
 /**

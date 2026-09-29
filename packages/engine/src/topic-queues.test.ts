@@ -27,9 +27,10 @@ describe('topic list queues', () => {
 
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'queues');
     expect(item?.queues).toEqual({
-      tiers: { needs_reply: 0, mine: 1, team: 0, to_review: 1, team_mentioned: 0, rest: 1 },
+      tiers: { needs_reply: 0, changes_requested: 0, mine: 1, team: 0, to_review: 1, team_mentioned: 0, rest: 1 },
       byYou: 1,
       byTeam: 0,
+      changesAddressed: 0,
     });
     expect(item?.people).toEqual([
       { login: viewer.login, relation: 'you' },
@@ -66,7 +67,19 @@ describe('topic list queues', () => {
     const detail = await h.engine.getTopic('approved');
     expect(detail?.tiles[0]).toMatchObject({ state: { kind: 'open' }, turn: { kind: 'you', what: 'Merge, it is approved' } });
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'approved');
-    expect(item).toMatchObject({ group: 'quiet', yourMoveTiles: 1 });
+    expect(item).toMatchObject({ group: 'quiet', yourMoves: [{ move: 'merge', text: 'Merge, it is approved' }] });
+  });
+
+  it('lists your moves most urgent first, whatever the tile order', async () => {
+    const h = harnessWithTeam();
+    const approved = makePr({ number: 7, author: viewer.login, reviewDecision: 'APPROVED', reviews: [makeReview({ author: 'lyra' })] });
+    const review = reviewRequestedPr(8, { author: 'ada', reviewerUsers: [viewer.login] });
+    topicWithPrs(h, 'moves', [approved, review]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'moves');
+    expect(item?.yourMoves.map((entry) => entry.move)).toEqual(['review', 'merge']);
   });
 
   it('keeps pulled-in stack layers out of the queue counts and tiers', async () => {
@@ -80,9 +93,10 @@ describe('topic list queues', () => {
 
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'stack');
     expect(item?.queues).toEqual({
-      tiers: { needs_reply: 0, mine: 0, team: 1, to_review: 0, team_mentioned: 0, rest: 0 },
+      tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 1, to_review: 0, team_mentioned: 0, rest: 0 },
       byYou: 0,
       byTeam: 1,
+      changesAddressed: 0,
     });
     const stack = (await h.engine.getTopic('stack'))?.tiles.find((view) => view.tile.kind === 'stack');
     expect(stack?.prs.map((pr) => [pr.key, pr.provenance.kind, pr.tier])).toEqual([

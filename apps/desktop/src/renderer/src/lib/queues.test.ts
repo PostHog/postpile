@@ -25,8 +25,8 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): Top
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,
-    yourMoveTiles: 0, unseenMergeTiles: 0,
-    queues: { tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0 },
+    yourMoves: [], unseenMergeTiles: 0,
+    queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0, changesAddressed: 0 },
     people: [],
     ...extra,
   };
@@ -79,26 +79,57 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
   };
 }
 
+function withAddressed(entry: TopicListItem, changesAddressed: number): TopicListItem {
+  return { ...entry, queues: { ...entry.queues, changesAddressed } };
+}
+
 describe('queueLayout', () => {
-  it('lists a topic in every section it has PRs for and keeps rest-only topics apart', () => {
+  it('lists each topic once, in its highest section, and keeps rest-only topics apart', () => {
     const depot = item('depot', { needs_reply: 1, team: 2, rest: 3 });
     const ci = item('ci', { team: 1 });
     const docs = item('docs', { rest: 2 });
     const layout = queueLayout([depot, ci, docs]);
     expect(layout.sections.map((section) => [section.tier, section.count, section.rows.map((row) => [row.item.topic.id, row.count])])).toEqual([
       ['needs_reply', 1, [['depot', 1]]],
-      ['team', 3, [['depot', 2], ['ci', 1]]],
+      ['team', 1, [['ci', 1]]],
     ]);
     expect(layout.other.map((entry) => entry.topic.id)).toEqual(['docs']);
+  });
+
+  it('puts Changes you requested under Needs reply and above My PRs', () => {
+    const cache = item('cache', { changes_requested: 1, mine: 2 });
+    const own = item('own', { mine: 1, to_review: 1 });
+    const layout = queueLayout([own, cache]);
+    expect(layout.sections.map((section) => [section.tier, section.rows.map((row) => [row.item.topic.id, row.count])])).toEqual([
+      ['changes_requested', [['cache', 1]]],
+      ['mine', [['own', 1]]],
+    ]);
+  });
+
+  it('lists addressed change requests before ones waiting on the author, else keeps the API order', () => {
+    const waiting = item('waiting', { changes_requested: 1 });
+    const addressed = withAddressed(item('addressed', { changes_requested: 2 }), 1);
+    const alsoWaiting = item('also-waiting', { changes_requested: 1 });
+    const layout = queueLayout([waiting, addressed, alsoWaiting]);
+    expect(layout.sections[0]?.rows.map((row) => row.item.topic.id)).toEqual(['addressed', 'waiting', 'also-waiting']);
   });
 });
 
 describe('queue filters', () => {
-  const mine = item('mine', { needs_reply: 1 }, { queues: { tiers: { needs_reply: 1, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: 1, byTeam: 0 } });
-  const review = item('review', { to_review: 2 }, { queues: { tiers: { needs_reply: 0, mine: 0, team: 0, to_review: 2, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 1 } });
+  const mine = item('mine', { needs_reply: 1 }, { queues: { tiers: { needs_reply: 1, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: 1, byTeam: 0, changesAddressed: 0 } });
+  const review = item('review', { to_review: 2 }, { queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 2, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 1, changesAddressed: 0 } });
 
   it('counts matching PRs over all topics', () => {
     expect(filterCounts([mine, review])).toEqual({ mine: 1, team: 1, reply: 1, review: 2 });
+  });
+
+  it('counts Changes you requested under Review, and matches a topic by any of its PRs', () => {
+    const changes = item('changes', { needs_reply: 1, changes_requested: 1, mine: 1 });
+    expect(filterCounts([changes])).toMatchObject({ reply: 1, review: 1 });
+    // Review finds the topic by its changes_requested PR, whatever section it shows under.
+    expect(applyQueueFilter([changes, mine], 'review')).toEqual([changes]);
+    expect(prMatchesFilter(pr({ tier: 'changes_requested' }), 'review')).toBe(true);
+    expect(prMatchesFilter(pr({ tier: 'changes_requested' }), 'reply')).toBe(false);
   });
 
   it('keeps topics with a matching PR, all without a filter', () => {
@@ -131,6 +162,13 @@ describe('tilesInTierOrder', () => {
   it('sorts by tier and keeps the order inside a tier', () => {
     const views = [tile('a', 'rest'), tile('b', 'team'), tile('c', 'needs_reply'), tile('d', 'team')];
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['c', 'b', 'd', 'a']);
+  });
+
+  it('puts your move before tiles waiting on the author inside Changes you requested', () => {
+    const waiting = { ...tile('waiting', 'changes_requested'), turn: { kind: 'them' as const, who: 'ada', what: 'to address 1 thread', prKey: 'o/r#1' } };
+    const addressed = { ...tile('addressed', 'changes_requested'), turn: { kind: 'you' as const, move: 're_review' as const, who: null, what: 'ada addressed your changes: re-review', prKey: 'o/r#2' } };
+    const views = [tile('mine', 'mine'), waiting, addressed];
+    expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['addressed', 'waiting', 'mine']);
   });
 
   it('puts reviews for you before routed team requests inside To review', () => {

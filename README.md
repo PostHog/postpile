@@ -33,7 +33,7 @@ The first sync then takes a few minutes while the agent sorts your pull requests
 ## What it does
 
 - Groups pull requests into topics and keeps a short dossier per topic. The agent proposes renames and merges, and you decide.
-- Sorts topics into queues: Needs reply, My PRs, Team's PRs, To review, Team mentioned. A queue holds topics, not a flat list of pull requests.
+- Sorts topics into queues: Needs reply, Changes you requested, My PRs, Team's PRs, To review, Team mentioned. A queue holds topics, not a flat list of pull requests, and each topic shows once, in its most urgent queue.
 - Shows whose move it is on every pull request. Deterministic rules (reviews, pushes, replies, stack order) decide first, and the agent judges only what the rules can't.
 - Keeps a stack of pull requests together as one unit.
 - Gives each pull request a short agent glance (verdict and risk) with sources you can check, recheck, or forget.

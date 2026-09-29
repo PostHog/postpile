@@ -18,7 +18,7 @@ describe('why helpers', () => {
   });
 
   it('writes turn and person tooltips', () => {
-    expect(turnTitle({ kind: 'you', who: null, what: 'Review', prKey: 'a#1' })).toBe('Your move: Review');
+    expect(turnTitle({ kind: 'you', move: 'review', who: null, what: 'Review', prKey: 'a#1' })).toBe('Your move: Review');
     expect(turnTitle({ kind: 'them', who: 'sol', what: 'to merge', prKey: 'a#1' })).toBe('Waiting on sol: sol to merge');
     expect(turnTitle({ kind: 'them', who: 'sol', what: 'and 1 more', prKey: 'a#1', lead: 'Waiting on' })).toBe('Waiting on sol and 1 more');
     expect(turnTitle({ kind: 'them', who: 'acme/team-platform', what: '', prKey: 'a#1', lead: 'Waiting on' })).toBe('Waiting on acme/team-platform');

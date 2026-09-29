@@ -31,7 +31,7 @@ function item(id: string, overrides: Partial<PingDecisionItem> = {}): PingDecisi
         seenAt: null,
       },
     ],
-    rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', who: null, what: 'Reply to @bob', prKey: 'acme/app#1' }, why: '@' },
+    rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to @bob', prKey: 'acme/app#1' }, why: '@' },
     template: { title: '@bob mentioned you · app#1', body: 'Title\nbob: ...' },
     ...overrides,
   };

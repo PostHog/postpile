@@ -4,7 +4,7 @@
 import { reviewRequestSubject } from './events.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
-import type { EventDisplayState, EventKind, IsoTime, Viewer } from './types.ts';
+import type { EventDisplayState, EventKind, IsoTime, Pr, Viewer } from './types.ts';
 import type { EventView } from './views.ts';
 
 /** About this many lines show before "Show all N". */
@@ -17,6 +17,11 @@ export interface ActivityLine {
   kind: EventKind;
   actor: string;
   summary: string;
+  /**
+   * The full text of a human comment or review, which `summary` clips to one
+   * short line. Null for bots, pushes and everything else.
+   */
+  body: string | null;
   /** When the newest event of the line happened. */
   at: IsoTime;
   /** The loudest state among its events (loud wins, then the newest event's). */
@@ -122,7 +127,19 @@ function groupBursts(events: EventView[]): EventView[][] {
   return groups;
 }
 
-function toLine(group: EventView[]): ActivityLine {
+/** The full body behind a human comment or review event; bots keep the one-line summary. */
+function fullBody(view: EventView, pr: Pr | null): string | null {
+  const { event } = view;
+  if (!pr || event.isBot || !HUMAN_TALK.includes(event.kind)) {
+    return null;
+  }
+  const comment = pr.comments.find((c) => c.id === event.sourceId);
+  const review = pr.reviews.find((r) => r.id === event.sourceId);
+  const body = (comment?.body ?? review?.body ?? '').trim();
+  return body === '' ? null : body;
+}
+
+function toLine(group: EventView[], pr: Pr | null): ActivityLine {
   const newestFirst = group.toReversed();
   const newest = newestFirst[0]!;
   const loud = group.some((view) => view.display === 'loud');
@@ -132,6 +149,7 @@ function toLine(group: EventView[]): ActivityLine {
     kind: newest.event.kind,
     actor: newest.event.actor,
     summary,
+    body: group.length > 1 ? null : fullBody(newest, pr),
     at: newest.event.at,
     display: loud ? 'loud' : newest.display,
     isNew: loud,
@@ -189,12 +207,14 @@ export function noiseSummary(noise: EventView[]): string {
  * While something loud is new, the unseen noise after `since` (the viewer's
  * last touch, `whatsNew().anchor.at`; null for a first look) moves to
  * `freshNoise`, so the box and the list below never show it twice.
+ *
+ * With `pr`, lines of human comments and reviews carry the full `body`.
  */
-export function activityList(events: EventView[], viewer: Viewer | null, since: IsoTime | null = null): ActivityList {
+export function activityList(events: EventView[], viewer: Viewer | null, since: IsoTime | null = null, pr: Pr | null = null): ActivityList {
   const sorted = events.toSorted(byTime);
   const meaningful = sorted.filter((view) => isMeaningful(view, viewer));
   const allNoise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
-  const lines = groupBursts(meaningful).map(toLine).toReversed();
+  const lines = groupBursts(meaningful).map((group) => toLine(group, pr)).toReversed();
   const fresh = lines.filter((line) => line.isNew);
   const isFreshNoise = (view: EventView) => fresh.length > 0 && view.display !== 'seen' && (since === null || view.event.at > since);
   const freshNoise = allNoise.filter(isFreshNoise);
