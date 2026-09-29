@@ -1,5 +1,5 @@
 import type { Pr } from '@postpile/core';
-import { at, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
+import { at, makeComment, makePr, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -106,5 +106,68 @@ describe('You already dealt with it: events before the viewer last touch count a
     await h.engine.sync({ maxAgentCalls: 0 });
 
     expect(h.store.events.listForPr(pr.key).find((event) => event.id === ready.id)?.seenAt).toBe(APPROVED_AT);
+  });
+});
+
+describe('You already dealt with it: opening a PR in PostPile marks its thread read when nothing is asked', () => {
+  /** alice's PR the viewer follows: rowan commented, nothing asks the viewer anything. */
+  function followedPr(): Pr {
+    return makePr({ number: 3, comments: [makeComment({ id: 'c-rowan', author: 'rowan', body: 'Nice cleanup', createdAt: at(10) })], updatedAt: at(10) });
+  }
+
+  function openedRows(h: Harness) {
+    return h.store.actionLog.listRecent(50).filter((entry) => entry.origin === 'quiet' && entry.detail === 'opened in PostPile');
+  }
+
+  async function syncedTopic(pr: Pr, writesEnabled = true): Promise<Harness> {
+    const h = makeHarness({ writesEnabled: false });
+    topicWithPrs(h, 't', [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    if (writesEnabled) {
+      await h.engine.setGitHubWrites(true);
+    }
+    return h;
+  }
+
+  it('marks the thread read once, logged as opened in PostPile and listed under Handled quietly', async () => {
+    const pr = followedPr();
+    const h = await syncedTopic(pr);
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: true });
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
+
+    expect(h.writer.calls).toEqual(['markThreadRead thread-3']);
+    expect(openedRows(h)).toEqual([expect.objectContaining({ action: 'mark_read', outcome: 'github', prKey: pr.key })]);
+    expect(await h.engine.handledQuietly()).toEqual([expect.objectContaining({ prKey: pr.key, reason: 'opened' })]);
+    expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(false);
+    expect(h.store.events.listForPr(pr.key).every((event) => event.seenAt !== null)).toBe(true);
+  });
+
+  it('does nothing while GitHub writes are locked, not even a pending write', async () => {
+    const pr = followedPr();
+    const h = await syncedTopic(pr, false);
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
+
+    expect(h.writer.calls).toEqual([]);
+    expect(h.store.pendingWrites.list()).toEqual([]);
+    expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(true);
+  });
+
+  it('never marks a tile that stays your move', async () => {
+    const pr = reviewRequestedPr(4, { reviewerUsers: [viewer.login] });
+    const h = await syncedTopic(pr);
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
+    expect(h.writer.calls).toEqual([]);
+  });
+
+  it('never marks a snoozed tile', async () => {
+    const pr = followedPr();
+    const h = await syncedTopic(pr);
+    await h.engine.snooze(`pr:${pr.key}`, { kind: 'until_time', until: '2099-01-01T00:00:00.000Z' });
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
+    expect(h.writer.calls).toEqual([]);
   });
 });

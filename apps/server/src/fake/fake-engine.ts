@@ -127,11 +127,14 @@ import {
   type SearchResult,
   type Viewer,
   botsFromQuietDetail,
+  openedReadCheck,
+  quietReasonDetail,
   quietReasonFromDetail,
   HANDLED_QUIETLY_DAYS,
   parsePrKey,
   pingDecisionsByThread,
   type PingDecision,
+  type OpenedReadResult,
   type QuietReadView,
 } from '@postpile/core';
 import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
@@ -1021,6 +1024,31 @@ export class FakeEngine implements EngineService {
       return this.markPrsRead([key], [key], 'debug', this.tilesHolding(key)[0]?.id ?? null);
     }
     return this.markPrsRead([], [], 'debug', null, [thread]);
+  }
+
+  /** Like QuietReads.markOpened, in memory: the sample thread turns read and the PR's events seen. */
+  async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
+    this.writes.settle();
+    if (!this.writes.isEnabled()) {
+      return { marked: false };
+    }
+    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
+    if (!thread) {
+      return { marked: false };
+    }
+    const tiles = this.tilesHolding(prKey).map((tile) => {
+      const view = this.tileView(tile);
+      return { snoozed: view.state.kind === 'snoozed', doneAfterRead: view.afterRead.done };
+    });
+    // Sample snapshots are always as fresh as their threads.
+    if (openedReadCheck({ thread, prFetchedAt: thread.updatedAt, tiles }).kind === 'skip') {
+      return { marked: false };
+    }
+    this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
+    for (const event of this.eventsOf(prKey)) {
+      event.seenAt ??= this.timestamp();
+    }
+    return { marked: true };
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

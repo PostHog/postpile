@@ -2313,6 +2313,28 @@ Merging or closing counts only when the viewer did it.
    to cases where it cannot hide a to-do. Also listed under Handled quietly
    ("opened in PostPile").
 
+   Built as `POST /api/prs/:owner/:repo/:number/opened` ->
+   `EngineService.markOpenedRead` -> `QuietReads.markOpened`, with the rule
+   in core `openedReadCheck`. Details the build settled:
+   - "Opened" means the PR stayed in the detail pane for 1.5s
+     (`OPENED_READ_DELAY_MS`, renderer `useOpenedRead`) while the window
+     was visible, so clicking through tiles marks nothing. The first tile
+     the app shows by itself counts too: it is on screen. One request per
+     open; re-renders and refetches of the same PR send nothing.
+   - The renderer asks only when `TileView.afterRead.done`, the tile is not
+     snoozed and the lock is open (`openedRead` on the `GithubWrite` list,
+     blocked while locked, never a pending write); the engine checks every
+     tile holding the PR again, plus an unread thread and a snapshot at
+     least as fresh as the thread (the user cannot have seen newer
+     activity). A PR only in a finished topic has no tile and is left.
+   - The write is the sync's quiet mark-read: thread read again right
+     before, origin `quiet`, detail "opened in PostPile", no undo window,
+     thread and events up to its update mirrored as read. Like a
+     github.com visit it sets no `handledAt`, so the tile turns read, and
+     done only where the done rules say so.
+   - Fake mode does it in memory (`FakeEngine.markOpenedRead`), nothing
+     leaves the process.
+
 ## Handled quietly
 
 Decided 2026-09-29. A PR thread the user had read comes back unread only
@@ -3080,6 +3102,7 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/prs/:owner/:repo/:number/approve` | `approve()` |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |
 | `POST /api/prs/:owner/:repo/:number/comment` `{body}` | `sendComment()` |
+| `POST /api/prs/:owner/:repo/:number/opened` | `markOpenedRead()` (opened in the detail pane; `{marked}`) |
 | `POST /api/tiles/:tileId/mark-read` | `markRead()` |
 | `POST /api/tiles/:tileId/snooze` `{condition}` / `DELETE` | `snooze()` / `unsnooze()` |
 | `GET`/`POST /api/tiles/:tileId/chat` `{message}` | `getChat()` / `chat()` |

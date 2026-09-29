@@ -166,6 +166,13 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
   leaves a topic (another topic or the Inbox), not on a timer.
+- `markOpenedRead` is quiet too (no toast, no undo) and on the
+  `GithubWrite` list as `openedRead`, blocked while locked (never a
+  pending write). `useOpenedRead` in `App.tsx` calls it once per open,
+  after the PR stayed 1.5s in the detail pane, only when
+  `opensMarkRead` (`lib/opened-read.ts`) says a mark-read leaves the tile
+  done. The server checks again and marks the GitHub thread read ("opened
+  in PostPile", listed under Handled quietly).
 - A missing glance is worded from `PrSummary.glanceState` /
   `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
   never "the next sync picks it up". Only a failed glance gets a button:

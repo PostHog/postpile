@@ -4,6 +4,7 @@ import {
   botNames,
   botOnlySinceRead,
   botsFromQuietDetail,
+  openedReadCheck,
   quietReadCheck,
   quietReadDetail,
   quietReasonDetail,
@@ -213,5 +214,25 @@ describe('quiet read detail', () => {
     expect(quietReasonFromDetail(quietReasonDetail('changes_requested'))).toBe('changes_requested');
     expect(quietReasonFromDetail(quietReasonDetail('opened'))).toBe('opened');
     expect(quietReasonFromDetail(quietReadDetail(['CI']))).toBe('bots');
+  });
+});
+
+describe('openedReadCheck', () => {
+  const unreadThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: true });
+  const doneTile = { snoozed: false, doneAfterRead: true };
+
+  it('marks an unread thread when every tile holding the PR would be done after a mark-read', () => {
+    expect(openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), tiles: [doneTile] })).toEqual({ kind: 'mark' });
+  });
+
+  it('never marks a tile that stays your move or is snoozed', () => {
+    expect(openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), tiles: [doneTile, { snoozed: false, doneAfterRead: false }] })).toEqual({ kind: 'skip', why: 'asks_you' });
+    expect(openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), tiles: [{ snoozed: true, doneAfterRead: true }] })).toEqual({ kind: 'skip', why: 'snoozed' });
+  });
+
+  it('leaves read threads, stale snapshots and PRs without a tile alone', () => {
+    expect(openedReadCheck({ thread: { ...unreadThread, unread: false }, prFetchedAt: at(30), tiles: [doneTile] })).toEqual({ kind: 'skip', why: 'not_unread' });
+    expect(openedReadCheck({ thread: unreadThread, prFetchedAt: at(29), tiles: [doneTile] })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), tiles: [] })).toEqual({ kind: 'skip', why: 'no_tile' });
   });
 });

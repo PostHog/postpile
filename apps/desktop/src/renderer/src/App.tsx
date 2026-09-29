@@ -39,6 +39,7 @@ import { toolsNotice } from './lib/tools.ts';
 import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
+import { useOpenedRead } from './lib/use-opened-read.ts';
 
 function MainPane(props: { children: ReactNode }) {
   return <main className="flex min-w-0 flex-col gap-[18px] overflow-auto px-5 py-[22px]">{props.children}</main>;
@@ -291,6 +292,9 @@ export function App() {
   });
   const columns = paneColumns(panes.widths);
   const wideList = pane === 'notifications' || pane === 'quiet';
+  // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
+  const detailShown = !showSetup && !wideList;
+  useOpenedRead(detailShown ? selected.view : null, detailShown ? selected.prKey : null);
 
   const tellAgent = {
     available: selected.view !== null,

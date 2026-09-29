@@ -30,6 +30,7 @@ import type {
   MemorySources,
   MemoryTarget,
   NotificationDebugRow,
+  OpenedReadResult,
   QuietReadView,
   PendingProposals,
   PrDetail,
@@ -197,6 +198,13 @@ export interface EngineService {
   markRead(tileId: string): Promise<ActionResult>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
   markThreadRead(threadId: string): Promise<ActionResult>;
+  /**
+   * The user opened the PR in the detail pane: marks its GitHub thread read
+   * ("opened in PostPile", origin quiet, no undo) when a mark-read would
+   * leave every tile holding it done and none is snoozed, only while writes
+   * are unlocked. Nothing happens otherwise, not even a pending write.
+   */
+  markOpenedRead(prKey: PrKey): Promise<OpenedReadResult>;
   /** undoToken null undoes the most recent pending mark-read batch. Memory correction tokens undo that correction. */
   undo(undoToken: string | null): Promise<ActionResult>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult>;

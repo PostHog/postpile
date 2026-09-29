@@ -219,6 +219,56 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   return { kind: 'mark', reason: touchReason(touch.kind) };
 }
 
+/** One tile that holds the opened PR, as far as the "opened in PostPile" rule cares. */
+export interface OpenedTile {
+  snoozed: boolean;
+  /** A mark-read would leave the tile done: nothing asked of the user (`TileView.afterRead.done`). */
+  doneAfterRead: boolean;
+}
+
+/**
+ * Why opening a PR in PostPile leaves its GitHub thread alone:
+ * - not_unread: GitHub has it read already
+ * - stale_snapshot: the stored PR snapshot is older than the thread, so the user did not see the newest activity
+ * - no_tile: no tile shows the PR
+ * - snoozed: the user put a tile holding it away for later
+ * - asks_you: a mark-read would leave something asked of the user
+ */
+export type OpenedSkip = 'not_unread' | 'stale_snapshot' | 'no_tile' | 'snoozed' | 'asks_you';
+
+export type OpenedReadCheck = { kind: 'mark' } | { kind: 'skip'; why: OpenedSkip };
+
+export interface OpenedReadInput {
+  thread: NotificationThread;
+  prFetchedAt: IsoTime | null;
+  /** Every tile that holds the PR. */
+  tiles: OpenedTile[];
+}
+
+/**
+ * Whether opening the PR in PostPile's detail pane may mark its thread read
+ * on GitHub, like a visit on github.com does, limited to cases where that
+ * cannot hide a to-do (DESIGN.md "You already dealt with it", part 3).
+ */
+export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
+  if (!input.thread.unread) {
+    return { kind: 'skip', why: 'not_unread' };
+  }
+  if (!snapshotCoversThread(input)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
+  }
+  if (input.tiles.length === 0) {
+    return { kind: 'skip', why: 'no_tile' };
+  }
+  if (input.tiles.some((tile) => tile.snoozed)) {
+    return { kind: 'skip', why: 'snoozed' };
+  }
+  if (!input.tiles.every((tile) => tile.doneAfterRead)) {
+    return { kind: 'skip', why: 'asks_you' };
+  }
+  return { kind: 'mark' };
+}
+
 const QUIET_DETAIL_PREFIX = 'only bot activity since your last read: ';
 
 /** Action log details of the quiet mark-reads that are not about bots; the Handled quietly view reads the reason back. */
