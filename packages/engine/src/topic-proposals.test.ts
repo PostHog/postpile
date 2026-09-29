@@ -1,4 +1,4 @@
-import type { TopicProposal } from '@postpile/core';
+import type { Pr, TopicProposal } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -57,5 +57,60 @@ describe('topic proposals from outside agents', () => {
     expect((await h.engine.getTopic('depot'))?.decidedProposals.map((p) => p.id)).toEqual(['recent', 'old']);
     setNow('2026-09-20T00:00:00Z');
     expect((await h.engine.getTopic('depot'))?.decidedProposals.map((p) => p.id)).toEqual(['recent']);
+  });
+});
+
+/** #1 <- #2 is a stack, #3 stands alone; all three in topic depot, synced into the store. */
+async function depotWithStack(h: Harness): Promise<{ bottom: Pr; top: Pr; lone: Pr }> {
+  const bottom = reviewRequestedPr(1, { baseRef: 'master', headRef: 's1' });
+  const top = reviewRequestedPr(2, { baseRef: 's1', headRef: 's2' });
+  const lone = reviewRequestedPr(3);
+  topicWithPrs(h, 'depot', [bottom, top, lone]);
+  await h.engine.sync({ maxAgentCalls: 0 });
+  return { bottom, top, lone };
+}
+
+describe('accepting a topic proposal', () => {
+  it('moves a whole stack with a split and reports the source in telemetry', async () => {
+    const { h } = clockedHarness();
+    const { bottom, top, lone } = await depotWithStack(h);
+    h.store.proposals.add(proposal({ id: 's', kind: 'split', name: 'Runner images', prKeys: [top.key] }));
+
+    expect((await h.engine.decideTopicProposal('s', true)).ok).toBe(true);
+
+    const moved = h.store.memberships.get(bottom.key)?.topicId;
+    expect(moved).not.toBe('depot');
+    expect(h.store.memberships.get(top.key)?.topicId).toBe(moved);
+    expect(h.store.memberships.get(lone.key)?.topicId).toBe('depot');
+    expect(h.telemetry.events).toContainEqual({ event: 'proposal_resolved', props: { kind: 'topic_split', accepted: true, source: 'agent' } });
+  });
+
+  it('refuses when the proposal no longer fits, and changes nothing', async () => {
+    const { h } = clockedHarness();
+    const { bottom, top, lone } = await depotWithStack(h);
+    h.store.topics.create({ ...h.store.topics.get('depot')!, id: 'other', name: 'Other' });
+    h.store.proposals.add(proposal({ id: 'gone', kind: 'split', name: 'Moved', prKeys: [lone.key] }));
+    h.store.proposals.add(proposal({ id: 'all', kind: 'split', name: 'Everything', prKeys: [top.key, lone.key] }));
+    h.store.proposals.add(proposal({ id: 'merge', kind: 'merge', name: null, intoTopicId: 'other' }));
+    h.store.memberships.assign({ prKey: lone.key, topicId: 'other', assignedBy: 'user', reason: '', createdAt: '2026-09-02T12:00:00.000Z' });
+    h.store.topics.setStatus('other', 'archived', '2026-09-02T12:00:00.000Z');
+
+    expect((await h.engine.decideTopicProposal('gone', true)).message).toBe(`Can't accept: ${lone.key} left the topic since. Nothing changed; reject it instead.`);
+    expect((await h.engine.decideTopicProposal('merge', true)).message).toContain('the topic to merge into is no longer active');
+    h.store.memberships.assign({ prKey: lone.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: '2026-09-02T12:00:00.000Z' });
+    expect((await h.engine.decideTopicProposal('all', true)).message).toContain('no PR would stay behind');
+    expect(h.store.memberships.get(bottom.key)?.topicId).toBe('depot');
+    expect(h.store.proposals.get('all')?.status).toBe('pending');
+    // Rejecting always works.
+    expect((await h.engine.decideTopicProposal('all', false)).ok).toBe(true);
+  });
+
+  it('refuses an expired outside proposal', async () => {
+    const { h, setNow } = clockedHarness();
+    await depotWithStack(h);
+    h.store.proposals.add(proposal({ id: 'r' }));
+    setNow('2026-09-20T00:00:00Z');
+    expect((await h.engine.decideTopicProposal('r', true)).message).toBe('This suggestion expired; nothing changed.');
+    expect(h.store.topics.get('depot')?.name).not.toBe('Depot runners');
   });
 });

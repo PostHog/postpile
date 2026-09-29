@@ -192,13 +192,17 @@ export interface EngineDeps {
 }
 
 /**
- * proposal_resolved only tracks a topic merge or a rename (DESIGN.md "Agent
- * trust"); new_topic and split have no slot in that event's kind enum, so
- * they are left untracked rather than mapped to something misleading.
+ * proposal_resolved tracks a topic merge, a rename or a split (DESIGN.md
+ * "Agent trust"; splits since outside agents can suggest them); new_topic
+ * has no slot in that event's kind enum, so it is left untracked rather
+ * than mapped to something misleading.
  */
-function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic_merge' | 'rename' | null {
+function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic_merge' | 'rename' | 'topic_split' | null {
   if (kind === 'merge' || kind === 'area_merge') {
     return 'topic_merge';
+  }
+  if (kind === 'split') {
+    return 'topic_split';
   }
   return kind === 'rename' ? 'rename' : null;
 }
@@ -815,10 +819,11 @@ export class Engine implements EngineService {
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     // Read the kind before deciding: decide() marks the proposal accepted/rejected in place.
-    const kind = topicProposalTelemetryKind(this.deps.store.proposals.get(proposalId)?.kind);
+    const proposal = this.deps.store.proposals.get(proposalId);
+    const kind = topicProposalTelemetryKind(proposal?.kind);
     const result = await this.proposals.decide(proposalId, accept);
-    if (result.ok && kind) {
-      this.telemetry.capture('proposal_resolved', { kind, accepted: accept });
+    if (result.ok && kind && proposal) {
+      this.telemetry.capture('proposal_resolved', { kind, accepted: accept, source: proposal.source });
     }
     return result;
   }
