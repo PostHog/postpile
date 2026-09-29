@@ -1,4 +1,4 @@
-import { planTopicChange, type TopicChangeRequest, type TopicChangeResult, type TopicChangeSnapshot, type TopicProposal, type TopicSnapshot } from '@postpile/core';
+import { cleanTopicName, planTopicChange, type TopicChangeRequest, type TopicChangeResult, type TopicChangeSnapshot, type TopicProposal, type TopicSnapshot } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import { newProposalId } from '../ids.ts';
@@ -52,7 +52,7 @@ export class OutsideProposals {
       id: newProposalId(),
       kind: change.kind,
       topicId: change.topicId,
-      name: change.kind === 'merge' ? null : (change.name?.trim() ?? null),
+      name: change.kind === 'merge' || change.name === null ? null : cleanTopicName(change.name),
       intoTopicId: change.kind === 'merge' ? change.intoTopicId : null,
       fromArea: null,
       prKeys: change.kind === 'split' ? change.prKeys : [],

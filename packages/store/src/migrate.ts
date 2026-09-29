@@ -16,14 +16,17 @@ import * as foundPr from './migrations/014_found_pr.ts';
 import * as dropTopicDeferred from './migrations/015_drop_topic_deferred.ts';
 import * as glanceKeyFiles from './migrations/016_glance_key_files.ts';
 import * as topicProposalSource from './migrations/017_topic_proposal_source.ts';
+import * as cleanTopicNames from './migrations/018_clean_topic_names.ts';
 
 interface Migration {
   version: number;
   sql: string;
+  /** A data change SQL alone cannot express, run after `sql` in the same transaction. */
+  run?: (db: DatabaseSync) => void;
 }
 
 // Append new migrations here, in order. Never edit one that has shipped.
-const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource];
+const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource, cleanTopicNames];
 
 /** The schema version this build writes and expects. */
 export const LATEST_VERSION = migrations[migrations.length - 1]!.version;
@@ -43,6 +46,7 @@ export function runMigrations(db: DatabaseSync): void {
     db.exec('BEGIN');
     try {
       db.exec(migration.sql);
+      migration.run?.(db);
       db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
         migration.version,
         new Date().toISOString(),

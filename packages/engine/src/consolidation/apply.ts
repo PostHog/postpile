@@ -1,5 +1,5 @@
 import type { AreaMerge, ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@postpile/agent';
-import type { TopicProposal } from '@postpile/core';
+import { cleanTopicName, type TopicProposal } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { ProposalActions } from '../actions/proposal-actions.ts';
 import { Board } from '../board.ts';
@@ -38,7 +38,7 @@ function sameIdea(filed: TopicProposal, idea: ConsolidationTopicProposal): boole
   if (idea.kind === 'merge') {
     return filed.intoTopicId === idea.intoTopicId;
   }
-  return normalized(filed.name ?? '') === normalized(idea.name);
+  return normalized(filed.name ?? '') === normalized(cleanTopicName(idea.name));
 }
 
 function toTopicProposal(idea: ConsolidationTopicProposal, at: string): TopicProposal {
@@ -46,7 +46,7 @@ function toTopicProposal(idea: ConsolidationTopicProposal, at: string): TopicPro
     id: newProposalId(),
     kind: idea.kind,
     topicId: idea.topicId,
-    name: idea.kind === 'merge' ? null : idea.name,
+    name: idea.kind === 'merge' ? null : cleanTopicName(idea.name),
     intoTopicId: idea.kind === 'merge' ? idea.intoTopicId : null,
     fromArea: null,
     prKeys: idea.kind === 'split' ? idea.prKeys : [],

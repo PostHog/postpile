@@ -1,4 +1,4 @@
-import { newTopic, proposalOutcome, type ActionResult, type PrKey, type TopicProposal } from '@postpile/core';
+import { cleanTopicName, newTopic, proposalOutcome, type ActionResult, type PrKey, type TopicProposal } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
@@ -31,7 +31,7 @@ export class ProposalActions {
     if (proposal.kind === 'new_topic' || proposal.kind === 'split') {
       this.createTopic(proposal, at);
     } else if (proposal.kind === 'rename' && proposal.topicId && proposal.name) {
-      this.store.topics.rename(proposal.topicId, proposal.name, at);
+      this.store.topics.rename(proposal.topicId, cleanTopicName(proposal.name), at);
     } else if (proposal.kind === 'merge' && proposal.topicId && proposal.intoTopicId) {
       // A new created_at marks them as joined, so the target's next dossier update introduces them.
       for (const membership of this.store.memberships.listForTopic(proposal.topicId)) {

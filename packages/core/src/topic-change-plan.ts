@@ -1,4 +1,5 @@
 import { isLiveProposal, sameTopicChange } from './topic-proposals.ts';
+import { cleanTopicName } from './topics.ts';
 import type { IsoTime, PrKey, TopicProposal, TopicStatus } from './types.ts';
 
 // propose_topic_change (DESIGN.md "propose_topic_change"): the checks and
@@ -106,7 +107,7 @@ function checkFields(change: TopicChangeRequest): string | null {
 
 /** Pending already, or rejected before: an agent must not file the same change twice. */
 function checkRepeat(change: TopicChangeRequest, snapshot: TopicChangeSnapshot): string | null {
-  const same = snapshot.proposals.filter((proposal) => sameTopicChange(proposal, { ...change, name: change.name?.trim() ?? null }));
+  const same = snapshot.proposals.filter((proposal) => sameTopicChange(proposal, { ...change, name: change.name === null ? null : cleanTopicName(change.name) }));
   const pending = same.find((proposal) => isLiveProposal(proposal, snapshot.now));
   if (pending) {
     return `The same change is pending already (filed ${pending.createdAt.slice(0, 10)}); the user has not decided yet.`;
@@ -155,7 +156,7 @@ function splitPlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, to
   if (staying.length === 0) {
     return refused(`That would move every PR out of "${topic.name}"; propose a rename or a merge instead.`);
   }
-  const name = change.name?.trim() ?? '';
+  const name = cleanTopicName(change.name ?? '');
   return {
     ok: true,
     movedPrKeys: moved,
@@ -180,8 +181,8 @@ export function planTopicChange(change: TopicChangeRequest, snapshot: TopicChang
   }
   let plan: TopicChangePlan;
   if (change.kind === 'rename') {
-    const name = change.name?.trim() ?? '';
-    if (name.toLowerCase() === topic.name.trim().toLowerCase()) {
+    const name = cleanTopicName(change.name ?? '');
+    if (name.toLowerCase() === cleanTopicName(topic.name).toLowerCase()) {
       return refused(`The topic is already called "${topic.name}".`);
     }
     plan = { ok: true, movedPrKeys: [], preview: [`Rename "${topic.name}" to "${name}".`] };
