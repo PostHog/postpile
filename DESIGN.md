@@ -2025,8 +2025,9 @@ core  <- store, github, agent  <- engine  <- server, cli
   fix-path included), preload and renderer into `out/`; electron-builder
   (`apps/desktop/electron-builder.yml`) packs only `out/**` and `package.json` into an asar,
   no node_modules (the desktop package has devDependencies only). macOS, arm64, `dir` + `zip`,
-  appId `com.postpile.app`, ad-hoc signed (`identity: "-"`, no hardened runtime, no
-  notarization; a broken signature makes macOS drop notifications), icon
+  appId `com.posthog.postpile`, ad-hoc signed locally (`identity: "-"`, no hardened runtime,
+  no notarization; a broken signature makes macOS drop notifications; the release workflow
+  overrides these to sign with a Developer ID, hardened runtime and notarization), icon
   `build/icon.icns`, output `apps/desktop/dist/`. About 290 MB unpacked, 130 MB zipped
   (Electron itself is most of it).
 - **apps/cli**: `sync`, `consolidate`, `topics`, `topic <id>` (with the dossier), `pr <owner/repo#n>`

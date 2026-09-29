@@ -477,8 +477,9 @@ now".
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
   consolidation can only propose splits over timeline PRs.
 - The app bundle (`pnpm dist`) is ad-hoc signed (no Developer ID, not
-  notarized) and arm64 only; no Homebrew
-  tap, no auto-update, no release pipeline. x64 would be one more arch in
+  notarized) and arm64 only; no auto-update. Release builds are signed
+  with PostHog's Developer ID and notarized once the `desktop-signing`
+  environment has the Apple secrets (access pending, see RELEASING.md). x64 would be one more arch in
   `electron-builder.yml` (another Electron download, not tried). The
   packaged app was started once in fake mode; a real-data run from Finder
   (PATH from the login shell, gh / claude found) is not tried yet.

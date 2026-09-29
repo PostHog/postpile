@@ -2,9 +2,12 @@
 # Everything the app runs is bundled into out/ by electron-vite (main,
 # preload, renderer, workspace packages, hono, fix-path), so the desktop
 # package has no runtime dependencies and no node_modules go into the app.
-# Ad-hoc signed (identity "-"): no Developer ID, no notarization. An
-# unsigned or half-signed bundle has an invalid signature, and macOS drops
-# notifications from such apps without a word.
+# Local builds are ad-hoc signed (identity "-"): dev machines have no
+# Developer ID certificate. An unsigned or half-signed bundle has an invalid
+# signature, and macOS drops notifications from such apps without a word.
+# The release workflow signs with PostHog's Developer ID instead, with the
+# hardened runtime and notarization, by overriding identity, hardenedRuntime
+# and notarize on the command line (see .github/workflows/release.yml).
 # Changed from com.postpile.app for 0.1.0-alpha.0. macOS keys notification
 # permission by the bundle id, so an install that ran the old id asks for it
 # again. The data folder (and with it the single-instance lock and the
@@ -28,10 +31,14 @@ mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools
   identity: "-"
-  # Hardened runtime with an ad-hoc signature needs library validation
-  # turned off by entitlement; without notarization it buys nothing.
+  # Hardened runtime and notarization only make sense with a Developer ID;
+  # the release workflow turns both on when it has the certificate.
   hardenedRuntime: false
   notarize: false
+  # One file for the app and its helpers. Only takes effect under the
+  # hardened runtime; see the comment in the file.
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
   target:
     - target: dir
       arch: [arm64]

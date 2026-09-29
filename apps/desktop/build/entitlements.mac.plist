@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Used for the app and, as entitlementsInherit, for its helpers. The same
+	three keys as electron-builder's default template and PostHog's desktop
+	app (products/desktop/apps/code/build/entitlements.mac.plist), minus the
+	microphone. They only matter under the hardened runtime of a Developer ID
+	build; an ad-hoc build carries them without effect.
+
+	Not needed for child processes: gh, claude, git and the login shell that
+	fix-path runs are separate binaries with their own signatures, and the
+	hardened runtime does not limit what the app may exec. node:sqlite is
+	built into Electron's Node, so the bundle has no .node files to load.
+	-->
+
+	<!-- V8 compiles JavaScript at runtime. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+
+	<!-- Electron's frameworks and helpers load each other; without this an ad-hoc build fails library validation (electron-builder#3940). -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

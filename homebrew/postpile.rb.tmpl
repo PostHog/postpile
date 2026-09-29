@@ -4,6 +4,11 @@
 # Rendered into PostHog/homebrew-tap as Casks/postpile.rb by
 # .github/workflows/release.yml on v* tags. Edit this template, not the
 # rendered file in the tap; the next release overwrites it.
+#
+# The first block in the caveats, between its two marker lines, is for ad-hoc
+# signed builds only. The workflow deletes the whole block for a Developer ID
+# signed and notarized build, and only the two marker lines for an ad-hoc one.
+# Don't write the marker names anywhere else in this file.
 cask "postpile" do
   version "VERSION_PLACEHOLDER"
   sha256 "SHA256_PLACEHOLDER"
@@ -27,7 +32,8 @@ cask "postpile" do
   ]
 
   caveats <<~EOS
-    PostPile is an alpha and the app is not notarized (ad-hoc signed only),
+    ADHOC_CAVEAT_BEGIN
+    PostPile is an alpha and this build is not notarized (ad-hoc signed only),
     so macOS blocks the first open. Either clear the quarantine flag:
 
       xattr -dr com.apple.quarantine /Applications/PostPile.app
@@ -35,10 +41,11 @@ cask "postpile" do
     or try to open it once, then allow it in System Settings > Privacy &
     Security > Open Anyway (on older macOS: right-click the app > Open).
 
+    ADHOC_CAVEAT_END
     PostPile needs the GitHub CLI and the Claude Code CLI, both installed
     and logged in:
 
       brew install gh && gh auth login
-      brew install --cask claude-code && claude
+      curl -fsSL https://claude.ai/install.sh | bash && claude auth login
   EOS
 end
