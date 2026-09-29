@@ -14,11 +14,12 @@ import { MemoryLine } from './MemoryLine.tsx';
 import { RelationLine } from './RelationLine.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
 
+/** Your role in the topic as a noun (2026-09-29): "You review" read like an order next to "lyra drives". */
 const ROLE_LABELS: Record<UserRole, string> = {
-  driver: 'You drive',
-  reviewer: 'You review',
-  stakeholder: 'You have a stake',
-  watcher: 'You watch',
+  driver: 'Driver',
+  reviewer: 'Reviewer',
+  stakeholder: 'Stakeholder',
+  watcher: 'Watcher',
 };
 
 const STATUS_TONES: Record<DossierStatus, string> = {
@@ -139,7 +140,9 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
               {topic.driver} drives
             </span>
           )}
-          <span className={`${chip} px-2`}>{ROLE_LABELS[topic.userRole]}</span>
+          <span className={`${chip} px-2`} title="Your role in this topic">
+            {ROLE_LABELS[topic.userRole]}
+          </span>
           <span className={`${chip} px-2 font-mono text-[10.5px] text-muted`}>
             {prCount} {prCount === 1 ? 'PR' : 'PRs'}
           </span>
