@@ -162,7 +162,8 @@ export async function staleServerNote(reader: Pick<PostPileReader, 'recordedAppV
   } catch {
     return null;
   }
-  if (appVersion === null || appVersion === ownVersion || ownVersion === 'unknown') {
+  // Without a known version on both sides there is nothing to compare.
+  if (appVersion === null || appVersion === 'unknown' || ownVersion === 'unknown' || appVersion === ownVersion) {
     return null;
   }
   return `Note: PostPile was updated to ${appVersion}, but this MCP server still runs ${ownVersion}, so its answers may follow old rules. Ask the user to reconnect the postpile MCP server (/mcp in Claude Code).`;

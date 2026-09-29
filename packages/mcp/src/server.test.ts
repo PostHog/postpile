@@ -4,7 +4,7 @@ import { FakeEngine } from '@postpile/server';
 import { describe, expect, it } from 'vitest';
 import { InMemoryAgentRequests } from './agent-requests.ts';
 import type { PostPileReader } from './reads.ts';
-import { createMcpServer, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
+import { createMcpServer, staleServerNote, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
 
 /** Claude Code cuts tool descriptions and server instructions at this many characters, without a word. */
 const CLAUDE_CODE_CUT = 2048;
@@ -191,6 +191,14 @@ describe('PostPile MCP server', () => {
     const text = await callText(await connected(updated, { version: '0.11.1' }), 'whats_on_me');
     expect(text).toMatch(/^Note: PostPile was updated to 0\.12\.0, but this MCP server still runs 0\.11\.1/);
     expect(await callText(await connected(new FakeEngine(), { version: '0.11.1' }), 'whats_on_me')).not.toContain('reconnect');
+  });
+
+  it('says nothing about a reconnect while either version is unknown', async () => {
+    const recorded = (version: string | null) => ({ recordedAppVersion: async () => version });
+    expect(await staleServerNote(recorded(null), '0.11.1')).toBeNull();
+    expect(await staleServerNote(recorded('unknown'), '0.11.1')).toBeNull();
+    expect(await staleServerNote(recorded('0.12.0'), 'unknown')).toBeNull();
+    expect(await staleServerNote(recorded('0.11.1'), '0.11.1')).toBeNull();
   });
 
   it('searches PRs with paging and flat filters', async () => {
