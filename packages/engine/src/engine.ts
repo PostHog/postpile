@@ -861,11 +861,19 @@ export class Engine implements EngineService {
   }
 
   async acceptSetup(request: SetupAcceptRequest): Promise<SetupAcceptResult> {
-    return this.setup.accept(request);
+    const result = await this.setup.accept(request);
+    if (result.ok) {
+      this.telemetry.capture('setup_completed', {});
+    }
+    return result;
   }
 
   async skipSetup(): Promise<ActionResult> {
-    return this.setup.skip();
+    const result = await this.setup.skip();
+    if (result.ok) {
+      this.telemetry.capture('setup_skipped', {});
+    }
+    return result;
   }
 
   flushPendingWrites(): Promise<void> {
