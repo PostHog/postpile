@@ -1,5 +1,5 @@
 import type { EventBatchInput } from '@postpile/agent';
-import type { PrEvent, PrKey } from '@postpile/core';
+import { PERSONAL_ASK_KINDS, type PrEvent, type PrKey } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import type { DigestDeps, TopicScope } from './deps.ts';
@@ -22,10 +22,18 @@ interface EventGroup {
 /**
  * Loud events get a second opinion (demote or mute). A push after the
  * viewer's approval starts quiet and goes to the agent too, which may raise
- * it when the push changes what was approved.
+ * it when the push changes what was approved. A loud personal ask (mention,
+ * question, reply) goes even once it is read: it stays the viewer's move
+ * until answered, unless the agent says it asks nothing ("thanks!").
  */
 function needsOpinion(event: PrEvent): boolean {
-  if (event.seenAt !== null || event.override !== null) {
+  if (event.override !== null) {
+    return false;
+  }
+  if (event.ruleLoudness === 'loud' && PERSONAL_ASK_KINDS.includes(event.kind)) {
+    return true;
+  }
+  if (event.seenAt !== null) {
     return false;
   }
   return event.ruleLoudness === 'loud' || event.kind === 'commits_after_approval';
@@ -33,8 +41,8 @@ function needsOpinion(event: PrEvent): boolean {
 
 /**
  * Second opinion on loud events, plus pushes after the viewer's approval: a
- * wrong "loud" costs the user an unread tile, a wrong "quiet" is still
- * visible as a dot. One call per topic
+ * wrong "loud" costs the user an unread tile (and, on an ask, a "your move"
+ * footer), a wrong "quiet" is still visible as a dot. One call per topic
  * (20 PRs at most). The agent may demote (or mute) with a reason; the
  * override is stored on the event.
  *
@@ -60,7 +68,7 @@ export class EventBatchClassifier {
     return [...topics, unsorted];
   }
 
-  /** Unseen events without an override that need an opinion (needsOpinion), logged after afterSeq, per PR. */
+  /** Events without an override that need an opinion (needsOpinion), logged after afterSeq, per PR. */
   private items(prKeys: PrKey[], afterSeq: number): EventItem[] {
     const byPr = new Map<PrKey, PrEvent[]>();
     for (const { event } of this.deps.store.eventLog.listSince(prKeys, afterSeq)) {

@@ -10,11 +10,18 @@ function tier(overrides: Partial<PrTierInput>): string {
   return prTier({ pr: makePr(), events: [], viewer: withTeam, userState: null, reason: null, ...overrides });
 }
 
-const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30) });
+const question = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'ada', at: at(30) });
 
 describe('prTier', () => {
   it('puts an unanswered question first, even on your own PR', () => {
     expect(tier({ pr: makePr({ author: me }), events: [question] })).toBe('needs_reply');
+  });
+
+  it('drops an ask the events agent lowered, and keeps one it left loud', () => {
+    const lowered = { ...question, override: { loudness: 'quiet' as const, reason: 'Only says thanks.', by: 'agent' as const } };
+    expect(tier({ pr: makePr({ author: me }), events: [lowered] })).toBe('mine');
+    expect(tier({ pr: makePr({ author: 'ada' }), events: [lowered] })).toBe('rest');
+    expect(tier({ pr: makePr({ author: 'ada' }), events: [question] })).toBe('needs_reply');
   });
 
   it('drops the ask once you commented after it', () => {
@@ -23,8 +30,8 @@ describe('prTier', () => {
   });
 
   it('ignores bots and team mentions for needs_reply', () => {
-    const bot = makeEvent({ kind: 'mention', actor: 'github-actions', isBot: true });
-    const team = makeEvent({ kind: 'team_mention', actor: 'ada' });
+    const bot = makeEvent({ kind: 'mention', ruleLoudness: 'loud', actor: 'github-actions', isBot: true });
+    const team = makeEvent({ kind: 'team_mention', ruleLoudness: 'loud', actor: 'ada' });
     expect(tier({ events: [bot] })).toBe('rest');
     expect(tier({ events: [team] })).toBe('team_mentioned');
   });
@@ -107,9 +114,9 @@ describe('prTier: Changes you requested', () => {
   });
 
   it('lets an ask from someone other than the author go first', () => {
-    const lyra = makeEvent({ kind: 'question_to_user', actor: 'lyra', at: at(45) });
+    const lyra = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'lyra', at: at(45) });
     expect(tier({ pr: addressed, events: [lyra] })).toBe('needs_reply');
-    const author = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(45) });
+    const author = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'ada', at: at(45) });
     const authorComment = makeComment({ author: 'ada', createdAt: at(45) });
     expect(tier({ pr: { ...standing, comments: [authorComment] }, events: [author] })).toBe('changes_requested');
   });

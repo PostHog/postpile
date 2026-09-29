@@ -1,10 +1,10 @@
 import type { Dossier, Pr } from '@postpile/core';
-import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
+import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { FAKE_MODEL } from './testing/fake-agent.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
-import { topicWithPrs } from './testing/topics.ts';
+import { makeTopic, topicWithPrs } from './testing/topics.ts';
 
 const LATER = '2026-09-03T00:00:00.000Z';
 
@@ -453,6 +453,46 @@ describe('event classification', () => {
     expect(h.agent.eventInputs[0]?.topic?.id).toBe('depot');
     const overridden = h.store.events.listForPr(h.agent.eventInputs[0]!.items[0]!.pr.key)[0];
     expect(overridden?.override).toMatchObject({ loudness: 'quiet', by: 'agent' });
+  });
+});
+
+describe('replies that ask nothing', () => {
+  // The viewer asked in a review thread, bob answered "thanks, that's fine".
+  function thankedPr(): Pr {
+    const thread = makeThread('t1', [
+      makeComment({ id: 'mine', author: viewer.login, body: 'Maybe rename this?', createdAt: at(5) }),
+      makeComment({ id: 'thanks', author: 'bob', body: "Thanks, that's fine", createdAt: at(10) }),
+    ]);
+    return reviewRequestedPr(1, { author: 'bob', threads: [thread], comments: thread.comments, reviews: [makeReview({ author: viewer.login, state: 'COMMENTED', submittedAt: at(5) })] });
+  }
+
+  it('go to the agent even once read on GitHub, and stop being your move when it lowers them', async () => {
+    const h = makeHarness();
+    const pr = thankedPr();
+    h.store.topics.create(makeTopic('depot'));
+    h.reader.addPr(pr, makeThreadFor(pr, { unread: false, lastReadAt: at(20) }));
+    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    h.agent.answerEvents((input) => {
+      const reply = input.items[0]!.events.find((event) => event.kind === 'reply_to_user')!;
+      return [{ eventId: reply.id, loudness: 'quiet', reason: 'Only says thanks.' }];
+    });
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    const reply = h.agent.eventInputs[0]?.items[0]?.events.find((event) => event.kind === 'reply_to_user');
+    expect(reply?.seenAt).not.toBeNull();
+    const turn = (await h.engine.getTopic('depot'))?.tiles[0]?.turn;
+    expect(turn).toMatchObject({ kind: 'them', who: 'bob', what: 'to address 1 thread' });
+  });
+
+  it('stay your move while the agent leaves them loud', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [thankedPr()]);
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    const turn = (await h.engine.getTopic('depot'))?.tiles[0]?.turn;
+    expect(turn).toMatchObject({ kind: 'you', move: 'reply', what: 'Reply to bob' });
   });
 });
 

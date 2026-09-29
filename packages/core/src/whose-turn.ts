@@ -2,7 +2,7 @@
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
 import { isBot } from './bots.ts';
 import { changesAnswered, type ChangesAnswer } from './changes-answered.ts';
-import { isUnseenLoud } from './loudness.ts';
+import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
@@ -109,7 +109,8 @@ function spokeSince(pr: Pr, viewer: Viewer, since: string): boolean {
  * answered since (no comment or review after it). Also used by `prTier`.
  * A team mention only asks until it is read: once seen (mark-read in the
  * app or read on GitHub) it no longer counts (decided 2026-09-28). Personal
- * asks count until answered.
+ * asks count until answered. An event the events agent lowered to quiet or
+ * muted ("thanks, that's fine") asks nothing (decided 2026-09-29).
  */
 export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: EventKind[] = ASK_KINDS): PrEvent | null {
   let newest: PrEvent | null = null;
@@ -118,6 +119,9 @@ export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: 
       continue;
     }
     if (event.kind === 'team_mention' && event.seenAt !== null) {
+      continue;
+    }
+    if (effectiveLoudness(event) !== 'loud') {
       continue;
     }
     if (spokeSince(pr, viewer, event.at)) {

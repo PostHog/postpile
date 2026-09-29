@@ -642,6 +642,11 @@ now".
 - A database from before the classify cursor gives a second opinion on its
   older loud unseen events once, on the first sync after the upgrade (one
   call per topic with such events, within `--max-agent-calls`).
+- Asks the events agent already judged before 2026-09-29 (behind the
+  topic's classify cursor, older prompt without the "asks nothing is quiet"
+  rule) are not judged again, read or not: an old "thanks, that's fine"
+  stays your move until you answer it. No cursor reset for now; new
+  replies get the new rule.
 - Topics without a stored dossier context hash count as unchanged; the hash
   is written on their next dossier update.
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
@@ -941,6 +946,14 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **A reply that asks nothing is not your move** (2026-09-29): whose turn,
+  Needs reply and the after-read toast skip an ask (reply, mention,
+  question) the events agent lowered to quiet or muted. The agent prompt
+  says a plain acknowledgement ("thanks", "yeah that's fine") is quiet, and
+  read personal asks go to the agent too. Julian: "if the author just
+  replies 'Oh yeah, that's fine,' that's not my move to reply again".
+  DESIGN.md "Whose turn", rule 2.
 
 - **Each topic once in the sidebar; "Changes you requested" under Needs
   reply** (2026-09-29): a topic shows only in its highest section (the

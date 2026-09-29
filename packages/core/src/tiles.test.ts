@@ -99,25 +99,25 @@ describe('isPrDone', () => {
 
   it('is not done after mark-read while an ask to you is unanswered', () => {
     const pr = makePr({ author: 'ada' });
-    const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30), seenAt: at(40) });
+    const question = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'ada', at: at(30), seenAt: at(40) });
     expect(isPrDone(pr, handled, teamViewer, [question])).toBe(false);
     expect(isPrDone(pr, handled, teamViewer)).toBe(true);
   });
 
   it('is not done after your approval while a later question to you is unanswered', () => {
     const pr = makePr({ author: 'ada', reviews: [makeReview({ author: viewer.login, submittedAt: at(20) })] });
-    const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30) });
+    const question = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'ada', at: at(30) });
     expect(isPrDone(pr, null, teamViewer, [question])).toBe(false);
     expect(isPrDone(pr, null, teamViewer)).toBe(true);
   });
 
   it('lets a team mention keep a PR out of done only until it is read', () => {
     const pr = makePr({ author: 'ada' });
-    const unseen = makeEvent({ kind: 'team_mention', actor: 'ada', at: at(30) });
+    const unseen = makeEvent({ kind: 'team_mention', ruleLoudness: 'loud', actor: 'ada', at: at(30) });
     expect(isPrDone(pr, handled, teamViewer, [unseen])).toBe(false);
     expect(isPrDone(pr, handled, teamViewer, [{ ...unseen, seenAt: at(40) }])).toBe(true);
     // A personal ask still holds after mark-read.
-    const question = makeEvent({ kind: 'question_to_user', actor: 'ada', at: at(30), seenAt: at(40) });
+    const question = makeEvent({ kind: 'question_to_user', ruleLoudness: 'loud', actor: 'ada', at: at(30), seenAt: at(40) });
     expect(isPrDone(pr, handled, teamViewer, [question])).toBe(false);
   });
 
