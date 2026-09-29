@@ -1,6 +1,9 @@
 import type {
   ActionLogEntry,
   ActionResult,
+  AgentRefreshOptions,
+  AgentRefreshResult,
+  AgentRefreshTarget,
   ChatMessage,
   ChatReply,
   ConsolidateOptions,
@@ -108,6 +111,15 @@ export interface EngineService {
    * a full sync or consolidation runs.
    */
   refreshOnFocus(prKeys: PrKey[]): Promise<void>;
+  /**
+   * refresh_from_github from an outside agent (DESIGN.md
+   * "refresh_from_github"): re-reads one PR, or a topic's open PRs (at most
+   * 10), from GitHub now, in one poll cycle with them in focus; a running
+   * full sync is joined instead. Fresh PRs are skipped; the hourly cap, one
+   * at a time and the quota gate apply across all agents. Logged as
+   * agent_refresh. GitHub reads only, never a write.
+   */
+  refreshNow(target: AgentRefreshTarget, options: AgentRefreshOptions): Promise<AgentRefreshResult>;
 
   /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
   listTopics(scope?: ListScope): Promise<TopicListItem[]>;

@@ -1,6 +1,9 @@
 import type {
   ActionLogEntry,
   ActionResult,
+  AgentRefreshOptions,
+  AgentRefreshResult,
+  AgentRefreshTarget,
   ChatMessage,
   ChatReply,
   ConsolidationReport,
@@ -133,7 +136,7 @@ import {
   type PingDecision,
   type QuietReadView,
 } from '@postpile/core';
-import { AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, AutoSyncSchedule, LivePoller, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
@@ -256,6 +259,7 @@ export class FakeEngine implements EngineService {
   private readonly toolStatus: FakeTools;
   private readonly mcp: FakeMcp;
   private readonly topicChanges: FakeTopicChanges;
+  private readonly agentRefresher: AgentRefresher;
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
@@ -303,6 +307,23 @@ export class FakeEngine implements EngineService {
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
     this.topicChanges = new FakeTopicChanges(this.data, this.now);
+    this.agentRefresher = new AgentRefresher({
+      now: this.now,
+      quota: this.quota,
+      pr: (key) => {
+        const pr = this.data.prs.find((candidate) => candidate.key === key);
+        return pr ? { fetchedAt: this.fetchedAtOf(key), updatedAt: pr.updatedAt, state: pr.state } : null;
+      },
+      topic: (topicId) => this.getTopic(topicId),
+      eventCounts: (keys) => new Map(keys.map((key) => [key, this.eventsOf(key).length])),
+      read: async (keys) => {
+        for (const key of keys) {
+          this.fetchedAt.set(key, this.timestamp());
+        }
+        return { kind: 'ran' };
+      },
+      log: (outcome, detail) => this.writes.record({ action: 'agent_refresh', origin: 'agent', outcome, detail }),
+    });
     this.feedback = [...this.memory.seedFeedback()];
     this.live = new FakeLivePoll(this.data, this.now, (prKey) => isPrInQuietRepo(prKey, this.repoSettings));
     this.writes = new FakeWrites(this.now, {
@@ -1449,6 +1470,11 @@ export class FakeEngine implements EngineService {
   /** Sample data never changes on GitHub; one poll cycle (debounced) keeps the flow the same as the real engine. */
   async refreshOnFocus(): Promise<void> {
     await this.livePoller?.runOnFocus();
+  }
+
+  /** The real refresh rules over sample data: a "read" only moves the PRs' fetch time; nothing changes on GitHub. */
+  refreshNow(target: AgentRefreshTarget, options: AgentRefreshOptions): Promise<AgentRefreshResult> {
+    return this.agentRefresher.refresh(target, options.client);
   }
 
   // -------------------------------------------------------------------------

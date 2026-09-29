@@ -36,3 +36,4 @@ export {
   type TelemetryPersonInfo,
 } from './telemetry/telemetry.ts';
 export { telemetryEnabled } from './telemetry/telemetry-env.ts';
+export { AgentRefresher, type AgentRefreshDeps, type RefreshRun, type StoredPrInfo } from './agent-requests/agent-refresh.ts';

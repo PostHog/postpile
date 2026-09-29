@@ -4,6 +4,9 @@ import type {
   ListScope,
   ActionLogEntry,
   ActionResult,
+  AgentRefreshOptions,
+  AgentRefreshResult,
+  AgentRefreshTarget,
   ChatMessage,
   ChatReply,
   ConsolidateOptions,
@@ -80,6 +83,7 @@ import { loadViewer } from './viewer-meta.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
+import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
@@ -242,6 +246,7 @@ export class Engine implements EngineService {
   private readonly quota: GitHubQuota;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
+  private readonly agentRefresher: AgentRefresher;
 
   constructor(private readonly deps: EngineDeps) {
     const { store, now } = deps;
@@ -318,6 +323,54 @@ export class Engine implements EngineService {
     const setupChecks = new SetupChecks(deps.reader, commands);
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
     this.mcp = new McpConnection({ store, commands, tools: this.toolHealth, launcher: deps.mcpLauncher ?? null, now, telemetry: this.telemetry });
+    this.agentRefresher = new AgentRefresher({
+      now,
+      quota: this.quota,
+      pr: (key) => {
+        const pr = store.prs.get(key);
+        return pr ? { fetchedAt: store.prs.fetchedAt(key), updatedAt: pr.updatedAt, state: pr.state } : null;
+      },
+      topic: async (topicId) => this.reads.getTopic(topicId),
+      eventCounts: (keys) => new Map([...store.events.listForPrs(keys)].map(([key, events]) => [key, events.length])),
+      read: (keys) => this.readForAgent(keys),
+      log: (outcome, detail) => log.record({ action: 'agent_refresh', origin: 'agent', outcome, detail }),
+    });
+  }
+
+  /** The next poll cycle's focus still holds one of these PRs: the cycle that ran was not ours. */
+  private focusHolds(keys: PrKey[]): boolean {
+    return this.focus.prRefs.some((ref) => keys.includes(`${ref.repo}#${ref.number}`));
+  }
+
+  /**
+   * An outside agent's refresh: these PRs fetched directly in one poll
+   * cycle, so new events get the usual ping handling and catch-up. A
+   * running full sync is joined instead (its freshness check covers every
+   * tracked PR). A cycle already running started before the request, so it
+   * is waited for, then one runs with these PRs in focus.
+   */
+  private async readForAgent(keys: PrKey[]): Promise<RefreshRun> {
+    const retryAt = new Date(this.deps.now().getTime() + 60_000).toISOString();
+    if (this.consolidating) {
+      return { kind: 'blocked', reason: 'A consolidation run is going; try again in a minute.', retryAt };
+    }
+    if (!this.syncing) {
+      await this.polling?.catch(() => {});
+      this.focus = { threadIds: this.focus.threadIds, prRefs: [...this.focus.prRefs, ...keys.map(parsePrKey)] };
+    }
+    try {
+      let cycle = await this.pollOnce();
+      if (cycle.kind === 'done' && this.focusHolds(keys)) {
+        cycle = await this.pollOnce();
+      }
+      if (this.syncing) {
+        await this.syncing.catch(() => {});
+        return { kind: 'joined_sync' };
+      }
+      return cycle.kind === 'blocked' ? { kind: 'blocked', reason: `PostPile's GitHub reads are paused: ${cycle.reason}.`, retryAt: null } : { kind: 'ran' };
+    } catch (error) {
+      return { kind: 'blocked', reason: `The GitHub read failed: ${errorText(error)}.`, retryAt };
+    }
   }
 
   /** The newest work context digest as the setup sweep reads it: prompt text, version and date. */
@@ -610,6 +663,10 @@ export class Engine implements EngineService {
     } else if (prKeys.length > 0) {
       await this.pollOnce().catch(() => {});
     }
+  }
+
+  refreshNow(target: AgentRefreshTarget, options: AgentRefreshOptions): Promise<AgentRefreshResult> {
+    return this.agentRefresher.refresh(target, options.client);
   }
 
   /** The poll's own status, plus what the renderer refreshes on (syncs, the next auto sync, catch-up runs) and the GitHub quota while it is low. */

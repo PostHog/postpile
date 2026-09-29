@@ -191,6 +191,19 @@ describe('FakeEngine memory', () => {
     expect(topics.map((item) => item.topic.id)).not.toContain('topic-frontend-build');
   });
 
+  it('refreshes sample PRs for an outside agent under the real rules', async () => {
+    const engine = new FakeEngine();
+    const agent = { source: 'agent', client: 'claude-code' } as const;
+    const first = await engine.refreshNow({ kind: 'pr', prKey: 'acme/app#1902' }, agent);
+    expect(first).toMatchObject({ status: 'done', fetched: ['acme/app#1902'], changed: [] });
+    const again = await engine.refreshNow({ kind: 'pr', prKey: 'acme/app#1902' }, agent);
+    expect(again).toMatchObject({ status: 'done', fetched: [], fresh: [{ prKey: 'acme/app#1902' }] });
+    const topic = await engine.refreshNow({ kind: 'topic', topicId: 'topic-depot' }, agent);
+    expect(topic.prKeys.length).toBeGreaterThan(1);
+    expect(topic.fresh.map((entry) => entry.prKey)).toEqual(['acme/app#1902']);
+    expect((await engine.actionLog(1))[0]).toMatchObject({ action: 'agent_refresh', origin: 'agent' });
+  });
+
   it('shows who suggested a topic change and splits the topic on accept', async () => {
     const engine = new FakeEngine();
     const split = (await engine.listProposals()).topics.find((proposal) => proposal.id === 'proposal-split-sharding');
