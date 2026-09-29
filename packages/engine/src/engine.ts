@@ -399,11 +399,17 @@ export class Engine implements EngineService {
       // The sync digests every topic: queued catch-up follow-ups are dropped, running ones waited for.
       this.catchUps.dropQueued();
       const before = Engine.settled([this.consolidating, this.polling, this.catchUps.settled()]);
+      // PRs left over by the PR cap bring the next background sync forward.
+      let backlog = false;
       this.syncing = before
         .then(() => this.syncIfGhWorks(options))
+        .then((report) => {
+          backlog = report.prsSkipped > 0;
+          return report;
+        })
         .finally(() => {
           this.syncing = null;
-          this.autoSync?.reschedule();
+          this.autoSync?.reschedule(backlog);
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
           void this.livePoller?.runCycle();
         });

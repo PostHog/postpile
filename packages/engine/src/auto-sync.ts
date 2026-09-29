@@ -4,6 +4,13 @@ import { errorText } from './errors.ts';
 /** Minutes between background full syncs, unless POSTPILE_AUTO_SYNC_MINUTES says otherwise. */
 export const DEFAULT_AUTO_SYNC_MINUTES = 60;
 
+/**
+ * Minutes to the next background sync when the last one stopped at the PR
+ * cap (SYNC_MAX_PRS): a backlog, e.g. after two weeks away, drains in
+ * batches a few minutes apart instead of one batch an hour.
+ */
+export const BACKLOG_SYNC_MINUTES = 2;
+
 export interface AutoSyncOptions {
   /** 0 or less keeps it off. */
   minutes: number;
@@ -42,9 +49,9 @@ export class AutoSyncSchedule {
     }
   }
 
-  private schedule(): void {
+  private schedule(minutes: number = this.options.minutes): void {
     this.clearTimer();
-    const ms = this.options.minutes * 60 * 1000;
+    const ms = minutes * 60 * 1000;
     this.dueAt = this.timers.now() + ms;
     this.timer = this.timers.setTimeout(() => {
       this.timer = null;
@@ -83,10 +90,13 @@ export class AutoSyncSchedule {
     this.dueAt = null;
   }
 
-  /** Any sync ended: the next auto sync is a full interval from now. */
-  reschedule(): void {
+  /**
+   * Any sync ended: the next auto sync is a full interval from now, or
+   * BACKLOG_SYNC_MINUTES when that sync left PRs over (`backlog`).
+   */
+  reschedule(backlog = false): void {
     if (this.started) {
-      this.schedule();
+      this.schedule(backlog ? Math.min(BACKLOG_SYNC_MINUTES, this.options.minutes) : this.options.minutes);
     }
   }
 

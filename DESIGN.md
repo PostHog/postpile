@@ -123,6 +123,18 @@ comparing against the PR would refetch everything). `SyncOptions` exist for
 cheap runs: `maxPrs` (newest first, the rest follow on later syncs even after a
 304), `maxAgentCalls`, `agentJobs`.
 
+**Big inboxes** (2026-09-29, core `selectSyncThreads`): every notification
+is stored, but only threads updated in the last 30 days
+(`SYNC_MAX_AGE_DAYS`) are ever fetched and digested, and one full sync takes
+at most 60 PRs (`SYNC_MAX_PRS`, the engine's default `maxPrs`), unread
+first, newest first. A thread older than that comes back in when it moves
+again; the user's own PRs, review requests and recent merges still arrive as
+found PRs. When a sync stops at the cap, the next background sync runs 2
+minutes later instead of an hour (`BACKLOG_SYNC_MINUTES`), so a backlog
+(two weeks away, ~400 notifications) drains in batches while the newest 60
+already show. Before, a year of unread notifications kept the first sync
+running for 20+ minutes.
+
 **Reconciling with GitHub's read time.** Every event on a thread from before
 that thread's `last_read_at` counts as seen, stamped with that time, whenever
 the app learns it (core `eventsReadOnGitHub`), not only on a PR's first

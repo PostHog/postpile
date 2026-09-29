@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- The first sync no longer runs for 20+ minutes on a big inbox. Notifications older than 30 days are left alone, one sync takes at most 60 PRs (newest and unread first), and when there are more, the next background sync follows 2 minutes later instead of an hour.
+
 ## 0.2.1 (2026-09-29)
 
 ### Fixed

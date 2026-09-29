@@ -14,6 +14,7 @@ import {
   type PrRef,
   type IsoTime,
   type Viewer,
+  selectSyncThreads,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
@@ -357,8 +358,9 @@ export class GitHubSync {
   }
 
   /**
-   * PR threads with activity after the stored snapshot was fetched, unread
-   * ones first, newest first inside each. Read threads count too, so a PR
+   * PR threads worth fetching (`selectSyncThreads`): updated in the last
+   * SYNC_MAX_AGE_DAYS, with activity after the stored snapshot was fetched,
+   * unread first, newest first inside each. Read threads count too, so a PR
    * handled entirely on github.com still gets its events logged (as seen)
    * and reaches topics, dossiers and facts. Compared against fetch time,
    * not the PR's updatedAt: a thread's updated_at runs ahead of the PR's
@@ -367,28 +369,12 @@ export class GitHubSync {
    * fetched after the inbox answers 304.
    */
   private candidates(): Candidate[] {
-    const fetchedAt = this.store.prs.fetchedAtByKey();
-    const seen = new Set<PrKey>();
-    const result: Candidate[] = [];
-    const threads = this.threads();
-    const unreadFirst = [...threads.filter((thread) => thread.unread), ...threads.filter((thread) => !thread.unread)];
-    for (const thread of unreadFirst) {
+    const withRefs = this.threads().flatMap((thread) => {
       const ref = threadPrRef(thread);
-      if (!ref) {
-        continue;
-      }
-      const key = prKey(ref);
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      const lastFetch = fetchedAt.get(key);
-      if (lastFetch !== undefined && lastFetch >= thread.updatedAt) {
-        continue;
-      }
-      result.push({ ref, thread });
-    }
-    return result;
+      return ref ? [{ ref, thread, key: prKey(ref), unread: thread.unread, updatedAt: thread.updatedAt }] : [];
+    });
+    const picked = selectSyncThreads(withRefs, this.store.prs.fetchedAtByKey(), this.now().toISOString());
+    return picked.map(({ ref, thread }) => ({ ref, thread }));
   }
 
   /** A stack layer has no topic of its own; it reads the context of its anchor's topic. */
