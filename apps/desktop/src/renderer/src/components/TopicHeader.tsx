@@ -60,6 +60,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
         <MemoryLine
           correction={{ kind: 'wrong', factId: null, topicId, text: statusText }}
           stale={null}
+          updating={props.updating}
           corrected={view.correctedClaims.includes(statusText)}
           fixedTo={fixedText(view, statusText)}
           canRecheck
@@ -74,6 +75,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
           <MemoryLine
             correction={{ kind: 'wrong', factId: null, topicId, text: dossier.goal }}
             stale={null}
+            updating={props.updating}
             corrected={view.correctedClaims.includes(dossier.goal)}
             fixedTo={fixedText(view, dossier.goal)}
             canRecheck
@@ -104,7 +106,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
           </span>
         </button>
       </div>
-      {open && <DossierPanel dossier={view} topicId={topicId} />}
+      {open && <DossierPanel dossier={view} topicId={topicId} updating={props.updating} />}
     </>
   );
 }
@@ -148,7 +150,9 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
           </span>
         </span>
       </div>
-      {placement && <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} />}
+      {placement && (
+        <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} updating={updating} />
+      )}
       {topic.summary && <p className="max-w-[680px] text-[13.5px] leading-normal text-pretty text-ink-2">{topic.summary}</p>}
       {dossier && <DossierSummary dossier={dossier} topicId={topic.id} updating={updating} />}
       {topic.tailoring && (

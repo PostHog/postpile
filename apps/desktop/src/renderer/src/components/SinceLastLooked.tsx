@@ -39,6 +39,7 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string; 
             <MemoryLine
               correction={{ kind: 'wrong', factId: null, topicId: props.topicId, text: change.text }}
               stale={null}
+              updating={props.updating}
               corrected={dossier.correctedClaims.includes(change.text)}
               fixedTo={fixedText(dossier, change.text)}
               refs={refs[index]}

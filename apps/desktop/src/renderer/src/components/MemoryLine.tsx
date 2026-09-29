@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { FactRef, MemoryCorrection, MemoryTarget, StaleReason } from '@postpile/core';
-import { useActions } from '../api/actions.tsx';
 import { staleLabel } from '../lib/memory.ts';
-import { staleWord } from '../lib/staleness.ts';
+import { staleBadge } from '../lib/staleness.ts';
 import { MemoryButton } from './MemoryButton.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';
 import { SourceChip } from './SourceChip.tsx';
@@ -13,6 +12,11 @@ interface MemoryLineProps {
   /** Which line this is. "Recheck" asks about it, "Forget" sends it with kind forget. */
   correction: MemoryCorrection;
   stale: StaleReason | null;
+  /**
+   * A full sync or a catch-up run for the line's topic is going
+   * (`updatingNow`): the stale badge and the "Why?" check say "updating".
+   */
+  updating: boolean;
   /** The user already marked it wrong; it stays until the next sync rewrites the dossier. */
   corrected: boolean;
   /** The user accepted a recheck's fix; shown instead until the next sync rewrites the dossier. */
@@ -28,12 +32,11 @@ interface MemoryLineProps {
 
 /**
  * One thing the agent remembers: the text with its sources and an "out of
- * date" ("updating" while a sync runs), "marked wrong" or "fixed" badge after it, and Why? / Recheck / Forget on
+ * date" ("updating" while a sync or catch-up runs), "marked wrong" or "fixed" badge after it, and Why? / Recheck / Forget on
  * hover. Why? opens the sources panel under the line, Recheck the dialog.
  * Recheck and Forget only show on big claims (`canRecheck`, `canForget`).
  */
 export function MemoryLine(props: MemoryLineProps) {
-  const actions = useActions();
   const [whyOpen, setWhyOpen] = useState(false);
   const [recheckOpen, setRecheckOpen] = useState(false);
   const fixedTo = props.fixedTo ?? null;
@@ -53,7 +56,7 @@ export function MemoryLine(props: MemoryLineProps) {
           ))}
           {props.stale && (
             <span className="ml-1.5 rounded bg-closer-soft px-1.5 text-[10px] font-medium whitespace-nowrap text-closer">
-              {staleWord(actions.syncing)} · {staleLabel(props.stale)}
+              {staleBadge(staleLabel(props.stale), props.updating)}
             </span>
           )}
           {props.corrected && <span className="ml-1.5 text-[10.5px] whitespace-nowrap text-hint">marked wrong, fixed on next sync</span>}
@@ -84,7 +87,7 @@ export function MemoryLine(props: MemoryLineProps) {
           {!settled && props.canRecheck && props.canForget && <MemoryButton correction={{ ...props.correction, kind: 'forget' }} />}
         </span>
       </div>
-      {whyOpen && props.why && <WhyPanel target={props.why} onClose={() => setWhyOpen(false)} />}
+      {whyOpen && props.why && <WhyPanel target={props.why} updating={props.updating} onClose={() => setWhyOpen(false)} />}
       {recheckOpen && <RecheckDialog request={{ factId, topicId, text, target: props.why ?? null }} onClose={() => setRecheckOpen(false)} />}
     </div>
   );

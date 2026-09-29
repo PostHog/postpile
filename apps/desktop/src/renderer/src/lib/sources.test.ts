@@ -5,10 +5,16 @@ import { changePath, checkLabel, targetKey, targetQuery } from './sources.ts';
 
 describe('checkLabel', () => {
   it('says whether a line still holds', () => {
-    expect(checkLabel({ state: 'ok', reason: null, note: null })).toEqual({ text: 'Checks out against GitHub', tone: 'ok' });
-    expect(checkLabel({ state: 'stale', reason: 'head_moved', note: null })).toEqual({ text: 'Out of date: PR moved since', tone: 'warn' });
-    expect(checkLabel({ state: 'closed', reason: null, note: 'the user said it is wrong' }).text).toBe('No longer believed: the user said it is wrong');
-    expect(checkLabel({ state: 'unsourced', reason: null, note: null }).text).toBe('No source recorded');
+    expect(checkLabel({ state: 'ok', reason: null, note: null }, false)).toEqual({ text: 'Checks out against GitHub', tone: 'ok' });
+    expect(checkLabel({ state: 'stale', reason: 'head_moved', note: null }, false)).toEqual({ text: 'Out of date: PR moved since', tone: 'warn' });
+    expect(checkLabel({ state: 'closed', reason: null, note: 'the user said it is wrong' }, false).text).toBe('No longer believed: the user said it is wrong');
+    expect(checkLabel({ state: 'unsourced', reason: null, note: null }, false).text).toBe('No source recorded');
+  });
+
+  it('says updating on a stale line while a sync or catch-up runs', () => {
+    expect(checkLabel({ state: 'stale', reason: 'head_moved', note: null }, true)).toEqual({ text: 'Updating now: PR moved since', tone: 'warn' });
+    expect(checkLabel({ state: 'stale', reason: null, note: null }, true).text).toBe('Updating now: a check failed');
+    expect(checkLabel({ state: 'ok', reason: null, note: null }, true).text).toBe('Checks out against GitHub');
   });
 });
 

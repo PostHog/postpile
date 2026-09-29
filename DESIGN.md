@@ -2678,9 +2678,12 @@ one wording everywhere for "not up to date". While a full sync runs
 dossier), every note says "updating": the tile's verdict chip "· updating",
 the stale verdict box "Updating now: a new assessment is being written.",
 the dossier's "Updating now: 3 newer events.", a stale memory badge
-"updating · PR moved since", the live footer "paused while syncing". When
-nothing runs: "out of date" ("· out of date", "Out of date: 3 newer events
-not in the dossier yet.", "Out of date: PR moved since" in "Why?"). "Stale"
+"updating · PR moved since" and its "Why?" check "Updating now: PR moved
+since" (the topic's or PR's updating state is passed into `MemoryLine`,
+`WhyPanel` and `checkLabel`, not read from the sync alone), the live footer
+"paused while syncing". When nothing runs: "out of date" ("· out of date",
+"Out of date: 3 newer events not in the dossier yet.", "Out of date: PR
+moved since" in "Why?"). "Stale"
 and "Sync to refresh it" are gone from the UI.
 
 **Refresh**: `LivePollStatus.catchUpChanges` grows on every queue, start and

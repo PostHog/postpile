@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dossierBehindNote, staleGlanceNote, staleVerdictTitle, staleWord, updatingNow } from './staleness.ts';
+import { dossierBehindNote, staleBadge, staleGlanceNote, staleLead, staleVerdictTitle, staleWord, updatingNow } from './staleness.ts';
 
 describe('updatingNow', () => {
   it('is true while a full sync or a catch-up run is going', () => {
@@ -13,6 +13,16 @@ describe('staleness wording', () => {
   it('says updating while something runs, out of date otherwise', () => {
     expect(staleWord(true)).toBe('updating');
     expect(staleWord(false)).toBe('out of date');
+  });
+
+  it('leads notes and check lines with the same word', () => {
+    expect(staleLead(true)).toBe('Updating now');
+    expect(staleLead(false)).toBe('Out of date');
+  });
+
+  it('words a stale memory badge for both cases', () => {
+    expect(staleBadge('PR moved since', true)).toBe('updating · PR moved since');
+    expect(staleBadge('PR moved since', false)).toBe('out of date · PR moved since');
   });
 
   it('words the stale verdict box line for both cases', () => {

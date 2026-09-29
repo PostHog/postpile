@@ -179,6 +179,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - "Not up to date" has one wording (`lib/staleness.ts`): "updating" while
   `useActions().syncing` or a catch-up writes (`glanceState` `writing`),
   else "out of date". Never write "stale" or "Sync to refresh" in the UI.
+  `MemoryLine` and `WhyPanel` take `updating` from their caller (topic or
+  PR state via `updatingNow`); don't read `syncing` alone there.
   A stale glance shows `StaleVerdictBox` (grey, dashed) with the advice
   folded behind "Show old assessment".
 

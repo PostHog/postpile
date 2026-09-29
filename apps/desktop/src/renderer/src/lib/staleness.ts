@@ -21,6 +21,16 @@ export function staleWord(updating: boolean): StaleWord {
   return updating ? 'updating' : 'out of date';
 }
 
+/** The capitalised lead of a note or check line: "Updating now: …" / "Out of date: …". */
+export function staleLead(updating: boolean): string {
+  return updating ? 'Updating now' : 'Out of date';
+}
+
+/** The badge after a stale memory line: "updating · PR moved since" / "out of date · PR moved since". */
+export function staleBadge(reasonLabel: string, updating: boolean): string {
+  return `${staleWord(updating)} · ${reasonLabel}`;
+}
+
 /** The one line in a stale verdict box, in place of its advice lines. */
 export function staleGlanceNote(updating: boolean): string {
   return updating
@@ -38,5 +48,5 @@ export function staleVerdictTitle(updating: boolean): string {
 /** Under "Since you last looked" when the dossier trails the event log: "Updating now: 3 newer events." */
 export function dossierBehindNote(eventsBehind: number, updating: boolean): string {
   const events = `${eventsBehind} newer ${eventsBehind === 1 ? 'event' : 'events'}`;
-  return updating ? `Updating now: ${events}.` : `Out of date: ${events} not in the dossier yet.`;
+  return updating ? `${staleLead(true)}: ${events}.` : `${staleLead(false)}: ${events} not in the dossier yet.`;
 }

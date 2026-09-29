@@ -21,7 +21,7 @@ function lineText(placement: TopicPlacement): string {
  * the correction: "Wrong" offers the other two relations. A correction holds
  * until something new happens in the topic.
  */
-export function RelationLine(props: { placement: TopicPlacement; topicId: string; dossierVersion: number | null }) {
+export function RelationLine(props: { placement: TopicPlacement; topicId: string; dossierVersion: number | null; updating: boolean }) {
   const actions = useActions();
   const [whyOpen, setWhyOpen] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -73,7 +73,7 @@ export function RelationLine(props: { placement: TopicPlacement; topicId: string
         </div>
       )}
       {whyOpen && props.dossierVersion !== null && (
-        <WhyPanel target={{ kind: 'dossier_line', topicId: props.topicId, version: props.dossierVersion, path: 'relation' }} onClose={() => setWhyOpen(false)} />
+        <WhyPanel target={{ kind: 'dossier_line', topicId: props.topicId, version: props.dossierVersion, path: 'relation' }} updating={props.updating} onClose={() => setWhyOpen(false)} />
       )}
     </div>
   );

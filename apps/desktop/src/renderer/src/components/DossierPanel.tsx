@@ -21,7 +21,7 @@ function careText(care: DossierCare): string {
 }
 
 /** The full dossier behind the "Dossier" disclosure: questions, PRs, cares, people, version history. */
-export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
+export function DossierPanel(props: { dossier: DossierView; topicId: string; updating: boolean }) {
   const now = useNow();
   const { dossier: view, topicId } = props;
   const { dossier } = view;
@@ -38,6 +38,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             key={question.text}
             correction={wrong(question.text)}
             stale={claimStaleReason(`openQuestions[${index}]`, view.staleClaims)}
+            updating={props.updating}
             corrected={corrected(question.text)}
             fixedTo={fixedText(view, question.text)}
             refs={questionRefs[index]}
@@ -57,6 +58,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             key={entry.prKey}
             correction={wrong(`${entry.prKey}: ${entry.role}`)}
             stale={claimStaleReason(`timeline[${index}]`, view.staleClaims)}
+            updating={props.updating}
             corrected={corrected(`${entry.prKey}: ${entry.role}`)}
             fixedTo={fixedText(view, `${entry.prKey}: ${entry.role}`)}
             why={why(`timeline[${index}]`)}
@@ -74,6 +76,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             key={care.text}
             correction={wrong(care.text)}
             stale={null}
+            updating={props.updating}
             corrected={corrected(care.text)}
             fixedTo={fixedText(view, care.text)}
             canRecheck
@@ -90,7 +93,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
         {dossier.people.map((person) => {
           const text = `@${person.login} ${person.role}: ${person.note}`;
           return (
-            <MemoryLine key={person.login} correction={wrong(text)} stale={null} corrected={corrected(text)} fixedTo={fixedText(view, text)} canRecheck>
+            <MemoryLine key={person.login} correction={wrong(text)} stale={null} updating={props.updating} corrected={corrected(text)} fixedTo={fixedText(view, text)} canRecheck>
               <span className="font-medium text-ink">@{person.login}</span> <span className="text-muted">{person.role}</span>
               {person.note && ` · ${person.note}`}
             </MemoryLine>

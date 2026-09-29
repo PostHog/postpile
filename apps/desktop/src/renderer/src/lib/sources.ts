@@ -1,5 +1,6 @@
 import type { DossierView, MemoryCheck, MemoryTarget } from '@postpile/core';
 import { staleLabel } from './memory.ts';
+import { staleLead } from './staleness.ts';
 
 export type CheckTone = 'ok' | 'warn' | 'muted';
 
@@ -8,13 +9,17 @@ export interface CheckLabel {
   tone: CheckTone;
 }
 
-/** The verify line at the top of a "Why?" panel. */
-export function checkLabel(check: MemoryCheck): CheckLabel {
+/**
+ * The verify line at the top of a "Why?" panel. `updating`: a sync or a
+ * catch-up run for the line's topic is going, so a stale line reads
+ * "Updating now: …" instead of "Out of date: …" (`lib/staleness.ts`).
+ */
+export function checkLabel(check: MemoryCheck, updating: boolean): CheckLabel {
   if (check.state === 'ok') {
     return { text: 'Checks out against GitHub', tone: 'ok' };
   }
   if (check.state === 'stale') {
-    return { text: `Out of date: ${check.reason ? staleLabel(check.reason) : 'a check failed'}`, tone: 'warn' };
+    return { text: `${staleLead(updating)}: ${check.reason ? staleLabel(check.reason) : 'a check failed'}`, tone: 'warn' };
   }
   if (check.state === 'closed') {
     return { text: `No longer believed${check.note ? `: ${check.note}` : ''}`, tone: 'muted' };
