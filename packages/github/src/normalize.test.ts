@@ -1,4 +1,4 @@
-import { deriveEvents, touchedReadCheck, type Pr } from '@postpile/core';
+import { deriveEvents, quietReadCheck, touchedReadCheck, type Pr } from '@postpile/core';
 import { viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from './fake-fetch.ts';
@@ -121,6 +121,62 @@ describe('toPr: truncation', () => {
     const raw = rawPr();
     raw.reviewThreads.totalCount = 51;
     expect(toPr(ref, raw).truncated).toBe(true);
+  });
+
+  it('flags a PR past any capped activity list: reviews, comments, commits, timeline', () => {
+    const lists = ['reviews', 'comments', 'commits', 'timelineItems'] as const;
+    for (const list of lists) {
+      const raw = rawPr();
+      raw[list].totalCount = raw[list].nodes.length + 1;
+      expect(toPr(ref, raw).truncated, list).toBe(true);
+    }
+  });
+
+  it('never quiet-reads a PR whose human comment sits before 60 bot comments', () => {
+    const raw = rawPr();
+    raw.reviewRequests.nodes = [];
+    raw.reviewThreads.nodes = [];
+    raw.reviews.nodes = [];
+    raw.commits.nodes = [];
+    raw.timelineItems.nodes = [];
+    raw.headCommit.nodes = [];
+    raw.comments.nodes = Array.from({ length: 60 }, (_, index) => ({
+      id: `BOT${index}`,
+      url: `https://github.com/acme/app/pull/42#issuecomment-${100 + index}`,
+      author: { __typename: 'Bot', login: 'deploy-preview' },
+      body: 'Preview updated',
+      createdAt: new Date(Date.UTC(2026, 8, 20, 11, index)).toISOString(),
+    }));
+    // The human comment GitHub has but the query left out.
+    raw.comments.totalCount = 61;
+    const pr = toPr(ref, raw);
+    const check = (snapshot: Pr) =>
+      quietReadCheck({
+        thread: {
+          id: 'thread-42',
+          reason: 'subscribed',
+          unread: true,
+          updatedAt: '2026-09-20T11:59:00.000Z',
+          lastReadAt: '2026-09-20T10:30:00.000Z',
+          subjectType: 'PullRequest',
+          repo: 'acme/app',
+          number: 42,
+          title: snapshot.title,
+        },
+        pr: snapshot,
+        events: deriveEvents(snapshot, viewer, null),
+        userState: null,
+        viewer,
+        tileUnread: false,
+        notYours: false,
+        prFetchedAt: '2026-09-21T00:00:00.000Z',
+        now: '2026-09-21T00:00:00.000Z',
+      });
+
+    expect(pr.truncated).toBe(true);
+    expect(check(pr)).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    // The same comments as a complete list would pass as bots only.
+    expect(check({ ...pr, truncated: false }).kind).toBe('mark');
   });
 
   it('flags a PR with more comments in one thread than the query took', () => {

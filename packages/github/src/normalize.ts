@@ -295,12 +295,15 @@ function cutOff(list: { totalCount?: number; nodes: unknown[] }): boolean {
 }
 
 /**
- * The query takes the last 50 review threads and the first 30 comments of
- * each (queries.ts). Past either cap a reply never arrives, so the snapshot
- * is flagged and no quiet mark-read trusts it.
+ * Every activity list the query caps (queries.ts): the last 50 reviews, 60
+ * comments, 50 review threads (and the first 30 comments of each), 50
+ * commits and 60 timeline items. Past any cap an event never arrives (a
+ * human comment followed by 60 bot comments), so the snapshot is flagged
+ * and no quiet mark-read trusts it.
  */
 function isTruncated(raw: RawPullRequest): boolean {
-  return cutOff(raw.reviewThreads) || raw.reviewThreads.nodes.some((thread) => cutOff(thread.comments));
+  const lists = [raw.reviews, raw.comments, raw.reviewThreads, raw.commits, raw.timelineItems];
+  return lists.some(cutOff) || raw.reviewThreads.nodes.some((thread) => cutOff(thread.comments));
 }
 
 export function toPr(ref: PrRef, raw: RawPullRequest): Pr {

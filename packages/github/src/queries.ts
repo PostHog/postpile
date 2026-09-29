@@ -67,14 +67,16 @@ fragment prData on PullRequest {
   files(first: 100) { nodes { path additions deletions } }
   reviewRequests(first: 30) { nodes { requestedReviewer { ...reviewer } } }
   reviews(last: 50) {
+    totalCount
     nodes { id state url submittedAt createdAt ...comment commit { oid } }
   }
-  comments(last: 60) { nodes { id url ...comment } }
+  comments(last: 60) { totalCount nodes { id url ...comment } }
   reviewThreads(last: 50) {
     totalCount
     nodes { id path isResolved comments(first: 30) { totalCount nodes { id url state ...comment } } }
   }
   commits(last: 50) {
+    totalCount
     nodes { commit { oid messageHeadline committedDate author { name user { login } } committer { name user { login } } } }
   }
   headCommit: commits(last: 1) {
@@ -88,6 +90,7 @@ fragment prData on PullRequest {
     } } }
   }
   timelineItems(last: 60, itemTypes: [${TIMELINE_TYPES.join(', ')}]) {
+    totalCount
     nodes {
       __typename
       ... on ReviewRequestedEvent { id createdAt actor { ...actor } requestedReviewer { ...reviewer } }

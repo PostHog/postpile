@@ -99,9 +99,10 @@ export interface SnapshotCoverInput {
  * fetched at or after the thread's last update. A sync refreshes every
  * thread but may leave a PR out (its cap, a failed fetch): then the thread
  * can be fresher than the snapshot, and a person's comment missing from it.
- * A snapshot cut off at the query's caps (too many review threads, or too
- * many comments in one) never covers the thread: a reply past the caps
- * never arrived, however fresh the fetch.
+ * A snapshot cut off at the query's caps (any capped activity list: reviews,
+ * comments, review threads and their comments, commits, timeline) never
+ * covers the thread: an event past the caps never arrived, however fresh
+ * the fetch.
  */
 export function snapshotCoversThread(input: SnapshotCoverInput): boolean {
   if (input.prTruncated) {

@@ -125,14 +125,15 @@ export interface RawPullRequest {
   labels: { nodes: { name: string }[] };
   files: { nodes: { path: string; additions: number; deletions: number }[] } | null;
   reviewRequests: { nodes: { requestedReviewer: RawRequestedReviewer | null }[] };
-  reviews: { nodes: RawReview[] };
-  comments: { nodes: RawComment[] };
+  // totalCount on the capped activity lists is missing in fixtures written before it was asked for.
+  reviews: { totalCount?: number; nodes: RawReview[] };
+  comments: { totalCount?: number; nodes: RawComment[] };
   /** totalCount is missing in fixtures written before it was asked for. */
   reviewThreads: { totalCount?: number; nodes: RawReviewThread[] };
-  commits: { nodes: RawCommit[] };
+  commits: { totalCount?: number; nodes: RawCommit[] };
   /** commits(last: 1) again, only for the head commit's check rollup. */
   headCommit: { nodes: { commit: { statusCheckRollup: RawStatusCheckRollup | null } }[] };
-  timelineItems: { nodes: RawTimelineItem[] };
+  timelineItems: { totalCount?: number; nodes: RawTimelineItem[] };
 }
 
 /** A PR node from a branch lookup (queries.ts buildBranchQuery). */
