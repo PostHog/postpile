@@ -877,7 +877,7 @@ export class FakeEngine implements EngineService {
     const events: EventView[] = this.eventsOf(prKey)
       .toSorted((a, b) => b.at.localeCompare(a.at))
       .map((event) => ({ event, display: displayState(event) }));
-    const news = whatsNew(this.eventsOf(prKey), this.viewer());
+    const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
       pr,
       events,

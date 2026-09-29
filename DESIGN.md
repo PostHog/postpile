@@ -106,7 +106,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 | loud | tile becomes unread | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
 | quiet | dot, no state change | bots, CI, deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
-| seen | already read | any of the above after reading |
+| seen | already read | any of the above after reading, or before the user's own last action on the PR (see "You already dealt with it") |
 
 Rules classify first (`ruleLoudness` in core). The agent may override with a
 reason; overrides are stored on the event. `seen` is user state (`seenAt`), not
@@ -219,6 +219,10 @@ github.com while the app was closed turns calm on the next start.
   plain read does not move, so a thread read without new activity is only
   found through "left the inbox". Commit events use the commit time, so an
   old commit pushed after the read counts as read.
+- The viewer's own last touch works the same way (2026-09-29, "You already
+  dealt with it"): every event up to it is marked seen in the store,
+  stamped with the touch time, so tile state, whose turn, pings, "since you
+  last looked" and `whatsNew` agree without a second rule.
 
 Action details:
 
@@ -1522,7 +1526,8 @@ draft), `fix_ci`, `merge`. Rules per pinged PR, first match wins:
    question, and you have not commented or reviewed since ("Answer ada's
    question"; with a pending review of yours: "Review, lyra mentioned you").
    A team mention asks only until it is read (2026-09-28): once its event is
-   seen (mark-read in the app, or read on GitHub) it no longer makes it your
+   seen (mark-read in the app, read on GitHub, or any touch of yours after
+   it, see "You already dealt with it") it no longer makes it your
    move, so it no longer keeps the tile off Done or the topic in needs-you.
    Personal asks (mention, question, reply) stay until answered.
    An ask the events agent lowered to quiet or muted (`effectiveLoudness`,
@@ -1683,8 +1688,9 @@ before the new loud events. Rules:
 - New events are the unseen loud ones, the same ones that make the tile
   unread. Quiet bot, CI and other events never change the text or the count.
 - A touch is one of the viewer's own events (review, approval, changes
-  request, comment, push; the loudness rules mark these "your own
-  activity"), else a mark-read: an event turned seen (mark read in the app,
+  request, comment, a push to their own PR, a merge or close they did; core
+  `lastTouch` in `last-touch.ts`, shared with "You already dealt with it"),
+  else a mark-read: an event turned seen (mark read in the app,
   or GitHub's `last_read_at` passed it, see "Reconciling with GitHub's read
   time"). The anchor is the newest own action before the first new event; a
   mark-read only anchors when the viewer never acted ("since you marked it
@@ -2249,6 +2255,27 @@ Merging or closing counts only when the viewer did it.
    rules. This generalizes two narrow rules that already existed (a review
    request turns quiet once the viewer reviewed after it, an ask once they
    replied after it); "ready for review" was the case they missed.
+
+   Built like "Reconciling with GitHub's read time", not as a second derived
+   rule: the engine marks every event up to and including the touch seen in
+   the store, stamped with the touch time (core `eventsSeenByTouch`), each
+   time a PR snapshot is stored (sync and poll, so the poll never pings for
+   them) and once per full sync over every stored PR (events stored before
+   the rule). The PRs join the seen-cursor move like read-time ones. Details
+   the build settled:
+   - A push counts only on the viewer's own PR. On someone else's PR a
+     rebase can carry the viewer's commits without them doing anything.
+   - The touch itself is marked too: a merge the viewer did on a PR they
+     were asked to review is a `merged_without_review` of their own and
+     would otherwise keep the tile open.
+   - `whatsNew` uses the same `lastTouch`, so its anchor gained "since you
+     merged it" / "since you closed it", and a push on someone else's PR no
+     longer anchors.
+   - The narrow rules stay (`requestAnswered`, `userRepliedAfter` in core
+     `events.ts`): they set rule loudness, which pings, the activity list
+     and whose turn read, and `requestAnswered` also covers a request that
+     was removed later. Where both apply the general rule makes the event
+     seen anyway.
 2. *GitHub read state* (a second reason for Handled quietly): when every
    unread event on a thread is older than the viewer's last touch, PostPile
    marks the thread read on GitHub after a full sync, through the normal
@@ -3187,7 +3214,7 @@ preflight and does not know the token, so CORS stays open.
   snooze started ends it, so a mention is never hidden. Confirm.
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
-  spoke on the PR after it; loud events on pulled-in PRs also make a tile unread. Commits after
+  spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread. Commits after
   the user's approval are quiet unless the agent raises one (decided 2026-09-28).
 - **Repo name**: decided 2026-09-28, the app is PostPile (formerly the working title
   `code-manager`). Renaming the repo folder is still open.

@@ -1,0 +1,110 @@
+import type { Pr } from '@postpile/core';
+import { at, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
+import { describe, expect, it } from 'vitest';
+import { makeHarness, type Harness } from './testing/fakes.ts';
+import { reviewRequestedPr } from './testing/prs.ts';
+import { topicWithPrs } from './testing/topics.ts';
+
+// NOW is 2026-09-02T12:00Z. The fixture `at` counts minutes from 2026-09-01T09:00Z.
+const READY_AT = '2026-09-02T11:40:00.000Z';
+const APPROVED_AT = '2026-09-02T11:45:00.000Z';
+
+function tileState(h: Harness, topicId: string) {
+  return h.engine.getTopic(topicId).then((detail) => detail?.tiles[0]?.state.kind);
+}
+
+/** alice marked her PR ready for review, then the viewer approved it from the gh CLI: GitHub keeps the thread unread. */
+function approvedFromTheCli(pr: Pr): Pr {
+  return {
+    ...pr,
+    updatedAt: APPROVED_AT,
+    timeline: [...pr.timeline, makeTimelineItem({ id: 'ready-1', kind: 'ready_for_review', actor: 'alice', subject: null, at: READY_AT })],
+    reviews: [makeReview({ id: 'r-me', author: viewer.login, state: 'APPROVED', submittedAt: APPROVED_AT, commitOid: pr.headOid })],
+  };
+}
+
+describe('You already dealt with it: events before the viewer last touch count as seen', () => {
+  it('makes the tile calm after an approval from the CLI, the earlier ready for review seen at the approval time', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    const pr = approvedFromTheCli(reviewRequestedPr(1));
+    topicWithPrs(h, 't', [pr]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(await tileState(h, 't')).not.toBe('unread');
+    const ready = h.store.events.listForPr(pr.key).find((event) => event.kind === 'ready_for_review');
+    expect(ready?.ruleLoudness).toBe('loud');
+    expect(ready?.seenAt).toBe(APPROVED_AT);
+    // The tile rule alone never writes to GitHub.
+    expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(true);
+  });
+
+  it('never pings for what came before the touch when the poll brings both', async () => {
+    let clock = new Date('2026-09-02T11:30:00.000Z');
+    const h = makeHarness({ writesEnabled: false, now: () => clock });
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 't', [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    await h.engine.pollOnce();
+    clock = new Date('2026-09-02T11:50:00.000Z');
+
+    const approved = approvedFromTheCli(pr);
+    h.reader.addPr(approved, makeThreadFor(approved, { updatedAt: APPROVED_AT }));
+    h.reader.etag = 'etag-2';
+    const cycle = await h.engine.pollOnce();
+
+    expect(cycle).toMatchObject({ kind: 'done', prsUpdated: 1, pings: [] });
+    expect(await tileState(h, 't')).not.toBe('unread');
+  });
+
+  it('keeps a loud event after the touch unseen', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    const early = approvedFromTheCli(reviewRequestedPr(1));
+    const pr: Pr = {
+      ...early,
+      timeline: [...early.timeline, makeTimelineItem({ id: 'rr-again', kind: 'review_requested', actor: 'alice', subject: viewer.login, at: '2026-09-02T11:50:00.000Z' })],
+      updatedAt: '2026-09-02T11:50:00.000Z',
+    };
+    topicWithPrs(h, 't', [pr]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(await tileState(h, 't')).toBe('unread');
+    const again = h.store.events.listForPr(pr.key).find((event) => event.sourceId === 'rr-again');
+    expect(again?.seenAt).toBeNull();
+  });
+
+  it('counts a push on the viewer own PR for the tile', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    const pr = reviewRequestedPr(1, {
+      author: viewer.login,
+      timeline: [],
+      reviews: [makeReview({ id: 'r-rowan', author: 'rowan', state: 'CHANGES_REQUESTED', submittedAt: at(10) })],
+      commits: [{ oid: 'c2', headline: 'address the review', author: viewer.login, committedAt: at(30) }],
+      headOid: 'c2',
+      updatedAt: at(30),
+    });
+    topicWithPrs(h, 't', [pr]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const review = h.store.events.listForPr(pr.key).find((event) => event.kind === 'review_changes_requested');
+    expect(review?.seenAt).toBe(at(30));
+    expect(await tileState(h, 't')).not.toBe('unread');
+  });
+
+  it('also applies to events stored before the rule, on the next full sync', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    const pr = approvedFromTheCli(reviewRequestedPr(1));
+    topicWithPrs(h, 't', [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    // As an older build left it: the ready for review stored unseen.
+    const ready = h.store.events.listForPr(pr.key).find((event) => event.kind === 'ready_for_review')!;
+    h.store.events.clearSeen([ready.id]);
+    expect(await tileState(h, 't')).toBe('unread');
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.store.events.listForPr(pr.key).find((event) => event.id === ready.id)?.seenAt).toBe(APPROVED_AT);
+  });
+});

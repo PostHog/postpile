@@ -11,6 +11,7 @@ export * from './provenance.ts';
 export * from './loudness.ts';
 export * from './events.ts';
 export * from './activity.ts';
+export * from './last-touch.ts';
 export * from './whats-new.ts';
 export * from './stacks.ts';
 export * from './snooze.ts';

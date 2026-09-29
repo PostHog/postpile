@@ -7,6 +7,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - The live poll checks GitHub every minute, as GitHub's `X-Poll-Interval` asks, instead of every 10 seconds, and once right away when you switch to the app. `POSTPILE_POLL_SECONDS` can no longer go below GitHub's value.
+- Whatever happened on a PR before your own last action on it counts as seen, however you acted (github.com, the gh CLI, GitHub Mobile, an agent commenting as you): your review, a comment or reply, a push to your own PR, or merging or closing it yourself. A "ready for review" from before your CLI approval no longer keeps the tile unread, and never pings.
+- "New since you looked" can now say "since you merged it" or "since you closed it"; a push to someone else's PR no longer counts as your last look.
 
 ## 0.7.0 (2026-09-29)
 
