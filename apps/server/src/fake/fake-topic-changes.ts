@@ -1,5 +1,7 @@
 import {
   cleanTopicName,
+  EMPTY_TOPIC_NAME,
+  hasEmptyTopicName,
   isLiveProposal,
   newTopic,
   OUTSIDE_PROPOSAL_DAYS,
@@ -134,6 +136,9 @@ export class FakeTopicChanges {
 
   /** Why accepting no longer fits (topics changed since it was filed), or null. The engine's ProposalActions checks the same. */
   whyStale(proposal: TopicProposal): string | null {
+    if (hasEmptyTopicName(proposal)) {
+      return EMPTY_TOPIC_NAME.toLowerCase();
+    }
     if (proposal.kind === 'area_merge') {
       return null;
     }

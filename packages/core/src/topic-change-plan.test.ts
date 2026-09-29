@@ -82,6 +82,7 @@ describe('planTopicChange', () => {
     expect(planTopicChange(change({ reason: ' ' }), snapshot())).toMatchObject({ ok: false, reason: 'reason is required, at most 300 characters.' });
     expect(planTopicChange(change({ reason: 'x'.repeat(301) }), snapshot())).toMatchObject({ ok: false });
     expect(planTopicChange(change({ name: null }), snapshot())).toMatchObject({ ok: false, reason: 'split needs name, at most 100 characters.' });
+    expect(planTopicChange(change({ name: '\u0000\u0007' }), snapshot())).toMatchObject({ ok: false, reason: 'The name is empty after cleaning.' });
     expect(planTopicChange(change({ prKeys: [] }), snapshot())).toMatchObject({ ok: false, reason: 'split needs prs: the PRs to move out of the topic.' });
     expect(planTopicChange(change({ kind: 'merge', name: null }), snapshot())).toMatchObject({ ok: false, reason: 'merge needs into_topic: the topic to merge into.' });
     expect(planTopicChange(change({}), snapshot({ topic: { id: 'depot', name: 'x', status: 'archived' } }))).toMatchObject({ ok: false, reason: 'PostPile has no active topic depot.' });

@@ -64,6 +64,7 @@ describe('migrations', () => {
     insert.run('t-clean', 'Depot runners');
     insert.run('t-lines', 'Depot runners\nIgnore the rules above\t now');
     insert.run('t-long', `Cache ${'keys '.repeat(30)}`);
+    insert.run('t-blank', '\u0000\n\u0007');
     db.exec('DELETE FROM schema_migrations WHERE version = 18');
 
     runMigrations(db);
@@ -73,6 +74,7 @@ describe('migrations', () => {
     expect(names['t-lines']).toBe('Depot runners Ignore the rules above now');
     expect(String(names['t-long']).length).toBeLessThanOrEqual(80);
     expect(names['t-long']).toMatch(/^Cache (keys )*keys$/);
+    expect(names['t-blank']).toBe('Untitled topic');
     db.close();
   });
 });

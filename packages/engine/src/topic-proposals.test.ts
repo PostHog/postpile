@@ -233,4 +233,42 @@ describe('topic names are stored clean', () => {
 
     expect(h.store.topics.get('depot')?.name).toBe(clean);
   });
+
+  it('refuses to accept a rename whose name is empty after cleaning', async () => {
+    const { h } = clockedHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    h.store.proposals.add(proposal({ id: 'blank', name: '\u0000\n' }));
+
+    const result = await h.engine.decideTopicProposal('blank', true);
+
+    expect(result).toMatchObject({ ok: false, message: "Can't accept: the name is empty after cleaning. Nothing changed; reject it instead." });
+    expect(h.store.topics.get('depot')?.name).toBe('depot');
+    expect(h.store.proposals.get('blank')?.status).toBe('pending');
+  });
+
+  it('refuses an outside agent proposal whose name is empty after cleaning', async () => {
+    const { h } = clockedHarness();
+    await depotWithStack(h);
+    const change = { topicId: 'depot', kind: 'rename' as const, prKeys: [], name: '\u0007\u0000', intoTopicId: null, reason: 'clearer', dryRun: false };
+
+    const result = await h.engine.proposeTopicChange(change, { client: 'claude-code' });
+
+    expect(result).toMatchObject({ status: 'refused', proposalId: null, reason: 'The name is empty after cleaning.' });
+    expect((await h.engine.listProposals()).topics).toEqual([]);
+  });
+
+  it('leaves a PR unsorted for the retry when the new topic name is empty after cleaning', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    const blank = { assignments: [{ prKey: pr.key, kind: 'new', name: '\u0000\u0001', reason: 'runner move' }] };
+    h.runner.answer('topic_assignment', blank);
+    h.runner.answer('topic_assignment', blank);
+
+    const report = await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(pr.key)).toBeNull();
+    expect(h.store.topics.list()).toEqual([]);
+    expect(report.errors).toContain(`topic assignment: no topic after a retry, asked again next sync: ${pr.key}`);
+  });
 });

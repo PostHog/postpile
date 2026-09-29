@@ -1,5 +1,5 @@
 import type { AreaMerge, ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@postpile/agent';
-import { cleanTopicName, type TopicProposal } from '@postpile/core';
+import { cleanTopicName, hasEmptyTopicName, type TopicProposal } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { ProposalActions } from '../actions/proposal-actions.ts';
 import { Board } from '../board.ts';
@@ -100,6 +100,10 @@ export class ConsolidationApplier {
       return;
     }
     const proposal = toTopicProposal(idea, at);
+    // Nothing left of the name after cleaning: a blank topic or a rename to nothing is no proposal.
+    if (hasEmptyTopicName(proposal)) {
+      return;
+    }
     this.store.proposals.add(proposal);
     if (this.isSmallSplit(idea, at)) {
       new ProposalActions(this.store, this.now).decide(proposal.id, true);

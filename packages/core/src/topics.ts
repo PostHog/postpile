@@ -1,4 +1,4 @@
-import type { IsoTime, Topic } from './types.ts';
+import type { IsoTime, Topic, TopicProposal } from './types.ts';
 
 /** A stored topic name is at most this many characters (code points). */
 export const STORED_TOPIC_NAME_MAX = 80;
@@ -27,6 +27,19 @@ export function cleanTopicName(name: string): string {
   }
   const lastSpace = cut.lastIndexOf(' ');
   return lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+}
+
+/** Why a name is refused when nothing is left of it after `cleanTopicName` (only control characters or spaces). */
+export const EMPTY_TOPIC_NAME = 'The name is empty after cleaning';
+
+/**
+ * A proposal that names a topic (new topic, rename, split) whose name is
+ * empty after cleaning. Accepting it would create a blank topic or rename
+ * to nothing, so it is never filed and never accepted.
+ */
+export function hasEmptyTopicName(proposal: Pick<TopicProposal, 'kind' | 'name'>): boolean {
+  const named = proposal.kind === 'new_topic' || proposal.kind === 'rename' || proposal.kind === 'split';
+  return named && cleanTopicName(proposal.name ?? '') === '';
 }
 
 /** A fresh active topic with no summary, tailoring or driver yet. The name is stored clean (`cleanTopicName`). */

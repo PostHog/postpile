@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanTopicName, newTopic, STORED_TOPIC_NAME_MAX } from './topics.ts';
+import { cleanTopicName, hasEmptyTopicName, newTopic, STORED_TOPIC_NAME_MAX } from './topics.ts';
 
 describe('cleanTopicName', () => {
   it('keeps a plain name as it is', () => {
@@ -30,5 +30,15 @@ describe('cleanTopicName', () => {
 describe('newTopic', () => {
   it('stores the name clean', () => {
     expect(newTopic('t1', 'Depot\nrunners', '2026-09-01T00:00:00.000Z').name).toBe('Depot runners');
+  });
+});
+
+describe('hasEmptyTopicName', () => {
+  it('flags a named proposal with nothing left after cleaning', () => {
+    expect(hasEmptyTopicName({ kind: 'rename', name: '\u0000\n\t ' })).toBe(true);
+    expect(hasEmptyTopicName({ kind: 'split', name: null })).toBe(true);
+    expect(hasEmptyTopicName({ kind: 'new_topic', name: 'Depot' })).toBe(false);
+    // Merges carry no name.
+    expect(hasEmptyTopicName({ kind: 'merge', name: null })).toBe(false);
   });
 });

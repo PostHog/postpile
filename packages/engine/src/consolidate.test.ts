@@ -56,6 +56,8 @@ describe('Engine.consolidate', () => {
         { kind: 'rename' as const, topicId: 'depot', name: 'Depot\n  runners', reason: 'clearer' },
         { kind: 'split' as const, topicId: 'depot', name: 'Runner images', prKeys: [prs[1]!.key], reason: 'separate work' },
         { kind: 'rename' as const, topicId: 'nope', name: 'Made up', reason: 'unknown topic' },
+        // Nothing left after cleaning: never filed.
+        { kind: 'rename' as const, topicId: 'depot', name: '\u0000\n', reason: 'blank' },
       ],
     });
     h.agent.answerConsolidation(answer);

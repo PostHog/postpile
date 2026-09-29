@@ -195,8 +195,10 @@ export class TopicAssigner {
         topics: this.topicChoices(),
         context: this.deps.contexts.forTopic(null),
       });
-      this.apply(assignments);
-      const answered = new Set(assignments.map((assignment) => assignment.prKey));
+      // A new topic whose name is empty after cleaning is an unusable answer: the PR is asked again.
+      const usable = assignments.filter((assignment) => assignment.kind !== 'new' || cleanTopicName(assignment.name) !== '');
+      this.apply(usable);
+      const answered = new Set(usable.map((assignment) => assignment.prKey));
       return batch.filter((pr) => !answered.has(pr.key));
     } catch (error) {
       this.deps.errors.push(`topic assignment: ${errorText(error)}`);

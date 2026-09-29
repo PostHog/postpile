@@ -1,5 +1,5 @@
 import { isLiveProposal, sameTopicChange } from './topic-proposals.ts';
-import { cleanTopicName } from './topics.ts';
+import { cleanTopicName, EMPTY_TOPIC_NAME } from './topics.ts';
 import type { IsoTime, PrKey, TopicProposal, TopicStatus } from './types.ts';
 
 // propose_topic_change (DESIGN.md "propose_topic_change"): the checks and
@@ -95,6 +95,9 @@ function checkFields(change: TopicChangeRequest): string | null {
   const name = change.name?.trim() ?? '';
   if ((change.kind === 'split' || change.kind === 'rename') && (name === '' || name.length > TOPIC_NAME_MAX)) {
     return `${change.kind} needs name, at most ${TOPIC_NAME_MAX} characters.`;
+  }
+  if ((change.kind === 'split' || change.kind === 'rename') && cleanTopicName(name) === '') {
+    return `${EMPTY_TOPIC_NAME}.`;
   }
   if (change.kind === 'split' && change.prKeys.length === 0) {
     return 'split needs prs: the PRs to move out of the topic.';
