@@ -235,6 +235,8 @@ export interface SyncOptions {
   maxAgentCalls?: number;
   /** Only run these agent jobs. Default: all of them. */
   agentJobs?: AgentJob[];
+  /** Set by the hourly background sync, so telemetry can tell it from a start or "Sync now". */
+  auto?: boolean;
 }
 
 /**

@@ -155,15 +155,15 @@ export class SyncRun {
     } catch (error) {
       this.log(`sync: could not store the report: ${errorText(error)}`);
     }
-    this.reportTelemetry(report);
+    this.reportTelemetry(report, options.auto === true);
     return report;
   }
 
   /** sync_completed always; rate_limited and first_sync_completed only when they apply. Never throws: telemetry never breaks a sync. */
-  private reportTelemetry(report: SyncReport): void {
+  private reportTelemetry(report: SyncReport, auto: boolean): void {
     try {
       const telemetry = runTelemetry(this.deps);
-      const trigger = this.syncedOnceInProcess ? 'manual' : 'start';
+      const trigger = auto ? 'auto' : this.syncedOnceInProcess ? 'manual' : 'start';
       this.syncedOnceInProcess = true;
       const durationMs = Math.max(0, new Date(report.finishedAt).getTime() - new Date(report.startedAt).getTime());
       const summary = agentCallSummary(report.agentCallStats);

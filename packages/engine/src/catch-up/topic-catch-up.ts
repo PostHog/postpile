@@ -1,4 +1,4 @@
-import { effectiveLoudness, emptyAgentCallStats, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey } from '@postpile/core';
+import { effectiveLoudness, emptyAgentCallStats, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { Board } from '../board.ts';
 import type { DigestDeps } from '../digest/deps.ts';
@@ -9,8 +9,9 @@ import { GlanceBatchWriter } from '../digest/glance-batches.ts';
 import { refreshDriversAndRoles } from '../digest/topic-roles.ts';
 import { glanceTargetKeys } from '../glance-inputs.ts';
 import { emptyFactCounts } from '../memory/fact-writer.ts';
-import type { RunDeps } from '../run-deps.ts';
+import { runTelemetry, type RunDeps } from '../run-deps.ts';
 import { loadViewer } from '../viewer-meta.ts';
+import { errorText } from '../errors.ts';
 import type { CatchUpCap } from './catch-up-cap.ts';
 
 /**
@@ -71,17 +72,24 @@ export class TopicCatchUp {
     return [...glanceTargetKeys(board)].filter((key) => (board.memberships.get(key)?.topicId ?? null) === topicId).length;
   }
 
-  async run(topicId: string | null): Promise<void> {
-    const { store, agent, contexts, facts, now, callLog } = this.deps;
-    const viewer = loadViewer(store);
-    if (!viewer || this.deps.agentOff() !== null) {
-      return;
+  /** catch_up_ran for every run that got past the agent check. Never throws: telemetry never breaks a run. */
+  private reportTelemetry(startedAt: string, stats: AgentCallStats, ok: boolean): void {
+    try {
+      runTelemetry(this.deps).capture('catch_up_ran', {
+        topics: 1,
+        agent_calls: stats.total,
+        duration_ms: Math.max(0, this.deps.now().getTime() - new Date(startedAt).getTime()),
+        ok,
+      });
+    } catch (error) {
+      this.log(`catch-up: telemetry failed: ${errorText(error)}`);
     }
+  }
+
+  private async runJobs(topicId: string | null, viewer: Viewer, startedAt: string, stats: AgentCallStats, errors: string[]): Promise<void> {
+    const { store, agent, contexts, facts, now, callLog } = this.deps;
     const label = topicId ?? 'unsorted';
-    const startedAt = now().toISOString();
-    const stats = emptyAgentCallStats();
     await callLog.withRun(`catchup:${label}:${startedAt}`, stats, async () => {
-      const errors: string[] = [];
       const budget = new AgentBudget(catchUpCallsPerRun(this.glanceTargetsIn(topicId)), stats, this.cap);
       const deps: DigestDeps = {
         store,
@@ -109,5 +117,22 @@ export class TopicCatchUp {
       const capped = budget.stoppedByDailyCap() ? ', daily cap reached' : '';
       this.log(`catch-up ${label}: ${statsLine(stats)}${capped}${errors.length > 0 ? `; errors: ${errors.join('; ')}` : ''}`);
     });
+  }
+
+  async run(topicId: string | null): Promise<void> {
+    const viewer = loadViewer(this.deps.store);
+    if (!viewer || this.deps.agentOff() !== null) {
+      return;
+    }
+    const startedAt = this.deps.now().toISOString();
+    const stats = emptyAgentCallStats();
+    const errors: string[] = [];
+    let ok = false;
+    try {
+      await this.runJobs(topicId, viewer, startedAt, stats, errors);
+      ok = errors.length === 0;
+    } finally {
+      this.reportTelemetry(startedAt, stats, ok);
+    }
   }
 }

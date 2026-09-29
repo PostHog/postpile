@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { AvailableUpdate } from '@postpile/core';
+import { sendTelemetry } from '../api/telemetry.ts';
 import { useUpdate } from '../api/update.ts';
 import { laterKey, pillVersion, releaseDate, UPGRADE_COMMAND } from '../lib/update.ts';
 import { useDismiss } from '../lib/use-dismiss.ts';
@@ -73,7 +74,14 @@ export function UpdatePill() {
   if (!update || !latest || version === null) {
     return null;
   }
+  function toggle() {
+    if (!open) {
+      sendTelemetry('update_pill_clicked', {});
+    }
+    setOpen(!open);
+  }
   function hideVersion(hidden: string) {
+    sendTelemetry('update_later_clicked', {});
     rememberLater(hidden);
     setLaterNow([...laterNow, hidden]);
     setOpen(false);
@@ -85,7 +93,7 @@ export function UpdatePill() {
         aria-expanded={open}
         aria-haspopup="dialog"
         title={`PostPile ${version} is out; you have ${update.current}`}
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
         className="flex h-[22px] items-center gap-1.5 rounded-full border border-frame bg-chip px-2 text-[11px] whitespace-nowrap text-ink-2 hover:bg-subtle hover:text-ink"
       >
         <span className="size-1.5 rounded-full bg-ink-2" />

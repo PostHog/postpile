@@ -42,6 +42,7 @@ import { useLastSyncReport } from './sync.ts';
 import { useGitHubWrites } from './writes.ts';
 import { prPath, request, tilePath } from './client.ts';
 import { queryKeys } from './keys.ts';
+import { sendTelemetry } from './telemetry.ts';
 
 // Matches UNDO_WINDOW_MS in the engine. The renderer imports types only.
 const UNDO_WINDOW_MS = 6000;
@@ -517,6 +518,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`));
     },
     retryGlance: async (prKey) => {
+      sendTelemetry('glance_retry_clicked', {});
       await run(`retryGlance:${prKey}`, null, () => request('POST', `${prPath(prKey)}/glance/retry`));
     },
     markRead: async (tileId) => {

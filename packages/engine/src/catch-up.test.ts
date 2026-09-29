@@ -56,6 +56,10 @@ describe('glance catch-up after a poll', () => {
     // Its calls land in their own run, not in the poll's.
     expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:/)]);
     expect((await h.engine.livePollStatus()).catchUpChanges).toBeGreaterThan(0);
+    await vi.waitFor(() => expect(h.telemetry.events.map((e) => e.event)).toContain('catch_up_ran'));
+    const ran = h.telemetry.events.find((e) => e.event === 'catch_up_ran');
+    expect(ran?.props).toMatchObject({ topics: 1, ok: true, agent_calls: expect.any(Number) });
+    expect((ran?.props as { agent_calls: number }).agent_calls).toBeGreaterThan(0);
   });
 
   it('writes the first glance of a PR new to the app in its new topic', async () => {

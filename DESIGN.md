@@ -2291,15 +2291,18 @@ message, are dropped.
    CI green — or a time bucket for `until_time`), `opened_on_github`,
    `ask_sent` (AskComposer's send), `chat_message_sent`, `mac_ping_shown` /
    `mac_ping_clicked`, `search_used` (throttled, query length bucket only),
-   `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked` /
-   `update_later_clicked` (reserved for the update-checker, not built yet).
+   `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked`
+   (the title bar pill opened) / `update_later_clicked`,
+   `glance_retry_clicked` (Retry on a failed glance).
 4. *Agent trust*: `wrong_topic_marked`, `not_related_marked`,
    `recheck_requested` + `recheck_resolved` (the agent's own answer, not yet
    the user's later accept/fix/drop), `memory_corrected`, `proposal_resolved`
    (kind `topic_merge` / `rename` / `rule` / `instructions`), `instructions_edited`.
 5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
    agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,
-   trigger `start`/`manual`), `sync_failed` (error_kind, currently only
+   trigger `start`/`manual`/`auto`, auto = the hourly background sync),
+   `catch_up_ran` (topics, always 1; agent_calls, duration_ms, ok: one glance
+   catch-up run after the poll), `sync_failed` (error_kind, currently only
    `gh_unavailable`: a blocked sync never runs), `rate_limited` (source
    `graphql`/`rest`, read from the sync's own error text — GitHub's GraphQL
    and REST rate-limit errors are shaped differently at the point

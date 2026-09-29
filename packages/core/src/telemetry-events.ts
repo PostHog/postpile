@@ -49,7 +49,7 @@ const proposalKind = z.enum(['topic_merge', 'rename', 'rule', 'instructions']);
 // 5. Health
 // -----------------------------------------------------------------------
 
-const syncTrigger = z.enum(['start', 'manual']);
+const syncTrigger = z.enum(['start', 'manual', 'auto']);
 const syncErrorKind = z.enum(['gh_unavailable', 'agent_unavailable', 'rate_limited', 'other']);
 const rateLimitSource = z.enum(['graphql', 'rest']);
 
@@ -84,6 +84,7 @@ export const TELEMETRY_EVENTS = {
   topic_opened: z.object({ section: topicSection }).strict(),
   update_pill_clicked: NO_PROPS,
   update_later_clicked: NO_PROPS,
+  glance_retry_clicked: NO_PROPS,
 
   // 4. Agent trust
   wrong_topic_marked: NO_PROPS,
@@ -110,6 +111,8 @@ export const TELEMETRY_EVENTS = {
   sync_failed: z.object({ error_kind: syncErrorKind }).strict(),
   rate_limited: z.object({ source: rateLimitSource }).strict(),
   consolidation_ran: z.object({ proposals_filed: count }).strict(),
+  // One glance catch-up run after the poll (packages/engine/src/catch-up). Always one topic per run.
+  catch_up_ran: z.object({ topics: z.literal(1), agent_calls: count, duration_ms: durationMs, ok: z.boolean() }).strict(),
 
   // Manual verification only (see NEXT.md "Verify once for real"). Never
   // sent from normal app code, not part of the analytics surface above.
@@ -140,6 +143,7 @@ export const RENDERER_TELEMETRY_EVENTS = [
   'topic_opened',
   'update_pill_clicked',
   'update_later_clicked',
+  'glance_retry_clicked',
 ] as const satisfies readonly TelemetryEventName[];
 
 export type RendererTelemetryEvent = (typeof RENDERER_TELEMETRY_EVENTS)[number];

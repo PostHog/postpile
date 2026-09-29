@@ -3,7 +3,7 @@
 // per event is enough here: the props themselves are already covered by the
 // zod catalogue in packages/core.
 import { at, makeThreadFor } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 
@@ -31,6 +31,23 @@ describe('engine telemetry', () => {
     h.telemetry.events.length = 0;
     await h.engine.sync({ maxAgentCalls: 0 });
     expect(h.telemetry.events.map((e) => e.event)).not.toContain('first_sync_completed');
+  });
+
+  it('marks the background sync as trigger auto, a later sync as manual', async () => {
+    const h = makeHarness();
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.engine.startAutoSync({ minutes: 1, maxAgentCalls: 0 });
+    h.telemetry.events.length = 0;
+
+    h.timers.advance(60 * 1000);
+
+    await vi.waitFor(() => expect(h.telemetry.events.map((e) => e.event)).toContain('sync_completed'));
+    expect(h.telemetry.events.find((e) => e.event === 'sync_completed')?.props).toMatchObject({ trigger: 'auto' });
+    h.engine.stopAutoSync();
+    h.telemetry.events.length = 0;
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.telemetry.events.find((e) => e.event === 'sync_completed')?.props).toMatchObject({ trigger: 'manual' });
   });
 
   it('fires sync_failed when gh is not usable, instead of running the sync', async () => {

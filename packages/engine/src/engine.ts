@@ -468,7 +468,7 @@ export class Engine implements EngineService {
     if (this.autoSync) {
       return;
     }
-    const target = { isSyncing: () => this.syncing !== null, sync: (maxAgentCalls: number) => this.sync({ maxAgentCalls }) };
+    const target = { isSyncing: () => this.syncing !== null, sync: (maxAgentCalls: number) => this.sync({ maxAgentCalls, auto: true }) };
     this.autoSync = new AutoSyncSchedule(target, this.deps.timers ?? systemTimers, options, this.deps.syncLog ?? ((line) => console.log(line)));
     this.autoSync.start();
   }
