@@ -760,8 +760,6 @@ function buildMembership(tiles: Tile[]): Map<PrKey, string> {
       }
     }
   }
-  membership.set(sampleKey(1855), TOPIC.frontend);
-  membership.set(sampleKey(1921), TOPIC.deps);
   return membership;
 }
 

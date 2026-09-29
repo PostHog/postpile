@@ -25,11 +25,6 @@ describe('pr_context and the pane', () => {
     for (const topicId of topicIds) {
       for (const view of (await engine.getTopic(topicId))?.tiles ?? []) {
         for (const row of view.prs) {
-          // pr_context reads the tiles of the PR's own topic. The sample puts two
-          // set members in other topics that hold no tile for them.
-          if ((await engine.getPr(row.key))?.topicId !== topicId) {
-            continue;
-          }
           const answer = await prContext(ctx, row.key, 'brief');
           expect(prMoveLines(answer.text), row.key).toEqual([turnText(row.turn)]);
           checked += 1;
