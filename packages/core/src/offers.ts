@@ -185,13 +185,19 @@ function githubLink(view: OfferView, leadKey: PrKey | null): GitHubLinkOffer | n
  * The detail pane's buttons for one PR. A done PR offers only Open, like a
  * done tile (2026-09-29: a handled PR by someone else with no ask still got
  * a primary Approve). A done PR whose news keeps its tile unread keeps Mark
- * read, but no Approve, Ask or Remove team.
+ * read, but no Approve, Ask or Remove team. On a snoozed single-PR tile a
+ * done PR keeps Snooze, so the snooze can be taken back.
  */
 export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
   const finished = view.state.kind === 'done' || pr.done;
   const approve = !finished && (pr.primaryAction === 'approve' || pr.primaryAction === 'approved');
-  const mark = scope === 'tile' ? tileFooterAction(view) : prMarkAction(view.state, pr);
+  // A done PR has nothing to mark once its news is seen, also on a snoozed tile.
+  const doneAndSeen = pr.done && pr.unseenLoudEvents === 0;
+  let mark: TileFooterAction | PrMarkAction = 'none';
+  if (!doneAndSeen) {
+    mark = scope === 'tile' ? tileFooterAction(view) : prMarkAction(view.state, pr);
+  }
   let lead: PaneLead;
   if (approve && pr.primaryAction === 'approve' && !pr.isDraft) {
     lead = 'approve';
