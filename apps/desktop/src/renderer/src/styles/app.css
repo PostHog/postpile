@@ -110,6 +110,7 @@
   --color-diff-add-ink: var(--diff-add-ink);
   --color-diff-del: var(--diff-del);
   --color-diff-del-ink: var(--diff-del-ink);
+  --color-diff-red: var(--diff-red);
 
   /* Avatars */
   --color-avatar-blue: var(--avatar-blue);

@@ -15,7 +15,7 @@ function ThreadRow(props: { thread: WorkContextThreadView; version: number; onOp
     <li className="group flex flex-col gap-1 border-t border-hairline-soft py-2 first:border-t-0">
       <div className="flex items-baseline gap-2">
         <span className={`text-xs font-semibold ${thread.forgotten ? 'text-faint line-through' : 'text-ink'}`}>{thread.title}</span>
-        {thread.forgotten && <span className="text-[11px] text-faint">forgotten, gone after the next refresh</span>}
+        {thread.forgotten && <span className="text-[11px] text-hint">forgotten, gone after the next refresh</span>}
         <span className="ml-auto flex shrink-0 gap-2.5">
           <button
             type="button"
@@ -109,7 +109,7 @@ function SkipListEditor(props: { view: WorkContextView }) {
           Save
         </Button>
       </div>
-      <p className="text-[10.5px] text-faint">{skipNote(props.view)}</p>
+      <p className="text-[10.5px] text-hint">{skipNote(props.view)}</p>
     </div>
   );
 }
@@ -130,7 +130,7 @@ export function WorkContextSection(props: { onOpenTopic: (topicId: string) => vo
     <section className="flex max-w-[680px] flex-col gap-2 rounded-tile border border-dashed border-hairline-strong bg-surface p-3.5 shadow-tile">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[12.5px] font-semibold text-ink">What you're working on</h2>
-        <span className="font-mono text-[10.5px] text-faint">agent-written{current ? ` · ${current.model}` : ''}</span>
+        <span className="font-mono text-[10.5px] text-hint">agent-written{current ? ` · ${current.model}` : ''}</span>
         <Button
           className="ml-auto self-center"
           disabled={running}

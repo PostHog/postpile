@@ -33,7 +33,7 @@ export function WhyPanel(props: { target: MemoryTarget; onClose: () => void }) {
       </div>
       {sources.isPending && <p className="text-xs text-muted">Looking up the sources…</p>}
       {sources.error && <p className="text-xs text-unread-ink">Could not load the sources: {sources.error.message}</p>}
-      {data && data.sources.length === 0 && <p className="text-xs text-faint">No source recorded for this line.</p>}
+      {data && data.sources.length === 0 && <p className="text-xs text-hint">No source recorded for this line.</p>}
       {data?.sources.map((source, index) => (
         <MemorySourceRow key={`${source.kind}:${source.title}:${index}`} source={source} />
       ))}

@@ -89,7 +89,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
           <span key={person.login} className={`${chip} gap-1.5 pr-2 pl-[3px]`} title={person.note}>
             <Avatar login={person.login} size="sm" />
             {person.login}
-            <span className="text-faint">{person.role}</span>
+            <span className="text-hint">{person.role}</span>
           </span>
         ))}
         <button
@@ -98,7 +98,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
           onClick={() => setOpen(!open)}
           className="ml-auto flex h-[22px] items-center gap-1 rounded-control px-2 text-[11.5px] text-accent hover:bg-accent-soft"
         >
-          Dossier <span className="font-mono text-[10.5px] text-muted">v{view.version}</span>
+          Dossier <span className="font-mono text-[10.5px] text-hint">v{view.version}</span>
           <span className={open ? 'rotate-180' : ''}>
             <ChevronIcon />
           </span>

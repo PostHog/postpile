@@ -32,7 +32,7 @@ function CheckAgain(props: { view: ToolsView; primary?: boolean }) {
       <Button variant={props.primary ? 'primary' : 'secondary'} disabled={checking} onClick={() => void actions.checkTools()}>
         {checking ? 'Checking…' : 'Check again'}
       </Button>
-      <span className="text-[11px] text-faint">{checkLine(props.view, now)}</span>
+      <span className="text-[11px] text-hint">{checkLine(props.view, now)}</span>
     </div>
   );
 }

@@ -118,8 +118,8 @@ export function ActivityTimeline(props: { activity: ActivityList }) {
   const empty = earlier.length === 0 && noise.length === 0;
   return (
     <div className="flex flex-col">
-      <span className="pb-2 text-[11px] font-semibold tracking-[0.04em] text-muted">{fresh.length > 0 ? 'Earlier activity' : 'Activity'}</span>
-      {empty && <span className="text-xs text-faint">{fresh.length > 0 ? 'Nothing before that.' : 'No activity yet.'}</span>}
+      <span className="pb-2 text-[11px] font-semibold tracking-[0.04em] text-hint">{fresh.length > 0 ? 'Earlier activity' : 'Activity'}</span>
+      {empty && <span className="text-xs text-hint">{fresh.length > 0 ? 'Nothing before that.' : 'No activity yet.'}</span>}
       {shown.map((line, index) => lineRow(line, index === shown.length - 1))}
       {earlier.length > props.activity.cap && (
         <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>

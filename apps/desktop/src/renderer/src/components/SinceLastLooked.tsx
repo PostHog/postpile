@@ -1,5 +1,5 @@
 import type { DossierView } from '@postpile/core';
-import { fixedText, sinceLastLooked } from '../lib/memory.ts';
+import { blockRefs, fixedText, sinceLastLooked } from '../lib/memory.ts';
 import { changePath, lineTarget } from '../lib/sources.ts';
 import { dossierBehindNote } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
@@ -21,6 +21,7 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string; 
   const { dossier } = props;
   const block = sinceLastLooked(dossier);
   const since = dossier.changesSinceSeen?.since;
+  const refs = blockRefs(block.changes);
   return (
     <section className="flex max-w-[680px] flex-col gap-2 rounded-row border border-accent-line bg-accent-soft px-3.5 py-3">
       {/* Wraps as whole pieces in the narrow tile column instead of breaking words. */}
@@ -30,7 +31,7 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string; 
         {block.counts && <span className="ml-auto font-mono text-[10.5px] whitespace-nowrap text-muted">{block.counts}</span>}
       </div>
       {block.changes.length === 0 && <p className="text-xs text-muted">Nothing new in the dossier since then.</p>}
-      {block.changes.map((change) => {
+      {block.changes.map((change, index) => {
         const path = changePath(dossier, change);
         return (
           <div key={`${change.at}:${change.text}`} className="grid grid-cols-[32px_minmax(0,1fr)] gap-2">
@@ -40,7 +41,7 @@ export function SinceLastLooked(props: { dossier: DossierView; topicId: string; 
               stale={null}
               corrected={dossier.correctedClaims.includes(change.text)}
               fixedTo={fixedText(dossier, change.text)}
-              refs={change.refs}
+              refs={refs[index]}
               why={path === null ? undefined : lineTarget(props.topicId, dossier, path)}
             >
               <span className="text-ink">{change.text}</span>

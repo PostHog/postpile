@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { DossierCare, DossierView } from '@postpile/core';
-import { claimStaleReason, fixedText } from '../lib/memory.ts';
+import { blockRefs, claimStaleReason, fixedText } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { ageLabel } from '../lib/time.ts';
@@ -28,10 +28,11 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
   const wrong = (text: string) => ({ kind: 'wrong' as const, factId: null, topicId, text });
   const corrected = (text: string) => view.correctedClaims.includes(text);
   const why = (path: string) => lineTarget(topicId, view, path);
+  const questionRefs = blockRefs(dossier.openQuestions);
   return (
     <div className="flex max-w-[680px] flex-col gap-4 rounded-row border border-hairline bg-surface px-3.5 py-3">
       <Section title="Open questions">
-        {dossier.openQuestions.length === 0 && <p className="text-xs text-faint">No open questions.</p>}
+        {dossier.openQuestions.length === 0 && <p className="text-xs text-hint">No open questions.</p>}
         {dossier.openQuestions.map((question, index) => (
           <MemoryLine
             key={question.text}
@@ -39,7 +40,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             stale={claimStaleReason(`openQuestions[${index}]`, view.staleClaims)}
             corrected={corrected(question.text)}
             fixedTo={fixedText(view, question.text)}
-            refs={question.refs}
+            refs={questionRefs[index]}
             canRecheck
             why={why(`openQuestions[${index}]`)}
           >
@@ -50,7 +51,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
       </Section>
 
       <Section title="PR timeline, oldest first">
-        {dossier.timeline.length === 0 && <p className="text-xs text-faint">No PRs in the timeline yet.</p>}
+        {dossier.timeline.length === 0 && <p className="text-xs text-hint">No PRs in the timeline yet.</p>}
         {dossier.timeline.map((entry, index) => (
           <MemoryLine
             key={entry.prKey}
@@ -67,7 +68,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
       </Section>
 
       <Section title="What you care about here">
-        {dossier.userCares.length === 0 && <p className="text-xs text-faint">Nothing noted yet.</p>}
+        {dossier.userCares.length === 0 && <p className="text-xs text-hint">Nothing noted yet.</p>}
         {dossier.userCares.map((care, index) => (
           <MemoryLine
             key={care.text}
@@ -85,7 +86,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
       </Section>
 
       <Section title="People">
-        {dossier.people.length === 0 && <p className="text-xs text-faint">Nobody noted yet.</p>}
+        {dossier.people.length === 0 && <p className="text-xs text-hint">Nobody noted yet.</p>}
         {dossier.people.map((person) => {
           const text = `@${person.login} ${person.role}: ${person.note}`;
           return (
@@ -105,7 +106,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string }) {
             </span>
             <span className="flex flex-col gap-0.5 text-ink-2">
               {note.changes.length === 0 && (
-                <span className="text-faint">{note.version === 1 ? 'First version.' : 'Reworded, nothing a reader would notice.'}</span>
+                <span className="text-hint">{note.version === 1 ? 'First version.' : 'Reworded, nothing a reader would notice.'}</span>
               )}
               {note.changes.map((change) => (
                 <span key={change}>{change}</span>

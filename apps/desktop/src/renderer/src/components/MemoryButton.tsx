@@ -12,7 +12,7 @@ export function MemoryButton(props: { correction: MemoryCorrection & { kind: 'fo
       disabled={busy}
       title="Tell the agent you do not care about this. Stays in local memory, nothing goes to GitHub."
       onClick={() => void actions.correctMemory(correction)}
-      className="shrink-0 text-[11px] text-faint hover:text-unread-ink hover:underline disabled:opacity-50"
+      className="shrink-0 text-[11px] text-hint hover:text-unread-ink hover:underline disabled:opacity-50"
     >
       Forget
     </button>

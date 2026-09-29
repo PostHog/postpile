@@ -16,6 +16,11 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
   NOT_YOURS: { icon: <DashIcon size={11} />, label: 'Not yours', tone: 'border-hairline bg-segment text-muted' },
 };
 
+/** The coral "new" dot in front of a PR number on a PR that keeps its tile unread (`newsPrKeys`). Coral means new since you looked, nothing else. */
+export function NewsDot() {
+  return <span role="img" aria-label="New since you looked" title="New since you looked" className="size-1.5 shrink-0 rounded-full bg-unread" />;
+}
+
 /** "pending: mark read on GitHub": a mark-read made while writes were locked. Neutral, not coral: nothing is new. */
 export function PendingWritePill(props: { pending: TilePendingWrite }) {
   const failed = props.pending.error !== null;
@@ -41,7 +46,7 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
 export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; updating?: boolean; greyed?: boolean; missing?: GlanceStateText | null }) {
   if (!props.verdict) {
     const text = props.missing;
-    const tone = text?.problem ? 'border-status-bad text-status-bad' : 'border-frame text-faint';
+    const tone = text?.problem ? 'border-status-bad text-status-bad' : 'border-frame text-hint';
     return (
       <span
         title={text?.card}

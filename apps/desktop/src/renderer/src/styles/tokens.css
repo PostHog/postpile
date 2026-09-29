@@ -132,6 +132,9 @@
   --diff-add-ink: #17633a;
   --diff-del: #fdecea;
   --diff-del-ink: #a3321f;
+  /* Deletions in the Size fact (count and bar). Its own red, never coral:
+     coral (--unread) means "new since you looked" only. */
+  --diff-red: #cf222e;
 
   /* Avatars: a few fixed tones, picked per login */
   --avatar-blue: #dbe7ff;

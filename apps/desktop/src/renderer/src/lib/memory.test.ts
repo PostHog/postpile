@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DossierView } from '@postpile/core';
 import { at, makeDossierVersion, makeFact, makeFactRef } from '@postpile/core/fixtures';
-import { claimStaleReason, fixedText, refLabel, sinceLastLooked } from './memory.ts';
+import { blockRefs, claimStaleReason, fixedText, refLabel, sinceLastLooked } from './memory.ts';
 
 function view(overrides: Partial<DossierView> = {}): DossierView {
   return {
@@ -68,5 +68,24 @@ describe('fixedText', () => {
     const fixed = view({ fixedClaims: [{ text: 'a', fixed: 'b2' }, { text: 'a', fixed: 'b1' }] });
     expect(fixedText(fixed, 'a')).toBe('b2');
     expect(fixedText(fixed, 'x')).toBeNull();
+  });
+});
+
+describe('blockRefs', () => {
+  const pr = makeFactRef({ prKey: 'acme/app#1902', url: 'https://github.com/acme/app/pull/1902' });
+  const review = makeFactRef({ kind: 'review', prKey: 'acme/app#1902', sourceId: 'r1', url: 'https://github.com/acme/app/pull/1902#r1' });
+  const other = makeFactRef({ prKey: 'acme/app#1960', url: 'https://github.com/acme/app/pull/1960' });
+
+  it('shows a repeated chip once per block, on its first line', () => {
+    expect(blockRefs([{ refs: [pr] }, { refs: [pr, review] }, { refs: [pr, other] }])).toEqual([[pr], [review], [other]]);
+  });
+
+  it('drops a repeat inside one line too', () => {
+    expect(blockRefs([{ refs: [pr, { ...pr }] }])).toEqual([[pr]]);
+  });
+
+  it('keeps chips that look the same but lead elsewhere', () => {
+    const elsewhere = { ...pr, url: 'https://github.com/acme/app/pull/1902#event-9' };
+    expect(blockRefs([{ refs: [pr] }, { refs: [elsewhere] }])).toEqual([[pr], [elsewhere]]);
   });
 });
