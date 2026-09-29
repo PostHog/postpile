@@ -2,6 +2,10 @@
 
 Notable changes per release. Versions follow semver, with `-alpha.N` pre-releases until 0.1.0.
 
+## 0.1.0-alpha.1 (unreleased)
+
+- Fewer macOS permission prompts. The app no longer runs your login shell at launch to find PATH (that ran your whole `.zshrc` in PostPile's name); it reads `/etc/paths` and `/etc/paths.d` instead and adds the usual install folders. Tools elsewhere (mise, asdf) go in `toolPath` in `~/.config/postpile/config.json`. `gh` and `claude` run in an empty app folder, claude calls skip CLAUDE.md, auto memory, skills, the autoupdater and claude.ai connectors, and the work context sweep stays out of Documents, iCloud, cloud drives, other apps' containers and `/Volumes`. FYI: old grants can be cleared with `tccutil reset All com.posthog.postpile`.
+
 ## 0.1.0-alpha.0 (2026-09-28)
 
 First public build. macOS arm64 only, ad-hoc signed, not notarized.

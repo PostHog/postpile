@@ -8,7 +8,7 @@ import { DataDirLock, type LockKind } from './data-lock.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
-import { defaultPaths, seedDevInstructions, type AppPaths } from './paths.ts';
+import { agentCwdFor, defaultPaths, seedDevInstructions, type AppPaths } from './paths.ts';
 import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
@@ -61,8 +61,11 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   // gh and claude behind one status: a missing or logged-out tool stops the
   // calls that need it (no process per call, no log line per call) and the UI
   // shows the fix. Real failures report back into it.
-  const ghTokens = new GhCliTokenSource();
-  const tools = new ToolHealth({ commands: systemCommands, now, forgetToken: () => ghTokens.forget() });
+  // Every gh and claude process runs in the app's own empty folder.
+  const agentCwd = agentCwdFor(paths.databaseFile);
+  const commands = systemCommands(agentCwd);
+  const ghTokens = new GhCliTokenSource(agentCwd);
+  const tools = new ToolHealth({ commands, now, forgetToken: () => ghTokens.forget() });
   const tokens = new WatchedTokenSource(ghTokens, tools);
   const fetchFn = watchedFetch(tools);
   let store: Store;
@@ -86,7 +89,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     store,
     reader,
     writes,
-    agent: new RunnerAgentService(new GatedRunner(new ClaudeCliRunner(), tools), { observer: callLog }),
+    agent: new RunnerAgentService(new GatedRunner(new ClaudeCliRunner({ cwd: agentCwd }), tools), { observer: callLog }),
     callLog,
     markReadQueue: new MarkReadQueue(
       writes,
@@ -103,6 +106,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
     dataLock: lock,
     userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
+    setupCommands: commands,
     tools,
   });
 }

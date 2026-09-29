@@ -6,6 +6,18 @@ now".
 
 ## Done
 
+- No more permission prompts from PostPile's own children (2026-09-29,
+  DESIGN.md "Missing tools" PATH, agent runner, sweep): fix-path removed,
+  PATH built from `/etc/paths(.d)`, config `toolPath` and the usual install
+  folders, no login shell run at launch (also drops ~150 ms from launch).
+  gh and claude run in `<data dir>/agent-cwd`; claude calls add
+  `--disable-slash-commands --no-chrome` and env that turns off the
+  autoupdater, side traffic, CLAUDE.md and auto memory loading and claude.ai
+  MCP connectors (flags checked against `claude --help` 2.1.284, env names
+  in its binary). The sweep skips symlinks under `~/.claude/projects` and
+  refuses CLAUDE.md or include paths in macOS privacy folders. Not tried in
+  a packaged build on a fresh machine yet; ad-hoc signing still resets
+  grants per update (separate work).
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as
@@ -482,7 +494,8 @@ now".
   environment has the Apple secrets (access pending, see RELEASING.md). x64 would be one more arch in
   `electron-builder.yml` (another Electron download, not tried). The
   packaged app was started once in fake mode; a real-data run from Finder
-  (PATH from the login shell, gh / claude found) is not tried yet.
+  (PATH from `/etc/paths(.d)` and `toolPath`, gh / claude found) is not
+  tried yet.
 - Search matches title, number, author, repo, head branch, topic name and
   area only (no PR body, comments or labels) and does not highlight the
   matched text. Filter state and history are not kept across restarts.
@@ -558,10 +571,9 @@ Fixed in that pass: parsed PR cache in `PrRepo` (every Board-backed request
   data_version` plus a local write counter, rebuilt when `now` crosses a
   snooze deadline) would make topics / topic / PR reads ~2-3 ms. Not needed
   at today's sizes; worth it if the event count grows 5-10x.
-- **fixPath blocks the main process ~130-190 ms** at launch (sync login
-  shell spawn, before `app.whenReady`). About a third of launch -> renderer
-  start (~350 ms). Could run async (shell-env) and only be awaited before
-  the first `gh` / `claude` spawn.
+- ~~**fixPath blocks the main process ~130-190 ms** at launch~~ Resolved
+  2026-09-29: fix-path is gone, PATH is built from file reads (see Done,
+  "No more permission prompts").
 - **ready-to-show fires on the empty body paint**, ~80 ms before React's
   first contentful paint, so the window still shows an empty (correctly
   coloured) frame briefly. Showing it on an IPC "first render" signal from

@@ -1,8 +1,8 @@
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ContextSweepItem } from '@postpile/agent';
-import type { IsoTime, WorkContextDrop, WorkContextInputStats, WorkContextSourceKind } from '@postpile/core';
+import { macPrivacyFolderOf, type IsoTime, type WorkContextDrop, type WorkContextInputStats, type WorkContextSourceKind } from '@postpile/core';
 import { maskSecrets } from './secrets.ts';
 import { readSessionSignals, type SessionSignals } from './session-reader.ts';
 import { SweepSkipList } from './skip-list.ts';
@@ -12,7 +12,9 @@ import { SweepSkipList } from './skip-list.ts';
 // every project's memory files, and light signals from sessions of the last
 // days. Project folders on the skip list are never read. Everything is
 // masked for secrets and cut to a character budget; what does not fit is
-// dropped and counted.
+// dropped and counted. Nothing is read from a macOS privacy folder
+// (~/Documents, iCloud, /Volumes, ...) or through a symlink under
+// ~/.claude/projects: macOS asks for a permission on the first access there.
 
 /** Character budget per section. Unused room carries over to the next section. */
 export interface CollectBudget {
@@ -87,6 +89,31 @@ function safeRealpath(path: string): string | null {
     return realpathSync(path);
   } catch {
     return null;
+  }
+}
+
+/** A symlink itself, not followed. False when the path is gone. */
+function isSymlink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where a symlink points, one step, without touching the target; the path
+ * itself when it is not a symlink. Lets a target be checked before realpath
+ * or stat follow it.
+ */
+function linkTarget(path: string): string {
+  if (!isSymlink(path)) {
+    return path;
+  }
+  try {
+    return resolve(dirname(path), readlinkSync(path));
+  } catch {
+    return path;
   }
 }
 
@@ -167,15 +194,33 @@ export class WorkContextCollector {
     this.skipList = options.skipList ?? new SweepSkipList([]);
   }
 
-  /** The project folders to read, without the skipped ones. */
+  /**
+   * The project folders to read, without the skipped ones and without
+   * symlinks: Claude Code only makes real folders here, and a link could
+   * point anywhere, a privacy folder included.
+   */
   private projectFolders(projectsDir: string): string[] {
     return listDir(projectsDir).filter((folder) => {
       if (this.skipList.skips(folder)) {
         this.skippedProjects.add(folder);
         return false;
       }
-      return true;
+      return !isSymlink(join(projectsDir, folder));
     });
+  }
+
+  /**
+   * True when `path` is inside a macOS privacy folder; then it is logged
+   * and dropped, and must not be touched at all.
+   */
+  private refusedPrivate(kind: WorkContextSourceKind, path: string): boolean {
+    const folder = macPrivacyFolderOf(path, this.home);
+    if (folder === null) {
+      return false;
+    }
+    this.log(`work context: skipped ${this.display(path)}: inside ${this.display(folder)}, a macOS privacy folder`);
+    this.drop(kind, this.display(path), 'inside a macOS privacy folder');
+    return true;
   }
 
   /** "~/.claude/..." instead of the full home path. */
@@ -206,9 +251,9 @@ export class WorkContextCollector {
   private resolveInclude(target: string, from: string, roots: string[]): string | null {
     const base = target.startsWith('~/') ? join(this.home, target.slice(2)) : target;
     const folders = [dirname(from), dirname(safeRealpath(from) ?? from)];
-    for (const folder of folders) {
-      const candidate = isAbsolute(base) ? base : resolve(folder, base);
-      if (!roots.some((root) => isInside(candidate, root))) {
+    const candidates = new Set(folders.map((folder) => (isAbsolute(base) ? base : resolve(folder, base))));
+    for (const candidate of candidates) {
+      if (!roots.some((root) => isInside(candidate, root)) || this.refusedPrivate('claude_md', linkTarget(candidate))) {
         continue;
       }
       const real = existsSync(candidate) ? safeRealpath(candidate) : null;
@@ -221,11 +266,18 @@ export class WorkContextCollector {
 
   private claudeMdCandidates(): Candidate[] {
     const main = join(this.options.claudeDir, 'CLAUDE.md');
-    const mainReal = safeRealpath(main);
-    if (!mainReal) {
+    if (this.refusedPrivate('claude_md', linkTarget(main))) {
       return [];
     }
-    const roots = [this.options.claudeDir, safeRealpath(this.options.claudeDir) ?? this.options.claudeDir, dirname(mainReal)];
+    const mainReal = safeRealpath(main);
+    if (!mainReal || this.refusedPrivate('claude_md', mainReal)) {
+      return [];
+    }
+    const claudeDirReal = this.refusedPrivate('claude_md', linkTarget(this.options.claudeDir))
+      ? this.options.claudeDir
+      : (safeRealpath(this.options.claudeDir) ?? this.options.claudeDir);
+    // An include root inside a privacy folder is dropped; includes under it are never looked up.
+    const roots = [this.options.claudeDir, claudeDirReal, dirname(mainReal)].filter((root) => !this.refusedPrivate('claude_md', root));
     const seen = new Set<string>();
     const found: Candidate[] = [];
     const visit = (path: string, depth: number): void => {
@@ -266,11 +318,14 @@ export class WorkContextCollector {
     const files: { path: string; group: number; mtime: number; index: boolean }[] = [];
     for (const project of this.projectFolders(projectsDir)) {
       const memoryDir = join(projectsDir, project, 'memory');
+      if (isSymlink(memoryDir)) {
+        continue;
+      }
       for (const name of listDir(memoryDir)) {
-        if (!name.endsWith('.md')) {
+        const path = join(memoryDir, name);
+        if (!name.endsWith('.md') || isSymlink(path)) {
           continue;
         }
-        const path = join(memoryDir, name);
         const mtime = mtimeMs(path);
         const index = name === 'MEMORY.md';
         files.push({ path, mtime, index, group: index ? 0 : mtime >= recentSince ? 1 : 2 });
@@ -295,7 +350,7 @@ export class WorkContextCollector {
     for (const projectDir of this.projectFolders(projectsDir)) {
       for (const name of listDir(join(projectsDir, projectDir))) {
         const path = join(projectsDir, projectDir, name);
-        if (name.endsWith('.jsonl') && mtimeMs(path) >= since) {
+        if (name.endsWith('.jsonl') && !isSymlink(path) && mtimeMs(path) >= since) {
           files.push({ path, sessionId: name.slice(0, -'.jsonl'.length), projectDir });
         }
       }

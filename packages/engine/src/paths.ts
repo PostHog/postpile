@@ -101,6 +101,18 @@ export function defaultPaths(pathEnv: PathEnv = systemPathEnv()): AppPaths {
 }
 
 /**
+ * The folder every gh and claude process runs in: an empty one the app owns,
+ * next to the database. A child that inherits / or a repo as its folder may
+ * read project files there (claude looks for settings and CLAUDE.md), and
+ * macOS asks for privacy permissions in PostPile's name. Created on demand.
+ */
+export function agentCwdFor(databaseFile: string): string {
+  const dir = join(dirname(databaseFile), 'agent-cwd');
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
  * The first dev run gets a copy of the real instructions.md, once: only
  * when the dev config folder does not exist yet. A copy, never a link, so
  * dev edits stay in dev. Returns the file it seeded, or null.

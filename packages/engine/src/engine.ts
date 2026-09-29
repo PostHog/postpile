@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import type { AgentService } from '@postpile/agent';
 import type {
   ActionLogEntry,
@@ -121,7 +122,11 @@ export interface EngineDeps {
   userConfig?: UserConfigFile | null;
   /** Sync start, summary and errors. Defaults to console.log, which the desktop app writes to its log file. */
   syncLog?: (line: string) => void;
-  /** Runs gh and claude for the setup checks. Defaults to the real programs; tests pass a fake. */
+  /**
+   * Runs gh and claude for the setup checks. createEngine passes the real
+   * programs run in the app's own folder; tests pass a fake. Missing: the
+   * real programs, run in the temp folder.
+   */
   setupCommands?: CommandRunner;
   /**
    * gh and claude status. Must be the one the token source, fetch and agent
@@ -214,7 +219,7 @@ export class Engine implements EngineService {
       digest: () => this.workContextDigest(),
       now,
     });
-    const setupChecks = new SetupChecks(deps.reader, deps.setupCommands ?? systemCommands);
+    const setupChecks = new SetupChecks(deps.reader, deps.setupCommands ?? systemCommands(tmpdir()));
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
   }
 
