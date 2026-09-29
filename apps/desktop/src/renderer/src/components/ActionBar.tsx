@@ -12,6 +12,7 @@ import { RecheckDialog } from './RecheckDialog.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { markReadNote } from '../lib/guard.ts';
 import { glanceClaim } from '../lib/glance.ts';
+import { markButtonLabel } from '../lib/mark-read.ts';
 
 interface ActionBarProps {
   detail: PrDetail;
@@ -51,7 +52,9 @@ function lifecycleOf(props: ActionBarProps): PrLifecycle {
  * "approved" still shows the button: an approval on any commit counts, and
  * re-approving is harmless. On your own
  * PR, or a merged or closed one, Mark read while the tile is unread, else
- * Open on GitHub. Approve acts on the PR, the rest on the tile.
+ * Open on GitHub. Approve acts on the PR, the rest on the tile. The mark
+ * button says "Mark done" only where a mark-read makes the tile done, and is
+ * left out while the tile is read and still your move (`markButtonLabel`).
  */
 export function ActionBar(props: ActionBarProps) {
   const actions = useActions();
@@ -73,11 +76,19 @@ export function ActionBar(props: ActionBarProps) {
   const markReadTitle = props.view.pendingWrite
     ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
     : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks the whole tile read; GitHub follows after 6s');
-  const markRead = (variant: 'primary' | 'secondary') => (
-    <Button variant={variant} size="md" title={markReadTitle} disabled={props.view.pendingWrite !== null} onClick={() => void actions.markRead(tileId)}>
-      Mark read
-    </Button>
-  );
+  const markLabel = markButtonLabel(props.view);
+  const markRead = (variant: 'primary' | 'secondary') =>
+    markLabel && (
+      <Button
+        variant={variant}
+        size="md"
+        title={markReadTitle}
+        disabled={props.view.pendingWrite !== null}
+        onClick={() => void actions.markRead(tileId, props.view.afterRead)}
+      >
+        {markLabel}
+      </Button>
+    );
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {(primary === 'approve' || primary === 'approved') && (

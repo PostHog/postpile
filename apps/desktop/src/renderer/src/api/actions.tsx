@@ -29,12 +29,14 @@ import type {
   SetupSweepView,
   SnoozeCondition,
   SyncReport,
+  TileAfterRead,
   ToolsView,
   WorkContextSweepResult,
   WorkThreadForget,
 } from '@postpile/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
+import { markReadNotice } from '../lib/mark-read.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
@@ -67,7 +69,12 @@ export interface Notice {
   tone: NoticeTone;
   message: string;
   undoToken: string | null;
+  /** The toast offers "Snooze" for this tile: a mark-read left it your move. */
+  snoozeTileId: string | null;
 }
+
+/** Reshapes the notice of a successful or failed action, e.g. the mark-read that leaves a tile your move. */
+type NoticeShape = (result: ActionResult) => { message: string; snoozeTileId: string | null };
 
 interface PendingUndo {
   token: string;
@@ -102,7 +109,8 @@ export interface Actions {
   approve(prKey: PrKey): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
-  markRead(tileId: string): Promise<void>;
+  /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
+  markRead(tileId: string, afterRead?: TileAfterRead): Promise<void>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
   unsnooze(tileId: string): Promise<void>;
   undo(undoToken: string): Promise<void>;
@@ -215,8 +223,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [pendingUndos]);
 
-  function show(tone: NoticeTone, message: string, undoToken: string | null = null): void {
-    setNotice({ id: Date.now(), tone, message, undoToken });
+  function show(tone: NoticeTone, message: string, undoToken: string | null = null, snoozeTileId: string | null = null): void {
+    setNotice({ id: Date.now(), tone, message, undoToken, snoozeTileId });
   }
 
   function refreshAll(): Promise<void> {
@@ -242,13 +250,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function run(busyKey: string, write: GithubWrite | null, task: () => Promise<ActionResult>): Promise<boolean> {
+  async function run(busyKey: string, write: GithubWrite | null, task: () => Promise<ActionResult>, shape: NoticeShape | null = null): Promise<boolean> {
     if (isBlocked(write)) {
       return false;
     }
     try {
       const result = await withBusy(busyKey, task);
-      show(result.ok ? 'ok' : 'error', result.message, result.undoToken);
+      const shaped = shape ? shape(result) : { message: result.message, snoozeTileId: null };
+      show(result.ok ? 'ok' : 'error', shaped.message, result.undoToken, shaped.snoozeTileId);
       if (result.undoToken) {
         const entry = { token: result.undoToken, until: Date.now() + UNDO_WINDOW_MS };
         setPendingUndos((current) => [...current, entry]);
@@ -521,8 +530,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
       sendTelemetry('glance_retry_clicked', {});
       await run(`retryGlance:${prKey}`, null, () => request('POST', `${prPath(prKey)}/glance/retry`));
     },
-    markRead: async (tileId) => {
-      await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`));
+    markRead: async (tileId, afterRead) => {
+      const shape: NoticeShape | null = afterRead
+        ? (result) => {
+            const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead });
+            return { message: notice.message, snoozeTileId: notice.offerSnooze ? tileId : null };
+          }
+        : null;
+      await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`), shape);
     },
     snooze: async (tileId, condition) => {
       await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }));

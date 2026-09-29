@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, type ButtonSize } from './Button.tsx';
+import { Button, type ButtonSize, type ButtonVariant } from './Button.tsx';
 
 export interface MenuItem {
   label: string;
@@ -12,6 +12,7 @@ interface MenuProps {
   label: string;
   items: MenuItem[];
   size?: ButtonSize;
+  variant?: ButtonVariant;
   /** Open upwards, for menus at the bottom of a pane. */
   up?: boolean;
   align?: 'left' | 'right';
@@ -50,7 +51,7 @@ export function Menu(props: MenuProps) {
   const position = `${props.up ? 'bottom-full mb-1' : 'top-full mt-1'} ${props.align === 'right' ? 'right-0' : 'left-0'}`;
   return (
     <div ref={root} className="relative">
-      <Button size={props.size} disabled={props.disabled} title={props.title} aria-label={props.title} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Button variant={props.variant} size={props.size} disabled={props.disabled} title={props.title} aria-label={props.title} aria-expanded={open} onClick={() => setOpen(!open)}>
         {props.label}
       </Button>
       {open && (

@@ -7,7 +7,11 @@ const TONES: Record<NoticeTone, string> = {
   blocked: 'border border-closer/30 bg-closer-soft text-closer',
 };
 
-/** The latest action result above the footer, with Undo while a mark-read can still be taken back. */
+/**
+ * The latest action result above the footer, with Undo while a mark-read can
+ * still be taken back, and "Snooze until next push" after a mark-read that
+ * left the tile your move.
+ */
 export function Toast() {
   const actions = useActions();
   const notice = actions.notice;
@@ -15,6 +19,7 @@ export function Toast() {
     return null;
   }
   const undoToken = notice.undoToken;
+  const snoozeTileId = notice.snoozeTileId;
   return (
     <div
       role="status"
@@ -26,6 +31,16 @@ export function Toast() {
       {undoToken && (
         <button type="button" className="font-semibold underline-offset-2 hover:underline" onClick={() => void actions.undo(undoToken)}>
           Undo
+        </button>
+      )}
+      {snoozeTileId && (
+        <button
+          type="button"
+          title="Snooze this tile until the author pushes again. Local only, nothing goes to GitHub."
+          className="font-semibold whitespace-nowrap underline-offset-2 hover:underline"
+          onClick={() => void actions.snooze(snoozeTileId, { kind: 'new_push' })}
+        >
+          Snooze until next push
         </button>
       )}
       <button type="button" aria-label="Dismiss" className="opacity-60 hover:opacity-100" onClick={actions.dismissNotice}>
