@@ -3996,6 +3996,31 @@ PR on a live or snoozed tile, routed team requests),
 `mcp/move-agreement.test.ts` (pr_context against the pane for every sample
 PR).
 
+Property tests (2026-09-29, fast-check) run the same kind of invariants over
+generated boards instead of a handful of fixed ones. `@postpile/core/testing`
+holds the board recipe (`boardSpecArb`: one topic, 1-3 tiles, 1-4 PRs each as
+single, stack or set, pinged, found or pulled in; authors viewer, teammate,
+other or bot; a short history of review requests, comments and mentions,
+reviews, pushes, readiness, merge or close, CI; thread read state, handled,
+in-app approval, per-PR and whole-tile snoozes, glance verdicts, Look closer,
+agent overrides, truncated or stale snapshots, pending writes), `buildBoard`
+(snapshots from the steps, events from `deriveEvents` made seen the way the
+sync and `planRead` do it, tiles from `buildTopicTiles`, a tile snooze from
+`snoozeWrites`) and the invariant catalogue by level
+(`invariants-tile.ts`, `-pr.ts`, `-read.ts`, `-topic.ts`), run in
+`core/src/properties/` plus the "Not done yet" dots in the renderer's
+`lib/tiles.properties.test.ts`. Where rules differ on purpose the invariant
+names the exception (routed NOT_YOURS, changes held, team taken, an ask
+first; a re-requested review under your standing changes request; news only
+on a pulled-in layer has no dot). `properties/coverage.test.ts` fails when a
+branch-relevant label (PR state x author, request target, review state
+including dismissed, CI, thread and seen state, snooze kind and phase,
+truncated, and the shapes past bugs needed) shows on under 1% of boards.
+Each invariant checks 2000 boards by default; `POSTPILE_PROPERTY_RUNS=10000
+pnpm test` checks more (about 13s for the whole suite). A failure prints
+the shrunk board recipe; a bug fixed from one gets a named scenario next to
+its property (`properties/pr.test.ts`).
+
 ## Architecture
 
 TypeScript everywhere, Node 24, pnpm workspaces (`pnpm-workspace.yaml`, workspace deps as `workspace:*`).

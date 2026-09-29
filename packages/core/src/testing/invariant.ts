@@ -1,0 +1,74 @@
+// The shape of one cross-rule invariant and the helpers every catalogue
+// shares. An invariant throws with a plain message when a board breaks it;
+// it does not depend on vitest, so a differential or a stateful test can run
+// the same catalogue after each step.
+import fc from 'fast-check';
+import { isTracked } from '../provenance.ts';
+import type { Pr, PrEvent, PrKey, TileMember } from '../types.ts';
+import type { PrSummary, TileView } from '../views.ts';
+import type { WhoseTurn } from '../whose-turn.ts';
+import { boardSpecArb, type BoardSpec } from './board-spec.ts';
+import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
+import { propertyRuns } from './runs.ts';
+
+export interface Invariant {
+  name: string;
+  /** Throws when the board breaks the invariant. */
+  check: (board: PropertyBoard, views: TileView[]) => void;
+}
+
+export class InvariantBroken extends Error {}
+
+/** Throws with `message` unless `holds`. */
+export function ensure(holds: boolean, message: string): void {
+  if (!holds) {
+    throw new InvariantBroken(message);
+  }
+}
+
+/** Runs one invariant over generated boards; fast-check shrinks a failure to a small spec. */
+export function checkBoards(invariant: Invariant, runs: number = propertyRuns(), arbitrary: fc.Arbitrary<BoardSpec> = boardSpecArb): void {
+  fc.assert(
+    fc.property(arbitrary, (spec) => {
+      const board = buildBoard(spec);
+      invariant.check(board, tileViewsOf(board));
+    }),
+    { numRuns: runs },
+  );
+}
+
+export function prOf(board: PropertyBoard, key: PrKey): Pr {
+  const pr = board.prs.get(key);
+  if (!pr) {
+    throw new Error(`no PR ${key} on the board`);
+  }
+  return pr;
+}
+
+export function eventsOf(board: PropertyBoard, key: PrKey): PrEvent[] {
+  return board.events.get(key) ?? [];
+}
+
+export function trackedMembers(view: TileView): TileMember[] {
+  return view.tile.members.filter((member) => isTracked(member.provenance));
+}
+
+export function trackedRows(view: TileView): PrSummary[] {
+  return view.prs.filter((row) => isTracked(row.provenance));
+}
+
+/** Loud as the agent or user left it, and not seen: spelled out here, not read from the rule under test. */
+export function isNews(event: PrEvent): boolean {
+  const loudness = event.override ? event.override.loudness : event.ruleLoudness;
+  return event.seenAt === null && loudness === 'loud';
+}
+
+/** Two turns name the same move on the same PR (the words differ between a tile and a row: " on #12"). */
+export function sameMove(a: WhoseTurn, b: WhoseTurn): boolean {
+  const moveOf = (turn: WhoseTurn) => (turn.kind === 'you' ? turn.move : null);
+  return a.kind === b.kind && moveOf(a) === moveOf(b) && a.who === b.who && a.prKey === b.prKey && (a.lead ?? null) === (b.lead ?? null);
+}
+
+export function describeTurn(turn: WhoseTurn): string {
+  return turn.kind === 'you' ? `you/${turn.move} on ${turn.prKey}` : `${turn.kind}${turn.who ? ` (${turn.who})` : ''} on ${turn.prKey ?? '-'}`;
+}
