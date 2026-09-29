@@ -3,7 +3,7 @@
 // even when the picked topic or tile no longer matches the filter.
 import type { PrSummary, TileView, TopicListItem } from '@postpile/core';
 import type { NavEntry } from './history.ts';
-import { firstGridTile } from './queues.ts';
+import { tilesInTierOrder } from './queues.ts';
 import { leadPr } from './tiles.ts';
 
 /**
@@ -16,6 +16,40 @@ export interface KeptView {
   topicId: string | null;
   tileId: string | null;
   prKey: string | null;
+  /**
+   * Set while the app picked this tile (`autoTile`), the user did not, with
+   * the grid filter and tile state it was picked under. An auto pick is
+   * re-run when the filter changes and turns into a user-like pick (kept
+   * visible in the grid) once its state changes while shown.
+   */
+  auto?: AutoPick | null;
+}
+
+export interface AutoPick {
+  tileFilter: TileFilter;
+  state: TileView['state']['kind'];
+}
+
+/** The grid's own filter: every live tile, or only the unread ones. */
+export type TileFilter = 'all' | 'unread';
+
+/**
+ * The tile the app selects when the user has not picked one (2026-09-29):
+ * the first unread tile in tier order; under All also the first open one;
+ * never a snoozed or done tile. Under Unread with nothing unread: none.
+ */
+export function autoTile(views: TileView[], tileFilter: TileFilter): TileView | null {
+  const ordered = tilesInTierOrder(views);
+  const unread = ordered.find((view) => view.state.kind === 'unread');
+  if (unread || tileFilter === 'unread') {
+    return unread ?? null;
+  }
+  return ordered.find((view) => view.state.kind === 'open') ?? null;
+}
+
+/** The detail pane's line when no tile is selected. */
+export function noSelectionText(tileFilter: TileFilter): string {
+  return tileFilter === 'unread' ? 'Nothing unread in this topic. Pick a tile, or show All.' : 'Pick a tile to see it.';
 }
 
 /**
@@ -39,13 +73,17 @@ export function keptFor(kept: KeptView | null, entry: NavEntry, key: string): Ke
   return kept;
 }
 
+function sameAuto(a: AutoPick | null, b: AutoPick | null): boolean {
+  return a === b || (a !== null && b !== null && a.tileFilter === b.tileFilter && a.state === b.state);
+}
+
 /**
  * What to keep after this render: what is shown now. Returns `previous`
  * itself when nothing changed, so a state update can be skipped. Another
  * pane keeps the last topic view for the way back; tiles still loading
  * (`shown.tileId` null on the same topic) keep the last tile.
  */
-export function nextKept(previous: KeptView | null, key: string, entry: NavEntry, shown: NavEntry): KeptView | null {
+export function nextKept(previous: KeptView | null, key: string, entry: NavEntry, shown: NavEntry, auto: AutoPick | null = null): KeptView | null {
   if (entry.pane !== 'topic') {
     return previous;
   }
@@ -53,10 +91,10 @@ export function nextKept(previous: KeptView | null, key: string, entry: NavEntry
   if (still && shown.tileId === null && still.topicId === shown.topicId) {
     return still;
   }
-  if (still && still.topicId === shown.topicId && still.tileId === shown.tileId && still.prKey === shown.prKey) {
+  if (still && still.topicId === shown.topicId && still.tileId === shown.tileId && still.prKey === shown.prKey && sameAuto(still.auto ?? null, auto)) {
     return still;
   }
-  return { filterKey: key, entry, topicId: shown.topicId, tileId: shown.tileId, prKey: shown.prKey };
+  return { filterKey: key, entry, topicId: shown.topicId, tileId: shown.tileId, prKey: shown.prKey, auto };
 }
 
 /**
@@ -94,7 +132,8 @@ function prIn(view: TileView, prKey: string | null | undefined): PrSummary | und
  * 2. the tile that now holds the picked PR (a set regrouped, a PR left a stack);
  * 3. the kept tile (by id, else by its PR) among all the topic's tiles, so a
  *    tile that stops matching the search after a refetch stays;
- * 4. the grid's first shown tile.
+ * 4. `autoTile` of the shown tiles (`auto` true; none under Unread with
+ *    nothing unread).
  * The PR: the picked one, else the kept one, else the first matching the
  * search, else the tile's lead PR. `kept` must belong to this topic.
  */
@@ -104,18 +143,21 @@ export function resolveSelection(
   allTiles: TileView[],
   matchingPrKeys: Set<string> | null,
   kept: KeptView | null,
-): { view: TileView | null; prKey: string | null } {
-  const view =
-    shownTiles.find((candidate) => candidate.tile.id === entry.tileId) ??
-    tileHolding(shownTiles, entry.prKey) ??
-    keptTile(allTiles, kept) ??
-    firstGridTile(shownTiles);
+  tileFilter: TileFilter = 'all',
+): { view: TileView | null; prKey: string | null; auto: boolean } {
+  const picked = shownTiles.find((candidate) => candidate.tile.id === entry.tileId) ?? tileHolding(shownTiles, entry.prKey);
+  // An auto pick made under another grid filter is picked again.
+  const usableKept = kept?.auto && kept.auto.tileFilter !== tileFilter ? null : kept;
+  const keptView = picked ? undefined : keptTile(allTiles, usableKept);
+  const view = picked ?? keptView ?? autoTile(shownTiles, tileFilter);
   if (!view) {
-    return { view: null, prKey: null };
+    return { view: null, prKey: null, auto: false };
   }
+  // Auto until its state changes while shown: then it counts as the user's, so pane and grid agree.
+  const auto = !picked && (keptView ? usableKept?.auto?.state === view.state.kind : true);
   const matching = matchingPrKeys ? view.prs.find((pr) => matchingPrKeys.has(pr.key)) : undefined;
   const pr = prIn(view, entry.prKey) ?? prIn(view, kept?.prKey) ?? matching ?? leadPr(view);
-  return { view, prKey: pr?.key ?? null };
+  return { view, prKey: pr?.key ?? null, auto };
 }
 
 /** The search's matching tile ids plus the selected tile, so the grid never hides what is open. */

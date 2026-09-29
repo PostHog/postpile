@@ -63,7 +63,7 @@ function leadSlot(lead: DetailPrimary): Slot {
  * Approve, open, ask, mark read, snooze, chat. One ink button
  * (`detailPrimary`): Approve while it is due, else Mark read / Mark done,
  * Snooze on a single-PR tile that is read and still your move, or Open on
- * GitHub. It sits first. Approve shows on someone else's open PR, label and
+ * GitHub (a done tile shows only that: no mark button, no Snooze). It sits first. Approve shows on someone else's open PR, label and
  * look from `approveButton` ("Approve as well", outlined "Approve draft" /
  * "Approve again"); core's "approved" still shows it: an approval on any
  * commit counts, and re-approving is harmless. Open on GitHub shows where
@@ -149,8 +149,8 @@ export function ActionBar(props: ActionBarProps) {
     removeTeam: removeTeamButtons(props.view.prs.find((candidate) => candidate.key === pr.key) ?? null).map((button) => (
       <RemoveTeamButton key={button.team} prKey={pr.key} button={button} />
     )),
-    // A set or stack is snoozed from its tile footer; here only a single-PR tile, where tile and PR are one.
-    snooze: selected === null && <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" variant={variantOf('snooze')} />,
+    // A set or stack is snoozed from its tile footer; here only a single-PR tile, where tile and PR are one. A done tile has no Snooze.
+    snooze: selected === null && props.view.state.kind !== 'done' && <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" variant={variantOf('snooze')} />,
   };
   const order = [leadSlot(lead), ...SLOT_ORDER.filter((slot) => slot !== leadSlot(lead))];
   return (

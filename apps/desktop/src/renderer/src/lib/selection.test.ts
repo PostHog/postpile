@@ -4,7 +4,7 @@ import { at } from '@postpile/core/fixtures';
 import type { NavEntry } from './history.ts';
 import { applyQueueFilter } from './queues.ts';
 import { visibleTopic } from './search.ts';
-import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, unreadTiles, withSelectedTile, type KeptView } from './selection.ts';
+import { autoTile, filterKey, noSelectionText, keptFor, listedTopics, nextKept, resolveSelection, unreadTiles, withSelectedTile, type KeptView } from './selection.ts';
 
 function item(id: string, toReview: number): TopicListItem {
   const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', area: null, createdAt: at(0), updatedAt: at(0) };
@@ -163,7 +163,7 @@ describe('resolveSelection', () => {
   it('falls back to the first tile when the PR is gone too', () => {
     const tiles = [tile('t1', ['o/r#1'])];
     expect(resolveSelection(entry('t', 'gone', 'o/r#9'), tiles, tiles, null, null).view?.tile.id).toBe('t1');
-    expect(resolveSelection(entry('t'), [], [], null, null)).toEqual({ view: null, prKey: null });
+    expect(resolveSelection(entry('t'), [], [], null, null)).toEqual({ view: null, prKey: null, auto: false });
   });
 });
 
@@ -177,5 +177,71 @@ describe('grid helpers', () => {
     const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2']), tile('t3', ['o/r#3'])];
     expect(unreadTiles(tiles, 't2').map((view) => view.tile.id)).toEqual(['t1', 't2']);
     expect(unreadTiles(tiles, null).map((view) => view.tile.id)).toEqual(['t1']);
+  });
+});
+
+describe('autoTile and the auto selection', () => {
+  const UNREAD: TileState = { kind: 'unread', unreadBecause: [] };
+  const SNOOZED = { kind: 'snoozed' } as unknown as TileState;
+
+  it('selects the first unread tile', () => {
+    const tiles = [tile('open', ['o/r#1']), tile('unread', ['o/r#2'], UNREAD), tile('done', ['o/r#3'], DONE)];
+    expect(autoTile(tiles, 'all')?.tile.id).toBe('unread');
+    expect(autoTile(tiles, 'unread')?.tile.id).toBe('unread');
+  });
+
+  it('falls back to the first open tile under All only', () => {
+    const tiles = [tile('done', ['o/r#3'], DONE), tile('open', ['o/r#1'])];
+    expect(autoTile(tiles, 'all')?.tile.id).toBe('open');
+    expect(autoTile(tiles, 'unread')).toBeNull();
+  });
+
+  it('never selects a done or snoozed tile', () => {
+    const tiles = [tile('done', ['o/r#3'], DONE), tile('snoozed', ['o/r#4'], SNOOZED)];
+    expect(autoTile(tiles, 'all')).toBeNull();
+    expect(autoTile(tiles, 'unread')).toBeNull();
+  });
+
+  it('marks the fallback as auto and a pick as not', () => {
+    const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2'])];
+    expect(resolveSelection(entry('t'), tiles, tiles, null, null, 'all').auto).toBe(true);
+    expect(resolveSelection(entry('t', 't2', 'o/r#2'), tiles, tiles, null, null, 'all').auto).toBe(false);
+  });
+
+  it('selects nothing under Unread when only done tiles are left', () => {
+    const tiles = [tile('t1', ['o/r#1'], DONE)];
+    expect(resolveSelection(entry('t'), tiles, tiles, null, null, 'unread')).toEqual({ view: null, prKey: null, auto: false });
+  });
+
+  it('stays auto while the kept auto pick keeps its state', () => {
+    const tiles = [tile('t1', ['o/r#1'], UNREAD)];
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 't1', 'o/r#1'), { tileFilter: 'all', state: 'unread' });
+    expect(resolveSelection(entry('t'), tiles, tiles, null, kept, 'all').auto).toBe(true);
+  });
+
+  it('turns into a user-like pick once the auto tile changes state while shown', () => {
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 't1', 'o/r#1'), { tileFilter: 'unread', state: 'unread' });
+    const read = [tile('t1', ['o/r#1'], DONE), tile('t2', ['o/r#2'], UNREAD)];
+    const selected = resolveSelection(entry('t'), read, read, null, kept, 'unread');
+    expect([selected.view?.tile.id, selected.auto]).toEqual(['t1', false]);
+  });
+
+  it('picks again when the grid filter changes under an auto pick', () => {
+    const tiles = [tile('open', ['o/r#1']), tile('unread', ['o/r#2'], UNREAD)];
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 'open', 'o/r#1'), { tileFilter: 'all', state: 'open' });
+    expect(resolveSelection(entry('t'), tiles, tiles, null, kept, 'unread').view?.tile.id).toBe('unread');
+    const onlyOpen = [tile('open', ['o/r#1'])];
+    expect(resolveSelection(entry('t'), onlyOpen, onlyOpen, null, kept, 'unread').view).toBeNull();
+  });
+
+  it('keeps a user pick across a grid filter change', () => {
+    const tiles = [tile('open', ['o/r#1'])];
+    const kept = nextKept(null, filterKey(null, null), entry('t', 'open', 'o/r#1'), entry('t', 'open', 'o/r#1'));
+    expect(resolveSelection(entry('t', 'open', 'o/r#1'), tiles, tiles, null, kept, 'unread').view?.tile.id).toBe('open');
+  });
+
+  it('words the empty pane by filter', () => {
+    expect(noSelectionText('unread')).toBe('Nothing unread in this topic. Pick a tile, or show All.');
+    expect(noSelectionText('all')).toBe('Pick a tile to see it.');
   });
 });

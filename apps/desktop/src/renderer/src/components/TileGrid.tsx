@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import type { TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
-import { unreadTiles } from '../lib/selection.ts';
+import { unreadTiles, type TileFilter } from '../lib/selection.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';
-
-type TileFilter = 'all' | 'unread';
 
 interface TileGridProps {
   detail: TopicDetail;
   topics: TopicListItem[];
   selectedTileId: string | null;
   selectedPrKey: string | null;
+  /** The app picked the selected tile: it is not kept in the Unread list. */
+  selectedIsAuto: boolean;
+  filter: TileFilter;
+  onFilter: (filter: TileFilter) => void;
   onSelect: (tileId: string, prKey: string) => void;
   /** Tiles the search bar lets through; null shows all. */
   matchingTileIds: Set<string> | null;
@@ -98,7 +100,7 @@ function tileId(view: TileView): string {
  * right away.
  */
 export function TileGrid(props: TileGridProps) {
-  const [filter, setFilter] = useState<TileFilter>('all');
+  const { filter, onFilter } = props;
   const matching = props.matchingTileIds;
   const ordered = tilesInTierOrder(props.detail.tiles);
   const tiles = matching ? ordered.filter((view) => matching.has(view.tile.id)) : ordered;
@@ -114,7 +116,7 @@ export function TileGrid(props: TileGridProps) {
     tileId,
   ).map((bucket) => bucket.items) as [TileView[], TileView[], TileView[]];
   // The selected tile stays in the Unread list while selected, at its held place: reading or approving it must not hide or move it.
-  const shown = filter === 'unread' ? unreadTiles([...live, ...snoozed, ...done], props.selectedTileId) : live;
+  const shown = filter === 'unread' ? unreadTiles([...live, ...snoozed, ...done], props.selectedIsAuto ? null : props.selectedTileId) : live;
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center gap-2.5 border-t border-hairline pt-3">
@@ -124,8 +126,8 @@ export function TileGrid(props: TileGridProps) {
           {tiles.length < props.detail.tiles.length && ` · ${props.detail.tiles.length - tiles.length} filtered out`}
         </span>
         <div className="ml-auto flex rounded-control bg-segment p-0.5">
-          <FilterButton label="All" active={filter === 'all'} onClick={() => setFilter('all')} />
-          <FilterButton label="Unread" active={filter === 'unread'} onClick={() => setFilter('unread')} />
+          <FilterButton label="All" active={filter === 'all'} onClick={() => onFilter('all')} />
+          <FilterButton label="Unread" active={filter === 'unread'} onClick={() => onFilter('unread')} />
         </div>
       </div>
       {shown.length === 0 && (

@@ -32,7 +32,7 @@ import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
 import type { SetupStepKey } from './lib/setup.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
-import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './lib/selection.ts';
+import { filterKey, keptFor, listedTopics, nextKept, noSelectionText, resolveSelection, withSelectedTile, type KeptView, type TileFilter } from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { toolsNotice } from './lib/tools.ts';
@@ -68,6 +68,7 @@ export function App() {
 
   const [query, setQuery] = useState('');
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
+  const [tileFilter, setTileFilter] = useState<TileFilter>('all');
   const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   const changeQueueFilter = (filter: QueueFilter | null): void => {
     setQueueFilter(filter);
@@ -135,10 +136,10 @@ export function App() {
   const allTiles = topic.data?.tiles ?? [];
   const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
   const keptTile = keptNow && keptNow.topicId === activeTopicId ? keptNow : null;
-  const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile);
+  const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile, tileFilter);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
-  const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown);
+  const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown, selected.auto && selected.view ? { tileFilter, state: selected.view.state.kind } : null);
   useEffect(() => {
     if (keptAfter !== kept) {
       setKept(keptAfter);
@@ -154,7 +155,8 @@ export function App() {
   // or mark a topic seen the user never left. Not while a search or queue
   // filter narrows the list: that fallback is derived and goes when the
   // filter does.
-  const pin = narrowed ? null : pinnedEntry(nav.current, shown);
+  // An app-picked tile is not pinned: pinning would make it the user's pick.
+  const pin = narrowed ? null : pinnedEntry(nav.current, selected.auto ? { ...shown, tileId: null, prKey: null } : shown);
   const pinKey = pin ? `${pin.topicId}|${pin.tileId}|${pin.prKey}` : null;
   const replaceEntry = nav.replace;
   useEffect(() => {
@@ -268,7 +270,10 @@ export function App() {
           selectedTileId={selected.view?.tile.id ?? null}
           selectedPrKey={selected.prKey}
           onSelect={pickTile}
-          matchingTileIds={withSelectedTile(matchingTileIds, selected.view?.tile.id ?? null)}
+          selectedIsAuto={selected.auto}
+          filter={tileFilter}
+          onFilter={setTileFilter}
+          matchingTileIds={withSelectedTile(matchingTileIds, selected.auto ? null : (selected.view?.tile.id ?? null))}
           queueFilter={queueFilter}
         />
       </MainPane>
@@ -379,6 +384,7 @@ export function App() {
               prKey={selected.prKey}
               onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
               chatRequest={chatRequest}
+              noSelectionText={noSelectionText(tileFilter)}
             />
           )}
           <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />

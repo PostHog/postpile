@@ -28,8 +28,10 @@ describe('tileFooterAction and markButtonLabel', () => {
     expect(markButtonLabel(view('open', NONE, { done: false, turn: NONE }))).toBe('Mark read');
   });
 
-  it('opens a done tile', () => {
+  it('opens a done tile and offers no mark button', () => {
     expect(tileFooterAction(view('done', NONE, doneAfter))).toBe('open');
+    expect(markButtonLabel(view('done', NONE, doneAfter))).toBeNull();
+    expect(markButtonLabel(view('done', NONE, { done: false, turn: NONE }))).toBeNull();
   });
 
   it('keeps the mark button on a snoozed tile, with the honest label', () => {
@@ -39,6 +41,12 @@ describe('tileFooterAction and markButtonLabel', () => {
 });
 
 describe('detailPrimary', () => {
+  it('leads with Open on GitHub on a done tile, with no mark label', () => {
+    const done = view('done', NONE, doneAfter);
+    expect(detailPrimary({ view: done, pr: null, prAction: 'open_on_github', approveVariant: 'primary' })).toBe('open_on_github');
+    expect(detailMarkLabel(done, null)).toBeNull();
+  });
+
   it('keeps Approve in the lead while it is due', () => {
     expect(detailPrimary({ view: view('unread', NONE, doneAfter), pr: null, prAction: 'approve', approveVariant: 'primary' })).toBe('approve');
   });

@@ -1945,7 +1945,11 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   with its usual menu, and a quieter "Review on GitHub" opens the files tab
   of the move's PR ("Open on GitHub" and the PR itself on your own PR),
   through the external link path (so `opened_on_github` fires). Done tiles
-  keep "Open".
+  keep "Open" and nothing else: no mark button and no Snooze, in the tile
+  footer and in the detail pane (2026-09-29: a done tile still offered
+  "Mark read" in the pane and Snooze in the footer, both leftovers that did
+  nothing visible; a user debugging a finished topic read them as "something
+  is still open here").
 - Detail pane action bar (changed 2026-09-29, "Actions act on what you
   look at"): on a single-PR tile, same label rule as the footer; the mark
   button is left out while the tile is read and still your move (Snooze
@@ -2369,6 +2373,26 @@ avatars and filters", QueuesB2).
   adds history entries. Why: after an approve the user often moves on to
   the next tile they had in sight; a jump to "the next best item" loses
   their place (2026-09-29). Pure rules in `lib/selection.ts`.
+- **Nothing is selected until there is something to look at**: when a
+  topic opens or a filter changes and the user has not picked a tile, the
+  app selects only an unread tile (the first in tier order); under the
+  grid's All filter, else the first open one; never a snoozed or done
+  tile. Under Unread with nothing unread it selects nothing, and the right
+  pane says "No tile selected" with one line ("Nothing unread in this
+  topic. Pick a tile, or show All."; under All "Pick a tile to see it.").
+  A tile the app picked is not the user's pick: it is not written into
+  history.
+  Changing the All / Unread filter under an app-picked tile picks again
+  (All to Unread drops an auto-picked open tile, then the first unread or
+  "No tile selected"). When an app-picked tile changes state while it is
+  shown (read or done through a sync, the move-on mark), it stays in the
+  pane and counts as the user's pick from then on, so the grid keeps it
+  too: pane and grid never disagree, and it drops out once the user moves
+  on. The keep-visible rule above stays for tiles the user selected. Why: "we
+  should rather not select any tile and show 'none selected' on the right
+  ... then when collapsing all 'done' and having selected 'unread' it would
+  actually make sense" (2026-09-29). Pure rules in `lib/selection.ts`
+  (`autoTile`).
 - **Topic column**: the whole topic, tiles sorted by `TileView.tier` (the
   most urgent tier among its PRs), needs reply first, rest last; inside a
   tier the old order (unread before open; a read tile that is still your

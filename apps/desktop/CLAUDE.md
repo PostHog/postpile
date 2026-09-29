@@ -206,8 +206,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   footer).
 - The action bar's one ink button comes from `detailPrimary` in
   `lib/mark-read.ts`: Approve while it is due, else on a single-PR tile
-  Mark read / Mark done / Snooze as on the tile (Open on GitHub on a done
-  tile), on a stack or set the selected PR's Mark read / Mark done, else
+  Mark read / Mark done / Snooze as on the tile (a done tile offers Open
+  on GitHub only: no mark button, no Snooze, in the pane and the footer), on a stack or set the selected PR's Mark read / Mark done, else
   Open on GitHub. It goes first; "Approve again" / "Approve draft" stay
   outlined. Don't pick a primary in the component.
 - "Remove <team>" (`RemoveTeamButton`, one per `PrSummary.ownTeamRequests`
