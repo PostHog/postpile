@@ -27,6 +27,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     unseenLoudEvents: 0,
     done: false,
     ownTeamRequests: [],
+    pendingWrite: null,
     turn: { kind: 'none', who: null, what: '', prKey: null },
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     whatsNew: null,

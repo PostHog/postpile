@@ -14,7 +14,7 @@ import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { markReadNote } from '../lib/guard.ts';
 import { glanceClaim } from '../lib/glance.ts';
 import { removeTeamButtons } from '../lib/team-request.ts';
-import { type DetailPrimary, detailMarkLabel, detailPr, detailPrimary } from '../lib/mark-read.ts';
+import { type DetailPrimary, detailMarkLabel, detailPendingWrite, detailPr, detailPrimary } from '../lib/mark-read.ts';
 
 interface ActionBarProps {
   detail: PrDetail;
@@ -95,7 +95,8 @@ export function ActionBar(props: ActionBarProps) {
   const lead = detailPrimary({ view: props.view, pr: selected, prAction: primary, approveVariant: approve.variant });
   const variantOf = (slot: Slot) => (leadSlot(lead) === slot ? 'primary' : 'secondary');
   const glance = props.detail.glance;
-  const markReadTitle = props.view.pendingWrite
+  const pending = detailPendingWrite(props.view, selected);
+  const markReadTitle = pending
     ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
     : (actions.blockedReason('markRead') ??
       markReadNote(actions.writes) ??
@@ -138,7 +139,7 @@ export function ActionBar(props: ActionBarProps) {
         variant={variantOf('mark')}
         size="md"
         title={markReadTitle}
-        disabled={props.view.pendingWrite !== null || actions.isBusy(selected ? `markPr:${tileId}:${pr.key}` : `markRead:${tileId}`)}
+        disabled={pending !== null || actions.isBusy(selected ? `markPr:${tileId}:${pr.key}` : `markRead:${tileId}`)}
         onClick={() => void markRead()}
       >
         {markLabel}

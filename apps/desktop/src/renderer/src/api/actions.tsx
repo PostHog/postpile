@@ -287,8 +287,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
       const result = await withBusy(busyKey, task);
       const shaped = shape ? shape(result) : { message: result.message, snoozeTileId: null };
       show(result.ok ? 'ok' : 'error', shaped.message, result.undoToken, shaped.snoozeTileId);
-      if (result.undoToken) {
-        const entry = { token: result.undoToken, until: Date.now() + UNDO_WINDOW_MS };
+      // A settle token has no Undo in the toast, but its mark-read is watched the same way: refetch once it settled.
+      const watched = result.undoToken ?? result.settleToken ?? null;
+      if (watched) {
+        const entry = { token: watched, until: Date.now() + UNDO_WINDOW_MS };
         setPendingUndos((current) => [...current, entry]);
       }
       await refreshAll();

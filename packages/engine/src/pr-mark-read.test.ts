@@ -140,6 +140,19 @@ describe('markPrRead: the detail pane acts on the selected PR', () => {
     expect(result.message).toContain('pending until you unlock GitHub writes');
     expect(doneByKey(await setView(h))[second.key]).toBe(false);
   });
+
+  it('shows a locked mark-read as pending on that PR only, so its neighbours stay markable', async () => {
+    const h = await syncedSet();
+    await h.engine.setGitHubWrites(false);
+
+    await h.engine.markPrRead(SET_TILE, second.key);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+
+    const view = await setView(h);
+    expect(view.pendingWrite).not.toBeNull();
+    expect(Object.fromEntries(view.prs.map((pr) => [pr.key, pr.pendingWrite !== null]))).toEqual({ [first.key]: false, [second.key]: true });
+  });
 });
 
 describe('markOpenedRead on a set: checked per PR', () => {

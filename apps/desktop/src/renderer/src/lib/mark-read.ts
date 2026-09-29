@@ -1,7 +1,7 @@
 // What the tile's mark button says and what takes its place, so the label
 // never promises more than a mark-read does (2026-09-29). Core's
 // `TileView.afterRead` says what a mark-read would leave behind.
-import type { PrPrimaryAction, PrSummary, TileAfterRead, TileView } from '@postpile/core';
+import type { PrPrimaryAction, PrSummary, TileAfterRead, TilePendingWrite, TileView } from '@postpile/core';
 import { filesTabUrl } from './key-files.ts';
 import { leadPr } from './tiles.ts';
 
@@ -49,6 +49,16 @@ export function detailPr(view: Pick<TileView, 'tile' | 'prs'>, prKey: string): P
     return null;
   }
   return view.prs.find((pr) => pr.key === prKey) ?? null;
+}
+
+/**
+ * The pending write the detail pane's mark button waits on: the tile's on a
+ * single-PR tile (`pr` null), else the selected PR's own, so a locked
+ * mark-read of one PR of a set does not block the others (Codex review on
+ * PR #15).
+ */
+export function detailPendingWrite(view: Pick<TileView, 'pendingWrite'>, pr: Pick<PrSummary, 'pendingWrite'> | null): TilePendingWrite | null {
+  return pr === null ? view.pendingWrite : pr.pendingWrite;
 }
 
 /** What the detail pane reads of the selected PR. */

@@ -473,6 +473,7 @@ export class FakeEngine implements EngineService {
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
           now: this.timestamp(),
+          pendingWrite: pending.get(pr.key) ?? null,
         }),
       ];
     });
@@ -966,8 +967,9 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'unsubscribe', origin: 'detail', outcome: 'github', prKey, threadId: thread.id, detail: 'sample data: nothing left the process' });
       unsubscribed = 'unsubscribed';
     }
-    this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
-    return ok(`Removed ${slug}'s review request, ${unsubscribed}`);
+    const marked = this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
+    const removed = ok(`Removed ${slug}'s review request, ${unsubscribed}`);
+    return marked.undoToken ? { ...removed, settleToken: marked.undoToken } : removed;
   }
 
   /**

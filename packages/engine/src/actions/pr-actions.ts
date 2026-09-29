@@ -95,10 +95,11 @@ export class PrActions {
       return failed(`Removing ${slug} failed: ${errorText(error)}`);
     }
     const unsubscribed = await this.unsubscribe(key);
-    this.readMarker.markRead([key], [key], { origin: 'detail', tileId: null });
+    const batch = this.readMarker.markRead([key], [key], { origin: 'detail', tileId: null });
     await this.refreshPr(key);
     this.mirrorRemoval(key, team);
-    return ok(`Removed ${slug}'s review request, ${unsubscribed}`);
+    // No undo (the removal is final), but the renderer watches the mark-read until it settles.
+    return { ...ok(`Removed ${slug}'s review request, ${unsubscribed}`), settleToken: batch.token };
   }
 
   /**

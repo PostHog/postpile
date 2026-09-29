@@ -160,6 +160,12 @@ export interface PrSummary {
    * are not (DESIGN.md "Actions act on what you look at").
    */
   done: boolean;
+  /**
+   * A mark-read of this PR waits for the writes lock; null when none does.
+   * The detail pane's per-PR Mark read checks this, not the tile's
+   * `pendingWrite`, so one PR's pending write does not block its neighbours.
+   */
+  pendingWrite: TilePendingWrite | null;
   /** The viewer's teams with a pending review request here (`ownTeamRequests`), for "Remove <team>" in the detail pane. */
   ownTeamRequests: string[];
   /** Whose move it is on this PR alone (`prWhoseTurn`), for the detail pane's buttons. */
@@ -355,6 +361,12 @@ export interface ActionResult {
   message: string;
   /** Set when the action queued a deferred GitHub write that can still be undone. */
   undoToken: string | null;
+  /**
+   * Set when the action queued a deferred mark-read that offers no undo
+   * ("Remove <team>"): the renderer refetches once its window settled, so a
+   * mark-read GitHub did not take (or a locked one turning pending) shows.
+   */
+  settleToken?: string;
 }
 
 /** Opening a PR in PostPile: whether its GitHub thread was marked read or the PR handled ("opened in PostPile"). Nothing to show either way. */

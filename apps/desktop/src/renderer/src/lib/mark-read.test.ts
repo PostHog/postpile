@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileAfterRead, TileStateKind, TileView, WhoseTurn } from '@postpile/core';
-import { detailMarkLabel, detailPr, detailPrimary, githubLink, markButtonLabel, markReadNotice, moveWords, prMarkAction, tileFooterAction, type DetailPrRow } from './mark-read.ts';
+import { detailMarkLabel, detailPendingWrite, detailPr, detailPrimary, githubLink, markButtonLabel, markReadNotice, moveWords, prMarkAction, tileFooterAction, type DetailPrRow } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -121,6 +121,14 @@ describe('the detail pane on a stack or set: acts on the selected PR', () => {
 
   it('keeps Approve in the lead while it is due', () => {
     expect(detailPrimary({ view: openSet, pr: row(), prAction: 'approve', approveVariant: 'primary' })).toBe('approve');
+  });
+
+  it('waits only on the selected PR own pending write on a stack or set', () => {
+    const pending = { since: '2026-09-29T10:00:00.000Z', error: null };
+    // #1 of the set has a locked mark-read pending, so the tile has one too.
+    expect(detailPendingWrite({ pendingWrite: pending }, { pendingWrite: null })).toBeNull();
+    expect(detailPendingWrite({ pendingWrite: pending }, { pendingWrite: pending })).toBe(pending);
+    expect(detailPendingWrite({ pendingWrite: pending }, null)).toBe(pending);
   });
 
   it('behaves as the tile on a single-PR tile', () => {

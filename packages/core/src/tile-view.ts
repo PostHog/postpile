@@ -38,6 +38,8 @@ export interface PrSummaryInput {
   tileUnread: boolean;
   /** Now, for what the PR would turn into once marked read (`afterRead`). */
   now: IsoTime;
+  /** A mark-read of this PR waiting for the writes lock, or null. */
+  pendingWrite: TilePendingWrite | null;
 }
 
 /** One PR row of a tile. */
@@ -73,6 +75,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
     done: isPrDone(pr, userState, viewer, events, notYours),
     ownTeamRequests: viewer ? ownTeamRequests(pr, viewer) : [],
+    pendingWrite: input.pendingWrite,
     turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours }) : NO_TURN,
     afterRead: prAfterMarkRead({ pr, events, userState, viewer, notYours, tracked: isTracked(member.provenance), readAt: input.now }),
     whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),

@@ -21,6 +21,7 @@ function summaryInput(pr: Pr, events: PrEvent[], overrides: Partial<PrSummaryInp
     repoLabel: null,
     tileUnread: false,
     now: at(100),
+    pendingWrite: null,
     ...overrides,
   };
 }

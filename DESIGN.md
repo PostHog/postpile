@@ -1696,7 +1696,15 @@ updates it while I'm looking at it."
   `lib/team-request.ts`), `removeTeam` on the `GithubWrite` list. After the
   refresh, a stored snapshot that still lists the team drops it (fetch time
   kept), so the handled PR is done until the next sync. Telemetry
-  `team_request_removed`, no props.
+  `team_request_removed`, no props. The answer carries no undo token but a
+  `settleToken` (Codex review on PR #15): the renderer watches the
+  mark-read like an undo window and refetches when it settled, so a
+  mark-read GitHub did not take (or one parked as pending when the lock
+  closed in the window) shows the PR as not done again.
+- Pending writes per PR: `PrSummary.pendingWrite`. The detail pane's mark
+  button on a stack or set waits only on the selected PR's own pending
+  write (`detailPendingWrite`), not the tile's, so a locked mark-read of
+  one PR does not block its neighbours (Codex review on PR #15).
 
 ## Tile faces: why it's here, status, whose turn
 
