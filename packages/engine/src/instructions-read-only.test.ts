@@ -40,7 +40,7 @@ describe('instructions in a read-only process', () => {
     const current = new InstructionsHistory(store, file, () => new Date(), true).current();
 
     expect(current.text).toBe(EDITED);
-    expect(current.version?.id).toBe(recorded?.id);
+    expect(current.version?.version).toBe(recorded?.version);
     expect(store.instructions.latest()?.text).toBe(BASE);
     store.close();
   });
