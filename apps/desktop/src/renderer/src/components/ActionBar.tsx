@@ -9,9 +9,11 @@ import { useNow } from '../lib/use-now.ts';
 import { Button, buttonClasses } from './Button.tsx';
 import { ChatIcon, Glyph } from './icons.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';
+import { RemoveTeamButton } from './RemoveTeamButton.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { markReadNote } from '../lib/guard.ts';
 import { glanceClaim } from '../lib/glance.ts';
+import { removeTeamButtons } from '../lib/team-request.ts';
 import { type DetailPrimary, detailMarkLabel, detailPr, detailPrimary } from '../lib/mark-read.ts';
 
 interface ActionBarProps {
@@ -46,9 +48,9 @@ function lifecycleOf(props: ActionBarProps): PrLifecycle {
 }
 
 /** The button slots in their fixed order; the lead one moves to the front. */
-type Slot = 'approve' | 'open' | 'ask' | 'mark' | 'snooze';
+type Slot = 'approve' | 'open' | 'ask' | 'mark' | 'snooze' | 'removeTeam';
 
-const SLOT_ORDER: Slot[] = ['approve', 'open', 'ask', 'mark', 'snooze'];
+const SLOT_ORDER: Slot[] = ['approve', 'open', 'ask', 'mark', 'snooze', 'removeTeam'];
 
 function leadSlot(lead: DetailPrimary): Slot {
   if (lead === 'mark_read' || lead === 'mark_done') {
@@ -142,6 +144,10 @@ export function ActionBar(props: ActionBarProps) {
         {markLabel}
       </Button>
     ),
+    // One "Remove <team>" per team of yours still asked on this PR; never the lead.
+    removeTeam: removeTeamButtons(props.view.prs.find((candidate) => candidate.key === pr.key) ?? null).map((button) => (
+      <RemoveTeamButton key={button.team} prKey={pr.key} button={button} />
+    )),
     // A set or stack is snoozed from its tile footer; here only a single-PR tile, where tile and PR are one.
     snooze: selected === null && <SnoozeMenu tileId={tileId} snoozed={props.view.state.kind === 'snoozed'} size="md" variant={variantOf('snooze')} />,
   };

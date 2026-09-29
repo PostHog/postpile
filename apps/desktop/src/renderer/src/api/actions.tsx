@@ -117,6 +117,8 @@ export interface Actions {
    */
   markOpenedRead(prKey: PrKey): Promise<void>;
   approve(prKey: PrKey): Promise<void>;
+  /** "Remove <team>": removes the team's review request, unsubscribes and marks the PR done. Final, no undo; blocked while locked. */
+  removeTeamRequest(prKey: PrKey, team: string): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
   /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
@@ -575,6 +577,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     },
     approve: async (prKey) => {
       await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`));
+    },
+    removeTeamRequest: async (prKey, team) => {
+      await run(`removeTeam:${prKey}`, 'removeTeam', () => request('POST', `${prPath(prKey)}/remove-team-request`, { team }));
     },
     retryGlance: async (prKey) => {
       sendTelemetry('glance_retry_clicked', {});
