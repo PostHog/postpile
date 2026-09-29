@@ -142,7 +142,8 @@ export interface EngineService {
   /**
    * "Handled quietly": PR threads PostPile marked read on GitHub by itself in
    * the last HANDLED_QUIETLY_DAYS days (only bot activity since the user's
-   * last read), newest first, from the action log.
+   * last read, the user acted after every unread event, or opened the PR in
+   * PostPile), each with its reason, newest first, from the action log.
    */
   handledQuietly(): Promise<QuietReadView[]>;
   /** The newest `limit` action log entries: every GitHub-affecting action and local mark-reads. */

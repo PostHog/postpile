@@ -1,9 +1,13 @@
 // "Handled quietly": a PR thread the user had read that turned unread again
 // only because of bots (CI, merge queue, review bots, deploys). PostPile marks
-// it read on GitHub by itself when nothing is asked of the user. Rules only,
-// no IO. DESIGN.md "Handled quietly" has the reasons behind each rule.
+// it read on GitHub by itself when nothing is asked of the user. A second
+// reason: the user acted on the PR after every unread event ("You already
+// dealt with it"), and a third, opening the PR in PostPile, is decided by the
+// engine from the tile. Rules only, no IO. DESIGN.md "Handled quietly" and
+// "You already dealt with it" have the reasons behind each rule.
 
 import type { NotificationLanding } from './debug-views.ts';
+import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
 import { isUnseenMergeWithoutReview } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import type { IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
@@ -126,7 +130,105 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   return { kind: 'mark', bots: botNames(botEvents) };
 }
 
+/**
+ * Why PostPile marked a thread read by itself:
+ * - bots: only bot activity since the user's last read
+ * - approved, changes_requested, reviewed, replied: the user acted on the PR after every unread event
+ * - opened: the user opened the PR in PostPile while nothing was asked of them
+ */
+export type QuietReason = 'bots' | TouchReason | 'opened';
+
+/** The "you acted after it" reasons, by the user's newest review or comment. */
+export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'replied';
+
+/**
+ * Why a thread is left alone by the "you acted after it" reason:
+ * - not_unread: GitHub has it read already
+ * - stale_snapshot: the stored PR snapshot is older than the thread's last update
+ * - no_touch: the user never reviewed or commented on the PR (a push, merge or close does not count here)
+ * - nothing_known: no event by someone else since the last read, so the thread is unread for a reason the app cannot see
+ * - activity_after: a person did something after the user's touch
+ * - own_pr: bots acted after the touch on the user's own PR, which can mean work
+ * - unseen_merge: a merge without the user's review came after their touch
+ * - tile_unread: the tile shows something new for the user
+ * - grace: the touch or the newest activity is less than QUIET_GRACE_MS old
+ */
+export type TouchedSkip = 'not_unread' | 'stale_snapshot' | 'no_touch' | 'nothing_known' | 'activity_after' | 'own_pr' | 'unseen_merge' | 'tile_unread' | 'grace';
+
+export type TouchedReadCheck = { kind: 'mark'; reason: TouchReason } | { kind: 'skip'; why: TouchedSkip };
+
+export type TouchedReadInput = Pick<QuietReadInput, 'thread' | 'pr' | 'events' | 'viewer' | 'tileUnread' | 'prFetchedAt' | 'now'>;
+
+/** The reason a reading touch gives; READING_TOUCH_KINDS only, so anything else is a comment. */
+function touchReason(kind: TouchKind): TouchReason {
+  switch (kind) {
+    case 'approval':
+      return 'approved';
+    case 'changes_request':
+      return 'changes_requested';
+    case 'review':
+      return 'reviewed';
+    default:
+      return 'replied';
+  }
+}
+
+/**
+ * Whether PostPile may mark this PR thread read on GitHub because the user
+ * reviewed or commented after every unread event (DESIGN.md "You already
+ * dealt with it"). Unread means after `last_read_at`, or everything when the
+ * thread was never read. Bots after the touch are fine as in the bot-only
+ * rule, except on the user's own PR. Whose turn is not checked: the
+ * mark-read changes nothing PostPile shows (the events before the touch are
+ * seen already), so a move that is still theirs stays on the tile.
+ */
+export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
+  const { thread, pr, events, viewer } = input;
+  if (!thread.unread) {
+    return { kind: 'skip', why: 'not_unread' };
+  }
+  if (!snapshotCoversThread(input)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
+  }
+  const touch = lastTouch(pr, events, viewer, { kinds: READING_TOUCH_KINDS });
+  if (touch === null) {
+    return { kind: 'skip', why: 'no_touch' };
+  }
+  const lastReadAt = thread.lastReadAt;
+  const unread = events.filter((event) => !isOwnEvent(event, viewer) && (lastReadAt === null || event.at > lastReadAt));
+  if (unread.length === 0) {
+    return { kind: 'skip', why: 'nothing_known' };
+  }
+  const late = unread.filter((event) => event.at > touch.at);
+  if (!late.every(isBotEvent)) {
+    return { kind: 'skip', why: 'activity_after' };
+  }
+  if (late.length > 0 && sameLogin(pr.author, viewer.login)) {
+    return { kind: 'skip', why: 'own_pr' };
+  }
+  if (events.some((event) => isUnseenMergeWithoutReview(event) && event.at > touch.at)) {
+    return { kind: 'skip', why: 'unseen_merge' };
+  }
+  if (input.tileUnread) {
+    return { kind: 'skip', why: 'tile_unread' };
+  }
+  const newest = [thread.updatedAt, touch.at, ...late.map((event) => event.at)].sort().at(-1) ?? thread.updatedAt;
+  if (new Date(input.now).getTime() - new Date(newest).getTime() < QUIET_GRACE_MS) {
+    return { kind: 'skip', why: 'grace' };
+  }
+  return { kind: 'mark', reason: touchReason(touch.kind) };
+}
+
 const QUIET_DETAIL_PREFIX = 'only bot activity since your last read: ';
+
+/** Action log details of the quiet mark-reads that are not about bots; the Handled quietly view reads the reason back. */
+const QUIET_REASON_DETAILS: Record<Exclude<QuietReason, 'bots'>, string> = {
+  approved: 'you approved after it',
+  changes_requested: 'you requested changes after it',
+  reviewed: 'you reviewed after it',
+  replied: 'you replied after it',
+  opened: 'opened in PostPile',
+};
 
 /** Action log detail of a quiet mark-read, naming the bots. */
 export function quietReadDetail(bots: string[]): string {
@@ -144,6 +246,21 @@ export function botsFromQuietDetail(detail: string): string[] {
     .filter((name) => name !== '');
 }
 
+/** Action log detail of a quiet mark-read for any reason but bots. */
+export function quietReasonDetail(reason: Exclude<QuietReason, 'bots'>): string {
+  return QUIET_REASON_DETAILS[reason];
+}
+
+/** The reason behind a quiet mark-read's log detail. Anything else is a bot-only one, the first and once the only reason. */
+export function quietReasonFromDetail(detail: string): QuietReason {
+  for (const [reason, text] of Object.entries(QUIET_REASON_DETAILS)) {
+    if (detail === text) {
+      return reason as QuietReason;
+    }
+  }
+  return 'bots';
+}
+
 /** One PR thread PostPile marked read on GitHub by itself, for the "Handled quietly" view. */
 export interface QuietReadView {
   /** The action log entry's id. */
@@ -155,6 +272,8 @@ export interface QuietReadView {
   number: number;
   /** The PR's title, else the notification's, else the key. */
   title: string;
+  reason: QuietReason;
+  /** The bots, for the reason `bots`; empty otherwise. */
   bots: string[];
   /** Where the PR shows in the app now, so a click can open its tile. */
   landing: NotificationLanding;

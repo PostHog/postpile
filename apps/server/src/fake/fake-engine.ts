@@ -127,6 +127,7 @@ import {
   type SearchResult,
   type Viewer,
   botsFromQuietDetail,
+  quietReasonFromDetail,
   HANDLED_QUIETLY_DAYS,
   parsePrKey,
   pingDecisionsByThread,
@@ -838,6 +839,7 @@ export class FakeEngine implements EngineService {
           repo: ref.repo,
           number: ref.number,
           title: this.data.prs.find((pr) => pr.key === key)?.title ?? key,
+          reason: quietReasonFromDetail(entry.detail),
           bots: botsFromQuietDetail(entry.detail),
           landing: this.landingOf(key),
         };

@@ -121,6 +121,9 @@ export interface ActionLine {
   title: string;
 }
 
+/** Detail of a bot-only quiet mark-read (core `quietReadDetail`), before the bot names. */
+const QUIET_BOTS_PREFIX = 'only bot activity since your last read';
+
 /** Detail of a mark-read GitHub did not take ("GitHub didn't take it: <reason>; still unread"). */
 const NOT_TAKEN_PREFIX = "GitHub didn't take it";
 
@@ -129,8 +132,9 @@ function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): {
   switch (last.outcome) {
     case 'github':
       if (last.origin === 'quiet') {
-        // Handled quietly: the detail names the bots.
-        return { text: 'marked read by PostPile: only bot activity since your last read', tone: 'app' };
+        // Handled quietly: the detail names the bots, or says what the user did ("you approved after it", "opened in PostPile").
+        const why = last.detail.startsWith(QUIET_BOTS_PREFIX) ? 'only bot activity since your last read' : last.detail;
+        return { text: `marked read by PostPile: ${why}`, tone: 'app' };
       }
       return { text: `marked read by ${who}${decidedBy ? `, queued by ${WHO[decidedBy.origin]}` : ''}`, tone: 'app' };
     case 'queued':

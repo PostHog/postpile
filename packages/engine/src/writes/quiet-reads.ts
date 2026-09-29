@@ -2,9 +2,12 @@ import {
   eventsReadOnGitHub,
   quietReadCheck,
   quietReadDetail,
+  quietReasonDetail,
   QUIET_READS_PER_RUN,
+  touchedReadCheck,
   type NotificationThread,
   type PrKey,
+  type QuietReadInput,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
@@ -13,11 +16,11 @@ import { errorText } from '../errors.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { GitHubWrites } from './github-writes.ts';
 
-/** A thread that passed the rules, with the bots that made it unread. */
+/** A thread that passed the rules, with the action log detail that says why. */
 interface QuietCandidate {
   thread: NotificationThread;
   prKey: PrKey;
-  bots: string[];
+  detail: string;
 }
 
 export interface QuietReadsResult {
@@ -28,10 +31,25 @@ export interface QuietReadsResult {
 
 const NOTHING_DONE: QuietReadsResult = { marked: [], errors: [] };
 
+/** The log detail when a thread may be marked read: only bots since the last read, else the user acted after it. */
+function quietDetail(input: QuietReadInput): string | null {
+  const bots = quietReadCheck(input);
+  if (bots.kind === 'mark') {
+    return quietReadDetail(bots.bots);
+  }
+  const touched = touchedReadCheck(input);
+  if (touched.kind === 'mark') {
+    return quietReasonDetail(touched.reason);
+  }
+  return null;
+}
+
 /**
  * "Handled quietly" (DESIGN.md): after a full sync, PR threads the user had
  * read that turned unread only because of bots get marked read on GitHub,
- * when nothing is asked of the user (`quietReadCheck`). Only while GitHub
+ * when nothing is asked of the user (`quietReadCheck`), and so do threads
+ * whose unread events all came before the user's own review or comment
+ * (`touchedReadCheck`, "You already dealt with it"). Only while GitHub
  * writes are unlocked: locked, nothing happens and nothing piles up as a
  * pending write. Each thread is read again right before the write and left
  * alone when it moved since the sync. Every write goes through
@@ -71,7 +89,7 @@ export class QuietReads {
       if (!pr) {
         continue;
       }
-      const check = quietReadCheck({
+      const detail = quietDetail({
         thread,
         pr,
         events: board.events.get(prKey) ?? [],
@@ -82,8 +100,8 @@ export class QuietReads {
         prFetchedAt: fetchedAt.get(prKey) ?? null,
         now: board.now,
       });
-      if (check.kind === 'mark') {
-        result.push({ thread, prKey, bots: check.bots });
+      if (detail !== null) {
+        result.push({ thread, prKey, detail });
       }
     }
     return result.slice(0, QUIET_READS_PER_RUN);
@@ -95,12 +113,11 @@ export class QuietReads {
     if (current === null || !current.unread || current.updatedAt > candidate.thread.updatedAt) {
       return false;
     }
-    const detail = quietReadDetail(candidate.bots);
-    const result = await this.writes.markThreadRead(candidate.thread.id, { origin: 'quiet', prKey: candidate.prKey, detail });
+    const result = await this.writes.markThreadRead(candidate.thread.id, { origin: 'quiet', prKey: candidate.prKey, detail: candidate.detail });
     if (result === 'off') {
       return false;
     }
-    // Mirror GitHub: the thread is read up to its last update, and so are the bot events before it.
+    // Mirror GitHub: the thread is read up to its last update, and so are the events before it.
     this.store.notifications.markRead(candidate.thread.id, current.updatedAt);
     const events = this.store.events.listForPr(candidate.prKey);
     this.store.events.markSeen(eventsReadOnGitHub(events, current.updatedAt), current.updatedAt);

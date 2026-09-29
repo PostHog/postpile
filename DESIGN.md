@@ -2285,6 +2285,27 @@ Merging or closing counts only when the viewer did it.
    pushing code does not mean reading the review comments. A merge without
    the viewer's review is never marked read this way unless they touched the
    PR after the merge.
+
+   Built as core `touchedReadCheck` (`quiet-reads.ts`), run by `QuietReads`
+   when the bot-only check says no, same write path (snapshot freshness,
+   thread read again right before, origin `quiet`, grace, at most
+   `QUIET_READS_PER_RUN`). Details the build settled:
+   - The touch here is a review or a comment (`READING_TOUCH_KINDS`): no
+     push, and no merge or close either, for the same reason.
+   - "Unread" is every event by someone else after `last_read_at`, or every
+     one when the thread was never read. None known: left alone, like the
+     bot-only rule.
+   - Bots after the touch are fine as in the bot-only rule (CI and the merge
+     queue follow most approvals), except on the viewer's own PR, where they
+     can mean work. The grace counts from the newest of the touch, those
+     bots and the thread's update.
+   - The tile must not be unread. Whose turn is not checked: every event
+     before the touch is seen already (part 1), so the mark-read changes
+     nothing PostPile shows, and a move that is still the viewer's (their
+     approved PR, "Merge") stays on the tile.
+   - Log details "you approved after it", "you requested changes after it",
+     "you reviewed after it", "you replied after it" (the newest touch);
+     `QuietReadView.reason` carries it to the view.
 3. *Opening a PR in PostPile*: opening a PR in the detail pane marks its
    GitHub thread read, only when a mark-read would leave the tile done
    (`TileView.afterRead.done`: nothing asked of the viewer), and only while
@@ -2350,7 +2371,9 @@ sync report and the next sync tries again. The sync log says how many.
 **The view**: sidebar footer "Handled quietly" (was a disabled stub) opens a
 list over the middle and detail columns: the quiet mark-reads that reached
 GitHub in the last 7 days (`HANDLED_QUIETLY_DAYS`), newest first, with
-repo#number, title, the bots and when (`GET /api/handled-quietly`,
+repo#number, title, why ("only trunk-io, CI", "you approved after it",
+"opened in PostPile"; the other reasons are in "You already dealt with it")
+and when (`GET /api/handled-quietly`,
 `EngineService.handledQuietly`, read from the action log). A click opens the
 tile when one holds the PR. Quiet on purpose: no coral, the count is faint
 mono. The notifications debug view shows the same entry as the row's last
@@ -2364,8 +2387,9 @@ activity since the last read is the safe case: the user already read
 everything a person said, and what came after can't ask them anything. Own
 PRs are excluded because bot reviews there can mean work.
 
-**Fake mode**: five sample quiet mark-reads in the action log (one older
-than 7 days, so it stays out of the view) and sample ping decisions
+**Fake mode**: seven sample quiet mark-reads in the action log (two for
+"you acted after it", one older than 7 days, so it stays out of the view)
+and sample ping decisions
 (`fake-quiet.ts`); the fake poll's decisions are kept too.
 
 ## Live poll and Mac pings

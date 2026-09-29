@@ -1,7 +1,7 @@
 import type { QuietReadView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useHandledQuietly } from '../api/quiet.ts';
-import { botsText, quietRef } from '../lib/quiet.ts';
+import { quietReasonText, quietRef } from '../lib/quiet.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import type { TilePick } from './NotificationRow.tsx';
@@ -26,8 +26,8 @@ function QuietRow(props: { item: QuietReadView; now: Date; onOpenTile: (pick: Ti
             {item.title}
           </span>
         </span>
-        <span className="truncate text-[11.5px] text-muted" title={item.bots.join(', ')}>
-          {botsText(item.bots)}
+        <span className="truncate text-[11.5px] text-muted" title={item.reason === 'bots' ? item.bots.join(', ') : quietReasonText(item)}>
+          {quietReasonText(item)}
         </span>
         <span className="text-right font-mono text-[10.5px] text-faint" title={item.at}>
           {ageLabel(item.at, now)}
@@ -39,9 +39,10 @@ function QuietRow(props: { item: QuietReadView; now: Date; onOpenTile: (pick: Ti
 
 /**
  * "Handled quietly": PR threads PostPile marked read on GitHub by itself in
- * the last 7 days, because only bots acted since the user's last read. Read
- * only, quiet on purpose: no counts in coral, no actions besides opening the
- * tile (GitHub has no mark-unread).
+ * the last 7 days: only bots acted since the user's last read, the user
+ * reviewed or replied after everything unread, or they opened the PR here
+ * while nothing was asked of them. Read only, quiet on purpose: no counts in
+ * coral, no actions besides opening the tile (GitHub has no mark-unread).
  */
 export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void }) {
   const quiet = useHandledQuietly();
@@ -53,9 +54,10 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Handled quietly</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
-          Threads you had read that came back only because of bots: CI, merge queues, review and deploy bots. PostPile marked them read on GitHub after a
-          full sync, 10 minutes after the last bot activity at the earliest. Never your own PRs, never while something is your move or new for you, never
-          a merge without your review, and only while GitHub writes are unlocked.
+          PR threads PostPile marked read on GitHub for you, only while GitHub writes are unlocked. After a full sync: threads you had read that came back
+          only because of bots (CI, merge queues, review and deploy bots; never on your own PRs, never while something is your move or new for you), and
+          threads where you reviewed or replied after everything unread, from the gh CLI, GitHub Mobile or an agent. And PRs you opened here while nothing
+          was asked of you. Never a merge without your review.
         </p>
       </div>
       {writes && !writes.enabled && (
@@ -78,7 +80,7 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
               className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_52px] gap-3 border-b border-hairline bg-subtle px-3 py-1.5 text-[10.5px] font-medium text-faint"
             >
               <span>PR</span>
-              <span>Only activity from</span>
+              <span>Why</span>
               <span className="text-right">Marked</span>
             </li>
             {items.map((item) => (
