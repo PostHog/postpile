@@ -170,7 +170,14 @@ describe('notDonePrKeys', () => {
   });
 
   it('never dots a pulled-in stack layer', () => {
-    expect(notDonePrKeys(setView([summary(1, done), summary(2, { provenance: pulled })])).size).toBe(0);
+    expect(notDonePrKeys(setView([summary(1, done), summary(2, done), summary(3, { provenance: pulled })])).size).toBe(0);
+  });
+
+  it('dots nothing on a tile with one tracked PR: it would only repeat the tile state', () => {
+    expect(notDonePrKeys(setView([summary(1)])).size).toBe(0);
+    expect(notDonePrKeys(setView([summary(1, { unseenLoudEvents: 1 })], ['acme/app#1'])).size).toBe(0);
+    // A stack with one pinged layer and pulled-in context counts as one tracked PR.
+    expect(notDonePrKeys(setView([summary(1), summary(2, { provenance: pulled })])).size).toBe(0);
   });
 
   it('dots nothing on a done or snoozed tile', () => {

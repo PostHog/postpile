@@ -1541,7 +1541,10 @@ missing the dot", and on a second, read-only dot: "I would just fold it into
 the main ... there doesn't need to be a distinction". One coral dot before
 every tracked PR that keeps the tile from being done (`isPrDone` false), on
 unread and open tiles alike, in the tile's rows and the detail pane's PR
-list (aria-label "Not done yet"). No dots on done or snoozed tiles. The
+list (aria-label "Not done yet"). No dots on done or snoozed tiles. Not on
+single-PR tiles either (a tile with one tracked PR, decided the same day):
+the dot says which PR of a stack or set holds the tile; on one PR it would
+only repeat the tile's own state. The
 dots and the detail-pane buttons work together: mark a dotted PR done and its
 dot goes; no dots left, the tile is done. The tile's own unread styling (strip,
 bold title) stays as decided on 28 Sept.
@@ -1742,7 +1745,9 @@ tile from being done gets a small coral dot before its number, in the
 tile's rows and the detail pane's PR list (aria-label "Not done yet"):
 `PrSummary.done` false (core `isPrDone`, shipped per row), or an unseen
 loud event left (that keeps the tile unread, so not done either). Pulled-in
-stack layers never get one; done and snoozed tiles show none. Mark a
+stack layers never get one; done and snoozed tiles show none, and neither
+does a tile with one tracked PR (the dot would only repeat the tile's
+state). Mark a
 dotted PR done in the detail pane and its dot goes; no dots left, the tile
 is done. It is the one coral mark that is not "new since you looked"; there
 is no second, read-only dot. History: a six-PR set once stayed unread

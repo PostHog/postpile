@@ -352,7 +352,8 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   false; the heading is the title). Every tracked PR that keeps an unread
   or open tile from being done (`notDonePrKeys`: `PrSummary.done` false, or
   unseen news left) gets `NotDoneDot` ("Not done yet") before its number,
-  on the tile and in `DetailContext`'s list; none on done or snoozed tiles. `DetailContext` shows kind, title, "PR x of n"
+  on the tile and in `DetailContext`'s list; none on done or snoozed tiles,
+  or on a tile with one tracked PR. `DetailContext` shows kind, title, "PR x of n"
   and the arrows only for several PRs; one PR is just "PR".
 - Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):
   pass its result as `MemoryLine` `refs` in lists.
