@@ -4,16 +4,22 @@
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { clipText } from './dossier.ts';
 import type { GitHubQuotaView } from './github-quota.ts';
+import { reviewRequestSubject } from './events.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
+import { isRoutedTeamRequestEvent } from './glance-pings.ts';
 import { effectiveLoudness } from './loudness.ts';
-import { sameLogin } from './mentions.ts';
-import type { IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
+import { isViewerSubject, sameLogin } from './mentions.ts';
+import { teamSlug } from './review-request.ts';
+import type { Glance, IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
 
 /**
  * What the rules make of a PR's new events, most aimed at the user first.
- * Only `addressed` can ping: the agent sees those and may veto or rephrase.
+ * Only `addressed` can ping here: the agent sees those and may veto or
+ * rephrase. `routed` is a review request routed to the viewer's team on a
+ * PR from outside the team: it never pings from the poll, it pings once when
+ * the glance says Look closer (`lookCloserPingCheck`, 2026-09-29).
  */
-export type PingRuleClass = 'addressed' | 'not_addressed' | 'quiet' | 'muted' | 'bot' | 'quiet_repo';
+export type PingRuleClass = 'addressed' | 'routed' | 'not_addressed' | 'quiet' | 'muted' | 'bot' | 'quiet_repo';
 
 export interface PingRule {
   class: PingRuleClass;
@@ -30,7 +36,8 @@ export interface PingTarget {
   prKey: PrKey;
 }
 
-export type PingDecisionSource = 'rules' | 'agent' | 'fallback';
+/** glance: a routed team request whose glance said Look closer (`lookCloserPingCheck`). */
+export type PingDecisionSource = 'rules' | 'agent' | 'fallback' | 'glance';
 
 /** One decision per PR thread with new activity in a poll cycle. Stored in ping_decision for debugging. */
 export interface PingDecision {
@@ -153,6 +160,18 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
   }
 }
 
+/**
+ * The event counts as a bot's for the bot-only shortcut: a bot did it and it
+ * is not a review request aimed at the viewer or their team (a request
+ * counts by whom it asks, not who clicked it, 2026-09-29).
+ */
+function isBotOnly(event: PrEvent, viewer: Viewer): boolean {
+  if (!event.isBot) {
+    return false;
+  }
+  return !(event.kind === 'review_requested' && isViewerSubject(reviewRequestSubject(event.summary), viewer));
+}
+
 function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {
   const reason = event.override?.reason ?? event.ruleReason;
   return { class: pingClass, loudness: effectiveLoudness(event), reason, event };
@@ -172,12 +191,17 @@ export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: b
   if (quietRepo) {
     return { ...ruleFrom('quiet_repo', newestFirst[0]!), reason: 'quiet repo (let it go stale)' };
   }
-  if (newestFirst.every((event) => event.isBot)) {
+  if (newestFirst.every((event) => isBotOnly(event, viewer))) {
     return ruleFrom('bot', newestFirst[0]!);
   }
-  const addressed = newestFirst.find((event) => isAddressedToViewer(event, pr, viewer));
+  const aimed = newestFirst.filter((event) => isAddressedToViewer(event, pr, viewer));
+  const addressed = aimed.find((event) => !isRoutedTeamRequestEvent(event, pr, viewer));
   if (addressed) {
     return ruleFrom('addressed', addressed);
+  }
+  const routed = aimed[0];
+  if (routed) {
+    return { ...ruleFrom('routed', routed), reason: 'review routed to your team: pings when the glance says Look closer' };
   }
   const loud = newestFirst.find((event) => effectiveLoudness(event) === 'loud');
   if (loud) {
@@ -193,6 +217,15 @@ export function pingRule(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: b
 /** Notification limits: macOS cuts long text anyway. */
 export const PING_TITLE_MAX = 80;
 export const PING_BODY_MAX = 200;
+
+/** "Review requested for team-devex", or "Review requested from you" for a personal request. */
+function requestHeadline(event: PrEvent): string {
+  const subject = reviewRequestSubject(event.summary);
+  if (subject === null || !subject.includes('/')) {
+    return 'Review requested from you';
+  }
+  return `Review requested for ${subject.split('/').pop()}`;
+}
 
 function headline(event: PrEvent): string {
   const who = `@${event.actor}`;
@@ -210,7 +243,8 @@ function headline(event: PrEvent): string {
     case 'reply_to_user':
       return `${who} replied to you`;
     case 'review_requested':
-      return `${who} asked for your review`;
+      // A bot's request says what it asks, not which bot clicked it.
+      return event.isBot ? requestHeadline(event) : `${who} asked for your review`;
     case 'commits_after_approval':
       return 'New commits after your approval';
     case 'review_changes_requested':
@@ -231,5 +265,19 @@ export function pingTemplate(event: PrEvent, pr: Pr): { title: string; body: str
   return {
     title: clipText(`${headline(event)} · ${shortKey(pr.key)}`, PING_TITLE_MAX),
     body: clipText(`${pr.title}\n${event.summary}`, PING_BODY_MAX),
+  };
+}
+
+/** The first sentence of the glance's for-you line. */
+function firstSentence(text: string): string {
+  const match = /^(.+?[.!?])(\s|$)/.exec(text.trim());
+  return match ? match[1]! : text.trim();
+}
+
+/** "Look closer: review for team-devex · app#1850", then the PR title and the glance's first sentence. */
+export function lookCloserPingText(pr: Pr, team: string, glance: Pick<Glance, 'forYou'>): { title: string; body: string } {
+  return {
+    title: clipText(`Look closer: review for ${teamSlug(team)} · ${shortKey(pr.key)}`, PING_TITLE_MAX),
+    body: clipText(`${pr.title}\n${firstSentence(glance.forYou)}`, PING_BODY_MAX),
   };
 }

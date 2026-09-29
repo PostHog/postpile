@@ -17,4 +17,8 @@ export interface GitHubWriter {
   /** Approves exactly `commitOid`, the head the user looked at, not whatever the head is now. */
   approvePr(ref: PrRef, body: string, commitOid: string): Promise<void>;
   commentOnPr(ref: PrRef, body: string): Promise<void>;
+  /** Removes the review request of one team (`teamSlug`, no org) from the PR. Everyone on the team stops being asked. */
+  removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void>;
+  /** Mutes the notification thread until the viewer comments or is mentioned (DELETE its subscription). */
+  unsubscribeThread(threadId: string): Promise<void>;
 }

@@ -35,12 +35,14 @@ export function isBotEvent(event: PrEvent): boolean {
 }
 
 /**
- * The events after the thread's last read, when every one of them is
- * automation. Null when a person took part, or when nothing after the read
- * is known (the thread turned unread for a reason the app cannot see).
+ * The events by someone else after the thread's last read, when every one of
+ * them is automation. The viewer's own events (a review from the CLI) are not
+ * someone else's activity and are left out. Null when a person took part, or
+ * when nothing by someone else after the read is known (the thread turned
+ * unread for a reason the app cannot see).
  */
-export function botOnlySinceRead(events: PrEvent[], lastReadAt: IsoTime): PrEvent[] | null {
-  const since = events.filter((event) => event.at > lastReadAt);
+export function botOnlySinceRead(events: PrEvent[], lastReadAt: IsoTime, viewer: Viewer): PrEvent[] | null {
+  const since = events.filter((event) => event.at > lastReadAt && !isOwnEvent(event, viewer));
   if (since.length === 0 || !since.every(isBotEvent)) {
     return null;
   }
@@ -58,8 +60,8 @@ export function botNames(events: PrEvent[]): string[] {
  * - never_read: the user never read it (no last_read_at), so it is not "back" because of bots
  * - stale_snapshot: the stored PR snapshot is older than the thread's last update (a PR the
  *   sync left out at its cap, or whose fetch failed), so a person's comment may be missing
- * - human_activity: a person did something since the last read, or nothing known happened
- * - own_pr: bot reviews and CI on the user's own PR can mean work for them
+ * - human_activity: someone else did something since the last read, or nothing known happened
+ * - own_pr: bot reviews and CI on the user's own open PR can mean work for them (merged or closed: they can't)
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
  * - tile_unread: the tile shows something new for the user
  * - your_move: whose turn is the user's
@@ -94,6 +96,16 @@ export function snapshotCoversThread(input: Pick<QuietReadInput, 'thread' | 'prF
   return input.prFetchedAt !== null && input.prFetchedAt >= input.thread.updatedAt;
 }
 
+/**
+ * The user's own PR while it is open. Bots there (a failing check, a review
+ * bot's finding) can mean work, so their activity keeps the thread unread.
+ * Once merged or closed they can't: every own PR merges through a queue bot
+ * after the last comment (2026-09-29).
+ */
+function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
+  return pr.state === 'OPEN' && sameLogin(pr.author, viewer.login);
+}
+
 /** Whether PostPile may mark this PR thread read on GitHub by itself, and if not, the first reason why not. */
 export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   const { thread, pr, events, viewer } = input;
@@ -106,11 +118,11 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (!snapshotCoversThread(input)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const botEvents = botOnlySinceRead(events, thread.lastReadAt);
+  const botEvents = botOnlySinceRead(events, thread.lastReadAt, viewer);
   if (botEvents === null) {
     return { kind: 'skip', why: 'human_activity' };
   }
-  if (sameLogin(pr.author, viewer.login)) {
+  if (isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (events.some(isUnseenMergeWithoutReview)) {
@@ -148,7 +160,7 @@ export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'repli
  * - no_touch: the user never reviewed or commented on the PR (a push, merge or close does not count here)
  * - nothing_known: no event by someone else since the last read, so the thread is unread for a reason the app cannot see
  * - activity_after: a person did something after the user's touch
- * - own_pr: bots acted after the touch on the user's own PR, which can mean work
+ * - own_pr: bots acted after the touch on the user's own open PR, which can mean work
  * - unseen_merge: a merge without the user's review came after their touch
  * - tile_unread: the tile shows something new for the user
  * - grace: the touch or the newest activity is less than QUIET_GRACE_MS old
@@ -178,7 +190,7 @@ function touchReason(kind: TouchKind): TouchReason {
  * reviewed or commented after every unread event (DESIGN.md "You already
  * dealt with it"). Unread means after `last_read_at`, or everything when the
  * thread was never read. Bots after the touch are fine as in the bot-only
- * rule, except on the user's own PR. Whose turn is not checked: the
+ * rule, except on the user's own open PR. Whose turn is not checked: the
  * mark-read changes nothing PostPile shows (the events before the touch are
  * seen already), so a move that is still theirs stays on the tile.
  */
@@ -203,7 +215,7 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   if (!late.every(isBotEvent)) {
     return { kind: 'skip', why: 'activity_after' };
   }
-  if (late.length > 0 && sameLogin(pr.author, viewer.login)) {
+  if (late.length > 0 && isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (events.some((event) => isUnseenMergeWithoutReview(event) && event.at > touch.at)) {
@@ -222,40 +234,45 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
 /** One tile that holds the opened PR, as far as the "opened in PostPile" rule cares. */
 export interface OpenedTile {
   snoozed: boolean;
-  /** A mark-read would leave the tile done: nothing asked of the user (`TileView.afterRead.done`). */
+}
+
+/**
+ * Why opening a PR in PostPile leaves it alone:
+ * - no_thread: the PR has no notification thread (a found PR): nothing on GitHub to mirror
+ * - no_tile: no tile shows the PR
+ * - snoozed: the user put a tile holding it away for later
+ * - asks_you: a mark-read of the PR would leave something asked of the user
+ * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, so the user did not see the newest activity
+ */
+export type OpenedSkip = 'no_thread' | 'no_tile' | 'snoozed' | 'asks_you' | 'stale_snapshot';
+
+/**
+ * mark: the thread is unread on GitHub; mark it read there, then handle the
+ * PR here. handle: GitHub has the thread read already (a github.com visit,
+ * an earlier open), so only PostPile's side is left: handle the PR here.
+ */
+export type OpenedReadCheck = { kind: 'mark' } | { kind: 'handle' } | { kind: 'skip'; why: OpenedSkip };
+
+export interface OpenedReadInput {
+  /** The PR's notification thread, null when it has none (a found PR). */
+  thread: NotificationThread | null;
+  prFetchedAt: IsoTime | null;
+  /** Every tile that holds the PR. */
+  tiles: OpenedTile[];
+  /** A mark-read of this PR alone would leave it done: nothing asked of the user (`PrSummary.afterRead.done`). */
   doneAfterRead: boolean;
 }
 
 /**
- * Why opening a PR in PostPile leaves its GitHub thread alone:
- * - not_unread: GitHub has it read already
- * - stale_snapshot: the stored PR snapshot is older than the thread, so the user did not see the newest activity
- * - no_tile: no tile shows the PR
- * - snoozed: the user put a tile holding it away for later
- * - asks_you: a mark-read would leave something asked of the user
- */
-export type OpenedSkip = 'not_unread' | 'stale_snapshot' | 'no_tile' | 'snoozed' | 'asks_you';
-
-export type OpenedReadCheck = { kind: 'mark' } | { kind: 'skip'; why: OpenedSkip };
-
-export interface OpenedReadInput {
-  thread: NotificationThread;
-  prFetchedAt: IsoTime | null;
-  /** Every tile that holds the PR. */
-  tiles: OpenedTile[];
-}
-
-/**
- * Whether opening the PR in PostPile's detail pane may mark its thread read
- * on GitHub, like a visit on github.com does, limited to cases where that
- * cannot hide a to-do (DESIGN.md "You already dealt with it", part 3).
+ * Whether opening the PR in PostPile's detail pane may mark it read on
+ * GitHub, like a visit on github.com does, and handle it in PostPile, limited
+ * to cases where that cannot hide a to-do (DESIGN.md "You already dealt with
+ * it", part 3). Checked per PR since 2026-09-29: that PR done after a
+ * mark-read, no tile holding it snoozed.
  */
 export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
-  if (!input.thread.unread) {
-    return { kind: 'skip', why: 'not_unread' };
-  }
-  if (!snapshotCoversThread(input)) {
-    return { kind: 'skip', why: 'stale_snapshot' };
+  if (input.thread === null) {
+    return { kind: 'skip', why: 'no_thread' };
   }
   if (input.tiles.length === 0) {
     return { kind: 'skip', why: 'no_tile' };
@@ -263,8 +280,14 @@ export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (input.tiles.some((tile) => tile.snoozed)) {
     return { kind: 'skip', why: 'snoozed' };
   }
-  if (!input.tiles.every((tile) => tile.doneAfterRead)) {
+  if (!input.doneAfterRead) {
     return { kind: 'skip', why: 'asks_you' };
+  }
+  if (!input.thread.unread) {
+    return { kind: 'handle' };
+  }
+  if (!snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt })) {
+    return { kind: 'skip', why: 'stale_snapshot' };
   }
   return { kind: 'mark' };
 }

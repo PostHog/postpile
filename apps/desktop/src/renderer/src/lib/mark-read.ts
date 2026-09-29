@@ -1,7 +1,7 @@
 // What the tile's mark button says and what takes its place, so the label
 // never promises more than a mark-read does (2026-09-29). Core's
 // `TileView.afterRead` says what a mark-read would leave behind.
-import type { PrPrimaryAction, PrSummary, TileAfterRead, TileView } from '@postpile/core';
+import type { PrPrimaryAction, PrSummary, TileAfterRead, TilePendingWrite, TileView } from '@postpile/core';
 import { filesTabUrl } from './key-files.ts';
 import { leadPr } from './tiles.ts';
 
@@ -39,20 +39,86 @@ export function markButtonLabel(view: Pick<TileView, 'state' | 'turn' | 'afterRe
 }
 
 /**
- * The detail pane's one ink button, so the pane leads with what the tile
- * leads with (2026-09-29):
+ * The PR the detail pane's buttons act on (2026-09-29: the detail pane acts
+ * on the selected PR, the tile footer on the tile): the selected PR of a
+ * stack or set, null on a single-PR tile, where the tile and the PR are the
+ * same and everything behaves as the tile.
+ */
+export function detailPr(view: Pick<TileView, 'tile' | 'prs'>, prKey: string): PrSummary | null {
+  if (view.tile.members.length <= 1) {
+    return null;
+  }
+  return view.prs.find((pr) => pr.key === prKey) ?? null;
+}
+
+/**
+ * The pending write the detail pane's mark button waits on: the tile's on a
+ * single-PR tile (`pr` null), else the selected PR's own, so a locked
+ * mark-read of one PR of a set does not block the others (Codex review on
+ * PR #15).
+ */
+export function detailPendingWrite(view: Pick<TileView, 'pendingWrite'>, pr: Pick<PrSummary, 'pendingWrite'> | null): TilePendingWrite | null {
+  return pr === null ? view.pendingWrite : pr.pendingWrite;
+}
+
+/** What the detail pane reads of the selected PR. */
+export type DetailPrRow = Pick<PrSummary, 'provenance' | 'done' | 'turn' | 'afterRead' | 'unseenLoudEvents'>;
+
+/**
+ * The detail pane's mark button for one PR of a stack or set, by the tile's
+ * rule applied to that PR:
+ * - mark_read: the PR has unseen news, or a mark-read of it leaves something asked.
+ * - mark_done: a mark-read of it makes that PR done.
+ * - none: nothing to mark. The tile is done, the PR is done already or a
+ *   pulled-in layer without news, or it is read and still your move (then
+ *   "Open on GitHub" leads; Snooze stays in the tile footer on a set).
+ */
+export type PrMarkAction = 'mark_read' | 'mark_done' | 'none';
+
+export function prMarkAction(view: Pick<TileView, 'state'>, pr: DetailPrRow): PrMarkAction {
+  if (view.state.kind === 'done') {
+    return 'none';
+  }
+  if (pr.unseenLoudEvents > 0) {
+    return 'mark_read';
+  }
+  if (pr.provenance.kind === 'pulled_in' || pr.done || pr.turn.kind === 'you') {
+    return 'none';
+  }
+  return pr.afterRead.done ? 'mark_done' : 'mark_read';
+}
+
+/** The detail pane's mark button label: the tile's on a single-PR tile (`pr` null), else the selected PR's; null for none. */
+export function detailMarkLabel(view: Pick<TileView, 'state' | 'turn' | 'afterRead'>, pr: DetailPrRow | null): 'Mark read' | 'Mark done' | null {
+  if (pr === null) {
+    return markButtonLabel(view);
+  }
+  const action = prMarkAction(view, pr);
+  if (action === 'none') {
+    return null;
+  }
+  return action === 'mark_done' ? 'Mark done' : 'Mark read';
+}
+
+/**
+ * The detail pane's one ink button, so the pane leads with what it acts on
+ * (2026-09-29):
  * - approve: Approve is due (someone else's open PR, not approved yet, not a
  *   draft). The pane is where approving happens, so it keeps the lead.
- * - mark_read / mark_done / snooze: the tile's footer action.
- * - open_on_github: the tile is done (its footer "Open" means nothing in the
- *   pane, which already shows it).
- * "Approve again" and "Approve draft" stay outlined, and the tile's action
- * leads next to them; before, an approved PR had no primary at all.
+ * - mark_read / mark_done: the mark button (`detailMarkLabel`).
+ * - snooze: single-PR tile only, read and still your move, as on the tile.
+ * - open_on_github: the tile is done, or on a stack or set the selected PR
+ *   has nothing to mark (its move is on GitHub; Snooze lives in the tile
+ *   footer there).
+ * "Approve again" and "Approve draft" stay outlined, and the mark action
+ * leads next to them.
  */
 export type DetailPrimary = 'approve' | 'mark_read' | 'mark_done' | 'snooze' | 'open_on_github';
 
 export interface DetailPrimaryInput {
   view: Pick<TileView, 'state' | 'turn' | 'afterRead'>;
+  /** The selected PR on a stack or set (`detailPr`); null on a single-PR tile, which follows the tile footer. */
+  pr: DetailPrRow | null;
   /** Core's primary action for the PR (`PrSummary.primaryAction`). */
   prAction: PrPrimaryAction;
   /** The Approve button's look (`approveButton`): outlined for "Approve again" and "Approve draft". */
@@ -62,6 +128,10 @@ export interface DetailPrimaryInput {
 export function detailPrimary(input: DetailPrimaryInput): DetailPrimary {
   if (input.prAction === 'approve' && input.approveVariant === 'primary') {
     return 'approve';
+  }
+  if (input.pr !== null) {
+    const action = prMarkAction(input.view, input.pr);
+    return action === 'none' ? 'open_on_github' : action;
   }
   const footer = tileFooterAction(input.view);
   return footer === 'open' ? 'open_on_github' : footer;

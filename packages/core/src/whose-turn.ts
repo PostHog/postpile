@@ -1,7 +1,7 @@
 // "Whose turn": is the next move on a tile the viewer's, someone else's, or
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
 import { isBot } from './bots.ts';
-import { changesAnswered, type ChangesAnswer } from './changes-answered.ts';
+import { changesAnswered, reReviewAsked, type ChangesAnswer } from './changes-answered.ts';
 import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
@@ -54,6 +54,9 @@ export interface WhoseTurnInput {
   /** PRs whose agent glance says NOT_YOURS: a routed team request on them asks nothing of the viewer. */
   notYours?: ReadonlySet<PrKey>;
 }
+
+/** A reviewer who asked for changes, after the push and their re-request: "ada to re-review". */
+const RE_REVIEW = 'to re-review';
 
 /** The move on the viewer's own approved PR. It shows on the tile, but it is not urgent. */
 export const MERGE_APPROVED_MOVE = 'Merge, it is approved';
@@ -221,6 +224,10 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
     return you(ctx, 'address_changes', `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
   }
   const changesBy = changesRequestedBy(ctx.pr);
+  if (changesBy && reReviewAsked(pr, changesBy)) {
+    // You pushed and asked them again: their move now.
+    return them(ctx, changesBy, RE_REVIEW);
+  }
   if (changesBy) {
     return you(ctx, 'address_changes', `Address ${changesBy}'s changes`);
   }
@@ -248,7 +255,8 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return NO_TURN;
   }
   if (hold?.kind === 'changes') {
-    return them(ctx, pr.author, `to address ${hold.by}'s changes`);
+    // The author moves first, until they pushed and asked the requester again.
+    return reReviewAsked(pr, hold.by) ? them(ctx, hold.by, RE_REVIEW) : them(ctx, pr.author, `to address ${hold.by}'s changes`);
   }
   if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
     return you(ctx, 'review', reviewText(ctx, ask));
@@ -266,6 +274,10 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   if (ask === 'team_taken') {
     if (pr.reviewDecision === 'APPROVED') {
       return them(ctx, pr.author, 'to merge');
+    }
+    const changesBy = changesRequestedBy(pr);
+    if (changesBy && reReviewAsked(pr, changesBy)) {
+      return them(ctx, changesBy, RE_REVIEW);
     }
     return them(ctx, teamRequestTakenBy(ctx.pr, ctx.viewer)[0]!, 'is reviewing');
   }

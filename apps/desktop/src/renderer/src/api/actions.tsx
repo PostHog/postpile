@@ -46,7 +46,7 @@ import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
 import { useLastSyncReport } from './sync.ts';
 import { useGitHubWrites } from './writes.ts';
-import { prPath, request, tilePath } from './client.ts';
+import { prPath, request, tilePath, tilePrPath } from './client.ts';
 import { queryKeys } from './keys.ts';
 import { sendTelemetry } from './telemetry.ts';
 
@@ -117,10 +117,19 @@ export interface Actions {
    */
   markOpenedRead(prKey: PrKey): Promise<void>;
   approve(prKey: PrKey): Promise<void>;
+  /** "Remove <team>": removes the team's review request, unsubscribes and marks the PR done. Final, no undo; blocked while locked. */
+  removeTeamRequest(prKey: PrKey, team: string): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
   /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
   markRead(tileId: string, afterRead?: TileAfterRead): Promise<void>;
+  /**
+   * The detail pane's Mark read / Mark done on a stack or set: only `prKey`.
+   * Same queue, lock and undo as markRead, undo brings back that PR only.
+   * `afterRead` is the PR's (`PrSummary.afterRead`); the toast never offers
+   * Snooze here, since snoozing is for the whole tile.
+   */
+  markPrRead(tileId: string, prKey: PrKey, afterRead: TileAfterRead): Promise<void>;
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
   unsnooze(tileId: string): Promise<void>;
   undo(undoToken: string): Promise<void>;
@@ -278,8 +287,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
       const result = await withBusy(busyKey, task);
       const shaped = shape ? shape(result) : { message: result.message, snoozeTileId: null };
       show(result.ok ? 'ok' : 'error', shaped.message, result.undoToken, shaped.snoozeTileId);
-      if (result.undoToken) {
-        const entry = { token: result.undoToken, until: Date.now() + UNDO_WINDOW_MS };
+      // A settle token has no Undo in the toast, but its mark-read is watched the same way: refetch once it settled.
+      const watched = result.undoToken ?? result.settleToken ?? null;
+      if (watched) {
+        const entry = { token: watched, until: Date.now() + UNDO_WINDOW_MS };
         setPendingUndos((current) => [...current, entry]);
       }
       await refreshAll();
@@ -569,6 +580,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     approve: async (prKey) => {
       await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`));
     },
+    removeTeamRequest: async (prKey, team) => {
+      await run(`removeTeam:${prKey}`, 'removeTeam', () => request('POST', `${prPath(prKey)}/remove-team-request`, { team }));
+    },
     retryGlance: async (prKey) => {
       sendTelemetry('glance_retry_clicked', {});
       await run(`retryGlance:${prKey}`, null, () => request('POST', `${prPath(prKey)}/glance/retry`));
@@ -581,6 +595,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
           }
         : null;
       await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`), shape);
+    },
+    markPrRead: async (tileId, prKey, afterRead) => {
+      const shape: NoticeShape = (result) => {
+        const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead });
+        return { message: notice.message, snoozeTileId: null };
+      };
+      await run(`markPr:${tileId}:${prKey}`, 'markRead', () => request('POST', `${tilePrPath(tileId, prKey)}/mark-read`), shape);
     },
     snooze: async (tileId, condition) => {
       await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }));

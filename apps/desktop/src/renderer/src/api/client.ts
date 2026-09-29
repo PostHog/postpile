@@ -35,3 +35,9 @@ export function prPath(prKey: PrKey): string {
 export function tilePath(tileId: string): string {
   return `/api/tiles/${encodeURIComponent(tileId)}`;
 }
+
+/** One PR of a tile: "/api/tiles/<encoded tile id>/prs/owner/repo/12". */
+export function tilePrPath(tileId: string, prKey: PrKey): string {
+  const [repo = '', number = ''] = prKey.split('#');
+  return `${tilePath(tileId)}/prs/${repo}/${number}`;
+}

@@ -31,7 +31,7 @@ describe('engine telemetry', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
 
     const summaries = h.telemetry.events.filter((e) => e.event === 'pings_summarized');
-    expect(summaries.map((e) => e.props)).toEqual([{ pinged: 0, withheld_rules: 0, withheld_agent: 1, handled_quietly: 0 }]);
+    expect(summaries.map((e) => e.props)).toEqual([{ pinged: 0, withheld_rules: 0, withheld_agent: 1, pinged_glance: 0, handled_quietly: 0 }]);
   });
 
   it('fires sync_completed (and first_sync_completed once) on a fresh database', async () => {

@@ -374,6 +374,11 @@ export function createApp(
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
     return c.json(await engine.approve(prKeyFromParams(c.req.param())));
   });
+  // "Remove <team>": removes a team review request and unsubscribes. Final; refused while writes are locked.
+  app.post('/api/prs/:owner/:repo/:number/remove-team-request', async (c) => {
+    const body = z.object({ team: z.string().min(1).max(200) }).parse(await c.req.json());
+    return c.json(await engine.removeTeamRequest(prKeyFromParams(c.req.param()), body.team));
+  });
   // Opened in the detail pane: marks the GitHub thread read only when nothing is asked of the user and writes are unlocked.
   app.post('/api/prs/:owner/:repo/:number/opened', async (c) => {
     return c.json(await engine.markOpenedRead(prKeyFromParams(c.req.param())));
@@ -388,6 +393,10 @@ export function createApp(
   });
 
   app.post('/api/tiles/:tileId/mark-read', async (c) => c.json(await engine.markRead(c.req.param('tileId'))));
+  // The detail pane's Mark read / Mark done: one PR of the tile, same queue, lock and undo.
+  app.post('/api/tiles/:tileId/prs/:owner/:repo/:number/mark-read', async (c) => {
+    return c.json(await engine.markPrRead(c.req.param('tileId'), prKeyFromParams(c.req.param())));
+  });
   app.post('/api/tiles/:tileId/snooze', async (c) => {
     const body = z.object({ condition: snoozeCondition }).parse(await c.req.json());
     return c.json(await engine.snooze(c.req.param('tileId'), body.condition));

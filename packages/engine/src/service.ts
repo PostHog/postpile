@@ -221,18 +221,32 @@ export interface EngineService {
   /** Immediate and final: GitHub approvals cannot be undone. */
   approve(prKey: PrKey): Promise<ActionResult>;
   /**
+   * "Remove <team>": removes the review request of one of the viewer's teams
+   * (`team` as GitHub lists it, "acme/team-devex"), unsubscribes from the
+   * PR's thread and marks the PR done here. Final, no undo; refused while
+   * GitHub writes are locked.
+   */
+  removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult>;
+  /**
    * Marks the tile's events seen and queues the GitHub mark-read behind the
    * undo window. With GitHub writes locked nothing changes in the app: after
    * the window it becomes a pending write (the tile shows a marker).
    */
   markRead(tileId: string): Promise<ActionResult>;
+  /**
+   * Mark read / Mark done in the detail pane: only `prKey` of the tile. Its
+   * events seen, handled when the tile tracks it, its GitHub thread through
+   * the same queue, lock and undo as markRead; undo brings back that PR only.
+   */
+  markPrRead(tileId: string, prKey: PrKey): Promise<ActionResult>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
   markThreadRead(threadId: string): Promise<ActionResult>;
   /**
-   * The user opened the PR in the detail pane: marks its GitHub thread read
-   * ("opened in PostPile", origin quiet, no undo) when a mark-read would
-   * leave every tile holding it done and none is snoozed, only while writes
-   * are unlocked. Nothing happens otherwise, not even a pending write.
+   * The user opened the PR in the detail pane: when a mark-read of that PR
+   * would leave it done and no tile holding it is snoozed, only while writes
+   * are unlocked, marks its GitHub thread read if it is unread ("opened in
+   * PostPile", origin quiet, no undo) and handles the PR here (events seen,
+   * handledAt). Nothing happens otherwise, not even a pending write.
    */
   markOpenedRead(prKey: PrKey): Promise<OpenedReadResult>;
   /** undoToken null undoes the most recent pending mark-read batch. Memory correction tokens undo that correction. */

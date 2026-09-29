@@ -154,6 +154,28 @@ export interface PrSummary {
   /** Where the glance stands (`glanceStateOf`): ready, queued, writing, failed, agent_off, capped or none. */
   glanceState: GlanceState;
   unseenLoudEvents: number;
+  /**
+   * Nothing is asked of the viewer on this PR (`isPrDone`). A tile is done
+   * when every tracked member is; the renderer dots the tracked members that
+   * are not (DESIGN.md "Actions act on what you look at").
+   */
+  done: boolean;
+  /**
+   * A mark-read of this PR waits for the writes lock; null when none does.
+   * The detail pane's per-PR Mark read checks this, not the tile's
+   * `pendingWrite`, so one PR's pending write does not block its neighbours.
+   */
+  pendingWrite: TilePendingWrite | null;
+  /** The viewer's teams with a pending review request here (`ownTeamRequests`), for "Remove <team>" in the detail pane. */
+  ownTeamRequests: string[];
+  /** Whose move it is on this PR alone (`prWhoseTurn`), for the detail pane's buttons. */
+  turn: WhoseTurn;
+  /**
+   * What a mark-read of this PR alone would leave (`prAfterMarkRead`): the
+   * detail pane says "Mark done" only when `done` is true. Always not done
+   * for a pulled-in stack layer.
+   */
+  afterRead: TileAfterRead;
   /** What changed since the viewer's last touch (`whatsNew`), for the why-now strip; null on a first look or with nothing new. */
   whatsNew: WhatsNew | null;
   updatedAt: IsoTime;
@@ -349,10 +371,17 @@ export interface ActionResult {
   message: string;
   /** Set when the action queued a deferred GitHub write that can still be undone. */
   undoToken: string | null;
+  /**
+   * Set when the action queued a deferred mark-read that offers no undo
+   * ("Remove <team>"): the renderer refetches once its window settled, so a
+   * mark-read GitHub did not take (or a locked one turning pending) shows.
+   */
+  settleToken?: string;
 }
 
-/** Opening a PR in PostPile: whether its GitHub thread was marked read ("opened in PostPile"). Nothing to show either way. */
+/** Opening a PR in PostPile: whether its GitHub thread was marked read or the PR handled ("opened in PostPile"). Nothing to show either way. */
 export interface OpenedReadResult {
+  /** Something changed (the thread on GitHub, or the PR's handled state here): the renderer refetches. */
   marked: boolean;
 }
 

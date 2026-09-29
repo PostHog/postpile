@@ -82,14 +82,24 @@ function reviewLoudness(input: LoudnessInput): LoudnessDecision {
 }
 
 /**
+ * A review request aimed at the viewer or one of their teams. It counts by
+ * whom it asks, not who clicked it (2026-09-29): a bot that assigns
+ * reviewers asks as much as a person does.
+ */
+function isRequestForViewer(input: LoudnessInput): boolean {
+  return input.kind === 'review_requested' && isViewerSubject(input.subject, input.viewer);
+}
+
+/**
  * Rule-based classification, relative to the viewer. The agent may override
  * later, with a reason. Order matters: who did it first, then what happened.
+ * The bot shortcut skips review requests aimed at the viewer or their team.
  */
 export function ruleLoudness(input: LoudnessInput): LoudnessDecision {
   if (input.actor !== '' && sameLogin(input.actor, input.viewer.login)) {
     return decide('quiet', 'your own activity');
   }
-  if (input.isBot || machineKinds.includes(input.kind)) {
+  if ((input.isBot && !isRequestForViewer(input)) || machineKinds.includes(input.kind)) {
     return machineLoudness(input);
   }
   if (ADDRESSED_KINDS.includes(input.kind)) {

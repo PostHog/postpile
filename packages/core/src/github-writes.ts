@@ -101,8 +101,9 @@ export interface GitHubWritesChange {
  * `agent_refresh` is an outside agent's refresh_from_github: a GitHub read,
  * logged with no thread or PR (the detail lists the PRs) so it never shows
  * as a thread's last action.
- * mark_done, subscribe and unsubscribe get added with their writer methods;
- * nothing sends them today.
+ * `remove_team_request` and `unsubscribe` are the detail pane's "Remove
+ * <team>" (2026-09-29). mark_done and subscribe get added with their writer
+ * methods; nothing sends them today.
  */
 export type LoggedAction =
   | 'mark_read'
@@ -110,6 +111,8 @@ export type LoggedAction =
   | 'undo_mark_read'
   | 'approve'
   | 'comment'
+  | 'remove_team_request'
+  | 'unsubscribe'
   | 'bring_back'
   | 'writes_on'
   | 'writes_off'
@@ -117,7 +120,8 @@ export type LoggedAction =
 
 /**
  * Who decided it.
- * - tile: the user in a tile or the detail pane
+ * - tile: the user in a tile (and, before 2026-09-29, the detail pane)
+ * - detail: the user in the detail pane (PR-scoped mark read, removing a team review request)
  * - debug: the user in the notifications debug view
  * - queue: the deferred mark-read queue, when a batch's undo window ran out
  * - quit: the queue flushed on quit
@@ -129,7 +133,7 @@ export type LoggedAction =
  *   turned unread only because of bots ("Handled quietly")
  * - agent: an outside agent through the MCP server (refresh_from_github); a GitHub read, never a write
  */
-export type ActionOrigin = 'tile' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet' | 'agent';
+export type ActionOrigin = 'tile' | 'detail' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet' | 'agent';
 
 /**
  * What came of it.

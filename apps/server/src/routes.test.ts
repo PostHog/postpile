@@ -209,6 +209,9 @@ describe('server routes over the fake engine', () => {
     expect((await opened(yours.tile.members[0]!.prKey)).json).toEqual({ marked: false });
     expect((await opened(doneKey)).json).toEqual({ marked: true });
     expect((await opened(doneKey)).json).toEqual({ marked: false });
+    // Handled in PostPile too: the tile is done now, not just read.
+    const topic = (await (await app.request(`/api/topics/${done.tile.topicId}`)).json()) as TopicDetail;
+    expect(topic.tiles.find((view) => view.tile.id === done.tile.id)?.state.kind).toBe('done');
 
     const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
     expect(quiet[0]).toMatchObject({ prKey: doneKey, reason: 'opened' });
@@ -284,6 +287,33 @@ describe('server routes over the fake engine', () => {
     expect(undone.json.ok).toBe(true);
     topic = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
     expect(topic.tiles.find((view) => view.tile.id === 'set:turbo-cache')?.state.kind).toBe('unread');
+  });
+
+  it('marks one PR of a tile read from the detail pane, leaving the other PRs as they were', async () => {
+    const app = appWithFake();
+    await post(app, '/api/github-writes', { enabled: true });
+    const setView = async () =>
+      ((await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail).tiles.find((view) => view.tile.id === 'set:turbo-cache');
+    const unseen = async () => Object.fromEntries((await setView())?.prs.map((pr) => [pr.key, pr.unseenLoudEvents]) ?? []);
+    const before = await unseen();
+    expect(before['acme/app#1907']).toBeGreaterThan(0);
+
+    const marked = await post<ActionResult>(app, `/api/tiles/${setTile}/prs/acme/app/1907/mark-read`);
+
+    expect(marked.json.ok).toBe(true);
+    expect(await unseen()).toEqual({ ...before, 'acme/app#1907': 0 });
+    expect((await post(app, `/api/tiles/${setTile}/prs/acme/app/0/mark-read`)).status).toBe(400);
+  });
+
+  it('removes a team review request only with a team, and refuses it while writes are locked', async () => {
+    const app = appWithFake();
+    const rows = await allRows(app);
+    const row = rows.find((pr) => pr.ownTeamRequests.length > 0)!;
+    const path = `/api/prs/${row.key.replace('#', '/')}/remove-team-request`;
+    expect((await post(app, path, {})).status).toBe(400);
+    expect((await post<ActionResult>(app, path, { team: row.ownTeamRequests[0] })).json.ok).toBe(false);
+    await post(app, '/api/github-writes', { enabled: true });
+    expect((await post<ActionResult>(app, path, { team: row.ownTeamRequests[0] })).json.ok).toBe(true);
   });
 
   it('refuses to approve while GitHub writes are off, approves once the lock is open', async () => {

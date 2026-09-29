@@ -16,9 +16,14 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
   NOT_YOURS: { icon: <DashIcon size={11} />, label: 'Not yours', tone: 'border-hairline bg-segment text-muted' },
 };
 
-/** The coral "new" dot in front of a PR number on a PR that keeps its tile unread (`newsPrKeys`). Coral means new since you looked, nothing else. */
-export function NewsDot() {
-  return <span role="img" aria-label="New since you looked" title="New since you looked" className="size-1.5 shrink-0 rounded-full bg-unread" />;
+/**
+ * The coral dot in front of a PR number on a PR that keeps its tile from
+ * being done (`notDonePrKeys`), on unread and open tiles. The one coral
+ * mark that is not "new since you looked" (DESIGN.md "Actions act on what
+ * you look at": no second, read-only dot).
+ */
+export function NotDoneDot() {
+  return <span role="img" aria-label="Not done yet" title="Not done yet" className="size-1.5 shrink-0 rounded-full bg-unread" />;
 }
 
 /** "pending: mark read on GitHub": a mark-read made while writes were locked. Neutral, not coral: nothing is new. */

@@ -48,6 +48,32 @@ describe('whoseTurn: your move', () => {
     expect(turnOf(singleTile(personal), [personal], [], [], withTeam)).toMatchObject({ kind: 'you' });
   });
 
+  it('names the requester once the author pushed and asked them to re-review, on a routed team request', () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
+    const changes = makeReview({ author: 'ada', state: 'CHANGES_REQUESTED', submittedAt: at(10) });
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'], reviews: [changes] });
+    const turn = (p: Pr) => turnOf(singleTile(p), [p], [], [], withTeam);
+    const pushed = { ...pr, commits: [makeCommit({ author: 'rowan', committedAt: at(20) })] };
+    // Pushed but not asked again: still the author's move.
+    expect(turn(pushed)).toMatchObject({ kind: 'them', who: 'rowan', what: "to address ada's changes" });
+    // Asked again but no push: the author has not moved yet.
+    expect(turn({ ...pr, reviewerUsers: ['ada'] })).toMatchObject({ kind: 'them', who: 'rowan', what: "to address ada's changes" });
+    expect(turn({ ...pushed, reviewerUsers: ['ada'] })).toEqual({ kind: 'them', who: 'ada', what: 'to re-review', prKey: pr.key });
+    // A force push counts as a push too.
+    const forced = { ...pr, reviewerUsers: ['ada'], timeline: [makeTimelineItem({ kind: 'head_ref_force_pushed', actor: 'rowan', at: at(20), subject: null })] };
+    expect(turn(forced)).toMatchObject({ kind: 'them', who: 'ada', what: 'to re-review' });
+  });
+
+  it('names the re-reviewer on a team request a teammate picked up with a change request', () => {
+    const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
+    const changes = makeReview({ author: 'lyra', state: 'CHANGES_REQUESTED', submittedAt: at(10) });
+    const pr = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'], reviews: [changes] });
+    const turn = (p: Pr) => turnOf(singleTile(p), [p], [], [], withTeam);
+    expect(turn(pr)).toMatchObject({ kind: 'them', who: 'lyra', what: 'is reviewing' });
+    const again = { ...pr, reviewerUsers: ['lyra'], commits: [makeCommit({ author: 'rowan', committedAt: at(20) })] };
+    expect(turn(again)).toMatchObject({ kind: 'them', who: 'lyra', what: 'to re-review' });
+  });
+
   it('gives no move on a routed team request when the glance says not yours', () => {
     const withTeam: Viewer = { ...viewer, teamMembers: ['lyra'] };
     const turn = (pr: Pr) =>
@@ -201,6 +227,16 @@ describe('whoseTurn: on your own PR', () => {
     expect(single(changes).what).toBe("Address ada's changes");
     const cleared = { ...changes, reviews: [...changes.reviews, makeReview({ id: 'r2', author: 'ada', submittedAt: at(30) })] };
     expect(single(cleared).what).not.toBe("Address ada's changes");
+  });
+
+  it('waits on the requester once you pushed and asked them to re-review', () => {
+    const changes = { ...own, reviews: [makeReview({ author: 'ada', state: 'CHANGES_REQUESTED', submittedAt: at(10) })] };
+    const pushed = { ...changes, commits: [makeCommit({ author: me, committedAt: at(20) })] };
+    expect(single(pushed)).toMatchObject({ kind: 'you', what: "Address ada's changes" });
+    expect(single({ ...pushed, reviewerUsers: ['ada', 'sol'] })).toEqual({ kind: 'them', who: 'ada', what: 'to re-review', prKey: own.key });
+    // A push from before the change request does not count.
+    const early = { ...changes, reviewerUsers: ['ada'], commits: [makeCommit({ author: me, committedAt: at(5) })] };
+    expect(single(early)).toMatchObject({ kind: 'you', what: "Address ada's changes" });
   });
 
   it('never makes failing CI on your own PR a move of yours: CI is not a signal', () => {

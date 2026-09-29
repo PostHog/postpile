@@ -123,6 +123,23 @@ export function reviewRequest(pr: Pr, viewer: Viewer): ReviewRequest {
   return isTeammate(pr.author, viewer) ? 'team_for_you' : 'team';
 }
 
+/**
+ * The viewer's teams with a pending review request on the open PR, as
+ * GitHub lists them ("acme/team-devex"). The detail pane offers "Remove
+ * <team>" for each (2026-09-29).
+ */
+export function ownTeamRequests(pr: Pr, viewer: Viewer): string[] {
+  if (pr.state !== 'OPEN') {
+    return [];
+  }
+  return pr.reviewerTeams.filter((team) => isOwnTeam(team, viewer.teams));
+}
+
+/** "acme/team-devex" -> "team-devex": the slug GitHub's review request API takes. */
+export function teamSlug(team: string): string {
+  return team.split('/').pop() ?? team;
+}
+
 /** A personal request, or a team request that counts like one. */
 export function isPersonalRequest(request: ReviewRequest): boolean {
   return request === 'you' || request === 'team_for_you';

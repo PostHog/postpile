@@ -79,12 +79,14 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 
 - **Every POST/DELETE goes through `useActions()`** from `api/actions.tsx`.
   Components never call `request()` for a mutation.
-- **GitHub writes are guarded.** approve, send comment, mark read and "not
-  mine" (it queues a mark-read) pass through `writeBlockedReason` in
+- **GitHub writes are guarded.** approve, send comment, mark read (tile
+  and PR-scoped), "not mine" (it queues a mark-read) and "Remove <team>"
+  pass through `writeBlockedReason` in
   `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
   /api/github-writes`, changes at runtime). With the lock closed
   (read-only, the default) approve and comment are blocked with a clear
-  toast; mark read and "not mine" still run but change nothing in the app:
+  toast (so is "Remove <team>", `removeTeam`: final, never a pending
+  write); mark read and "not mine" still run but change nothing in the app:
   after the undo window they become pending writes (buttons carry
   `markReadNote`, the tile shows `PendingWritePill` from `pills.tsx`, its
   Mark read button is disabled). Never show a locked mark-read as done. Everything is blocked
@@ -177,11 +179,16 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - `markOpenedRead` is quiet too (no toast, no undo) and on the
   `GithubWrite` list as `openedRead`, blocked while locked (never a
   pending write). `useOpenedRead` in `App.tsx` calls it once per open,
-  after the PR stayed 1.5s in the detail pane with the window visible
-  (`OpenedReadTimer`; hiding the window restarts the wait), only when
-  `opensMarkRead` (`lib/opened-read.ts`) says a mark-read leaves the tile
-  done. The server checks again and marks the GitHub thread read ("opened
-  in PostPile", listed under Handled quietly).
+  when the user moves on (another PR or tile, the pane closed, the window
+  hidden or blurred) after the PR stayed 1.5s in the detail pane with the
+  window visible and focused (`OpenedReadTimer`: the dwell arms, leaving
+  fires; hidden before the dwell restarts the wait). Never while the PR is
+  still on screen: the status must not change under the user's eyes. Only when
+  `opensMarkRead` (`lib/opened-read.ts`) says a mark-read of that PR
+  leaves it done (`PrSummary.afterRead.done`, per PR, not the tile's). The
+  server checks again, marks the GitHub thread read if it is unread
+  ("opened in PostPile", listed under Handled quietly) and handles the PR
+  (done in PostPile too).
 - A missing glance is worded from `PrSummary.glanceState` /
   `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
   never "the next sync picks it up". Only a failed glance gets a button:
@@ -189,11 +196,24 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   list). No manual refresh per PR or topic (decided 2026-09-29).
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the action bar right under the assessment boxes.
-- The action bar's one ink button is the tile's lead (`detailPrimary` in
-  `lib/mark-read.ts`, built on `tileFooterAction`): Approve while it is
-  due, else Mark read / Mark done / Snooze as on the tile, Open on GitHub on
-  a done tile. It goes first; "Approve again" / "Approve draft" stay
+- The detail pane acts on the selected PR, the tile footer on the tile
+  (2026-09-29). `detailPr` (`lib/mark-read.ts`) gives the selected PR's
+  row on a stack or set and null on a single-PR tile, which behaves as the
+  tile. On a stack or set the mark button marks only that PR
+  (`useActions().markPrRead`, own undo, toast without the Snooze offer),
+  its label comes from `detailMarkLabel` over `PrSummary.afterRead` /
+  `.turn` / `.done`, and Snooze is not in the pane (it stays in the tile
+  footer).
+- The action bar's one ink button comes from `detailPrimary` in
+  `lib/mark-read.ts`: Approve while it is due, else on a single-PR tile
+  Mark read / Mark done / Snooze as on the tile (Open on GitHub on a done
+  tile), on a stack or set the selected PR's Mark read / Mark done, else
+  Open on GitHub. It goes first; "Approve again" / "Approve draft" stay
   outlined. Don't pick a primary in the component.
+- "Remove <team>" (`RemoveTeamButton`, one per `PrSummary.ownTeamRequests`
+  entry via `removeTeamButtons` in `lib/team-request.ts`) removes the
+  team's review request, unsubscribes and marks the PR done. It asks once
+  in a small popover and has no undo. Never the primary.
 - "Not up to date" has one wording (`lib/staleness.ts`): "updating" while
   `useActions().syncing` or a catch-up writes (`glanceState` `writing`),
   else "out of date". Never write "stale" or "Sync to refresh" in the UI.
@@ -255,7 +275,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
   title; the activity list then shows only earlier events),
-  `AgentFacts`, `ActivityTimeline`, `ActionBar`, `AskComposer`, `TileChat`),
+  `AgentFacts`, `ActivityTimeline`, `ActionBar` (+ `RemoveTeamButton`), `AskComposer`, `TileChat`),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
@@ -267,8 +287,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
   optional box; secondary button there so Accept stays the one primary).
-- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `NewsDot`
-  (the coral dot before a PR number, `newsPrKeys` in `lib/tiles.ts`), `ForWhomChip`,
+- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `NotDoneDot`
+  (the coral dot before a PR number, `notDonePrKeys` in `lib/tiles.ts`), `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
@@ -340,15 +360,19 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   state line, the RISK box or the your-move chip**: checks only show in
   `PrFacts` (DESIGN.md "CI is not a signal"; `PrStatus` has no checks).
 - PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
-  false; the heading is the title). Every PR that keeps an unread tile
-  unread gets `NewsDot` before its number, on the tile and in
-  `DetailContext`'s list. `DetailContext` shows kind, title, "PR x of n"
+  false; the heading is the title). Every tracked PR that keeps an unread
+  or open tile from being done (`notDonePrKeys`: `PrSummary.done` false, or
+  unseen news left) gets `NotDoneDot` ("Not done yet") before its number,
+  on the tile and in `DetailContext`'s list; none on done or snoozed tiles,
+  or on a tile with one tracked PR. `DetailContext` shows kind, title, "PR x of n"
   and the arrows only for several PRs; one PR is just "PR".
 - Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):
   pass its result as `MemoryLine` `refs` in lists.
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for
   "Your move".
-- Coral (`unread`) means "new since you looked" and nothing else on a tile.
+- Coral (`unread`) means "new since you looked" and nothing else on a tile,
+  with one exception: the not-done dot on PR rows (DESIGN.md "Actions act
+  on what you look at": one dot, no second read-only one).
   Primary buttons are ink; accent blue is for selection and focus only.
 
 ## Setup flow
@@ -394,7 +418,10 @@ not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set
 (`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
 the ones a queue filter does not match and folds snoozed / done ones.
-Tiles stay in one column (DESIGN.md "Three-pane balance").
+Tiles stay in one column (DESIGN.md "Three-pane balance"). The selected
+tile keeps the place it had when it was selected (`useHeldPlace` over
+`holdPlace`, `lib/hold-place.ts`), and the open topic's sidebar row too,
+until the selection moves; its look still changes right away.
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
 "Your instructions", the notifications debug list and "Handled quietly",

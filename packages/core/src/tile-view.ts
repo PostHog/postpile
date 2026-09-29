@@ -1,21 +1,22 @@
 // The PR rows and the tile view the UI gets, built from gathered inputs. The
 // engine and FakeEngine only collect the inputs (store or sample data); the
 // rules that turn them into a view live here, once.
-import { tileAfterMarkRead } from './after-read.ts';
+import { prAfterMarkRead, tileAfterMarkRead } from './after-read.ts';
 import { forWhom, tileForWhom } from './for-whom.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { prStatus, openThreadCount } from './pr-status.ts';
 import { prTier } from './pr-tier.ts';
 import { prPrimaryAction } from './primary-action.ts';
-import { isApprovedByViewer } from './review-request.ts';
+import { isApprovedByViewer, ownTeamRequests } from './review-request.ts';
 import { tilePeople } from './tile-people.ts';
-import { TILE_STATE_ORDER } from './tiles.ts';
+import { isTracked } from './provenance.ts';
+import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
 import { memberTier, personRelation, tileTier } from './topic-queues.ts';
 import type { Glance, IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
 import type { GlanceState } from './glance-state.ts';
 import type { GlanceGap, PrSummary, TilePendingWrite, TileView } from './views.ts';
 import { whatsNew } from './whats-new.ts';
-import { whoseTurn } from './whose-turn.ts';
+import { NO_TURN, prWhoseTurn, whoseTurn } from './whose-turn.ts';
 import { tileWhy, whyHere } from './why-here.ts';
 
 export interface PrSummaryInput {
@@ -35,6 +36,10 @@ export interface PrSummaryInput {
   repoLabel: string | null;
   /** The tile is unread, so the primary action may be Mark read. */
   tileUnread: boolean;
+  /** Now, for what the PR would turn into once marked read (`afterRead`). */
+  now: IsoTime;
+  /** A mark-read of this PR waiting for the writes lock, or null. */
+  pendingWrite: TilePendingWrite | null;
 }
 
 /** One PR row of a tile. */
@@ -44,6 +49,8 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
   const approved = isApprovedByViewer(pr, userState, viewer?.login);
   const why = whyHere(member.provenance, pr, viewer);
   const tier = viewer ? prTier({ pr, events, viewer, userState, reason: input.reason }) : 'rest';
+  // Same NOT_YOURS reading as the Board's (the stored glance, stale or not).
+  const notYours = input.glance?.verdict === 'NOT_YOURS';
   return {
     key: pr.key,
     title: pr.title,
@@ -66,6 +73,11 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     glanceState: input.glanceState,
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
+    done: isPrDone(pr, userState, viewer, events, notYours),
+    ownTeamRequests: viewer ? ownTeamRequests(pr, viewer) : [],
+    pendingWrite: input.pendingWrite,
+    turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours }) : NO_TURN,
+    afterRead: prAfterMarkRead({ pr, events, userState, viewer, notYours, tracked: isTracked(member.provenance), readAt: input.now }),
     whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),
     updatedAt: pr.updatedAt,
     quietRepo: input.quietRepo,

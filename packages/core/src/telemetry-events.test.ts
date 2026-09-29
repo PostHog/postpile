@@ -49,7 +49,7 @@ describe('TELEMETRY_EVENTS', () => {
   });
 
   it('takes the hourly ping summary as counts only', () => {
-    const summary = { pinged: 3, withheld_rules: 12, withheld_agent: 1, handled_quietly: 4 };
+    const summary = { pinged: 3, withheld_rules: 12, withheld_agent: 1, pinged_glance: 0, handled_quietly: 4 };
     expect(TELEMETRY_EVENTS.pings_summarized.safeParse(summary).success).toBe(true);
     expect(TELEMETRY_EVENTS.pings_summarized.safeParse({ ...summary, pinged: -1 }).success).toBe(false);
     expect(TELEMETRY_EVENTS.pings_summarized.safeParse({ ...summary, repo: 'acme/app' }).success).toBe(false);

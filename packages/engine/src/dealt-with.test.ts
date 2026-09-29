@@ -178,6 +178,36 @@ describe('You already dealt with it: opening a PR in PostPile marks its thread r
     expect(h.store.events.listForPr(pr.key).every((event) => event.seenAt !== null)).toBe(true);
   });
 
+  it('handles the PR in PostPile too, so the tile turns done', async () => {
+    const pr = followedPr();
+    const h = await syncedTopic(pr);
+
+    await h.engine.markOpenedRead(pr.key);
+
+    expect(h.store.userPrStates.get(pr.key)?.handledAt).not.toBeNull();
+    expect(await tileState(h, 't')).toBe('done');
+  });
+
+  it('only handles the PR here when GitHub has its thread read already', async () => {
+    const pr = followedPr();
+    const h = makeHarness({ writesEnabled: false });
+    topicWithPrs(h, 't', [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    await h.engine.setGitHubWrites(true);
+    const thread = h.store.notifications.getByPrKeys([pr.key]).get(pr.key)!;
+    h.store.notifications.markRead(thread.id, thread.updatedAt);
+    expect(await tileState(h, 't')).not.toBe('done');
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: true });
+
+    expect(h.writer.calls).toEqual([]);
+    expect(await tileState(h, 't')).toBe('done');
+    const rows = h.store.actionLog.listRecent(10).filter((entry) => entry.origin === 'quiet' && entry.prKey === pr.key);
+    expect(rows).toEqual([expect.objectContaining({ action: 'mark_read', outcome: 'local' })]);
+    // Nothing reached GitHub, so nothing to list under Handled quietly.
+    expect(await h.engine.handledQuietly()).toEqual([]);
+  });
+
   it('does nothing while GitHub writes are locked, not even a pending write', async () => {
     const pr = followedPr();
     const h = await syncedTopic(pr, false);
@@ -195,6 +225,7 @@ describe('You already dealt with it: opening a PR in PostPile marks its thread r
 
     expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
     expect(h.writer.calls).toEqual([]);
+    expect(h.store.userPrStates.get(pr.key)?.handledAt ?? null).toBeNull();
   });
 
   it('never marks a snoozed tile', async () => {
