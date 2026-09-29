@@ -2,6 +2,14 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Threads you had read that came back only because of bots (CI, merge queue, review and deploy bots) are marked read on GitHub by PostPile after a sync, 10 minutes after the last bot activity at the earliest. Never your own PRs, never when something is your move or new for you, never a merge without your review, and only while GitHub writes are unlocked. "Handled quietly" in the sidebar lists the last 7 days.
+- The notifications debug view shows each thread's ping decisions: pinged or withheld, by the rules or the agent, and why.
+- One hourly usage event counts pings sent and withheld and threads handled quietly (counts only).
+
 ## 0.6.0 (2026-09-29)
 
 ### Changed

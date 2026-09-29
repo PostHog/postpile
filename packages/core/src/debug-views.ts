@@ -1,6 +1,7 @@
 // Read models for the debug view of the raw GitHub notification stream.
 
 import type { ActionLogEntry } from './github-writes.ts';
+import type { PingDecision } from './pings.ts';
 import type { EventKind, IsoTime, Loudness, NotificationThread, PrKey, TileStateKind } from './types.ts';
 
 /** Rows the debug endpoint returns when the request names no limit, and at most. */
@@ -9,6 +10,9 @@ export const DEBUG_NOTIFICATIONS_MAX_LIMIT = 1000;
 
 /** Logged events shown per PR when a debug row is expanded, newest first. */
 export const DEBUG_EVENTS_PER_PR = 5;
+
+/** Ping decisions shown per thread, newest first. */
+export const DEBUG_PING_DECISIONS_PER_THREAD = 3;
 
 /**
  * Where a notification thread ended up in the app.
@@ -62,4 +66,10 @@ export interface NotificationDebugRow {
   lastAction: ActionLogEntry | null;
   /** When lastAction is a queue send: the entry of the click that queued it (same batch). */
   decidedBy: ActionLogEntry | null;
+  /**
+   * The live poll's newest ping decisions for the thread (pinged or
+   * withheld, by the rules, the agent or the fallback, with the reason),
+   * newest first, at most DEBUG_PING_DECISIONS_PER_THREAD.
+   */
+  pingDecisions: PingDecision[];
 }

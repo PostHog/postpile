@@ -25,5 +25,6 @@ export const queryKeys = {
   setupChecks: ['setup-checks'] as const,
   setupSweep: ['setup-sweep'] as const,
   debugNotifications: (limit: number) => ['debug-notifications', limit] as const,
+  handledQuietly: ['handled-quietly'] as const,
   memorySources: (targetKey: string) => ['memory-sources', targetKey] as const,
 };

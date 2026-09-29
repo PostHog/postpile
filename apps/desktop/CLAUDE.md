@@ -24,7 +24,7 @@ The renderer shows what the local API returned and nothing else.
 ## Disabled, not hidden
 
 When something is not wired yet (no endpoint, no data), render it `disabled`
-with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it makes the gap invisible to the next agent.
+with a `title` that says why. Hiding it makes the gap invisible to the next agent.
 
 ## Data: typed query hooks, types from core
 
@@ -36,7 +36,8 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
   (`useMemorySources`, only enabled while a "Why?" panel is open), `debug.ts`
-  (`useDebugNotifications`, the notifications debug pane), `writes.ts`
+  (`useDebugNotifications`, the notifications debug pane), `quiet.ts`
+  (`useHandledQuietly`, the "Handled quietly" list), `writes.ts`
   (`useGitHubWrites`, the footer lock), `repos.ts` (`useRepos`, the
   title bar repo menu), `cleanup.ts` (`useInboxCleanup`), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
@@ -109,8 +110,14 @@ with a `title` that says why, like "Handled quietly" in the sidebar. Hiding it m
   undo, lock and action log as a tile). There is no "bring back": GitHub has
   no mark-unread, and the app never holds a read state GitHub doesn't have. Each row shows its last action log entry
   (`actionLine` in `lib/notifications.ts`); a read thread without one reads
-  as "read on github.com or another client". Keep the tooltips honest about
-  what reaches GitHub.
+  as "read on github.com or another client"; a quiet mark-read (origin
+  `quiet`) as "marked read by PostPile: only bot activity since your last
+  read". Rows also show the newest ping decision (`pingDecisionLine`), the
+  expanded row the last three. Keep the tooltips honest about what reaches
+  GitHub.
+- "Handled quietly" (`HandledQuietlyPane`, pane `quiet`) is read only: the
+  engine's own quiet mark-reads of the last 7 days, a click opens the tile.
+  No actions, no coral.
 - After an action the provider invalidates every query except the config.
   Mark-read and memory correction results carry an undo token; the toast
   offers Undo for the 6s window and the footer counts mark-reads in the
@@ -207,7 +214,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 
 - One component per file in `components/`, named like the UI part:
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
-  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`),
+  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
   `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
   title; the activity list then shows only earlier events),
@@ -338,8 +345,8 @@ the ones a queue filter does not match and folds snoozed / done ones.
 Tiles stay in one column (DESIGN.md "Three-pane balance").
 
 `App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
-"Your instructions", the notifications debug list, which also takes the
-detail pane's column), and the picked
+"Your instructions", the notifications debug list and "Handled quietly",
+which both also take the detail pane's column), and the picked
 tile + PR. Everything else is
 derived on render (`resolveSelection` in `lib/selection.ts`): a missing
 pick falls back to the first topic, its first tile and that tile's lead PR;

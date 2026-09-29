@@ -20,6 +20,20 @@ async function synced() {
 }
 
 describe('engine telemetry', () => {
+  it('sends pings_summarized after a sync once an hour has passed since the last one', async () => {
+    let now = new Date('2026-09-02T12:00:00Z');
+    const h = makeHarness({ now: () => now });
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.pingDecisions.add({ threadId: 't', prKey: pr.key, ping: false, source: 'agent', title: '', body: '', reason: 'r', at: '2026-09-02T12:10:00.000Z' });
+
+    now = new Date('2026-09-02T13:01:00Z');
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const summaries = h.telemetry.events.filter((e) => e.event === 'pings_summarized');
+    expect(summaries.map((e) => e.props)).toEqual([{ pinged: 0, withheld_rules: 0, withheld_agent: 1, handled_quietly: 0 }]);
+  });
+
   it('fires sync_completed (and first_sync_completed once) on a fresh database', async () => {
     const h = makeHarness();
     h.reader.addPr(pr, makeThreadFor(pr));

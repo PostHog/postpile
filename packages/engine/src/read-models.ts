@@ -38,6 +38,9 @@ import {
   type GlanceGap,
   type GlanceState,
   type NotificationDebugRow,
+  HANDLED_QUIETLY_DAYS,
+  pingDecisionsByThread,
+  type QuietReadView,
   type Pr,
   type PrDetail,
   type PrKey,
@@ -57,7 +60,7 @@ import {
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
-import { debugNotificationRows } from './debug-notifications.ts';
+import { debugNotificationRows, quietReadViews } from './debug-notifications.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { GlanceInputs, glanceTargetKeys } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
@@ -361,7 +364,17 @@ export class ReadModels {
       byPrKey: this.store.actionLog.latestByPrKey(),
       firstOfBatch: this.store.actionLog.firstOfBatches(),
     };
-    return debugNotificationRows(this.board(), this.store.notifications.list().slice(0, limit), actions);
+    const threads = this.store.notifications.list().slice(0, limit);
+    const decisions = pingDecisionsByThread(this.store.pingDecisions.listForThreads(threads.map((thread) => thread.id)));
+    return debugNotificationRows(this.board(), threads, actions, decisions);
+  }
+
+  /** "Handled quietly": the quiet mark-reads of the last HANDLED_QUIETLY_DAYS days, newest first. */
+  handledQuietly(): QuietReadView[] {
+    const since = new Date(this.now().getTime() - HANDLED_QUIETLY_DAYS * 24 * 3600_000).toISOString();
+    const entries = this.store.actionLog.listByOriginSince('quiet', since);
+    const titles = new Map(this.store.notifications.list().map((thread) => [thread.id, thread.title]));
+    return quietReadViews(this.board(), entries, titles);
   }
 
   /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */

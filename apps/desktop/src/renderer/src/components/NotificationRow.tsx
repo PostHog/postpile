@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { GitHubWritesStatus, NotificationDebugRow } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { actionLine, landingLabel, noTileReason, threadRef, type ActionTone } from '../lib/notifications.ts';
+import { actionLine, landingLabel, noTileReason, pingDecisionLine, threadRef, type ActionTone } from '../lib/notifications.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { ChevronIcon } from './icons.tsx';
@@ -84,6 +84,26 @@ function RecentEvents(props: { row: NotificationDebugRow }) {
   );
 }
 
+/** The live poll's newest ping decisions for the thread, under an expanded row. */
+function PingDecisions(props: { row: NotificationDebugRow }) {
+  const now = useNow();
+  if (props.row.pingDecisions.length === 0) {
+    return <p className="text-[11.5px] text-faint">No ping decision: the live poll never saw new activity on this thread.</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-1">
+      {props.row.pingDecisions.map((decision) => {
+        const line = pingDecisionLine(decision, now);
+        return (
+          <li key={`${decision.at}:${decision.source}`} className={`truncate text-[11.5px] select-text ${line.pinged ? 'text-ink-2' : 'text-muted'}`} title={line.title}>
+            {line.text}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /**
  * One stored notification thread. A click jumps to its tile (never marks
  * anything read); without a tile it says why inline. The chevron shows the
@@ -97,6 +117,8 @@ export function NotificationRow(props: { row: NotificationDebugRow; onOpenTile: 
   const { thread, landing } = row;
   const why = noTileReason(landing);
   const line = actionLine(row, now);
+  const newestDecision = row.pingDecisions[0];
+  const decision = newestDecision ? pingDecisionLine(newestDecision, now) : null;
 
   function open() {
     if (landing.kind === 'tile') {
@@ -135,6 +157,11 @@ export function NotificationRow(props: { row: NotificationDebugRow; onOpenTile: 
                 {line.text}
               </span>
             )}
+            {decision && (
+              <span className="truncate text-[11px] text-muted" title={decision.title}>
+                {decision.text}
+              </span>
+            )}
           </span>
           <span className="truncate font-mono text-[10.5px] text-ink-2">{thread.reason}</span>
           <span className={`truncate text-[11.5px] ${landing.kind === 'tile' ? 'text-accent' : 'text-muted'}`} title={landingLabel(landing)}>
@@ -149,8 +176,8 @@ export function NotificationRow(props: { row: NotificationDebugRow; onOpenTile: 
         <button
           type="button"
           aria-expanded={expanded}
-          aria-label="Recent events of this PR"
-          title="Recent events of this PR"
+          aria-label="Recent events and ping decisions"
+          title="Recent events and ping decisions"
           onClick={() => setExpanded(!expanded)}
           className="flex w-8 shrink-0 items-center justify-center text-faint hover:bg-subtle hover:text-ink"
         >
@@ -161,8 +188,12 @@ export function NotificationRow(props: { row: NotificationDebugRow; onOpenTile: 
       </div>
       {showWhy && why && <p className="mx-3 mb-2 rounded-row bg-subtle px-3 py-2 text-[11.5px] text-ink-2">{why}</p>}
       {expanded && (
-        <div className="mx-3 mb-2 rounded-row border border-hairline-soft px-3 py-2">
+        <div className="mx-3 mb-2 flex flex-col gap-2 rounded-row border border-hairline-soft px-3 py-2">
           <RecentEvents row={row} />
+          <div className="flex flex-col gap-1 border-t border-hairline-soft pt-2">
+            <h3 className="text-[10.5px] font-medium text-faint">Ping decisions</h3>
+            <PingDecisions row={row} />
+          </div>
         </div>
       )}
     </li>

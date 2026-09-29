@@ -1,8 +1,9 @@
 // Pure helpers for the notification debug view, shared by the engine and FakeEngine.
 
-import { DEBUG_EVENTS_PER_PR, type DebugEventLine } from './debug-views.ts';
+import { DEBUG_EVENTS_PER_PR, DEBUG_PING_DECISIONS_PER_THREAD, type DebugEventLine } from './debug-views.ts';
 import { prKey } from './keys.ts';
 import { effectiveLoudness } from './loudness.ts';
+import type { PingDecision } from './pings.ts';
 import type { NotificationThread, PrEvent, PrKey, PrRef } from './types.ts';
 
 /** The PR a thread is about, as a ref. Only PullRequest threads with a number map to one. */
@@ -33,4 +34,18 @@ export function debugEventLines(events: PrEvent[]): DebugEventLine[] {
       loudness: effectiveLoudness(event),
       seen: event.seenAt !== null,
     }));
+}
+
+/** Ping decisions grouped by thread, newest first, at most DEBUG_PING_DECISIONS_PER_THREAD each. Takes them in any order. */
+export function pingDecisionsByThread(decisions: PingDecision[]): Map<string, PingDecision[]> {
+  const result = new Map<string, PingDecision[]>();
+  const newestFirst = [...decisions].sort((a, b) => b.at.localeCompare(a.at));
+  for (const decision of newestFirst) {
+    const list = result.get(decision.threadId) ?? [];
+    if (list.length < DEBUG_PING_DECISIONS_PER_THREAD) {
+      list.push(decision);
+    }
+    result.set(decision.threadId, list);
+  }
+  return result;
 }

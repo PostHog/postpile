@@ -10,6 +10,7 @@ import type {
   InstructionsView,
   MemorySources,
   NotificationDebugRow,
+  QuietReadView,
   GitHubWritesStatus,
   InboxCleanupView,
   PrDetail,
@@ -178,6 +179,17 @@ describe('server routes over the fake engine', () => {
     expect((await app.request('/api/debug/notifications?limit=0')).status).toBe(400);
   });
 
+  it('lists the last 7 days of quiet mark-reads, newest first, and shows them and the ping decisions on debug rows', async () => {
+    const app = appWithFake();
+    const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
+    expect(quiet.map((item) => item.prKey)).toEqual(['acme/app#1904', 'acme/app#1899', 'acme/app#1921', 'acme/app#1963']);
+    expect(quiet[0]).toMatchObject({ repo: 'acme/app', number: 1904, title: 'Hash Turbo inputs by lockfile only', bots: ['trunk-io[bot]', 'CI'] });
+
+    const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
+    expect(rows.find((row) => row.prKey === 'acme/app#1904')?.lastAction).toMatchObject({ origin: 'quiet', outcome: 'github' });
+    expect(rows.find((row) => row.prKey === 'acme/app#1902')?.pingDecisions.map((decision) => decision.source)).toEqual(['agent', 'rules']);
+  });
+
   it('does not mark anything read when the debug list is read', async () => {
     const app = appWithFake();
     const before = (await (await app.request('/api/topics')).json()) as TopicListItem[];
@@ -271,7 +283,8 @@ describe('server routes over the fake engine', () => {
     expect(marked.json.message).toMatch(/pending until you unlock/);
 
     const log = (await (await app.request('/api/debug/actions')).json()) as ActionLogEntry[];
-    expect(log.map((entry) => [entry.action, entry.origin, entry.outcome])).toEqual([
+    // The sample "Handled quietly" rows come first in time, so they sit below the click.
+    expect(log.filter((entry) => entry.origin !== 'quiet').map((entry) => [entry.action, entry.origin, entry.outcome])).toEqual([
       ['mark_read', 'debug', 'queued'],
     ]);
     const after = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
