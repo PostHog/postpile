@@ -130,7 +130,7 @@ export class PingDecider {
     const tile = candidate.tile;
     const member = tile?.members.find((m) => m.prKey === candidate.pr.key);
     const turn = tile
-      ? whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer })
+      ? whoseTurn({ tile, prs: board.prs, events: board.events, userStates: board.userStates, viewer, notYours: board.notYours })
       : { kind: 'none' as const, who: null, what: '', prKey: null };
     return {
       id: candidate.threadId,

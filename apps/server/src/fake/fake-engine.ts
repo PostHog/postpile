@@ -369,6 +369,11 @@ export class FakeEngine implements EngineService {
     return new Map(keys.map((key) => [key, this.eventsOf(key)]));
   }
 
+  /** Sample PRs whose glance says NOT_YOURS, as the engine's Board keeps them. */
+  private notYours(): Set<PrKey> {
+    return new Set(this.data.glances.filter((glance) => glance.verdict === 'NOT_YOURS').map((glance) => glance.prKey));
+  }
+
   /** Core's tile state rule over the sample data, snoozes included. */
   private tileState(tile: Tile): TileState {
     return deriveTileState({
@@ -379,6 +384,7 @@ export class FakeEngine implements EngineService {
       snooze: this.snoozes.get(tile.id) ?? null,
       now: this.timestamp(),
       viewer: this.viewer(),
+      notYours: this.notYours(),
     });
   }
 
@@ -433,6 +439,7 @@ export class FakeEngine implements EngineService {
       events,
       userStates,
       viewer,
+      notYours: this.notYours(),
       pendingWrite: tile.members.map((member) => pending.get(member.prKey)).find((mark) => mark !== undefined) ?? null,
       quietRepo: isQuietTile(tile.members.map((member) => member.prKey), this.repoSettings),
       repoLabel: labels?.tile ?? null,

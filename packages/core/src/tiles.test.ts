@@ -46,6 +46,16 @@ describe('isPrDone', () => {
     expect(isPrDone(pr, makeUserState({ approvedAt: at(1), approvedCommitOid: 'h2' }))).toBe(true);
   });
 
+  it('is done after mark-read on a routed team request that waits or is not yours', () => {
+    const withTeam = { ...viewer, teamMembers: ['lyra'] };
+    const handled = makeUserState({ handledAt: at(1) });
+    const routed = makePr({ author: 'rowan', reviewerTeams: ['acme/team-platform'] });
+    expect(isPrDone(routed, handled, withTeam)).toBe(false);
+    expect(isPrDone(routed, handled, withTeam, [], true)).toBe(true);
+    const blocked = { ...routed, reviews: [makeReview({ author: 'ada', state: 'CHANGES_REQUESTED' })] };
+    expect(isPrDone(blocked, handled, withTeam)).toBe(true);
+  });
+
   it('is not done after mark-read while your personal review is pending', () => {
     const pr = makePr({ author: 'ada', reviewerUsers: [viewer.login] });
     expect(isPrDone(pr, handled, teamViewer)).toBe(false);
