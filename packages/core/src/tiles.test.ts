@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, singleTile, viewer } from './fixtures.ts';
+import { at, makeComment, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, singleTile, viewer } from './fixtures.ts';
 import { buildStacks } from './stacks.ts';
 import {
   buildTopicTiles,
@@ -169,7 +169,7 @@ describe('deriveTileState', () => {
     const state = deriveTileState(stateInput(tile, [pr], [loud], [], [unreadThread]));
     expect(state).toEqual({
       kind: 'unread',
-      unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', actor: 'bob', summary: 'bob mentioned you', at: loud.at }],
+      unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', actor: 'bob', summary: 'bob mentioned you', at: loud.at, automation: false, loud: true, importance: 0 }],
       unreadOnGitHub: true,
       loud: true,
     });
@@ -205,7 +205,43 @@ describe('deriveTileState', () => {
     expect(quiet.unreadBecause.map((r) => [r.eventId, r.summary])).toEqual([['quiet', 'lyra commented']]);
     const seen = events.map((event) => ({ ...event, seenAt: at(40) }));
     const bare = deriveTileState(stateInput(tile, [pr], seen, [handled], [unreadThread]));
-    expect(bare.unreadBecause).toEqual([{ prKey: pr.key, eventId: `thread:${unreadThread.id}`, kind: 'comment', actor: 'bob', summary: 'new activity on GitHub', at: unreadThread.updatedAt }]);
+    expect(bare.unreadBecause).toEqual([{ prKey: pr.key, eventId: `thread:${unreadThread.id}`, kind: 'comment', actor: 'bob', summary: 'new activity on GitHub', at: unreadThread.updatedAt, automation: false, loud: false, importance: 4 }]);
+  });
+
+  it('leads with the merge without review, not the deploy bot that posted last', () => {
+    const events = [
+      makeEvent({ id: 'approval', kind: 'review_approved', at: at(10), actor: 'lyra', isBot: false }),
+      makeEvent({ id: 'merge', kind: 'merged_without_review', at: at(20), actor: 'trunk-io[bot]', isBot: true, summary: 'trunk-io[bot] merged without your review' }),
+      makeEvent({ id: 'ci', kind: 'ci', at: at(25), actor: '', isBot: true }),
+      makeEvent({ id: 'deploy', kind: 'deploy', at: at(30), actor: 'deployment-status-posthog[bot]', isBot: true, summary: 'deploy' }),
+    ];
+    const state = deriveTileState(stateInput(tile, [pr], events, [handled], [unreadThread]));
+    expect(state.unreadBecause.map((r) => r.eventId)).toEqual(['merge']);
+    const botOnly = deriveTileState(stateInput(tile, [pr], events.filter((e) => e.isBot && e.kind !== 'merged_without_review'), [handled], [unreadThread]));
+    expect(botOnly.unreadBecause.map((r) => [r.eventId, r.automation, r.loud])).toEqual([['deploy', true, false]]);
+  });
+
+  it('ranks the headline across the whole set, not per PR', () => {
+    const other = makePr({ number: 2 });
+    const setTile: Tile = { ...tile, id: 'set:s1', kind: 'set', members: [...tile.members, { ...tile.members[0]!, prKey: other.key }] };
+    const events = [
+      makeEvent({ id: 'merge', kind: 'merged_without_review', at: at(20), actor: 'trunk-io[bot]', isBot: true }),
+      makeEvent({ id: 'deploy', prKey: other.key, kind: 'deploy', at: at(30), actor: 'deployment-status-posthog[bot]', isBot: true }),
+    ];
+    const input = stateInput(setTile, [pr, other], events, [handled], [unreadThread, makeThreadFor(other, { lastReadAt: at(1) })]);
+    const reasons = deriveTileState(input).unreadBecause;
+    expect(reasons.map((r) => r.eventId)).toEqual(['deploy', 'merge']);
+  });
+
+  it('does not treat a routing team mention as an ask', () => {
+    const routed: Viewer = { ...teamViewer, teams: ['acme/team-platform', 'acme/team-routing'], homeTeams: ['acme/team-platform'] };
+    const withMention = makePr({ comments: [makeComment({ id: 'c1', author: 'bob', body: 'fyi @acme/team-routing' })] });
+    const events = [
+      makeEvent({ id: 'fyi', kind: 'team_mention', sourceId: 'c1', at: at(30) }),
+      makeEvent({ id: 'chat', kind: 'comment', sourceId: 'c2', at: at(20) }),
+    ];
+    const input = { ...stateInput(singleTile(withMention), [withMention], events, [handled], [makeThreadFor(withMention, { lastReadAt: at(1) })]), viewer: routed };
+    expect(deriveTileState(input).unreadBecause.map((r) => [r.eventId, r.importance])).toEqual([['chat', 3]]);
   });
 
   it('shows a done PR unread while its thread is unread on GitHub, done once read', () => {

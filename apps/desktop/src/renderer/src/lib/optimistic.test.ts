@@ -47,7 +47,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
 function unreadTile(prs: PrSummary[]): TileView {
   return withOffers({
     tile: { id: 'set:s1', topicId: 't1', kind: 'set', title: 'Cache PRs', members: [], stacks: [] },
-    state: { kind: 'unread', unreadBecause: [{ prKey: 'acme/app#1', eventId: 'e1', kind: 'mention', actor: 'lyra', summary: 'x', at: at(1) }], unreadOnGitHub: true, loud: true },
+    state: { kind: 'unread', unreadBecause: [{ prKey: 'acme/app#1', eventId: 'e1', kind: 'mention', actor: 'lyra', summary: 'x', at: at(1), automation: false, loud: true, importance: 0 }], unreadOnGitHub: true, loud: true },
     prs,
     why: '@',
     forWhom: { kind: 'you' },

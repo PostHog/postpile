@@ -59,6 +59,9 @@ describe('Depot examples', () => {
         actor: 'carol',
         summary: 'carol asked you: @viewer runner labels ok?',
         at: at(10),
+        automation: false,
+        loud: true,
+        importance: 0,
       },
     ]);
   });

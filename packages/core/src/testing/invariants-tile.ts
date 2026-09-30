@@ -4,6 +4,7 @@
 import type { WhoseTurn, WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
 import type { PrTier } from '../pr-tier.ts';
+import type { Pr, PrEvent } from '../types.ts';
 import { tileListRank } from '../tile-view.ts';
 import type { TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
@@ -58,6 +59,45 @@ function tileNews(board: PropertyBoard, view: TileView) {
  * news; else its newest unseen quiet event after the thread's read; else the
  * thread itself.
  */
+/** A team mention naming only routing teams (none of the home teams): FYI, never an ask. */
+function isRoutingOnlyMention(event: PrEvent, pr: Pr, board: PropertyBoard): boolean {
+  const body = (pr.comments.find((comment) => comment.id === event.sourceId)?.body ?? '').toLowerCase();
+  const mentioned = board.viewer.teams.filter((team) => body.includes(`@${team.toLowerCase()}`) || body.includes(`@${team.split('/').pop()!.toLowerCase()}`));
+  const home = board.viewer.homeTeams ?? board.viewer.teams;
+  return mentioned.length > 0 && mentioned.every((team) => !home.includes(team));
+}
+
+/** Headline class restated from raw fields: ask 0, merged or closed 1, verdict 2, comment 3, other human 4, automation 5. */
+function headlineRank(event: PrEvent, pr: Pr, board: PropertyBoard): number {
+  if (event.kind === 'merged_without_review' || event.kind === 'closed') {
+    return 1;
+  }
+  const subject = pr.timeline.find((item) => item.id === event.sourceId)?.subject ?? '';
+  const asksViewer = event.kind === 'review_requested' && (subject === board.viewer.login || board.viewer.teams.some((team) => team.endsWith(`/${subject.split('/').pop()}`) || team === subject));
+  if (asksViewer) {
+    return 0;
+  }
+  if (event.isBot || event.actor === '') {
+    return 5;
+  }
+  if (event.kind === 'team_mention' && isRoutingOnlyMention(event, pr, board)) {
+    return 4;
+  }
+  if (['mention', 'team_mention', 'question_to_user', 'reply_to_user'].includes(event.kind)) {
+    return 0;
+  }
+  if (event.kind === 'review_approved' || event.kind === 'review_changes_requested') {
+    return 2;
+  }
+  return event.kind === 'comment' || event.kind === 'review_commented' ? 3 : 4;
+}
+
+function expectedHeadline(events: PrEvent[], pr: Pr, board: PropertyBoard): PrEvent | undefined {
+  // On a tie in class and time the later event in the list wins.
+  const ranked = events.toReversed().toSorted((a, b) => headlineRank(a, pr, board) - headlineRank(b, pr, board) || (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  return ranked[0];
+}
+
 function expectedReasonIds(board: PropertyBoard, key: string): string[] {
   const events = eventsOf(board, key);
   const news = events.filter(isNews);
@@ -69,7 +109,8 @@ function expectedReasonIds(board: PropertyBoard, key: string): string[] {
     const loudness = event.override ? event.override.loudness : event.ruleLoudness;
     return event.seenAt === null && loudness === 'quiet' && (thread.lastReadAt === null || event.at > thread.lastReadAt);
   });
-  return quiet.length > 0 ? [quiet.at(-1)!.id] : [`thread:${thread.id}`];
+  const headline = expectedHeadline(quiet, prOf(board, key), board);
+  return headline ? [headline.id] : [`thread:${thread.id}`];
 }
 
 /**
@@ -91,7 +132,7 @@ function loudWithoutThreadKeys(board: PropertyBoard, view: TileView): string[] {
  * while it is not snoozed and one of its threads is unread on GitHub,
  * whatever else holds (done, loud or not), or a pulled-in layer has loud
  * news, or a Look closer event is unseen (unread here while read on GitHub
- * is fine, never the reverse). The reasons name those PRs, oldest first.
+ * is fine, never the reverse). The reasons name those PRs, least important first (the last is the headline).
  */
 export const unreadWhileAThreadIsUnread: Invariant = {
   name: 'a tile is unread exactly while not snoozed and a thread of it is unread on GitHub, a pulled-in layer has loud news or a Look closer is unseen',
@@ -108,8 +149,15 @@ export const unreadWhileAThreadIsUnread: Invariant = {
           ...loudKeys.flatMap((key) => eventsOf(board, key).filter(isNews).map((event) => event.id)),
         ].sort();
         ensure(JSON.stringify(reasons) === JSON.stringify(want), `${view.tile.id}: unread reasons ${reasons.join(', ')}, expected ${want.join(', ')}`);
-        const times = view.state.unreadBecause.map((reason) => reason.at);
-        ensure(times.every((time, index) => index === 0 || times[index - 1]! <= time), `${view.tile.id}: unread reasons out of time order`);
+        // Least important first, oldest first within a class: the last reason is the tile's headline.
+        const order = view.state.unreadBecause.map((reason) => {
+          const event = eventsOf(board, reason.prKey).find((candidate) => candidate.id === reason.eventId);
+          return { rank: event ? headlineRank(event, prOf(board, reason.prKey), board) : 4, at: reason.at };
+        });
+        ensure(
+          order.every((item, index) => index === 0 || order[index - 1]!.rank > item.rank || (order[index - 1]!.rank === item.rank && order[index - 1]!.at <= item.at)),
+          `${view.tile.id}: unread reasons not ordered by importance then time`,
+        );
         ensure(view.state.unreadBecause.every((reason) => unreadKeys.includes(reason.prKey) || loudKeys.includes(reason.prKey)), `${view.tile.id}: a reason names a PR that holds nothing unread`);
       } else {
         ensure(view.state.unreadBecause.length === 0, `${view.tile.id}: ${view.state.kind} tile with unread reasons`);
