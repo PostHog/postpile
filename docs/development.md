@@ -56,6 +56,17 @@ The packaged app bundles main, preload, renderer, the workspace packages and the
 
 Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPile-dev`), rotated at 5 MB. Help › Reveal Logs opens the folder.
 
+## Screenshots
+
+The README screenshots in `docs/images/` come from `pnpm screenshots`. It builds the renderer, starts the sample data server and a static file server on free ports, and takes one cropped shot per entry of the list at the top of `scripts/screenshots.ts`. Add a shot by adding an entry (name, selector, optional setup and cursor).
+
+```
+npx playwright install chromium   # once
+pnpm screenshots
+```
+
+Run it on a Mac only, because the macOS system font is part of the look, so there is no CI job. Commit the changed PNGs with the UI change that caused them.
+
 ## Configuration
 
 Instructions for every prompt go in `~/.config/postpile/instructions.md` (honours `XDG_CONFIG_HOME`, or set `POSTPILE_INSTRUCTIONS`). The app also changes this file, but only through proposals you accept.
