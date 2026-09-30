@@ -2,6 +2,7 @@
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
 import { isBot, isMadeByAutomation } from './bots.ts';
 import { changesAnswered, standingChanges, type ChangesAnswer } from './changes-answered.ts';
+import { editMentionOf } from './events.ts';
 import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
@@ -123,7 +124,24 @@ function touchedSince(pr: Pr, events: PrEvent[], viewer: Viewer, since: string):
 }
 
 /**
- * A human event of `kinds` aimed at the viewer that they have not answered
+ * The ask an event makes, as its kind: a person's comment edit that now
+ * mentions the viewer asks like a mention, one that mentions a home team
+ * like a team mention (`editMentionOf`), at the edit time. Any other event
+ * is its own kind.
+ */
+export function askKindOf(event: PrEvent, pr: Pr, viewer: Viewer): EventKind {
+  if (event.kind !== 'comment_edited') {
+    return event.kind;
+  }
+  const edit = editMentionOf(event, pr, viewer);
+  if (edit === 'you') {
+    return 'mention';
+  }
+  return edit === 'team' ? 'team_mention' : event.kind;
+}
+
+/**
+ * A human event of `kinds` (`askKindOf`: a mention edit asks like a mention) aimed at the viewer that they have not answered
  * since (no touch after it: comment, review, push to their own PR; `events`
  * are the PR's events, where the touches are). A team mention only asks until it
  * is read: once seen (mark-read in the app or read on GitHub) it no longer
@@ -132,10 +150,11 @@ function touchedSince(pr: Pr, events: PrEvent[], viewer: Viewer, since: string):
  * nothing (decided 2026-09-29).
  */
 export function isUnansweredAsk(pr: Pr, events: PrEvent[], event: PrEvent, viewer: Viewer, kinds: readonly EventKind[] = ADDRESSED_KINDS): boolean {
-  if (!kinds.includes(event.kind) || isMadeByAutomation(event) || sameLogin(event.actor, viewer.login)) {
+  const kind = askKindOf(event, pr, viewer);
+  if (!kinds.includes(kind) || isMadeByAutomation(event) || sameLogin(event.actor, viewer.login)) {
     return false;
   }
-  if (event.kind === 'team_mention' && event.seenAt !== null) {
+  if (kind === 'team_mention' && event.seenAt !== null) {
     return false;
   }
   if (effectiveLoudness(event) !== 'loud') {
@@ -184,8 +203,8 @@ const ASK_VERBS: Record<string, { alone: (actor: string) => string; withReview: 
   team_mention: { alone: (actor) => `${actor} mentioned your team`, withReview: 'mentioned your team' },
 };
 
-function askText(ask: PrEvent, reviewToo: boolean): string {
-  const verbs = ASK_VERBS[ask.kind]!;
+function askText(ctx: PrContext, ask: PrEvent, reviewToo: boolean): string {
+  const verbs = ASK_VERBS[askKindOf(ask, ctx.pr, ctx.viewer)]!;
   return reviewToo ? `Review, ${ask.actor} ${verbs.withReview}` : verbs.alone(ask.actor);
 }
 
@@ -310,7 +329,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
 function draftTurn(ctx: PrContext): WhoseTurn {
   const ask = unansweredAsk(ctx.pr, ctx.events, ctx.viewer, PERSONAL_ASK_KINDS);
   if (ask) {
-    return you(ctx, 'reply', `${askText(ask, false)} on draft`);
+    return you(ctx, 'reply', `${askText(ctx, ask, false)} on draft`);
   }
   if (!isPrOwner(ctx.pr, ctx.viewer.login)) {
     return NO_TURN;
@@ -349,7 +368,7 @@ function prTurn(ctx: PrContext): WhoseTurn {
     const reviewToo = isPrOwner(ctx.pr, ctx.viewer.login)
       ? false
       : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && viewerHeadReview(ctx.pr, ctx.viewer) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
-    return you(ctx, 'reply', askText(ask, reviewToo));
+    return you(ctx, 'reply', askText(ctx, ask, reviewToo));
   }
   return isPrOwner(ctx.pr, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
 }

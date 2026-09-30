@@ -72,12 +72,22 @@ export function isAutomationEvent(pr: Pr, viewer: Viewer | null, event: PrEvent)
   return madeByAutomation && !asksTheViewer;
 }
 
-/** A person's event of `kinds` for the viewer, still loud, and no touch of theirs since; a team mention asks only until seen. */
+/** The ask an event makes: a person's edit that now mentions the viewer asks like a mention, one naming a home team like a team mention. */
+export function askKindOfEvent(pr: Pr, viewer: Viewer, event: PrEvent): EventKind {
+  const edit = editAsks(pr, viewer, event);
+  if (edit === 'you') {
+    return 'mention';
+  }
+  return edit === 'team' ? 'team_mention' : event.kind;
+}
+
+/** A person's event of `kinds` for the viewer (by the ask it makes), still loud, and no touch of theirs since; a team mention asks only until seen. */
 function isOpenAsk(pr: Pr, viewer: Viewer, event: PrEvent, kinds: readonly EventKind[]): boolean {
-  if (!kinds.includes(event.kind) || event.isBot || event.actor === '' || isViewerLogin(viewer, event.actor)) {
+  const kind = askKindOfEvent(pr, viewer, event);
+  if (!kinds.includes(kind) || event.isBot || event.actor === '' || isViewerLogin(viewer, event.actor)) {
     return false;
   }
-  if (event.kind === 'team_mention' && event.seenAt !== null) {
+  if (kind === 'team_mention' && event.seenAt !== null) {
     return false;
   }
   const touch = newestTouch(pr, viewer);
@@ -140,7 +150,7 @@ function draftTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
   const ask = openAsk(pr, input.events, viewer, SPEC_PERSONAL_ASK_KINDS);
   if (ask) {
-    return you('reply', `${ASK_WORDS[ask.kind]!.alone(ask.actor)} on draft`);
+    return you('reply', `${ASK_WORDS[askKindOfEvent(pr, viewer, ask)]!.alone(ask.actor)} on draft`);
   }
   if (!viewerOwns(pr, viewer)) {
     return NONE;
@@ -286,7 +296,7 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
     const own = viewerOwns(pr, viewer);
     const request = pendingRequest(pr, viewer);
     const reviewToo = !own && (request === 'you' || request === 'team_for_you') && !viewerReviewedHead(pr, viewer, input.userState);
-    const words = ASK_WORDS[ask.kind]!;
+    const words = ASK_WORDS[askKindOfEvent(pr, viewer, ask)]!;
     return you('reply', reviewToo ? `Review, ${ask.actor} ${words.withReview}` : words.alone(ask.actor));
   }
   return viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input);

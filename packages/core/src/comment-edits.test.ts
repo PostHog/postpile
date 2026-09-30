@@ -9,7 +9,9 @@ import { at, makeComment, makeCommit, makePr, makeThreadFor, makeTimelineItem, v
 import { headlineClass } from './headline.ts';
 import { isPersonalPing, pingRule } from './pings.ts';
 import { isAskOfViewer, isAutomationFinding, judgedReadCheck, quietReadCheck, touchedReadCheck, type QuietReadInput } from './quiet-reads.ts';
+import { prTier } from './pr-tier.ts';
 import type { Comment, Pr, PrEvent, Viewer } from './types.ts';
+import { prWhoseTurn, unansweredAsk } from './whose-turn.ts';
 
 function edited(overrides: Partial<Comment>): Comment {
   return makeComment({ createdAt: at(10), lastEditedAt: at(30), ...overrides });
@@ -117,6 +119,40 @@ describe('deriveEvents: comment edits', () => {
     });
     const classOf = (id: string) => headlineClass(edits(pr).find((event) => event.sourceId === id)!, pr, viewer);
     expect([classOf('plain'), classOf('ask'), classOf('bot')]).toEqual([3, 0, 5]);
+  });
+});
+
+describe('comment edits as asks: whose move and tier', () => {
+  // ada commented at 10, the viewer answered at 20, ada edited her comment at 30 to ask the viewer.
+  function adaPr(extra: Comment[] = [], body = '@viewer can you check the flag name?'): Pr {
+    return makePr({
+      author: 'ada',
+      comments: [edited({ id: 'ask', author: 'ada', editor: 'ada', body, createdAt: at(10), lastEditedAt: at(30) }), makeComment({ id: 'mine', author: 'viewer', body: 'looks fine', createdAt: at(20) }), ...extra],
+    });
+  }
+
+  it('makes an edit that now mentions the viewer an unanswered ask: reply move, Needs reply', () => {
+    const pr = adaPr();
+    const events = deriveEvents(pr, viewer, null);
+    expect(unansweredAsk(pr, events, viewer)?.kind).toBe('comment_edited');
+    expect(prWhoseTurn({ pr, events, userState: null, viewer })).toMatchObject({ kind: 'you', move: 'reply', what: 'ada mentioned you' });
+    expect(prTier({ pr, events, viewer, userState: null, reason: 'subscribed' })).toBe('needs_reply');
+  });
+
+  it('is answered by a later comment of the viewer', () => {
+    const pr = adaPr([makeComment({ id: 'again', author: 'viewer', body: 'renamed it', createdAt: at(40) })]);
+    const events = deriveEvents(pr, viewer, null);
+    expect(unansweredAsk(pr, events, viewer)).toBeNull();
+    expect(prTier({ pr, events, viewer, userState: null, reason: 'subscribed' })).not.toBe('needs_reply');
+  });
+
+  it('asks like a team mention when the edit names a home team: a move until seen, not Needs reply', () => {
+    const pr = adaPr([], 'cc @acme/team-platform for the flag name');
+    const events = deriveEvents(pr, viewer, null);
+    expect(prWhoseTurn({ pr, events, userState: null, viewer })).toMatchObject({ kind: 'you', move: 'reply', what: 'ada mentioned your team' });
+    expect(prTier({ pr, events, viewer, userState: null, reason: 'subscribed' })).not.toBe('needs_reply');
+    const seen = events.map((event) => ({ ...event, seenAt: at(35) }));
+    expect(unansweredAsk(pr, seen, viewer)).toBeNull();
   });
 });
 
