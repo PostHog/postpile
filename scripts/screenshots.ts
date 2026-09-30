@@ -15,9 +15,9 @@ interface Shot {
   name: string;
   /** Clicks and waits before the shot. */
   setup?: (page: Page) => Promise<void>;
-  /** The element to crop to. */
-  selector: string;
-  /** Where to draw a cursor, in page pixels. Gets the cropped element's box. */
+  /** The element to crop to. Several selectors crop to the box around all of them. */
+  selector: string | string[];
+  /** Where to draw a cursor, in page pixels. Gets the cropped box. */
   cursor?: (box: Box) => { x: number; y: number };
 }
 
@@ -29,22 +29,28 @@ interface Box {
 }
 
 const SELECTED_TILE = 'article.border-accent';
-const APPROVE = 'button:has-text("Approve")';
+const DETAILS = 'aside[aria-label="Details"]';
+const TILE_ROWS = 'article:has-text("rowan/depot: e2e layer")';
 
+// Each shot is one feature, cropped tight. Run one with: pnpm screenshots <name>
 const SHOTS: Shot[] = [
-  { name: 'tiles', selector: 'article >> xpath=..', setup: selectFirstTile },
-  { name: 'detail', selector: 'aside[aria-label="Details"]', setup: selectFirstTile },
-  { name: 'topics', selector: 'nav[aria-label="Topics"]' },
-  { name: 'glance', selector: SELECTED_TILE, setup: selectLookCloserTile },
+  { name: 'topic-row', selector: 'nav[aria-label="Topics"] button:has-text("Move CI to Depot")' },
+  { name: 'queues', selector: '[role="group"][aria-label="Filter topics"]' },
+  { name: 'tile', selector: 'article:has-text("DEPOT_TOKEN went in")' },
+  { name: 'stack', selector: `${TILE_ROWS} >> text=#1851 >> xpath=../../..` },
+  { name: 'glance', selector: `${DETAILS} div.rounded-box:has-text("Look closer") >> xpath=..`, setup: selectFirstTile },
+  { name: 'new-since', selector: `${DETAILS} div.rounded-box:has-text("New since you looked")`, setup: selectFirstTile },
+  { name: 'dossier', selector: 'main >> text=Status >> xpath=..' },
   {
-    name: 'actions',
-    selector: `aside[aria-label="Details"] ${APPROVE} >> xpath=..`,
+    name: 'approve',
+    selector: `${DETAILS} button:has-text("Approve") >> xpath=..`,
     setup: selectFirstTile,
     cursor: (box) => ({ x: box.x + 60, y: box.y + box.height / 2 + 8 }),
   },
+  { name: 'status-bar', selector: ['footer >> text=unread >> nth=0', 'footer >> text=live poll off'] },
 ];
 
-const PADDING = 16;
+const PADDING = 12;
 const WIDTH = 1440;
 const HEIGHT = 900;
 const TOKEN = 'screenshots';
@@ -64,11 +70,6 @@ const CURSOR_SVG =
 
 async function selectFirstTile(page: Page): Promise<void> {
   await page.locator('article').first().click({ position: { x: 12, y: 12 } });
-  await page.locator(SELECTED_TILE).first().waitFor();
-}
-
-async function selectLookCloserTile(page: Page): Promise<void> {
-  await page.locator('article', { hasText: 'Look closer' }).first().click({ position: { x: 12, y: 12 } });
   await page.locator(SELECTED_TILE).first().waitFor();
 }
 
@@ -146,16 +147,30 @@ async function drawCursor(page: Page, x: number, y: number): Promise<void> {
   );
 }
 
+async function boxAround(page: Page, shot: Shot): Promise<Box> {
+  const selectors = Array.isArray(shot.selector) ? shot.selector : [shot.selector];
+  const boxes: Box[] = [];
+  for (const selector of selectors) {
+    const target = page.locator(selector).first();
+    await target.scrollIntoViewIfNeeded();
+    const box = await target.boundingBox();
+    if (!box) {
+      throw new Error(`${shot.name}: ${selector} has no box`);
+    }
+    boxes.push(box);
+  }
+  const left = Math.min(...boxes.map((box) => box.x));
+  const top = Math.min(...boxes.map((box) => box.y));
+  const right = Math.max(...boxes.map((box) => box.x + box.width));
+  const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
 async function takeShot(page: Page, shot: Shot): Promise<void> {
   await page.reload();
   await page.locator('article').first().waitFor();
   await shot.setup?.(page);
-  const target = page.locator(shot.selector).first();
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
-  if (!box) {
-    throw new Error(`${shot.name}: ${shot.selector} has no box`);
-  }
+  const box = await boxAround(page, shot);
   if (shot.cursor) {
     const point = shot.cursor(box);
     await drawCursor(page, point.x, point.y);
@@ -187,7 +202,8 @@ async function main(): Promise<void> {
     try {
       const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 2 });
       await page.goto(`http://127.0.0.1:${webPort}/index.html?api=http://127.0.0.1:${apiPort}&token=${TOKEN}`);
-      for (const shot of SHOTS) {
+      const only = process.argv.slice(2);
+      for (const shot of SHOTS.filter((candidate) => only.length === 0 || only.includes(candidate.name))) {
         await takeShot(page, shot);
       }
     } finally {
