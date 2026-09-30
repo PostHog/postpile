@@ -3,7 +3,7 @@ import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
 import { kindParts, prNumber, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, NotDoneDot, StackMark, StateWordLabel } from './pills.tsx';
+import { ForWhomChip, UnreadDot, StackMark, StateWordLabel } from './pills.tsx';
 
 interface DetailContextProps {
   view: TileView;
@@ -110,7 +110,7 @@ export function DetailContext(props: DetailContextProps) {
               >
                 <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} className="mx-[3px]" />
                 {/* Hangs in the row padding, so every row's #number starts at the same x. */}
-                {view.notDonePrKeys.includes(pr.key) && <NotDoneDot className="absolute top-[13px] left-1" />}
+                {view.unreadPrKeys.includes(pr.key) && <UnreadDot className="absolute top-[13px] left-1" />}
                 <span className="shrink-0 font-mono text-[11px] text-hint">#{prNumber(pr.key)}</span>
                 {place && <StackMark place={place} />}
                 <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>

@@ -18,14 +18,15 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
 };
 
 /**
- * The coral dot in front of a PR number on a PR that keeps its tile from
- * being done (core `TileView.notDonePrKeys`), on unread and open tiles. The one coral
- * mark that is not "new since you looked" (DESIGN.md "Actions act on what
- * you look at": no second, read-only dot).
+ * The coral dot in front of a PR number on an unread PR (core
+ * `TileView.unreadPrKeys`: an unread thread on GitHub, a pulled-in layer
+ * with loud news, an unseen Look closer event), and on a topic with unread
+ * PRs. It means exactly "unread", so the dots add up to GitHub's unread
+ * count. What is seen but still owed is the honey "Your move" instead.
  */
-export function NotDoneDot(props: { className?: string }) {
+export function UnreadDot(props: { className?: string }) {
   return (
-    <span role="img" aria-label="Not done yet" title="Not done yet" className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft ${props.className ?? ''}`} />
+    <span role="img" aria-label="Unread" title="Unread" className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft ${props.className ?? ''}`} />
   );
 }
 

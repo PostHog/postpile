@@ -67,6 +67,33 @@ export function isNews(event: PrEvent): boolean {
   return event.seenAt === null && loudness === 'loud';
 }
 
+/**
+ * The PRs of a tile that are unread, per "GitHub unread is PostPile unread"
+ * (2026-09-30), spelled out from the board: a tracked thread unread on
+ * GitHub; on an unread tile also a pulled-in layer with unseen loud news and
+ * a not-found PR with an unseen Look closer event. A snoozed tile counts its
+ * unread threads only. Open and done tiles have none.
+ */
+export function expectedUnreadRows(board: PropertyBoard, view: TileView): PrKey[] {
+  if (view.state.kind !== 'unread' && view.state.kind !== 'snoozed') {
+    return [];
+  }
+  const rows = view.prs.filter((row) => {
+    if (board.threads.get(row.key)?.unread === true && row.provenance.kind !== 'found') {
+      return true;
+    }
+    if (view.state.kind === 'snoozed') {
+      return false;
+    }
+    const events = eventsOf(board, row.key);
+    if (row.provenance.kind === 'pulled_in') {
+      return events.some(isNews);
+    }
+    return row.provenance.kind !== 'found' && events.some((event) => event.kind === 'look_closer' && isNews(event));
+  });
+  return rows.map((row) => row.key);
+}
+
 /** Two turns name the same move on the same PR (the words differ between a tile and a row: " on #12"). */
 export function sameMove(a: WhoseTurn, b: WhoseTurn): boolean {
   const moveOf = (turn: WhoseTurn) => (turn.kind === 'you' ? turn.move : null);

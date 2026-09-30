@@ -14,6 +14,7 @@ function item(id: string, unreadTiles: number, placement: Partial<TopicPlacement
     statusLine: null,
     group: unreadTiles > 0 ? 'needs_you' : 'quiet',
     unreadTiles,
+    unreadPrs: unreadTiles,
     urgentUnreadTiles: unreadTiles,
     openTiles: 0,
     totalTiles: 1,

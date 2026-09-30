@@ -107,25 +107,28 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
 }
 
 /**
- * The PRs that keep the tile from being done (2026-09-29, replaced "the new
- * dot"): every tracked PR that is not done (`PrSummary.done`, `isPrDone`),
- * or that still has an unseen loud event or a thread unread on GitHub (both
- * keep the tile from being done). A pulled-in stack layer counts once it has unseen loud news
- * (2026-09-30): that news keeps the tile from being done. Their rows get the
- * coral dot ("Not done yet"), on unread and open tiles alike; a done or
- * snoozed tile has none. Mark a dotted PR done and its dot goes; no dots
- * left, the tile is done. Only where it says which PR holds the tile: with
- * a single PR that can hold it the dot would only repeat the tile's state.
+ * The PRs that make a tile unread (2026-09-30, "GitHub unread is PostPile
+ * unread"; replaced the "Not done yet" dot): a tracked thread unread on
+ * GitHub, a pulled-in layer with unseen loud news, an unseen Look closer
+ * event. They are the PRs in `TileState.unreadBecause`, plus every PR with
+ * an unread thread, which a snoozed tile keeps counting (its snooze stays,
+ * its unread threads do not go away). Open and done tiles have none. The
+ * dots add up to GitHub's unread count, tile by tile and topic by topic.
  */
-export function notDonePrKeys(view: Pick<TileView, 'state' | 'prs'>): PrKey[] {
-  if (view.state.kind !== 'unread' && view.state.kind !== 'open') {
+export function unreadPrKeysOf(state: Pick<TileState, 'kind' | 'unreadBecause'>, unreadThreadKeys: PrKey[]): PrKey[] {
+  if (state.kind === 'snoozed') {
+    return [...new Set(unreadThreadKeys)];
+  }
+  if (state.kind !== 'unread') {
     return [];
   }
-  const counted = view.prs.filter((pr) => isTracked(pr.provenance) || pr.unseenLoudEvents > 0);
-  if (counted.length <= 1) {
-    return [];
-  }
-  return counted.filter((pr) => !pr.done || pr.unseenLoudEvents > 0 || pr.unreadOnGitHub).map((pr) => pr.key);
+  return [...new Set([...state.unreadBecause.map((reason) => reason.prKey), ...unreadThreadKeys])];
+}
+
+/** `unreadPrKeysOf` for a tile's rows, in tile order. */
+export function tileUnreadPrKeys(state: TileState, prs: PrSummary[]): PrKey[] {
+  const keys = new Set(unreadPrKeysOf(state, prs.filter((pr) => pr.unreadOnGitHub).map((pr) => pr.key)));
+  return prs.filter((pr) => keys.has(pr.key)).map((pr) => pr.key);
 }
 
 export interface TileViewInput {
@@ -173,7 +176,7 @@ export function buildTileView(input: TileViewInput): TileView {
     afterRead,
     pendingWrite: input.pendingWrite,
     offers: tileOffers({ tile, state: input.state, turn, afterRead, prs, pendingWrite: input.pendingWrite }),
-    notDonePrKeys: notDonePrKeys({ state: input.state, prs }),
+    unreadPrKeys: tileUnreadPrKeys(input.state, prs),
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
   };

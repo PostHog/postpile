@@ -83,6 +83,8 @@ export interface TopicListItem {
   /** needs_you when an unread tile is still open or it is the user's move (`topicUrgency`). */
   group: TopicGroup;
   unreadTiles: number;
+  /** Unread PRs in the topic (`TileView.unreadPrKeys` summed): the bubble's number, so it adds up to GitHub's unread count. */
+  unreadPrs: number;
   /** Unread tiles with at least one open PR. Only these make the unread count coral. */
   urgentUnreadTiles: number;
   openTiles: number;
@@ -249,8 +251,8 @@ export interface TileView {
   pendingWrite: TilePendingWrite | null;
   /** What the tile footer and the detail pane offer (`tileOffers`); the renderer only displays it. */
   offers: TileOffers;
-  /** The PRs whose rows get the "Not done yet" dot (`notDonePrKeys`), in tile order. */
-  notDonePrKeys: PrKey[];
+  /** The PRs whose rows get the unread dot (`unreadPrKeys`: what makes the tile unread), in tile order. */
+  unreadPrKeys: PrKey[];
   /** Every PR of the tile is in a quiet repo; the tile shows a small "quiet repo" note. */
   quietRepo: boolean;
   /**

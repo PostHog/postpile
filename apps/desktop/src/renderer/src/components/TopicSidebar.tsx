@@ -10,6 +10,7 @@ import { sidebarGroups } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { teamPill } from '../lib/faces.ts';
+import { UnreadDot } from './pills.tsx';
 import { yourMoveChip } from '../lib/your-move.ts';
 import { Avatar } from './Avatar.tsx';
 import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon } from './icons.tsx';
@@ -43,17 +44,17 @@ const SECTION_LOOK: Record<PrTier | 'other', { label: string; text: string; dot:
 };
 
 /**
- * The row's one number: unread tiles, in a small bubble. Coral while an unread
+ * The row's one number: unread PRs (the dots of its tiles), in a small bubble. Coral while an unread
  * tile is still open (the urgency rule), grey when every unread tile is merged
  * or closed. Nothing when all is read.
  */
 function UnreadBubble(props: { item: TopicListItem }) {
   const look = unreadLook(props.item);
-  const count = props.item.unreadTiles;
+  const count = props.item.unreadPrs;
   if (look === null) {
     return null;
   }
-  const label = look === 'urgent' ? `${count} unread ${count === 1 ? 'tile' : 'tiles'}` : `${count} merged or closed since you looked`;
+  const label = look === 'urgent' ? `${count} unread ${count === 1 ? 'PR' : 'PRs'}` : `${count} unread, merged or closed since you looked`;
   const tint = look === 'urgent' ? 'bg-unread text-on-ink' : 'bg-chip text-muted';
   return (
     <span
@@ -171,6 +172,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
     >
       <span className="flex w-full min-w-0 items-center gap-[7px]">
+        {item.unreadPrs > 0 && <UnreadDot />}
         <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>
         <span className="ml-auto" />
         <FaceStack people={item.people} tone={tone} />

@@ -123,8 +123,8 @@ function KindLabel(props: { view: TileView; selected: boolean }) {
 /**
  * The tile's PR rows. One PR: a white bordered box without the title (the
  * tile's heading is the title). A stack or set: one tinted box with rounded
- * member rows, the selected one highlighted. A PR that keeps the tile from
- * being done gets the coral dot (core `TileView.notDonePrKeys`).
+ * member rows, the selected one highlighted. An unread PR gets the coral dot
+ * (core `TileView.unreadPrKeys`), a lone row too.
  */
 function PrRows(props: TileProps & { done: boolean }) {
   const { view } = props;
@@ -144,7 +144,7 @@ function PrRows(props: TileProps & { done: boolean }) {
           showForWhom={grouped && !sameForWhom(pr.forWhom, view.forWhom)}
           stackPlace={places.get(pr.key) ?? null}
           showTitle={grouped}
-          notDone={view.notDonePrKeys.includes(pr.key)}
+          unread={view.unreadPrKeys.includes(pr.key)}
           selected={props.selected && pr.key === props.selectedPrKey}
           greyed={props.done}
           onClick={() => props.onSelect(pr.key)}
