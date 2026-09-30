@@ -87,6 +87,11 @@ export class QuietReads {
     private readonly now: () => Date,
   ) {}
 
+  /** GitHub writes are on, so the quiet reads can clear what the rules allow. */
+  writesEnabled(): boolean {
+    return this.writes.enabled();
+  }
+
   /** PR threads the rules may mark read. Whether the tile is unread is no input: an unread thread always makes it so. */
   private prCandidates(board: Board): QuietCandidate[] {
     const viewer = board.viewer;

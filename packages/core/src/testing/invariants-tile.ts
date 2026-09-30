@@ -73,25 +73,44 @@ function expectedReasonIds(board: PropertyBoard, key: string): string[] {
 }
 
 /**
+ * PRs of the tile unread without an unread thread: a pulled-in layer with
+ * unseen loud news (decided 2026-09-30), or a pinged PR with an unseen Look
+ * closer event.
+ */
+function loudWithoutThreadKeys(board: PropertyBoard, view: TileView): string[] {
+  return view.tile.members
+    .filter((member) => {
+      const news = eventsOf(board, member.prKey).filter(isNews);
+      return member.provenance.kind === 'pulled_in' ? news.length > 0 : member.provenance.kind !== 'found' && news.some((event) => event.kind === 'look_closer');
+    })
+    .map((member) => member.prKey);
+}
+
+/**
  * GitHub unread is PostPile unread (2026-09-30): a tile is unread exactly
  * while it is not snoozed and one of its threads is unread on GitHub,
- * whatever else holds (done, loud or not). The reasons name each unread
- * thread's PR, oldest first.
+ * whatever else holds (done, loud or not), or a pulled-in layer has loud
+ * news, or a Look closer event is unseen (unread here while read on GitHub
+ * is fine, never the reverse). The reasons name those PRs, oldest first.
  */
 export const unreadWhileAThreadIsUnread: Invariant = {
-  name: 'a tile is unread exactly while not snoozed and a thread of it is unread on GitHub',
+  name: 'a tile is unread exactly while not snoozed and a thread of it is unread on GitHub, a pulled-in layer has loud news or a Look closer is unseen',
   check(board, views) {
     for (const view of views) {
       const unreadKeys = unreadThreadKeys(board, view);
-      const expected = view.state.kind !== 'snoozed' && unreadKeys.length > 0;
-      ensure((view.state.kind === 'unread') === expected, `${view.tile.id}: state ${view.state.kind}, ${unreadKeys.length} unread threads`);
+      const loudKeys = loudWithoutThreadKeys(board, view).filter((key) => !unreadKeys.includes(key));
+      const expected = view.state.kind !== 'snoozed' && unreadKeys.length + loudKeys.length > 0;
+      ensure((view.state.kind === 'unread') === expected, `${view.tile.id}: state ${view.state.kind}, ${unreadKeys.length} unread threads, ${loudKeys.length} loud without a thread`);
       if (view.state.kind === 'unread') {
         const reasons = view.state.unreadBecause.map((reason) => reason.eventId).sort();
-        const want = unreadKeys.flatMap((key) => expectedReasonIds(board, key)).sort();
+        const want = [
+          ...unreadKeys.flatMap((key) => expectedReasonIds(board, key)),
+          ...loudKeys.flatMap((key) => eventsOf(board, key).filter(isNews).map((event) => event.id)),
+        ].sort();
         ensure(JSON.stringify(reasons) === JSON.stringify(want), `${view.tile.id}: unread reasons ${reasons.join(', ')}, expected ${want.join(', ')}`);
         const times = view.state.unreadBecause.map((reason) => reason.at);
         ensure(times.every((time, index) => index === 0 || times[index - 1]! <= time), `${view.tile.id}: unread reasons out of time order`);
-        ensure(view.state.unreadBecause.every((reason) => unreadKeys.includes(reason.prKey)), `${view.tile.id}: a reason names a PR whose thread is read`);
+        ensure(view.state.unreadBecause.every((reason) => unreadKeys.includes(reason.prKey) || loudKeys.includes(reason.prKey)), `${view.tile.id}: a reason names a PR that holds nothing unread`);
       } else {
         ensure(view.state.unreadBecause.length === 0, `${view.tile.id}: ${view.state.kind} tile with unread reasons`);
       }

@@ -1075,11 +1075,12 @@ the app meanwhile.
   releases and issues always) or shows unread in PostPile. A tile is unread
   while a thread of it is unread, done or not; snooze stays; loudness keeps
   pings, coral and urgency. Asks never clear by themselves. A finished topic
-  never holds an unread thread. "Start fresh here" is gone. Build choices
-  to confirm: a thread never read and never reviewed or commented on is not
-  judged-clearable; loud news on a pulled-in layer or a Look closer event on
-  a read thread no longer makes the tile unread by itself. See DESIGN.md
-  "GitHub unread is PostPile unread".
+  never holds an unread thread. "Start fresh here" is gone. Also unread:
+  loud news on a pulled-in layer and an unseen Look closer event (unread
+  here while read on GitHub is fine). A thread never read and never reviewed
+  or commented on is not judged-clearable; routing-team mentions are FYI;
+  your move blocks the judged clear. See DESIGN.md "GitHub unread is
+  PostPile unread".
 - **Equal tiles and detail, whole-tile click** (2026-09-30, owner review of
   the polish pass): the tile column and the detail pane split what the
   sidebar leaves evenly by default (dragged widths stay); the 720px tile cap

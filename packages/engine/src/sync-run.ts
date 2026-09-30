@@ -171,7 +171,7 @@ export class SyncRun {
       // Last, so the new events, what was read on GitHub and the quiet reads all count.
       report.topicsRetired = retireFinishedTopics(store, now().toISOString());
       // A finished topic never holds a thread unread on GitHub.
-      reviveUnreadTopics(store, now().toISOString());
+      reviveUnreadTopics(store, now().toISOString(), this.quietReads.writesEnabled());
     } catch (error) {
       crashed = true;
       errors.push(`sync: ${errorText(error)}`);

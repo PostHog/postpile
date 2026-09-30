@@ -11,7 +11,7 @@ import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
 import { isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits } from './spec-facts.ts';
-import { expectedSnoozePhase, isAskEvent, isAutomationEvent, lastLooked } from './spec-rules.ts';
+import { cutSnapshotHoldsSince, expectedSnoozePhase, isAskEvent, isAutomationEvent, lastLooked } from './spec-rules.ts';
 
 /**
  * Why a tracked open PR can sit in To review while its move is not Review,
@@ -106,10 +106,10 @@ function quietInput(board: PropertyBoard, key: PrKey, thread: NotificationThread
  * while a person's loud news is unseen, the acted-after rule only when the
  * viewer reviewed or commented after every such news, the judged rule never
  * while a person's activity since the viewer last looked is loud or not
- * judged by the agent, and none trusts a truncated snapshot.
+ * judged by the agent, and none trusts a snapshot cut off inside the unread interval.
  */
 export const quietReadsNeverHideAsks: Invariant = {
-  name: 'quiet reads never hide unseen human news the viewer did not act after or the agent did not judge, nor trust a truncated snapshot',
+  name: 'quiet reads never hide unseen human news the viewer did not act after or the agent did not judge, nor trust a snapshot cut off inside the unread interval',
   check(board, views) {
     for (const [key, thread] of board.threads) {
       if (holdingViews(views, key).length === 0) {
@@ -123,17 +123,17 @@ export const quietReadsNeverHideAsks: Invariant = {
       const judged = judgedReadCheck(input);
       const humanNews = events.filter((event) => isNews(event) && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event));
       if (quiet.kind === 'mark') {
-        ensure(!pr.truncated, `${key}: bot-only quiet read on a truncated snapshot`);
+        ensure(!pr.truncated || cutSnapshotHoldsSince(pr, thread.lastReadAt!), `${key}: bot-only quiet read on a snapshot cut off after the read`);
         ensure(humanNews.length === 0, `${key}: bot-only quiet read with human news ${humanNews.map((event) => event.id).join(', ')}`);
       }
       if (touched.kind === 'mark') {
-        ensure(!pr.truncated, `${key}: acted-after quiet read on a truncated snapshot`);
         const touch = newestTouch(pr, board.viewer, READING_TOUCHES);
+        ensure(!pr.truncated || cutSnapshotHoldsSince(pr, touch!.at), `${key}: acted-after quiet read on a snapshot cut off after the touch`);
         const after = humanNews.filter((event) => touch === null || event.at >= touch.at);
         ensure(after.length === 0, `${key}: acted-after quiet read with human news after the touch: ${after.map((event) => event.id).join(', ')}`);
       }
       if (judged.kind === 'mark') {
-        ensure(!pr.truncated, `${key}: judged quiet read on a truncated snapshot`);
+        ensure(!pr.truncated || cutSnapshotHoldsSince(pr, lastLooked(thread, pr, board.viewer)!), `${key}: judged quiet read on a snapshot cut off after the last look`);
         ensure(humanNews.length === 0, `${key}: judged quiet read with human news ${humanNews.map((event) => event.id).join(', ')}`);
         const since = lastLooked(thread, pr, board.viewer)!;
         const unjudged = events.filter(

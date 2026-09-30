@@ -660,9 +660,34 @@ function withinGrace(now: IsoTime, times: IsoTime[]): boolean {
   return new Date(now).getTime() - new Date(newest).getTime() < GRACE_MS;
 }
 
-/** The snapshot vouches for the thread: complete, and fetched at or after the thread's last update. */
-export function snapshotIsFresh(thread: NotificationThread, prFetchedAt: IsoTime | null, truncated: boolean): boolean {
-  return !truncated && prFetchedAt !== null && prFetchedAt >= thread.updatedAt;
+/**
+ * A snapshot cut off at the query's caps (newest 50 reviews, 60 comments,
+ * 50 commits, 60 timeline items; 50 review threads, first 30 comments each)
+ * still holds everything since `since` when each of the newest-N lists that
+ * may be cut (within 5 of its cap: normalizing drops a few nodes) kept an
+ * item at or before `since`, and no review thread list or thread's comments
+ * may be cut (a reply there can come at any time).
+ */
+export function cutSnapshotHoldsSince(pr: Pr, since: IsoTime): boolean {
+  const near = (length: number, cap: number) => length >= cap - 5;
+  if (near(pr.threads.length, 50) || pr.threads.some((thread) => near(thread.comments.length, 30))) {
+    return false;
+  }
+  const oldestAtOrBefore = (times: IsoTime[], cap: number) => !near(times.length, cap) || times.some((time) => time <= since);
+  return (
+    oldestAtOrBefore(pr.reviews.map((review) => review.submittedAt), 50) &&
+    oldestAtOrBefore(pr.comments.filter((comment) => comment.kind === 'comment').map((comment) => comment.createdAt), 60) &&
+    oldestAtOrBefore(pr.commits.map((commit) => commit.committedAt), 50) &&
+    oldestAtOrBefore(pr.timeline.map((item) => item.at), 60)
+  );
+}
+
+/** The snapshot vouches for the thread: fetched at or after the thread's last update, and complete, or cut off only before `since`. */
+export function snapshotIsFresh(thread: NotificationThread, prFetchedAt: IsoTime | null, truncated: boolean, pr: Pr | null = null, since: IsoTime | null = null): boolean {
+  if (truncated && !(pr !== null && since !== null && cutSnapshotHoldsSince(pr, since))) {
+    return false;
+  }
+  return prFetchedAt !== null && prFetchedAt >= thread.updatedAt;
 }
 
 export interface QuietReadSpecInput {
@@ -710,7 +735,7 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (thread.lastReadAt === null) {
     return { kind: 'skip', why: 'never_read' };
   }
-  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true)) {
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, thread.lastReadAt)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   const readAt = thread.lastReadAt;
@@ -754,10 +779,10 @@ export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>)
   if (!thread.unread) {
     return { kind: 'skip', why: 'not_unread' };
   }
-  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true)) {
+  const touch = newestTouch(pr, viewer, READING_TOUCHES);
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, touch?.at ?? null)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const touch = newestTouch(pr, viewer, READING_TOUCHES);
   if (touch === null) {
     return { kind: 'skip', why: 'no_touch' };
   }
@@ -828,10 +853,10 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   if (!thread.unread) {
     return { kind: 'skip', why: 'not_unread' };
   }
-  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true)) {
+  const since = lastLooked(thread, pr, viewer);
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, since)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const since = lastLooked(thread, pr, viewer);
   if (since === null) {
     return { kind: 'skip', why: 'never_looked' };
   }

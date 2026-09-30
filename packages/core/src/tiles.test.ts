@@ -233,7 +233,7 @@ describe('deriveTileState', () => {
     expect(deriveTileState(stateInput(setTile, [pr, pulledIn], [], [approved])).kind).toBe('done');
   });
 
-  it('counts loud events on pulled-in PRs too: never done, loud, unread only by a thread', () => {
+  it('counts loud events on pulled-in PRs too: unread without a thread', () => {
     const pulledIn = makePr({ number: 2 });
     const setTile: Tile = {
       ...tile,
@@ -241,8 +241,7 @@ describe('deriveTileState', () => {
     };
     const loud = makeEvent({ prKey: pulledIn.key, ruleLoudness: 'loud' });
     const approved = makeUserState({ approvedAt: at(1), approvedCommitOid: 'head' });
-    expect(deriveTileState(stateInput(setTile, [pr, pulledIn], [loud], [approved]))).toMatchObject({ kind: 'open', loud: true });
-    expect(deriveTileState(stateInput(setTile, [pr, pulledIn], [loud], [approved], [unreadThread])).kind).toBe('unread');
+    expect(deriveTileState(stateInput(setTile, [pr, pulledIn], [loud], [approved]))).toMatchObject({ kind: 'unread', loud: true, unreadOnGitHub: false });
   });
 
   it('is snoozed while the condition holds, even with older unseen loud events', () => {

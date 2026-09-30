@@ -53,9 +53,10 @@ after the digest and the quiet reads, so the sync's own events and what
 PostPile cleared by itself count; the sync log line and
 `SyncReport.topicsRetired` say how many. Retiring is reversible: a new loud
 event on a member PR (`reviveRetiredTopics`, full sync and live poll), a
-member thread unread on GitHub (`reviveUnreadTopics`, after the retire step
-of every full sync and in every poll that moved the inbox, also for topics
-an older build retired with an unread thread) or a new PR assigned to it
+member thread unread on GitHub that the quiet reads would not clear by
+rule (`reviveUnreadTopics`, after the retire step of every full sync and in
+every poll that moved the inbox, also for topics an older build retired
+with an unread thread) or a new PR assigned to it
 (retired topics stay on offer for 30 days) makes it active again. Every
 status change goes through `nextTopicStatus` (engine: `changeTopicStatus`),
 and retiring records `retiredAt` (migration 020; before, "retired at" read
@@ -151,7 +152,9 @@ team-devex" instead of the bot's name.
 
 - `unread` (since 2026-09-30, "GitHub unread is PostPile unread"): a
   member's notification thread is unread on GitHub, whether the tile is done
-  or not. The tile says which PR and why: its unseen loud events, else its
+  or not, or a pulled-in stack layer has unseen loud news, or the app's Look
+  closer event is unseen (unread here while read on GitHub is fine, never
+  the reverse). The tile says which PR and why: its unseen loud events, else its
   newest unseen quiet event, else "new activity on GitHub". Until then it
   meant "a member has an unseen loud event"; that fact stays as
   `TileState.loud` and drives pings, coral, urgency and sections. A snoozed
@@ -1922,8 +1925,8 @@ tile's rows and the detail pane's PR list (aria-label "Not done yet"):
 `PrSummary.done` false (core `isPrDone`, shipped per row), or an unseen
 loud event left, or its thread unread on GitHub (since 2026-09-30: both keep
 the tile from being done). A pulled-in stack layer gets one while it has
-unseen loud news, which keeps the tile from being done too (2026-09-30;
-before, such a tile was unread with no dot anywhere). Done and snoozed tiles show none, and neither does a tile where
+unseen loud news, which makes the tile unread too (2026-09-30; before, such
+a tile was unread with no dot anywhere). Done and snoozed tiles show none, and neither does a tile where
 only one PR can hold it (the dot would only repeat the tile's state). Mark a
 dotted PR done in the detail pane and its dot goes; no dots left, the tile
 is done. It is the one coral mark that is not "new since you looked"; there
@@ -2936,9 +2939,10 @@ finished topics included.
   else its newest unseen quiet event since the read, else "new activity on
   GitHub". Urgency ("needs you", coral topic) counts unread tiles with loud
   news only.
-- Strictly by thread: loud news on a pulled-in stack layer, or the app's
-  Look closer event on a thread already read, keeps the tile loud and not
-  done and pings, but does not make it unread.
+- Besides an unread thread, loud news on a pulled-in stack layer and an
+  unseen Look closer event make the tile unread (owner, 2026-09-30: "It
+  should get a dot and be unread"). Unread in PostPile while read on
+  GitHub is fine; the rule only forbids read here while unread there.
 - A Mark read with writes on reads the thread in the store at the click
   (so the tile turns read right away, not after the undo window); undo, a
   parked batch or a mark-read GitHub did not take puts it back unread.
@@ -2964,11 +2968,24 @@ finished topics included.
   by `QuietReads` with detail "not a pull request", in the action log and
   the debug view, not under Handled quietly.
 - Retire gate needs every thread read; `reviveUnreadTopics` runs after the
-  retire step of the full sync and in every poll that moved the inbox. The
-  quiet reads moved before the retire step.
-- Snapshots cut off at the query caps (`Pr.truncated`) never clear (the
-  existing stale-snapshot rule): on the real data of the day that was 48 of
-  the 130 unread PR threads.
+  retire step of the full sync and in every poll that moved the inbox. A
+  thread the quiet reads would clear by rule (`clearableByRule`, the grace
+  set aside) brings nothing back while writes are on, so a deploy bot on a
+  merged PR does not reopen its topic for three days. The quiet reads
+  moved before the retire step.
+- Snapshots cut off at the query caps (`Pr.truncated`, 48 of the 130
+  unread PR threads on the day's real data) used to never clear. Most
+  capped lists keep the newest N (50 reviews, 60 comments, 50 commits, 60
+  timeline items), so a cut snapshot still covers the unread interval when
+  every such list near its cap (within 5: normalizing drops a few nodes)
+  kept an item at or before the rule's boundary (GitHub's read time for
+  bots only, the touch for "you acted after it", the last look for the
+  judged rule). Review threads never vouch: the 50 kept are the newest by
+  creation and each keeps its first 30 comments, so a reply past either
+  cap can come at any time; a thread list or a thread's comments near its
+  cap keeps the snapshot untrusted. Core `cutSnapshotCovers` behind
+  `snapshotCoversThread`. Most flagged snapshots on real data had no list
+  near a cap at all (GitHub counts items the query never returns).
 
 ## Inbox cleanup
 
@@ -3171,7 +3188,9 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
    Not "fetched in this very sync": a PR fetched while its bot activity was
    still inside the grace period is not fetched again until it moves, and
-   the snapshot from then still covers the thread.
+   the snapshot from then still covers the thread. A snapshot cut off at
+   the query's caps covers only when what fell off is older than the read
+   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
 2. *Not the user's own open PR.* Bot reviews and CI on your own PR can mean
    work (a failing check, a review bot's finding), so they stay unread while
    it is open. A merged or closed own PR is fine (2026-09-29: every own PR
@@ -4409,9 +4428,8 @@ four cases where the rules had no answer yet; Julian decided each:
   layer a "Not done yet" dot. Julian: "PostPile found it could be interesting
   to me? that's a nice side effect". Before, the tile went unread with no dot
   anywhere. (Confirms "loud events on pulled-in PRs also make a tile unread"
-  from the open questions.) Since "GitHub unread is PostPile unread" (the
-  same day) the layer's news keeps the tile from being done, makes it loud
-  and dots the layer, but only a thread unread on GitHub makes it unread.
+  from the open questions.) Still so under "GitHub unread is PostPile
+  unread" (the same day).
 - Every snooze ends when its PR is merged or closed, not only push and CI
   snoozes: a "someone replies" or "until" snooze on a finished PR kept its
   topic from retiring.
@@ -4766,7 +4784,7 @@ preflight and does not know the token, so CORS stays open.
   breaks? (From the codebase review, 2026-09-29.)
 - **Loudness rules beyond the spec**, to confirm: human mentions of a home team are loud (a routing team's are quiet, decided 2026-09-30); human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
-  spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also count for the tile (confirmed 2026-09-30, the layer gets a "Not done yet" dot; since "GitHub unread is PostPile unread" they keep it loud and not done, unread only by a thread). Commits after
+  spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread (confirmed 2026-09-30, the layer gets a "Not done yet" dot). Commits after
   the user's approval are quiet unless the agent raises one (decided 2026-09-28).
 - **Repo name**: decided 2026-09-28, the app is PostPile (formerly the working title
   `code-manager`). Renaming the repo folder is still open.

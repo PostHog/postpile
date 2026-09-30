@@ -34,7 +34,7 @@ export interface UrgencyTile {
 }
 
 export interface TopicUrgency {
-  /** Tiles with a thread unread on GitHub, open or not, snoozed or not: what the Unread filter shows. */
+  /** Unread tiles, open or not, and snoozed ones with a thread unread on GitHub: what the Unread filter shows. */
   unreadTiles: number;
   /** Unread tiles with loud news and at least one open PR. These light up the topic. */
   urgentUnreadTiles: number;
@@ -61,7 +61,7 @@ function byMoveUrgency(a: TopicMove, b: TopicMove): number {
 }
 
 export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
-  const unreadTiles = tiles.filter((tile) => tile.unreadOnGitHub).length;
+  const unreadTiles = tiles.filter((tile) => tile.state === 'unread' || tile.unreadOnGitHub).length;
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
   const live = tiles.filter((tile) => tile.state !== 'done' && tile.state !== 'snoozed');
   const yourMoves = live.flatMap((tile) => (tile.move === null ? [] : [tile.move])).toSorted(byMoveUrgency);

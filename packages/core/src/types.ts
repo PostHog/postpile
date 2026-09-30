@@ -516,7 +516,8 @@ export type TileStateKind = 'unread' | 'open' | 'done' | 'snoozed';
  * (DESIGN.md "GitHub unread is PostPile unread"). Each unseen loud event of
  * that PR is a reason; with none, its newest unseen quiet event is; with
  * none either, the thread itself ("new activity on GitHub", `eventId`
- * `thread:<thread id>`, the newest event's kind and actor).
+ * `thread:<thread id>`, the newest event's kind and actor). A pulled-in
+ * layer's loud news and an unseen Look closer event are reasons too.
  */
 export interface UnreadReason {
   prKey: PrKey;

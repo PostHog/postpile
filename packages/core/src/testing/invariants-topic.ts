@@ -35,15 +35,16 @@ function urgencyOf(views: TileView[]) {
 
 /**
  * Unread count, your moves and "needs you" say what the tiles say. The count
- * is every tile with a thread unread on GitHub, snoozed ones too; only
+ * is every unread tile and every tile with a thread unread on GitHub,
+ * snoozed ones too; only
  * unread tiles with loud news light the topic up (loudness keeps its job).
  */
 export const topicCountsMatchTiles: Invariant = {
   name: "a topic's unread count, your moves and needs-you match its tiles",
   check(board, views) {
     const urgency = urgencyOf(views);
-    const withUnreadThread = views.filter((view) => view.tile.members.some((member) => board.threads.get(member.prKey)?.unread === true));
-    ensure(urgency.unreadTiles === withUnreadThread.length, `unread tiles ${urgency.unreadTiles}, tiles with an unread thread ${withUnreadThread.length}`);
+    const withUnreadThread = views.filter((view) => view.state.kind === 'unread' || view.tile.members.some((member) => board.threads.get(member.prKey)?.unread === true));
+    ensure(urgency.unreadTiles === withUnreadThread.length, `unread tiles ${urgency.unreadTiles}, unread tiles and ones with an unread thread ${withUnreadThread.length}`);
     const unread = views.filter((view) => view.state.kind === 'unread');
     const loudUnread = unread.filter((view) => tileHasNews(board, view));
     const live = views.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');

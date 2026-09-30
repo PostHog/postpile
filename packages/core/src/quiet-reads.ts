@@ -103,6 +103,50 @@ export interface SnapshotCoverInput {
   prFetchedAt: IsoTime | null;
   /** The snapshot was cut off at the query's caps (`Pr.truncated`). */
   prTruncated: boolean;
+  /** The snapshot itself, so a cut-off one can still vouch (`cutSnapshotCovers`); without it a cut-off snapshot never does. */
+  pr?: Pr;
+  /** Where the unread interval the rule reads starts (GitHub's read time, the last reading touch); null: from the start. */
+  since?: IsoTime | null;
+}
+
+/**
+ * How many items of each activity list the PR query keeps (packages/github
+ * `queries.ts`): the newest N of reviews, comments, review threads, commits
+ * and timeline items; the first 30 comments of a review thread.
+ */
+export const SNAPSHOT_CAPS = { reviews: 50, comments: 60, reviewThreads: 50, commits: 50, timeline: 60, threadComments: 30 } as const;
+
+/**
+ * Normalizing drops a few nodes (draft review comments, threads holding only
+ * drafts, timeline items it does not read), so a stored list this close to
+ * its cap may still have been cut.
+ */
+const CAP_SLACK = 5;
+
+function mayBeCut(length: number, cap: number): boolean {
+  return length >= cap - CAP_SLACK;
+}
+
+/**
+ * A snapshot cut off at the caps still holds everything since `since` when
+ * every newest-N list that may be cut kept an item at or before `since`:
+ * what fell off is older than that. Review threads cannot vouch: a reply in
+ * an older thread past the cap, or past the first 30 comments of a thread,
+ * never arrives, whenever it was written. Most flagged snapshots have no list
+ * near a cap at all (GitHub counts items the query never returns); those
+ * lost nothing to the caps.
+ */
+export function cutSnapshotCovers(pr: Pr, since: IsoTime): boolean {
+  if (mayBeCut(pr.threads.length, SNAPSHOT_CAPS.reviewThreads) || pr.threads.some((thread) => mayBeCut(thread.comments.length, SNAPSHOT_CAPS.threadComments))) {
+    return false;
+  }
+  const lists: [IsoTime[], number][] = [
+    [pr.reviews.map((review) => review.submittedAt), SNAPSHOT_CAPS.reviews],
+    [pr.comments.filter((comment) => comment.kind === 'comment').map((comment) => comment.createdAt), SNAPSHOT_CAPS.comments],
+    [pr.commits.map((commit) => commit.committedAt), SNAPSHOT_CAPS.commits],
+    [pr.timeline.map((item) => item.at), SNAPSHOT_CAPS.timeline],
+  ];
+  return lists.every(([times, cap]) => !mayBeCut(times.length, cap) || times.toSorted()[0]! <= since);
 }
 
 /**
@@ -111,20 +155,21 @@ export interface SnapshotCoverInput {
  * thread but may leave a PR out (its cap, a failed fetch): then the thread
  * can be fresher than the snapshot, and a person's comment missing from it.
  * A snapshot cut off at the query's caps (any capped activity list: reviews,
- * comments, review threads and their comments, commits, timeline) never
- * covers the thread: an event past the caps never arrived, however fresh
- * the fetch.
+ * comments, review threads and their comments, commits, timeline) covers the
+ * thread only when what fell off is older than the unread interval
+ * (`cutSnapshotCovers`, since 2026-09-30); before, it never did, and 48 of
+ * 130 unread PR threads on real data could never clear.
  */
 export function snapshotCoversThread(input: SnapshotCoverInput): boolean {
-  if (input.prTruncated) {
+  if (input.prTruncated && !(input.pr && input.since != null && cutSnapshotCovers(input.pr, input.since))) {
     return false;
   }
   return input.prFetchedAt !== null && input.prFetchedAt >= input.thread.updatedAt;
 }
 
-/** The snapshot check for an input that carries the PR itself. */
-function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetchedAt'>): boolean {
-  return snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt, prTruncated: input.pr.truncated === true });
+/** The snapshot check for an input that carries the PR itself, for the unread interval from `since`. */
+function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetchedAt'>, since: IsoTime | null): boolean {
+  return snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt, prTruncated: input.pr.truncated === true, pr: input.pr, since });
 }
 
 /**
@@ -146,7 +191,7 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (thread.lastReadAt === null) {
     return { kind: 'skip', why: 'never_read' };
   }
-  if (!prCoversThread(input)) {
+  if (!prCoversThread(input, thread.lastReadAt)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   const botEvents = botOnlySinceRead(pr, events, thread.lastReadAt, viewer);
@@ -232,10 +277,10 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   if (!thread.unread) {
     return { kind: 'skip', why: 'not_unread' };
   }
-  if (!prCoversThread(input)) {
+  const touch = lastTouch(pr, events, viewer, { kinds: READING_TOUCH_KINDS });
+  if (!prCoversThread(input, touch?.at ?? null)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const touch = lastTouch(pr, events, viewer, { kinds: READING_TOUCH_KINDS });
   if (touch === null) {
     return { kind: 'skip', why: 'no_touch' };
   }
@@ -363,10 +408,10 @@ export function judgedReadCheck(input: QuietReadInput): JudgedReadCheck {
   if (!thread.unread) {
     return { kind: 'skip', why: 'not_unread' };
   }
-  if (!prCoversThread(input)) {
+  const since = lastLookedAt(thread, pr, events, viewer);
+  if (!prCoversThread(input, since)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const since = lastLookedAt(thread, pr, events, viewer);
   if (since === null) {
     return { kind: 'skip', why: 'never_looked' };
   }
@@ -401,6 +446,21 @@ export function judgedReadCheck(input: QuietReadInput): JudgedReadCheck {
     return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', actors: botNames(after) };
+}
+
+/** Later than any grace: `clearableByRule` sets the grace aside. */
+const AFTER_EVERY_GRACE = '9999-12-31T23:59:59.999Z';
+
+/**
+ * The quiet reads would mark this PR thread read once its grace is over:
+ * only bots since the last read, the user acted after it, or everything
+ * since they last looked judged quiet. A retired topic comes back only for
+ * a thread that is not (`reviveUnreadTopics`): bot-only noise the next full
+ * sync clears brings nothing back.
+ */
+export function clearableByRule(input: QuietReadInput): boolean {
+  const afterGrace = { ...input, now: AFTER_EVERY_GRACE };
+  return quietReadCheck(afterGrace).kind === 'mark' || touchedReadCheck(afterGrace).kind === 'mark' || judgedReadCheck(afterGrace).kind === 'mark';
 }
 
 /**

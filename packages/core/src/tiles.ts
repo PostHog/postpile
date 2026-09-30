@@ -148,6 +148,22 @@ function unreadThreadMembers(input: TileStateInput): TileMember[] {
   return input.tile.members.filter((member) => input.threads.get(member.prKey)?.unread === true);
 }
 
+/**
+ * Members whose loud news PostPile found without a thread saying so: a
+ * pulled-in stack layer with unseen loud news (decided 2026-09-30: "It
+ * should get a dot and be unread"), or the app's own unseen Look closer
+ * event. Unread here while read on GitHub is fine; only the reverse is not.
+ */
+function loudWithoutThreadMembers(input: TileStateInput): TileMember[] {
+  return input.tile.members.filter((member) => {
+    const events = input.events.get(member.prKey) ?? [];
+    if (member.provenance.kind === 'pulled_in') {
+      return events.some(isUnseenLoud);
+    }
+    return member.provenance.kind !== 'found' && events.some((event) => event.kind === 'look_closer' && isUnseenLoud(event));
+  });
+}
+
 export const THREAD_REASON_SUMMARY = 'new activity on GitHub';
 
 /** The newest event, the later one in the list on a tie (the store lists by time, then id), whatever order the list is in. */
@@ -193,8 +209,15 @@ function threadReasons(input: TileStateInput, member: TileMember): UnreadReason[
   ];
 }
 
-function unreadReasons(input: TileStateInput, members: TileMember[]): UnreadReason[] {
-  return members.flatMap((member) => threadReasons(input, member)).sort(byTime);
+/** A member unread without an unread thread (`loudWithoutThreadMembers`): its unseen loud events. */
+function loudReasonsOf(input: TileStateInput, member: TileMember): UnreadReason[] {
+  return (input.events.get(member.prKey) ?? []).filter(isUnseenLoud).map((event) => reasonOf(member.prKey, event));
+}
+
+function unreadReasons(input: TileStateInput, threadMembers: TileMember[], loudMembers: TileMember[]): UnreadReason[] {
+  const byThread = new Set(threadMembers.map((member) => member.prKey));
+  const loudOnly = loudMembers.filter((member) => !byThread.has(member.prKey));
+  return [...threadMembers.flatMap((member) => threadReasons(input, member)), ...loudOnly.flatMap((member) => loudReasonsOf(input, member))].sort(byTime);
 }
 
 /** Merges without the user's review they have not seen, on PRs the glance did not call not theirs. */
@@ -238,9 +261,10 @@ function allPingedDone(input: TileStateInput): boolean {
  * snoozed: every tracked PR has a snooze whose condition is not met and that
  * no human broke with a loud event since it started. It keeps its snooze
  * while a thread is unread; `unreadOnGitHub` says so.
- * unread: a member's notification thread is unread on GitHub; unreadBecause
- * says which PR and why. Done or not does not matter: a done tile whose
- * thread went unread again shows unread until the thread is read.
+ * unread: a member's notification thread is unread on GitHub, or a
+ * pulled-in layer has unseen loud news, or an unseen Look closer event;
+ * unreadBecause says which PR and why. Done or not does not matter: a done
+ * tile whose thread went unread again shows unread until the thread is read.
  * done: every tracked member is done, nothing loud is unseen and no thread
  * is unread.
  * open: everything else.
@@ -249,13 +273,14 @@ function allPingedDone(input: TileStateInput): boolean {
  */
 export function deriveTileState(input: TileStateInput): TileState {
   const unreadThreads = unreadThreadMembers(input);
+  const loudWithoutThread = loudWithoutThreadMembers(input);
   const unreadOnGitHub = unreadThreads.length > 0;
   const loud = loudReasons(input).length > 0;
   if (isTileSnoozed(input)) {
     return { kind: 'snoozed', unreadBecause: [], unreadOnGitHub, loud };
   }
-  if (unreadOnGitHub) {
-    return { kind: 'unread', unreadBecause: unreadReasons(input, unreadThreads), unreadOnGitHub, loud };
+  if (unreadOnGitHub || loudWithoutThread.length > 0) {
+    return { kind: 'unread', unreadBecause: unreadReasons(input, unreadThreads, loudWithoutThread), unreadOnGitHub, loud };
   }
   if (!loud && allPingedDone(input)) {
     return { kind: 'done', unreadBecause: [], unreadOnGitHub, loud };

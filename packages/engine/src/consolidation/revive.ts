@@ -1,5 +1,6 @@
-import { effectiveLoudness } from '@postpile/core';
+import { clearableByRule, effectiveLoudness, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
+import { Board } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
 import { changeTopicStatus } from '../topic-status.ts';
 
@@ -32,26 +33,49 @@ export function reviveRetiredTopics(store: Store, newEventIds: string[], at: str
   return revived;
 }
 
+/** The thread's PR, read as the quiet reads read it, would be cleared by rule (grace aside). Unknown PR or no viewer: not clearable. */
+function clearableNow(board: Board, prKey: PrKey, fetchedAt: Map<PrKey, string>): boolean {
+  const thread = board.threads.get(prKey);
+  const pr = board.prs.get(prKey);
+  if (!thread || !pr || board.viewer === null) {
+    return false;
+  }
+  return clearableByRule({
+    thread,
+    pr,
+    events: board.events.get(prKey) ?? [],
+    userState: board.userStates.get(prKey) ?? null,
+    viewer: board.viewer,
+    notYours: board.notYours.has(prKey),
+    prFetchedAt: fetchedAt.get(prKey) ?? null,
+    now: board.now,
+  });
+}
+
 /**
  * A finished topic never holds an unread thread (DESIGN.md "GitHub unread is
  * PostPile unread"): every retired topic with a member PR whose thread is
  * unread on GitHub becomes active again, whether the thread just turned
  * unread or was unread when the topic retired (before 2026-09-30 the retire
- * gate did not look at threads). Runs after the quiet reads in the full
- * sync, so what PostPile clears by itself brings nothing back, and in every
- * poll that moved the inbox. Returns how many topics came back.
+ * gate did not look at threads). A thread the quiet reads clear by rule
+ * (`clearableByRule`, grace aside) brings nothing back while GitHub writes
+ * are on: the next full sync clears it. Runs after the quiet reads in the
+ * full sync and in every poll that moved the inbox. Returns how many topics
+ * came back.
  */
-export function reviveUnreadTopics(store: Store, at: string): number {
+export function reviveUnreadTopics(store: Store, at: string, writesOn: boolean): number {
   const retired = store.topics.list().filter((topic) => topic.status === 'retired');
   if (retired.length === 0) {
     return 0;
   }
+  const board = Board.load(store, at);
+  const fetchedAt = store.prs.fetchedAtByKey();
+  const holdsUnread = (key: PrKey) => board.threads.get(key)?.unread === true && !(writesOn && clearableNow(board, key, fetchedAt));
   let revived = 0;
   store.transaction(() => {
     for (const topic of retired) {
       const keys = store.memberships.listForTopic(topic.id).map((membership) => membership.prKey);
-      const unread = [...store.notifications.getByPrKeys(keys).values()].some((thread) => thread.unread);
-      if (unread && changeTopicStatus(store, topic.id, 'revive', at)) {
+      if (keys.some(holdsUnread) && changeTopicStatus(store, topic.id, 'revive', at)) {
         revived += 1;
       }
     }

@@ -188,6 +188,34 @@ describe('Engine.sync retires finished topics', () => {
     expect(h.store.topics.get('depot')?.status).toBe('active');
   });
 
+  it('keeps a retired topic retired when only a bot turned its thread unread, and brings it back for a person', async () => {
+    let now = FOUR_DAYS_LATER;
+    const h = makeHarness({ now: () => now });
+    const pr = mergedPr(1);
+    await syncedAndRead(h, [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
+    const readAt = h.store.notifications.getByPrKeys([pr.key]).get(pr.key)!.lastReadAt!;
+
+    // A deploy bot comments on the merged PR: the next full sync clears that by rule.
+    now = new Date('2026-09-06T12:00:00Z');
+    const botAt = '2026-09-06T11:00:00.000Z';
+    const withBot = { ...pr, comments: [makeComment({ id: 'c-bot', author: 'vercel[bot]', body: 'Preview deployed', createdAt: botAt })], updatedAt: botAt };
+    h.reader.addPr(withBot, makeThreadFor(withBot, { lastReadAt: readAt, updatedAt: botAt }));
+    h.reader.etag = 'etag-2';
+    await h.engine.pollOnce();
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
+
+    // Half an hour later a person comments: that comes back.
+    now = new Date('2026-09-06T12:30:00Z');
+    const humanAt = '2026-09-06T12:20:00.000Z';
+    const withHuman = { ...withBot, comments: [...withBot.comments, makeComment({ id: 'c-bob', author: 'bob', body: 'Follow-up in #2', createdAt: humanAt })], updatedAt: humanAt };
+    h.reader.addPr(withHuman, makeThreadFor(withHuman, { lastReadAt: readAt, updatedAt: humanAt }));
+    h.reader.etag = 'etag-3';
+    await h.engine.pollOnce();
+    expect(h.store.topics.get('depot')?.status).toBe('active');
+  });
+
   it('brings a retired topic back while the thread of a new event is unread, also when the agent turns the event quiet', async () => {
     let now = FOUR_DAYS_LATER;
     const h = makeHarness({ now: () => now });
