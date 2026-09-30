@@ -68,7 +68,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   POST to `/api/telemetry`; not a query hook, no cache, a dropped call is
   swallowed. Only the events in `RENDERER_TELEMETRY_EVENTS`
   (`@postpile/core`) go through it — search, queue filter, topic and tile
-  opens, setup steps and fit fixes, the update pill; everything else is the engine's own).
+  opens, setup steps and fit fixes, the update pill; everything else is the engine's own.
+  `errorReporter` sends renderer errors on the same route as
+  `renderer_exception`: `main.tsx` hooks it to the window's `error` and
+  `unhandledrejection` events, `components/ErrorBoundary.tsx` at the root to
+  render errors. Raw error in, the engine scrubs it; logic in
+  `lib/error-report.ts`).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small

@@ -12,10 +12,13 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - PR rows and the detail pane show "assigned to" with faces when someone other than the author is assigned.
 - The full sync also finds every open PR assigned to you. Only the ones a bot opened become yours; a PR a person assigned to you stays theirs and shows "assigned to you".
 - Team roles: each of your GitHub teams is a home team or routing only. A home team works as before: its members are your teammates. A routing-only team, such as a big approvers team, only brings you its review requests and mentions: its members are not your teammates, its requests never count as "For you" on a teammate's PR, its chip is neutral without the side band, and its mentions no longer make a tile unread. Setup decides the roles from how your reviews of the last 90 days reached you (existing installs on the next sync), and you can flip one under the setup sweep or in "Your teams" below your instructions. With no home team there is no Team filter and no Team's PRs.
+- Errors in the window are reported to PostHog Error Tracking like the app's other errors: scrubbed the same way, and off whenever usage analytics are off. A crash while drawing a screen shows a Reload button instead of a blank window.
+- Error reports carry the release they came from, and release builds upload their source maps to PostHog (never shipped in the app), so error stacks point at the source instead of bundled files. Needs a one-time `POSTHOG_CLI_API_KEY` secret, see RELEASING.md.
 
 ### Changed
 
 - Interface polish pass: a lighter selected tile with a pointer to the detail pane, one text grid in the detail pane, a ruled "Since you last looked" timeline, quieter sidebar rows, ink numbers in the title bar and footer, thin scrollbars. Approve is green now, the color of the "Approved" state it produces.
+- Error messages sent to PostHog also drop repo names, PR numbers and quoted text, and stack frames from dependencies are always left out.
 - Approve, Mark read, Mark done and Snooze change the tile and buttons as soon as they're clicked instead of after a few seconds. A failed action puts things back and says why.
 - A snooze on a stack or set wakes when any of its tracked PRs meets the condition, for example the first PR to go green, instead of waiting for all of them.
 - Under the hood: each rule (automation, who a review request asks, whose move, loudness, pings, button offers) is worked out once in core and read by the app, pings, MCP and sample mode alike, so they can no longer disagree.

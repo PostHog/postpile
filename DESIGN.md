@@ -3644,7 +3644,7 @@ PostHog directly, it reports UI-only events through `POST /api/telemetry`,
 validated against the same catalogue the engine's own events use
 (`packages/core/src/telemetry-events.ts`, the allow-list for both). One
 `Telemetry` class (`capture`, `identifyPerson`, `setViewerIdentity`,
-`captureException`, `shutdown`) plus a no-op implementation used whenever
+`captureException`, `captureRendererException`, `shutdown`) plus a no-op implementation used whenever
 telemetry is off, so call sites never branch on it. `Engine.close()` flushes
 it, so it goes out on every quit path.
 
@@ -3665,12 +3665,49 @@ containing `/` or `#` is dropped and logged once
 (`packages/core/src/telemetry-guard.ts`). This is on top of the catalogue
 only allowing enums, counts, durations and booleans in the first place: PR
 titles, bodies, repo names, branch names, logins, prompts, agent text and
-topic names are never event props. Uncaught exceptions and unhandled
-rejections (main process and server) go through `captureException`, itself
-scrubbed to the error's class name and a stack of `file:line` pairs from the
-app's own bundle only (`packages/core/src/telemetry-errors.ts`); node_modules
-and Node-internal frames, and anything that looks like a path or a URL in the
-message, are dropped.
+topic names are never event props.
+
+**Errors** (PostHog Error Tracking, `$exception` events):
+
+- *Where they come from*: uncaught exceptions and unhandled rejections of
+  the main process and the server go through `captureException`. The
+  renderer's go through `captureRendererException`: window `error` and
+  `unhandledrejection` handlers plus an `ErrorBoundary` at the app root
+  (`apps/desktop/src/renderer/src/lib/error-report.ts`, a reload screen
+  instead of a blank window) post the raw error to `POST /api/telemetry` as
+  `renderer_exception`, validated by `rendererExceptionProps` (strict, size
+  caps). Raw is fine there: it only reaches the local server, and the one
+  scrubber runs in the engine before anything leaves. At most 20 reports per
+  window load; a failed post is swallowed, never shown. Off with the rest of
+  telemetry (the no-op drops them).
+- *Scrubbing* (`packages/core/src/telemetry-errors.ts`): the class name
+  (anything that is not an identifier becomes `Error`), the message with URLs,
+  anything containing a slash (paths, `owner/repo`), `#123` and double-quoted
+  snippets (JSON.parse quotes its input) replaced, cut at 200 characters, and
+  up to 10 frames from the app's own bundle only: the path after the last
+  bundle marker (`out/`, `.asar/`, …) plus line and column, e.g.
+  `main/chunks/engine-from-env-<hash>.js:35040:12`. node_modules and
+  Node-internal frames are dropped, function names are not sent, and a thrown
+  non-Error value gets no frames.
+- *Source maps*: electron-vite writes hidden source maps (no
+  `sourceMappingURL`, left out of the app by `electron-builder.yml`). The
+  release workflow runs `posthog-cli sourcemap inject` on `out/main` and
+  `out/renderer`, which prepends a snippet recording each file's chunk id in
+  `globalThis._posthogChunkIds`, and uploads the maps keyed by chunk id
+  (RELEASING.md). The scrubber maps each frame's bundle file to its chunk id,
+  and the `Telemetry` class sends its own `$exception_list` (oldest frame
+  first, `filename`, `lineno`, `colno`, `chunk_id`, `in_app`, platform
+  `node:javascript` or `web:javascript`) instead of letting posthog-node parse
+  a stack: the SDK would look chunk ids up by the full, unscrubbed path.
+  Builds without the upload (dev, local `pnpm dist`, a release without the
+  secret) send the same frames without chunk ids.
+- *Release*: `inject --release-name postpile --release-version <version>`
+  also records the PostHog release id in `_posthogReleaseId`, and posthog-node
+  sends it as `$release_id` on every exception (renderer errors use the main
+  process's, the same release), so an issue can be marked resolved in a
+  version. `app_version` stays a super property either way. Also
+  `process_type` (`main` or `renderer`) and a mechanism (`generic`,
+  `onerror`, `onunhandledrejection`, `react_error_boundary`, all unhandled).
 
 **Events** (snake_case; the full typed list, incl. prop shapes, is
 `TELEMETRY_EVENTS` in `packages/core/src/telemetry-events.ts`):

@@ -381,6 +381,25 @@ describe('POST /api/telemetry', () => {
     expect(telemetry.events).toEqual([]);
   });
 
+  it('hands a renderer error to captureRendererException, not to capture', async () => {
+    const telemetry = new FakeTelemetry();
+    const app = createApp(fakeEngine({}), 'secret', CONFIG, new UpdatesOff(''), telemetry);
+    const props = { source: 'react_render', type: 'TypeError', message: 'boom', stack: 'TypeError: boom', chunk_ids: {} };
+    const res = await app.request('/api/telemetry', { method: 'POST', headers, body: JSON.stringify({ event: 'renderer_exception', props }) });
+    expect(res.status).toBe(200);
+    expect(telemetry.rendererExceptions).toEqual([props]);
+    expect(telemetry.events).toEqual([]);
+  });
+
+  it('refuses a renderer error with extra fields', async () => {
+    const telemetry = new FakeTelemetry();
+    const app = createApp(fakeEngine({}), 'secret', CONFIG, new UpdatesOff(''), telemetry);
+    const props = { source: 'window_error', type: 'Error', message: 'boom', stack: null, chunk_ids: {}, pr_title: 'Fix login' };
+    const res = await app.request('/api/telemetry', { method: 'POST', headers, body: JSON.stringify({ event: 'renderer_exception', props }) });
+    expect(res.status).toBe(400);
+    expect(telemetry.rendererExceptions).toEqual([]);
+  });
+
   it('requires the token like every other route', async () => {
     const app = createApp(fakeEngine({}), 'secret', CONFIG);
     const res = await app.request('/api/telemetry', {
