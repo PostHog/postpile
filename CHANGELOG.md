@@ -22,6 +22,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Fixed
 
+- A sync touching many PRs no longer fails with "Expression tree is too large": the facts lookup built two SQL conditions per PR and SQLite gave up past about 500.
 - A review request a bot made for you counts as an ask everywhere: it pings, wakes a snooze, and keeps quiet reads from marking the thread read as bot activity.
 - A dismissed review no longer counts as reviewed for "To review" while whose move says "Review".
 - Asked again after you requested changes, without a new push, whose move says "Re-review, ada asked", like with a push. It said "ada to address your changes".
