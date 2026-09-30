@@ -159,7 +159,7 @@ team-devex" instead of the bot's name.
   meant "a member has an unseen loud event"; that fact stays as
   `TileState.loud` and drives pings, coral, urgency and sections. A snoozed
   tile keeps its snooze while a thread is unread (`TileState.unreadOnGitHub`)
-  and counts in the Unread filter.
+  and sits in the Unread group (see "Groups inside a topic").
 - `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
   yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); every snooze also ends
   when its PR is merged or closed.
@@ -173,7 +173,7 @@ team-devex" instead of the bot's name.
   team request no teammate picked up and not on hold (`teamRequestHold`, see whose turn),
   head not reviewed by them). Marking read a PR that
   still waits on their review makes it read (no strip, no coral) but leaves it open in the
-  normal tile list with its turn footer, and in To review; it never lands in the Done fold.
+  normal tile list with its turn footer, and in To review; it never lands in Dealt with.
   An approval counts on any commit (2026-09-28): a PR the user approved stays done after later
   pushes. `commits_after_approval` events are quiet by the rules; the tile comes back only
   through the normal loud events (re-review requested, mention, question, changes requested)
@@ -324,7 +324,7 @@ the reasons and does not flip back:
    match is gone; the agent may still raise a single event like any other.
 2. *Not done until seen.* `isPrDone`: a merged PR is done, except while its
    `merged_without_review` event is unseen. Such a tile is `open`, whose turn
-   "none", in the normal tile list (not in the Done fold), and carries the
+   "none", in the normal tile list (not in Dealt with), and carries the
    merge on `TileState.unseenMerges`: the tile shows it in a grey strip where
    an unread tile has its warm one ("nell merged it without your review ·
    2d", `UnseenMergeStrip`), without the NEW pill. History: 2026-09-25 "approved and even merged might mean I
@@ -333,7 +333,7 @@ the reasons and does not flip back:
    here, but something is unseen) and "not urgent when all stuff has merged"
    (why it never makes a topic urgent).
 3. *"Not yours" counts as seen.* When the PR's glance says NOT_YOURS, the
-   merge counts as seen and the tile is done (it shows in the Done fold with
+   merge counts as seen and the tile is done (it shows in Dealt with with
    the verdict). This applies to personal requests too: after a merge the only
    question is whether it concerns the user. For open PRs the team request
    hold still ignores NOT_YOURS on personal requests (see whose turn).
@@ -1756,8 +1756,8 @@ updates it while I'm looking at it."
   (leaves when the PR changes or the pane closes, `visibilitychange`,
   window `blur` / `focus`). The held place is `holdPlace` in
   `lib/hold-place.ts` with `useHeldPlace` (the place taken when the
-  selection starts): `TileGrid` holds the selected tile across its live,
-  Snoozed and Done lists (the Unread filter keeps that order),
+  selection starts): `TileGrid` holds the selected tile across its Unread,
+  Open and Dealt with groups,
   `TopicSidebar` holds the open topic's row across the queue sections and
   Other topics (`layoutBuckets` / `layoutFromBuckets` in `lib/queues.ts`)
   while its selected tile stays selected.
@@ -2639,7 +2639,7 @@ avatars and filters", QueuesB2).
   filter, or the search once its new results are in), or when the pick is
   really gone (topic deleted or merged). Meanwhile the open topic stays
   listed in the sidebar in its normal place, the open tile stays in the
-  grid (search matches, the Unread list, the Done fold opens for it), and
+  grid (search matches, Dealt with opens for it), and
   a tile id that disappears (set regrouped, PR left a stack, single to set)
   is followed by its picked PR to the tile that holds it now. None of this
   adds history entries. Why: after an approve the user often moves on to
@@ -2647,28 +2647,25 @@ avatars and filters", QueuesB2).
   their place (2026-09-29). Pure rules in `lib/selection.ts`.
 - **Nothing is selected until there is something to look at**: when a
   topic opens or a filter changes and the user has not picked a tile, the
-  app selects only an unread tile (the first in tier order); under the
-  grid's All filter, else the first open one; never a snoozed or done
-  tile. Under Unread with nothing unread it selects nothing, and the right
-  pane says "No tile selected" with one line ("Nothing unread in this
-  topic. Pick a tile, or show All."; under All "Pick a tile to see it.").
-  A tile the app picked is not the user's pick: it is not written into
-  history.
-  Changing the All / Unread filter under an app-picked tile picks again
-  (All to Unread drops an auto-picked open tile, then the first unread or
-  "No tile selected"). When an app-picked tile changes state while it is
-  shown (read or done through a sync, the move-on mark), it stays in the
-  pane and counts as the user's pick from then on, so the grid keeps it
-  too: pane and grid never disagree, and it drops out once the user moves
-  on. The keep-visible rule above stays for tiles the user selected. Why: "we
-  should rather not select any tile and show 'none selected' on the right
-  ... then when collapsing all 'done' and having selected 'unread' it would
-  actually make sense" (2026-09-29). Pure rules in `lib/selection.ts`
-  (`autoTile`).
-- **Topic column**: the whole topic, tiles sorted by `TileView.tier` (the
-  most urgent tier among its PRs), needs reply first, rest last; inside a
-  tier the old order (unread before open; a read tile that is still your
-  move stays with the unread ones, `tileListRank`). Single column as before.
+  app selects the first tile of the Unread group in tier order, else the
+  first of Open; never a snoozed tile, never one in Dealt with. With
+  neither it selects nothing, and the right pane says "No tile selected"
+  ("Pick a tile to see it."). A tile the app picked is not the user's pick:
+  it is not written into history. When an app-picked tile changes group
+  while it is shown (read or done through a sync, the move-on mark), it
+  stays in the pane and counts as the user's pick from then on, so the
+  grid keeps it too: pane and grid never disagree, and it drops out once
+  the user moves on. The keep-visible rule above stays for tiles the user
+  selected. Why: "we should rather not select any tile and show 'none
+  selected' on the right" (2026-09-29). Pure rules in `lib/selection.ts`
+  (`autoTile`). The All / Unread filter it was first built for is gone
+  (2026-09-30, "Groups inside a topic").
+- **Topic column**: the whole topic in three groups, Unread, Open, Dealt
+  with (see "Groups inside a topic"); inside a group tiles sort by
+  `TileView.tier` (the most urgent tier among its PRs), needs reply first,
+  rest last, snoozed ones last; inside a tier the engine's order
+  (`tileListRank`: a read tile that is still your move first). Single
+  column as before.
 
 ### Repo scope and quiet repos
 
@@ -2929,7 +2926,7 @@ ways, and there is no third:
 A PR tile is unread while any tracked thread in it is unread on GitHub. Done,
 whose move and snooze stay separate facts: a done tile whose thread went unread
 again shows unread until it is cleared. A snoozed tile keeps its snooze but
-still counts in the Unread filter. A finished topic never holds an unread
+still counts as unread (the Unread group, see "Groups inside a topic"). A finished topic never holds an unread
 thread: the retire gate needs every thread read, and a retired topic whose
 thread turns unread comes back.
 
@@ -2979,7 +2976,7 @@ finished topics included.
 - Tile state (core `deriveTileState`, Board passes the threads): snoozed,
   else unread while a member's thread is unread on GitHub, else done (every
   tracked PR done, no loud news), else open. `TileState.unreadOnGitHub` (a
-  snoozed tile too, for the Unread filter and the sidebar count) and
+  snoozed tile too, for the Unread group and the sidebar count) and
   `TileState.loud` (the old "unseen loud" unread) are separate facts;
   `PrSummary.unreadOnGitHub` keeps Mark read and the "Not done yet" dot on
   a done PR whose thread is unread. Unread reasons: the PR's loud news,
@@ -3083,6 +3080,53 @@ vacation). Rules in core `inbox-cleanup.ts`, engine `InboxCleanup`
   PostPile that stayed unread on GitHub, the third state the rule removes.
   The dialog keeps only "mark read on GitHub before <date>" and Not now;
   migration 021 deletes a stored baseline, so nothing it hid stays hidden.
+
+## Groups inside a topic (2026-09-30)
+
+The tile grid had an All / Unread toggle next to folded Snoozed and Done
+rows. Switching it deselected the tile, kept a filter state and special
+cases in selection, and the renderer worked out "unread" and "done" from
+the raw tile state itself (`isUnreadTile`, the fold filters, the NEW pill
+check), a second copy of core's rules. Owner decisions (2026-09-30):
+
+- **Core ships display decisions, the renderer only displays.** Each
+  `TileView` carries its `group` in the topic (core `tileGroup` in
+  `tile-groups.ts`): `unread` (the tile is unread by "GitHub unread is
+  PostPile unread", a snoozed tile with an unread thread too), `open` (read,
+  not dealt with: your move, waiting on someone, snoozed) or `dealt_with`
+  (tile state `done`). It also carries `newBadge` (`tileNewBadge`: the coral
+  NEW pill, never on a headline made by automation unless it is loud). The
+  topic's unread count (`TopicListItem.unreadTiles`, the sidebar bubble; the
+  footer adds the topics up) counts the Unread group (`topicUrgency` calls
+  `tileGroup`). `apps/desktop/src/main/renderer-rules.test.ts` fails when
+  renderer code compares a tile state with `unread` / `done` or reads
+  `unreadOnGitHub` or `automation` again. The one exception is the
+  optimistic guess after a click (`lib/optimistic.ts`), from `afterRead`,
+  until the refetch brings core's answer.
+- **Three groups, always in this order: Unread, Open, Dealt with (n).**
+  Empty groups don't show. Dealt with is folded by default and opens on
+  click, for the rest of the session in every topic (App state); it also
+  opens while the search filters or while one of its tiles is selected.
+  The group's name and count sit right on top of its first tile, no box
+  around them. Core's order is `TILE_GROUP_ORDER`; the renderer's copy is
+  typed with `TileGroupOrder`, so a drift fails to compile.
+- **No toggle.** The All / Unread buttons, "switching to Unread deselects",
+  the filter-aware auto pick and the "show All" empty text are gone.
+- **Selection:** the selected tile keeps its place (`useHeldPlace`, now over
+  the three groups); a tile moves groups after a mark or when you leave it
+  (the move-on mark), shown once the selection moves on. Its look changes
+  right away.
+- **Wording:** "Dealt with" labels tiles wherever the app names the group
+  (tile grid, counts, MCP `[PR, dealt with]` tile lines, the dev CLI); the
+  internal state stays `done`. Topics that are really over stay "Finished".
+- **Tests** (restated independently in `@postpile/core/testing`,
+  `invariants-screen.ts`, `properties/screen.test.ts`): every tile is in
+  exactly one group, the one the spec gives it; group Unread exactly when
+  the tile has an unread dot; the unread count is the number of unread
+  tiles; the NEW pill shows only on unread tiles and never on an automation
+  headline left quiet; the groups come in the order Unread, Open, Dealt
+  with. The fake engine builds its tiles through `buildTileView`, and its
+  rules test checks the groups and the counts per topic and in total.
 
 ## You already dealt with it
 

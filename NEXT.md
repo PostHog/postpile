@@ -1068,6 +1068,14 @@ the app meanwhile.
 
 ## Decided
 
+- **Groups inside a topic** (2026-09-30, DESIGN.md "Groups inside a topic"):
+  the tile grid's All / Unread toggle is gone; a topic shows three groups,
+  always Unread, Open, Dealt with (n), empty ones hidden, Dealt with folded
+  until opened (kept for the session). Core ships each tile's `group` and
+  `newBadge` and the unread counts; the renderer only displays them, and a
+  static test fails when renderer code works unread or done out from raw
+  state. "Done" as a tile label reads "Dealt with" (internal state stays
+  `done`); finished topics stay "Finished".
 - **Comment edits, findings, new moves, read before acting** (2026-09-30,
   DESIGN.md "Handled quietly" › Comment edits and New moves only, "You
   already dealt with it" › Read before acting): a comment's latest edit is a
