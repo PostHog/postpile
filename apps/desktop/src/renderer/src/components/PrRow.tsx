@@ -1,7 +1,9 @@
 import type { PrSummary } from '@postpile/core';
+import { assigneeLine } from '../lib/assignees.ts';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import type { StackPlace } from '../lib/stacks.ts';
 import { prNumber } from '../lib/tiles.ts';
+import { AssignedTo } from './AssignedTo.tsx';
 import { Avatar } from './Avatar.tsx';
 import { Glyph, PrStateIcon } from './icons.tsx';
 import { ForWhomChip, NotDoneDot, RepoLabel, StackMark, StateWordLabel } from './pills.tsx';
@@ -40,7 +42,8 @@ function rowBackground(props: PrRowProps, quiet: boolean): string {
  * PR keeps the tile unread, number, the stack mark for a stack layer
  * ("1/3"), title (not on a single-PR tile, whose heading is the title), then
  * the state word (review state, or the DRAFT chip, Merged, Closed), open
- * threads and the author. No CI here: checks only show in the detail
+ * threads and the author, then "assigned to" when someone else is assigned
+ * (an agent PR a bot opened for a person names that person). No CI here: checks only show in the detail
  * pane's facts. Drafts and closed layers sit on a grey row so they stay in
  * their stack without drawing the eye.
  */
@@ -57,6 +60,7 @@ export function PrRow(props: PrRowProps) {
     titleLook = 'font-semibold text-ink-2';
   }
   const word = rowStateWord(pr.status);
+  const assigned = assigneeLine(pr.author, pr.assignees);
   return (
     <button
       type="button"
@@ -84,6 +88,7 @@ export function PrRow(props: PrRowProps) {
           </span>
         )}
         <Avatar login={pr.author} />
+        {assigned && <AssignedTo line={assigned} />}
       </span>
     </button>
   );
