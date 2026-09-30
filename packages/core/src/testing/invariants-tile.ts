@@ -4,7 +4,7 @@
 import type { WhoseTurn, WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
 import type { PrTier } from '../pr-tier.ts';
-import { pickHeadlineEvent } from '../headline.ts';
+import type { Pr, PrEvent } from '../types.ts';
 import { tileListRank } from '../tile-view.ts';
 import type { TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
@@ -59,6 +59,34 @@ function tileNews(board: PropertyBoard, view: TileView) {
  * news; else its newest unseen quiet event after the thread's read; else the
  * thread itself.
  */
+/** Headline class restated from raw fields: ask 0, merged or closed 1, verdict 2, comment 3, other human 4, automation 5. */
+function headlineRank(event: PrEvent, pr: Pr, board: PropertyBoard): number {
+  if (event.kind === 'merged_without_review' || event.kind === 'closed') {
+    return 1;
+  }
+  const subject = pr.timeline.find((item) => item.id === event.sourceId)?.subject ?? '';
+  const asksViewer = event.kind === 'review_requested' && (subject === board.viewer.login || board.viewer.teams.some((team) => team.endsWith(`/${subject.split('/').pop()}`) || team === subject));
+  if (asksViewer) {
+    return 0;
+  }
+  if (event.isBot || event.actor === '') {
+    return 5;
+  }
+  if (['mention', 'team_mention', 'question_to_user', 'reply_to_user'].includes(event.kind)) {
+    return 0;
+  }
+  if (event.kind === 'review_approved' || event.kind === 'review_changes_requested') {
+    return 2;
+  }
+  return event.kind === 'comment' || event.kind === 'review_commented' ? 3 : 4;
+}
+
+function expectedHeadline(events: PrEvent[], pr: Pr, board: PropertyBoard): PrEvent | undefined {
+  // On a tie in class and time the later event in the list wins.
+  const ranked = events.toReversed().toSorted((a, b) => headlineRank(a, pr, board) - headlineRank(b, pr, board) || (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  return ranked[0];
+}
+
 function expectedReasonIds(board: PropertyBoard, key: string): string[] {
   const events = eventsOf(board, key);
   const news = events.filter(isNews);
@@ -70,7 +98,7 @@ function expectedReasonIds(board: PropertyBoard, key: string): string[] {
     const loudness = event.override ? event.override.loudness : event.ruleLoudness;
     return event.seenAt === null && loudness === 'quiet' && (thread.lastReadAt === null || event.at > thread.lastReadAt);
   });
-  const headline = pickHeadlineEvent(quiet, prOf(board, key), board.viewer);
+  const headline = expectedHeadline(quiet, prOf(board, key), board);
   return headline ? [headline.id] : [`thread:${thread.id}`];
 }
 
