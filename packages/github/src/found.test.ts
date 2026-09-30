@@ -8,7 +8,7 @@ describe('buildFoundQuery', () => {
     const { query, aliases } = buildFoundQuery(['acme/team-platform', 'acme/team-infra'], '2026-09-21');
     expect(aliases.map((alias) => [alias.alias, alias.via, alias.team])).toEqual([
       ['own', 'own_open', null],
-      ['assigned', 'own_open', null],
+      ['assigned', 'assigned', null],
       ['review', 'review_requested', null],
       ['team0', 'team_review_requested', 'acme/team-platform'],
       ['team1', 'team_review_requested', 'acme/team-infra'],
@@ -41,7 +41,7 @@ describe('foundRefs', () => {
     ]);
   });
 
-  it('keeps an assigned PR only when a bot opened it: then it is the viewer\'s own', () => {
+  it('finds every open PR assigned to the viewer: a bot\'s as their own, a person\'s as assigned', () => {
     const query = buildFoundQuery([], '2026-09-21');
     const node = (number: number, author: string) => ({
       number,
@@ -49,8 +49,16 @@ describe('foundRefs', () => {
       repository: { nameWithOwner: 'o/r' },
       author: { __typename: author },
     });
-    const refs = foundRefs(query, { assigned: { nodes: [node(7, 'Bot'), node(8, 'User')] } });
-    expect(refs.map((ref) => [ref.ref.number, ref.via, ref.reason])).toEqual([[7, 'own_open', 'agent PR assigned to you']]);
+    // #6 is the viewer's own, self-assigned: the own alias found it first.
+    const refs = foundRefs(query, {
+      own: { pullRequests: { nodes: [node(6, 'User')] } },
+      assigned: { nodes: [node(6, 'User'), node(7, 'Bot'), node(8, 'User')] },
+    });
+    expect(refs.map((ref) => [ref.ref.number, ref.via, ref.reason])).toEqual([
+      [6, 'own_open', 'your open PR'],
+      [7, 'own_open', 'agent PR assigned to you'],
+      [8, 'assigned', 'assigned to you'],
+    ]);
   });
 });
 

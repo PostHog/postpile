@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { PrDetail, PrLifecycle, PrStatus, PrSummary, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useViewer } from '../api/viewer.ts';
 import { assigneeLine } from '../lib/assignees.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
@@ -79,7 +80,8 @@ export function PrBody(props: PrBodyProps) {
   const { syncing } = useActions();
   const { pr } = props.detail;
   const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
-  const assigned = assigneeLine(pr.author, pr.assignees ?? []);
+  const viewerLogin = useViewer().data?.login ?? null;
+  const assigned = assigneeLine(pr.author, pr.assignees ?? [], viewerLogin);
   // A catch-up run on the PR's topic shows as its glance writing; facts get rewritten by it too.
   const updating = updatingNow({ syncing, writing: props.detail.glanceState === 'writing' });
   return (

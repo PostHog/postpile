@@ -13,7 +13,9 @@ now".
   queues and filters, team requests, changes answered, loudness, pings,
   quiet reads, why-here, topic relation and driver, faces, "Ask <owner>"
   and the own-PR prompt note; shown authorship stays `pr.author`. The
-  finder adds `is:pr is:open assignee:@me`, bot-opened hits only. PR rows
+  finder adds `is:pr is:open assignee:@me`: it finds every PR assigned to
+  you, and only bot PRs become yours (bot hits `own_open`, a person's PR
+  the new `FoundVia` `assigned`, code AS, "For you", still the author's). PR rows
   and the detail pane show "assigned to" (faces, two then "+N") when
   someone other than the author is assigned. Sample data: #1970 (the
   viewer's agent PR) and #1972 (three teammates' agent PR). Not changed:

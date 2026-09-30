@@ -310,11 +310,13 @@ export type PingReason = NotificationReason;
 
 /**
  * How the full sync found a PR that is not in the inbox:
- * own_open: the viewer's own open PR; review_requested: a review is asked of
- * the viewer; team_review_requested: of one of their teams; involved_merged:
- * involves the viewer and merged in the last days.
+ * own_open: the viewer's own open PR; assigned: an open PR assigned to the
+ * viewer, whoever opened it (a bot's is theirs, see `prOwners`);
+ * review_requested: a review is asked of the viewer; team_review_requested:
+ * of one of their teams; involved_merged: involves the viewer and merged in
+ * the last days.
  */
-export type FoundVia = 'own_open' | 'review_requested' | 'team_review_requested' | 'involved_merged';
+export type FoundVia = 'own_open' | 'assigned' | 'review_requested' | 'team_review_requested' | 'involved_merged';
 
 /**
  * Why a PR is inside a tile.

@@ -10,6 +10,7 @@ import { ownerRelation, topicPeople } from './topic-queues.ts';
 import { topicDriver } from './topic-roles.ts';
 import type { Pr, Viewer } from './types.ts';
 import { whoseTurn } from './whose-turn.ts';
+import { whyHere } from './why-here.ts';
 
 const me = viewer.login;
 const withTeam: Viewer = { ...viewer, teamMembers: ['lyra', 'rowan'] };
@@ -112,5 +113,29 @@ describe('an agent PR assigned to a teammate', () => {
     expect(topicPeople([pr, agentPr([])], withTeam)).toEqual([{ login: 'lyra', relation: 'team' }]);
     expect(topicDriver([pr, agentPr(['lyra'], { number: 2 }), makePr({ author: 'ada', number: 3 })])).toBe('lyra');
     expect(tilePeople([pr], me)).toEqual([{ login: 'lyra', role: 'assignee' }]);
+  });
+});
+
+describe('a person’s PR found because it is assigned to the viewer', () => {
+  const assigned = { kind: 'found' as const, via: 'assigned' as const, reason: 'assigned to you' };
+
+  it('is aimed at the viewer (AS, "For you") but stays the author’s', () => {
+    const pr = makePr({ author: 'ada', assignees: [me] });
+    expect(whyHere(assigned, pr, withTeam)).toBe('AS');
+    expect(forWhom('AS', pr, withTeam)).toEqual({ kind: 'you' });
+    expect(tierOf(pr)).toBe('rest');
+    expect(turnOf(pr)).toMatchObject({ kind: 'none' });
+    expect(ownerRelation(pr, withTeam)).toBe('other');
+  });
+
+  it('files a teammate’s assigned PR under team and a requested review under To review', () => {
+    expect(tierOf(makePr({ author: 'lyra', assignees: [me] }))).toBe('team');
+    expect(tierOf(makePr({ author: 'ada', assignees: [me], reviewerUsers: [me] }))).toBe('to_review');
+  });
+
+  it('keeps a bot PR found through the same search the viewer’s own', () => {
+    const pr = agentPr([me]);
+    expect(whyHere({ kind: 'found', via: 'own_open', reason: 'agent PR assigned to you' }, pr, withTeam)).toBe('AU');
+    expect(forWhom('AU', pr, withTeam)).toEqual({ kind: 'own' });
   });
 });

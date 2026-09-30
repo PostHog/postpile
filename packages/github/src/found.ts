@@ -11,7 +11,7 @@ export interface FoundRef {
   ref: PrRef;
   updatedAt: IsoTime;
   via: FoundVia;
-  /** "your open PR", "agent PR assigned to you", "review requested from you", "review requested from org/team", "involves you, merged 2026-09-24". */
+  /** "your open PR", "agent PR assigned to you", "assigned to you", "review requested from you", "review requested from org/team", "involves you, merged 2026-09-24". */
   reason: string;
 }
 
@@ -21,8 +21,6 @@ export interface FoundAlias {
   via: FoundVia;
   /** The team for team_review_requested. */
   team: string | null;
-  /** Keep only hits a bot opened: an assigned PR is the viewer's own only then (`prOwners`). */
-  botAuthorsOnly: boolean;
 }
 
 export interface FoundQuery {
@@ -40,18 +38,18 @@ function searchAlias(alias: string, search: string, fields = PR_FIELDS): string 
 
 /**
  * One GraphQL request for PRs the inbox may not show: the viewer's own open
- * PRs, open agent PRs a bot opened and assigned to them (their own too, see
+ * PRs, every open PR assigned to them (a bot's is their own, see
  * `prOwners`), reviews asked of them and of each of their teams, and PRs
  * involving them merged since `mergedSince` (a date, YYYY-MM-DD). Only id-level
  * fields; the batched PR fetch gets the rest for new or changed ones.
  */
 export function buildFoundQuery(teams: string[], mergedSince: string): FoundQuery {
   const aliases: FoundAlias[] = [
-    { alias: 'own', via: 'own_open', team: null, botAuthorsOnly: false },
-    { alias: 'assigned', via: 'own_open', team: null, botAuthorsOnly: true },
-    { alias: 'review', via: 'review_requested', team: null, botAuthorsOnly: false },
-    ...teams.map((team, index): FoundAlias => ({ alias: `team${index}`, via: 'team_review_requested', team, botAuthorsOnly: false })),
-    { alias: 'merged', via: 'involved_merged', team: null, botAuthorsOnly: false },
+    { alias: 'own', via: 'own_open', team: null },
+    { alias: 'assigned', via: 'assigned', team: null },
+    { alias: 'review', via: 'review_requested', team: null },
+    ...teams.map((team, index): FoundAlias => ({ alias: `team${index}`, via: 'team_review_requested', team })),
+    { alias: 'merged', via: 'involved_merged', team: null },
   ];
   const parts = [
     `  own: viewer {
@@ -59,6 +57,7 @@ export function buildFoundQuery(teams: string[], mergedSince: string): FoundQuer
       nodes { ${PR_FIELDS} }
     }
   }`,
+    // The author's type tells an agent PR (a bot's, the viewer's own) from one a person assigned them.
     searchAlias('assigned', 'is:pr is:open assignee:@me', `${PR_FIELDS} author { __typename }`),
     searchAlias('review', 'is:pr is:open user-review-requested:@me'),
     ...teams.map((team, index) => searchAlias(`team${index}`, `is:pr is:open team-review-requested:${team}`)),
@@ -79,10 +78,27 @@ export interface RawFoundNode {
 
 export type RawFoundResponse = Record<string, { nodes: (RawFoundNode | null)[] } | { pullRequests: { nodes: (RawFoundNode | null)[] } } | null>;
 
+/**
+ * An assigned PR a bot opened is the viewer's own (`prOwners`): found like
+ * their own open PRs. One a person opened stays `assigned`: the author
+ * still owns it.
+ */
+function viaFor(alias: FoundAlias, node: RawFoundNode): FoundVia {
+  if (alias.via === 'assigned' && node.author?.__typename === 'Bot') {
+    return 'own_open';
+  }
+  return alias.via;
+}
+
 function reasonFor(alias: FoundAlias, node: RawFoundNode): string {
+  if (alias.via === 'assigned' && viaFor(alias, node) === 'own_open') {
+    return 'agent PR assigned to you';
+  }
   switch (alias.via) {
     case 'own_open':
-      return alias.botAuthorsOnly ? 'agent PR assigned to you' : 'your open PR';
+      return 'your open PR';
+    case 'assigned':
+      return 'assigned to you';
     case 'review_requested':
       return 'review requested from you';
     case 'team_review_requested':
@@ -95,13 +111,12 @@ function reasonFor(alias: FoundAlias, node: RawFoundNode): string {
 /**
  * The finder answer as one list: each PR once, from the first alias in
  * query order that found it (review requests before merges), at most
- * FOUND_CAP. Aliases the token could not answer are null and skipped, and
- * so are a bot-only alias's hits that a person opened.
+ * FOUND_CAP. Aliases the token could not answer are null and skipped.
  */
 export function foundRefs(query: FoundQuery, data: RawFoundResponse): FoundRef[] {
   const seen = new Set<string>();
   const result: FoundRef[] = [];
-  const order: FoundVia[] = ['review_requested', 'team_review_requested', 'own_open', 'involved_merged'];
+  const order: FoundVia[] = ['review_requested', 'team_review_requested', 'own_open', 'assigned', 'involved_merged'];
   const aliases = [...query.aliases].sort((a, b) => order.indexOf(a.via) - order.indexOf(b.via));
   for (const alias of aliases) {
     const answer = data[alias.alias];
@@ -113,9 +128,6 @@ export function foundRefs(query: FoundQuery, data: RawFoundResponse): FoundRef[]
       if (!node?.number || !node.repository || !node.updatedAt) {
         continue;
       }
-      if (alias.botAuthorsOnly && node.author?.__typename !== 'Bot') {
-        continue;
-      }
       const key = `${node.repository.nameWithOwner}#${node.number}`;
       if (seen.has(key) || result.length >= FOUND_CAP) {
         continue;
@@ -124,7 +136,7 @@ export function foundRefs(query: FoundQuery, data: RawFoundResponse): FoundRef[]
       result.push({
         ref: { repo: node.repository.nameWithOwner, number: node.number },
         updatedAt: new Date(node.updatedAt).toISOString(),
-        via: alias.via,
+        via: viaFor(alias, node),
         reason: reasonFor(alias, node),
       });
     }

@@ -45,6 +45,8 @@ function foundCode(via: FoundVia, authored: boolean): WhyCode {
   switch (via) {
     case 'own_open':
       return 'AU';
+    case 'assigned':
+      return 'AS';
     case 'review_requested':
       return 'RV';
     case 'team_review_requested':

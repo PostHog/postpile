@@ -80,7 +80,10 @@ never stored.
   author, subscribed, ...)
 - `found`: not in the inbox; the full sync found it with one GraphQL request
   (`findPrs`, `buildFoundQuery` in packages/github; never in the live poll):
-  the user's own open PRs (`own_open`, "your open PR", code AU), reviews asked
+  the user's own open PRs (`own_open`, "your open PR", code AU), every open
+  PR assigned to them (`assignee:@me`: a bot's as `own_open`, "agent PR
+  assigned to you"; a person's as `assigned`, "assigned to you", AS; see
+  "PR ownership"), reviews asked
   of them (`review_requested`, `user-review-requested:@me`, RV) or of each of
   their teams (`team_review_requested`, one search alias per team, RT), and PRs
   involving them merged in the last 7 days (`involved_merged`, AU or CM).
@@ -1789,10 +1792,17 @@ counted as a teammate's.
 - **Fetching**: the batched PR query reads `assignees(first: 10)`; stored
   snapshots keep them in the PR JSON (`Pr.assignees`, missing on older
   snapshots and read as none). The full sync's finder asks
-  `is:pr is:open assignee:@me` next to the viewer's own open PRs and keeps
-  only hits a bot opened (found as `own_open`, "agent PR assigned to you").
-  GitHub notifies the assignee with reason `assign` (code AS), so an agent
-  PR usually arrives through the inbox anyway.
+  `is:pr is:open assignee:@me` next to the viewer's own open PRs: it finds
+  every PR assigned to the viewer, and only bot PRs become theirs. A hit a
+  bot opened (the search reads the author's `__typename`) is found as
+  `own_open`, "agent PR assigned to you" (AU, "Your PR", My PRs). A hit a
+  person opened is found as `assigned`, "assigned to you": code AS, so
+  "For you" like an `assign` notification, but the author still owns it
+  (tier by author and requests: team for a teammate's PR, To review with a
+  request, else rest; no move of its own), and its row says "assigned to
+  you". The viewer's own self-assigned PRs come from the own alias first
+  (one entry per PR). GitHub also notifies the assignee with reason `assign`
+  (code AS), so these usually arrive through the inbox anyway.
 - **Shown on the tile**: see "PR rows" under "Tile faces": when someone other
   than the author is assigned, the row and the detail pane say so.
 
@@ -1827,7 +1837,7 @@ long why-here reason. The table below is still the rule behind it.
 |---|---|---|
 | RV / RT | review asked of you / your team | `review_requested`: a pending request names the viewer or one of `Viewer.teams`, else the newest timeline request does, else RV |
 | @ / @T | mentioned you / your team | `mention` / `team_mention` |
-| AS | assigned | `assign` |
+| AS | assigned | `assign`, or found through the assignee search (a person's PR) |
 | AU | you wrote it | `author`, or a passive reason on the viewer's own PR |
 | CM | you took part | `comment`, `state_change` |
 | FW | following | `subscribed`, `manual`, `ci_activity`, `other` |
@@ -1864,7 +1874,7 @@ the tile from being done ("Not done yet", see below), mono number, the stack mar
 label), then the state word, open threads (bubble + count) and the author's
 avatar. When someone other than the author is assigned (2026-09-30, an agent
 PR a bot opened for a person, see "PR ownership"), "assigned to" follows in
-quiet grey with each assignee's avatar and login, at most two and then
+quiet grey with each assignee's avatar and login ("you" for the viewer), at most two and then
 "+N", every name in the tooltip (`assigneeLine` in the renderer's
 `lib/assignees.ts`, `AssignedTo`); the detail pane shows "opened by
 <author> · assigned to <assignees>" under the branch line. A single PR sits in a white bordered box and its row leaves the

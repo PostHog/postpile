@@ -9,7 +9,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The Dock shows how many tiles are your move as a badge, pings leave Notification Center once their tile is read or done in PostPile, and the Dock bounces once for a personal ask (mention, question, reply, review requested from you) while the window is in the background.
 - Agent PRs a bot opens for someone count as that person's PR: one assigned to you shows as "Your PR" under My PRs, and one assigned to a teammate counts as your team's (a team review request on it is for you). Whose move names the assignee instead of the bot, and "Ask" asks them.
 - PR rows and the detail pane show "assigned to" with faces when someone other than the author is assigned.
-- The full sync also finds open PRs a bot opened and assigned to you.
+- The full sync also finds every open PR assigned to you. Only the ones a bot opened become yours; a PR a person assigned to you stays theirs and shows "assigned to you".
 
 ### Changed
 

@@ -1,4 +1,5 @@
 import type { PrSummary } from '@postpile/core';
+import { useViewer } from '../api/viewer.ts';
 import { assigneeLine } from '../lib/assignees.ts';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import type { StackPlace } from '../lib/stacks.ts';
@@ -60,7 +61,8 @@ export function PrRow(props: PrRowProps) {
     titleLook = 'font-semibold text-ink-2';
   }
   const word = rowStateWord(pr.status);
-  const assigned = assigneeLine(pr.author, pr.assignees);
+  const viewerLogin = useViewer().data?.login ?? null;
+  const assigned = assigneeLine(pr.author, pr.assignees, viewerLogin);
   return (
     <button
       type="button"
