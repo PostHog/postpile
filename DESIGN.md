@@ -1596,7 +1596,8 @@ missing the dot", and on a second, read-only dot: "I would just fold it into
 the main ... there doesn't need to be a distinction". One coral dot before
 every tracked PR that keeps the tile from being done (`isPrDone` false), on
 unread and open tiles alike, in the tile's rows and the detail pane's PR
-list (aria-label "Not done yet"). No dots on done or snoozed tiles. Not on
+list (aria-label "Not done yet"; since 2026-09-30 this is the unread dot, see
+"The unread dot" below). No dots on done or snoozed tiles. Not on
 single-PR tiles either (a tile with one tracked PR, decided the same day):
 the dot says which PR of a stack or set holds the tile; on one PR it would
 only repeat the tile's own state. A pulled-in stack layer with unseen loud
@@ -1743,9 +1744,9 @@ updates it while I'm looking at it."
   `EngineService.markPrRead` (origin `detail`, own batch and undo, handled
   unless pulled in). A mark-read of an unread PR that leaves it your move
   says so in the toast, without the tile Snooze offer.
-- The dot: `notDonePrKeys` in core `tile-view.ts`, shipped as
-  `TileView.notDonePrKeys` (moved out of the renderer's `lib/tiles.ts`
-  2026-09-30), `NotDoneDot` in `pills.tsx`.
+- The dot: `unreadPrKeysOf` in core `tile-view.ts`, shipped as
+  `TileView.unreadPrKeys` (2026-09-30: was `notDonePrKeys`, see "The unread
+  dot"), `UnreadDot` in `pills.tsx`.
   A done PR that still has unseen news or a thread unread on GitHub keeps
   the tile from being done, so it keeps its dot until it is read.
 - Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
@@ -1902,8 +1903,8 @@ together; "all passing" at none) in the normal muted text, no pass or fail
 colour. The Size fact next to it draws deletions (count and bar) in their
 own diff red (`--diff-red`), never coral: coral stays for "new".
 
-**PR rows** (`PrRow`): state icon, the coral dot for a PR that keeps
-the tile from being done ("Not done yet", see below), mono number, the stack mark for a stack layer ("1/3", see
+**PR rows** (`PrRow`): state icon, the coral dot for an unread PR
+("The unread dot", see below), mono number, the stack mark for a stack layer ("1/3", see
 "Stacks as one unit"), bold title, (for-whom chip when it differs, repo
 label), then the state word, open threads (bubble + count) and the author's
 avatar. When someone other than the author is assigned (2026-09-30, an agent
@@ -1916,7 +1917,7 @@ title out (2026-09-29: the tile's heading already is the title; the row's
 tooltip keeps it); a stack or set's rows sit in one tinted rounded box, the
 selected row highlighted, drafts and closed layers on a grey row.
 
-**The not-done dot** (2026-09-29, core `notDonePrKeys`, shipped as
+**The unread dot** (2026-09-30; the dot below, first the "not-done dot" of 2026-09-29, core `notDonePrKeys`, shipped as
 `TileView.notDonePrKeys` since 2026-09-30; replaced "the new dot" of the same morning, which only
 showed on unread tiles for PRs with unseen news, see "Actions act on what
 you look at"): on an unread or open tile every tracked PR that keeps the
@@ -1934,6 +1935,19 @@ is no second, read-only dot. History: a six-PR set once stayed unread
 because of one old "ready for review" and nothing showed which PR, which
 gave the first dot; an open set that never said which PR held it gave this
 one.
+
+*Unread dot, 2026-09-30 (owner decision):* the dot now means exactly
+"unread" (core `unreadPrKeysOf`, `TileView.unreadPrKeys`, aria-label
+"Unread"), so dotted topics, dotted tiles and dotted PRs add up to GitHub's
+unread count. A PR has it when it makes its tile unread by "GitHub unread is
+PostPile unread": a tracked thread unread on GitHub, a pulled-in layer with
+unseen loud news, or an unseen Look closer event. Single-PR tiles get it
+too (the multi-PR-only rule is gone), a snoozed tile keeps the dots of its
+unread threads, open and done tiles have none. Seen but still owed is not a
+dot: the honey "Your move" (tile footer, sidebar chip) says it. A topic with
+unread PRs shows the dot, and its bubble counts unread PRs instead of tiles
+(`TopicListItem.unreadPrs`, also the footer's unread number). The passages
+above describe the "Not done yet" rule this replaced.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
 "Stack · 2"; dashed square + "Set · 3"; blue only while selected), the
@@ -2430,7 +2444,7 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   activity list; the ask composer opens under it.
 - **Detail pane top** (2026-09-29, design 3a): the tinted header repeats
   the tile (kind, title, "PR 1 of 2", ‹ ›) and lists its PRs like tile rows,
-  the open one boxed in accent, with the coral not-done dot where it applies.
+  the open one boxed in accent, with the coral unread dot where it applies (was the not-done dot until 2026-09-30).
   A single-PR tile's header shows only the kind ("PR"): no title (the body
   shows it right below), no counter and no arrows that lead nowhere
   (2026-09-29). The body starts with a state line: big

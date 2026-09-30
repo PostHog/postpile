@@ -316,8 +316,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
   optional box; secondary button there so Accept stays the one primary).
 - Shared kit: `Button` (variants primary, safe, secondary, move for the
-  "Your move" footer; sizes sm, md, icon, icon-md), `Menu`, `Avatar`, `SectionLabel`, `pills.tsx` (verdict, `NotDoneDot`
-  (the coral dot before a PR number, core `TileView.notDonePrKeys`), `ForWhomChip`,
+  "Your move" footer; sizes sm, md, icon, icon-md), `Menu`, `Avatar`, `SectionLabel`, `pills.tsx` (verdict, `UnreadDot`
+  (the coral dot before a PR number and on a topic, core `TileView.unreadPrKeys`), `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
@@ -396,10 +396,11 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   `assigneeLine` in `lib/assignees.ts`), and `PrBody` says "opened by ·
   assigned to" under the branch line. Whose PR it is for rules is core's
   (`authorRelation`, `facts.owners`: "Ask <owner>"), never decided here.
-  Every PR in core's `TileView.notDonePrKeys` (keeps an unread or open tile
-  from being done: `PrSummary.done` false or unseen news left; a pulled-in
-  layer by its news) gets `NotDoneDot` ("Not done yet") before its number,
-  on the tile and in `DetailContext`'s list. The renderer only reads the
+  Every PR in core's `TileView.unreadPrKeys` (what makes the tile unread: a
+  thread unread on GitHub, a pulled-in layer's loud news, an unseen Look
+  closer event) gets `UnreadDot` ("Unread") before its number, on the tile
+  (single-PR tiles too) and in `DetailContext`'s list. A topic with unread
+  PRs gets it too, and its bubble counts `TopicListItem.unreadPrs`. The renderer only reads the
   field. `DetailContext` shows kind, title, "PR x of n"
   and the arrows only for several PRs; one PR is just "PR".
 - Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):
@@ -407,7 +408,7 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
 - Whose turn: `TurnLine` in the tile footer; the footer turns warm for
   "Your move".
 - Coral (`unread`) means "new since you looked" and nothing else on a tile,
-  with one exception: the not-done dot on PR rows (DESIGN.md "Actions act
+  with one exception: the unread dot on PR rows and topics (DESIGN.md "Actions act
   on what you look at": one dot, no second read-only one).
   Primary buttons are ink, except Approve: `Button` variant `safe` (`--safe`
   green, `--elev-safe`), the color of the "Approved" state it produces

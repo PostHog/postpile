@@ -76,7 +76,7 @@ now".
 - Actions act on what you look at (2026-09-29, DESIGN.md "Actions act on
   what you look at"): PR-scoped mark read in the detail pane
   (`markPrRead`, per-PR label and undo), the not-done dot
-  (core `TileView.notDonePrKeys` over the new `PrSummary.done`), opened-in-PostPile
+  (now the unread dot, core `TileView.unreadPrKeys`), opened-in-PostPile
   handles the PR (checked per PR), the lead PR follows the turn (core
   `leadPrKey`, shipped in `TileView.offers`), "X to re-review"
   (`reReviewAsked`), own merged PRs clear quietly, and "Remove <team>"
@@ -1133,8 +1133,8 @@ the app meanwhile.
 - **Actions act on what you look at** (2026-09-29): the detail pane's
   Mark read / Mark done / Approve act on the selected PR (per-PR label, per-PR
   undo, Snooze in the pane only on single-PR tiles), the tile footer on the
-  tile. One coral dot per tracked PR that keeps the tile from being done
-  ("Not done yet"), on unread and open tiles, no second read-only dot.
+  tile. One coral dot per unread PR (since 2026-09-30 the dot means exactly
+  "unread", it was "Not done yet" before), no second read-only dot.
   Opening a PR in PostPile also handles it, checked per PR. The lead PR
   (core `leadPrKey`) prefers the turn's PR. Whose turn names the
   re-reviewer after a push and a re-request. The own-PR bot exception only applies while the PR is
