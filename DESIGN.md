@@ -4119,6 +4119,20 @@ topic names are never event props.
    `mcp_connect_clicked` (from `footer`/`setup`, ok: Claude Code has the
    server afterwards) and `mcp_connect_dismissed` (the footer's "Not now"),
    both sent by the engine from the action itself.
+7. *Board shape*: `tile_shape` and `topic_shape`, a counts-only snapshot of
+   how tiles and topics turn out on real boards. The desktop app sends it once
+   per local calendar day, right after a full sync ended (the board is fresh),
+   from the same day-marker mechanism as `app_active` (`ActiveDayReporter`,
+   file `telemetry-board-shape-day` in the data folder, so a restart does not
+   send twice). `Engine.boardShape()` builds it with the pure
+   `boardShapeEvents` (`packages/core/src/board-shape.ts`) over the topics the
+   sidebar lists (all repos), retired topics left out. One `tile_shape` per
+   tile: `kind` (single/stack/set), `prs` (all members), `stacked_prs`
+   (members in a stack: all of a stack tile, the stacks' members in a set, 0 for
+   a single), `pulled_in` (members that are pulled-in layers), `topic_tiles`
+   (tile count of its topic). One `topic_shape` per topic: `tiles`, `prs`,
+   `single_tiles`, `stack_tiles`, `set_tiles`. Answers "how many tiles hold x
+   PRs, and are they stacked"; never a repo, title, login or PR number.
 
 **Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
 and a scratch data dir sends one `telemetry_test` event (distinct id

@@ -63,6 +63,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
   ViewerView,
+  BoardShapeEvent,
 } from '@postpile/core';
 import type { AutoSyncOptions } from './auto-sync.ts';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
@@ -151,6 +152,8 @@ export interface EngineService {
    * ping from Notification Center once its PR is not in this list anymore.
    */
   unreadPrKeys(): Promise<PrKey[]>;
+  /** The daily board snapshot's events over the topics the sidebar lists (all repos), counts only. */
+  boardShape(): Promise<BoardShapeEvent[]>;
   /** Topics retired in the last 30 days, newest first, for the sidebar's Finished drawer. getTopic opens any of them. */
   listFinishedTopics(): Promise<FinishedTopic[]>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */

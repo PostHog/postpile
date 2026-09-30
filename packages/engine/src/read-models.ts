@@ -64,6 +64,8 @@ import {
   type TopicListItem,
   type Viewer,
   type ViewerView,
+  boardShapeEvents,
+  type BoardShapeEvent,
 } from '@postpile/core';
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
@@ -281,6 +283,14 @@ export class ReadModels {
     const board = this.board();
     const unread = board.allTiles().filter((tile) => board.stateOf(tile).kind === 'unread');
     return [...new Set(unread.flatMap(memberKeys))];
+  }
+
+  /** The topics the sidebar lists with all repos, each with its tiles. */
+  boardShape(): BoardShapeEvent[] {
+    const board = this.board();
+    const settings = scopedSettings(loadRepoSettings(this.store), { allRepos: true });
+    const listed = board.topics().map((topic) => ({ topic, tiles: board.tilesForTopic(topic.id) }));
+    return boardShapeEvents(listed.filter(({ tiles }) => this.isListed(tiles, settings)));
   }
 
   listTopics(scope?: ListScope): TopicListItem[] {

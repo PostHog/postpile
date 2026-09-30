@@ -77,6 +77,7 @@ import type {
   TeamRole,
   TeamRolesView,
   ViewerView,
+  BoardShapeEvent,
 } from '@postpile/core';
 import {
   activityList,
@@ -727,6 +728,10 @@ export class FakeEngine implements EngineService {
       }
     }
     return [...found.values()];
+  }
+
+  async boardShape(): Promise<BoardShapeEvent[]> {
+    return [];
   }
 
   async unreadPrKeys(): Promise<PrKey[]> {

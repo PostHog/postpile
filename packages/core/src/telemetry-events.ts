@@ -147,6 +147,12 @@ export const TELEMETRY_EVENTS = {
   // Once per drop into a worse level within one rate-limit window, not per request (DESIGN.md "GitHub quota").
   github_quota_low: z.object({ resource: quotaResource, level: quotaLevel }).strict(),
   consolidation_ran: z.object({ proposals_filed: count }).strict(),
+  // The daily board snapshot, counts only: one per tile on the board. stacked_prs = members in a stack
+  // (all of a stack tile, the stacks' members in a set, 0 for a single); pulled_in = layers fetched
+  // only to complete a stack; topic_tiles = tile count of the topic the tile sits in.
+  tile_shape: z.object({ kind: tileKind, prs: count, stacked_prs: count, pulled_in: count, topic_tiles: count }).strict(),
+  // The same snapshot, one per active topic in the sidebar.
+  topic_shape: z.object({ tiles: count, prs: count, single_tiles: count, stack_tiles: count, set_tiles: count }).strict(),
   // One glance catch-up run after the poll (packages/engine/src/catch-up). Always one topic per run.
   catch_up_ran: z.object({ topics: z.literal(1), agent_calls: count, duration_ms: durationMs, ok: z.boolean() }).strict(),
 

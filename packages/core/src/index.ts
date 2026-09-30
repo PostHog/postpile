@@ -78,6 +78,7 @@ export * from './github-quota.ts';
 export * from './mac-privacy.ts';
 export * from './updates.ts';
 export * from './mcp-connection.ts';
+export * from './board-shape.ts';
 export * from './telemetry-events.ts';
 export * from './telemetry-guard.ts';
 export * from './telemetry-errors.ts';

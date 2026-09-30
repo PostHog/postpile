@@ -68,6 +68,7 @@ import type {
   WorkContextSweepResult,
   WorkContextView,
   WorkThreadForget,
+  BoardShapeEvent,
 } from '@postpile/core';
 import { arch, release } from 'node:os';
 import {
@@ -815,6 +816,10 @@ export class Engine implements EngineService {
 
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     return this.reads.listTopics(scope);
+  }
+
+  async boardShape(): Promise<BoardShapeEvent[]> {
+    return this.reads.boardShape();
   }
 
   async unreadPrKeys(): Promise<PrKey[]> {

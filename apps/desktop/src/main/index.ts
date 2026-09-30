@@ -152,6 +152,9 @@ const ACTIVE_DAY_CHECK_MS = 30 * 60_000;
 // How often the live status is checked for a board change (Dock badge, pings in Notification Center).
 const BOARD_CHECK_MS = 5_000;
 let activeDay: ActiveDayReporter | null = null;
+// The board shape snapshot (tile_shape, topic_shape): once per local day, after a full sync finished.
+let boardShapeDay: ActiveDayReporter | null = null;
+let syncWasRunning = false;
 
 function checkActiveDay(): void {
   activeDay?.check(new Date());
@@ -357,6 +360,7 @@ async function start(): Promise<void> {
   activeDay = new ActiveDayReporter(join(app.getPath('userData'), 'telemetry-active-day'), () => telemetry.capture('app_active', {}));
   checkActiveDay();
   setInterval(checkActiveDay, ACTIVE_DAY_CHECK_MS).unref();
+  boardShapeDay = new ActiveDayReporter(join(app.getPath('userData'), 'telemetry-board-shape-day'), () => void sendBoardShape());
   mainWindow = await openWindow();
   // A click opens the tile: show the window, then let the renderer navigate.
   const notifier = new MacNotifier({
@@ -385,7 +389,27 @@ async function start(): Promise<void> {
   );
   const watcher = boardWatcher;
   void watcher.refresh();
-  setInterval(() => void board.livePollStatus().then((status) => watcher.checkStatus(status)), BOARD_CHECK_MS).unref();
+  async function sendBoardShape(): Promise<void> {
+    try {
+      for (const { event, props } of await board.boardShape()) {
+        telemetry.capture(event, props);
+      }
+    } catch (error) {
+      console.warn('board shape:', error);
+    }
+  }
+  setInterval(
+    () =>
+      void board.livePollStatus().then((status) => {
+        void watcher.checkStatus(status);
+        // A full sync just ended: the board is fresh, so take the daily snapshot (once per day).
+        if (syncWasRunning && !status.syncRunning) {
+          boardShapeDay?.check(new Date());
+        }
+        syncWasRunning = status.syncRunning;
+      }),
+    BOARD_CHECK_MS,
+  ).unref();
   // "Send test notification" in the status footer.
   ipcMain.handle('postpile:test-notification', () => notifier.showTest());
   // First launch: one calm welcome notification, so macOS asks for the
