@@ -291,3 +291,46 @@ describe('comments', () => {
     expect(h.writer.calls).toEqual(['commentOnPr acme/app#1 @bob can you check the migration?']);
   });
 });
+
+describe('agent actions re-check at click time', () => {
+  it('approves the PRs still agent-safe and refuses one the agent now says look closer on', async () => {
+    const h = makeHarness();
+    const other = reviewRequestedPr(2);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    h.reader.addPr(other, makeThreadFor(other));
+    await h.engine.sync({ maxAgentCalls: 50 });
+    const glance = h.store.glances.get(other.key);
+    expect(glance).not.toBeNull();
+    h.store.glances.put({ ...glance!, verdict: 'LOOK_CLOSER' });
+
+    const result = await h.engine.approveMany(
+      [
+        { prKey: pr.key, headOid: pr.headOid },
+        { prKey: other.key, headOid: other.headOid },
+      ],
+      'agent_topic',
+    );
+
+    expect(result.results).toEqual([
+      { prKey: pr.key, ok: true, message: 'Approved' },
+      { prKey: other.key, ok: false, message: 'the agent now says look closer' },
+    ]);
+    expect(result.undoToken).toBeNull();
+    expect(h.writer.calls).toEqual(['approvePr acme/app#1@head']);
+  });
+
+  it('skips a tile the agent no longer backs and refuses unknown tiles', async () => {
+    const h = makeHarness();
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 50 });
+    const glance = h.store.glances.get(pr.key);
+    expect(glance).not.toBeNull();
+    h.store.glances.put({ ...glance!, verdict: 'LOOK_CLOSER' });
+
+    const skipped = await h.engine.markTilesRead([tileId], 'agent_tile');
+    expect(skipped).toMatchObject({ ok: false, undoToken: null });
+    expect(skipped.message).toContain('the agent now says look closer');
+    expect(await tileState(h)).toBe('unread');
+    expect((await h.engine.markTilesRead([tileId, 'pr:acme/app#404'], 'agent_topic')).message).toBe('no tile pr:acme/app#404');
+  });
+});

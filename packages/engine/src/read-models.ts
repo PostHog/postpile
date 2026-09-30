@@ -271,6 +271,16 @@ export class ReadModels {
     return views.sort((a, b) => tileListRank(a) - tileListRank(b));
   }
 
+  /**
+   * The current views of the tiles `wanted` picks, built like an opened
+   * topic's. The agent actions re-check their offers against them at click time.
+   */
+  currentTileViews(wanted: (tile: Tile) => boolean): TileView[] {
+    const board = this.board();
+    const topicIds = [...new Set(board.allTiles().filter(wanted).map((tile) => tile.topicId))];
+    return topicIds.flatMap((topicId) => this.tileViews(board, topicId)).filter((view) => wanted(view.tile));
+  }
+
   /** Each PR of the topic's tiles once, in tile order. */
   private topicPrs(board: Board, tiles: Tile[]): Pr[] {
     const prs = new Map<PrKey, Pr>();

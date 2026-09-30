@@ -92,6 +92,8 @@ import {
   UNDO_WINDOW_MS,
   viewerApproval,
   agentPrFacts,
+  agentApproveRefusal,
+  agentMarkReadRefusal,
   approvalsSummary,
   tilesReadScope,
   buildPrSummary,
@@ -1047,12 +1049,19 @@ export class FakeEngine implements EngineService {
   }
 
   /** Like the engine's approveMany: each PR through the fake approve, reported per PR, no undo. */
-  async approveMany(prs: ApprovePrRequest[], _from: AgentActionFrom): Promise<BatchApproveResult> {
+  async approveMany(prs: ApprovePrRequest[], from: AgentActionFrom): Promise<BatchApproveResult> {
     if (prs.length === 0) {
       return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
     }
     const results: PrApproveResult[] = [];
+    // Checked up front against the current sample, like the engine.
+    const refusals = new Map(prs.map(({ prKey }) => [prKey, agentApproveRefusal(prKey, this.tilesHolding(prKey).map((tile) => this.tileView(tile)), from)]));
     for (const { prKey, headOid } of prs) {
+      const refusal = refusals.get(prKey) ?? null;
+      if (refusal !== null) {
+        results.push({ prKey, ok: false, message: refusal });
+        continue;
+      }
       const result = await this.approve(prKey, headOid);
       results.push({ prKey, ok: result.ok, message: result.message });
     }
@@ -1183,8 +1192,23 @@ export class FakeEngine implements EngineService {
     if (tiles.length === 0) {
       return fail('no tiles to mark read');
     }
-    const scope = tilesReadScope(tiles);
-    return this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', tiles.length === 1 ? (tiles[0]?.id ?? null) : null);
+    // Checked against the current sample like the engine: tiles no longer backed are skipped and named.
+    const skipped: string[] = [];
+    const backed: Tile[] = [];
+    for (const tile of tiles) {
+      const refusal = agentMarkReadRefusal(this.tileView(tile));
+      if (refusal === null) {
+        backed.push(tile);
+      } else {
+        skipped.push(`${tile.title}: ${refusal}`);
+      }
+    }
+    if (backed.length === 0) {
+      return fail(`Nothing marked read; skipped ${skipped.join('; ')}`);
+    }
+    const scope = tilesReadScope(backed);
+    const result = this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', backed.length === 1 ? (backed[0]?.id ?? null) : null);
+    return skipped.length === 0 ? result : { ...result, message: `${result.message}; skipped ${skipped.join('; ')}` };
   }
 
   /** Like TileActions.markPrRead: one PR of the tile, handled unless it is a pulled-in layer. */

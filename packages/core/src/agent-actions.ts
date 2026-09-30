@@ -381,6 +381,42 @@ export function topicMarkReadOffer(tiles: TopicAgentTile[]): TopicMarkReadOffer 
   };
 }
 
+const APPROVE_REFUSALS: Record<AgentBlock, string> = {
+  rechecking: 'the agent is rechecking it',
+  look_closer: 'the agent now says look closer',
+  high: 'the agent now rates it high risk',
+};
+
+const MARK_READ_REFUSALS: Record<MarkReadBlock, string> = {
+  ...APPROVE_REFUSALS,
+  asks_for_you: 'it asks something of you',
+};
+
+/**
+ * The click-time check of an agent Approve (approve is final): why `prKey`
+ * no longer goes through, or null while a current tile view still covers it.
+ * `views` are the current views of the tiles holding it; the topic's
+ * Approve leaves out snoozed tiles, like `topicApproveOffer`.
+ */
+export function agentApproveRefusal(prKey: PrKey, views: Pick<TileView, 'state' | 'agent'>[], from: 'agent_tile' | 'agent_topic'): string | null {
+  const counted = from === 'agent_topic' ? views.filter((view) => view.state.kind !== 'snoozed') : views;
+  const offers = counted.flatMap((view) => view.agent.approve ?? []);
+  if (offers.some((offer) => offer.covered.some((pr) => pr.prKey === prKey))) {
+    return null;
+  }
+  const leftOut = offers.flatMap((offer) => offer.leftOut).find((pr) => pr.prKey === prKey);
+  return leftOut ? APPROVE_REFUSALS[leftOut.reason] : 'nothing to approve on it any more';
+}
+
+/** The click-time check of an agent Mark read: why the tile is skipped, or null while the agent still backs its Mark read. */
+export function agentMarkReadRefusal(view: Pick<TileView, 'agent'>): string | null {
+  const backing = view.agent.markRead;
+  if (!backing) {
+    return 'nothing unread any more';
+  }
+  return backing.state === 'active' ? null : MARK_READ_REFUSALS[backing.reason ?? 'rechecking'];
+}
+
 /** "Approved 3 PRs", or "Approved 2 of 3 PRs" with the first failure's reason; ok only when every PR was approved. */
 export function approvalsSummary(results: { prKey: PrKey; ok: boolean; message: string }[]): { ok: boolean; message: string } {
   const approved = results.filter((result) => result.ok).length;
