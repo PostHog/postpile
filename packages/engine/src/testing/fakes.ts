@@ -1,6 +1,7 @@
 // Fakes for engine tests. Nothing here touches GitHub or the claude CLI.
 import { FakeRunner } from '@postpile/agent';
 import type { ActivityPr, McpLauncher, NotificationThread, Pr, PrKey, PrRef, TelemetryEventName, TelemetryEventProps, Viewer } from '@postpile/core';
+import type { RendererExceptionProps } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
@@ -318,6 +319,7 @@ export class FakeTelemetry implements Telemetry {
   personInfo: TelemetryPersonInfo[] = [];
   aliasedTo: number[] = [];
   exceptions: unknown[] = [];
+  rendererExceptions: RendererExceptionProps[] = [];
   shutdownCalls = 0;
 
   capture<K extends TelemetryEventName>(event: K, props: TelemetryEventProps<K>): void {
@@ -334,6 +336,10 @@ export class FakeTelemetry implements Telemetry {
 
   captureException(error: unknown): void {
     this.exceptions.push(error);
+  }
+
+  captureRendererException(report: RendererExceptionProps): void {
+    this.rendererExceptions.push(report);
   }
 
   async shutdown(): Promise<void> {

@@ -7,7 +7,9 @@ import {
   DEBUG_NOTIFICATIONS_DEFAULT_LIMIT,
   DEBUG_NOTIFICATIONS_MAX_LIMIT,
   prKey,
+  RENDERER_EXCEPTION_EVENT,
   RENDERER_TELEMETRY_EVENTS,
+  rendererExceptionProps,
   TELEMETRY_EVENTS,
   type AppConfig,
   type TelemetryEventName,
@@ -215,8 +217,18 @@ export function createApp(
   // The renderer's only way to PostHog: an allow-listed event name plus props validated
   // against the same catalogue the engine's own Telemetry class uses. Unknown events and
   // disallowed props are refused with 400, never silently dropped or forwarded as is.
+  // A renderer error is the one event with free text: it goes to captureRendererException,
+  // which scrubs it the same way as the engine's own uncaught errors before it leaves.
   app.post('/api/telemetry', async (c) => {
     const body = telemetryBody.parse(await c.req.json());
+    if (body.event === RENDERER_EXCEPTION_EVENT) {
+      const report = rendererExceptionProps.safeParse(body.props);
+      if (!report.success) {
+        return c.json({ error: `bad props for ${body.event}: ${report.error.message}` }, 400);
+      }
+      telemetry.captureRendererException(report.data);
+      return c.json({ ok: true });
+    }
     if (!isRendererTelemetryEvent(body.event)) {
       return c.json({ error: `telemetry event not allowed from the renderer: ${body.event}` }, 400);
     }
