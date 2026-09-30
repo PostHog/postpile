@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
-import { ageLabel } from '../lib/time.ts';
+import { ageLabel, clockLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Glyph } from './icons.tsx';
 import { SectionLabel } from './SectionLabel.tsx';
@@ -45,11 +45,17 @@ interface RowProps {
   body: string | null;
   at: string;
   display: EventDisplayState;
+  /** The event's own seen state is unseen (from core): the coral unread dot. */
+  unseen: boolean;
   /** Why the rules (or the agent) classed it so, for the hover title. */
   reason: string;
   last: boolean;
   /** The event id to unmute, on agent-muted events. */
   unmuteId: string | null;
+}
+
+function UnseenDot() {
+  return <span aria-label="Unseen" className="size-1.5 rounded-full bg-unread" />;
 }
 
 function ActivityRow(props: RowProps) {
@@ -75,7 +81,7 @@ function ActivityRow(props: RowProps) {
         )}
       </span>
       <span className="flex items-center gap-1.5 self-start pt-px font-mono text-[10.5px] text-faint">
-        {props.display === 'loud' && <span aria-label="New since you looked" className="size-1.5 rounded-full bg-unread" />}
+        {props.unseen && <UnseenDot />}
         {ageLabel(props.at, now)}
       </span>
     </div>
@@ -85,7 +91,7 @@ function ActivityRow(props: RowProps) {
 export function lineRow(line: ActivityLine, last: boolean) {
   const newest = line.events[0]!.event;
   const reason = line.events.length > 1 ? `${line.events.length} events` : (newest.override?.reason ?? newest.ruleReason);
-  return <ActivityRow key={line.id} kind={line.kind} actor={line.actor} summary={line.summary} body={line.body} at={line.at} display={line.display} reason={reason} last={last} unmuteId={null} />;
+  return <ActivityRow key={line.id} kind={line.kind} actor={line.actor} summary={line.summary} body={line.body} at={line.at} display={line.display} unseen={line.unseen} reason={reason} last={last} unmuteId={null} />;
 }
 
 export function eventRow(view: EventView, last: boolean) {
@@ -99,10 +105,37 @@ export function eventRow(view: EventView, last: boolean) {
       body={null}
       at={event.at}
       display={view.display}
+      unseen={view.unseen}
       reason={event.override?.reason ?? event.ruleReason}
       last={last}
       unmuteId={view.display === 'muted' ? event.id : null}
     />
+  );
+}
+
+/**
+ * The unread tile has no event to show for it: GitHub changed the
+ * notification after the last known event. One dotted line, top of the list.
+ */
+function ThreadChangeRow(props: { at: string; last: boolean }) {
+  const now = useNow();
+  const when = new Date(props.at);
+  const sameDay = when.toDateString() === now.toDateString();
+  const time = sameDay ? `at ${clockLabel(when)}` : `${whenLabel(props.at, now)}, ${clockLabel(when)}`;
+  return (
+    <div className="grid grid-cols-[20px_minmax(0,1fr)_auto] gap-x-2" title="The notification is unread on GitHub, but no event explains it.">
+      <span className="flex flex-col items-center">
+        <span className={`mt-px flex size-4 items-center justify-center rounded-full ${BADGES.muted}`}>
+          <span className="size-1 rounded-full bg-faint" />
+        </span>
+        {!props.last && <span className="w-px flex-1 bg-hairline" />}
+      </span>
+      <span className="pb-2.5 text-[12.5px] leading-[1.45] text-ink-2 select-text">GitHub changed the notification {time}, nothing PostPile can show</span>
+      <span className="flex items-center gap-1.5 self-start pt-px font-mono text-[10.5px] text-faint">
+        <UnseenDot />
+        {ageLabel(props.at, now)}
+      </span>
+    </div>
   );
 }
 
@@ -119,13 +152,15 @@ export function ActivityTimeline(props: { activity: ActivityList }) {
   const [showNoise, setShowNoise] = useState(false);
   const { fresh, earlier, noise } = props.activity;
   const shown = showAll ? earlier : earlier.slice(0, props.activity.cap);
-  const empty = earlier.length === 0 && noise.length === 0;
+  const { threadChangedAt } = props.activity;
+  const empty = earlier.length === 0 && noise.length === 0 && threadChangedAt === null;
   return (
     <div className="flex flex-col px-3">
       <span className="pb-2">
         <SectionLabel>{fresh.length > 0 ? 'Earlier activity' : 'Activity'}</SectionLabel>
       </span>
       {empty && <span className="text-xs text-hint">{fresh.length > 0 ? 'Nothing before that.' : 'No activity yet.'}</span>}
+      {threadChangedAt !== null && <ThreadChangeRow at={threadChangedAt} last={earlier.length === 0 && noise.length === 0} />}
       {shown.map((line, index) => lineRow(line, index === shown.length - 1))}
       {earlier.length > props.activity.cap && (
         <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>

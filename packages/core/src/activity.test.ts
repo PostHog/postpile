@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { activityList, noiseLabel, noiseSummary } from './activity.ts';
+import { activityList, noiseLabel, noiseSummary, threadChangedAt } from './activity.ts';
 import { reviewRequestSubject } from './events.ts';
-import { at, makeComment, makeEvent, makePr, makeReview, viewer } from './fixtures.ts';
+import { at, makeComment, makeEvent, makePr, makeReview, makeThreadFor, viewer } from './fixtures.ts';
 import type { EventDisplayState, PrEvent } from './types.ts';
 import type { EventView } from './views.ts';
 
@@ -12,7 +12,9 @@ const who = { ...viewer, teams: [team] };
 let seq = 0;
 function ev(overrides: Partial<PrEvent>, display: EventDisplayState = 'seen'): EventView {
   seq += 1;
-  return { event: makeEvent({ id: `e${seq}`, sourceId: `s${seq}`, ...overrides }), display };
+  const loudness = display === 'loud' || display === 'muted' ? display : 'quiet';
+  const base = { id: `e${seq}`, sourceId: `s${seq}`, ruleLoudness: loudness, seenAt: display === 'seen' ? at(0) : null } as const;
+  return { event: makeEvent({ ...base, ...overrides }), display, unseen: display !== 'seen' && display !== 'muted' };
 }
 
 describe('activityList', () => {
@@ -135,6 +137,50 @@ describe('activityList bodies', () => {
   it('has no body without the PR', () => {
     const comment = ev({ kind: 'comment', actor: 'lyra', sourceId: 'c1', at: at(1) });
     expect(activityList([comment], who).earlier[0]?.body).toBeNull();
+  });
+});
+
+describe('unseen dots', () => {
+  it('marks each line whose events are unseen, a burst when any of its events is', () => {
+    const seen = ev({ kind: 'comment', actor: 'lyra', at: at(1) }, 'seen');
+    const quiet = ev({ kind: 'comment', actor: 'ada', at: at(2) }, 'quiet');
+    const burst = [ev({ kind: 'commits_pushed', actor: 'rowan', at: at(3) }, 'seen'), ev({ kind: 'commits_pushed', actor: 'rowan', at: at(4) }, 'quiet')];
+    const list = activityList([seen, quiet, ...burst], who);
+    expect(list.earlier.map((line) => [line.actor, line.unseen])).toEqual([
+      ['rowan', true],
+      ['ada', true],
+      ['lyra', false],
+    ]);
+  });
+
+  it('counts muted events as seen', () => {
+    const muted = ev({ kind: 'comment', actor: 'lyra', at: at(1) }, 'muted');
+    expect(muted.unseen).toBe(false);
+  });
+});
+
+describe('threadChangedAt', () => {
+  const pr = makePr();
+  const thread = makeThreadFor(pr, { unread: true, updatedAt: at(9), lastReadAt: at(3) });
+
+  it('says when GitHub changed an unread thread that no unseen event explains', () => {
+    const seen = ev({ kind: 'comment', actor: 'lyra', at: at(5) }, 'seen');
+    expect(threadChangedAt(thread, [seen])).toBe(at(9));
+    expect(activityList([seen], who, null, null, thread).threadChangedAt).toBe(at(9));
+  });
+
+  it('stays quiet when an unseen loud event, or an unseen quiet one since the read, explains it', () => {
+    const loud = ev({ kind: 'mention', actor: 'lyra', at: at(5) }, 'loud');
+    const quietSince = ev({ kind: 'comment', actor: 'lyra', at: at(5) }, 'quiet');
+    const quietBefore = ev({ kind: 'comment', actor: 'lyra', at: at(2) }, 'quiet');
+    expect(threadChangedAt(thread, [loud])).toBeNull();
+    expect(threadChangedAt(thread, [quietSince])).toBeNull();
+    expect(threadChangedAt(thread, [quietBefore])).toBe(at(9));
+  });
+
+  it('stays quiet for a read thread or no thread', () => {
+    expect(threadChangedAt({ ...thread, unread: false }, [])).toBeNull();
+    expect(threadChangedAt(null, [])).toBeNull();
   });
 });
 

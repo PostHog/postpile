@@ -4,7 +4,8 @@
 import { reviewRequestSubject } from './events.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
-import type { EventDisplayState, EventKind, IsoTime, Pr, Viewer } from './types.ts';
+import { effectiveLoudness } from './loudness.ts';
+import type { EventDisplayState, EventKind, IsoTime, NotificationThread, Pr, Viewer } from './types.ts';
 import type { EventView } from './views.ts';
 
 /** About this many lines show before "Show all N". */
@@ -28,6 +29,8 @@ export interface ActivityLine {
   display: EventDisplayState;
   /** New since you looked: an unseen loud event is in it. */
   isNew: boolean;
+  /** Any event of the line is unseen (`EventView.unseen`): the line wears the unread dot. */
+  unseen: boolean;
   /** Newest first. */
   events: EventView[];
 }
@@ -50,6 +53,12 @@ export interface ActivityList {
   freshNoiseLabel: string;
   /** Lines to show before "Show all N" (ACTIVITY_LINE_CAP). */
   cap: number;
+  /**
+   * The tile is unread because GitHub updated the notification and no event
+   * explains it (the thread reason "new activity on GitHub"): when GitHub did
+   * it. The pane shows one dotted line at the top. Null otherwise.
+   */
+  threadChangedAt: IsoTime | null;
 }
 
 const HUMAN_TALK: EventKind[] = [
@@ -154,6 +163,7 @@ function toLine(group: EventView[], pr: Pr | null): ActivityLine {
     at: newest.event.at,
     display: loud ? 'loud' : newest.display,
     isNew: loud,
+    unseen: group.some((view) => view.unseen),
     events: newestFirst,
   };
 }
@@ -199,6 +209,27 @@ export function noiseSummary(noise: EventView[]): string {
 }
 
 /**
+ * When GitHub changed an unread notification thread that no event explains:
+ * nothing unseen and loud, and no unseen quiet event since the thread's last
+ * read. Mirrors the tile's thread reason (`threadReasons` in tiles.ts), which
+ * then says "new activity on GitHub".
+ */
+export function threadChangedAt(thread: NotificationThread | null, events: EventView[]): IsoTime | null {
+  if (!thread || !thread.unread) {
+    return null;
+  }
+  const explains = (view: EventView) => {
+    const { event } = view;
+    if (event.seenAt !== null) {
+      return false;
+    }
+    const loudness = effectiveLoudness(event);
+    return loudness === 'loud' || (loudness === 'quiet' && (thread.lastReadAt === null || event.at > thread.lastReadAt));
+  };
+  return events.some(explains) ? null : thread.updatedAt;
+}
+
+/**
  * The activity list for one PR. Meaningful events: human comments and
  * reviews, mentions, review requests naming you or your team, human pushes
  * (a burst by one person is one line), and lifecycle (ready, draft, merged,
@@ -210,8 +241,16 @@ export function noiseSummary(noise: EventView[]): string {
  * `freshNoise`, so the box and the list below never show it twice.
  *
  * With `pr`, lines of human comments and reviews carry the full `body`.
+ * With `thread` (the PR's notification thread), `threadChangedAt` says when an
+ * unread thread changed without an event to show for it.
  */
-export function activityList(events: EventView[], viewer: Viewer | null, since: IsoTime | null = null, pr: Pr | null = null): ActivityList {
+export function activityList(
+  events: EventView[],
+  viewer: Viewer | null,
+  since: IsoTime | null = null,
+  pr: Pr | null = null,
+  thread: NotificationThread | null = null,
+): ActivityList {
   const sorted = events.toSorted(byTime);
   const meaningful = sorted.filter((view) => isMeaningful(view, viewer));
   const allNoise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
@@ -228,5 +267,6 @@ export function activityList(events: EventView[], viewer: Viewer | null, since: 
     freshNoise,
     freshNoiseLabel: noiseSummary(freshNoise),
     cap: ACTIVITY_LINE_CAP,
+    threadChangedAt: threadChangedAt(thread, events),
   };
 }

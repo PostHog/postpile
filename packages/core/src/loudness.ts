@@ -6,6 +6,7 @@ import { isPrOwner } from './pr-owners.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import { isRoutingTeam } from './team-roles.ts';
 import type { EventDisplayState, EventKind, IsoTime, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
+import type { EventView } from './views.ts';
 
 export interface LoudnessInput {
   kind: EventKind;
@@ -270,6 +271,15 @@ export function displayState(event: PrEvent): EventDisplayState {
     return 'seen';
   }
   return effectiveLoudness(event);
+}
+
+/**
+ * The event as the UI gets it: its display state and whether it is unseen
+ * (no `seenAt`; muted counts as seen, like the merge rule below: the agent or
+ * the user called it noise, so it never makes a tile unread).
+ */
+export function eventView(event: PrEvent): EventView {
+  return { event, display: displayState(event), unseen: event.seenAt === null && effectiveLoudness(event) !== 'muted' };
 }
 
 /**
