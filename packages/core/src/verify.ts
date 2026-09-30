@@ -1,6 +1,8 @@
+import { isBot } from './bots.ts';
 import { findDossierLine } from './dossier-lines.ts';
 import { PREDICATE_RULES } from './fact-rules.ts';
 import type { Dossier, DossierIssue, DossierQuestion, Fact, FactRef, StaleReason, VerifyOutcome } from './memory.ts';
+import { isPrOwner } from './pr-owners.ts';
 import type { IsoTime, Pr, PrKey } from './types.ts';
 
 /** What verification may look at. Only stored snapshots: no IO, no agent. */
@@ -202,6 +204,18 @@ function questionIssue(question: DossierQuestion, prs: Map<PrKey, Pr>): StaleRea
  * that are no longer members. Derived fields (PR state, author) are never
  * stored in the dossier, so they need no check.
  */
+/**
+ * A bot named as driver while a PR it opened now has other owners (its
+ * assignees, `prOwners`): the people behind the agent PR drive the work.
+ * Catches dossiers written before assignees were read (2026-09-30).
+ */
+function botDriverReplaced(login: string, prs: Map<PrKey, Pr>): boolean {
+  if (!isBot(login)) {
+    return false;
+  }
+  return [...prs.values()].some((pr) => sameLogin(pr.author, login) && !isPrOwner(pr, login));
+}
+
 export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssue[] {
   const issues: DossierIssue[] = [];
   dossier.openQuestions.forEach((question, index) => {
@@ -213,6 +227,11 @@ export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssu
   dossier.timeline.forEach((entry, index) => {
     if (!world.memberKeys.has(entry.prKey)) {
       issues.push({ path: `timeline[${index}]`, reason: 'left_topic' });
+    }
+  });
+  dossier.people.forEach((person, index) => {
+    if (person.role === 'driver' && botDriverReplaced(person.login, world.prs)) {
+      issues.push({ path: `people[${index}]`, reason: 'person_not_involved' });
     }
   });
   return issues;
@@ -255,5 +274,6 @@ export function withoutStaleClaims(dossier: Dossier, world: VerifyWorld): Dossie
     ...dossier,
     openQuestions: dossier.openQuestions.filter((question) => questionIssue(question, world.prs) === null),
     timeline: dossier.timeline.filter((entry) => world.memberKeys.has(entry.prKey)),
+    people: dossier.people.filter((person) => person.role !== 'driver' || !botDriverReplaced(person.login, world.prs)),
   };
 }

@@ -115,6 +115,23 @@ describe('verifyDossier', () => {
     ]);
   });
 
+  it('flags and drops a bot driver once its PR has other owners', () => {
+    const bot = 'acme-agent[bot]';
+    const assigned = makePr({ number: 5, author: bot, assignees: ['lyra'] });
+    const unassigned = makePr({ number: 6, author: bot, assignees: [] });
+    const dossier: Dossier = {
+      ...emptyDossier(),
+      people: [
+        { login: bot, role: 'driver', note: 'opened the PR' },
+        { login: 'lyra', role: 'reviewer', note: '' },
+      ],
+    };
+    expect(verifyDossier(dossier, world([assigned], [assigned.key]))).toEqual([{ path: 'people[0]', reason: 'person_not_involved' }]);
+    expect(withoutStaleClaims(dossier, world([assigned], [assigned.key])).people).toEqual([dossier.people[1]]);
+    // No assignees yet: the bot still drives its own PR.
+    expect(verifyDossier(dossier, world([unassigned], [unassigned.key]))).toEqual([]);
+  });
+
   it('flags timeline entries for PRs that left the topic', () => {
     const dossier: Dossier = {
       ...emptyDossier(),
