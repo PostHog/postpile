@@ -168,11 +168,12 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
 
 /**
  * A ping about the viewer in person: a mention, question or reply to them, or
- * a review request that names them and not a team. A team mention, a team
- * request and a push or changes-request event are not (they may still ping).
+ * a review request that names them and not a team, or the author's answer to
+ * their changes request. A team mention, a team request and other push or
+ * changes-request events are not (they may still ping).
  */
-export function isPersonalPing(event: PrEvent, pr: Pr): boolean {
-  if (PERSONAL_ASK_KINDS.includes(event.kind)) {
+export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
+  if (PERSONAL_ASK_KINDS.includes(event.kind) || isChangesAnswerEvent(event, pr, viewer)) {
     return true;
   }
   if (event.kind !== 'review_requested') {

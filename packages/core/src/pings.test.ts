@@ -200,20 +200,20 @@ describe('isPersonalPing', () => {
 
   it('counts mentions, questions and replies', () => {
     for (const kind of ['mention', 'question_to_user', 'reply_to_user'] as const) {
-      expect(isPersonalPing(makeEvent({ id: kind, kind }), pr)).toBe(true);
+      expect(isPersonalPing(makeEvent({ id: kind, kind }), pr, viewer)).toBe(true);
     }
   });
 
   it('counts a review request that names the viewer', () => {
-    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-me' }), personalRequest)).toBe(true);
+    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-me' }), personalRequest, viewer)).toBe(true);
   });
 
   it('skips a review request for a team', () => {
-    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-team' }), teamRequest)).toBe(false);
+    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-team' }), teamRequest, viewer)).toBe(false);
   });
 
   it('skips team mentions and other kinds', () => {
-    expect(isPersonalPing(makeEvent({ id: 't', kind: 'team_mention' }), pr)).toBe(false);
-    expect(isPersonalPing(makeEvent({ id: 'c', kind: 'review_changes_requested' }), pr)).toBe(false);
+    expect(isPersonalPing(makeEvent({ id: 't', kind: 'team_mention' }), pr, viewer)).toBe(false);
+    expect(isPersonalPing(makeEvent({ id: 'c', kind: 'review_changes_requested' }), pr, viewer)).toBe(false);
   });
 });

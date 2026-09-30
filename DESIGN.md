@@ -3168,8 +3168,9 @@ main, `BoardWatcher`):
   a personal ping, only while the window is not focused. Personal
   (`isPersonalPing` in core, carried as `personal` on `Ping` and
   `MacNotification`): mention, question, reply, or a review request that names
-  the user and not a team. Team mentions, team requests, routed Look closer
-  pings, pushes and changes requests do not bounce. A summary is personal when
+  the user and not a team, or the author's answer to the user's changes
+  request ("addressed your changes"). Team mentions, team requests, routed
+  Look closer pings and other pushes and changes requests do not bounce. A summary is personal when
   any of its pings is.
 
 **Fake mode**: `FakeLivePoll` adds a sample question to the next open pinged

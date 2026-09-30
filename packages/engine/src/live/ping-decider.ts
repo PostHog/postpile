@@ -217,7 +217,7 @@ export class PingDecider {
       .filter((d) => d.ping && this.stillNews(byThread.get(d.threadId)!))
       .map((d): Ping => {
         const candidate = byThread.get(d.threadId)!;
-        return { title: d.title, body: d.body, target: candidate.target, personal: isPersonalPing(candidate.rule.event!, candidate.pr) };
+        return { title: d.title, body: d.body, target: candidate.target, personal: isPersonalPing(candidate.rule.event!, candidate.pr, viewer) };
       });
     return { decisions, pings, errors };
   }
