@@ -1027,6 +1027,18 @@ the app meanwhile.
 
 ## Decided
 
+- **GitHub unread is PostPile unread** (2026-09-30): every notification
+  unread on GitHub is either cleared by PostPile because it is obviously
+  clearable (bots only, you acted after it, or everything since you last
+  looked is bots or people the events agent judged as not needing you;
+  releases and issues always) or shows unread in PostPile. A tile is unread
+  while a thread of it is unread, done or not; snooze stays; loudness keeps
+  pings, coral and urgency. Asks never clear by themselves. A finished topic
+  never holds an unread thread. "Start fresh here" is gone. Build choices
+  to confirm: a thread never read and never reviewed or commented on is not
+  judged-clearable; loud news on a pulled-in layer or a Look closer event on
+  a read thread no longer makes the tile unread by itself. See DESIGN.md
+  "GitHub unread is PostPile unread".
 - **Dock badge, cleared pings, bounce** (2026-09-30): the Dock badge is the
   number of tiles that are your move (live, not done, not snoozed), the same
   count the sidebar chips add up to. A ping leaves Notification Center once

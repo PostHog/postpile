@@ -10,10 +10,14 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- GitHub unread is PostPile unread: a tile is unread while one of its PR threads is unread on GitHub, done or not, so nothing stays "done here, unread there". Pings, the coral "new since you looked" and the topic's "needs you" still follow loud news only; a tile unread with only quiet news counts in the Unread filter and the sidebar count but does not ping. A snoozed tile keeps its snooze and counts in the Unread filter.
+- PostPile clears more by itself on GitHub (only while GitHub writes are unlocked, listed under Handled quietly): threads where everything since you last looked is bots or people's activity the events agent judged as not needing you. Review requests to you or your team, mentions, team mentions, questions and replies to you, and merges without your review are never cleared by PostPile. The events agent now also sees quiet activity by people on unread threads, and raising one to loud pings as usual.
+- Release and issue notifications are marked read on GitHub by the sync (while writes are unlocked); PostPile does not show them.
+- A finished topic never holds an unread thread: it retires only once every thread is read, and a finished topic whose thread turns unread comes back.
 - Approve, Mark read, Mark done and Snooze change the tile and buttons as soon as they're clicked instead of after a few seconds. A failed action puts things back and says why.
 - A snooze on a stack or set wakes when any of its tracked PRs meets the condition, for example the first PR to go green, instead of waiting for all of them.
 - Under the hood: each rule (automation, who a review request asks, whose move, loudness, pings, button offers) is worked out once in core and read by the app, pings, MCP and sample mode alike, so they can no longer disagree.
-- Loud news on a pulled-in stack layer gives that layer a "Not done yet" dot. It already made the tile unread, but no row said why.
+- Loud news on a pulled-in stack layer gives that layer a "Not done yet" dot and keeps the tile from being done.
 - A bot's event the agent raised to loud wakes a snooze like a person's loud news: the tile turns unread and pings. A bot's event the agent left alone, and PostPile's own "Look closer" event, still never wake one.
 
 ### Fixed
@@ -34,6 +38,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The MCP server says so, and asks for a reconnect, when the app was updated while it kept running.
 - A snoozed tile no longer pings. A bot's event the agent raised to loud used to leave the snooze in place and still send a Mac notification for it.
 - An event the agent raises to loud after the poll saw it, like a push after your approval, now pings (and wakes a snooze) while it is fresh. The poll had already decided it while it was quiet, so no notification came.
+
+### Removed
+
+- "Leave GitHub alone, start fresh here" in the inbox cleanup. It hid things in PostPile that stayed unread on GitHub; a stored start-fresh date is dropped on upgrade, so they show again. "Mark everything older than 14 / 30 days read on GitHub" stays.
 
 ## 0.11.1 (2026-09-29)
 
