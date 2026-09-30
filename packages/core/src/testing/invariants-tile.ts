@@ -1,7 +1,7 @@
 // Tile-level invariants: state, whose turn, lead PR and the buttons
 // (DESIGN.md "Tile faces", "Actions act on what you look at", "Rules layer:
 // one home per fact").
-import type { WhoseTurnKind } from '../whose-turn.ts';
+import type { WhoseTurn, WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
 import type { PrTier } from '../pr-tier.ts';
 import { tileListRank } from '../tile-view.ts';
@@ -97,10 +97,18 @@ export const unseenMergesOnlyOnOpenTiles: Invariant = {
   },
 };
 
-/** The tile's turn is the most urgent turn of its tracked PRs, and names the same move as that PR's row. */
+/** A row's words on the tile: a multi-PR tile names the PR ("Review, ada asked on #12"; "Waiting on sol and 1 more on #12"). */
+function tileWords(turn: WhoseTurn, where: string): string {
+  if (where === '') {
+    return turn.what;
+  }
+  return turn.kind === 'them' && turn.lead === 'Waiting on' ? [turn.what, where].filter((part) => part !== '').join(' ') : `${turn.what} ${where}`;
+}
+
+/** The tile's turn is the most urgent turn of its tracked PRs, names the same move as that PR's row, in the row's words plus the PR on a multi-PR tile. */
 export const tileTurnIsAPrTurn: Invariant = {
-  name: 'the tile turn is the most urgent turn of one of its tracked PRs',
-  check(_board, views) {
+  name: 'the tile turn is the most urgent turn of one of its tracked PRs, in its words',
+  check(board, views) {
     for (const view of views) {
       const rows = trackedRows(view);
       const best = Math.min(...rows.map((row) => TURN_RANK[row.turn.kind]), TURN_RANK.none);
@@ -111,6 +119,8 @@ export const tileTurnIsAPrTurn: Invariant = {
       const row = rows.find((candidate) => candidate.key === view.turn.prKey);
       ensure(row !== undefined, `${view.tile.id}: tile turn names ${view.turn.prKey}, no tracked row`);
       ensure(sameMove(row!.turn, view.turn), `${view.tile.id}: tile turn ${describeTurn(view.turn)}, row turn ${describeTurn(row!.turn)}`);
+      const what = tileWords(row!.turn, view.tile.members.length > 1 ? `on #${prOf(board, row!.key).ref.number}` : '');
+      ensure(view.turn.what === what, `${view.tile.id}: tile says "${view.turn.what}", expected "${what}"`);
     }
   },
 };

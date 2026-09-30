@@ -19,6 +19,7 @@ import {
   askedToReReview,
   asksViewer,
   changesAnswer,
+  isAutomationLogin,
   isKnownTeammate,
   isViewerLogin,
   isViewerTeam,
@@ -30,11 +31,13 @@ import {
   routedRequestWaits,
   standingChangesBy,
   teamTakers,
+  threadsViewerOpened,
   threadsWaitingOnViewer,
   viewerApproved,
   viewerAskedForChanges,
   viewerHeadReview,
   viewerReviewedHead,
+  type SpecRequest,
   type SpecTouchKind,
 } from './spec-facts.ts';
 
@@ -84,16 +87,24 @@ export function openAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readon
 // Whose turn
 // ---------------------------------------------------------------------------
 
-export type ExpectedTurn = { kind: 'you'; move: YourMove } | { kind: 'them'; who: string } | { kind: 'none' };
+/** A move and the footer's words for it (a single-PR tile: no " on #n"); `lead` only for "Waiting on". */
+export type ExpectedTurn =
+  | { kind: 'you'; move: YourMove; what: string }
+  | { kind: 'them'; who: string; what: string; lead?: string }
+  | { kind: 'none'; what: '' };
 
-const NONE: ExpectedTurn = { kind: 'none' };
+const NONE: ExpectedTurn = { kind: 'none', what: '' };
 
-function you(move: YourMove): ExpectedTurn {
-  return { kind: 'you', move };
+function you(move: YourMove, what: string): ExpectedTurn {
+  return { kind: 'you', move, what };
 }
 
-function them(who: string): ExpectedTurn {
-  return { kind: 'them', who };
+function them(who: string, what: string): ExpectedTurn {
+  return { kind: 'them', who, what };
+}
+
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
 export interface TurnInput {
@@ -104,16 +115,36 @@ export interface TurnInput {
   notYours: boolean;
 }
 
+/** How an ask reads alone ("Answer ada's question") and after "Review, ada ..." when a review is owed too. */
+const ASK_WORDS: Partial<Record<EventKind, { alone: (actor: string) => string; withReview: string }>> = {
+  question_to_user: { alone: (actor) => `Answer ${actor}'s question`, withReview: 'asked you something' },
+  mention: { alone: (actor) => `${actor} mentioned you`, withReview: 'mentioned you' },
+  reply_to_user: { alone: (actor) => `${actor} replied to you`, withReview: 'replied to you' },
+  team_mention: { alone: (actor) => `${actor} mentioned your team`, withReview: 'mentioned your team' },
+};
+
 /** Drafts: only a personal ask is a move; on the viewer's own draft also comments and changes to address. */
 function draftTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
-  if (openAsk(pr, input.events, viewer, SPEC_PERSONAL_ASK_KINDS)) {
-    return you('reply');
+  const ask = openAsk(pr, input.events, viewer, SPEC_PERSONAL_ASK_KINDS);
+  if (ask) {
+    return you('reply', `${ASK_WORDS[ask.kind]!.alone(ask.actor)} on draft`);
   }
   if (!sameLogin(pr.author, viewer.login)) {
     return NONE;
   }
-  return threadsWaitingOnViewer(pr, viewer) > 0 || standingChangesBy(pr).length > 0 ? you('address_changes') : NONE;
+  const threads = threadsWaitingOnViewer(pr, viewer);
+  if (threads.length > 0) {
+    return you('address_changes', `Address ${plural(threads.length, 'comment')} on your draft`);
+  }
+  const standing = standingChangesBy(pr);
+  return standing.length > 0 ? you('address_changes', `Address ${standing[0]}'s changes on your draft`) : NONE;
+}
+
+/** "Answer 2 threads", naming the one person the threads wait on when there is one. */
+function answerThreads(threads: string[]): string {
+  const people = new Set(threads.map((login) => login.toLowerCase()));
+  return `Answer ${plural(threads.length, 'thread')}${people.size === 1 ? ` from ${threads[0]}` : ''}`;
 }
 
 /**
@@ -123,24 +154,44 @@ function draftTurn(input: TurnInput): ExpectedTurn {
  */
 function ownPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
-  if (threadsWaitingOnViewer(pr, viewer) > 0) {
-    return you('address_changes');
+  const threads = threadsWaitingOnViewer(pr, viewer);
+  if (threads.length > 0) {
+    return you('address_changes', answerThreads(threads));
   }
   const standing = standingChangesBy(pr);
+  const waiting = standing.find((reviewer) => !askedToReReview(pr, reviewer));
   if (standing.length > 0) {
-    return standing.every((reviewer) => askedToReReview(pr, reviewer)) ? them(standing[0]!) : you('address_changes');
+    return waiting === undefined ? them(standing[0]!, 'to re-review') : you('address_changes', `Address ${waiting}'s changes`);
   }
   const reviewers = [...pr.reviewerUsers, ...pr.reviewerTeams];
   if (reviewers.length > 0) {
-    return them(reviewers[0]!);
+    return { kind: 'them', who: reviewers[0]!, what: reviewers.length > 1 ? `and ${reviewers.length - 1} more` : '', lead: 'Waiting on' };
   }
-  return pr.reviewDecision === 'APPROVED' ? you('merge') : NONE;
+  return pr.reviewDecision === 'APPROVED' ? you('merge', 'Merge, it is approved') : NONE;
 }
 
-/** The first reviewer (other than `except`) whose changes stand, when every one of them was asked to re-review. */
-function reReviewer(pr: Pr, except: string | null): string | null {
+/** Where the changes requests (other than `except`'s) leave the author: re-review once every reviewer was asked again, else whose to address first. */
+function standingTurn(pr: Pr, except: string | null): ExpectedTurn | null {
   const standing = standingChangesBy(pr).filter((login) => except === null || !sameLogin(login, except));
-  return standing.length > 0 && standing.every((reviewer) => askedToReReview(pr, reviewer)) ? standing[0]! : null;
+  if (standing.length === 0) {
+    return null;
+  }
+  const waiting = standing.find((reviewer) => !askedToReReview(pr, reviewer));
+  return waiting === undefined ? them(standing[0]!, 'to re-review') : them(pr.author, `to address ${waiting}'s changes`);
+}
+
+/** "Review, ada asked" (the newest person who asked the viewer or their team), "Review for team-platform", or with the author for a teammate's PR. */
+function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review' | 'Re-review'): string {
+  const team = pr.reviewerTeams.find((subject) => isViewerTeam(viewer, subject))?.split('/').pop();
+  if (request === 'team') {
+    return `${verb} for ${team}`;
+  }
+  if (request === 'team_for_you') {
+    return `${verb} for ${team}: ${pr.author}'s PR`;
+  }
+  const requests = pr.timeline.filter((item) => item.kind === 'review_requested' && asksViewer(viewer, item.subject) && !isAutomationLogin(item.actor));
+  const by = requests.toSorted((a, b) => a.at.localeCompare(b.at)).at(-1)?.actor;
+  return by !== undefined && !sameLogin(by, viewer.login) ? `${verb}, ${by} asked` : verb;
 }
 
 /**
@@ -152,7 +203,7 @@ function reReviewer(pr: Pr, except: string | null): string | null {
 function othersPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
   if (viewerApproved(pr, viewer, input.userState)) {
-    return them(pr.author);
+    return them(pr.author, 'to merge');
   }
   const headReview = viewerHeadReview(pr, viewer);
   const waits = headReview === null ? routedRequestWaits(pr, viewer, input.notYours) : null;
@@ -160,29 +211,41 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
     return NONE;
   }
   if (waits === 'changes') {
-    return them(reReviewer(pr, viewer.login) ?? pr.author);
+    return standingTurn(pr, viewer.login)!;
   }
   const request = pendingRequest(pr, viewer);
   if (headReview === null && (request === 'you' || request === 'team_for_you' || request === 'team')) {
-    return you(viewerAskedForChanges(pr, viewer) ? 're_review' : 'review');
+    return viewerAskedForChanges(pr, viewer) ? you('re_review', reviewWords(pr, viewer, request, 'Re-review')) : you('review', reviewWords(pr, viewer, request, 'Review'));
   }
   if (headReview !== null) {
-    return them(pr.author);
+    const opened = threadsViewerOpened(pr, viewer);
+    if (headReview.state === 'APPROVED') {
+      return them(pr.author, 'to merge');
+    }
+    if (opened > 0) {
+      return them(pr.author, `to address ${plural(opened, 'thread')}`);
+    }
+    return them(pr.author, headReview.state === 'CHANGES_REQUESTED' ? 'to address your changes' : 'to reply');
   }
   if (request === 'team_taken') {
     if (pr.reviewDecision === 'APPROVED') {
-      return them(pr.author);
+      return them(pr.author, 'to merge');
     }
-    return them(reReviewer(pr, null) ?? teamTakers(pr, viewer)[0]!);
+    const standing = standingChangesBy(pr);
+    if (standing.length > 0 && standing.every((reviewer) => askedToReReview(pr, reviewer))) {
+      return them(standing[0]!, 'to re-review');
+    }
+    return them(teamTakers(pr, viewer)[0]!, 'is reviewing');
   }
   return NONE;
 }
 
 /**
- * Whose move on one PR: nobody's once merged or closed; on an open PR the
- * author's answer to the viewer's changes request is a re-review (their
- * thread reply included), any other open ask is a reply, and then the
- * rules for own and others' PRs.
+ * Whose move on one PR and its words: nobody's once merged or closed; on
+ * an open PR the author's answer to the viewer's changes request is a
+ * re-review (their thread reply included), any other open ask is a reply
+ * ("Review, ada asked you something" when a personal review is owed too),
+ * and then the rules for own and others' PRs.
  */
 export function expectedTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
@@ -193,11 +256,16 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
     return draftTurn(input);
   }
   const ask = openAsk(pr, input.events, viewer, SPEC_ADDRESSED_KINDS);
-  if (changesAnswer(pr, viewer) !== null && (ask === null || sameLogin(ask.actor, pr.author))) {
-    return you('re_review');
+  const answer = changesAnswer(pr, viewer);
+  if (answer !== null && (ask === null || sameLogin(ask.actor, pr.author))) {
+    return you('re_review', answer.pushed ? `${pr.author} addressed your changes: re-review` : `${pr.author} replied to your review`);
   }
   if (ask !== null) {
-    return you('reply');
+    const own = sameLogin(pr.author, viewer.login);
+    const request = pendingRequest(pr, viewer);
+    const reviewToo = !own && (request === 'you' || request === 'team_for_you') && !viewerReviewedHead(pr, viewer, input.userState);
+    const words = ASK_WORDS[ask.kind]!;
+    return you('reply', reviewToo ? `Review, ${ask.actor} ${words.withReview}` : words.alone(ask.actor));
   }
   return sameLogin(pr.author, viewer.login) ? ownPrTurn(input) : othersPrTurn(input);
 }

@@ -12,7 +12,7 @@ import type { QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { PrEvent, PrKey, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
 import { SPEC_ADDRESSED_KINDS } from './spec-events.ts';
 import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest } from './spec-facts.ts';
 import {
@@ -27,7 +27,6 @@ import {
   expectedTouchedRead,
   expectedTurn,
   openAsk,
-  type ExpectedTurn,
 } from './spec-rules.ts';
 
 function allRows(views: TileView[]): PrSummary[] {
@@ -38,11 +37,9 @@ function turnInput(board: PropertyBoard, key: PrKey) {
   return { pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) };
 }
 
-function describeExpected(turn: ExpectedTurn): string {
-  if (turn.kind === 'you') {
-    return `you/${turn.move}`;
-  }
-  return turn.kind === 'them' ? `them (${turn.who})` : 'none';
+/** A turn as one comparable line: kind, move, whom it waits on, lead and words. */
+function turnLine(turn: { kind: string; move?: string; who: string | null; lead?: string; what: string }): string {
+  return JSON.stringify([turn.kind, turn.move ?? null, turn.who, turn.lead ?? null, turn.what]);
 }
 
 /** The facts every consumer reads: who a request asks, the viewer's last touch, the open ask, automation author, own team requests. */
@@ -68,21 +65,17 @@ export const prFactsMatchTheSpec: Invariant = {
  * Whose move on each PR is the spec's (DESIGN "Whose turn"): by PR type
  * (reply, re-review, review on someone else's PR; reply, address changes,
  * merge on your own; a draft only reply and your own draft's changes), a
- * review only with a real request and no review of the head, and whom a
- * "them" turn waits on.
+ * review only with a real request and no review of the head, whom a "them"
+ * turn waits on, and the footer's words for it.
  */
 export const turnMatchesTheSpec: Invariant = {
-  name: 'whose move on each PR is the spec move, and a them turn names whom it waits on',
+  name: 'whose move on each PR is the spec move, whom a them turn waits on, and its words',
   check(board, views) {
     for (const row of allRows(views)) {
       const expected = expectedTurn(turnInput(board, row.key));
-      const turn = row.turn;
-      const same =
-        turn.kind === expected.kind &&
-        (turn.kind !== 'you' || (expected.kind === 'you' && turn.move === expected.move)) &&
-        (turn.kind !== 'them' || (expected.kind === 'them' && turn.who === expected.who));
-      ensure(same, `${row.key}: ${describeTurn(turn)}, expected ${describeExpected(expected)}`);
-      ensure(turn.prKey === (turn.kind === 'none' ? null : row.key), `${row.key}: turn names ${turn.prKey}`);
+      const want = turnLine({ ...expected, who: expected.kind === 'them' ? expected.who : null });
+      ensure(turnLine(row.turn) === want, `${row.key}: ${turnLine(row.turn)}, expected ${want}`);
+      ensure(row.turn.prKey === (row.turn.kind === 'none' ? null : row.key), `${row.key}: turn names ${row.turn.prKey}`);
     }
   },
 };

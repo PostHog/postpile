@@ -284,12 +284,21 @@ export function askedToReReview(pr: Pr, reviewer: string): boolean {
   return verdict?.state === 'CHANGES_REQUESTED' && someonePushedAfter(pr, reviewer, verdict.submittedAt);
 }
 
-/** Unresolved threads whose last comment is by someone other than the viewer or automation. */
-export function threadsWaitingOnViewer(pr: Pr, viewer: Viewer): number {
-  return pr.threads.filter((thread) => {
+/** Who has the last word in each unresolved thread that waits on the viewer: someone other than the viewer or automation. */
+export function threadsWaitingOnViewer(pr: Pr, viewer: Viewer): string[] {
+  const lastWords: string[] = [];
+  for (const thread of pr.threads) {
     const last = thread.comments.at(-1);
-    return !thread.isResolved && last !== undefined && !sameLogin(last.author, viewer.login) && !isAutomationLogin(last.author);
-  }).length;
+    if (!thread.isResolved && last !== undefined && !sameLogin(last.author, viewer.login) && !isAutomationLogin(last.author)) {
+      lastWords.push(last.author);
+    }
+  }
+  return lastWords;
+}
+
+/** Unresolved threads the viewer started. */
+export function threadsViewerOpened(pr: Pr, viewer: Viewer): number {
+  return pr.threads.filter((thread) => !thread.isResolved && thread.comments[0] !== undefined && sameLogin(thread.comments[0].author, viewer.login)).length;
 }
 
 export type SpecTouchKind = 'changes_request' | 'approval' | 'review' | 'comment' | 'push' | 'merge' | 'close';
