@@ -378,7 +378,7 @@ async function start(): Promise<void> {
   boardWatcher = new BoardWatcher(
     board,
     (snapshot) => {
-      app.setBadgeCount(snapshot.yourMoves);
+      app.setBadgeCount(snapshot.unreadTopics);
       notifier.closeRead(snapshot.unreadPrKeys);
     },
     (error) => console.warn('board watcher:', error),

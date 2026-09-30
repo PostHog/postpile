@@ -3538,10 +3538,13 @@ teammate even".
 **Dock badge, cleared pings and the bounce** (decided 2026-09-30, desktop
 main, `BoardWatcher`):
 
-- The Dock badge (`app.setBadgeCount`, 0 clears it) is the number of tiles
-  that are the user's move: live tiles, not done, not snoozed, summed across
-  topics in every repo, so it equals what the sidebar's "your moves" chips add
-  up to. It is read from `listTopics({ allRepos: true })` (`yourMoves`), no
+- The Dock badge (`app.setBadgeCount`, 0 clears it) is the number of topics
+  with an unread tile, in every repo: the topics with a dot in the sidebar,
+  like unread channels in Slack. Julian (2026-09-30, was the count of
+  your-move tiles): "I see five topics with a dot, and that means these are
+  open ... It's still my move, maybe, but I've looked at it. This clears the
+  unread count in the app." Your move stays visible in the app, not on the
+  Dock. It is read from `listTopics({ allRepos: true })` (`unreadTiles`), no
   rule is repeated in main. It is read at start, after each shown ping, when
   the live status moves (`changeCount`, which also counts every ended sync,
   `catchUpChanges`, `syncRunning`; checked every 5s) and after every non-read API request, which covers local

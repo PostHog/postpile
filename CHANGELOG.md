@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Changed
+
+- The Dock badge counts topics with an unread dot, like unread channels in Slack, instead of tiles that are your move. Looking at them clears it; your move stays visible in the app.
+
 ### Fixed
 
 - The sidebar topic bubble and the footer unread number count unread tiles again (0.12.0 counted PRs). The per-PR dots stay.

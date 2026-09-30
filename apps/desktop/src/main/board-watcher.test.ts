@@ -3,9 +3,8 @@ import { OFF_POLL_STATUS } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { BoardWatcher, type BoardSnapshot } from './board-watcher.ts';
 
-function topic(moves: number): TopicListItem {
-  const yourMoves = Array.from({ length: moves }, () => ({ move: 'review' as const, text: 'Review' }));
-  return { yourMoves } as unknown as TopicListItem;
+function topic(unreadTiles: number): TopicListItem {
+  return { unreadTiles } as unknown as TopicListItem;
 }
 
 function setup(topics: TopicListItem[]) {
@@ -28,10 +27,10 @@ function status(overrides: Partial<LivePollStatus>): LivePollStatus {
 }
 
 describe('BoardWatcher', () => {
-  it('sums your moves across topics and passes the unread PRs', async () => {
+  it('counts topics with an unread tile and passes the unread PRs', async () => {
     const { watcher, seen } = setup([topic(2), topic(0), topic(3)]);
     await watcher.refresh();
-    expect(seen).toEqual([{ yourMoves: 5, unreadPrKeys: ['acme/app#1'] }]);
+    expect(seen).toEqual([{ unreadTopics: 2, unreadPrKeys: ['acme/app#1'] }]);
   });
 
   it('reads again only when the live status moved', async () => {
