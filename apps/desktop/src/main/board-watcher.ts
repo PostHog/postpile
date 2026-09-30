@@ -7,8 +7,8 @@ export interface BoardReader {
 }
 
 export interface BoardSnapshot {
-  /** Live tiles where it is the viewer's move, summed across topics like the sidebar chips. */
-  yourMoves: number;
+  /** Topics with an unread tile: the ones with a dot in the sidebar, like unread channels in Slack. */
+  unreadTopics: number;
   unreadPrKeys: PrKey[];
 }
 
@@ -20,7 +20,7 @@ function statusSignature(status: LivePollStatus): string {
 /**
  * Reads the board for the Mac surfaces (Dock badge, Notification Center)
  * and hands it to `onBoard`. The count comes from the engine's topic list,
- * the same `yourMoves` the sidebar shows, so no rule is repeated here.
+ * the same `unreadTiles` the sidebar shows, so no rule is repeated here.
  * One read at a time; a request during a read runs once more afterwards.
  */
 export class BoardWatcher {
@@ -65,8 +65,8 @@ export class BoardWatcher {
     try {
       const topics = await this.reader.listTopics({ allRepos: true });
       const unreadPrKeys = await this.reader.unreadPrKeys();
-      const yourMoves = topics.reduce((sum, topic) => sum + topic.yourMoves.length, 0);
-      this.onBoard({ yourMoves, unreadPrKeys });
+      const unreadTopics = topics.filter((topic) => topic.unreadTiles > 0).length;
+      this.onBoard({ unreadTopics, unreadPrKeys });
     } catch (error) {
       this.onError(error);
     }

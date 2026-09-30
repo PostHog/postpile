@@ -1098,8 +1098,8 @@ the app meanwhile.
   other lead (Snooze, Mark read, Mark done) stays ink; accent blue stays for
   selection and focus only. Replaces "Ink primary buttons" for Approve.
 - **Dock badge, cleared pings, bounce** (2026-09-30): the Dock badge is the
-  number of tiles that are your move (live, not done, not snoozed), the same
-  count the sidebar chips add up to. A ping leaves Notification Center once
+  number of topics with an unread tile, like unread channels in Slack
+  (changed later that day; it counted your-move tiles first). A ping leaves Notification Center once
   its tile is read, done or snoozed. The Dock bounces once for a personal ask
   (mention, question, reply, review requested from you, answer to your
   changes request) while the window is not focused. See DESIGN.md "Live poll

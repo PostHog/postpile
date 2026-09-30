@@ -370,7 +370,7 @@ async function start(): Promise<void> {
       }
     },
   });
-  // The Dock badge counts the tiles that are the user's move; a ping leaves
+  // The Dock badge counts topics with an unread tile; a ping leaves
   // Notification Center once its tile is read or done. Both follow the board:
   // poll cycles and syncs (the live status moves), local actions (the API's
   // non-read requests) and each new ping.
@@ -378,7 +378,7 @@ async function start(): Promise<void> {
   boardWatcher = new BoardWatcher(
     board,
     (snapshot) => {
-      app.setBadgeCount(snapshot.yourMoves);
+      app.setBadgeCount(snapshot.unreadTopics);
       notifier.closeRead(snapshot.unreadPrKeys);
     },
     (error) => console.warn('board watcher:', error),
