@@ -1,6 +1,6 @@
 {
   "name": "@postpile/agent",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "description": "PostPile agent layer: claude CLI runner, prompts and answer schemas",
   "private": true,
   "license": "MIT",

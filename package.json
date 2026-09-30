@@ -1,6 +1,6 @@
 {
   "name": "postpile",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "description": "A macOS app one level above GitHub PRs: agent-maintained topics instead of a notification pile",
   "private": true,
   "license": "MIT",
