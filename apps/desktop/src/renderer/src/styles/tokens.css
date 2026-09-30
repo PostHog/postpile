@@ -51,6 +51,7 @@
   /* Rings: 1px edges drawn as inset box-shadows (no layout shift, crisper on tints) */
   --ring-hairline: rgba(16, 24, 40, 0.08); /* white chips, description box */
   --ring-control: rgba(16, 24, 40, 0.12); /* secondary buttons */
+  --ring-control-soft: rgba(16, 24, 40, 0.1); /* small white icon buttons, filters, the search field's parent */
   --ring-honey: rgba(107, 77, 0, 0.16); /* secondary buttons in the "Your move" footer */
   --ring-honey-box: rgba(107, 77, 0, 0.13); /* Look closer box */
   --ring-risk-box: rgba(184, 50, 31, 0.13); /* Risk box */

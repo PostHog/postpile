@@ -4,6 +4,7 @@ import type { ForWhom, Provenance, TilePendingWrite, TopicRelation, Verdict, Why
 import { pendingWriteTitle } from '../lib/guard.ts';
 import type { GlanceStateText } from '../lib/glance.ts';
 import { staleVerdictTitle, staleWord } from '../lib/staleness.ts';
+import type { EventGlyph } from '../lib/events.ts';
 import type { StateWord } from '../lib/pr.ts';
 import { relationLabel } from '../lib/sidebar.ts';
 import { type StackPlace, stackPlaceLabel, stackPlaceTitle } from '../lib/stacks.ts';
@@ -22,8 +23,10 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
  * mark that is not "new since you looked" (DESIGN.md "Actions act on what
  * you look at": no second, read-only dot).
  */
-export function NotDoneDot() {
-  return <span role="img" aria-label="Not done yet" title="Not done yet" className="size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft" />;
+export function NotDoneDot(props: { className?: string }) {
+  return (
+    <span role="img" aria-label="Not done yet" title="Not done yet" className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft ${props.className ?? ''}`} />
+  );
 }
 
 /** "pending: mark read on GitHub": a mark-read made while writes were locked. Neutral, not coral: nothing is new. */
@@ -109,17 +112,17 @@ export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance
   );
 }
 
-const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { icon: ReactNode; tone: string }> = {
-  review: { icon: <Glyph glyph="eye" size={12} strokeWidth={1.7} />, tone: 'text-closer' },
-  approved: { icon: <Glyph glyph="check" size={12} strokeWidth={1.9} />, tone: 'text-status-good' },
-  changes: { icon: <Glyph glyph="changes" size={12} strokeWidth={1.7} />, tone: 'text-status-bad' },
-  merged: { icon: null, tone: 'text-merged-ink' },
-  closed: { icon: null, tone: 'text-status-bad' },
+const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { glyph: EventGlyph | null; stroke: number; tone: string }> = {
+  review: { glyph: 'eye', stroke: 1.7, tone: 'text-closer' },
+  approved: { glyph: 'check', stroke: 1.9, tone: 'text-status-good' },
+  changes: { glyph: 'changes', stroke: 1.7, tone: 'text-status-bad' },
+  merged: { glyph: null, stroke: 0, tone: 'text-merged-ink' },
+  closed: { glyph: null, stroke: 0, tone: 'text-status-bad' },
 };
 
 const STATE_WORD_SIZES = {
-  row: 'text-[11.5px]',
-  md: 'text-[13px]',
+  row: { text: 'text-[11.5px]', icon: 12 },
+  md: { text: 'text-[12.5px]', icon: 13 },
 };
 
 /**
@@ -142,9 +145,10 @@ export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STA
     );
   }
   const look = STATE_WORD_LOOKS[word.kind];
+  const size = STATE_WORD_SIZES[props.size ?? 'row'];
   return (
-    <span title={word.title} className={`flex shrink-0 items-center gap-1 font-semibold whitespace-nowrap ${STATE_WORD_SIZES[props.size ?? 'row']} ${look.tone}`}>
-      {look.icon}
+    <span title={word.title} className={`flex shrink-0 items-center gap-1 font-semibold whitespace-nowrap ${size.text} ${look.tone}`}>
+      {look.glyph && <Glyph glyph={look.glyph} size={size.icon} strokeWidth={look.stroke} />}
       {word.text}
     </span>
   );

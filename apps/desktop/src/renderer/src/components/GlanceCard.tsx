@@ -17,38 +17,52 @@ interface GlanceCardProps {
   view: TileView;
 }
 
-/** Box 1 takes the verdict's look: honey to look closer, green when safe, grey when not yours. */
+/** Box 1 takes the verdict's look: honey to look closer, green when safe, grey when not yours. Edges are inset rings. */
 const VERDICT_BOX: Record<Verdict, { box: string; mark: string }> = {
-  LOOK_CLOSER: { box: 'border-move-line bg-move text-honey-ink', mark: 'bg-mark-honey text-honey-ink' },
-  LOOKS_SAFE: { box: 'border-safe-line bg-safe-soft text-safe', mark: 'bg-mark-safe text-safe' },
-  NOT_YOURS: { box: 'border-hairline bg-segment text-muted', mark: 'bg-chip text-ink-2' },
+  LOOK_CLOSER: { box: 'bg-move text-honey-ink inset-ring inset-ring-edge-honey-box', mark: 'bg-mark-honey text-honey-ink' },
+  LOOKS_SAFE: { box: 'bg-safe-soft text-safe inset-ring inset-ring-safe-line', mark: 'bg-mark-safe text-safe' },
+  NOT_YOURS: { box: 'bg-segment text-muted inset-ring inset-ring-hairline', mark: 'bg-chip text-ink-2' },
 };
 
 /** A stale verdict box: grey and dashed, whatever the verdict (2026-09-29). */
-const STALE_BOX = { box: 'border-dashed border-frame bg-subtle text-hint', mark: 'bg-chip text-ink-2' };
+const STALE_BOX = { box: 'border border-dashed border-frame bg-subtle text-hint', mark: 'bg-chip text-ink-2' };
 
-const RISK_BOX = { box: 'border-risk-line bg-status-bad-soft text-status-bad', mark: 'bg-mark-risk text-status-bad' };
+const RISK_BOX = { box: 'bg-status-bad-soft text-status-bad inset-ring inset-ring-edge-risk-box', mark: 'bg-mark-risk text-status-bad' };
+
+/** Every mark sits centered in a 20px slot, 8px before its text: text starts on the 62px line. */
+const MARK_GRID = 'grid grid-cols-[20px_minmax(0,1fr)] items-start gap-x-2';
 
 function Mark(props: { mark: AssessmentMark | '→' | '“'; tone: string }) {
-  return <span className={`flex size-5 items-center justify-center rounded-md text-[10.5px] font-extrabold ${props.tone}`}>{props.mark}</span>;
+  return (
+    <span className={`flex size-[18px] items-center justify-center justify-self-center rounded-[5px] text-[10px] font-extrabold ${props.tone}`}>{props.mark}</span>
+  );
 }
 
 function MarkedLine(props: { line: AssessmentLine; tone: string }) {
   return (
-    <span className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-2 text-[12.5px] leading-[1.4] text-ink select-text">
+    <span className={`${MARK_GRID} text-[12.5px] leading-[1.45] text-pretty text-ink select-text`}>
       <Mark mark={props.line.mark} tone={props.tone} />
       <span className="pt-px">{props.line.text}</span>
     </span>
   );
 }
 
-function Box(props: { title: string; tag: string; look: { box: string; mark: string }; lines: AssessmentLine[] }) {
+/** "LOOK CLOSER · for you": small wide-tracked caps on the box's first line. */
+function BoxTitle(props: { title: string; tag: string }) {
   return (
-    <div className={`flex flex-col gap-2 rounded-[10px] border p-3 ${props.look.box}`}>
-      <span className="flex items-center gap-2">
-        <span className="text-[10.5px] font-extrabold tracking-[0.06em]">{props.title}</span>
+    <span className={`${MARK_GRID} items-baseline leading-[normal]`}>
+      <span className="col-span-2 flex items-baseline gap-1.5">
+        <span className="text-[10px] font-extrabold tracking-[0.08em]">{props.title}</span>
         {props.tag && <span className="text-[10.5px] opacity-80">{props.tag}</span>}
       </span>
+    </span>
+  );
+}
+
+function Box(props: { title: string; tag: string; look: { box: string; mark: string }; lines: AssessmentLine[] }) {
+  return (
+    <div className={`flex flex-col gap-2 rounded-box px-3 pt-[11px] pb-3 ${props.look.box}`}>
+      <BoxTitle title={props.title} tag={props.tag} />
       {props.lines.map((line) => (
         <MarkedLine key={`${line.mark}${line.text}`} line={line} tone={props.look.mark} />
       ))}
@@ -61,7 +75,7 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
     return null;
   }
   return (
-    <span className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-2 text-[12.5px] leading-[1.4] text-ink-2 select-text">
+    <span className={`${MARK_GRID} text-[12.5px] leading-[1.45] text-pretty text-ink-2 select-text`}>
       <Mark mark={props.mark} tone="bg-segment text-ink-2" />
       <span className="pt-px">
         <span className="font-[650] text-ink">{props.label}</span> {props.text}
@@ -77,12 +91,9 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
  */
 function StaleVerdictBox(props: { title: string; lines: AssessmentLine[]; updating: boolean; showOld: boolean; onToggle: () => void }) {
   return (
-    <div className={`flex flex-col gap-2 rounded-[10px] border p-3 ${STALE_BOX.box}`}>
-      <span className="flex items-center gap-2">
-        <span className="text-[10.5px] font-extrabold tracking-[0.06em]">{props.title}</span>
-        <span className="text-[10.5px]">· {staleWord(props.updating)}</span>
-      </span>
-      <span className="text-[12.5px] leading-[1.4] text-ink-2">{staleGlanceNote(props.updating)}</span>
+    <div className={`flex flex-col gap-2 rounded-box px-3 pt-[11px] pb-3 ${STALE_BOX.box}`}>
+      <BoxTitle title={props.title} tag={`· ${staleWord(props.updating)}`} />
+      <span className="text-[12.5px] leading-[1.45] text-ink-2">{staleGlanceNote(props.updating)}</span>
       {props.showOld && props.lines.map((line) => <MarkedLine key={`${line.mark}${line.text}`} line={line} tone={STALE_BOX.mark} />)}
       <button type="button" aria-expanded={props.showOld} onClick={props.onToggle} className="self-start text-[11.5px] text-accent hover:underline">
         {props.showOld ? 'Hide old assessment' : 'Show old assessment'}
@@ -104,7 +115,7 @@ function MissingGlance(props: { detail: PrDetail }) {
   const text = glanceStateText({ state: glanceState, gap: glanceGap, nextAutoSyncAt, now });
   const busy = actions.isBusy(`retryGlance:${pr.key}`);
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 px-3">
       <p className={`flex items-center gap-1.5 text-xs ${text.problem ? 'text-status-bad' : 'text-muted'}`}>
         {text.spinner && <SpinnerIcon />}
         {text.card}
@@ -143,26 +154,33 @@ export function GlanceCard(props: GlanceCardProps) {
   const folded = glanceStale && !showOld;
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.glanceState === 'writing' });
   return (
-    <div className="flex flex-col gap-3">
-      {view && glanceStale && (
-        <StaleVerdictBox title={view.title} lines={view.lines} updating={updating} showOld={showOld} onToggle={() => setOldShownFor(showOld ? null : prKey)} />
-      )}
-      {view && !glanceStale && <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} />}
-      {!folded && view?.risk && <Box title="RISK" tag={view.risk.level ? `· ${view.risk.level}` : ''} look={RISK_BOX} lines={view.risk.lines} />}
-      {!folded && view && (view.does || view.others) && (
-        <div className="flex flex-col gap-2">
-          <PlainLine mark="→" label="Does:" text={view.does} />
-          <PlainLine mark="“" label="Others:" text={view.others} />
+    <div className="flex flex-col gap-4">
+      {view && (
+        <div className="flex flex-col gap-2.5">
+          {glanceStale ? (
+            <StaleVerdictBox title={view.title} lines={view.lines} updating={updating} showOld={showOld} onToggle={() => setOldShownFor(showOld ? null : prKey)} />
+          ) : (
+            <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} />
+          )}
+          {!folded && view.risk && <Box title="RISK" tag={view.risk.level ? `· ${view.risk.level}` : ''} look={RISK_BOX} lines={view.risk.lines} />}
+          {!folded && (view.does || view.others) && (
+            // Outside a box, but on the same 34 / 62 lines as the box contents.
+            <div className="flex flex-col gap-2 px-3 pt-1">
+              <PlainLine mark="→" label="Does:" text={view.does} />
+              <PlainLine mark="“" label="Others:" text={view.others} />
+            </div>
+          )}
         </div>
       )}
       {!folded && glance && <KeyFiles keyFiles={glance.keyFiles} pr={props.detail.pr} />}
       {!glance && !stackLayer && <MissingGlance detail={props.detail} />}
       {stackLayer && (
-        <p className="text-xs text-muted">Pulled in to complete the stack. Stack layers get no glance until GitHub pings you about them.</p>
+        <p className="px-3 text-xs text-muted">Pulled in to complete the stack. Stack layers get no glance until GitHub pings you about them.</p>
       )}
       {canUnrelate && summary && (
         <div>
           <Button
+            className="px-3!"
             onClick={() =>
               void actions.feedback({ kind: 'not_related', tileId: props.view.tile.id, prKey: summary.key, targetTopicId: null, note: '' })
             }

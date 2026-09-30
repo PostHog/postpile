@@ -93,6 +93,8 @@ export function ActionBar(props: ActionBarProps) {
   const approving = actions.isBusy(`approve:${pr.key}`);
   const lead = leadSlot(offers.lead);
   const variantOf = (slot: Slot) => (lead === slot ? 'primary' : 'secondary');
+  // Approve leads in green (--safe), the colour of the "Approved" state it produces; every other lead is ink.
+  const approveVariant = lead === 'approve' ? 'safe' : 'secondary';
   const glance = props.detail.glance;
   const onePr = offers.scope === 'pr';
   const pending = offers.pendingWrite;
@@ -106,14 +108,14 @@ export function ActionBar(props: ActionBarProps) {
   const slots: Record<Slot, ReactNode> = {
     approve: offers.approve && (
       <Button
-        variant={variantOf('approve')}
+        variant={approveVariant}
         size="md"
         disabled={approving}
         title={approveTitle(approveInput, approve, actions.blockedReason('approve'), now)}
         onClick={() => void actions.approve(pr.key, pr.headOid)}
       >
         {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}
-        <span className="flex items-center gap-1 opacity-75">
+        <span className="mr-px flex items-center gap-[3px] opacity-75">
           {approveStateGlyphs(lifecycleOf(props), pr.reviewDecision, props.detail.agentApprovers).map((part) => (
             <span key={part.glyph} role="img" aria-label={part.title} title={part.title} className="flex">
               <Glyph glyph={part.glyph} size={11} strokeWidth={1.8} />
@@ -153,18 +155,19 @@ export function ActionBar(props: ActionBarProps) {
   };
   const order = [lead, ...SLOT_ORDER.filter((slot) => slot !== lead)];
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    // No rules above or below: spacing alone sets the bar apart.
+    <div className="flex flex-wrap items-center gap-1.5 pt-1.5 pb-2.5">
       {order.map((slot) => (
         <Fragment key={slot}>{slots[slot]}</Fragment>
       ))}
       {/* Recheck and chat stay together at the end, and wrap as one when the pane is narrow. */}
-      <span className="ml-auto flex items-center gap-1">
+      <span className="ml-auto flex items-center gap-1.5">
         {glance && (
           <button
             type="button"
             title="Recheck this assessment: the agent reads the whole glance against the PR, its activity and the topic dossier"
             onClick={() => setRecheckOpen(true)}
-            className="h-[30px] px-2 text-xs text-muted hover:text-ink"
+            className="h-[30px] px-2 text-xs text-hint hover:text-ink"
           >
             Recheck
           </button>
@@ -175,8 +178,8 @@ export function ActionBar(props: ActionBarProps) {
           aria-pressed={props.chatOpen}
           title="Chat about this tile"
           onClick={props.onToggleChat}
-          className={`flex size-[30px] items-center justify-center rounded-control border ${
-            props.chatOpen ? 'border-accent bg-accent-soft text-accent' : 'border-control bg-surface text-ink-2 hover:bg-subtle'
+          className={`flex size-[30px] items-center justify-center rounded-control inset-ring ${
+            props.chatOpen ? 'bg-accent-soft text-accent inset-ring-accent' : 'bg-surface text-ink-2 shadow-control inset-ring-edge-control hover:bg-subtle'
           }`}
         >
           <ChatIcon />

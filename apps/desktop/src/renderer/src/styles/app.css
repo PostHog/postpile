@@ -55,6 +55,7 @@
   /* Rings as colors: inset-ring-edge-hairline, inset-ring-edge-control, ... */
   --color-edge-hairline: var(--ring-hairline);
   --color-edge-control: var(--ring-control);
+  --color-edge-control-soft: var(--ring-control-soft);
   --color-edge-honey: var(--ring-honey);
   --color-edge-honey-box: var(--ring-honey-box);
   --color-edge-risk-box: var(--ring-risk-box);

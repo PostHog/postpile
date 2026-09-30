@@ -24,7 +24,7 @@ export function Avatar(props: { login: string; size?: keyof typeof SIZES; classN
   // Kept per URL, so a reused Avatar with another login starts over.
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const shape = isTeam(props.login) ? 'rounded-md' : 'rounded-full';
+  const shape = isTeam(props.login) ? 'rounded-[5px]' : 'rounded-full';
   return (
     <span
       title={props.login}

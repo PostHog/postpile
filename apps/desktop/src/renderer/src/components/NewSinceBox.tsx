@@ -27,7 +27,7 @@ export function NewSinceBox(props: { detail: PrDetail }) {
   const shown = showAll ? fresh : fresh.slice(0, LINES_SHOWN);
   const hidden = fresh.length - shown.length;
   return (
-    <div className="flex flex-col rounded-row border border-unread-border bg-unread-row px-2.5 pt-2 pb-1.5">
+    <div className="flex flex-col rounded-box bg-unread-row px-3 pt-[11px] pb-1.5 inset-ring inset-ring-unread-border">
       <span className="pb-1.5 text-[10.5px] font-semibold text-unread-ink">
         <span className="tracking-[0.04em] uppercase">New since you looked</span>
         {anchor && <span className="font-medium"> · {anchor}</span>}

@@ -78,6 +78,15 @@ export function ExternalIcon(props: IconProps) {
   );
 }
 
+/** The "head → base" arrow in the detail pane's branch line, 12×8. */
+export function BranchArrowIcon(props: { className?: string }) {
+  return (
+    <svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className={props.className} aria-hidden="true">
+      <path d="M1 4h9M7.5 1.5L10 4 7.5 6.5" />
+    </svg>
+  );
+}
+
 export function ChatIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -150,17 +159,19 @@ export function ChevronIcon(props: IconProps) {
 }
 
 /** Left-pointing chevron for "Back"; ForwardIcon mirrors it. */
-export function BackIcon() {
+export function BackIcon(props: IconProps) {
+  const size = props.size ?? 14;
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
       <path d="M10 3.5L5.5 8l4.5 4.5" />
     </svg>
   );
 }
 
-export function ForwardIcon() {
+export function ForwardIcon(props: IconProps) {
+  const size = props.size ?? 14;
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
       <path d="M6 3.5L10.5 8 6 12.5" />
     </svg>
   );
