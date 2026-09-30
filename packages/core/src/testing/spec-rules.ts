@@ -6,6 +6,7 @@
 // and loudness, never a rule's answer about it. Each function says what the
 // app should do; the invariants compare the app's answer with it. Type
 // imports only from the rule modules.
+import type { ForWhom } from '../for-whom.ts';
 import type { LookCloserPing } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
 import type { PingRuleClass } from '../pings.ts';
@@ -13,6 +14,7 @@ import type { PrTier } from '../pr-tier.ts';
 import type { OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
+import type { WhyCode } from '../why-here.ts';
 import type { YourMove } from '../whose-turn.ts';
 import { answersChanges, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS } from './spec-events.ts';
 import {
@@ -20,12 +22,15 @@ import {
   asksViewer,
   changesAnswer,
   isAutomationLogin,
+  isHomeTeam,
   isOwner,
+  isRoutedTeam,
+  isRoutingTeam,
   isViewerLogin,
-  isViewerTeam,
   namedOwner,
   newestTouch,
   pendingRequest,
+  pendingRequestTeam,
   READING_TOUCHES,
   requestSubjectOf,
   reviewStillOwed,
@@ -40,6 +45,7 @@ import {
   viewerHeadReview,
   viewerOwns,
   viewerReviewedHead,
+  viewerTeamsMentioned,
   type SpecRequest,
   type SpecTouchKind,
 } from './spec-facts.ts';
@@ -183,9 +189,13 @@ function standingTurn(pr: Pr, except: string | null): ExpectedTurn | null {
   return waiting === undefined ? them(standing[0]!, 'to re-review') : them(namedOwner(pr), `to address ${waiting}'s changes`);
 }
 
-/** "Review, ada asked" (the newest person who asked the viewer or their team), "Review for team-platform", or with the owner for a teammate's PR. */
+/**
+ * "Review, ada asked" (the newest person who asked the viewer or their
+ * team), "Review for team-platform" (the team whose request decides, home
+ * or routing), or with the owner for a teammate's PR.
+ */
 function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review' | 'Re-review'): string {
-  const team = pr.reviewerTeams.find((subject) => isViewerTeam(viewer, subject))?.split('/').pop();
+  const team = pendingRequestTeam(pr, viewer)?.split('/').pop();
   if (request === 'team') {
     return `${verb} for ${team}`;
   }
@@ -286,8 +296,10 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
 /**
  * The PR's queue: an unanswered personal ask (not an owner's reply once
  * they answered your changes), your changes request, your PR, a personal
- * request, a teammate's PR, any other request, a team mention, the rest.
- * Your PR and a teammate's go by owners (DESIGN "PR ownership").
+ * request or an open routed one (on a teammate's PR only a routing team's
+ * can be), a teammate's PR, a taken request, a team mention, the rest.
+ * Your PR and a teammate's go by owners (DESIGN "PR ownership"), and only
+ * home teams have teammates (DESIGN "Team roles").
  * Only open PRs have a queue. Drafts and reviewed heads never sit in To review.
  */
 export function expectedTier(input: TurnInput & { reason: NotificationReason | null }): PrTier {
@@ -306,7 +318,7 @@ export function expectedTier(input: TurnInput & { reason: NotificationReason | n
     return 'mine';
   }
   const request = pr.isDraft || viewerReviewedHead(pr, viewer, input.userState) ? null : pendingRequest(pr, viewer);
-  if (request === 'you' || request === 'team_for_you') {
+  if (request === 'you' || request === 'team_for_you' || request === 'team') {
     return 'to_review';
   }
   if (teammateOwns(pr, viewer)) {
@@ -344,6 +356,72 @@ export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer
     return false;
   }
   return viewer === null || (!reviewStillOwed(pr, viewer, userState, input.notYours) && notYourMove());
+}
+
+// ---------------------------------------------------------------------------
+// For whom
+// ---------------------------------------------------------------------------
+
+/**
+ * Which of the viewer's teams a team chip names, home teams first at each
+ * step: the team whose pending request decides, a team asked in the
+ * timeline, a team mentioned, else their first team. Null without teams.
+ */
+function chipTeam(pr: Pr, viewer: Viewer): string | null {
+  const homeFirst = [...viewer.teams.filter((team) => isHomeTeam(viewer, team)), ...viewer.teams.filter((team) => isRoutingTeam(viewer, team))];
+  const pending = pendingRequestTeam(pr, viewer);
+  if (pending !== null) {
+    return pending;
+  }
+  const asked = pr.timeline.flatMap((item) => (item.kind === 'review_requested' && item.subject !== null ? [item.subject] : []));
+  const timelineTeam = homeFirst.find((team) => asked.some((subject) => sameLogin(subject, team)));
+  if (timelineTeam !== undefined) {
+    return timelineTeam;
+  }
+  const mentioned = [pr.body, ...pr.comments.map((comment) => comment.body)].flatMap((body) => viewerTeamsMentioned(body, viewer));
+  const mentionedTeam = homeFirst.find((team) => mentioned.some((subject) => sameLogin(subject, team)));
+  return mentionedTeam ?? homeFirst[0] ?? null;
+}
+
+/**
+ * The for-whom chip of one PR (DESIGN "Tile faces", "Team roles"): "Your
+ * PR" on one the viewer owns or was notified about as its author; "For
+ * you" when the owner answered their changes, a home team request on a
+ * teammate's PR is theirs, or the code aims at them (RV, @, AS); a team
+ * chip for RT and @T, sea for a home team and neutral for a routing team;
+ * else none.
+ */
+export function expectedForWhom(why: WhyCode, pr: Pr, viewer: Viewer): ForWhom {
+  if (why === 'AU' || viewerOwns(pr, viewer)) {
+    return { kind: 'own' };
+  }
+  if (changesAnswer(pr, viewer) !== null || pendingRequest(pr, viewer) === 'team_for_you') {
+    return { kind: 'you' };
+  }
+  if (why === 'RV' || why === '@' || why === 'AS') {
+    return { kind: 'you' };
+  }
+  if (why !== 'RT' && why !== '@T') {
+    return { kind: 'none' };
+  }
+  const team = chipTeam(pr, viewer);
+  if (team === null) {
+    return { kind: 'team', team: 'your team' };
+  }
+  const slug = team.split('/').pop()!;
+  return isRoutingTeam(viewer, team) ? { kind: 'routing', team: slug } : { kind: 'team', team: slug };
+}
+
+/** The tile's chip: the most aimed of its PRs' chips (you, a home team, a routing team, own), the first on a tie. */
+export function expectedTileForWhom(chips: ForWhom[]): ForWhom {
+  const order: ForWhom['kind'][] = ['you', 'team', 'routing', 'own'];
+  for (const kind of order) {
+    const chip = chips.find((candidate) => candidate.kind === kind);
+    if (chip) {
+      return chip;
+    }
+  }
+  return { kind: 'none' };
 }
 
 // ---------------------------------------------------------------------------
@@ -420,13 +498,13 @@ export function isAimedAtViewer(pr: Pr, viewer: Viewer, event: PrEvent): boolean
   return event.kind === 'review_changes_requested' && viewerOwns(pr, viewer);
 }
 
-/** A request for one of the viewer's teams (not the viewer) on a PR from outside the team (neither the viewer nor a teammate owns it). */
+/** A request for one of the viewer's teams (not the viewer) that is routed: a routing team's, or a home team's on a PR from outside the team. */
 export function isRoutedRequest(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
-  if (event.kind !== 'review_requested' || viewerOwns(pr, viewer) || teammateOwns(pr, viewer)) {
+  if (event.kind !== 'review_requested') {
     return false;
   }
   const subject = requestSubjectOf(pr, event);
-  return subject !== null && !sameLogin(subject, viewer.login) && isViewerTeam(viewer, subject);
+  return subject !== null && !sameLogin(subject, viewer.login) && isRoutedTeam(pr, viewer, subject);
 }
 
 export interface ExpectedPing {
@@ -530,8 +608,8 @@ function slug(team: string): string {
 
 /**
  * A routed team request pings once when the glance says Look closer: an
- * open non-draft PR from outside the team with one of the viewer's teams
- * pending, the head not reviewed, no snooze, and not for the same request
+ * open non-draft PR with a routed request pending (a routing team's on
+ * anyone else's PR, a home team's on a PR from outside the team), the head not reviewed, no snooze, and not for the same request
  * again (the newest timeline request for that team, else `pending:<team>`).
  */
 export function expectedLookCloser(input: {
@@ -546,8 +624,7 @@ export function expectedLookCloser(input: {
   if (input.verdict !== 'LOOK_CLOSER') {
     return { kind: 'skip', why: 'not_look_closer' };
   }
-  const outside = !viewerOwns(pr, viewer) && !teammateOwns(pr, viewer);
-  const team = pr.state === 'OPEN' && !pr.isDraft && outside ? pr.reviewerTeams.find((subject) => isViewerTeam(viewer, subject)) : undefined;
+  const team = pr.state === 'OPEN' && !pr.isDraft ? pr.reviewerTeams.find((subject) => isRoutedTeam(pr, viewer, subject)) : undefined;
   if (team === undefined) {
     return { kind: 'skip', why: 'no_routed_request' };
   }

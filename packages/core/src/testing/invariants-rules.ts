@@ -15,16 +15,18 @@ import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
 import { ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
 import { SPEC_ADDRESSED_KINDS } from './spec-events.ts';
-import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwnerRelation, specOwners, specRelation, viewerOwns } from './spec-facts.ts';
+import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwnerRelation, specOwners, specRelation } from './spec-facts.ts';
 import {
   effectiveLoudnessOf,
   expectedDone,
+  expectedForWhom,
   expectedLookCloser,
   expectedLookCloserText,
   expectedPing,
   expectedPingText,
   expectedQuietRead,
   expectedTier,
+  expectedTileForWhom,
   expectedTouchedRead,
   expectedTurn,
   openAsk,
@@ -64,21 +66,17 @@ export const prFactsMatchTheSpec: Invariant = {
 
 /**
  * Whose PR it is (DESIGN "PR ownership"): the row's owners and their
- * relation (Mine and Team filters), the "Your PR" chip exactly on a PR the
- * viewer owns (or one GitHub notified them about as its author), and the
- * sidebar faces: every owner who is a person, once, with their relation.
+ * relation (Mine and Team filters), and the sidebar faces: every owner who
+ * is a person, once, with their relation.
  */
 export const ownershipMatchesTheSpec: Invariant = {
-  name: 'owners, their relation, the Your PR chip and the sidebar faces are the spec owners',
+  name: 'owners, their relation and the sidebar faces are the spec owners',
   check(board, views) {
     for (const row of allRows(views)) {
       const pr = prOf(board, row.key);
       ensure(JSON.stringify(row.facts.owners) === JSON.stringify(specOwners(pr)), `${row.key}: owners ${row.facts.owners.join(', ')}, expected ${specOwners(pr).join(', ')}`);
       const relation = specOwnerRelation(pr, board.viewer);
       ensure(row.authorRelation === relation, `${row.key}: owner relation ${row.authorRelation}, expected ${relation}`);
-      const notifiedAsAuthor = row.provenance.kind === 'pinged' && row.provenance.reason === 'author';
-      const own = viewerOwns(pr, board.viewer) || notifiedAsAuthor;
-      ensure((row.forWhom.kind === 'own') === own, `${row.key}: for whom ${row.forWhom.kind}, expected own ${own}`);
     }
     const prs = [...board.prs.values()];
     const people = new Map<string, string>();
@@ -88,6 +86,25 @@ export const ownershipMatchesTheSpec: Invariant = {
     const faces = topicPeople(prs, board.viewer).map((person) => `${person.login.toLowerCase()}:${person.relation}`);
     const expected = [...people.values()];
     ensure(JSON.stringify(faces.toSorted()) === JSON.stringify(expected.toSorted()), `faces ${faces.join(', ')}, expected ${expected.join(', ')}`);
+  },
+};
+
+/**
+ * The for-whom chip of each PR and tile is the spec's (DESIGN "Tile faces",
+ * "Team roles"): "Your PR" on an owned PR, "For you" when it is theirs, a
+ * sea chip for a home team and a neutral one for a routing team.
+ */
+export const forWhomMatchesTheSpec: Invariant = {
+  name: 'the for-whom chip of each PR and tile is the spec chip, routing teams neutral',
+  check(board, views) {
+    for (const view of views) {
+      for (const row of view.prs) {
+        const expected = JSON.stringify(expectedForWhom(row.why, prOf(board, row.key), board.viewer));
+        ensure(JSON.stringify(row.forWhom) === expected, `${row.key}: for whom ${JSON.stringify(row.forWhom)} (${row.why}), expected ${expected}`);
+      }
+      const tile = JSON.stringify(expectedTileForWhom(view.prs.map((row) => row.forWhom)));
+      ensure(JSON.stringify(view.forWhom) === tile, `${view.tile.id}: for whom ${JSON.stringify(view.forWhom)}, expected ${tile}`);
+    }
   },
 };
 
@@ -292,6 +309,7 @@ export const lookCloserMatchesTheSpec: Invariant = {
 export const RULE_INVARIANTS: readonly Invariant[] = [
   prFactsMatchTheSpec,
   ownershipMatchesTheSpec,
+  forWhomMatchesTheSpec,
   turnMatchesTheSpec,
   tierMatchesTheSpec,
   doneMatchesTheSpec,

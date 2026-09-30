@@ -21,14 +21,24 @@ export type Person = 'viewer' | 'teammate' | 'other' | 'outsider' | 'bot' | 'app
 export type Assignee = 'viewer' | 'teammate' | 'other';
 
 /**
- * Whom a review request names: the viewer, the viewer's team, another team,
- * a teammate (rowan), or ada (so the reviewer who asked for changes gets
- * asked again).
+ * Whom a review request names: the viewer, the viewer's team
+ * (team-platform), another team (team-infra), the approvers team (the
+ * viewer's routing team on most boards that have it), a teammate (rowan),
+ * or ada (so the reviewer who asked for changes gets asked again).
  */
-export type RequestTarget = 'viewer' | 'team' | 'other_team' | 'teammate' | 'other';
+export type RequestTarget = 'viewer' | 'team' | 'other_team' | 'routing_team' | 'teammate' | 'other';
 
-/** What a comment says, as far as the rules care. */
-export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'bot_marker' | 'deploy';
+/** What a comment says, as far as the rules care. routing_mention names approvers, teams_mention approvers and team-platform. */
+export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'routing_mention' | 'teams_mention' | 'bot_marker' | 'deploy';
+
+/**
+ * The viewer's teams and their roles (DESIGN "Team roles"). one_home:
+ * team-platform, a home team. home_and_routing: team-platform home,
+ * approvers routing only. no_home: both routing only, so no teammates.
+ * undecided: both teams, roles not decided yet (`homeTeams` missing), so
+ * both count as home.
+ */
+export type TeamSetup = 'one_home' | 'home_and_routing' | 'no_home' | 'undecided';
 
 /** PENDING: an unsent review, which says nothing yet. */
 export type ReviewVerdict = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
@@ -148,6 +158,7 @@ export interface GroupSpec {
 
 export interface BoardSpec {
   groups: GroupSpec[];
+  teams: TeamSetup;
   /** GitHub writes are locked, so mark-reads wait as pending writes. */
   writesLocked: boolean;
   /** The team member list was never fetched, so rules fall back to "any other reviewer is a teammate". */
@@ -191,10 +202,10 @@ const assignees: fc.Arbitrary<Assignee[]> = fc.oneof(
 const nonViewer = fc.constantFrom<Person>('other', 'teammate', 'bot');
 /** The viewer and their team most: those requests are what the rules act on. */
 const target: fc.Arbitrary<RequestTarget> = fc.oneof(
-  { weight: 2, arbitrary: fc.constantFrom<RequestTarget>('viewer', 'team') },
+  { weight: 2, arbitrary: fc.constantFrom<RequestTarget>('viewer', 'team', 'routing_team') },
   { weight: 1, arbitrary: fc.constantFrom<RequestTarget>('other_team', 'teammate', 'other') },
 );
-const commentText = fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'bot_marker', 'deploy');
+const commentText = fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'routing_mention', 'teams_mention', 'bot_marker', 'deploy');
 const stepIndex = fc.nat({ max: 8 });
 
 const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
@@ -294,6 +305,7 @@ const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
 /** A board: one topic with one to three tiles, 1-4 PRs each. */
 export const boardSpecArb: fc.Arbitrary<BoardSpec> = fc.record({
   groups: fc.array(anyGroupArb, { minLength: 1, maxLength: 3 }),
+  teams: fc.constantFrom<TeamSetup>('one_home', 'home_and_routing', 'no_home', 'undecided'),
   writesLocked: fc.boolean(),
   teamMembersUnknown: sometimes(1, 9),
   nowGap: fc.constantFrom(5000, 60, 3),
