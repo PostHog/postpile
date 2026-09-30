@@ -1,6 +1,6 @@
 import {
   actionTrail,
-  botsFromQuietDetail,
+  actorsFromQuietDetail,
   quietReasonFromDetail,
   debugEventLines,
   parsePrKey,
@@ -95,7 +95,7 @@ export function quietReadViews(board: Board, entries: ActionLogEntry[], threadTi
         number: ref.number,
         title: board.prs.get(entry.prKey)?.title ?? threadTitle ?? entry.prKey,
         reason: quietReasonFromDetail(entry.detail),
-        bots: botsFromQuietDetail(entry.detail),
+        bots: actorsFromQuietDetail(entry.detail),
         landing: landingOf(board, entry.prKey),
       },
     ];

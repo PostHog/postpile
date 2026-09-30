@@ -11,9 +11,9 @@ import {
   singleTileId,
   type TileStateInput,
 } from './tiles.ts';
-import type { Pr, PrEvent, PrSet, Snooze, SnoozeCondition, Tile, UserPrState, Viewer } from './types.ts';
+import type { NotificationThread, Pr, PrEvent, PrSet, Snooze, SnoozeCondition, Tile, UserPrState, Viewer } from './types.ts';
 
-function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPrState[] = []): TileStateInput {
+function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPrState[] = [], threads: NotificationThread[] = []): TileStateInput {
   const eventMap = new Map<string, PrEvent[]>();
   for (const event of events) {
     eventMap.set(event.prKey, [...(eventMap.get(event.prKey) ?? []), event]);
@@ -22,6 +22,7 @@ function stateInput(tile: Tile, prs: Pr[], events: PrEvent[], userStates: UserPr
     tile,
     prs: new Map(prs.map((pr) => [pr.key, pr])),
     events: eventMap,
+    threads: new Map(threads.map((thread) => [`${thread.repo}#${thread.number}`, thread])),
     userStates: new Map(userStates.map((s) => [s.prKey, s])),
     snoozes: new Map(),
     now: at(100),
@@ -161,15 +162,24 @@ describe('deriveTileState', () => {
 
   const pr = makePr();
   const tile = singleTile(pr);
+  const unreadThread = makeThreadFor(pr, { lastReadAt: at(1) });
 
   it('is unread with the PR and event that caused it', () => {
     const loud = makeEvent({ id: 'e1', kind: 'mention', ruleLoudness: 'loud', summary: 'bob mentioned you' });
-    const state = deriveTileState(stateInput(tile, [pr], [loud]));
+    const state = deriveTileState(stateInput(tile, [pr], [loud], [], [unreadThread]));
     expect(state).toEqual({
       kind: 'unread',
       unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', actor: 'bob', summary: 'bob mentioned you', at: loud.at }],
+      unreadOnGitHub: true,
+      loud: true,
     });
     expect(explainTileState(state)).toBe('unread (acme/app#1: bob mentioned you)');
+  });
+
+  it('is unread only while a thread is unread on GitHub: loud news on a read thread keeps it open and loud', () => {
+    const loud = makeEvent({ id: 'e1', kind: 'mention', ruleLoudness: 'loud', summary: 'bob mentioned you' });
+    const read = makeThreadFor(pr, { unread: false, lastReadAt: at(50) });
+    expect(deriveTileState(stateInput(tile, [pr], [loud], [], [read]))).toEqual({ kind: 'open', unreadBecause: [], unreadOnGitHub: false, loud: true });
   });
 
   it('lists every unseen loud event, oldest first, and skips seen and quiet ones', () => {
@@ -179,8 +189,28 @@ describe('deriveTileState', () => {
       makeEvent({ id: 'seen', ruleLoudness: 'loud', at: at(5), seenAt: at(6) }),
       makeEvent({ id: 'quiet', ruleLoudness: 'quiet', at: at(7) }),
     ];
-    const state = deriveTileState(stateInput(tile, [pr], events));
+    const state = deriveTileState(stateInput(tile, [pr], events, [], [unreadThread]));
     expect(state.unreadBecause.map((r) => r.eventId)).toEqual(['early', 'late']);
+  });
+
+  it('names the newest quiet event since the read when the thread has no loud news, else the thread', () => {
+    const events = [
+      makeEvent({ id: 'old', at: at(0), summary: 'ada commented' }),
+      makeEvent({ id: 'quiet', at: at(20), summary: 'lyra commented', actor: 'lyra' }),
+      makeEvent({ id: 'noise', at: at(30), override: { loudness: 'muted', reason: 'noise', by: 'agent' } }),
+    ];
+    const quiet = deriveTileState(stateInput(tile, [pr], events, [handled], [unreadThread]));
+    expect(quiet.kind).toBe('unread');
+    expect(quiet.loud).toBe(false);
+    expect(quiet.unreadBecause.map((r) => [r.eventId, r.summary])).toEqual([['quiet', 'lyra commented']]);
+    const seen = events.map((event) => ({ ...event, seenAt: at(40) }));
+    const bare = deriveTileState(stateInput(tile, [pr], seen, [handled], [unreadThread]));
+    expect(bare.unreadBecause).toEqual([{ prKey: pr.key, eventId: `thread:${unreadThread.id}`, kind: 'comment', actor: 'bob', summary: 'new activity on GitHub', at: unreadThread.updatedAt }]);
+  });
+
+  it('shows a done PR unread while its thread is unread on GitHub, done once read', () => {
+    expect(deriveTileState(stateInput(tile, [pr], [], [handled], [unreadThread])).kind).toBe('unread');
+    expect(deriveTileState(stateInput(tile, [pr], [], [handled], [{ ...unreadThread, unread: false }])).kind).toBe('done');
   });
 
   it('respects an agent override that mutes a loud event', () => {
@@ -203,7 +233,7 @@ describe('deriveTileState', () => {
     expect(deriveTileState(stateInput(setTile, [pr, pulledIn], [], [approved])).kind).toBe('done');
   });
 
-  it('counts loud events on pulled-in PRs too', () => {
+  it('counts loud events on pulled-in PRs too: unread without a thread', () => {
     const pulledIn = makePr({ number: 2 });
     const setTile: Tile = {
       ...tile,
@@ -211,13 +241,13 @@ describe('deriveTileState', () => {
     };
     const loud = makeEvent({ prKey: pulledIn.key, ruleLoudness: 'loud' });
     const approved = makeUserState({ approvedAt: at(1), approvedCommitOid: 'head' });
-    expect(deriveTileState(stateInput(setTile, [pr, pulledIn], [loud], [approved])).kind).toBe('unread');
+    expect(deriveTileState(stateInput(setTile, [pr, pulledIn], [loud], [approved]))).toMatchObject({ kind: 'unread', loud: true, unreadOnGitHub: false });
   });
 
   it('is snoozed while the condition holds, even with older unseen loud events', () => {
-    const input = stateInput(tile, [pr], [makeEvent({ ruleLoudness: 'loud', at: at(5) })]);
+    const input = stateInput(tile, [pr], [makeEvent({ ruleLoudness: 'loud', at: at(5) })], [], [unreadThread]);
     input.snoozes = snoozesFor([pr.key], { kind: 'until_time', until: at(200) });
-    expect(deriveTileState(input).kind).toBe('snoozed');
+    expect(deriveTileState(input)).toEqual({ kind: 'snoozed', unreadBecause: [], unreadOnGitHub: true, loud: true });
   });
 
   it('wakes from a snooze when the condition is met', () => {
@@ -227,7 +257,7 @@ describe('deriveTileState', () => {
   });
 
   it('wakes from a snooze on a loud human event after it started', () => {
-    const input = stateInput(tile, [pr], [makeEvent({ kind: 'mention', ruleLoudness: 'loud', at: at(20) })]);
+    const input = stateInput(tile, [pr], [makeEvent({ kind: 'mention', ruleLoudness: 'loud', at: at(20) })], [], [unreadThread]);
     input.snoozes = snoozesFor([pr.key], { kind: 'new_push' });
     expect(deriveTileState(input).kind).toBe('unread');
   });
@@ -443,6 +473,6 @@ describe('found PRs', () => {
     });
     const loud = makeEvent({ prKey: pr.key, ruleLoudness: 'loud' });
     expect(tiles[0]?.members[0]?.provenance.kind).toBe('pinged');
-    expect(deriveTileState(stateInput(tiles[0]!, [pr], [loud])).kind).toBe('unread');
+    expect(deriveTileState(stateInput(tiles[0]!, [pr], [loud], [], [makeThreadFor(pr)])).kind).toBe('unread');
   });
 });

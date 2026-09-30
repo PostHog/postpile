@@ -224,6 +224,7 @@ export class ReadModels {
           quietRepo: isPrInQuietRepo(pr.key, settings),
           repoLabel: repoLabels[index] ?? null,
           tileUnread,
+          unreadOnGitHub: board.threads.get(pr.key)?.unread === true,
           now: board.now,
           pendingWrite: pending.get(pr.key) ?? null,
         }),
@@ -296,9 +297,12 @@ export class ReadModels {
       const urgency = topicUrgency(
         tiles.map((tile, index) => {
           const turn = board.turnOf(tile);
+          const state = board.stateOf(tile);
           const loudMembers = tile.members.filter((member) => !isPrInQuietRepo(member.prKey, settings));
           return {
             state: states[index] ?? 'open',
+            unreadOnGitHub: state.unreadOnGitHub,
+            loud: state.loud,
             prStates: loudMembers.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
             move: topicMove(turn),
             quiet: isQuietTile(memberKeys(tile), settings),

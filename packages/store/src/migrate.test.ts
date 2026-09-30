@@ -23,6 +23,17 @@ describe('migrations', () => {
     db.close();
   });
 
+  it('drops a start-fresh baseline stored before 021, and keeps the rest of meta', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(init.sql);
+    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
+    db.exec("INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-09-01T00:00:00.000Z')");
+    db.exec("INSERT INTO meta (key, value) VALUES ('start_fresh_baseline', '2026-09-20T00:00:00.000Z'), ('viewer', '{}')");
+    runMigrations(db);
+    expect(db.prepare('SELECT key FROM meta ORDER BY key').all().map((row) => row.key)).toEqual(['viewer']);
+    db.close();
+  });
+
   it('gives events that existed before v2 an event_log seq in time order', () => {
     const db = new DatabaseSync(':memory:');
     db.exec(init.sql);

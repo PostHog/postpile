@@ -60,6 +60,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
+    unreadOnGitHub: false,
     done: false,
     ownTeamRequests: [],
     pendingWrite: null,
@@ -77,7 +78,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
 function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
   return withOffers({
     tile: { id, topicId: 't', kind: 'single', title: id, members: [], stacks: [] },
-    state: { kind: 'open', unreadBecause: [] },
+    state: { kind: 'open', unreadBecause: [], unreadOnGitHub: false, loud: false },
     prs,
     why: 'RV',
     forWhom: { kind: 'you' },
@@ -213,14 +214,14 @@ describe('tilesInTierOrder', () => {
 
 describe('firstGridTile', () => {
   it('picks the first live tile in tier order, not the first in API order', () => {
-    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [] } };
+    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [], unreadOnGitHub: false, loud: false } };
     const views = [tile('rest', 'rest'), done, tile('team', 'team')];
     expect(firstGridTile(views)?.tile.id).toBe('team');
   });
 
   it('falls back to snoozed, then done, then nothing', () => {
-    const snoozed = { ...tile('snoozed', 'rest'), state: { kind: 'snoozed' as const, unreadBecause: [] } };
-    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [] } };
+    const snoozed = { ...tile('snoozed', 'rest'), state: { kind: 'snoozed' as const, unreadBecause: [], unreadOnGitHub: false, loud: false } };
+    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [], unreadOnGitHub: false, loud: false } };
     expect(firstGridTile([done, snoozed])?.tile.id).toBe('snoozed');
     expect(firstGridTile([done])?.tile.id).toBe('done');
     expect(firstGridTile([])).toBeNull();

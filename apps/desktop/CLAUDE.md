@@ -106,7 +106,7 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   GitHub-writing action on the `GithubWrite` list. The inbox cleanup
   (`cleanUpInbox`, "mark everything older than N days read") is on it as
   `cleanup` and behaves like mark read: locked, it becomes one pending
-  write. Start fresh and "Not now" are local.
+  write. "Not now" is local.
 - "Add to Claude Code" (`connectMcp(from)`) changes Claude Code's config,
   never GitHub, so it is not on the `GithubWrite` list. Fire it only from a
   click, never from an effect or along with Accept: the app never installs

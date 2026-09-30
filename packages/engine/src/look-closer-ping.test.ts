@@ -62,7 +62,8 @@ describe('routed team requests ping when the glance says Look closer', () => {
   it('pings once, records the decision and marks the tile unread with the reason', async () => {
     const pr = routedPr();
     const { h, pings } = await synced(pr);
-    expect(await tileState(h)).not.toBe('unread');
+    // The routed request's thread is unread on GitHub: unread, but without loud news.
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.state).toMatchObject({ kind: 'unread', loud: false });
 
     written(h, pings, glance(pr, 'LOOK_CLOSER'));
 
@@ -78,7 +79,7 @@ describe('routed team requests ping when the glance says Look closer', () => {
     expect(pings.drain()).toEqual([]);
     expect(glanceDecisions(h)).toEqual([expect.objectContaining({ ping: true, reason: 'Look closer: review routed to team-platform', prKey: pr.key })]);
     const view = (await h.engine.getTopic('depot'))?.tiles[0];
-    expect(view?.state.kind).toBe('unread');
+    expect(view?.state).toMatchObject({ kind: 'unread', loud: true });
     expect(view?.state.unreadBecause.map((reason) => reason.summary)).toEqual(['Look closer: review routed to team-platform']);
   });
 

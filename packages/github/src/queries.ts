@@ -3,6 +3,14 @@ import type { BranchLookup } from './reader.ts';
 
 // Limits per PR. Picked so 12 aliased PRs stay well inside GitHub's node
 // limit even when every PR drags in its full conversation.
+
+/**
+ * The caps on the activity lists: the last N reviews, comments, review
+ * threads, commits and timeline items, the first N comments of a thread.
+ * Normalizing records which ones came back full (`Pr.capHits`).
+ */
+export const QUERY_CAPS = { reviews: 50, comments: 60, reviewThreads: 50, threadComments: 30, commits: 50, timeline: 60 } as const;
+
 const TIMELINE_TYPES = [
   'REVIEW_REQUESTED_EVENT',
   'REVIEW_REQUEST_REMOVED_EVENT',
@@ -67,16 +75,16 @@ fragment prData on PullRequest {
   labels(first: 20) { nodes { name } }
   files(first: 100) { nodes { path additions deletions } }
   reviewRequests(first: 30) { nodes { requestedReviewer { ...reviewer } } }
-  reviews(last: 50) {
+  reviews(last: ${QUERY_CAPS.reviews}) {
     totalCount
     nodes { id state url submittedAt createdAt ...comment commit { oid } }
   }
-  comments(last: 60) { totalCount nodes { id url ...comment } }
-  reviewThreads(last: 50) {
+  comments(last: ${QUERY_CAPS.comments}) { totalCount nodes { id url ...comment } }
+  reviewThreads(last: ${QUERY_CAPS.reviewThreads}) {
     totalCount
-    nodes { id path isResolved comments(first: 30) { totalCount nodes { id url state ...comment } } }
+    nodes { id path isResolved comments(first: ${QUERY_CAPS.threadComments}) { totalCount nodes { id url state ...comment } } }
   }
-  commits(last: 50) {
+  commits(last: ${QUERY_CAPS.commits}) {
     totalCount
     nodes { commit { oid messageHeadline committedDate author { name user { login } } committer { name user { login } } } }
   }
@@ -90,7 +98,7 @@ fragment prData on PullRequest {
       } }
     } } }
   }
-  timelineItems(last: 60, itemTypes: [${TIMELINE_TYPES.join(', ')}]) {
+  timelineItems(last: ${QUERY_CAPS.timeline}, itemTypes: [${TIMELINE_TYPES.join(', ')}]) {
     totalCount
     nodes {
       __typename

@@ -6,7 +6,6 @@ const view: InboxCleanupView = {
   unreadOlderThan14: 12,
   unreadOlderThan30: 4,
   look: 'line',
-  baseline: null,
   hiddenUntil: null,
   pendingCutoff: null,
 };

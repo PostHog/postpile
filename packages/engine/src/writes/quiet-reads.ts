@@ -1,5 +1,8 @@
 import {
+  isClearableNonPr,
   isTracked,
+  judgedReadCheck,
+  judgedReadDetail,
   openedReadCheck,
   prAfterMarkRead,
   prReadScope,
@@ -22,22 +25,28 @@ import { readLocally } from '../actions/local-change.ts';
 import type { GitHubWrites } from './github-writes.ts';
 import { markThreadReadIfUnchanged } from './thread-mark-read.ts';
 
-/** A thread that passed the rules, with the action log detail that says why. */
+/** A thread that passed the rules, with the action log detail that says why. `prKey` is null for a notification that is not a PR. */
 interface QuietCandidate {
   thread: NotificationThread;
-  prKey: PrKey;
+  prKey: PrKey | null;
   detail: string;
 }
 
 export interface QuietReadsResult {
-  /** Threads marked read on GitHub. */
+  /** PR threads marked read on GitHub. */
   marked: PrKey[];
+  /** Notifications that are not PRs (releases, issues) marked read on GitHub, by thread id. */
+  otherMarked: string[];
   errors: string[];
 }
 
-const NOTHING_DONE: QuietReadsResult = { marked: [], errors: [] };
+const NOTHING_DONE: QuietReadsResult = { marked: [], otherMarked: [], errors: [] };
 
-/** The log detail when a thread may be marked read: only bots since the last read, else the user acted after it. */
+/**
+ * The log detail when a thread may be marked read: only bots since the last
+ * read, else the user acted after it, else everything since they last looked
+ * is automation or a person the events agent judged as not needing them.
+ */
 function quietDetail(input: QuietReadInput): string | null {
   const bots = quietReadCheck(input);
   if (bots.kind === 'mark') {
@@ -47,6 +56,10 @@ function quietDetail(input: QuietReadInput): string | null {
   if (touched.kind === 'mark') {
     return quietReasonDetail(touched.reason);
   }
+  const judged = judgedReadCheck(input);
+  if (judged.kind === 'mark') {
+    return judgedReadDetail(judged.actors);
+  }
   return null;
 }
 
@@ -55,11 +68,16 @@ function quietDetail(input: QuietReadInput): string | null {
  * read that turned unread only because of bots get marked read on GitHub,
  * when nothing is asked of the user (`quietReadCheck`), and so do threads
  * whose unread events all came before the user's own review or comment
- * (`touchedReadCheck`, "You already dealt with it"). Only while GitHub
- * writes are unlocked: locked, nothing happens and nothing piles up as a
- * pending write. Each thread is read again right before the write and left
- * alone when it moved since the sync. Every write goes through
- * GitHubWrites and is logged with origin `quiet`.
+ * (`touchedReadCheck`, "You already dealt with it"), and threads where
+ * everything since the user last looked is automation or a person's
+ * activity the events agent judged as not needing them (`judgedReadCheck`,
+ * "GitHub unread is PostPile unread"). Notifications that are not PRs are
+ * marked read too (`isClearableNonPr`): PostPile shows none of them. Only
+ * while GitHub writes are unlocked: locked, nothing happens and nothing
+ * piles up as a pending write, and the thread stays unread in PostPile.
+ * Each thread is read again right before the write and left alone when it
+ * moved since the sync. Every write goes through GitHubWrites and is logged
+ * with origin `quiet`.
  */
 export class QuietReads {
   constructor(
@@ -69,25 +87,12 @@ export class QuietReads {
     private readonly now: () => Date,
   ) {}
 
-  /** PRs whose tile is unread right now, any PR of the tile counts. */
-  private unreadKeys(board: Board): Set<PrKey> {
-    const keys = new Set<PrKey>();
-    for (const tile of board.allTiles()) {
-      if (board.stateOf(tile).kind === 'unread') {
-        for (const member of tile.members) {
-          keys.add(member.prKey);
-        }
-      }
-    }
-    return keys;
-  }
-
-  private candidates(board: Board): QuietCandidate[] {
+  /** PR threads the rules may mark read. Whether the tile is unread is no input: an unread thread always makes it so. */
+  private prCandidates(board: Board): QuietCandidate[] {
     const viewer = board.viewer;
     if (viewer === null) {
       return [];
     }
-    const unread = this.unreadKeys(board);
     const fetchedAt = this.store.prs.fetchedAtByKey();
     const result: QuietCandidate[] = [];
     for (const [prKey, thread] of board.threads) {
@@ -101,7 +106,6 @@ export class QuietReads {
         events: board.events.get(prKey) ?? [],
         userState: board.userStates.get(prKey) ?? null,
         viewer,
-        tileUnread: unread.has(prKey),
         notYours: board.notYours.has(prKey),
         prFetchedAt: fetchedAt.get(prKey) ?? null,
         now: board.now,
@@ -110,7 +114,15 @@ export class QuietReads {
         result.push({ thread, prKey, detail });
       }
     }
-    return result.slice(0, QUIET_READS_PER_RUN);
+    return result;
+  }
+
+  /** Releases, issues and other notifications that are not PRs, unread on GitHub past the grace. */
+  private otherCandidates(now: string): QuietCandidate[] {
+    return this.store.notifications
+      .list()
+      .filter((thread) => isClearableNonPr(thread, now))
+      .map((thread) => ({ thread, prKey: null, detail: quietReasonDetail('not_pr') }));
   }
 
   /**
@@ -126,7 +138,9 @@ export class QuietReads {
     }
     // Mirror GitHub: the thread is read up to its last update, and so are the events before it.
     this.store.notifications.markRead(candidate.thread.id, result.readAt);
-    readLocally(this.store, prReadScope(candidate.prKey, false), { kind: 'quiet', readAt: result.readAt }, result.readAt);
+    if (candidate.prKey !== null) {
+      readLocally(this.store, prReadScope(candidate.prKey, false), { kind: 'quiet', readAt: result.readAt }, result.readAt);
+    }
     return true;
   }
 
@@ -214,15 +228,22 @@ export class QuietReads {
       return NOTHING_DONE;
     }
     const nowIso = this.now().toISOString();
-    const result: QuietReadsResult = { marked: [], errors: [] };
-    for (const candidate of this.candidates(Board.load(this.store, nowIso))) {
+    const result: QuietReadsResult = { marked: [], otherMarked: [], errors: [] };
+    // One budget for both, PR threads first: they are what the tiles show.
+    const candidates = [...this.prCandidates(Board.load(this.store, nowIso)), ...this.otherCandidates(nowIso)].slice(0, QUIET_READS_PER_RUN);
+    for (const candidate of candidates) {
       try {
-        if (await this.markOne(candidate)) {
+        if (!(await this.markOne(candidate))) {
+          continue;
+        }
+        if (candidate.prKey === null) {
+          result.otherMarked.push(candidate.thread.id);
+        } else {
           result.marked.push(candidate.prKey);
         }
       } catch (error) {
         // GitHubWrites logged it as failed; the thread stays unread and the next sync tries again.
-        result.errors.push(`quiet mark-read of ${candidate.prKey}: ${errorText(error)}`);
+        result.errors.push(`quiet mark-read of ${candidate.prKey ?? `notification ${candidate.thread.id}`}: ${errorText(error)}`);
       }
     }
     advanceSeenFromGitHub(this.store, result.marked, nowIso);

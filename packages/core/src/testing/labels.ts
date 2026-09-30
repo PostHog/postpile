@@ -5,7 +5,7 @@
 import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
-import { quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
+import { judgedReadCheck, quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { ownedByTeammate, requestedTeam, reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
 import { isRoutingTeam } from '../team-roles.ts';
 import { snoozePhase } from '../snooze.ts';
@@ -188,12 +188,13 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
       events,
       userState: board.userStates.get(key) ?? null,
       viewer: board.viewer,
-      tileUnread: false,
       notYours: board.notYours.has(key),
       prFetchedAt: board.prFetchedAt.get(key) ?? null,
       now: board.now,
     };
     labels.push(`quiet-read:${quietReadCheck(input).kind}`, `touched-read:${touchedReadCheck(input).kind}`);
+    const judged = judgedReadCheck(input);
+    labels.push(judged.kind === 'mark' ? 'judged-read:mark' : `judged-read:${judged.why}`);
   }
   if (prWhoseTurn({ pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer }).kind === 'them') {
     labels.push('pr-turn:them');
@@ -214,6 +215,21 @@ function tileLabels(view: TileView): string[] {
     if (pr.done && isTracked(pr.provenance) && (view.state.kind === 'unread' || view.state.kind === 'open')) {
       labels.push('shape:done PR on a live tile');
     }
+    if (pr.done && pr.unreadOnGitHub) {
+      labels.push('shape:done PR with an unread thread');
+    }
+  }
+  if (view.state.kind === 'unread' && !view.state.loud) {
+    labels.push('shape:unread with only quiet news');
+  }
+  if (view.state.kind !== 'unread' && view.state.kind !== 'snoozed' && view.state.loud) {
+    labels.push('shape:loud news on a read tile');
+  }
+  if (view.state.kind === 'snoozed' && view.state.unreadOnGitHub) {
+    labels.push('shape:snoozed with an unread thread');
+  }
+  if (view.state.unreadBecause.some((reason) => reason.eventId.startsWith('thread:'))) {
+    labels.push('shape:unread by the thread alone');
   }
   if (view.state.kind === 'snoozed' && view.tile.members.length > 1) {
     labels.push('shape:snoozed multi-PR tile');
@@ -287,6 +303,15 @@ export const REQUIRED_LABELS: readonly string[] = [
   'ping:quiet',
   'quiet-read:mark',
   'touched-read:mark',
+  'judged-read:mark',
+  'judged-read:asks_you',
+  'judged-read:not_judged',
+  'judged-read:never_looked',
+  'shape:done PR with an unread thread',
+  'shape:unread with only quiet news',
+  'shape:loud news on a read tile',
+  'shape:snoozed with an unread thread',
+  'shape:unread by the thread alone',
   'request-to:ada',
   'review:PENDING',
   ...['open', 'draft', 'merged', 'closed'].flatMap((state) => ['viewer', 'teammate', 'other', 'bot'].map((author) => `pr-author:${state}/${author}`)),

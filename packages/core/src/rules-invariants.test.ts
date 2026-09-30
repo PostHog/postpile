@@ -4,7 +4,7 @@
 // live tile, a snoozed tile holding a done PR, routed team requests.
 import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
-import { at, makeEvent, makePr, makeReview, makeUserState, viewer as baseViewer } from './fixtures.ts';
+import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, viewer as baseViewer } from './fixtures.ts';
 import type { PaneOffers } from './offers.ts';
 import { deriveTileState } from './tiles.ts';
 import { buildPrSummary, buildTileView } from './tile-view.ts';
@@ -22,6 +22,8 @@ interface BoardInput {
   userStates?: UserPrState[];
   snoozes?: Snooze[];
   notYours?: PrKey[];
+  /** PRs whose thread is unread on GitHub; every other thread is read. */
+  unreadKeys?: PrKey[];
 }
 
 function tileOf(prs: Pr[]): Tile {
@@ -42,7 +44,8 @@ function tileView(input: BoardInput): TileView {
   }
   const notYours = new Set(input.notYours ?? []);
   const snoozes = new Map((input.snoozes ?? []).map((snooze) => [snooze.prKey, snooze]));
-  const state = deriveTileState({ tile, prs, events, userStates, snoozes, now: NOW, viewer, notYours });
+  const threads = new Map((input.unreadKeys ?? []).map((key) => [key, makeThreadFor(prs.get(key)!)]));
+  const state = deriveTileState({ tile, prs, events, threads, snoozes, userStates, now: NOW, viewer, notYours });
   const rows = tile.members.map((member) => {
     const pr = prs.get(member.prKey)!;
     return buildPrSummary({
@@ -60,6 +63,7 @@ function tileView(input: BoardInput): TileView {
       quietRepo: false,
       repoLabel: null,
       tileUnread: state.kind === 'unread',
+      unreadOnGitHub: threads.get(pr.key)?.unread === true,
       now: NOW,
       pendingWrite: null,
     });
@@ -102,9 +106,15 @@ describe('a done tile or done PR offers only Open', () => {
 
   it('except Mark read while the done PR has news that keeps its tile unread', () => {
     const news = makeEvent({ id: 'n1', prKey: handledPr.key, kind: 'comment', actor: 'ada', ruleLoudness: 'loud', at: at(60) });
-    const view = tileView({ prs: [handledPr], events: [news], userStates: [handled] });
+    const view = tileView({ prs: [handledPr], events: [news], userStates: [handled], unreadKeys: [handledPr.key] });
     expect(view.state.kind).toBe('unread');
     expect(view.prs[0]?.done).toBe(true);
+    expect(paneOf(view, handledPr.key)).toMatchObject({ lead: 'mark_read', markLabel: 'Mark read', approve: false, ask: false, removeTeams: [] });
+  });
+
+  it('and Mark read while the done PR only has its thread unread on GitHub', () => {
+    const view = tileView({ prs: [handledPr], userStates: [handled], unreadKeys: [handledPr.key] });
+    expect(view.state).toMatchObject({ kind: 'unread', loud: false });
     expect(paneOf(view, handledPr.key)).toMatchObject({ lead: 'mark_read', markLabel: 'Mark read', approve: false, ask: false, removeTeams: [] });
   });
 

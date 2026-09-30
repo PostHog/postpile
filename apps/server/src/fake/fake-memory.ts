@@ -20,7 +20,6 @@ import type {
 } from '@postpile/core';
 import {
   isBigClaim,
-  seenSinceBaseline,
   describeFactRef,
   describeLineSources,
   dossierLineIssue,
@@ -159,13 +158,12 @@ export class FakeMemory {
     };
   }
 
-  /** `baseline`: "start fresh", nothing before it counts as new since you looked. */
-  dossierView(topicId: string, feedback: Feedback[], baseline: string | null): DossierView | null {
+  dossierView(topicId: string, feedback: Feedback[]): DossierView | null {
     const latest = this.latest(topicId);
     if (!latest) {
       return null;
     }
-    const seen = seenSinceBaseline(this.memory.seen.get(topicId) ?? null, topicId, baseline);
+    const seen = this.memory.seen.get(topicId) ?? null;
     const changedFacts = seen
       ? this.memory.facts.filter((fact) => fact.topicId === topicId && (fact.recordedAt > seen.updatedAt || (fact.expiredAt ?? '') > seen.updatedAt))
       : [];

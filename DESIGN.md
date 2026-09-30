@@ -44,13 +44,19 @@ set a finer or coarser grain.
 **Topic status**: `active`, `retired` (finished) or `archived` (merged
 away, never comes back). Every full sync ends by retiring each active topic
 that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR
-merged or closed, no events for 3 days, and every tile done (since
-2026-09-29 evening; before, only "no unread or snoozed tile", which retired
-topics holding unseen merges without the user's review). No agent
-verdict is needed, and Unsorted never retires. It runs after the digest, so
-the sync's own events count; the sync log line and `SyncReport.topicsRetired`
-say how many. Retiring is reversible: a new loud event on a member PR
-(`reviveRetiredTopics`, full sync and live poll) or a new PR assigned to it
+merged or closed, no events for 3 days, every thread of the topic read on
+GitHub (since 2026-09-30, "GitHub unread is PostPile unread") and every
+tile done (since 2026-09-29 evening; before, only "no unread or snoozed
+tile", which retired topics holding unseen merges without the user's
+review). No agent verdict is needed, and Unsorted never retires. It runs
+after the digest and the quiet reads, so the sync's own events and what
+PostPile cleared by itself count; the sync log line and
+`SyncReport.topicsRetired` say how many. Retiring is reversible: a new loud
+event on a member PR (`reviveRetiredTopics`, full sync and live poll), a
+member thread unread on GitHub that the quiet reads would not clear by
+rule (`reviveUnreadTopics`, after the retire step of every full sync and in
+every poll that moved the inbox, also for topics an older build retired
+with an unread thread) or a new PR assigned to it
 (retired topics stay on offer for 30 days) makes it active again. Every
 status change goes through `nextTopicStatus` (engine: `changeTopicStatus`),
 and retiring records `retiredAt` (migration 020; before, "retired at" read
@@ -101,8 +107,9 @@ Provenance is derived: a notification thread makes a PR pinged, then a
 pulled-in or found PR that later gets a real ping becomes pinged without
 anything having to update it. Found PRs work like pinged ones for tiles,
 topics (Unsorted until assigned), dossiers, glances, whose turn and the
-queues, but never make a tile unread on their own (their loud events are
-skipped in `unreadReasons`, `unseenLoudEvents` is 0); an owed review still
+queues, but never make a tile unread on their own (they have no thread,
+and their loud events do not count as the tile's loud news,
+`unseenLoudEvents` is 0); an owed review still
 says "Your move" and lifts the topic. Quiet repos apply to them too. The why
 badge tooltip says "found: <reason>; not in your inbox, found via GitHub".
 Stack completion walks from pinged and found PRs alike. Sets are
@@ -112,8 +119,8 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 | loudness | effect | examples |
 |---|---|---|
-| loud | tile becomes unread | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
-| quiet | dot, no state change | bots, CI (always, see "CI is not a signal"), deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
+| loud | pings, coral "new since you looked", lights up the topic (the tile is unread while its thread is unread on GitHub, loud or not: "GitHub unread is PostPile unread") | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
+| quiet | dot, no ping | bots, CI (always, see "CI is not a signal"), deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading, or before the user's own last action on the PR (see "You already dealt with it") |
 
@@ -143,11 +150,21 @@ team-devex" instead of the bot's name.
 
 **Tile state is derived, never stored**:
 
-- `unread`: a member has an unseen loud event. The tile says which PR and which event.
+- `unread` (since 2026-09-30, "GitHub unread is PostPile unread"): a
+  member's notification thread is unread on GitHub, whether the tile is done
+  or not, or a pulled-in stack layer has unseen loud news, or the app's Look
+  closer event is unseen (unread here while read on GitHub is fine, never
+  the reverse). The tile says which PR and why: its unseen loud events, else its
+  newest unseen quiet event, else "new activity on GitHub". Until then it
+  meant "a member has an unseen loud event"; that fact stays as
+  `TileState.loud` and drives pings, coral, urgency and sections. A snoozed
+  tile keeps its snooze while a thread is unread (`TileState.unreadOnGitHub`)
+  and counts in the Unread filter.
 - `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
   yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); every snooze also ends
   when its PR is merged or closed.
-- `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
+- `done`: every pinged member is done, nothing loud is unseen and no thread is unread
+  on GitHub. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
   without their review they have not seen yet, see "Merged without your review"), or approved by
   them while whose turn is not "you" (a later question or mention after the approval keeps
@@ -1729,8 +1746,8 @@ updates it while I'm looking at it."
 - The dot: `notDonePrKeys` in core `tile-view.ts`, shipped as
   `TileView.notDonePrKeys` (moved out of the renderer's `lib/tiles.ts`
   2026-09-30), `NotDoneDot` in `pills.tsx`.
-  A done PR that still has unseen news keeps the tile unread, so it keeps
-  its dot until it is read.
+  A done PR that still has unseen news or a thread unread on GitHub keeps
+  the tile from being done, so it keeps its dot until it is read.
 - Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
 - Marked when you move on: `OpenedReadTimer` in the renderer's
   `lib/opened-read.ts` (the dwell arms, `leave()` / `hidden()` fire,
@@ -1906,10 +1923,10 @@ you look at"): on an unread or open tile every tracked PR that keeps the
 tile from being done gets a small coral dot before its number, in the
 tile's rows and the detail pane's PR list (aria-label "Not done yet"):
 `PrSummary.done` false (core `isPrDone`, shipped per row), or an unseen
-loud event left (that keeps the tile unread, so not done either). A
-pulled-in stack layer gets one while it has unseen loud news, which makes
-the tile unread too (2026-09-30; before, such a tile was unread with no dot
-anywhere). Done and snoozed tiles show none, and neither does a tile where
+loud event left, or its thread unread on GitHub (since 2026-09-30: both keep
+the tile from being done). A pulled-in stack layer gets one while it has
+unseen loud news, which makes the tile unread too (2026-09-30; before, such
+a tile was unread with no dot anywhere). Done and snoozed tiles show none, and neither does a tile where
 only one PR can hold it (the dot would only repeat the tile's state). Mark a
 dotted PR done in the detail pane and its dot goes; no dots left, the tile
 is done. It is the one coral mark that is not "new since you looked"; there
@@ -2115,8 +2132,8 @@ it won't merge soon. Rules in core:
   draft under Changes you requested. "Addressed your changes" does not apply to a
   draft: only the author's reply in your thread counts, as a personal ask.
 - loudness: a review request naming you on a draft is quiet (commits after
-  your approval are quiet everywhere), so neither makes the tile unread or the
-  topic urgent. Mark-ready (`ready_for_review`) is loud when a review of you
+  your approval are quiet everywhere), so neither pings or makes the topic
+  urgent. Mark-ready (`ready_for_review`) is loud when a review of you
   or your team is pending or was asked ("ready for your review"), which
   brings the PR back as reviewable.
 - pings (`isAddressedToViewer`): drafts ping only for a personal question,
@@ -2176,8 +2193,7 @@ as `PrSummary.whatsNew` and `PrDetail.whatsNew`; words from the renderer's
 only its text changes, and only when the viewer already touched the PR
 before the new loud events. Rules:
 
-- New events are the unseen loud ones, the same ones that make the tile
-  unread. Quiet bot, CI and other events never change the text or the count.
+- New events are the unseen loud ones, the same loud news that pings. Quiet bot, CI and other events never change the text or the count.
 - A touch is one of the viewer's own events (review, approval, changes
   request, comment, a push to their own PR, a merge or close they did; core
   `lastTouch` in `last-touch.ts`, shared with "You already dealt with it"),
@@ -2817,7 +2833,8 @@ that changes the threads also marks events older than their thread's
 `last_read_at` seen (event state, not logged) and may move a topic's seen
 cursor ("Reconciling with GitHub's read time"). Glances, consolidation, dossiers and ping decisions never mark
 anything read. There is no CLI write. The only "mark all read" is the inbox
-cleanup, a deliberate choice in its dialog ("Inbox cleanup and start fresh").
+cleanup, a deliberate choice in its dialog ("Inbox cleanup"). The quiet
+reads ("Handled quietly") are the other writes PostPile makes by itself.
 
 **Debug view rows.** Each row carries `lastAction` (the newest log entry for
 the thread or its PR) and `decidedBy` (for a queue send, the click that
@@ -2841,15 +2858,152 @@ Fake mode runs the same flows on `FakeWrites`: the lock (off at start, not
 persisted), the log, queue sends after 6s that only flip the sample thread's
 "GitHub" unread flag, pending writes (in memory) with send and discard.
 
-## Inbox cleanup and start fresh
+## GitHub unread is PostPile unread (2026-09-30)
+
+Julian's GitHub inbox showed 155 unread notifications while PostPile showed six
+unread tiles, after a day of keeping up in PostPile. PostPile's "unread" meant
+"has unseen loud news", so quiet activity, done PRs, finished topics and
+releases stayed unread on GitHub with nothing to do about them in PostPile: a
+third state, done here and unread there. Julian: "I want nothing cleared that
+potentially affects me, meaning even merged PRs where my team was the only one
+assigned and I never looked. I want things cleared that are obviously
+clearable, or they should still be unread in PostPile." A Codex (gpt-6-astra)
+review of the 155 agreed: unread has to be a fact about the GitHub thread, not
+about loudness.
+
+**The rule.** Every notification that is unread on GitHub ends one of two
+ways, and there is no third:
+
+1. PostPile clears it by itself (marks it read on GitHub), because it is
+   obviously clearable (below), or
+2. it shows as unread in PostPile, and dealing with it there (Mark read, Mark
+   done, Approve, opening it) clears it on GitHub.
+
+A PR tile is unread while any tracked thread in it is unread on GitHub. Done,
+whose move and snooze stay separate facts: a done tile whose thread went unread
+again shows unread until it is cleared. A snoozed tile keeps its snooze but
+still counts in the Unread filter. A finished topic never holds an unread
+thread: the retire gate needs every thread read, and a retired topic whose
+thread turns unread comes back.
+
+**Obviously clearable.** PostPile marks a thread read on GitHub only when
+everything since your last GitHub read, or since your last comment or review on
+the PR, is one of:
+
+- automation (the existing bots-only rule), or
+- your own activity (the existing "you acted after it" rule), or
+- human activity that is not an ask, judged by the events agent as not needing
+  you. Julian: "I would actually want the agent to decide ... It's quiet if the
+  teammate comments, all right, for example. Then we can mark it read in
+  PostPile, but also on GitHub automatically." The events agent now also sees
+  new quiet human events on unread threads (a teammate's comment, someone
+  else's review, a push by the author), not only loud ones.
+
+Never clearable by itself: a review request to you or your team, a mention, a
+team mention, a question or reply to you, an unseen merge without your review.
+These stay unread until you deal with them, also after the PR merged and a
+teammate reviewed. Not clearance evidence either: an agent NOT_YOURS, age,
+merged or closed state, an old handled mark or approval.
+
+The existing safety checks stay: fresh and complete snapshot, the 10-minute
+grace after the newest activity, the writes lock (locked: the thread stays
+unread in PostPile), the guarded re-read of the thread before the write, and an
+action-log entry ("Handled quietly").
+
+**Notifications that are not PRs** (releases, issues): PostPile marks them read
+on GitHub by itself for now. Julian: "People who use PostPile (for example, to
+catch up after vacation or never having used the GitHub inbox) expect PostPile
+to clear all of this." Showing them is decided later.
+
+**Loudness keeps its job.** Pings, the coral "new since you looked", urgency
+and sections stay tied to loud news. An unread tile with only quiet news (the
+agent has not judged it yet, or a check blocked the clear) shows as unread but
+does not ping.
+
+**Start fresh.** The local-only "Start fresh here" hid things in PostPile that
+stayed unread on GitHub, the state this rule removes. The inbox cleanup keeps
+only "mark read on GitHub before <date>".
+
+**First run.** The clear pass runs first; whatever is left shows as unread,
+finished topics included.
+
+**Built** (2026-09-30). Details the build settled:
+
+- Tile state (core `deriveTileState`, Board passes the threads): snoozed,
+  else unread while a member's thread is unread on GitHub, else done (every
+  tracked PR done, no loud news), else open. `TileState.unreadOnGitHub` (a
+  snoozed tile too, for the Unread filter and the sidebar count) and
+  `TileState.loud` (the old "unseen loud" unread) are separate facts;
+  `PrSummary.unreadOnGitHub` keeps Mark read and the "Not done yet" dot on
+  a done PR whose thread is unread. Unread reasons: the PR's loud news,
+  else its newest unseen quiet event since the read, else "new activity on
+  GitHub". Urgency ("needs you", coral topic) counts unread tiles with loud
+  news only.
+- Besides an unread thread, loud news on a pulled-in stack layer and an
+  unseen Look closer event make the tile unread (owner, 2026-09-30: "It
+  should get a dot and be unread"). Unread in PostPile while read on
+  GitHub is fine; the rule only forbids read here while unread there.
+- A Mark read with writes on reads the thread in the store at the click
+  (so the tile turns read right away, not after the undo window); undo, a
+  parked batch or a mark-read GitHub did not take puts it back unread.
+- The quiet reads (core `quiet-reads.ts`) lost their "tile not unread"
+  check (it would block itself); `unseen_loud` (no unseen loud event on the
+  PR) stands in. The third case is `judgedReadCheck`: "since you last
+  looked" is the newer of `last_read_at` and the viewer's last review or
+  comment; a thread never read and never reviewed or commented on is left
+  alone (`never_looked`). Judged means an override below loud on the
+  event. Asks are `isAskOfViewer`; a mention of only routing teams is FYI
+  ("Team roles"), not an ask, so the agent judges it like other quiet news.
+  "Your own open PR" is one the viewer owns (`isPrOwner`, a bot PR assigned
+  to them too). Log detail "nothing that needs you since
+  you last looked: lyra, CI"; Handled quietly says "nothing for you from
+  lyra, CI".
+- The events agent (`EventBatchClassifier`) also gets people's quiet
+  events on unread threads (`awaitsJudgement`): new ones after the classify
+  cursor, and older ones on at most 40 PRs per sync (`JUDGE_BACKLOG_PRS`,
+  newest unread thread first). One it leaves out of its answer gets a quiet
+  override "nothing here needs you"; one it raises goes through the raised
+  ping path. The budget caps the calls as before.
+- Releases and issues: `isClearableNonPr` (unread, past the grace), marked
+  by `QuietReads` with detail "not a pull request", in the action log and
+  the debug view, not under Handled quietly.
+- Retire gate needs every thread read; `reviveUnreadTopics` runs after the
+  retire step of the full sync and in every poll that moved the inbox. The
+  full sync reads the unread state its quiet reads left, so a failed or
+  capped write brings the topic back. The poll skips a thread the quiet
+  reads would clear by rule (`clearableByRule`, the grace set aside) while
+  writes are on, so a deploy bot on a merged PR does not reopen its topic
+  for three days; the next full sync clears it or brings the topic back.
+  The quiet reads moved before the retire step and share one budget of
+  `QUIET_READS_PER_RUN` threads, PR threads first.
+- The click's local thread read is put back (undo, parked, not taken) only
+  while the row still holds the read time the click wrote; a read or new
+  activity GitHub reported meanwhile stays.
+- Snapshots cut off at the query caps (`Pr.truncated`, 48 of the 130
+  unread PR threads on the day's real data) used to never clear.
+  Normalizing (packages/github, caps in `QUERY_CAPS`) now records from the
+  raw answer, before it drops any node, which lists came back full at their
+  cap with more on GitHub, with the node count and the oldest item
+  (`Pr.capHits`). Most capped lists keep the newest N (50 reviews, 60
+  comments, 50 commits, 60 timeline items), so a cut snapshot still covers
+  the unread interval when every list that hit its cap is one of those and
+  came back with an item at or before the rule's boundary (GitHub's read
+  time for bots only, the touch for "you acted after it", the last look for
+  the judged rule). Review threads never vouch: the 50 kept are the newest
+  by creation and each keeps its first 30 comments, so a reply past either
+  cap can come at any time. A snapshot stored before `capHits` existed never
+  vouches until it is fetched again. Core `cutSnapshotCovers` behind
+  `snapshotCoversThread`. A snapshot flagged while no list hit its cap
+  (GitHub counts items the query never returns) covers.
+
+## Inbox cleanup
 
 Old unread threads pile up on GitHub (a first run on a busy account, a
 vacation). Rules in core `inbox-cleanup.ts`, engine `InboxCleanup`
 (`actions/inbox-cleanup.ts`), `GET /api/inbox-cleanup`.
 
 - **Counts**: stored threads unread on GitHub with `updated_at` older than
-  14 and 30 days (`unreadOlderThan`), leaving out threads before the
-  start-fresh baseline.
+  14 and 30 days (`unreadOlderThan`).
 - **Where**: with a count > 0 the sidebar footer shows a quiet line "N
   unread older than 14 days · Clean up". On the first run, or when a full
   sync starts 5+ days after the previous one (meta `last_sync_started_at`;
@@ -2870,17 +3024,18 @@ vacation). Rules in core `inbox-cleanup.ts`, engine `InboxCleanup`
     cycle right after; threads leaving the inbox then go through the normal
     reconciliation (their read time from the read list or a thread lookup).
     Nothing changes in the app before GitHub reports it.
-  - "Leave GitHub alone, start fresh here": meta `start_fresh_baseline` =
-    now. Events before it read as seen (`applyBaseline`, applied in
-    `Board.load` and FakeEngine, not stored, so clearing brings GitHub's
-    state back), "since you last looked" never starts before it
-    (`seenSinceBaseline`, and `countSince(..., notBefore)`), and threads
-    before it leave the counts. Nothing is written to GitHub. The dialog
-    shows "Started fresh on <date> · Clear it".
   - "Not now": hides line and banner for 7 days (meta
     `inbox_cleanup_hidden_until`).
-- **Fake mode**: three old unread sample threads (16, 22, 45 days), the
-  banner on every start, pending and send handled by `FakeWrites`.
+- **Fake mode**: three old unread sample PR threads (16, 22, 45 days) that
+  never become tiles, the banner on every start, pending and send handled by
+  `FakeWrites`.
+- **Start fresh is gone** (2026-09-30, "GitHub unread is PostPile unread"):
+  "Leave GitHub alone, start fresh here" set a local baseline (meta
+  `start_fresh_baseline`) before which events read as seen, "since you last
+  looked" never started and threads left the counts. It hid things in
+  PostPile that stayed unread on GitHub, the third state the rule removes.
+  The dialog keeps only "mark read on GitHub before <date>" and Not now;
+  migration 021 deletes a stored baseline, so nothing it hid stays hidden.
 
 ## You already dealt with it
 
@@ -2955,10 +3110,12 @@ Merging or closing counts only when the viewer did it.
      there too (2026-09-29, "Own merged PRs clear on GitHub too" in "Actions
      act on what you look at"). The grace counts from the newest of the
      touch, those bots and the thread's update.
-   - The tile must not be unread. Whose turn is not checked: every event
-     before the touch is seen already (part 1), so the mark-read changes
-     nothing PostPile shows, and a move that is still the viewer's (their
-     approved PR, "Merge") stays on the tile.
+   - No unseen loud news on the PR (until 2026-09-30: the tile must not be
+     unread, which since "GitHub unread is PostPile unread" it always is
+     while its thread is). Whose turn is not checked: every event before
+     the touch is seen already (part 1), so the mark-read only turns the
+     tile read, and a move that is still the viewer's (their approved PR,
+     "Merge") stays on the tile.
    - Log details "you approved after it", "you requested changes after it",
      "you reviewed after it", "you replied after it" (the newest touch);
      `QuietReadView.reason` carries it to the view.
@@ -3040,7 +3197,9 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
    Not "fetched in this very sync": a PR fetched while its bot activity was
    still inside the grace period is not fetched again until it moves, and
-   the snapshot from then still covers the thread.
+   the snapshot from then still covers the thread. A snapshot cut off at
+   the query's caps covers only when what fell off is older than the read
+   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
 2. *Not the user's own open PR.* Bot reviews and CI on your own PR can mean
    work (a failing check, a review bot's finding), so they stay unread while
    it is open. A merged or closed own PR is fine (2026-09-29: every own PR
@@ -3049,17 +3208,20 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
 3. *No unseen merge without the user's review* ("Merged without your
    review", rule 5: PostPile never marks those read by itself). Checked on
    its own, since a merge queue bot merging counts as bot activity.
-4. *Nothing asked of the user.* The PR's tile is not unread (any PR of the
-   tile) and whose turn (`prWhoseTurn`, with the glance's NOT_YOURS as the
-   tile reads it) is not `you`.
+4. *Nothing asked of the user.* No unseen loud news on the PR, and whose
+   turn (`prWhoseTurn`, with the glance's NOT_YOURS as the tile reads it)
+   is not `you`. Until 2026-09-30 this read "the PR's tile is not unread";
+   since "GitHub unread is PostPile unread" a tile is unread while its
+   thread is, so that check would block every quiet read.
 5. *Grace.* 10 minutes (`QUIET_GRACE_MS`) after the newer of the newest
    bot event and the thread's `updated_at` (a bot push can carry an older
    commit date), so a person answering the bot right away still counts.
 6. *Lock open.* Only while GitHub writes are unlocked. Locked, nothing
    happens and nothing piles up as a pending write.
 
-**Where it runs**: at the end of every full sync (start, "Sync now", the
-hourly auto sync), after the digest and the retire step. The full sync has
+**Where it runs**: near the end of every full sync (start, "Sync now", the
+hourly auto sync), after the digest and before the retire step (since
+2026-09-30: what PostPile clears no longer holds a finished topic). The full sync has
 just fetched the inbox and every moved PR, so threads, events and read times
 are fresh, and the hourly auto sync is also what comes back once a grace
 period ran out. The live poll only fetches what moved and would need its own
@@ -4206,13 +4368,13 @@ A waiting GitHub write moves through `pendingWriteStep(write, cause)` in
 `core/pending-write.ts`, and `PendingWrites.apply` is the only place that
 carries out its effects. Not in the planner: the own-touch reconciliation in
 github-sync (stamps each event with its own time), undo and not-taken
-(`putBackLocalChange`, reversals rather than reads) and the inbox-cleanup
-baseline.
+(`putBackLocalChange`, reversals rather than reads). The inbox-cleanup
+baseline is gone (2026-09-30).
 
 **Handled is not reset by new activity (decided 2026-09-29).** Handled means
-"you dealt with this once", not "complete now". New loud activity already
-makes the tile unread before done is checked; once seen, done needs no move
-left for you. Resetting it would make a GitHub visit or quiet read leave the
+"you dealt with this once", not "complete now". New activity already makes
+the thread, and so the tile, unread before done is checked (loud news
+before 2026-09-30); once read, done needs no move left for you. Resetting it would make a GitHub visit or quiet read leave the
 PR open with nothing asked.
 
 **Snoozes belong to PRs.** A snooze was keyed by the tile id, which changes
@@ -4275,7 +4437,8 @@ four cases where the rules had no answer yet; Julian decided each:
   layer a "Not done yet" dot. Julian: "PostPile found it could be interesting
   to me? that's a nice side effect". Before, the tile went unread with no dot
   anywhere. (Confirms "loud events on pulled-in PRs also make a tile unread"
-  from the open questions.)
+  from the open questions.) Still so under "GitHub unread is PostPile
+  unread" (the same day).
 - Every snooze ends when its PR is merged or closed, not only push and CI
   snoozes: a "someone replies" or "until" snooze on a finished PR kept its
   topic from retiring.
@@ -4446,9 +4609,8 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/sync` | `sync()` |
 | `GET /api/topics` | `listTopics()` |
 | `GET /api/topics/:id` | `getTopic()` |
-| `GET /api/inbox-cleanup` | `inboxCleanup()` (old unread counts, look, baseline, pending cutoff) |
+| `GET /api/inbox-cleanup` | `inboxCleanup()` (old unread counts, look, pending cutoff) |
 | `POST /api/inbox-cleanup/mark-read` `{olderThanDays: 14\|30}` | `cleanUpInbox()` (GitHub write, pending while locked) |
-| `POST`/`DELETE /api/inbox-cleanup/start-fresh` | `startFresh()` / `clearStartFresh()` |
 | `POST /api/inbox-cleanup/not-now` | `hideInboxCleanup()` (7 days) |
 | `GET /api/mcp-connection` | `mcpConnection()` (cached `claude mcp get postpile`, commands, "Not now") |
 | `POST /api/mcp-connection` `{from: footer\|setup}` | `connectMcp()` (`claude mcp add`, installed app only) |

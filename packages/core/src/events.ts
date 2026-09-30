@@ -4,7 +4,7 @@ import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { ruleLoudness } from './loudness.ts';
 import { mentionsAnyTeam, mentionsTeam, mentionsUser, sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
-import { teamsHomeFirst } from './team-roles.ts';
+import { isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
@@ -87,6 +87,19 @@ function addressedKind(comment: Comment, pr: Pr, viewer: Viewer): EventKind | nu
  */
 function mentionedTeam(comment: Comment, viewer: Viewer): string | null {
   return teamsHomeFirst(viewer).find((team) => mentionsTeam(comment.body, team)) ?? null;
+}
+
+/**
+ * A team mention that names only teams routing reviews to the viewer, none
+ * of their home teams: FYI, never an ask (DESIGN.md "Team roles").
+ */
+export function isRoutingTeamMention(event: Pick<PrEvent, 'kind' | 'sourceId'>, pr: Pr, viewer: Viewer): boolean {
+  if (event.kind !== 'team_mention') {
+    return false;
+  }
+  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+  const team = comment ? mentionedTeam(comment, viewer) : null;
+  return team !== null && isRoutingTeam(team, viewer);
 }
 
 function commentSummary(kind: EventKind, comment: Comment): string {

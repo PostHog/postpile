@@ -179,12 +179,18 @@ export class FakeWrites {
     return { ok: true, message };
   }
 
-  /** A sample thread with its GitHub unread flag as the fake queue left it. */
+  /**
+   * A sample thread with its GitHub unread flag as the fake queue left it.
+   * A thread of a batch queued with writes on reads as read while its undo
+   * window runs, like the engine's store: the click reads it here right away
+   * and GitHub follows (an undo or a parked batch brings it back).
+   */
   onGitHub(thread: NotificationThread): NotificationThread {
     if (!this.githubUnread.has(thread.id)) {
       this.githubUnread.set(thread.id, thread.unread);
     }
-    return { ...thread, unread: this.githubUnread.get(thread.id) ?? thread.unread };
+    const readHere = this.batches.some((batch) => batch.writesOn && batch.threads.some((queued) => queued.id === thread.id));
+    return { ...thread, unread: !readHere && (this.githubUnread.get(thread.id) ?? thread.unread) };
   }
 
   /** A mark-read PostPile does by itself (origin quiet), right away and without undo, like QuietReads. */

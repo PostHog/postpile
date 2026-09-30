@@ -94,7 +94,9 @@ describe('markPrRead: the detail pane acts on the selected PR', () => {
     expect(result.ok).toBe(true);
     expect(result.undoToken).not.toBeNull();
     const afterFirst = await setView(h);
-    expect(afterFirst.state.kind).toBe('open');
+    // The second PR's thread is still unread on GitHub; the first one's turned read with the click.
+    expect(afterFirst.state.kind).toBe('unread');
+    expect(afterFirst.state.unreadBecause.map((reason) => reason.prKey)).toEqual([second.key]);
     expect(doneByKey(afterFirst)).toEqual({ [first.key]: true, [second.key]: false });
     expect(h.store.userPrStates.get(second.key)?.handledAt ?? null).toBeNull();
 

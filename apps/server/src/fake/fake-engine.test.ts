@@ -71,8 +71,8 @@ describe('FakeEngine', () => {
     await engine.markRead('pr:acme/app#1790');
     await engine.undo(null);
     const topics = await engine.listTopics();
-    // #1790 merged without your review: quiet, so an open grey tile, not an unread one.
-    expect(topics.find((item) => item.topic.id === 'topic-ci-tests')).toMatchObject({ unreadTiles: 1, unseenMergeTiles: 1 });
+    // #1790 merged without your review: quiet, but its thread is unread on GitHub again, so an unread tile without loud news.
+    expect(topics.find((item) => item.topic.id === 'topic-ci-tests')).toMatchObject({ unreadTiles: 2, urgentUnreadTiles: 1, unseenMergeTiles: 0 });
     expect(topics.find((item) => item.topic.id === 'topic-depot')?.unreadTiles).toBe(2);
   });
 

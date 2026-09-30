@@ -1,10 +1,10 @@
-// Inbox cleanup and "start fresh". Old unread GitHub threads pile up (a
-// vacation, a first run on a busy account); the app offers to mark them
-// read on GitHub in one call, or to leave GitHub alone and treat everything
-// before a baseline as background here. Rules only, no IO; the engine and
-// FakeEngine call the same functions. DESIGN.md "Inbox cleanup and start fresh".
-import type { Cursor } from './memory.ts';
-import type { IsoTime, NotificationThread, PrEvent } from './types.ts';
+// Inbox cleanup. Old unread GitHub threads pile up (a vacation, a first run
+// on a busy account); the app offers to mark them read on GitHub in one
+// call. The local-only "Start fresh here" is gone (2026-09-30): it hid
+// things in PostPile that stayed unread on GitHub (DESIGN.md "GitHub unread
+// is PostPile unread"). Rules only, no IO; the engine and FakeEngine call the
+// same functions. DESIGN.md "Inbox cleanup".
+import type { IsoTime, NotificationThread } from './types.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -21,12 +21,10 @@ export type CleanupLook = 'banner' | 'line' | 'none';
 
 /** GET /api/inbox-cleanup. */
 export interface InboxCleanupView {
-  /** Threads unread on GitHub whose last activity is older than 14 days (after the baseline, if one is set). */
+  /** Threads unread on GitHub whose last activity is older than 14 days. */
   unreadOlderThan14: number;
   unreadOlderThan30: number;
   look: CleanupLook;
-  /** "Start fresh here": threads and events before it are background. Null when not set. */
-  baseline: IsoTime | null;
   /** Set while "Not now" hides the cleanup. */
   hiddenUntil: IsoTime | null;
   /** A cleanup mark-read waiting for the writes lock: its cutoff. Null when none waits. */
@@ -42,9 +40,9 @@ export function cleanupCutoff(now: IsoTime, age: CleanupAge): IsoTime {
   return daysBefore(now, age);
 }
 
-/** Unread threads with no activity since `cutoff`, leaving out the background before the baseline. */
-export function unreadOlderThan(threads: NotificationThread[], cutoff: IsoTime, baseline: IsoTime | null): number {
-  return threads.filter((thread) => thread.unread && thread.updatedAt < cutoff && (baseline === null || thread.updatedAt >= baseline)).length;
+/** Unread threads with no activity since `cutoff`. */
+export function unreadOlderThan(threads: NotificationThread[], cutoff: IsoTime): number {
+  return threads.filter((thread) => thread.unread && thread.updatedAt < cutoff).length;
 }
 
 /** First run (no sync before) or a gap of CLEANUP_GAP_DAYS or more since the last one. */
@@ -63,32 +61,4 @@ export function cleanupLook(input: CleanupLookInput, now: IsoTime): CleanupLook 
     return 'none';
   }
   return input.prominent ? 'banner' : 'line';
-}
-
-/**
- * "Start fresh": an event from before the baseline counts as seen, stamped
- * with the baseline, so it is never unread or new since you looked. Applied
- * when reading, not stored, so clearing the baseline brings GitHub's state
- * back. Events already seen keep their time.
- */
-export function applyBaseline(events: PrEvent[], baseline: IsoTime | null): PrEvent[] {
-  if (baseline === null) {
-    return events;
-  }
-  return events.map((event) => (event.seenAt === null && event.at < baseline ? { ...event, seenAt: baseline } : event));
-}
-
-/**
- * The topic's seen cursor as "since you last looked" uses it: never before
- * the baseline, so nothing older counts as new. A topic never marked seen
- * gets a cursor at the baseline.
- */
-export function seenSinceBaseline(seen: Cursor | null, scope: string, baseline: IsoTime | null): Cursor | null {
-  if (baseline === null) {
-    return seen;
-  }
-  if (seen === null) {
-    return { kind: 'seen', scope, seq: 0, dossierVersion: null, updatedAt: baseline };
-  }
-  return seen.updatedAt >= baseline ? seen : { ...seen, updatedAt: baseline };
 }

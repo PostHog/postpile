@@ -295,14 +295,12 @@ export function createApp(
     return c.json(await engine.setGitHubWrites(body.enabled));
   });
   // Inbox cleanup: old unread threads, "mark everything older than N days read" (a GitHub
-  // write through the lock, pending while locked), "start fresh" (local) and "Not now".
+  // write through the lock, pending while locked) and "Not now".
   app.get('/api/inbox-cleanup', async (c) => c.json(await engine.inboxCleanup()));
   app.post('/api/inbox-cleanup/mark-read', async (c) => {
     const body = z.object({ olderThanDays: z.union([z.literal(14), z.literal(30)]) }).parse(await c.req.json());
     return c.json(await engine.cleanUpInbox(body.olderThanDays));
   });
-  app.post('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.startFresh()));
-  app.delete('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.clearStartFresh()));
   app.post('/api/inbox-cleanup/not-now', async (c) => c.json(await engine.hideInboxCleanup()));
   // PostPile's MCP server in Claude Code: the cached `claude mcp get`, "Add to Claude Code"
   // (runs `claude mcp add` in the installed app only; local, never GitHub) and the footer's "Not now".

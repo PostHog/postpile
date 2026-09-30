@@ -58,8 +58,6 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     githubWrites: notImplemented,
     inboxCleanup: notImplemented,
     cleanUpInbox: notImplemented,
-    startFresh: notImplemented,
-    clearStartFresh: notImplemented,
     hideInboxCleanup: notImplemented,
     setGitHubWrites: notImplemented,
     sendPendingWrites: notImplemented,

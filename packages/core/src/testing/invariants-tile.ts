@@ -43,19 +43,74 @@ export const snoozedWhileEveryTrackedPrSnoozed: Invariant = {
   },
 };
 
-/** Unread: not snoozed, and a pinged or pulled-in PR has loud news (a found PR never makes its tile unread). */
-export const unreadWhileLoudNews: Invariant = {
-  name: 'a tile is unread exactly while not snoozed and a non-found PR has unseen loud news',
+/** The members whose notification thread is unread on GitHub. */
+function unreadThreadKeys(board: PropertyBoard, view: TileView): string[] {
+  return view.tile.members.filter((member) => board.threads.get(member.prKey)?.unread === true).map((member) => member.prKey);
+}
+
+/** Unseen loud news on a pinged or pulled-in PR (a found PR's news never counts for the tile). */
+function tileNews(board: PropertyBoard, view: TileView) {
+  return view.tile.members.filter((member) => member.provenance.kind !== 'found').flatMap((member) => eventsOf(board, member.prKey).filter(isNews));
+}
+
+/**
+ * Why one PR's unread thread keeps its tile unread, from the board: its loud
+ * news; else its newest unseen quiet event after the thread's read; else the
+ * thread itself.
+ */
+function expectedReasonIds(board: PropertyBoard, key: string): string[] {
+  const events = eventsOf(board, key);
+  const news = events.filter(isNews);
+  if (news.length > 0) {
+    return news.map((event) => event.id);
+  }
+  const thread = board.threads.get(key)!;
+  const quiet = events.filter((event) => {
+    const loudness = event.override ? event.override.loudness : event.ruleLoudness;
+    return event.seenAt === null && loudness === 'quiet' && (thread.lastReadAt === null || event.at > thread.lastReadAt);
+  });
+  return quiet.length > 0 ? [quiet.at(-1)!.id] : [`thread:${thread.id}`];
+}
+
+/**
+ * PRs of the tile unread without an unread thread: a pulled-in layer with
+ * unseen loud news (decided 2026-09-30), or a pinged PR with an unseen Look
+ * closer event.
+ */
+function loudWithoutThreadKeys(board: PropertyBoard, view: TileView): string[] {
+  return view.tile.members
+    .filter((member) => {
+      const news = eventsOf(board, member.prKey).filter(isNews);
+      return member.provenance.kind === 'pulled_in' ? news.length > 0 : member.provenance.kind !== 'found' && news.some((event) => event.kind === 'look_closer');
+    })
+    .map((member) => member.prKey);
+}
+
+/**
+ * GitHub unread is PostPile unread (2026-09-30): a tile is unread exactly
+ * while it is not snoozed and one of its threads is unread on GitHub,
+ * whatever else holds (done, loud or not), or a pulled-in layer has loud
+ * news, or a Look closer event is unseen (unread here while read on GitHub
+ * is fine, never the reverse). The reasons name those PRs, oldest first.
+ */
+export const unreadWhileAThreadIsUnread: Invariant = {
+  name: 'a tile is unread exactly while not snoozed and a thread of it is unread on GitHub, a pulled-in layer has loud news or a Look closer is unseen',
   check(board, views) {
     for (const view of views) {
-      const news = view.tile.members.filter((member) => member.provenance.kind !== 'found').flatMap((member) => eventsOf(board, member.prKey).filter(isNews));
-      const expected = view.state.kind !== 'snoozed' && news.length > 0;
-      ensure((view.state.kind === 'unread') === expected, `${view.tile.id}: state ${view.state.kind}, ${news.length} loud news`);
+      const unreadKeys = unreadThreadKeys(board, view);
+      const loudKeys = loudWithoutThreadKeys(board, view).filter((key) => !unreadKeys.includes(key));
+      const expected = view.state.kind !== 'snoozed' && unreadKeys.length + loudKeys.length > 0;
+      ensure((view.state.kind === 'unread') === expected, `${view.tile.id}: state ${view.state.kind}, ${unreadKeys.length} unread threads, ${loudKeys.length} loud without a thread`);
       if (view.state.kind === 'unread') {
-        const reasons = view.state.unreadBecause.map((reason) => reason.eventId);
-        const byTime = news.toSorted((a, b) => a.at.localeCompare(b.at)).map((event) => event.at);
-        ensure(JSON.stringify(reasons.toSorted()) === JSON.stringify(news.map((event) => event.id).sort()), `${view.tile.id}: unread reasons are not the loud news`);
-        ensure(JSON.stringify(view.state.unreadBecause.map((reason) => reason.at)) === JSON.stringify(byTime), `${view.tile.id}: unread reasons out of time order`);
+        const reasons = view.state.unreadBecause.map((reason) => reason.eventId).sort();
+        const want = [
+          ...unreadKeys.flatMap((key) => expectedReasonIds(board, key)),
+          ...loudKeys.flatMap((key) => eventsOf(board, key).filter(isNews).map((event) => event.id)),
+        ].sort();
+        ensure(JSON.stringify(reasons) === JSON.stringify(want), `${view.tile.id}: unread reasons ${reasons.join(', ')}, expected ${want.join(', ')}`);
+        const times = view.state.unreadBecause.map((reason) => reason.at);
+        ensure(times.every((time, index) => index === 0 || times[index - 1]! <= time), `${view.tile.id}: unread reasons out of time order`);
+        ensure(view.state.unreadBecause.every((reason) => unreadKeys.includes(reason.prKey) || loudKeys.includes(reason.prKey)), `${view.tile.id}: a reason names a PR that holds nothing unread`);
       } else {
         ensure(view.state.unreadBecause.length === 0, `${view.tile.id}: ${view.state.kind} tile with unread reasons`);
       }
@@ -63,14 +118,42 @@ export const unreadWhileLoudNews: Invariant = {
   },
 };
 
-/** Done: not snoozed, not unread, and every tracked PR done by the spec. */
+/** `unreadOnGitHub` says whether a thread of the tile is unread, on every state (a snoozed tile counts in the Unread filter); `loud` whether a non-found PR has unseen loud news. */
+export const unreadOnGitHubAndLoudFollowTheBoard: Invariant = {
+  name: 'unreadOnGitHub follows the threads and loud follows the loud news, in every state, and each row says whether its thread is unread',
+  check(board, views) {
+    for (const view of views) {
+      const unread = unreadThreadKeys(board, view).length > 0;
+      ensure(view.state.unreadOnGitHub === unread, `${view.tile.id}: unreadOnGitHub ${view.state.unreadOnGitHub}, unread threads ${unread}`);
+      const loud = tileNews(board, view).length > 0;
+      ensure(view.state.loud === loud, `${view.tile.id}: loud ${view.state.loud}, loud news ${loud}`);
+      for (const row of view.prs) {
+        const threadUnread = board.threads.get(row.key)?.unread === true;
+        ensure(row.unreadOnGitHub === threadUnread, `${row.key}: row unreadOnGitHub ${row.unreadOnGitHub}, thread unread ${threadUnread}`);
+      }
+    }
+  },
+};
+
+/** No "done here, unread there": a done tile never holds a thread unread on GitHub (DESIGN "GitHub unread is PostPile unread"). */
+export const doneNeverWhileAThreadIsUnread: Invariant = {
+  name: 'a done tile never holds a thread unread on GitHub',
+  check(board, views) {
+    for (const view of views.filter((candidate) => candidate.state.kind === 'done')) {
+      ensure(unreadThreadKeys(board, view).length === 0, `${view.tile.id}: done with an unread thread`);
+    }
+  },
+};
+
+/** Done: not snoozed, not unread, no loud news, and every tracked PR done by the spec. */
 export const doneWhileEveryTrackedPrDone: Invariant = {
-  name: 'a tile is done exactly while not snoozed, not unread and every tracked PR is done',
+  name: 'a tile is done exactly while not snoozed, not unread, without loud news and every tracked PR is done',
   check(board, views) {
     for (const view of views) {
       const allDone = trackedMembers(view).every((member) => prDone(board, member.prKey));
-      const expected = view.state.kind !== 'snoozed' && view.state.kind !== 'unread' && allDone;
-      ensure((view.state.kind === 'done') === expected, `${view.tile.id}: state ${view.state.kind}, every tracked PR done: ${allDone}`);
+      const news = tileNews(board, view).length > 0;
+      const expected = view.state.kind !== 'snoozed' && view.state.kind !== 'unread' && !news && allDone;
+      ensure((view.state.kind === 'done') === expected, `${view.tile.id}: state ${view.state.kind}, every tracked PR done: ${allDone}, loud news ${news}`);
     }
   },
 };
@@ -189,31 +272,31 @@ export const doneTileOffersOnlyOpen: Invariant = {
   },
 };
 
-/** A done PR offers only Open; with unseen news it keeps Mark read, never Approve, Ask or Remove team. */
+/** A done PR offers only Open; with unseen news or its thread unread on GitHub it keeps Mark read, never Approve, Ask or Remove team. */
 export const donePrOffersOnlyOpen: Invariant = {
-  name: 'a done PR offers only Open, or Mark read while its news is unseen',
+  name: 'a done PR offers only Open, or Mark read while its news is unseen or its thread unread',
   check(_board, views) {
     for (const view of views) {
       for (const row of view.prs.filter((candidate) => candidate.done)) {
         const pane = view.offers.pane[row.key]!;
         ensure(!pane.approve && !pane.ask && pane.removeTeams.length === 0, `${row.key}: done PR offers Approve, Ask or Remove team`);
-        if (row.unseenLoudEvents === 0) {
+        if (row.unseenLoudEvents === 0 && !row.unreadOnGitHub) {
           ensure(onlyOpen(pane), `${row.key}: done PR with nothing unseen leads with ${pane.lead}`);
         } else if (view.state.kind !== 'done') {
-          ensure(pane.markLabel !== null, `${row.key}: done PR with unseen news offers no mark button`);
+          ensure(pane.markLabel !== null, `${row.key}: done PR with unseen news or an unread thread offers no mark button`);
         }
       }
     }
   },
 };
 
-/** A snoozed tile whose tracked PRs are all done with their news seen leads with Open, footer and panes (DESIGN "Actions act on what you look at"). */
+/** A snoozed tile whose tracked PRs are all done with their news seen and threads read leads with Open, footer and panes (DESIGN "Actions act on what you look at"). */
 export const snoozedAllDoneLeadsWithOpen: Invariant = {
   name: 'a snoozed tile with every tracked PR done and seen leads with Open',
   check(_board, views) {
     for (const view of views.filter((candidate) => candidate.state.kind === 'snoozed')) {
       const rows = trackedRows(view);
-      if (rows.length === 0 || !rows.every((row) => row.done && row.unseenLoudEvents === 0)) {
+      if (rows.length === 0 || !rows.every((row) => row.done && row.unseenLoudEvents === 0 && !row.unreadOnGitHub)) {
         continue;
       }
       ensure(view.offers.footer === 'open' && view.offers.markLabel === null && view.offers.snooze, `${view.tile.id}: footer ${view.offers.footer}`);
@@ -253,9 +336,14 @@ export const markDoneNeverLeavesAMove: Invariant = {
   },
 };
 
-/** Unseen loud news that keeps the tile unread: a found PR's news never does. */
+/** Unseen loud news that keeps the tile from being done: a found PR's news never does. */
 function hasTileNews(board: PropertyBoard, row: PrSummary): boolean {
   return row.provenance.kind !== 'found' && eventsOf(board, row.key).some(isNews);
+}
+
+/** The PR's thread is unread on GitHub, which keeps its tile unread (2026-09-30). */
+function hasUnreadThread(board: PropertyBoard, row: PrSummary): boolean {
+  return board.threads.get(row.key)?.unread === true;
 }
 
 /**
@@ -268,8 +356,9 @@ function rowsThatCanHold(board: PropertyBoard, view: TileView): PrSummary[] {
 
 /**
  * One "Not done yet" dot per PR that keeps a live tile from being done: not
- * done, or with unseen loud news (a pulled-in layer counts by its news).
- * Only on unread or open tiles where more than one PR can hold the tile.
+ * done, with unseen loud news (a pulled-in layer counts by its news), or
+ * with its thread unread on GitHub. Only on unread or open tiles where more
+ * than one PR can hold the tile.
  */
 export const oneDotPerNotDonePr: Invariant = {
   name: 'one Not done yet dot per PR that holds a live tile, only where more than one PR can hold it',
@@ -282,7 +371,7 @@ export const oneDotPerNotDonePr: Invariant = {
         ensure(dots.length === 0, `${view.tile.id}: dots on a ${view.state.kind} tile with ${holders.length} PRs that can hold it`);
         continue;
       }
-      const expected = holders.filter((row) => !row.done || hasTileNews(board, row)).map((row) => row.key).sort();
+      const expected = holders.filter((row) => !row.done || hasTileNews(board, row) || hasUnreadThread(board, row)).map((row) => row.key).sort();
       ensure(JSON.stringify(dots) === JSON.stringify(expected), `${view.tile.id}: dots ${dots.join(', ')}, not done ${expected.join(', ')}`);
     }
   },
@@ -411,7 +500,9 @@ export const noViewerAsksNothing: Invariant = {
 
 export const TILE_INVARIANTS: readonly Invariant[] = [
   snoozedWhileEveryTrackedPrSnoozed,
-  unreadWhileLoudNews,
+  unreadWhileAThreadIsUnread,
+  unreadOnGitHubAndLoudFollowTheBoard,
+  doneNeverWhileAThreadIsUnread,
   doneWhileEveryTrackedPrDone,
   unseenMergesOnlyOnOpenTiles,
   tileTurnIsAPrTurn,

@@ -1,11 +1,22 @@
 import type { EventBatchInput, EventOverrideProposal } from '@postpile/agent';
-import { isUnansweredAsk, PERSONAL_ASK_KINDS, type PrEvent, type PrKey } from '@postpile/core';
+import { awaitsJudgement, isUnansweredAsk, PERSONAL_ASK_KINDS, type Pr, type PrEvent, type PrKey } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import type { DigestDeps, TopicScope } from './deps.ts';
 
 /** PRs per event classification call. */
 export const EVENT_BATCH_PRS = 20;
+
+/**
+ * Unread PR threads whose older quiet activity (logged before the classify
+ * cursor, so never judged) one full sync sends to the events agent at most,
+ * newest first. Keeps the first run on a big inbox from turning into one
+ * call per topic; the rest follow on later syncs.
+ */
+export const JUDGE_BACKLOG_PRS = 40;
+
+/** The override a person's quiet event gets when the events agent saw it and left it quiet. */
+export const JUDGED_QUIET_REASON = 'nothing here needs you';
 
 /** Classify cursor scope for PRs without a topic. */
 const UNSORTED_SCOPE = 'unsorted';
@@ -23,6 +34,12 @@ function rejudgeKey(group: EventGroup): string {
 }
 
 type EventItem = EventBatchInput['items'][number];
+
+/** The items of one call, and which of their events were sent only to be judged for clearing. */
+interface EventWork {
+  items: EventItem[];
+  judging: Set<string>;
+}
 
 /** One topic (or Unsorted) and its PRs, each with its own classify cursor. */
 interface EventGroup {
@@ -53,17 +70,49 @@ function needsOpinion(event: PrEvent): boolean {
 
 /**
  * Second opinion on loud events, plus pushes after the viewer's approval: a
- * wrong "loud" costs the user an unread tile (and, on an ask, a "your move"
- * footer), a wrong "quiet" is still visible as a dot. One call per topic
- * (20 PRs at most). The agent may demote (or mute) with a reason; the
- * override is stored on the event.
+ * wrong "loud" costs the user a ping (and, on an ask, a "your move"
+ * footer), a wrong "quiet" is still visible as a dot. Since 2026-09-30 also
+ * people's quiet activity on threads unread on GitHub (DESIGN.md "GitHub
+ * unread is PostPile unread"): left quiet it is marked judged and PostPile
+ * may clear the thread by itself; raised to loud it pings like any loud
+ * news. One call per topic (20 PRs at most). The agent may demote (or
+ * mute) with a reason; the override is stored on the event.
  *
  * Driven by the event log, not by this sync's new events: every topic has a
  * classify cursor that only moves once all its batches ran. Batches the call
  * cap skips wait for the next sync instead of being lost.
  */
 export class EventBatchClassifier {
+  /** PRs whose backlog of quiet activity this run judges (`JUDGE_BACKLOG_PRS`), set by `run`. */
+  private backlogKeys = new Set<PrKey>();
+
   constructor(private readonly deps: DigestDeps) {}
+
+  /** PRs with a thread unread on GitHub, newest thread first. */
+  private unreadThreadKeys(prKeys: PrKey[]): PrKey[] {
+    return [...this.deps.store.notifications.getByPrKeys(prKeys).entries()]
+      .filter(([, thread]) => thread.unread)
+      .sort(([, a], [, b]) => (a.updatedAt < b.updatedAt ? 1 : -1))
+      .map(([key]) => key);
+  }
+
+  /** People's quiet activity on the PR the judged quiet read waits on (`awaitsJudgement`). */
+  private awaiting(pr: Pr, events: PrEvent[]): PrEvent[] {
+    return events.filter((event) => awaitsJudgement(event, pr, this.deps.viewer));
+  }
+
+  /** The PRs, newest unread thread first, with quiet activity nobody judged yet: at most JUDGE_BACKLOG_PRS. */
+  private judgeBacklog(prKeys: PrKey[]): Set<PrKey> {
+    const { store } = this.deps;
+    const unread = this.unreadThreadKeys(prKeys);
+    const prs = store.prs.getMany(unread);
+    const events = store.events.listForPrs(unread);
+    const waiting = unread.filter((key) => {
+      const pr = prs.get(key);
+      return pr !== undefined && this.awaiting(pr, events.get(key) ?? []).length > 0;
+    });
+    return new Set(waiting.slice(0, JUDGE_BACKLOG_PRS));
+  }
 
   /**
    * Retired topics too: their new events are judged before the sync decides
@@ -103,17 +152,46 @@ export class EventBatchClassifier {
   }
 
   /**
-   * Events without an override that need an opinion (needsOpinion), logged
-   * after afterSeq, per PR. With `rejudge`, the stuck asks too.
+   * People's quiet activity on the group's unread threads, for the judged
+   * quiet read: what was logged after the cursor, and on the backlog PRs
+   * (`judgeBacklog`) everything nobody judged yet.
    */
-  private items(prKeys: PrKey[], afterSeq: number, rejudge: boolean): EventItem[] {
+  private judgingEvents(prKeys: PrKey[], logged: PrEvent[]): PrEvent[] {
+    const { store } = this.deps;
+    const unread = new Set(this.unreadThreadKeys(prKeys));
+    const prs = store.prs.getMany([...unread]);
+    const fresh = logged.filter((event) => {
+      const pr = prs.get(event.prKey);
+      return unread.has(event.prKey) && pr !== undefined && awaitsJudgement(event, pr, this.deps.viewer);
+    });
+    const backlog = [...unread].filter((key) => this.backlogKeys.has(key));
+    const stored = store.events.listForPrs(backlog);
+    const older = backlog.flatMap((key) => {
+      const pr = prs.get(key);
+      return pr ? this.awaiting(pr, stored.get(key) ?? []) : [];
+    });
+    const ids = new Set(fresh.map((event) => event.id));
+    return [...fresh, ...older.filter((event) => !ids.has(event.id))];
+  }
+
+  /**
+   * Events without an override that need an opinion (needsOpinion), logged
+   * after afterSeq, per PR. With `rejudge`, the stuck asks too. Plus people's
+   * quiet activity on unread threads (`judgingEvents`), marked in `judging`.
+   */
+  private work(prKeys: PrKey[], afterSeq: number, rejudge: boolean): EventWork {
     const logged = this.deps.store.eventLog.listSince(prKeys, afterSeq).map((entry) => entry.event);
     const events = logged.filter(needsOpinion);
+    const ids = new Set(events.map((event) => event.id));
     if (rejudge) {
-      const ids = new Set(events.map((event) => event.id));
-      events.push(...this.stuckAsks(prKeys).filter((event) => !ids.has(event.id)));
-      events.sort((a, b) => (a.at < b.at ? -1 : 1));
+      const stuck = this.stuckAsks(prKeys).filter((event) => !ids.has(event.id));
+      stuck.forEach((event) => ids.add(event.id));
+      events.push(...stuck);
     }
+    // A judging event may be up for an opinion anyway (a push after approval); it is sent once.
+    const judging = this.judgingEvents(prKeys, logged);
+    events.push(...judging.filter((event) => !ids.has(event.id)));
+    events.sort((a, b) => (a.at < b.at ? -1 : 1));
     const byPr = new Map<PrKey, PrEvent[]>();
     for (const event of events) {
       const list = byPr.get(event.prKey) ?? [];
@@ -121,10 +199,11 @@ export class EventBatchClassifier {
       byPr.set(event.prKey, list);
     }
     const prs = this.deps.store.prs.getMany([...byPr.keys()]);
-    return [...byPr].flatMap(([key, events]) => {
+    const items = [...byPr].flatMap(([key, events]) => {
       const pr = prs.get(key);
       return pr ? [{ pr, events }] : [];
     });
+    return { items, judging: new Set(judging.map((event) => event.id)) };
   }
 
   /**
@@ -152,8 +231,13 @@ export class EventBatchClassifier {
     }
   }
 
-  /** False when the budget skipped the call or it failed, so the topic's cursor stays put. */
-  private async classify(topicId: string | null, items: EventItem[]): Promise<boolean> {
+  /**
+   * False when the budget skipped the call or it failed, so the topic's
+   * cursor stays put. A judging event the agent left out of its answer was
+   * judged quiet: it gets a quiet override, which is what makes it clearable
+   * (`judgedReadCheck`) and keeps it from being sent again.
+   */
+  private async classify(topicId: string | null, items: EventItem[], judging: Set<string>): Promise<boolean> {
     const { store } = this.deps;
     if (!this.deps.budget.take('event_classification')) {
       return false;
@@ -166,9 +250,14 @@ export class EventBatchClassifier {
         viewer: this.deps.viewer,
         context: this.deps.contexts.forTopic(topicId),
       });
+      const answered = new Set(overrides.map((override) => override.eventId));
+      const sent = items.flatMap((item) => item.events.map((event) => event.id));
       store.transaction(() => {
         for (const override of overrides) {
           store.events.setOverride(override.eventId, { loudness: override.loudness, reason: override.reason, by: 'agent' });
+        }
+        for (const id of sent.filter((eventId) => judging.has(eventId) && !answered.has(eventId))) {
+          store.events.setOverride(id, { loudness: 'quiet', reason: JUDGED_QUIET_REASON, by: 'agent' });
         }
       });
     } catch (error) {
@@ -183,8 +272,9 @@ export class EventBatchClassifier {
   private async runGroup(group: EventGroup, toSeq: number, rejudge: boolean): Promise<void> {
     const { store } = this.deps;
     const cursorSeq = store.cursors.get('classify', group.scope)?.seq ?? 0;
-    const batches = chunk(this.items(group.prKeys, cursorSeq, rejudge), EVENT_BATCH_PRS);
-    const done = await Promise.all(batches.map((batch) => this.classify(group.topicId, batch)));
+    const work = this.work(group.prKeys, cursorSeq, rejudge);
+    const batches = chunk(work.items, EVENT_BATCH_PRS);
+    const done = await Promise.all(batches.map((batch) => this.classify(group.topicId, batch, work.judging)));
     if (!done.every(Boolean)) {
       return;
     }
@@ -207,6 +297,7 @@ export class EventBatchClassifier {
     const toSeq = store.eventLog.maxSeq();
     const rejudgeOpen = scope === null && store.meta.get(REJUDGE_ASKS_KEY) === null;
     const groups = this.groups().filter((group) => scope === null || group.topicId === scope.topicId);
+    this.backlogKeys = this.judgeBacklog(groups.flatMap((group) => group.prKeys));
     const rejudged = (group: EventGroup) => store.meta.get(rejudgeKey(group)) !== null;
     await Promise.all(groups.map((group) => this.runGroup(group, toSeq, rejudgeOpen && !rejudged(group))));
     if (rejudgeOpen && groups.every(rejudged)) {

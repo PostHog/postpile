@@ -168,7 +168,11 @@ export function withSelectedTile(tileIds: Set<string> | null, selectedTileId: st
   return new Set([...tileIds, selectedTileId]);
 }
 
-/** The grid's Unread list: unread tiles, plus the selected one while it is selected (it just got read). */
+/**
+ * The grid's Unread list: every unread tile, and a snoozed one whose thread
+ * is unread on GitHub (it keeps its snooze), plus the selected one while it
+ * is selected (it just got read).
+ */
 export function unreadTiles(views: TileView[], selectedTileId: string | null): TileView[] {
-  return views.filter((view) => view.state.kind === 'unread' || view.tile.id === selectedTileId);
+  return views.filter((view) => view.state.kind === 'unread' || view.state.unreadOnGitHub || view.tile.id === selectedTileId);
 }

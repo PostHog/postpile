@@ -11,7 +11,7 @@ import type { LookCloserPing } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
 import type { PingRuleClass } from '../pings.ts';
 import type { PrTier } from '../pr-tier.ts';
-import type { OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
+import type { JudgedReadCheck, OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
 import type { WhyCode } from '../why-here.ts';
@@ -27,6 +27,7 @@ import {
   isRoutedTeam,
   isRoutingTeam,
   isViewerLogin,
+  mentionsOnlyRoutingTeams,
   namedOwner,
   newestTouch,
   pendingRequest,
@@ -659,9 +660,28 @@ function withinGrace(now: IsoTime, times: IsoTime[]): boolean {
   return new Date(now).getTime() - new Date(newest).getTime() < GRACE_MS;
 }
 
-/** The snapshot vouches for the thread: complete, and fetched at or after the thread's last update. */
-export function snapshotIsFresh(thread: NotificationThread, prFetchedAt: IsoTime | null, truncated: boolean): boolean {
-  return !truncated && prFetchedAt !== null && prFetchedAt >= thread.updatedAt;
+/**
+ * A snapshot cut off at the query's caps still holds everything since
+ * `since` when it carries the raw cap evidence and every list that hit its
+ * cap keeps the newest N (reviews, comments, commits, timeline) with its
+ * oldest returned item at or before `since`. A review thread list or a
+ * thread's comments at their cap never vouch (a reply there can come at any
+ * time); no evidence never vouches.
+ */
+export function cutSnapshotHoldsSince(pr: Pr, since: IsoTime): boolean {
+  if (pr.capHits === undefined) {
+    return false;
+  }
+  const newestN = ['reviews', 'comments', 'commits', 'timeline'];
+  return pr.capHits.every((hit) => newestN.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since);
+}
+
+/** The snapshot vouches for the thread: fetched at or after the thread's last update, and complete, or cut off only before `since`. */
+export function snapshotIsFresh(thread: NotificationThread, prFetchedAt: IsoTime | null, truncated: boolean, pr: Pr | null = null, since: IsoTime | null = null): boolean {
+  if (truncated && !(pr !== null && since !== null && cutSnapshotHoldsSince(pr, since))) {
+    return false;
+  }
+  return prFetchedAt !== null && prFetchedAt >= thread.updatedAt;
 }
 
 export interface QuietReadSpecInput {
@@ -669,15 +689,24 @@ export interface QuietReadSpecInput {
   pr: Pr;
   events: PrEvent[];
   viewer: Viewer;
-  tileUnread: boolean;
   /** Whose move on the PR is the viewer's. */
   yourMove: boolean;
   prFetchedAt: IsoTime | null;
   now: IsoTime;
 }
 
-function othersEvents(input: QuietReadSpecInput): PrEvent[] {
+function othersEvents(input: Pick<QuietReadSpecInput, 'events' | 'viewer'>): PrEvent[] {
   return input.events.filter((event) => !isViewerLogin(input.viewer, event.actor));
+}
+
+/** Loud as the agent or user left it, and not seen. */
+function isUnseenLoudEvent(event: PrEvent): boolean {
+  return event.seenAt === null && effectiveLoudnessOf(event) === 'loud';
+}
+
+/** Who acted, in order of first appearance, "CI" for actor-less events. */
+function actorNames(events: PrEvent[]): string[] {
+  return [...new Set(events.map((event) => (event.actor === '' ? 'CI' : event.actor)))];
 }
 
 function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
@@ -687,9 +716,10 @@ function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
 /**
  * "Handled quietly", bots only (DESIGN): a thread the viewer had read that
  * turned unread only because of automation, on a fresh complete snapshot,
- * not their own open PR, no unseen merge without their review, the tile not
- * unread, not their move, and past the grace. Liveness too: all of that
- * holds, so it marks.
+ * not their own open PR, no unseen merge without their review, no unseen
+ * loud news on the PR, not their move, and past the grace. Whether the tile
+ * is unread never matters: its thread is unread, so it always is. Liveness
+ * too: all of that holds, so it marks.
  */
 export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   const { thread, pr, viewer } = input;
@@ -699,7 +729,7 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (thread.lastReadAt === null) {
     return { kind: 'skip', why: 'never_read' };
   }
-  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true)) {
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, thread.lastReadAt)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   const readAt = thread.lastReadAt;
@@ -713,8 +743,8 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (input.events.some(isUnseenMergeWithoutViewer)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (input.tileUnread) {
-    return { kind: 'skip', why: 'tile_unread' };
+  if (input.events.some(isUnseenLoudEvent)) {
+    return { kind: 'skip', why: 'unseen_loud' };
   }
   if (input.yourMove) {
     return { kind: 'skip', why: 'your_move' };
@@ -722,7 +752,7 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (withinGrace(input.now, [thread.updatedAt, ...since.map((event) => event.at)])) {
     return { kind: 'skip', why: 'grace' };
   }
-  return { kind: 'mark', bots: [...new Set(since.map((event) => (event.actor === '' ? 'CI' : event.actor)))] };
+  return { kind: 'mark', bots: actorNames(since) };
 }
 
 const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_requested' | 'reviewed' | 'replied'>> = {
@@ -736,22 +766,22 @@ const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_request
  * "You already dealt with it": the viewer reviewed or commented after every
  * unread event (bots after it are fine, except on their own open PR), on a
  * fresh complete snapshot, no unseen merge without their review after the
- * touch, the tile not unread, and past the grace.
+ * touch, no unseen loud news on the PR, and past the grace.
  */
 export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>): TouchedReadCheck {
   const { thread, pr, viewer } = input;
   if (!thread.unread) {
     return { kind: 'skip', why: 'not_unread' };
   }
-  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true)) {
+  const touch = newestTouch(pr, viewer, READING_TOUCHES);
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, touch?.at ?? null)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
-  const touch = newestTouch(pr, viewer, READING_TOUCHES);
   if (touch === null) {
     return { kind: 'skip', why: 'no_touch' };
   }
   const readAt = thread.lastReadAt;
-  const unread = othersEvents({ ...input, yourMove: false }).filter((event) => readAt === null || event.at > readAt);
+  const unread = othersEvents(input).filter((event) => readAt === null || event.at > readAt);
   if (unread.length === 0) {
     return { kind: 'skip', why: 'nothing_known' };
   }
@@ -765,13 +795,95 @@ export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>)
   if (input.events.some((event) => isUnseenMergeWithoutViewer(event) && event.at > touch.at)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (input.tileUnread) {
-    return { kind: 'skip', why: 'tile_unread' };
+  if (input.events.some(isUnseenLoudEvent)) {
+    return { kind: 'skip', why: 'unseen_loud' };
   }
   if (withinGrace(input.now, [thread.updatedAt, touch.at, ...late.map((event) => event.at)])) {
     return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', reason: TOUCH_REASONS[touch.kind]! };
+}
+
+/**
+ * An ask of the viewer (DESIGN "GitHub unread is PostPile unread": never
+ * clearable by itself): a mention, team mention (of a home team), question
+ * or reply to them, a review request naming them or their team (whoever
+ * made it), a merge without their review they have not seen. Whatever the
+ * agent made of it.
+ */
+export function isAskEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
+  if (event.kind === 'team_mention') {
+    // A mention of only routing teams is FYI (DESIGN "Team roles").
+    const body = pr.comments.find((comment) => comment.id === event.sourceId)?.body ?? '';
+    return !mentionsOnlyRoutingTeams(body, viewer);
+  }
+  if (SPEC_ADDRESSED_KINDS.includes(event.kind)) {
+    return true;
+  }
+  if (event.kind === 'review_requested') {
+    return asksViewer(viewer, requestSubjectOf(pr, event));
+  }
+  return isUnseenMergeWithoutViewer(event);
+}
+
+/** The newer of GitHub's read time and the viewer's last review or comment; null when neither exists. */
+export function lastLooked(thread: NotificationThread, pr: Pr, viewer: Viewer): IsoTime | null {
+  const touch = newestTouch(pr, viewer, READING_TOUCHES);
+  const times = [thread.lastReadAt, touch?.at ?? null].filter((time): time is IsoTime => time !== null);
+  return times.toSorted().at(-1) ?? null;
+}
+
+/**
+ * "GitHub unread is PostPile unread" (2026-09-30): everything by someone
+ * else since the viewer last looked is automation or a person's activity
+ * the events agent (or the user) left below loud, with no ask among it and
+ * no loud news; at least one person, else the bot-only and acted-after
+ * rules decide. Plus the safety checks: fresh complete snapshot, no bots on
+ * the viewer's own open PR, no unseen merge without their review, not their
+ * move, past the grace. Liveness too: all of that holds, so it marks.
+ */
+export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
+  const { thread, pr, viewer } = input;
+  if (!thread.unread) {
+    return { kind: 'skip', why: 'not_unread' };
+  }
+  const since = lastLooked(thread, pr, viewer);
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, since)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
+  }
+  if (since === null) {
+    return { kind: 'skip', why: 'never_looked' };
+  }
+  const after = othersEvents(input).filter((event) => event.at > since);
+  if (after.length === 0) {
+    return { kind: 'skip', why: 'nothing_known' };
+  }
+  if (after.some((event) => isAskEvent(pr, viewer, event))) {
+    return { kind: 'skip', why: 'asks_you' };
+  }
+  if (input.events.some(isUnseenLoudEvent) || after.some((event) => effectiveLoudnessOf(event) === 'loud')) {
+    return { kind: 'skip', why: 'unseen_loud' };
+  }
+  const people = after.filter((event) => !isAutomationEvent(pr, viewer, event));
+  if (people.length === 0) {
+    return { kind: 'skip', why: 'no_people' };
+  }
+  if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
+    return { kind: 'skip', why: 'not_judged' };
+  }
+  if (people.length < after.length && isOwnOpenPr(pr, viewer)) {
+    return { kind: 'skip', why: 'own_pr' };
+  }
+  if (input.events.some(isUnseenMergeWithoutViewer)) {
+    return { kind: 'skip', why: 'unseen_merge' };
+  }
+  if (input.yourMove) {
+    return { kind: 'skip', why: 'your_move' };
+  }
+  if (withinGrace(input.now, [thread.updatedAt, since, ...after.map((event) => event.at)])) {
+    return { kind: 'skip', why: 'grace' };
+  }
+  return { kind: 'mark', actors: actorNames(after) };
 }
 
 /**

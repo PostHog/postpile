@@ -8,6 +8,7 @@
 import { eventsSeenByTouch } from '../last-touch.ts';
 import { at, makePr } from '../fixtures.ts';
 import { deriveEvents } from '../events.ts';
+import { awaitsJudgement } from '../quiet-reads.ts';
 import { ownEventsOnReadThread } from '../github-read.ts';
 import { lookCloserEvent, lookCloserPingCheck } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
@@ -501,6 +502,21 @@ export interface PropertyBoard {
   tiles: Tile[];
 }
 
+/**
+ * GitHub's read time of the PR's thread: the recipe's read, and a Mark read
+ * or Approve in the app, which reach GitHub at the click (the recipe's clicks
+ * model a completed mark-read). Null when none of them happened.
+ */
+function threadReadAt(spec: PrSpec, pr: Pr, viewer: Viewer, clock: PrClock): IsoTime | null {
+  const approved = spec.approvedAfter !== null && pr.state === 'OPEN' && !sameLogin(pr.author, viewer.login);
+  const times = [
+    spec.tracking.kind === 'thread' && spec.tracking.readAfter !== null ? clock.after(spec.tracking.readAfter) : null,
+    spec.markedReadAfter === null ? null : clock.after(spec.markedReadAfter),
+    approved ? clock.after(Math.min(spec.approvedAfter!, spec.steps.length)) : null,
+  ].filter((time): time is IsoTime => time !== null);
+  return times.toSorted().at(-1) ?? null;
+}
+
 /** One PR's stored events and user state, made the way the sync and the app make them. */
 function storedPrState(input: {
   spec: PrSpec;
@@ -552,6 +568,10 @@ function storedPrState(input: {
     const after = applyPlan(pr.key, events, userState, { kind: 'pending_completion', clickedAt }, clickedAt, input.tracked);
     events = after.events;
     userState = after.userState;
+  }
+  // The events agent judged people's unseen quiet activity and left it quiet (`awaitsJudgement` picks what the engine sends it: not asks).
+  if (spec.judged) {
+    events = events.map((event) => (awaitsJudgement(event, pr, viewer) ? { ...event, override: { loudness: 'quiet', reason: 'nothing here needs you', by: 'agent' } } : event));
   }
   // The events agent's overrides, on derived events only.
   const derived = events.filter((event) => event.kind !== 'look_closer');
@@ -648,7 +668,7 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     board.prSpecs.set(pr.key, entry.spec);
     let thread: NotificationThread | null = null;
     if (tracking.kind === 'thread') {
-      const lastReadAt = tracking.readAfter === null ? null : clockOf(entry).after(tracking.readAfter);
+      const lastReadAt = threadReadAt(entry.spec, pr, viewer, clockOf(entry));
       thread = {
         id: `thread-${pr.ref.number}`,
         reason: tracking.reason,
@@ -741,6 +761,7 @@ export function tileStateOf(board: PropertyBoard, tile: Tile, viewer: Viewer | n
     tile,
     prs: board.prs,
     events: board.events,
+    threads: board.threads,
     userStates: board.userStates,
     snoozes: board.snoozes,
     now: board.now,
@@ -771,6 +792,7 @@ function prRows(board: PropertyBoard, tile: Tile, state: TileState, viewer: View
         quietRepo: false,
         repoLabel: null,
         tileUnread: state.kind === 'unread',
+        unreadOnGitHub: board.threads.get(pr.key)?.unread === true,
         now: board.now,
         pendingWrite: board.pendingWrites.get(pr.key) ?? null,
       }),

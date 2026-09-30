@@ -95,7 +95,6 @@ import {
   displayState,
   compareTopicUrgency,
   actionTrail,
-  applyBaseline,
   cleanupCutoff,
   cleanupLook,
   CLEANUP_SNOOZE_DAYS,
@@ -141,7 +140,7 @@ import {
   type SearchableTopic,
   type SearchResult,
   type Viewer,
-  botsFromQuietDetail,
+  actorsFromQuietDetail,
   openedReadCheck,
   ownTeamRequests,
   teamSlug,
@@ -310,7 +309,6 @@ export class FakeEngine implements EngineService {
   // Inbox cleanup, in memory: every fake start counts as a first run, so the banner shows.
   private cleanupProminent = true;
   private cleanupHiddenUntil: string | null = null;
-  private baseline: string | null = null;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
   /** When each sample PR was last "fetched": a few minutes before start, moved by a fake agent refresh. */
@@ -433,12 +431,8 @@ export class FakeEngine implements EngineService {
     return this.data.tiles.find((tile) => tile.id === tileId);
   }
 
-  /** With "start fresh" on, events before the baseline read as seen (copies; the sample keeps its state). */
   private eventsOf(prKey: PrKey): PrEvent[] {
-    return applyBaseline(
-      this.data.events.filter((event) => event.prKey === prKey),
-      this.baseline,
-    );
+    return this.data.events.filter((event) => event.prKey === prKey);
   }
 
   private userStateOf(prKey: PrKey): UserPrState {
@@ -471,12 +465,25 @@ export class FakeEngine implements EngineService {
     return new Set(this.data.glances.filter((glance) => glance.verdict === 'NOT_YOURS').map((glance) => glance.prKey));
   }
 
-  /** Core's tile state rule over the sample data, snoozes included. */
+  /** The sample PR threads by PR, with their GitHub unread flag as the fake queue left it. */
+  private prThreads(): Map<PrKey, NotificationThread> {
+    const threads = new Map<PrKey, NotificationThread>();
+    for (const thread of this.threadsOnGitHub()) {
+      const key = threadPrKey(thread);
+      if (key !== null && !threads.has(key)) {
+        threads.set(key, thread);
+      }
+    }
+    return threads;
+  }
+
+  /** Core's tile state rule over the sample data, snoozes and GitHub unread included. */
   private tileState(tile: Tile): TileState {
     return deriveTileState({
       tile,
       prs: this.prsByKey(),
       events: this.eventsByKey(tile.members.map((member) => member.prKey)),
+      threads: this.prThreads(),
       userStates: this.userStatesByKey(),
       snoozes: this.snoozes,
       now: this.timestamp(),
@@ -512,6 +519,7 @@ export class FakeEngine implements EngineService {
     const prsByKey = this.prsByKey();
     const events = this.eventsByKey(tile.members.map((member) => member.prKey));
     const userStates = this.userStatesByKey();
+    const threads = this.prThreads();
     const prs = tile.members.flatMap((member, index) => {
       const pr = prsByKey.get(member.prKey);
       if (!pr) {
@@ -532,6 +540,7 @@ export class FakeEngine implements EngineService {
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
+          unreadOnGitHub: threads.get(pr.key)?.unread === true,
           now: this.timestamp(),
           pendingWrite: pending.get(pr.key) ?? null,
         }),
@@ -739,6 +748,8 @@ export class FakeEngine implements EngineService {
       const urgency = topicUrgency(
         views.map((view) => ({
           state: view.state.kind,
+          unreadOnGitHub: view.state.unreadOnGitHub,
+          loud: view.state.loud,
           prStates: view.prs.filter((pr) => !pr.quietRepo).map((pr) => pr.state),
           move: topicMove(view.turn),
           quiet: view.quietRepo,
@@ -792,15 +803,14 @@ export class FakeEngine implements EngineService {
     this.writes.settle();
     const now = this.timestamp();
     const threads = this.threadsOnGitHub();
-    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14), this.baseline);
+    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14));
     const hiddenUntil = this.cleanupHiddenUntil !== null && this.cleanupHiddenUntil > now ? this.cleanupHiddenUntil : null;
     // Without gh nothing is known about the GitHub inbox.
     const look = this.toolStatus.ghOff() !== null ? 'none' : cleanupLook({ unreadOlderThan14, prominent: this.cleanupProminent, hiddenUntil }, now);
     return {
       unreadOlderThan14,
-      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30), this.baseline),
+      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30)),
       look,
-      baseline: this.baseline,
       hiddenUntil,
       pendingCutoff: this.writes.pendingCleanupCutoff(),
     };
@@ -812,17 +822,6 @@ export class FakeEngine implements EngineService {
       return ok(`Pending: marks everything older than ${age} days read once you unlock and send it from the lock`);
     }
     return ok(`fake: marked the sample threads older than ${age} days read, nothing sent to GitHub`);
-  }
-
-  async startFresh(): Promise<ActionResult> {
-    this.cleanupProminent = false;
-    this.baseline = this.timestamp();
-    return ok('Started fresh: everything before now is background here. GitHub is unchanged.');
-  }
-
-  async clearStartFresh(): Promise<ActionResult> {
-    this.baseline = null;
-    return ok('Start fresh cleared: older unread threads count again');
   }
 
   async hideInboxCleanup(): Promise<ActionResult> {
@@ -872,7 +871,7 @@ export class FakeEngine implements EngineService {
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.topicChanges.pendingForTopic(topicId),
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
-      dossier: this.memory.dossierView(topicId, this.feedback, this.baseline),
+      dossier: this.memory.dossierView(topicId, this.feedback),
     };
   }
 
@@ -935,7 +934,7 @@ export class FakeEngine implements EngineService {
           number: ref.number,
           title: this.data.prs.find((pr) => pr.key === key)?.title ?? key,
           reason: quietReasonFromDetail(entry.detail),
-          bots: botsFromQuietDetail(entry.detail),
+          bots: actorsFromQuietDetail(entry.detail),
           landing: this.landingOf(key),
         };
       });

@@ -1,6 +1,8 @@
 // When a topic counts as "needs you" in the sidebar: prominent coral unread,
 // placed on top. Unread alone is not enough: a topic whose unread tiles are
-// all merged or closed only has news to read, nothing to act on.
+// all merged or closed only has news to read, nothing to act on, and a tile
+// unread with only quiet news (DESIGN.md "GitHub unread is PostPile unread")
+// counts but never lights the topic up: urgency follows loud news.
 import type { PrState, TileStateKind } from './types.ts';
 import { YOUR_MOVE_ORDER, type WhoseTurn, type YourMove } from './whose-turn.ts';
 
@@ -19,6 +21,10 @@ export function topicMove(turn: WhoseTurn): TopicMove | null {
 /** One tile of the topic, as far as urgency cares. */
 export interface UrgencyTile {
   state: TileStateKind;
+  /** A tracked thread is unread on GitHub (`TileState.unreadOnGitHub`), snoozed or not. */
+  unreadOnGitHub: boolean;
+  /** Unseen loud news on the tile (`TileState.loud`). */
+  loud: boolean;
   /** States of the tile's PRs outside quiet repos (all of them when none is quiet). */
   prStates: PrState[];
   /** The viewer's move when whose turn says it is theirs, else null. `merge` only makes a topic urgent with more to do. */
@@ -28,9 +34,9 @@ export interface UrgencyTile {
 }
 
 export interface TopicUrgency {
-  /** Unread tiles, open or not. The tiles still show each one as unread. */
+  /** Unread tiles, open or not, and snoozed ones with a thread unread on GitHub: what the Unread filter shows. */
   unreadTiles: number;
-  /** Unread tiles with at least one open PR. These light up the topic. */
+  /** Unread tiles with loud news and at least one open PR. These light up the topic. */
   urgentUnreadTiles: number;
   /**
    * The moves on live (not done, not snoozed) tiles where it is the
@@ -47,7 +53,7 @@ export interface TopicUrgency {
 }
 
 export function isUrgentUnread(tile: UrgencyTile): boolean {
-  return !tile.quiet && tile.state === 'unread' && tile.prStates.includes('OPEN');
+  return !tile.quiet && tile.state === 'unread' && tile.loud && tile.prStates.includes('OPEN');
 }
 
 function byMoveUrgency(a: TopicMove, b: TopicMove): number {
@@ -55,7 +61,7 @@ function byMoveUrgency(a: TopicMove, b: TopicMove): number {
 }
 
 export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
-  const unreadTiles = tiles.filter((tile) => tile.state === 'unread').length;
+  const unreadTiles = tiles.filter((tile) => tile.state === 'unread' || tile.unreadOnGitHub).length;
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
   const live = tiles.filter((tile) => tile.state !== 'done' && tile.state !== 'snoozed');
   const yourMoves = live.flatMap((tile) => (tile.move === null ? [] : [tile.move])).toSorted(byMoveUrgency);

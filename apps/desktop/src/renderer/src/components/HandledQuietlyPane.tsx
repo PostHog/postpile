@@ -26,7 +26,7 @@ function QuietRow(props: { item: QuietReadView; now: Date; onOpenTile: (pick: Ti
             {item.title}
           </span>
         </span>
-        <span className="truncate text-[11.5px] text-muted" title={item.reason === 'bots' ? item.bots.join(', ') : quietReasonText(item)}>
+        <span className="truncate text-[11.5px] text-muted" title={item.reason === 'bots' || item.reason === 'judged' ? item.bots.join(', ') : quietReasonText(item)}>
           {quietReasonText(item)}
         </span>
         <span className="text-right font-mono text-[10.5px] text-faint" title={item.at}>
@@ -55,9 +55,10 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Handled quietly</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
           PR threads PostPile marked read on GitHub for you, only while GitHub writes are unlocked. After a full sync: threads you had read that came back
-          only because of bots (CI, merge queues, review and deploy bots; never on your own PRs, never while something is your move or new for you), and
-          threads where you reviewed or replied after everything unread, from the gh CLI, GitHub Mobile or an agent. And PRs you opened here while nothing
-          was asked of you. Never a merge without your review.
+          only because of bots (CI, merge queues, review and deploy bots; never on your own PRs, never while something is your move or new for you),
+          threads where you reviewed or replied after everything unread, from the gh CLI, GitHub Mobile or an agent, and threads where everything since
+          you last looked is bots or people the agent judged as not needing you. And PRs you opened here while nothing was asked of you. Never a review
+          request, mention, question or reply to you, and never a merge without your review. Releases and issues are marked read too, and not listed.
         </p>
       </div>
       {writes && !writes.enabled && (

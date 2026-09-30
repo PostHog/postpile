@@ -67,8 +67,6 @@ const PROBLEM_NOTICE_MS = 12000;
 /** Busy keys of the inbox cleanup's actions, one each (see withBusy). */
 export const CLEANUP_BUSY = {
   markRead: 'cleanup:mark-read',
-  startFresh: 'cleanup:start-fresh',
-  clearStartFresh: 'cleanup:clear-fresh',
   notNow: 'cleanup:not-now',
 } as const;
 // Room for the engine to send or park a batch after its window ends.
@@ -165,9 +163,6 @@ export interface Actions {
    * the lock closed it becomes one pending write. Returns whether it went through.
    */
   cleanUpInbox(age: CleanupAge): Promise<boolean>;
-  /** "Leave GitHub alone, start fresh here". Local. */
-  startFresh(): Promise<boolean>;
-  clearStartFresh(): Promise<boolean>;
   /** "Not now": hides the cleanup for a week. Local. */
   hideInboxCleanup(): Promise<boolean>;
   /**
@@ -701,8 +696,6 @@ export function ActionsProvider(props: { children: ReactNode }) {
     sendTestNotification,
     // One busy key each: withBusy drops every copy of a key when one run ends.
     cleanUpInbox: (age) => run(CLEANUP_BUSY.markRead, 'cleanup', () => request('POST', '/api/inbox-cleanup/mark-read', { olderThanDays: age })),
-    startFresh: () => run(CLEANUP_BUSY.startFresh, null, () => request('POST', '/api/inbox-cleanup/start-fresh')),
-    clearStartFresh: () => run(CLEANUP_BUSY.clearStartFresh, null, () => request('DELETE', '/api/inbox-cleanup/start-fresh')),
     hideInboxCleanup: () => run(CLEANUP_BUSY.notNow, null, () => request('POST', '/api/inbox-cleanup/not-now')),
     connectMcp: (from) => run('mcp:connect', null, () => request('POST', '/api/mcp-connection', { from })),
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),

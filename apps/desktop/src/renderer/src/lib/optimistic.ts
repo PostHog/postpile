@@ -3,7 +3,7 @@
 // the snooze state, the head commit); where those don't say enough, the
 // data stays as it is and the button shows its pending state instead.
 // The next refetch replaces all of it with the server's answer.
-import type { IsoTime, PrDetail, PrKey, PrSummary, TileView, TopicDetail } from '@postpile/core';
+import type { IsoTime, PrDetail, PrKey, PrSummary, TileState, TileView, TopicDetail } from '@postpile/core';
 
 /** A PR row after a mark-read of it: news seen, and a tracked PR takes its `afterRead`. */
 function markedPrRow(pr: PrSummary): PrSummary {
@@ -11,6 +11,7 @@ function markedPrRow(pr: PrSummary): PrSummary {
   return {
     ...pr,
     unseenLoudEvents: 0,
+    unreadOnGitHub: false,
     done: tracked ? pr.afterRead.done : pr.done,
     turn: tracked ? pr.afterRead.turn : pr.turn,
   };
@@ -18,11 +19,14 @@ function markedPrRow(pr: PrSummary): PrSummary {
 
 /**
  * The tile after Mark read / Mark done: done or open and whose move as its
- * `afterRead` says, every row marked. A snoozed tile keeps its state (the
- * snooze outlasts a mark-read); its rows still change.
+ * `afterRead` says, every row marked, its threads read. A snoozed tile keeps
+ * its snooze (the snooze outlasts a mark-read); its rows still change.
  */
 export function markedReadTile(view: TileView): TileView {
-  const state = view.state.kind === 'snoozed' ? view.state : { kind: view.afterRead.done ? ('done' as const) : ('open' as const), unreadBecause: [] };
+  const state: TileState =
+    view.state.kind === 'snoozed'
+      ? { ...view.state, unreadOnGitHub: false, loud: false }
+      : { kind: view.afterRead.done ? 'done' : 'open', unreadBecause: [], unreadOnGitHub: false, loud: false };
   return { ...view, state, turn: view.afterRead.turn, prs: view.prs.map(markedPrRow) };
 }
 
@@ -35,9 +39,9 @@ export function markedReadPr(view: TileView, prKey: PrKey): TileView {
   return { ...view, prs: view.prs.map((pr) => (pr.key === prKey ? markedPrRow(pr) : pr)) };
 }
 
-/** A snoozed tile: snoozed wins over unread, open and done while it holds. */
+/** A snoozed tile: snoozed wins over unread, open and done while it holds; an unread thread still counts in the Unread filter. */
 export function snoozedTile(view: TileView): TileView {
-  return { ...view, state: { kind: 'snoozed', unreadBecause: [] } };
+  return { ...view, state: { kind: 'snoozed', unreadBecause: [], unreadOnGitHub: view.state.unreadOnGitHub, loud: view.state.loud } };
 }
 
 /** The PR after the viewer's approval of the commit on screen, so Approve turns into "Approved". */

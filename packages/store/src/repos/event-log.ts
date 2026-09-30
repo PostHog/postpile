@@ -57,11 +57,8 @@ export class EventLogRepo {
     return rows.map((row) => ({ seq: row.seq, event: toEvent(row) }));
   }
 
-  /**
-   * Count only, for "N events since" badges without loading rows.
-   * `notBefore` leaves out events that happened before it ("start fresh").
-   */
-  countSince(prKeys: PrKey[], afterSeq: number, notBefore: string | null = null): number {
+  /** Count only, for "N events since" badges without loading rows. */
+  countSince(prKeys: PrKey[], afterSeq: number): number {
     if (prKeys.length === 0) {
       return 0;
     }
@@ -69,10 +66,9 @@ export class EventLogRepo {
       this.db,
       `SELECT COUNT(*) AS count FROM event_log l
        JOIN pr_event e ON e.id = l.event_id
-       WHERE l.pr_key IN (${placeholders(prKeys.length)}) AND l.seq > ? AND e.at >= ?`,
+       WHERE l.pr_key IN (${placeholders(prKeys.length)}) AND l.seq > ?`,
       ...prKeys,
       afterSeq,
-      notBefore ?? '',
     );
     return row?.count ?? 0;
   }

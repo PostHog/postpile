@@ -1,4 +1,4 @@
-import { quietReadDetail, quietReasonDetail, type NewActionLogEntry, type PingDecision } from '@postpile/core';
+import { judgedReadDetail, quietReadDetail, quietReasonDetail, type NewActionLogEntry, type PingDecision } from '@postpile/core';
 import { SAMPLE_REPO } from './sample-builders.ts';
 
 function hoursBefore(now: Date, hours: number): string {
@@ -7,13 +7,16 @@ function hoursBefore(now: Date, hours: number): string {
 
 /**
  * Sample PRs PostPile marked read by itself, with the log detail: threads
- * that came back only because of bots (which bots), and threads the viewer
- * reviewed after everything unread. Invented.
+ * that came back only because of bots (which bots), threads the viewer
+ * reviewed after everything unread, and threads where a teammate's comment
+ * since the viewer last looked was judged as not needing them. Invented.
  */
 const QUIET_SAMPLES: { number: number; detail: string; hoursAgo: number }[] = [
   { number: 1904, detail: quietReadDetail(['trunk-io[bot]', 'CI']), hoursAgo: 2 },
   { number: 1911, detail: quietReasonDetail('approved'), hoursAgo: 3.5 },
-  { number: 1899, detail: quietReadDetail(['github-actions[bot]']), hoursAgo: 26 },
+  { number: 1934, detail: judgedReadDetail(['lyra', 'CI']), hoursAgo: 4 },
+  // After mergify queued it (1h ago) and the grace: the tile is done again.
+  { number: 1899, detail: quietReadDetail(['renovate[bot]', 'mergify[bot]']), hoursAgo: 0.5 },
   { number: 1960, detail: quietReasonDetail('changes_requested'), hoursAgo: 29 },
   { number: 1921, detail: quietReadDetail(['renovate[bot]', 'CI']), hoursAgo: 50 },
   { number: 1963, detail: quietReadDetail(['chatgpt-codex-connector[bot]', 'coderabbitai[bot]']), hoursAgo: 75 },
@@ -21,21 +24,31 @@ const QUIET_SAMPLES: { number: number; detail: string; hoursAgo: number }[] = [
   { number: 1855, detail: quietReadDetail(['vercel[bot]']), hoursAgo: 9 * 24 },
 ];
 
+/** When PostPile marked each sample PR's thread read by itself, by PR: its thread stays read unless something came after. */
+export function sampleQuietReadTimes(now: Date): Map<string, string> {
+  return new Map(QUIET_SAMPLES.map((sample) => [`${SAMPLE_REPO}#${sample.number}`, hoursBefore(now, sample.hoursAgo)]));
+}
+
+/** Notifications that are not PRs, marked read by the sync (in the log and the debug view, not in "Handled quietly"). */
+const NOT_PR_SAMPLES: { threadId: string; hoursAgo: number }[] = [{ threadId: 'sample-thread-issue-1700', hoursAgo: 2.5 }];
+
 /**
  * Action log rows as the real sync writes them for "Handled quietly", on
  * sample threads that are read. Oldest first, so the log ids grow with time.
  */
 export function sampleQuietReads(now: Date): NewActionLogEntry[] {
-  return QUIET_SAMPLES.toSorted((a, b) => b.hoursAgo - a.hoursAgo).map((sample) => ({
-    at: hoursBefore(now, sample.hoursAgo),
+  const prRows = QUIET_SAMPLES.map((sample) => ({ hoursAgo: sample.hoursAgo, threadId: `sample-thread-${sample.number}`, prKey: `${SAMPLE_REPO}#${sample.number}`, detail: sample.detail }));
+  const otherRows = NOT_PR_SAMPLES.map((sample) => ({ hoursAgo: sample.hoursAgo, threadId: sample.threadId, prKey: null, detail: quietReasonDetail('not_pr') }));
+  return [...prRows, ...otherRows].toSorted((a, b) => b.hoursAgo - a.hoursAgo).map((row) => ({
+    at: hoursBefore(now, row.hoursAgo),
     action: 'mark_read',
     origin: 'quiet',
     outcome: 'github',
-    threadId: `sample-thread-${sample.number}`,
-    prKey: `${SAMPLE_REPO}#${sample.number}`,
+    threadId: row.threadId,
+    prKey: row.prKey,
     tileId: null,
     batch: null,
-    detail: sample.detail,
+    detail: row.detail,
   }));
 }
 

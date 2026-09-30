@@ -17,6 +17,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- GitHub unread is PostPile unread: a tile is unread while one of its PR threads is unread on GitHub, done or not, so nothing stays "done here, unread there". Pings, the coral "new since you looked" and the topic's "needs you" still follow loud news only; a tile unread with only quiet news counts in the Unread filter and the sidebar count but does not ping. A snoozed tile keeps its snooze and counts in the Unread filter.
+- PostPile clears more by itself on GitHub (only while GitHub writes are unlocked, listed under Handled quietly): threads where everything since you last looked is bots or people's activity the events agent judged as not needing you. Review requests to you or your team, mentions, team mentions, questions and replies to you, and merges without your review are never cleared by PostPile. The events agent now also sees quiet activity by people on unread threads, and raising one to loud pings as usual.
+- Release and issue notifications are marked read on GitHub by the sync (while writes are unlocked); PostPile does not show them.
+- A finished topic never holds an unread thread: it retires only once every thread is read, and a finished topic whose thread turns unread comes back.
 - Interface polish pass: a lighter selected tile with a pointer to the detail pane, one text grid in the detail pane, a ruled "Since you last looked" timeline, quieter sidebar rows, ink numbers in the title bar and footer, thin scrollbars. Approve is green now, the color of the "Approved" state it produces.
 - Error messages sent to PostHog also drop repo names, PR numbers and quoted text, and stack frames from dependencies are always left out.
 - Approve, Mark read, Mark done and Snooze change the tile and buttons as soon as they're clicked instead of after a few seconds. A failed action puts things back and says why.
@@ -44,6 +48,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The MCP server says so, and asks for a reconnect, when the app was updated while it kept running.
 - A snoozed tile no longer pings. A bot's event the agent raised to loud used to leave the snooze in place and still send a Mac notification for it.
 - An event the agent raises to loud after the poll saw it, like a push after your approval, now pings (and wakes a snooze) while it is fresh. The poll had already decided it while it was quiet, so no notification came.
+
+### Removed
+
+- "Leave GitHub alone, start fresh here" in the inbox cleanup. It hid things in PostPile that stayed unread on GitHub; a stored start-fresh date is dropped on upgrade, so they show again. "Mark everything older than 14 / 30 days read on GitHub" stays.
 
 ## 0.11.1 (2026-09-29)
 

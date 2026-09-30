@@ -4,8 +4,6 @@ import { CLEANUP_BUSY, useActions } from '../api/actions.tsx';
 import { cleanupChoices, shortDate } from '../lib/cleanup.ts';
 import { Button } from './Button.tsx';
 
-type Choice = CleanupAge | 'fresh';
-
 function Radio(props: { checked: boolean; onChange: () => void; title: string; note: string }) {
   return (
     <label className={`flex cursor-pointer gap-2.5 rounded-row border px-3 py-2.5 ${props.checked ? 'border-accent-line bg-accent-soft' : 'border-hairline-strong hover:bg-subtle'}`}>
@@ -21,12 +19,13 @@ function Radio(props: { checked: boolean; onChange: () => void; title: string; n
 /**
  * "Clean up": mark everything older than 14 / 30 days read on GitHub (one
  * call through the writes lock; locked, it waits as one pending write), or
- * leave GitHub alone and start fresh here (a local baseline, clearable), or
- * "Not now" (hidden for a week).
+ * "Not now" (hidden for a week). The local-only "start fresh" is gone: it hid
+ * things here that stayed unread on GitHub (DESIGN.md "GitHub unread is
+ * PostPile unread").
  */
 export function InboxCleanupDialog(props: { view: InboxCleanupView; onClose: () => void }) {
   const actions = useActions();
-  const [choice, setChoice] = useState<Choice>(14);
+  const [choice, setChoice] = useState<CleanupAge>(14);
   const { view, onClose } = props;
   const locked = actions.writes?.enabled !== true;
   const busy = Object.values(CLEANUP_BUSY).some((key) => actions.isBusy(key));
@@ -42,8 +41,7 @@ export function InboxCleanupDialog(props: { view: InboxCleanupView; onClose: () 
   }, [onClose]);
 
   async function confirm() {
-    const done = choice === 'fresh' ? await actions.startFresh() : await actions.cleanUpInbox(choice);
-    if (done) {
+    if (await actions.cleanUpInbox(choice)) {
       onClose();
     }
   }
@@ -81,21 +79,7 @@ export function InboxCleanupDialog(props: { view: InboxCleanupView; onClose: () 
               note={`${entry.count} unread ${entry.count === 1 ? 'thread' : 'threads'} here. ${lockNote}`}
             />
           ))}
-          <Radio
-            checked={choice === 'fresh'}
-            onChange={() => setChoice('fresh')}
-            title="Leave GitHub alone, start fresh here"
-            note="Everything before now counts as background in PostPile: never unread, never new since you looked. Nothing is written to GitHub."
-          />
         </div>
-        {view.baseline && (
-          <p className="flex items-center gap-2 text-[11.5px] text-muted">
-            Started fresh on {shortDate(view.baseline)}.
-            <button type="button" disabled={busy} onClick={() => void actions.clearStartFresh()} className="text-accent hover:underline">
-              Clear it
-            </button>
-          </p>
-        )}
         <div className="flex items-center gap-2">
           <Button onClick={() => void notNow()} disabled={busy} title="Hides the cleanup for 7 days">
             Not now
@@ -105,10 +89,10 @@ export function InboxCleanupDialog(props: { view: InboxCleanupView; onClose: () 
           <Button
             variant="primary"
             disabled={busy}
-            title={choice === 'fresh' ? 'Local only' : (actions.blockedReason('cleanup') ?? lockNote)}
+            title={actions.blockedReason('cleanup') ?? lockNote}
             onClick={() => void confirm()}
           >
-            {choice === 'fresh' ? 'Start fresh' : locked ? 'Add pending write' : 'Mark read on GitHub'}
+            {locked ? 'Add pending write' : 'Mark read on GitHub'}
           </Button>
         </div>
       </div>

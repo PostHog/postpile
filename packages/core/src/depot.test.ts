@@ -3,16 +3,18 @@
 
 import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
-import { at, makeComment, makeCommit, makePr, makeTimelineItem, makeUserState, singleTile, viewer } from './fixtures.ts';
+import { at, makeComment, makeCommit, makePr, makeThreadFor, makeTimelineItem, makeUserState, singleTile, viewer } from './fixtures.ts';
 import { deriveTileState } from './tiles.ts';
 import type { Pr, UserPrState } from './types.ts';
 
-function tileState(pr: Pr, userState: UserPrState | null) {
+/** `unreadOnGitHub`: the PR's thread is unread on GitHub; read otherwise (GitHub or PostPile's quiet reads cleared it). */
+function tileState(pr: Pr, userState: UserPrState | null, unreadOnGitHub = false) {
   const events = deriveEvents(pr, viewer, userState);
   const state = deriveTileState({
     tile: singleTile(pr),
     prs: new Map([[pr.key, pr]]),
     events: new Map([[pr.key, events]]),
+    threads: new Map([[pr.key, makeThreadFor(pr, { unread: unreadOnGitHub, lastReadAt: at(5) })]]),
     userStates: new Map(userState ? [[pr.key, userState]] : []),
     snoozes: new Map(),
     now: at(100),
@@ -38,6 +40,8 @@ describe('Depot examples', () => {
     const { events, state } = tileState(pr, approved);
     expect(events.find((e) => e.sourceId === 'd1')).toMatchObject({ kind: 'deploy', ruleLoudness: 'quiet' });
     expect(state.kind).toBe('done');
+    // Until the bot-only quiet read clears the thread on GitHub, it shows unread without loud news.
+    expect(tileState(pr, approved, true).state).toMatchObject({ kind: 'unread', loud: false });
   });
 
   it('a mention makes the done tile unread and says why', () => {
@@ -45,7 +49,7 @@ describe('Depot examples', () => {
       ...depotPr,
       comments: [makeComment({ id: 'm1', author: 'carol', body: '@viewer runner labels ok?', createdAt: at(10) })],
     };
-    const { state } = tileState(pr, approved);
+    const { state } = tileState(pr, approved, true);
     expect(state.kind).toBe('unread');
     expect(state.unreadBecause).toEqual([
       {

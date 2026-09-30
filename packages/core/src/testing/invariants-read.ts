@@ -4,17 +4,46 @@
 import { deriveEvents } from '../events.ts';
 import { openedReadCheck } from '../quiet-reads.ts';
 import { applyReadPlan, planRead, prReadScope, tileReadScope, type ReadCause, type ReadScope } from '../read-plan.ts';
-import type { IsoTime, Pr, Tile, UserPrState } from '../types.ts';
+import type { IsoTime, Pr, PrKey, Tile, UserPrState } from '../types.ts';
 import { tileViewOf, tileStateOf, withReadState, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isTrackedHere, prOf, sameMove, trackedRows, type Invariant } from './invariant.ts';
 import { pendingRequest } from './spec-facts.ts';
 import { expectedOpenedRead, expectedReadPlan } from './spec-rules.ts';
 
-/** The board after a read of `scope` by `cause`, through the planner, as the engine writes it. */
+/** The board with the threads of `keys` read on GitHub up to their last update, as a mark-read that reached GitHub leaves them. */
+export function withThreadsRead(board: PropertyBoard, keys: PrKey[]): PropertyBoard {
+  const threads = new Map(board.threads);
+  for (const key of keys) {
+    const thread = threads.get(key);
+    if (thread?.unread) {
+      threads.set(key, { ...thread, unread: false, lastReadAt: thread.updatedAt });
+    }
+  }
+  return { ...board, threads };
+}
+
+/** The board with the thread of `key` unread again after new activity at `at` (GitHub flags it), when the PR has one. */
+export function withThreadUnread(board: PropertyBoard, key: PrKey, at: IsoTime): PropertyBoard {
+  const thread = board.threads.get(key);
+  if (!thread) {
+    return board;
+  }
+  const threads = new Map(board.threads);
+  threads.set(key, { ...thread, unread: true, updatedAt: at });
+  return { ...board, threads };
+}
+
+/**
+ * The board after a read of `scope` by `cause`, through the planner, as the
+ * engine writes it. Every cause but GitHub's own read time also reads the
+ * scope's threads on GitHub (the button, Approve, an open, a sent pending
+ * write, a quiet read): the tile follows the thread.
+ */
 export function afterRead(board: PropertyBoard, scope: ReadScope, cause: ReadCause, at: IsoTime = board.now): PropertyBoard {
   const plan = planRead({ scope, cause, events: board.events, userStates: board.userStates, at });
   const applied = applyReadPlan(plan, board.events, board.userStates);
-  return withReadState(board, applied.events, applied.userStates);
+  const read = withReadState(board, applied.events, applied.userStates);
+  return cause.kind === 'read_on_github' ? read : withThreadsRead(read, scope.prKeys);
 }
 
 /** A few read times per board: the oldest event, a middle one, now. */
@@ -180,7 +209,7 @@ function withNewMention(pr: Pr, now: IsoTime): Pr {
   return { ...pr, comments: [...pr.comments, comment], updatedAt: now };
 }
 
-/** Handled means "you dealt with this once" (decided 2026-09-29): a later mention makes the tile unread and leaves handled alone. */
+/** Handled means "you dealt with this once" (decided 2026-09-29): a later mention (GitHub flags the thread unread) makes the tile unread and leaves handled alone. */
 export const handledSurvivesNewActivity: Invariant = {
   name: 'handled survives new activity, which makes the tile unread',
   check(board, views) {
@@ -190,7 +219,7 @@ export const handledSurvivesNewActivity: Invariant = {
         if (!state?.handledAt || row.provenance.kind === 'found') {
           continue;
         }
-        const next = resync(board, withNewMention(prOf(board, row.key), board.now));
+        const next = withThreadUnread(resync(board, withNewMention(prOf(board, row.key), board.now)), row.key, board.now);
         ensure(next.userStates.get(row.key)?.handledAt === state.handledAt, `${row.key}: handled time moved`);
         const nextState = tileStateOf(next, view.tile);
         ensure(nextState.kind === 'unread', `${row.key}: a new mention leaves the tile ${nextState.kind}`);

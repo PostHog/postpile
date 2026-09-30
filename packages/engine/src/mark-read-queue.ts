@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import {
   DeferredQueue,
-  NO_READ_CHANGE,
   UNDO_WINDOW_MS,
   type ActionOrigin,
   type DeferredBatch,
   type IsoTime,
   type PendingThread,
   type PrKey,
-  type ReadChange,
   type ThreadOutcome,
   type Timers,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
+import type { LocalChange } from './actions/local-change.ts';
+import { NO_LOCAL_CHANGE } from './actions/local-change.ts';
 import { errorText } from './errors.ts';
 import { notTakenDetail, type GitHubWrites } from './writes/github-writes.ts';
 import { markThreadReadIfUnchanged } from './writes/thread-mark-read.ts';
@@ -25,10 +25,7 @@ export interface BatchOrigin {
   tileId: string | null;
 }
 
-/** What a mark-read changed in the app right away, so an undo (or parking the batch) can put it back (`planRead`'s change). */
-export type LocalChange = ReadChange;
-
-export const NO_LOCAL_CHANGE: LocalChange = NO_READ_CHANGE;
+export { NO_LOCAL_CHANGE, type LocalChange } from './actions/local-change.ts';
 
 /** One click's worth of mark-read. */
 export interface MarkReadRequest {

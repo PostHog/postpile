@@ -51,11 +51,11 @@ describe('rules agree on the sample boards', () => {
     }
   });
 
-  it('a done PR offers only Open, or Mark read while its own news is unseen', async () => {
+  it('a done PR offers only Open, or Mark read while its own news is unseen or its thread unread on GitHub', async () => {
     for (const view of await sampleTiles(new FakeEngine({ now: () => NOW }))) {
       for (const pr of view.prs.filter((row) => row.done)) {
         const pane = paneOf(view, pr);
-        if (pr.unseenLoudEvents > 0) {
+        if (pr.unseenLoudEvents > 0 || pr.unreadOnGitHub) {
           expect(pane, pr.key).toMatchObject({ approve: false, ask: false, removeTeams: [] });
           expect(pane.markLabel, pr.key).not.toBeNull();
         } else {

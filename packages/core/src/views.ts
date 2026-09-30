@@ -166,6 +166,8 @@ export interface PrSummary {
   /** Where the glance stands (`glanceStateOf`): ready, queued, writing, failed, agent_off, capped or none. */
   glanceState: GlanceState;
   unseenLoudEvents: number;
+  /** The PR's notification thread is unread on GitHub: its tile is unread, and the PR keeps a mark button even when done. */
+  unreadOnGitHub: boolean;
   /**
    * Nothing is asked of the viewer on this PR (`isPrDone`). A tile is done
    * when every tracked member is; the renderer dots the tracked members that

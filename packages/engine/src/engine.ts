@@ -358,7 +358,7 @@ export class Engine implements EngineService {
       () => !this.syncing && !this.consolidating && agentOff() === null,
       lineLog,
     );
-    this.pollRun = new PollRun(runDeps, github, decider, (topicIds) => this.requestCatchUps(topicIds));
+    this.pollRun = new PollRun(runDeps, github, decider, (topicIds) => this.requestCatchUps(topicIds), () => deps.writes.enabled());
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
     this.teamMembers = new TeamMembers(store, deps.reader, now);
     this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));
@@ -888,14 +888,6 @@ export class Engine implements EngineService {
 
   cleanUpInbox(age: CleanupAge): Promise<ActionResult> {
     return this.cleanup.markReadBefore(age);
-  }
-
-  async startFresh(): Promise<ActionResult> {
-    return this.cleanup.startFresh();
-  }
-
-  async clearStartFresh(): Promise<ActionResult> {
-    return this.cleanup.clearStartFresh();
   }
 
   async hideInboxCleanup(): Promise<ActionResult> {

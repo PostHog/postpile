@@ -2,7 +2,7 @@ import { splitAgentOffErrors, type AgentCallStats, type PrKey, type Viewer } fro
 import { Board } from '../board.ts';
 import { AgentBudget } from '../budget.ts';
 import { topicsToCatchUp } from '../catch-up/topic-catch-up.ts';
-import { reviveRetiredTopics } from '../consolidation/revive.ts';
+import { reviveRetiredTopics, reviveUnreadTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';
 import { errorText } from '../errors.ts';
 import { NO_FOCUS, type GitHubSync, type PollFocus } from '../github-sync.ts';
@@ -32,6 +32,8 @@ export class PollRun {
     private readonly github: GitHubSync,
     private readonly decider: PingDecider,
     private readonly onCatchUp: (topicIds: (string | null)[]) => void = () => {},
+    /** GitHub writes are on: a thread the next full sync clears by rule brings no finished topic back. */
+    private readonly writesOn: () => boolean = () => false,
   ) {}
 
   /** After topic assignment, so a PR new to the app catches up in its new topic. */
@@ -78,6 +80,10 @@ export class PollRun {
     const done = { kind: 'done' as const, notModified: inbox.notModified, githubPollIntervalSeconds: inbox.pollIntervalSeconds };
     // A thread read on github.com usually brings no PR to fetch, only read times.
     advanceSeenFromGitHub(store, inbox.readOnGitHub, now().toISOString());
+    // A finished topic whose thread turned unread comes back, fetched PR or not, unless the next full sync clears it by rule.
+    if (!inbox.notModified) {
+      reviveUnreadTopics(store, now().toISOString(), this.writesOn());
+    }
     if (inbox.notModified || !inbox.viewer || inbox.fetchedPrKeys.length === 0) {
       return { ...done, prsUpdated: 0, decisions: [], pings: [], errors: [] };
     }

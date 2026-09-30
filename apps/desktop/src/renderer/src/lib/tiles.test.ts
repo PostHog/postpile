@@ -26,6 +26,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
+    unreadOnGitHub: false,
     done: false,
     ownTeamRequests: [],
     pendingWrite: null,
@@ -46,6 +47,8 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     state: {
       kind: unreadKeys.length > 0 ? 'unread' : 'open',
       unreadBecause: unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention', actor: 'lyra', summary: 'x', at: at(index) })),
+      unreadOnGitHub: unreadKeys.length > 0,
+      loud: unreadKeys.length > 0,
     },
     prs,
     why: 'RV',

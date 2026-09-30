@@ -7,9 +7,14 @@ import { prTier } from '../pr-tier.ts';
 import type { PrEvent } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { isReReviewMove, prWhoseTurn, type YourMove } from '../whose-turn.ts';
-import { tileViewsOf } from './build-board.ts';
+import { tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { ensure, eventsOf, isNews, isTrackedHere, prOf, type Invariant } from './invariant.ts';
 import { expectedTurn, isUnseenMergeWithoutViewer } from './spec-rules.ts';
+
+/** Unseen loud news on a PR of the tile that is not found. */
+function tileHasNews(board: PropertyBoard, view: TileView): boolean {
+  return view.tile.members.some((member) => member.provenance.kind !== 'found' && eventsOf(board, member.prKey).some(isNews));
+}
 
 /** Most urgent first, like the sidebar sections: spelled out here, not read from `YOUR_MOVE_ORDER`. */
 const MOVE_ORDER: readonly YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'merge'];
@@ -19,6 +24,8 @@ function urgencyOf(views: TileView[]) {
   return topicUrgency(
     views.map((view) => ({
       state: view.state.kind,
+      unreadOnGitHub: view.state.unreadOnGitHub,
+      loud: view.state.loud,
       prStates: view.prs.map((row) => row.state),
       move: topicMove(view.turn),
       quiet: false,
@@ -26,19 +33,26 @@ function urgencyOf(views: TileView[]) {
   );
 }
 
-/** Unread count, your moves and "needs you" say what the tiles say. */
+/**
+ * Unread count, your moves and "needs you" say what the tiles say. The count
+ * is every unread tile and every tile with a thread unread on GitHub,
+ * snoozed ones too; only
+ * unread tiles with loud news light the topic up (loudness keeps its job).
+ */
 export const topicCountsMatchTiles: Invariant = {
   name: "a topic's unread count, your moves and needs-you match its tiles",
-  check(_board, views) {
+  check(board, views) {
     const urgency = urgencyOf(views);
+    const withUnreadThread = views.filter((view) => view.state.kind === 'unread' || view.tile.members.some((member) => board.threads.get(member.prKey)?.unread === true));
+    ensure(urgency.unreadTiles === withUnreadThread.length, `unread tiles ${urgency.unreadTiles}, unread tiles and ones with an unread thread ${withUnreadThread.length}`);
     const unread = views.filter((view) => view.state.kind === 'unread');
-    ensure(urgency.unreadTiles === unread.length, `unread tiles ${urgency.unreadTiles}, tiles unread ${unread.length}`);
+    const loudUnread = unread.filter((view) => tileHasNews(board, view));
     const live = views.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
     const moves = live.flatMap((view) => (view.turn.kind === 'you' ? [view.turn.move] : []));
     ensure(urgency.yourMoves.length === moves.length, `your moves ${urgency.yourMoves.length}, live tiles your move ${moves.length}`);
     const order = urgency.yourMoves.map((move) => MOVE_ORDER.indexOf(move.move));
     ensure(order.every((rank, index) => index === 0 || order[index - 1]! <= rank), 'your moves out of order');
-    const urgentUnread = unread.some((view) => view.prs.some((row) => row.state === 'OPEN'));
+    const urgentUnread = loudUnread.some((view) => view.prs.some((row) => row.state === 'OPEN'));
     const urgentMove = moves.some((move) => move !== 'merge');
     ensure(urgency.needsYou === (urgentUnread || urgentMove), `needs you ${urgency.needsYou}, open unread ${urgentUnread}, move ${urgentMove}`);
   },
@@ -90,11 +104,14 @@ export const queueCountsMatchRows: Invariant = {
 
 /**
  * A finished topic can retire: every PR merged or closed (which ends every
- * snooze), no loud news unseen and no unseen merge without review leaves
- * every tile done, and then nothing in the row needs you.
+ * snooze), no loud news unseen, no unseen merge without review and every
+ * thread read on GitHub leaves every tile done, and then nothing in the row
+ * needs you. A thread unread on GitHub keeps its tile, and so its topic,
+ * from being done (the engine's retire gate needs every tile done and every
+ * thread read).
  */
 export const finishedTopicRetires: Invariant = {
-  name: 'a finished topic with nothing unseen has every tile done and needs nothing',
+  name: 'a finished topic with nothing unseen and every thread read has every tile done and needs nothing',
   check(board, views) {
     const keys = [...new Set(views.flatMap((view) => view.tile.members.map((member) => member.prKey)))];
     const allOver = keys.length > 0 && keys.every((key) => prOf(board, key).state !== 'OPEN');
@@ -105,7 +122,8 @@ export const finishedTopicRetires: Invariant = {
             const events = eventsOf(board, member.prKey);
             const news = member.provenance.kind !== 'found' && events.some(isNews);
             const merge = isTrackedHere(member.provenance) && !board.notYours.has(member.prKey) && events.some(isUnseenMergeWithoutViewer);
-            return !news && !merge;
+            const unreadThread = board.threads.get(member.prKey)?.unread === true;
+            return !news && !merge && !unreadThread;
           }),
       );
       if (nothingUnseen) {
@@ -115,6 +133,10 @@ export const finishedTopicRetires: Invariant = {
     if (views.length > 0 && views.every((view) => view.state.kind === 'done')) {
       const urgency = urgencyOf(views);
       ensure(!urgency.needsYou && urgency.unreadTiles === 0 && urgency.yourMoves.length === 0, 'every tile done, but the topic still needs you');
+    }
+    const unreadThread = views.some((view) => view.tile.members.some((member) => board.threads.get(member.prKey)?.unread === true));
+    if (unreadThread) {
+      ensure(views.some((view) => view.state.kind === 'unread' || view.state.kind === 'snoozed'), 'a thread is unread on GitHub, but no tile shows it');
     }
   },
 };

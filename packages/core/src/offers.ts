@@ -106,15 +106,21 @@ export type OfferPr = Pick<
   | 'turn'
   | 'afterRead'
   | 'unseenLoudEvents'
+  | 'unreadOnGitHub'
   | 'pendingWrite'
   | 'ownTeamRequests'
   | 'facts'
 >;
 
-/** Every tracked PR of the tile is done and its news seen: nothing is left to mark. */
+/** A done PR with its news seen and its thread read on GitHub: nothing is left to mark. */
+function nothingToMark(pr: Pick<OfferPr, 'done' | 'unseenLoudEvents' | 'unreadOnGitHub'>): boolean {
+  return pr.done && pr.unseenLoudEvents === 0 && !pr.unreadOnGitHub;
+}
+
+/** Every tracked PR of the tile is done, its news seen and its thread read: nothing is left to mark. */
 function everyTrackedPrDoneAndSeen(view: Pick<TileView, 'prs'>): boolean {
   const tracked = view.prs.filter((pr) => isTracked(pr.provenance));
-  return tracked.length > 0 && tracked.every((pr) => pr.done && pr.unseenLoudEvents === 0);
+  return tracked.length > 0 && tracked.every(nothingToMark);
 }
 
 export function tileFooterAction(view: Pick<TileView, 'state' | 'turn' | 'afterRead' | 'prs'>): TileFooterAction {
@@ -144,23 +150,30 @@ function markLabelOf(action: TileFooterAction | PrMarkAction): MarkLabel | null 
 /**
  * The pane's mark action for one PR of a stack or set, by the tile's rule
  * applied to that PR:
- * - mark_read: the PR has unseen news, or a mark-read of it leaves something asked.
+ * - mark_read: the PR has unseen news, or a mark-read of it leaves something
+ *   asked, or it is done or your move while its thread is unread on GitHub.
  * - mark_done: a mark-read of it makes that PR done.
- * - none: nothing to mark. The tile is done, the PR is done already or a
- *   pulled-in layer without news, or it is read and still your move (then
- *   Open on GitHub leads; Snooze stays in the tile footer on a set).
+ * - none: nothing to mark. The tile is done, the PR is done already (thread
+ *   read) or a pulled-in layer without news, or it is read and still your
+ *   move (then Open on GitHub leads; Snooze stays in the tile footer on a set).
  */
 export type PrMarkAction = 'mark_read' | 'mark_done' | 'none';
 
-export function prMarkAction(state: Pick<TileState, 'kind'>, pr: Pick<OfferPr, 'provenance' | 'done' | 'turn' | 'afterRead' | 'unseenLoudEvents'>): PrMarkAction {
+export function prMarkAction(
+  state: Pick<TileState, 'kind'>,
+  pr: Pick<OfferPr, 'provenance' | 'done' | 'turn' | 'afterRead' | 'unseenLoudEvents' | 'unreadOnGitHub'>,
+): PrMarkAction {
   if (state.kind === 'done') {
     return 'none';
   }
   if (pr.unseenLoudEvents > 0) {
     return 'mark_read';
   }
-  if (pr.provenance.kind === 'pulled_in' || pr.done || pr.turn.kind === 'you') {
+  if (pr.provenance.kind === 'pulled_in') {
     return 'none';
+  }
+  if (pr.done || pr.turn.kind === 'you') {
+    return pr.unreadOnGitHub ? 'mark_read' : 'none';
   }
   return pr.afterRead.done ? 'mark_done' : 'mark_read';
 }
@@ -199,16 +212,16 @@ function githubLink(view: OfferView, leadKey: PrKey | null): GitHubLinkOffer | n
 /**
  * The detail pane's buttons for one PR. A done PR offers only Open, like a
  * done tile (2026-09-29: a handled PR by someone else with no ask still got
- * a primary Approve). A done PR whose news keeps its tile unread keeps Mark
- * read, but no Approve, Ask or Remove team. On a snoozed single-PR tile a
+ * a primary Approve). A done PR whose news or unread thread keeps its tile
+ * unread keeps Mark read, but no Approve, Ask or Remove team. On a snoozed single-PR tile a
  * done PR keeps Snooze, so the snooze can be taken back.
  */
 export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
   const finished = view.state.kind === 'done' || pr.done;
   const approve = !finished && (pr.primaryAction === 'approve' || pr.primaryAction === 'approved');
-  // A done PR has nothing to mark once its news is seen, also on a snoozed tile.
-  const doneAndSeen = pr.done && pr.unseenLoudEvents === 0;
+  // A done PR has nothing to mark once its news is seen and its thread read, also on a snoozed tile.
+  const doneAndSeen = nothingToMark(pr);
   let mark: TileFooterAction | PrMarkAction = 'none';
   if (!doneAndSeen) {
     mark = scope === 'tile' ? tileFooterAction(view) : prMarkAction(view.state, pr);
