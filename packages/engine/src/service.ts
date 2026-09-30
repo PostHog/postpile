@@ -144,6 +144,11 @@ export interface EngineService {
 
   /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
   listTopics(scope?: ListScope): Promise<TopicListItem[]>;
+  /**
+   * The PRs held by an unread tile, in every repo. The desktop app clears a
+   * ping from Notification Center once its PR is not in this list anymore.
+   */
+  unreadPrKeys(): Promise<PrKey[]>;
   /** Topics retired in the last 30 days, newest first, for the sidebar's Finished drawer. getTopic opens any of them. */
   listFinishedTopics(): Promise<FinishedTopic[]>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */

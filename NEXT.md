@@ -1027,6 +1027,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Dock badge, cleared pings, bounce** (2026-09-30): the Dock badge is the
+  number of tiles that are your move (live, not done, not snoozed), the same
+  count the sidebar chips add up to. A ping leaves Notification Center once
+  its tile is read, done or snoozed. The Dock bounces once for a personal ask
+  (mention, question, reply, review requested from you, answer to your
+  changes request) while the window is not focused. See DESIGN.md "Live poll
+  and Mac pings".
 - **From the property tests** (2026-09-30): a re-request after your changes
   request says "Re-review, ada asked" (move `re_review`), with or without a
   push; the PR stays under Changes you requested, and the order inside that

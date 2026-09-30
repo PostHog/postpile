@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { PING_TILE_WINDOW_MS, PingThrottle } from './ping-throttle.ts';
 
 function ping(tile: string, title = `about ${tile}`): Ping {
-  return { title, body: 'body', target: { topicId: 't', tileId: tile, prKey: `acme/app#${tile}` } };
+  return { title, body: 'body', target: { topicId: 't', tileId: tile, prKey: `acme/app#${tile}` }, personal: false };
 }
 
 describe('PingThrottle', () => {
@@ -26,8 +26,17 @@ describe('PingThrottle', () => {
         body: 'about 1\nabout 2\nabout 3\nand 2 more',
         target: { topicId: 't', tileId: '1', prKey: 'acme/app#1' },
         count: 5,
+        personal: false,
       },
     ]);
+  });
+
+  it('marks a summary personal when any of its pings is', () => {
+    const throttle = new PingThrottle();
+    const personal = { ...ping('4'), personal: true };
+    const shown = throttle.plan([ping('1'), ping('2'), ping('3'), personal], 0);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]).toMatchObject({ count: 4, personal: true });
   });
 
   it('pings a tile at most once per two minutes, also within one cycle', () => {
@@ -46,7 +55,7 @@ describe('PingThrottle', () => {
 
   it('falls back to the PR for a ping without a tile', () => {
     const throttle = new PingThrottle();
-    const noTile: Ping = { title: 'x', body: '', target: { topicId: null, tileId: null, prKey: 'acme/app#9' } };
+    const noTile: Ping = { title: 'x', body: '', target: { topicId: null, tileId: null, prKey: 'acme/app#9' }, personal: false };
     expect(throttle.plan([noTile, noTile], 0)).toHaveLength(1);
   });
 });

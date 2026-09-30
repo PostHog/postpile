@@ -16,6 +16,8 @@ export interface ServerOptions {
   updates: UpdateSource;
   /** Where the renderer's POST /api/telemetry events go. Defaults to a no-op. */
   telemetry?: Telemetry;
+  /** Called after every non-read API request, so the host can follow local actions (the Dock badge). */
+  onWrite?: () => void;
 }
 
 export interface RunningServer {
@@ -26,7 +28,7 @@ export interface RunningServer {
 
 /** Binds to 127.0.0.1 only. The API can approve PRs, so it never listens on the network. */
 export function startServer(options: ServerOptions): Promise<RunningServer> {
-  const app = createApp(options.engine, options.token, options.config, options.updates, options.telemetry);
+  const app = createApp(options.engine, options.token, options.config, options.updates, options.telemetry, options.onWrite);
   options.updates.start();
   return new Promise((resolve) => {
     const server = serve({ fetch: app.fetch, port: options.port, hostname: '127.0.0.1' }, (info) => {

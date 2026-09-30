@@ -274,6 +274,12 @@ export class ReadModels {
     return [...prs.values()];
   }
 
+  unreadPrKeys(): PrKey[] {
+    const board = this.board();
+    const unread = board.allTiles().filter((tile) => board.stateOf(tile).kind === 'unread');
+    return [...new Set(unread.flatMap(memberKeys))];
+  }
+
   listTopics(scope?: ListScope): TopicListItem[] {
     const board = this.board();
     const topics = board.topics();

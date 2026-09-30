@@ -1,5 +1,6 @@
-import { Notification } from 'electron';
-import type { MacNotification, PingTarget } from '@postpile/core';
+import { app, Notification } from 'electron';
+import type { MacNotification, PingTarget, PrKey } from '@postpile/core';
+import { PingShelf } from './ping-shelf.ts';
 
 /**
  * Notifications keep their click handler only while referenced; a GC'd
@@ -12,6 +13,8 @@ export interface MacNotifierOptions {
   /** POSTPILE_MAC_NOTIFICATIONS=0 turns them off; the poll still updates tiles. */
   enabled: boolean;
   onClick: (target: PingTarget | null) => void;
+  /** The Dock only bounces for a personal ask while the window is not focused. */
+  isWindowFocused: () => boolean;
 }
 
 /**
@@ -22,6 +25,7 @@ export interface MacNotifierOptions {
  */
 export class MacNotifier {
   private readonly kept: Notification[] = [];
+  private readonly shelf = new PingShelf();
   private warnedUnsupported = false;
 
   constructor(private readonly options: MacNotifierOptions) {}
@@ -37,6 +41,18 @@ export class MacNotifier {
     const index = this.kept.indexOf(notification);
     if (index >= 0) {
       this.kept.splice(index, 1);
+    }
+  }
+
+  /** Takes the pings of PRs that are not unread anymore out of Notification Center. */
+  closeRead(unreadPrKeys: PrKey[]): void {
+    this.shelf.closeRead(unreadPrKeys, Date.now());
+  }
+
+  /** One bounce per batch, for a personal ask, while PostPile is in the background. */
+  private bounceForPersonal(items: MacNotification[]): void {
+    if (items.some((item) => item.personal) && !this.options.isWindowFocused()) {
+      app.dock?.bounce('informational');
     }
   }
 
@@ -64,8 +80,12 @@ export class MacNotifier {
         this.forget(notification);
         console.warn(`mac notifications: could not show "${item.title}": ${error}`);
       });
+      if (item.target) {
+        this.shelf.add(item.target.prKey, notification, Date.now());
+      }
       notification.show();
     }
+    this.bounceForPersonal(items);
     return 'shown';
   }
 
@@ -74,11 +94,11 @@ export class MacNotifier {
    * the permission now and not in the middle of a real ping.
    */
   showWelcome(): 'shown' | 'off' | 'unsupported' {
-    return this.show([{ title: 'PostPile', body: 'PostPile will ping you here when something needs you.', target: null, count: 1 }]);
+    return this.show([{ title: 'PostPile', body: 'PostPile will ping you here when something needs you.', target: null, count: 1, personal: false }]);
   }
 
   /** "Send test notification" from the status footer. */
   showTest(): 'shown' | 'off' | 'unsupported' {
-    return this.show([{ title: 'PostPile test notification', body: 'This is how a ping looks. Clicking one opens its tile.', target: null, count: 1 }]);
+    return this.show([{ title: 'PostPile test notification', body: 'This is how a ping looks. Clicking one opens its tile.', target: null, count: 1, personal: false }]);
   }
 }
