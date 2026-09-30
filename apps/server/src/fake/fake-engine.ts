@@ -69,6 +69,7 @@ import type {
   TileRepoLabels,
   TileState,
   TileView,
+  PrSummaryInput,
   ToolsView,
   Topic,
   TopicDetail,
@@ -86,8 +87,10 @@ import {
   standingApprovals,
   UNDO_WINDOW_MS,
   viewerApproval,
+  agentPrFacts,
   buildPrSummary,
   buildTileView,
+  topicAgentOffers,
   planRead,
   prReadScope,
   deriveTileState,
@@ -521,13 +524,13 @@ export class FakeEngine implements EngineService {
     const events = this.eventsByKey(tile.members.map((member) => member.prKey));
     const userStates = this.userStatesByKey();
     const threads = this.prThreads();
-    const prs = tile.members.flatMap((member, index) => {
+    const rows = tile.members.flatMap((member, index): PrSummaryInput[] => {
       const pr = prsByKey.get(member.prKey);
       if (!pr) {
         return [];
       }
       return [
-        buildPrSummary({
+        {
           pr,
           member,
           viewer,
@@ -545,13 +548,14 @@ export class FakeEngine implements EngineService {
           lastReadAt: threads.get(pr.key)?.lastReadAt ?? null,
           now: this.timestamp(),
           pendingWrite: pending.get(pr.key) ?? null,
-        }),
+        },
       ];
     });
     return buildTileView({
       tile,
       state,
-      prs,
+      prs: rows.map(buildPrSummary),
+      agentPrs: rows.map(agentPrFacts),
       prsByKey,
       events,
       userStates,
@@ -875,14 +879,16 @@ export class FakeEngine implements EngineService {
     if (!topic) {
       return null;
     }
+    const tiles = this.topicTileViews(topicId);
     return {
       topic,
       placement: this.memory.placement(topic),
-      tiles: this.topicTileViews(topicId),
+      tiles,
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.topicChanges.pendingForTopic(topicId),
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback),
+      agent: topicAgentOffers(tiles),
     };
   }
 

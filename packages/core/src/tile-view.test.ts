@@ -52,7 +52,7 @@ describe('buildPrSummary: done, turn and afterRead per PR', () => {
   it('reads a NOT_YOURS glance like the tile does', () => {
     const routed = makePr({ author: 'ada', reviewerTeams: ['acme/team-platform'] });
     expect(buildPrSummary(summaryInput(routed, [])).turn.kind).toBe('you');
-    const notYours = buildPrSummary(summaryInput(routed, [], { glance: { verdict: 'NOT_YOURS', forYou: 'not yours' } }));
+    const notYours = buildPrSummary(summaryInput(routed, [], { glance: { verdict: 'NOT_YOURS', forYou: 'not yours', risk: 'low' } }));
     expect(notYours.turn.kind).toBe('none');
     expect(notYours.afterRead.done).toBe(true);
   });

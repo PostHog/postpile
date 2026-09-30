@@ -28,6 +28,7 @@ import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './me
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
 import type { TileOffers } from './offers.ts';
+import type { TileAgentOffers, TopicAgentOffers } from './agent-actions.ts';
 import type { TileGroup } from './tile-groups.ts';
 import type { Touch } from './last-touch.ts';
 import type { ReviewRequest } from './review-request.ts';
@@ -254,6 +255,8 @@ export interface TileView {
   pendingWrite: TilePendingWrite | null;
   /** What the tile footer and the detail pane offer (`tileOffers`); the renderer only displays it. */
   offers: TileOffers;
+  /** The ✨ Approve and the ✨ pill on Mark read, when the agent's verdicts back them (`tileAgentOffers`). */
+  agent: TileAgentOffers;
   /** The PRs whose rows get the unread dot (`unreadPrKeys`: what makes the tile unread), in tile order. */
   unreadPrKeys: PrKey[];
   /** Its group in the topic (`tileGroup`): Unread, Open or Dealt with. The renderer groups by it and never works it out itself. */
@@ -292,6 +295,8 @@ export interface TopicDetail {
   decidedProposals: TopicProposal[];
   /** Null until the first dossier update for the topic (and always for Unsorted). */
   dossier: DossierView | null;
+  /** The header's ✨ Approve and ✨ "Mark N read" (`topicAgentOffers`), from the tiles above. */
+  agent: TopicAgentOffers;
 }
 
 export interface EventView {
@@ -430,6 +435,32 @@ export interface ActionResult {
    * mark-read GitHub did not take (or a locked one turning pending) shows.
    */
   settleToken?: string;
+}
+
+/** Where an agent-assisted action was clicked: a tile's ✨ Approve or ✨ Mark read, or the topic header's. */
+export type AgentActionFrom = 'agent_tile' | 'agent_topic';
+
+/** One PR of an agent Approve: the head the confirm list showed, so a newer push refuses the approve. */
+export interface ApprovePrRequest {
+  prKey: PrKey;
+  headOid: string;
+}
+
+export interface PrApproveResult {
+  prKey: PrKey;
+  ok: boolean;
+  /** "Approved", or why not (new commits since you looked, writes off, GitHub's error). */
+  message: string;
+}
+
+/**
+ * An agent Approve over several PRs, each through the single approve. `ok`
+ * only when every PR was approved. Never an undo token: approvals are final.
+ * `settleToken` is the last approve's follow-up mark-read, so the renderer
+ * refetches once it settled.
+ */
+export interface BatchApproveResult extends ActionResult {
+  results: PrApproveResult[];
 }
 
 /** Opening a PR in PostPile: whether its GitHub thread was marked read or the PR handled ("opened in PostPile"). Nothing to show either way. */
