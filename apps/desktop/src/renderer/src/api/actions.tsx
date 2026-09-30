@@ -157,7 +157,6 @@ export interface Actions {
    * the lock closed it becomes one pending write. Returns whether it went through.
    */
   cleanUpInbox(age: CleanupAge): Promise<boolean>;
-  /** "Leave GitHub alone, start fresh here". Local. */
   /** "Not now": hides the cleanup for a week. Local. */
   hideInboxCleanup(): Promise<boolean>;
   /**

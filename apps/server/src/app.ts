@@ -274,7 +274,7 @@ export function createApp(
     return c.json(await engine.setGitHubWrites(body.enabled));
   });
   // Inbox cleanup: old unread threads, "mark everything older than N days read" (a GitHub
-  // write through the lock, pending while locked), "start fresh" (local) and "Not now".
+  // write through the lock, pending while locked) and "Not now".
   app.get('/api/inbox-cleanup', async (c) => c.json(await engine.inboxCleanup()));
   app.post('/api/inbox-cleanup/mark-read', async (c) => {
     const body = z.object({ olderThanDays: z.union([z.literal(14), z.literal(30)]) }).parse(await c.req.json());
