@@ -4,7 +4,7 @@ import { compareTopicUrgency, topicMove, topicUrgency, type RankedTopic, type To
 /** An unread tile is unread on GitHub with loud news and one unread PR unless the overrides say otherwise. */
 function tile(overrides: Partial<UrgencyTile>): UrgencyTile {
   const unread = overrides.state === 'unread';
-  return { state: 'open', unreadOnGitHub: unread, unreadPrs: unread ? 1 : 0, loud: unread, prStates: ['OPEN'], move: null, quiet: false, ...overrides };
+  return { state: 'open', unreadOnGitHub: unread, unreadPrKeys: unread ? ['acme/app#1'] : [], loud: unread, prStates: ['OPEN'], move: null, quiet: false, ...overrides };
 }
 
 const review: TopicMove = { move: 'review', text: 'Review, rowan asked' };
@@ -12,8 +12,8 @@ const merge: TopicMove = { move: 'merge', text: 'Merge, it is approved' };
 
 describe('topicUrgency', () => {
   it('needs you while an unread tile is still open', () => {
-    const urgency = topicUrgency([tile({ state: 'unread' }), tile({ state: 'unread', prStates: ['MERGED'] })]);
-    expect(urgency).toEqual({ unreadTiles: 2, unreadPrs: 2, urgentUnreadTiles: 1, yourMoves: [], needsYou: true });
+    const urgency = topicUrgency([tile({ state: 'unread' }), tile({ state: 'unread', prStates: ['MERGED'], unreadPrKeys: ['acme/app#2'] })]);
+    expect(urgency).toMatchObject({ unreadTiles: 2, unreadPrs: 2, urgentUnreadTiles: 1, yourMoves: [], needsYou: true });
   });
 
   it('stays calm when every unread tile is merged or closed', () => {
@@ -24,8 +24,14 @@ describe('topicUrgency', () => {
   });
 
   it('counts a tile unread with only quiet news, and a snoozed one with an unread thread, but neither lights the topic up', () => {
-    const urgency = topicUrgency([tile({ state: 'unread', loud: false }), tile({ state: 'snoozed', unreadOnGitHub: true, unreadPrs: 1, loud: true })]);
-    expect(urgency).toEqual({ unreadTiles: 2, unreadPrs: 2, urgentUnreadTiles: 0, yourMoves: [], needsYou: false });
+    const urgency = topicUrgency([tile({ state: 'unread', loud: false }), tile({ state: 'snoozed', unreadOnGitHub: true, unreadPrKeys: ['acme/app#2'], loud: true })]);
+    expect(urgency).toMatchObject({ unreadTiles: 2, unreadPrs: 2, urgentUnreadTiles: 0, yourMoves: [], needsYou: false });
+  });
+
+  it('counts a PR once when two tiles of the topic share it', () => {
+    const urgency = topicUrgency([tile({ state: 'unread', unreadPrKeys: ['acme/app#1', 'acme/app#2'] }), tile({ state: 'unread', unreadPrKeys: ['acme/app#2'] })]);
+    expect(urgency.unreadPrs).toBe(2);
+    expect(urgency.unreadPrKeys).toEqual(['acme/app#1', 'acme/app#2']);
   });
 
   it('counts a stack as open while one of its layers is', () => {
@@ -41,6 +47,7 @@ describe('topicUrgency', () => {
     expect(topicUrgency([tile({ move: merge })])).toEqual({
       unreadTiles: 0,
       unreadPrs: 0,
+      unreadPrKeys: [],
       urgentUnreadTiles: 0,
       yourMoves: [merge],
       needsYou: false,
@@ -92,7 +99,7 @@ describe('compareTopicUrgency', () => {
 describe('quiet repos', () => {
   it('never makes a topic urgent from a quiet tile', () => {
     const urgency = topicUrgency([tile({ state: 'unread', quiet: true }), tile({ move: review, quiet: true })]);
-    expect(urgency).toEqual({ unreadTiles: 1, unreadPrs: 1, urgentUnreadTiles: 0, yourMoves: [review], needsYou: false });
+    expect(urgency).toMatchObject({ unreadTiles: 1, unreadPrs: 1, urgentUnreadTiles: 0, yourMoves: [review], needsYou: false });
   });
 
   it('lets a mixed tile count only its PRs outside quiet repos', () => {

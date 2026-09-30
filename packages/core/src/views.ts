@@ -85,6 +85,8 @@ export interface TopicListItem {
   unreadTiles: number;
   /** Unread PRs in the topic (`TileView.unreadPrKeys` summed): the bubble's number, so it adds up to GitHub's unread count. */
   unreadPrs: number;
+  /** Their keys, so totals across topics can count a PR once. */
+  unreadPrKeys: PrKey[];
   /** Unread tiles with at least one open PR. Only these make the unread count coral. */
   urgentUnreadTiles: number;
   openTiles: number;

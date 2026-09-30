@@ -3,7 +3,7 @@
 // all merged or closed only has news to read, nothing to act on, and a tile
 // unread with only quiet news (DESIGN.md "GitHub unread is PostPile unread")
 // counts but never lights the topic up: urgency follows loud news.
-import type { PrState, TileStateKind } from './types.ts';
+import type { PrKey, PrState, TileStateKind } from './types.ts';
 import { YOUR_MOVE_ORDER, type WhoseTurn, type YourMove } from './whose-turn.ts';
 
 /** The viewer's move on one tile, for the sidebar row's chip: its kind and the tile footer's words. */
@@ -26,7 +26,7 @@ export interface UrgencyTile {
   /** Unseen loud news on the tile (`TileState.loud`). */
   loud: boolean;
   /** PRs of the tile that are unread (`TileView.unreadPrKeys`). */
-  unreadPrs: number;
+  unreadPrKeys: PrKey[];
   /** States of the tile's PRs outside quiet repos (all of them when none is quiet). */
   prStates: PrState[];
   /** The viewer's move when whose turn says it is theirs, else null. `merge` only makes a topic urgent with more to do. */
@@ -38,8 +38,9 @@ export interface UrgencyTile {
 export interface TopicUrgency {
   /** Unread tiles, open or not, and snoozed ones with a thread unread on GitHub: what the Unread filter shows. */
   unreadTiles: number;
-  /** Unread PRs across the tiles: the sidebar bubble's number. */
+  /** Distinct unread PRs across the tiles (a PR in two set tiles counts once): the sidebar bubble's number. */
   unreadPrs: number;
+  unreadPrKeys: PrKey[];
   /** Unread tiles with loud news and at least one open PR. These light up the topic. */
   urgentUnreadTiles: number;
   /**
@@ -66,12 +67,12 @@ function byMoveUrgency(a: TopicMove, b: TopicMove): number {
 
 export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
   const unreadTiles = tiles.filter((tile) => tile.state === 'unread' || tile.unreadOnGitHub).length;
-  const unreadPrs = tiles.reduce((sum, tile) => sum + tile.unreadPrs, 0);
+  const unreadPrKeys = [...new Set(tiles.flatMap((tile) => tile.unreadPrKeys))];
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
   const live = tiles.filter((tile) => tile.state !== 'done' && tile.state !== 'snoozed');
   const yourMoves = live.flatMap((tile) => (tile.move === null ? [] : [tile.move])).toSorted(byMoveUrgency);
   const urgentMoves = live.filter((tile) => tile.move !== null && tile.move.move !== 'merge' && !tile.quiet).length;
-  return { unreadTiles, unreadPrs, urgentUnreadTiles, yourMoves, needsYou: urgentUnreadTiles > 0 || urgentMoves > 0 };
+  return { unreadTiles, unreadPrs: unreadPrKeys.length, unreadPrKeys, urgentUnreadTiles, yourMoves, needsYou: urgentUnreadTiles > 0 || urgentMoves > 0 };
 }
 
 /** The fields `compareTopicUrgency` reads; `TopicListItem` has them all. */

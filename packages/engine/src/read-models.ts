@@ -304,10 +304,10 @@ export class ReadModels {
             state: states[index] ?? 'open',
             unreadOnGitHub: state.unreadOnGitHub,
             loud: state.loud,
-            unreadPrs: unreadPrKeysOf(
+            unreadPrKeys: unreadPrKeysOf(
               state,
               tile.members.map((member) => member.prKey).filter((key) => board.threads.get(key)?.unread === true),
-            ).length,
+            ),
             prStates: loudMembers.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
             move: topicMove(turn),
             quiet: isQuietTile(memberKeys(tile), settings),
@@ -325,6 +325,7 @@ export class ReadModels {
         group: urgency.needsYou ? 'needs_you' : 'quiet',
         unreadTiles: urgency.unreadTiles,
         unreadPrs: urgency.unreadPrs,
+        unreadPrKeys: urgency.unreadPrKeys,
         urgentUnreadTiles: urgency.urgentUnreadTiles,
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,

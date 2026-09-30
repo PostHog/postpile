@@ -64,7 +64,8 @@ function unreadTile(prs: PrSummary[]): TileView {
 describe('markedReadTile', () => {
   it('takes state and turn from afterRead and marks every row, a pulled-in layer only seen', () => {
     const layer = summary(2, { provenance: { kind: 'pulled_in', reason: 'stack' }, afterRead: { done: false, turn: NONE } });
-    const marked = markedReadTile(unreadTile([summary(1), layer]));
+    const marked = markedReadTile({ ...unreadTile([summary(1), layer]), unreadPrKeys: ['acme/app#1', 'acme/app#2'] });
+    expect(marked.unreadPrKeys).toEqual([]);
 
     expect(marked.state).toEqual({ kind: 'done', unreadBecause: [], unreadOnGitHub: false, loud: false });
     expect(marked.turn).toEqual(NONE);
@@ -83,9 +84,10 @@ describe('markedReadTile', () => {
 
 describe('markedReadPr', () => {
   it('changes only that row and leaves the tile state to the server', () => {
-    const view = unreadTile([summary(1), summary(3)]);
+    const view = { ...unreadTile([summary(1), summary(3)]), unreadPrKeys: ['acme/app#1', 'acme/app#3'] };
     const marked = markedReadPr(view, 'acme/app#3');
 
+    expect(marked.unreadPrKeys).toEqual(['acme/app#1']);
     expect(marked.state).toBe(view.state);
     expect(marked.prs[0]).toBe(view.prs[0]);
     expect(marked.prs[1]).toMatchObject({ unseenLoudEvents: 0, done: true, turn: NONE });

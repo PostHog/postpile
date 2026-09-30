@@ -26,7 +26,7 @@ function urgencyOf(views: TileView[]) {
       state: view.state.kind,
       unreadOnGitHub: view.state.unreadOnGitHub,
       loud: view.state.loud,
-      unreadPrs: view.unreadPrKeys.length,
+      unreadPrKeys: view.unreadPrKeys,
       prStates: view.prs.map((row) => row.state),
       move: topicMove(view.turn),
       quiet: false,
@@ -46,7 +46,7 @@ export const topicCountsMatchTiles: Invariant = {
     const urgency = urgencyOf(views);
     const withUnreadThread = views.filter((view) => view.state.kind === 'unread' || view.tile.members.some((member) => board.threads.get(member.prKey)?.unread === true));
     ensure(urgency.unreadTiles === withUnreadThread.length, `unread tiles ${urgency.unreadTiles}, unread tiles and ones with an unread thread ${withUnreadThread.length}`);
-    const unreadRows = views.reduce((sum, view) => sum + expectedUnreadRows(board, view).length, 0);
+    const unreadRows = new Set(views.flatMap((view) => expectedUnreadRows(board, view))).size;
     ensure(urgency.unreadPrs === unreadRows, `unread PRs ${urgency.unreadPrs}, unread threads and pulled-in or Look closer extras ${unreadRows}`);
     const unread = views.filter((view) => view.state.kind === 'unread');
     const loudUnread = unread.filter((view) => tileHasNews(board, view));
