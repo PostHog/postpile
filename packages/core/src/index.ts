@@ -68,6 +68,7 @@ export * from './pings.ts';
 export * from './quiet-reads.ts';
 export * from './work-context.ts';
 export * from './tile-view.ts';
+export * from './tile-groups.ts';
 export * from './instructions-sections.ts';
 export * from './setup.ts';
 export * from './setup-draft.ts';

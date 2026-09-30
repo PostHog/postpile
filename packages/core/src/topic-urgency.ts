@@ -3,6 +3,7 @@
 // all merged or closed only has news to read, nothing to act on, and a tile
 // unread with only quiet news (DESIGN.md "GitHub unread is PostPile unread")
 // counts but never lights the topic up: urgency follows loud news.
+import { tileGroup } from './tile-groups.ts';
 import type { PrKey, PrState, TileStateKind } from './types.ts';
 import { YOUR_MOVE_ORDER, type WhoseTurn, type YourMove } from './whose-turn.ts';
 
@@ -36,7 +37,7 @@ export interface UrgencyTile {
 }
 
 export interface TopicUrgency {
-  /** Unread tiles, open or not, and snoozed ones with a thread unread on GitHub: what the Unread filter shows. */
+  /** Tiles in the Unread group (`tileGroup`): unread ones and snoozed ones with a thread unread on GitHub. */
   unreadTiles: number;
   /** Distinct unread PRs across the tiles (a PR in two set tiles counts once): the sidebar bubble's number. */
   unreadPrs: number;
@@ -66,7 +67,7 @@ function byMoveUrgency(a: TopicMove, b: TopicMove): number {
 }
 
 export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
-  const unreadTiles = tiles.filter((tile) => tile.state === 'unread' || tile.unreadOnGitHub).length;
+  const unreadTiles = tiles.filter((tile) => tileGroup({ kind: tile.state, unreadOnGitHub: tile.unreadOnGitHub }) === 'unread').length;
   const unreadPrKeys = [...new Set(tiles.flatMap((tile) => tile.unreadPrKeys))];
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
   const live = tiles.filter((tile) => tile.state !== 'done' && tile.state !== 'snoozed');

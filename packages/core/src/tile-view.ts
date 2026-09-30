@@ -12,6 +12,7 @@ import { prStatus, openThreadCount } from './pr-status.ts';
 import { prTier } from './pr-tier.ts';
 import { prPrimaryAction } from './primary-action.ts';
 import { isApprovedByViewer, ownTeamRequests, reviewRequest } from './review-request.ts';
+import { tileGroup } from './tile-groups.ts';
 import { tilePeople } from './tile-people.ts';
 import { isTracked } from './provenance.ts';
 import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
@@ -133,6 +134,19 @@ export function tileUnreadPrKeys(state: TileState, prs: PrSummary[]): PrKey[] {
   return prs.filter((pr) => keys.has(pr.key)).map((pr) => pr.key);
 }
 
+/**
+ * The strip's coral NEW pill: only on an unread tile, and never on a
+ * headline (the last unread reason) made by automation unless it is loud
+ * (DESIGN.md "Tile faces" › Headline event).
+ */
+export function tileNewBadge(state: Pick<TileState, 'kind' | 'unreadBecause'>): boolean {
+  const headline = state.unreadBecause[state.unreadBecause.length - 1];
+  if (state.kind !== 'unread' || !headline) {
+    return false;
+  }
+  return !headline.automation || headline.loud;
+}
+
 export interface TileViewInput {
   tile: Tile;
   state: TileState;
@@ -179,6 +193,8 @@ export function buildTileView(input: TileViewInput): TileView {
     pendingWrite: input.pendingWrite,
     offers: tileOffers({ tile, state: input.state, turn, afterRead, prs, pendingWrite: input.pendingWrite }),
     unreadPrKeys: tileUnreadPrKeys(input.state, prs),
+    group: tileGroup(input.state),
+    newBadge: tileNewBadge(input.state),
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
   };

@@ -28,6 +28,7 @@ import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './me
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
 import type { TileOffers } from './offers.ts';
+import type { TileGroup } from './tile-groups.ts';
 import type { Touch } from './last-touch.ts';
 import type { ReviewRequest } from './review-request.ts';
 import type { PrTier } from './pr-tier.ts';
@@ -255,6 +256,10 @@ export interface TileView {
   offers: TileOffers;
   /** The PRs whose rows get the unread dot (`unreadPrKeys`: what makes the tile unread), in tile order. */
   unreadPrKeys: PrKey[];
+  /** Its group in the topic (`tileGroup`): Unread, Open or Dealt with. The renderer groups by it and never works it out itself. */
+  group: TileGroup;
+  /** The strip's coral NEW pill (`tileNewBadge`): an unread tile whose headline is not automation left quiet. */
+  newBadge: boolean;
   /** Every PR of the tile is in a quiet repo; the tile shows a small "quiet repo" note. */
   quietRepo: boolean;
   /**
