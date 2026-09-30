@@ -12,10 +12,12 @@ import {
   changesAnswer,
   isAutomationLogin,
   isMachineComment,
+  isOwner,
   lastSpoke,
   mentionsViewer,
   mentionsViewerTeam,
   saysDeploy,
+  viewerOwns,
   viewerWasAsked,
 } from './spec-facts.ts';
 
@@ -45,7 +47,7 @@ export const SPEC_PUSH_KINDS: readonly EventKind[] = ['commits_pushed', 'commits
 
 export const SPEC_REVIEW_KINDS: readonly EventKind[] = ['review_approved', 'review_changes_requested', 'review_commented'];
 
-/** Author events that can answer a changes request (pushes by any human but the reviewer). */
+/** Owner events that can answer a changes request (pushes by any human but the reviewer). */
 const ANSWER_KINDS: readonly EventKind[] = [...SPEC_PUSH_KINDS, 'comment', 'review_commented', 'reply_to_user', 'question_to_user', 'mention'];
 
 /** Machine kinds: quiet whoever made them. */
@@ -105,9 +107,9 @@ function commitsAfterApproval(pr: Pr, viewer: Viewer, userState: UserPrState | n
   return new Set(after.map((commit) => commit.oid));
 }
 
-/** Merged while the viewer was asked and never sent a review, on someone else's PR. */
+/** Merged while the viewer was asked and never sent a review, on a PR someone else owns. */
 function mergedWithoutViewer(pr: Pr, viewer: Viewer): boolean {
-  return !sameLogin(pr.author, viewer.login) && viewerWasAsked(pr, viewer) && lastSpoke(pr, viewer.login, true) === null;
+  return !viewerOwns(pr, viewer) && viewerWasAsked(pr, viewer) && lastSpoke(pr, viewer.login, true) === null;
 }
 
 const TIMELINE_KINDS: Record<string, EventKind> = {
@@ -151,7 +153,7 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
   return events;
 }
 
-/** Part of the author's answer to the viewer's changes request (`changesAnswer`), by kind, actor and time. */
+/** Part of the owner's answer to the viewer's changes request (`changesAnswer`), by kind, actor and time. */
 export function answersChanges(pr: Pr, viewer: Viewer, event: { kind: EventKind; actor: string; at: IsoTime }): boolean {
   const answer = changesAnswer(pr, viewer);
   if (answer === null || !ANSWER_KINDS.includes(event.kind) || event.at <= answer.since) {
@@ -160,7 +162,7 @@ export function answersChanges(pr: Pr, viewer: Viewer, event: { kind: EventKind;
   if (SPEC_PUSH_KINDS.includes(event.kind)) {
     return !isAutomationLogin(event.actor) && !sameLogin(event.actor, viewer.login);
   }
-  return sameLogin(event.actor, pr.author);
+  return isOwner(pr, event.actor);
 }
 
 const LOUD_ADDRESSED: Record<string, string> = {
@@ -177,8 +179,8 @@ function spokeAfter(pr: Pr, login: string, at: IsoTime, reviewsOnly = false): bo
 
 /**
  * Loudness by rule, with the reason the event's line gives. Loud: an
- * addressed kind the viewer has not spoken after, the author's answer to
- * the viewer's changes request, a review on the viewer's PR, a review
+ * addressed kind the viewer has not spoken after, the owner's answer to
+ * the viewer's changes request, a review on the viewer's PR (one they own), a review
  * request for the viewer or their team that is still open on a non-draft
  * PR, ready for review when the viewer was asked, a comment on the
  * viewer's PR. Never loud: the viewer's own activity and automation (a bot
@@ -196,7 +198,7 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
   if (automation || MACHINE_KINDS.includes(event.kind)) {
     return event.isBot && SPEC_PUSH_KINDS.includes(event.kind) && pr.isDraft ? { loudness: 'muted', reason: 'bot pushed to a draft' } : quiet('bot activity');
   }
-  const own = sameLogin(pr.author, viewer.login);
+  const own = viewerOwns(pr, viewer);
   if (SPEC_ADDRESSED_KINDS.includes(event.kind)) {
     return spokeAfter(pr, viewer.login, event.at) ? quiet('you already replied') : loud(LOUD_ADDRESSED[event.kind]!);
   }

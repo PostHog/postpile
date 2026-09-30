@@ -3,7 +3,8 @@
 // the same core functions the store and the engine use, so every generated
 // board is shaped like real data. Names and repos are invented (acme/app,
 // alice, ada, lyra, rowan; renovate is the one automation account without
-// the [bot] suffix).
+// the [bot] suffix, acme-agent[bot] the coding agent that opens PRs for
+// people).
 import fc from 'fast-check';
 import type { NotificationReason, Verdict } from '../types.ts';
 
@@ -11,8 +12,13 @@ import type { NotificationReason, Verdict } from '../types.ts';
  * Who does something: the viewer, a teammate (lyra), someone outside the
  * team (ada, and alice as a second outsider), a GitHub App (dependabot[bot])
  * or automation on a user account without the [bot] suffix (renovate).
+ * Only PR authors: a coding agent's GitHub App (acme-agent[bot]) and a
+ * deleted account (ghost, read as '').
  */
-export type Person = 'viewer' | 'teammate' | 'other' | 'outsider' | 'bot' | 'app';
+export type Person = 'viewer' | 'teammate' | 'other' | 'outsider' | 'bot' | 'app' | 'agent' | 'ghost';
+
+/** Who a PR is assigned to: the viewer, a teammate (lyra) or ada. A bot's PR belongs to its assignees (DESIGN "PR ownership"). */
+export type Assignee = 'viewer' | 'teammate' | 'other';
 
 /**
  * Whom a review request names: the viewer, the viewer's team, another team,
@@ -72,6 +78,8 @@ export interface OverrideSpec {
 
 export interface PrSpec {
   author: Person;
+  /** In this order; the first names the owner in sentences when a bot opened the PR. */
+  assignees: Assignee[];
   /** Opened as a draft. */
   draft: boolean;
   steps: StepSpec[];
@@ -100,6 +108,7 @@ export interface PrSpec {
 /** A scenario's starting point: ada's open PR, pinged for a review request, with nothing else going on. */
 export const QUIET_PR: PrSpec = {
   author: 'other',
+  assignees: [],
   draft: false,
   steps: [],
   end: { kind: 'open' },
@@ -166,9 +175,18 @@ const person: fc.Arbitrary<Person> = fc.oneof(
   { weight: 2, arbitrary: fc.constant<Person>('bot') },
   { weight: 1, arbitrary: fc.constant<Person>('app') },
 );
+/** Mostly people and dependabot; now and then a coding agent's PR or a deleted author, which the assignees own. */
 const author: fc.Arbitrary<Person> = fc.oneof(
   { weight: 8, arbitrary: fc.constantFrom<Person>('other', 'viewer', 'teammate', 'bot') },
   { weight: 1, arbitrary: fc.constant<Person>('app') },
+  { weight: 2, arbitrary: fc.constant<Person>('agent') },
+  { weight: 1, arbitrary: fc.constant<Person>('ghost') },
+);
+/** Half the PRs have nobody assigned; the rest one person, or two with the viewer or a teammate second. */
+const assignees: fc.Arbitrary<Assignee[]> = fc.oneof(
+  { weight: 4, arbitrary: fc.constant<Assignee[]>([]) },
+  { weight: 3, arbitrary: fc.constantFrom<Assignee[]>(['viewer'], ['teammate'], ['other']) },
+  { weight: 1, arbitrary: fc.constantFrom<Assignee[]>(['teammate', 'viewer'], ['other', 'teammate']) },
 );
 const nonViewer = fc.constantFrom<Person>('other', 'teammate', 'bot');
 /** The viewer and their team most: those requests are what the rules act on. */
@@ -239,6 +257,7 @@ const snoozeArb: fc.Arbitrary<SnoozeSpec> = fc.record({
 /** One PR with a short, valid history. Small numbers and short lists, so shrinking ends on a readable case. */
 export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
   author,
+  assignees,
   draft: sometimes(1, 4),
   steps: fc.array(stepArb, { maxLength: 8 }),
   end: endArb,

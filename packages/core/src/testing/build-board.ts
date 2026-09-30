@@ -49,10 +49,20 @@ export const OTHER_TEAM = 'acme/team-infra';
 /** Who makes a bot's review request. */
 export const REQUEST_BOT = 'github-actions[bot]';
 
-export const LOGINS: Record<Person, string> = { viewer: 'viewer', teammate: 'lyra', other: 'ada', outsider: 'alice', bot: 'dependabot[bot]', app: 'renovate' };
+/** ghost: a deleted account, which GitHub reads back as ''. */
+export const LOGINS: Record<Person, string> = {
+  viewer: 'viewer',
+  teammate: 'lyra',
+  other: 'ada',
+  outsider: 'alice',
+  bot: 'dependabot[bot]',
+  app: 'renovate',
+  agent: 'acme-agent[bot]',
+  ghost: '',
+};
 
 /** Every automation account on a board: what the spec oracles call automation, without asking `isBot`. */
-export const AUTOMATION_LOGINS: readonly string[] = [LOGINS.bot, LOGINS.app, REQUEST_BOT];
+export const AUTOMATION_LOGINS: readonly string[] = [LOGINS.bot, LOGINS.app, LOGINS.agent, REQUEST_BOT];
 
 /** The login or team a request target names; the teammate asked is rowan, so lyra can still be the author. */
 export function requestSubject(target: RequestTarget): string {
@@ -97,9 +107,15 @@ function afterMinute(prIndex: number, count: number): number {
   return 10 * count + prIndex + 5;
 }
 
-/** A human who asks for a review: the author, or ada when a bot wrote the PR. */
+/** A human who asks for a review: the author, or ada when a GitHub App or a deleted account opened the PR. */
 function humanRequester(author: string): string {
-  return author === LOGINS.bot ? LOGINS.other : author;
+  return author === LOGINS.bot || author === LOGINS.agent || author === LOGINS.ghost ? LOGINS.other : author;
+}
+
+/** The viewer owns the PR the recipe describes: wrote it, or it is a bot's PR assigned to them (DESIGN "PR ownership"). */
+function viewerOwns(spec: PrSpec): boolean {
+  const botAuthor = spec.author === 'bot' || spec.author === 'app' || spec.author === 'agent';
+  return botAuthor && spec.assignees.length > 0 ? spec.assignees.includes('viewer') : spec.author === 'viewer';
 }
 
 /** Builds one PR snapshot step by step, skipping what GitHub would not allow. */
@@ -350,6 +366,7 @@ function compilePr(spec: PrSpec, place: PrPlace): CompiledPr {
     number: place.number,
     repo: PROPERTY_REPO,
     author,
+    assignees: spec.assignees.map((assignee) => LOGINS[assignee]),
     state,
     isDraft: history.isDraft,
     baseRef: place.baseRef,
@@ -451,7 +468,8 @@ function storedPrState(input: {
   const { spec, compiled, clock, viewer, thread } = input;
   const pr = compiled.pr;
   let userState: UserPrState | null = null;
-  if (spec.approvedAfter !== null && pr.state === 'OPEN' && !sameLogin(pr.author, viewer.login)) {
+  // The app offers Approve only on a PR someone else owns.
+  if (spec.approvedAfter !== null && pr.state === 'OPEN' && !viewerOwns(spec)) {
     // Approved while open: at most after the last step, before any merge or close.
     const count = Math.min(spec.approvedAfter, spec.steps.length);
     userState = { prKey: pr.key, approvedAt: clock.after(count), approvedCommitOid: compiled.headAfter[count] ?? null, handledAt: null };
@@ -599,7 +617,9 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
       };
       board.threads.set(pr.key, thread);
     } else if (tracking.kind === 'found') {
-      const via = sameLogin(pr.author, viewer.login) ? 'own_open' : pr.state === 'MERGED' ? 'involved_merged' : 'review_requested';
+      // The finder's aliases: the viewer's own PRs (an agent PR assigned to them too), merged ones they took part in, a person's PR assigned to them, review requests.
+      const assigned = entry.spec.assignees.includes('viewer');
+      const via = viewerOwns(entry.spec) ? 'own_open' : pr.state === 'MERGED' ? 'involved_merged' : assigned ? 'assigned' : 'review_requested';
       board.found.set(pr.key, { prKey: pr.key, via, reason: 'found by the sync', foundAt: now });
     } else {
       pullInReasons.set(pr.key, `stack layer below #${pr.ref.number + 1}`);

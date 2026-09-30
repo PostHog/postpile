@@ -7,6 +7,7 @@
 import { lookCloserPingCheck } from '../glance-pings.ts';
 import { displayState } from '../loudness.ts';
 import { lookCloserPingText, pingRule, pingTemplate } from '../pings.ts';
+import { topicPeople } from '../topic-queues.ts';
 import { botsFromQuietDetail, quietReadCheck, quietReadDetail, quietReasonDetail, quietReasonFromDetail, touchedReadCheck } from '../quiet-reads.ts';
 import type { QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { PrEvent, PrKey, Verdict } from '../types.ts';
@@ -14,7 +15,7 @@ import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
 import { ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
 import { SPEC_ADDRESSED_KINDS } from './spec-events.ts';
-import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwners } from './spec-facts.ts';
+import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwnerRelation, specOwners, specRelation, viewerOwns } from './spec-facts.ts';
 import {
   effectiveLoudnessOf,
   expectedDone,
@@ -58,6 +59,35 @@ export const prFactsMatchTheSpec: Invariant = {
       const teams = pr.state === 'OPEN' ? pr.reviewerTeams.filter((team) => isViewerTeam(board.viewer, team)) : [];
       ensure(JSON.stringify(row.ownTeamRequests) === JSON.stringify(teams), `${row.key}: own team requests ${row.ownTeamRequests.join(', ')}, expected ${teams.join(', ')}`);
     }
+  },
+};
+
+/**
+ * Whose PR it is (DESIGN "PR ownership"): the row's owners and their
+ * relation (Mine and Team filters), the "Your PR" chip exactly on a PR the
+ * viewer owns (or one GitHub notified them about as its author), and the
+ * sidebar faces: every owner who is a person, once, with their relation.
+ */
+export const ownershipMatchesTheSpec: Invariant = {
+  name: 'owners, their relation, the Your PR chip and the sidebar faces are the spec owners',
+  check(board, views) {
+    for (const row of allRows(views)) {
+      const pr = prOf(board, row.key);
+      ensure(JSON.stringify(row.facts.owners) === JSON.stringify(specOwners(pr)), `${row.key}: owners ${row.facts.owners.join(', ')}, expected ${specOwners(pr).join(', ')}`);
+      const relation = specOwnerRelation(pr, board.viewer);
+      ensure(row.authorRelation === relation, `${row.key}: owner relation ${row.authorRelation}, expected ${relation}`);
+      const notifiedAsAuthor = row.provenance.kind === 'pinged' && row.provenance.reason === 'author';
+      const own = viewerOwns(pr, board.viewer) || notifiedAsAuthor;
+      ensure((row.forWhom.kind === 'own') === own, `${row.key}: for whom ${row.forWhom.kind}, expected own ${own}`);
+    }
+    const prs = [...board.prs.values()];
+    const people = new Map<string, string>();
+    for (const owner of prs.flatMap(specOwners).filter((login) => !isAutomationLogin(login))) {
+      people.set(owner.toLowerCase(), `${owner.toLowerCase()}:${specRelation(owner, board.viewer)}`);
+    }
+    const faces = topicPeople(prs, board.viewer).map((person) => `${person.login.toLowerCase()}:${person.relation}`);
+    const expected = [...people.values()];
+    ensure(JSON.stringify(faces.toSorted()) === JSON.stringify(expected.toSorted()), `faces ${faces.join(', ')}, expected ${expected.join(', ')}`);
   },
 };
 
@@ -261,6 +291,7 @@ export const lookCloserMatchesTheSpec: Invariant = {
 
 export const RULE_INVARIANTS: readonly Invariant[] = [
   prFactsMatchTheSpec,
+  ownershipMatchesTheSpec,
   turnMatchesTheSpec,
   tierMatchesTheSpec,
   doneMatchesTheSpec,

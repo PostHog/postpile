@@ -20,9 +20,10 @@ import {
   asksViewer,
   changesAnswer,
   isAutomationLogin,
-  isKnownTeammate,
+  isOwner,
   isViewerLogin,
   isViewerTeam,
+  namedOwner,
   newestTouch,
   pendingRequest,
   READING_TOUCHES,
@@ -30,12 +31,14 @@ import {
   reviewStillOwed,
   routedRequestWaits,
   standingChangesBy,
+  teammateOwns,
   teamTakers,
   threadsViewerOpened,
   threadsWaitingOnViewer,
   viewerApproved,
   viewerAskedForChanges,
   viewerHeadReview,
+  viewerOwns,
   viewerReviewedHead,
   type SpecRequest,
   type SpecTouchKind,
@@ -130,7 +133,7 @@ function draftTurn(input: TurnInput): ExpectedTurn {
   if (ask) {
     return you('reply', `${ASK_WORDS[ask.kind]!.alone(ask.actor)} on draft`);
   }
-  if (!sameLogin(pr.author, viewer.login)) {
+  if (!viewerOwns(pr, viewer)) {
     return NONE;
   }
   const threads = threadsWaitingOnViewer(pr, viewer);
@@ -170,24 +173,24 @@ function ownPrTurn(input: TurnInput): ExpectedTurn {
   return pr.reviewDecision === 'APPROVED' ? you('merge', 'Merge, it is approved') : NONE;
 }
 
-/** Where the changes requests (other than `except`'s) leave the author: re-review once every reviewer was asked again, else whose to address first. */
+/** Where the changes requests (other than `except`'s) leave the owner: re-review once every reviewer was asked again, else whose to address first. */
 function standingTurn(pr: Pr, except: string | null): ExpectedTurn | null {
   const standing = standingChangesBy(pr).filter((login) => except === null || !sameLogin(login, except));
   if (standing.length === 0) {
     return null;
   }
   const waiting = standing.find((reviewer) => !askedToReReview(pr, reviewer));
-  return waiting === undefined ? them(standing[0]!, 'to re-review') : them(pr.author, `to address ${waiting}'s changes`);
+  return waiting === undefined ? them(standing[0]!, 'to re-review') : them(namedOwner(pr), `to address ${waiting}'s changes`);
 }
 
-/** "Review, ada asked" (the newest person who asked the viewer or their team), "Review for team-platform", or with the author for a teammate's PR. */
+/** "Review, ada asked" (the newest person who asked the viewer or their team), "Review for team-platform", or with the owner for a teammate's PR. */
 function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review' | 'Re-review'): string {
   const team = pr.reviewerTeams.find((subject) => isViewerTeam(viewer, subject))?.split('/').pop();
   if (request === 'team') {
     return `${verb} for ${team}`;
   }
   if (request === 'team_for_you') {
-    return `${verb} for ${team}: ${pr.author}'s PR`;
+    return `${verb} for ${team}: ${namedOwner(pr)}'s PR`;
   }
   const requests = pr.timeline.filter((item) => item.kind === 'review_requested' && asksViewer(viewer, item.subject) && !isAutomationLogin(item.actor));
   const by = requests.toSorted((a, b) => a.at.localeCompare(b.at)).at(-1)?.actor;
@@ -204,7 +207,7 @@ function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review
 function othersPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
   if (viewerApproved(pr, viewer, input.userState)) {
-    return them(pr.author, 'to merge');
+    return them(namedOwner(pr), 'to merge');
   }
   const headReview = viewerHeadReview(pr, viewer);
   const waits = headReview === null ? routedRequestWaits(pr, viewer, input.notYours) : null;
@@ -225,16 +228,16 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
   if (headReview !== null) {
     const opened = threadsViewerOpened(pr, viewer);
     if (headReview.state === 'APPROVED') {
-      return them(pr.author, 'to merge');
+      return them(namedOwner(pr), 'to merge');
     }
     if (opened > 0) {
-      return them(pr.author, `to address ${plural(opened, 'thread')}`);
+      return them(namedOwner(pr), `to address ${plural(opened, 'thread')}`);
     }
-    return them(pr.author, headReview.state === 'CHANGES_REQUESTED' ? 'to address your changes' : 'to reply');
+    return them(namedOwner(pr), headReview.state === 'CHANGES_REQUESTED' ? 'to address your changes' : 'to reply');
   }
   if (request === 'team_taken') {
     if (pr.reviewDecision === 'APPROVED') {
-      return them(pr.author, 'to merge');
+      return them(namedOwner(pr), 'to merge');
     }
     const standing = standingChangesBy(pr);
     if (standing.length > 0 && standing.every((reviewer) => askedToReReview(pr, reviewer))) {
@@ -262,17 +265,18 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
   }
   const ask = openAsk(pr, input.events, viewer, SPEC_ADDRESSED_KINDS);
   const answer = changesAnswer(pr, viewer);
-  if (answer !== null && (ask === null || sameLogin(ask.actor, pr.author))) {
-    return you('re_review', answer.pushed ? `${pr.author} addressed your changes: re-review` : `${pr.author} replied to your review`);
+  if (answer !== null && (ask === null || isOwner(pr, ask.actor))) {
+    const owner = namedOwner(pr);
+    return you('re_review', answer.pushed ? `${owner} addressed your changes: re-review` : `${owner} replied to your review`);
   }
   if (ask !== null) {
-    const own = sameLogin(pr.author, viewer.login);
+    const own = viewerOwns(pr, viewer);
     const request = pendingRequest(pr, viewer);
     const reviewToo = !own && (request === 'you' || request === 'team_for_you') && !viewerReviewedHead(pr, viewer, input.userState);
     const words = ASK_WORDS[ask.kind]!;
     return you('reply', reviewToo ? `Review, ${ask.actor} ${words.withReview}` : words.alone(ask.actor));
   }
-  return sameLogin(pr.author, viewer.login) ? ownPrTurn(input) : othersPrTurn(input);
+  return viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,9 +284,10 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
 // ---------------------------------------------------------------------------
 
 /**
- * The PR's queue: an unanswered personal ask (not the author's reply once
+ * The PR's queue: an unanswered personal ask (not an owner's reply once
  * they answered your changes), your changes request, your PR, a personal
  * request, a teammate's PR, any other request, a team mention, the rest.
+ * Your PR and a teammate's go by owners (DESIGN "PR ownership").
  * Only open PRs have a queue. Drafts and reviewed heads never sit in To review.
  */
 export function expectedTier(input: TurnInput & { reason: NotificationReason | null }): PrTier {
@@ -291,20 +296,20 @@ export function expectedTier(input: TurnInput & { reason: NotificationReason | n
     return 'rest';
   }
   const ask = openAsk(pr, input.events, viewer, SPEC_PERSONAL_ASK_KINDS);
-  if (ask !== null && !(changesAnswer(pr, viewer) !== null && sameLogin(ask.actor, pr.author))) {
+  if (ask !== null && !(changesAnswer(pr, viewer) !== null && isOwner(pr, ask.actor))) {
     return 'needs_reply';
   }
   if (viewerAskedForChanges(pr, viewer)) {
     return 'changes_requested';
   }
-  if (sameLogin(pr.author, viewer.login)) {
+  if (viewerOwns(pr, viewer)) {
     return 'mine';
   }
   const request = pr.isDraft || viewerReviewedHead(pr, viewer, input.userState) ? null : pendingRequest(pr, viewer);
   if (request === 'you' || request === 'team_for_you') {
     return 'to_review';
   }
-  if (isKnownTeammate(viewer, pr.author)) {
+  if (teammateOwns(pr, viewer)) {
     return 'team';
   }
   if (request !== null) {
@@ -412,12 +417,12 @@ export function isAimedAtViewer(pr: Pr, viewer: Viewer, event: PrEvent): boolean
   if (event.kind === 'review_requested' || event.kind === 'commits_after_approval') {
     return true;
   }
-  return event.kind === 'review_changes_requested' && sameLogin(pr.author, viewer.login);
+  return event.kind === 'review_changes_requested' && viewerOwns(pr, viewer);
 }
 
-/** A request for one of the viewer's teams (not the viewer) on a PR from outside the team. */
+/** A request for one of the viewer's teams (not the viewer) on a PR from outside the team (neither the viewer nor a teammate owns it). */
 export function isRoutedRequest(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
-  if (event.kind !== 'review_requested' || sameLogin(pr.author, viewer.login) || isKnownTeammate(viewer, pr.author)) {
+  if (event.kind !== 'review_requested' || viewerOwns(pr, viewer) || teammateOwns(pr, viewer)) {
     return false;
   }
   const subject = requestSubjectOf(pr, event);
@@ -541,7 +546,7 @@ export function expectedLookCloser(input: {
   if (input.verdict !== 'LOOK_CLOSER') {
     return { kind: 'skip', why: 'not_look_closer' };
   }
-  const outside = !sameLogin(pr.author, viewer.login) && !isKnownTeammate(viewer, pr.author);
+  const outside = !viewerOwns(pr, viewer) && !teammateOwns(pr, viewer);
   const team = pr.state === 'OPEN' && !pr.isDraft && outside ? pr.reviewerTeams.find((subject) => isViewerTeam(viewer, subject)) : undefined;
   if (team === undefined) {
     return { kind: 'skip', why: 'no_routed_request' };
@@ -599,7 +604,7 @@ function othersEvents(input: QuietReadSpecInput): PrEvent[] {
 }
 
 function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
-  return pr.state === 'OPEN' && sameLogin(pr.author, viewer.login);
+  return pr.state === 'OPEN' && viewerOwns(pr, viewer);
 }
 
 /**

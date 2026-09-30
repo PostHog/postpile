@@ -15,6 +15,7 @@ import type { Pr, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import type { Person } from './board-spec.ts';
+import { isAutomationLogin, specOwners } from './spec-facts.ts';
 
 function prStateLabel(pr: Pr): string {
   if (pr.state !== 'OPEN') {
@@ -37,12 +38,32 @@ function snoozeLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   return [`snooze:${snooze.condition.kind}`, `snooze-phase:${phase}`];
 }
 
+/** A bot opened the PR and assigned people, who own it (DESIGN "PR ownership"); a deleted author with assignees stays the owner. */
+function ownerLabels(pr: Pr): string[] {
+  const assignees = pr.assignees ?? [];
+  if (pr.author === '') {
+    return assignees.length > 0 ? ['shape:deleted author with assignees'] : [];
+  }
+  if (!isAutomationLogin(pr.author) || assignees.length === 0) {
+    return [];
+  }
+  const owners = specOwners(pr);
+  const labels = ['shape:bot PR with assignees'];
+  if (owners.some((owner) => sameLogin(owner, LOGINS.viewer))) {
+    labels.push('shape:bot PR owned by viewer');
+  }
+  if (owners.some((owner) => sameLogin(owner, LOGINS.teammate))) {
+    labels.push('shape:bot PR owned by teammate');
+  }
+  return labels;
+}
+
 /** The PR-level labels: one per value of every dimension the rules branch on. */
 function prLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   const labels: string[] = [];
   const state = prStateLabel(pr);
   const author = authorLabel(pr);
-  labels.push(`pr:${state}`, `author:${author}`, `pr-author:${state}/${author}`);
+  labels.push(`pr:${state}`, `author:${author}`, `pr-author:${state}/${author}`, ...ownerLabels(pr));
   labels.push(`request:${reviewRequest(pr, board.viewer) ?? 'none'}`);
   for (const item of pr.timeline) {
     if (item.kind === 'review_requested') {
@@ -220,6 +241,9 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:second outsider',
   'shape:re-review asked',
   'shape:routed request held by changes',
+  'shape:bot PR owned by viewer',
+  'shape:bot PR owned by teammate',
+  'shape:deleted author with assignees',
   'timeline:added_to_merge_queue',
   'timeline:deployed',
   'events:deploy',
