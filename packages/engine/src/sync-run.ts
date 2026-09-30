@@ -75,6 +75,8 @@ export class SyncRun {
     private readonly quota: GitHubQuota,
     private readonly quietReads: QuietReads,
     private readonly log: (line: string) => void = (line) => console.log(line),
+    /** Told after each sync that ran to the end, next to sync_completed (not for a crashed or blocked one). */
+    private readonly onCompleted: () => void = () => {},
   ) {}
 
   /**
@@ -250,6 +252,7 @@ export class SyncRun {
           agent_calls: report.agentCalls,
         });
       }
+      this.onCompleted();
     } catch (error) {
       this.log(`sync: telemetry failed: ${errorText(error)}`);
     }

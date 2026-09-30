@@ -68,6 +68,7 @@ import type {
   WorkContextSweepResult,
   WorkContextView,
   WorkThreadForget,
+  BoardShapeEvent,
 } from '@postpile/core';
 import { arch, release } from 'node:os';
 import {
@@ -265,6 +266,7 @@ export class Engine implements EngineService {
   private writeRefreshesDone = 0;
   /** Full syncs that ended; counted into the live status' changeCount so a short sync between two looks is not missed. */
   private syncsDone = 0;
+  private syncCompletedListener: (() => void) | null = null;
   private livePoller: LivePoller | null = null;
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUpCap: CatchUpCap;
@@ -362,7 +364,7 @@ export class Engine implements EngineService {
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
-    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog);
+    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog, () => this.syncCompletedListener?.());
     this.consolidationRun = new ConsolidationRun(runDeps);
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
     this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
@@ -815,6 +817,14 @@ export class Engine implements EngineService {
 
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     return this.reads.listTopics(scope);
+  }
+
+  onSyncCompleted(listener: () => void): void {
+    this.syncCompletedListener = listener;
+  }
+
+  async boardShape(): Promise<BoardShapeEvent[]> {
+    return this.reads.boardShape();
   }
 
   async unreadPrKeys(): Promise<PrKey[]> {
