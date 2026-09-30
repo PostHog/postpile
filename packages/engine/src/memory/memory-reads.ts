@@ -2,7 +2,6 @@ import {
   DOSSIER_HISTORY_SHOWN,
   dossierVersionNotes,
   parseFixedClaimNote,
-  seenSinceBaseline,
   topicChangesSince,
   verifyDossier,
   type DossierView,
@@ -14,7 +13,6 @@ import {
   type PrKey,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { loadBaseline } from '../baseline-meta.ts';
 import { factViews } from './fact-world.ts';
 
 /** Enough recent topic feedback to find every correction made since the latest version. */
@@ -57,9 +55,9 @@ export class MemoryReads {
     }
     const memberKeys = store.memberships.listForTopic(topicId).map((m) => m.prKey);
     const world = { prs, memberKeys: new Set(memberKeys), now: this.now().toISOString() };
-    const seen = seenSinceBaseline(store.cursors.get('seen', topicId), topicId, loadBaseline(store));
+    const seen = store.cursors.get('seen', topicId);
     const changedFacts = seen ? store.facts.query({ topicId, changedSince: seen.updatedAt, includeClosed: true }) : [];
-    const newEvents = seen ? store.eventLog.countSince(memberKeys, seen.seq, loadBaseline(store)) : 0;
+    const newEvents = seen ? store.eventLog.countSince(memberKeys, seen.seq) : 0;
     const corrections = this.correctionsSince(topicId, latest.createdAt);
     return {
       version: latest.version,

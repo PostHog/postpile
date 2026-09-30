@@ -93,7 +93,6 @@ import {
   displayState,
   compareTopicUrgency,
   actionTrail,
-  applyBaseline,
   cleanupCutoff,
   cleanupLook,
   CLEANUP_SNOOZE_DAYS,
@@ -306,7 +305,6 @@ export class FakeEngine implements EngineService {
   // Inbox cleanup, in memory: every fake start counts as a first run, so the banner shows.
   private cleanupProminent = true;
   private cleanupHiddenUntil: string | null = null;
-  private baseline: string | null = null;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
   /** When each sample PR was last "fetched": a few minutes before start, moved by a fake agent refresh. */
@@ -427,12 +425,8 @@ export class FakeEngine implements EngineService {
     return this.data.tiles.find((tile) => tile.id === tileId);
   }
 
-  /** With "start fresh" on, events before the baseline read as seen (copies; the sample keeps its state). */
   private eventsOf(prKey: PrKey): PrEvent[] {
-    return applyBaseline(
-      this.data.events.filter((event) => event.prKey === prKey),
-      this.baseline,
-    );
+    return this.data.events.filter((event) => event.prKey === prKey);
   }
 
   private userStateOf(prKey: PrKey): UserPrState {
@@ -786,15 +780,14 @@ export class FakeEngine implements EngineService {
     this.writes.settle();
     const now = this.timestamp();
     const threads = this.threadsOnGitHub();
-    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14), this.baseline);
+    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14));
     const hiddenUntil = this.cleanupHiddenUntil !== null && this.cleanupHiddenUntil > now ? this.cleanupHiddenUntil : null;
     // Without gh nothing is known about the GitHub inbox.
     const look = this.toolStatus.ghOff() !== null ? 'none' : cleanupLook({ unreadOlderThan14, prominent: this.cleanupProminent, hiddenUntil }, now);
     return {
       unreadOlderThan14,
-      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30), this.baseline),
+      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30)),
       look,
-      baseline: this.baseline,
       hiddenUntil,
       pendingCutoff: this.writes.pendingCleanupCutoff(),
     };
@@ -806,17 +799,6 @@ export class FakeEngine implements EngineService {
       return ok(`Pending: marks everything older than ${age} days read once you unlock and send it from the lock`);
     }
     return ok(`fake: marked the sample threads older than ${age} days read, nothing sent to GitHub`);
-  }
-
-  async startFresh(): Promise<ActionResult> {
-    this.cleanupProminent = false;
-    this.baseline = this.timestamp();
-    return ok('Started fresh: everything before now is background here. GitHub is unchanged.');
-  }
-
-  async clearStartFresh(): Promise<ActionResult> {
-    this.baseline = null;
-    return ok('Start fresh cleared: older unread threads count again');
   }
 
   async hideInboxCleanup(): Promise<ActionResult> {
@@ -858,7 +840,7 @@ export class FakeEngine implements EngineService {
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.topicChanges.pendingForTopic(topicId),
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
-      dossier: this.memory.dossierView(topicId, this.feedback, this.baseline),
+      dossier: this.memory.dossierView(topicId, this.feedback),
     };
   }
 

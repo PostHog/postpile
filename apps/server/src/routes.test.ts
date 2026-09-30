@@ -71,10 +71,10 @@ describe('server routes over the fake engine', () => {
     await vi.waitFor(async () => expect(((await (await app.request(path)).json()) as PrDetail).glanceState).toBe('ready'));
   });
 
-  it('shows the inbox cleanup on sample data, parks it while locked and starts fresh', async () => {
+  it('shows the inbox cleanup on sample data and parks it while locked', async () => {
     const app = appWithFake();
     const view = (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
-    expect(view).toMatchObject({ unreadOlderThan14: 3, unreadOlderThan30: 1, look: 'banner', baseline: null, pendingCutoff: null });
+    expect(view).toMatchObject({ unreadOlderThan14: 3, unreadOlderThan30: 1, look: 'banner', pendingCutoff: null });
 
     const parked = await post<{ ok: boolean; message: string }>(app, '/api/inbox-cleanup/mark-read', { olderThanDays: 14 });
     expect(parked.json.message).toMatch(/^Pending/);
@@ -87,10 +87,7 @@ describe('server routes over the fake engine', () => {
     expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).unreadOlderThan14).toBe(0);
 
     expect((await post(app, '/api/inbox-cleanup/mark-read', { olderThanDays: 7 })).status).toBe(400);
-    await post(app, '/api/inbox-cleanup/start-fresh');
-    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).baseline).not.toBeNull();
-    await app.request('/api/inbox-cleanup/start-fresh', { method: 'DELETE' });
-    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).baseline).toBeNull();
+    expect((await app.request('/api/inbox-cleanup/start-fresh', { method: 'POST' })).status).toBe(404);
   });
 
   it('lists repos, keeps the topics of the chosen repo, labels other repos and sets a repo quiet', async () => {

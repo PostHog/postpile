@@ -31,7 +31,6 @@ describe('inbox cleanup', () => {
       unreadOlderThan14: 2,
       unreadOlderThan30: 1,
       look: 'banner',
-      baseline: null,
       hiddenUntil: null,
       pendingCutoff: null,
     });
@@ -42,8 +41,8 @@ describe('inbox cleanup', () => {
     const h = makeHarness({ now: () => clock });
     h.reader.threads = [{ ...makeThreadFor(makePr({ number: 20 }), { updatedAt: OLD_20 }), subjectType: 'Issue' }];
     await h.engine.sync({ maxAgentCalls: 0 });
-    await h.engine.startFresh();
-    await h.engine.clearStartFresh();
+    // Any choice in the dialog answers the banner; one that leaves the old thread unread keeps the count.
+    await h.engine.cleanUpInbox(30);
     clock = new Date('2026-09-03T12:00:00.000Z');
     await h.engine.sync({ maxAgentCalls: 0 });
     expect((await h.engine.inboxCleanup()).look).toBe('line');
@@ -123,27 +122,16 @@ describe('inbox cleanup', () => {
     expect(logRows(h).at(-1)).toEqual(['mark_all_read_before', 'footer', 'discarded']);
   });
 
-  it('starts fresh: older events are background, nothing goes to GitHub, and it can be cleared', async () => {
-    let clock = NOW;
-    const h = makeHarness({ now: () => clock });
+  it('hides nothing behind a start-fresh baseline stored before 2026-09-30', async () => {
+    const h = makeHarness({ now: () => NOW });
     const pr = reviewRequestedPr(1);
     topicWithPrs(h, 't', [pr]);
     h.reader.threads = [...h.reader.threads, { ...makeThreadFor(makePr({ number: 20 }), { updatedAt: OLD_20 }), subjectType: 'Issue' }];
+    h.store.meta.set('start_fresh_baseline', NOW.toISOString());
     await h.engine.sync({ maxAgentCalls: 0 });
     expect((await h.engine.getTopic('t'))?.tiles[0]?.state.kind).toBe('unread');
-
-    await h.engine.startFresh();
-
-    expect(h.writer.calls).toEqual([]);
-    expect((await h.engine.getTopic('t'))?.tiles[0]?.state.kind).toBe('open');
-    expect((await h.engine.listTopics())[0]).toMatchObject({ unreadTiles: 0 });
-    expect(await h.engine.inboxCleanup()).toMatchObject({ unreadOlderThan14: 0, look: 'none', baseline: NOW.toISOString() });
-    // The store keeps GitHub's state; only reads apply the baseline.
-    expect(h.store.events.listForPr(pr.key).every((event) => event.seenAt === null)).toBe(true);
-
-    await h.engine.clearStartFresh();
-    expect((await h.engine.getTopic('t'))?.tiles[0]?.state.kind).toBe('unread');
-    expect((await h.engine.inboxCleanup()).baseline).toBeNull();
+    expect((await h.engine.listTopics())[0]).toMatchObject({ unreadTiles: 1 });
+    expect((await h.engine.inboxCleanup()).unreadOlderThan14).toBe(1);
   });
 
   it('hides the cleanup for 7 days on "Not now"', async () => {

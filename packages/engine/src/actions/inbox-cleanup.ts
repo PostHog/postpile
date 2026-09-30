@@ -10,7 +10,6 @@ import {
   type IsoTime,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { BASELINE_KEY, loadBaseline } from '../baseline-meta.ts';
 import { errorText } from '../errors.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { PendingWrites } from '../writes/pending-writes.ts';
@@ -38,7 +37,9 @@ export function noteSyncStart(store: Store, at: IsoTime): void {
 /**
  * The inbox cleanup dialog: count old unread threads, mark them read on
  * GitHub in one call (through the writes door, so the lock turns it into a
- * pending write), start fresh with a local baseline, or hide it for a week.
+ * pending write), or hide it for a week. The local-only "start fresh" is
+ * gone (DESIGN.md "GitHub unread is PostPile unread"); migration 021 drops a
+ * stored baseline.
  */
 export class InboxCleanup {
   constructor(
@@ -53,15 +54,13 @@ export class InboxCleanup {
   view(): InboxCleanupView {
     const now = this.now().toISOString();
     const threads = this.store.notifications.list();
-    const baseline = loadBaseline(this.store);
-    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14), baseline);
+    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14));
     const hiddenUntil = this.store.meta.get(HIDDEN_UNTIL_KEY);
     const prominent = this.store.meta.get(PROMINENT_KEY) !== null;
     return {
       unreadOlderThan14,
-      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30), baseline),
+      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30)),
       look: cleanupLook({ unreadOlderThan14, prominent, hiddenUntil }, now),
-      baseline,
       hiddenUntil: hiddenUntil !== null && hiddenUntil > now ? hiddenUntil : null,
       pendingCutoff: this.pendingWrites.pendingCleanupCutoff(),
     };
@@ -94,18 +93,6 @@ export class InboxCleanup {
     }
     await this.reread().catch(() => {});
     return ok(`Asked GitHub to mark everything older than ${age} days read. It can take a moment; the tiles follow on the next poll.`);
-  }
-
-  /** "Leave GitHub alone, start fresh here". Local only. */
-  startFresh(): ActionResult {
-    this.answered();
-    this.store.meta.set(BASELINE_KEY, this.now().toISOString());
-    return ok('Started fresh: everything before now is background here. GitHub is unchanged.');
-  }
-
-  clearStartFresh(): ActionResult {
-    this.store.meta.delete(BASELINE_KEY);
-    return ok('Start fresh cleared: older unread threads count again');
   }
 
   /** "Not now": hides the line and the banner for a week. */

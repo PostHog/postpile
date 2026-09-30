@@ -133,7 +133,7 @@ export class PendingWrites {
       title: this.title(write),
       prKeys: write.prKeys,
       tileId: write.tileId,
-      threadCount: write.kind === 'mark_all_read_before' ? unreadOlderThan(threads, write.readBefore ?? '', null) : write.threads.length,
+      threadCount: write.kind === 'mark_all_read_before' ? unreadOlderThan(threads, write.readBefore ?? '') : write.threads.length,
       error: write.error,
     }));
   }

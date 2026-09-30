@@ -280,8 +280,6 @@ export function createApp(
     const body = z.object({ olderThanDays: z.union([z.literal(14), z.literal(30)]) }).parse(await c.req.json());
     return c.json(await engine.cleanUpInbox(body.olderThanDays));
   });
-  app.post('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.startFresh()));
-  app.delete('/api/inbox-cleanup/start-fresh', async (c) => c.json(await engine.clearStartFresh()));
   app.post('/api/inbox-cleanup/not-now', async (c) => c.json(await engine.hideInboxCleanup()));
   // PostPile's MCP server in Claude Code: the cached `claude mcp get`, "Add to Claude Code"
   // (runs `claude mcp add` in the installed app only; local, never GitHub) and the footer's "Not now".

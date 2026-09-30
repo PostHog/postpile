@@ -852,14 +852,6 @@ export class Engine implements EngineService {
     return this.cleanup.markReadBefore(age);
   }
 
-  async startFresh(): Promise<ActionResult> {
-    return this.cleanup.startFresh();
-  }
-
-  async clearStartFresh(): Promise<ActionResult> {
-    return this.cleanup.clearStartFresh();
-  }
-
   async hideInboxCleanup(): Promise<ActionResult> {
     return this.cleanup.hide();
   }
