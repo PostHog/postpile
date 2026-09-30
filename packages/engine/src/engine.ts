@@ -341,7 +341,7 @@ export class Engine implements EngineService {
       glancePings: new GlancePings(store, now),
       raisedPings: new RaisedPings(decider),
     };
-    const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
+    const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, this.quota, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog);
@@ -358,7 +358,7 @@ export class Engine implements EngineService {
     this.pollRun = new PollRun(runDeps, github, decider, (topicIds) => this.requestCatchUps(topicIds));
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
     this.teamMembers = new TeamMembers(store, deps.reader, now);
-    this.teamRoles = new TeamRoleKeeper(store, deps.reader, now);
+    this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));
     const setupSweep = new SetupSweep({
       store,
       reader: deps.reader,

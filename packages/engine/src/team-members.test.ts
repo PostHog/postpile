@@ -96,7 +96,7 @@ describe('team roles during sync', () => {
   });
 
   it('keeps every team home when the classification fails, without failing the sync', async () => {
-    const { h } = harness();
+    const { h, advance } = harness();
     h.reader.teamRolesError = new Error('search timed out');
     const report = await h.engine.sync({ maxAgentCalls: 0 });
     expect(report.errors).toEqual([]);
@@ -104,7 +104,41 @@ describe('team roles during sync', () => {
     expect(loadViewer(h.store)?.teamMembers).toEqual(['ada', 'lyra', 'mira']);
 
     h.reader.teamRolesError = null;
+    advance(2);
     await h.engine.sync({ maxAgentCalls: 0 });
+    expect(loadViewer(h.store)?.homeTeams).toEqual(['acme/team-platform']);
+  });
+
+  it('waits two hours after a failed classification before a sync tries again', async () => {
+    const { h, advance } = harness();
+    h.reader.teamRolesError = new Error('search timed out');
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.teamSizeCalls).toBe(1);
+
+    h.reader.teamRolesError = null;
+    advance(1.9);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.teamSizeCalls).toBe(1);
+    expect(loadViewer(h.store)?.homeTeams).toBeUndefined();
+
+    advance(0.2);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.teamSizeCalls).toBe(2);
+    expect(loadViewer(h.store)?.homeTeams).toEqual(['acme/team-platform']);
+  });
+
+  it('skips the classification while the GitHub quota is low, and classifies once it recovers', async () => {
+    const { h, advance } = harness();
+    const resetAtMs = h.timers.now() + 30 * 60 * 1000;
+    h.quota.note({ resource: 'graphql', limit: 5000, remaining: 1000, resetAtMs });
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.teamSizeCalls).toBe(0);
+    expect(loadViewer(h.store)?.homeTeams).toBeUndefined();
+
+    advance(1);
+    h.quota.note({ resource: 'graphql', limit: 5000, remaining: 4900, resetAtMs: h.timers.now() + 60 * 60 * 1000 });
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.reviewedCalls).toHaveLength(1);
     expect(loadViewer(h.store)?.homeTeams).toEqual(['acme/team-platform']);
   });
 });

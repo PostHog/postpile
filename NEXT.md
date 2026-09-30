@@ -28,7 +28,8 @@ now".
   mentions, and its members are not teammates. Rules decide from the last
   90 days of reviews (`classifyTeams`: 20% of reviews through the team and
   at most 10 members; size alone under 30 reviews), in the setup sweep and on
-  the next sync of installs without roles or for a newly joined team; meta
+  the next sync of installs without roles or for a newly joined team (not
+  while the GitHub quota is low, and 2h after a failed try); meta
   `team_roles`. The user flips a role under the sweep and in "Your teams"
   below the instructions (`GET/POST /api/team-roles`); a flip sticks.
   `TeamMembers` fetches home teams only; no home team means no teammates

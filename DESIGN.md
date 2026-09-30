@@ -2304,7 +2304,13 @@ every team again (see Setup flow); a sync classifies when `team_roles` is
 missing (installs that finished setup before roles existed) and when
 `Viewer.teams` gains a team (only the new one). A role with `source:
 'user'` is never overwritten. A failed classification never fails a sync
-or the sweep; those teams stay home until the next try.
+or the sweep; those teams stay home until the next try. A sync's next try
+waits 2 hours (meta `team_roles_retry_after`, set by any failed
+classification, cleared by a good one; `SWEEP_RETRY_MS`, the same wait as
+a failed work-context sweep), and a sync does not classify at all while
+the GitHub quota is low (`allowsBackground`, see "GitHub quota"), so a
+failing search or an org behind SAML SSO costs no search pages on every
+auto sync (2026-09-30). The setup sweep and a flip ignore both.
 
 The user flips a role under the setup sweep and in "Your teams" in the
 instructions pane ("team-devex · Home team (57% of your reviews) · Make

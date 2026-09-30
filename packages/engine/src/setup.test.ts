@@ -233,6 +233,18 @@ describe('setup sweep: team roles', () => {
     expect(loadViewer(h.store)?.teamMembers).toEqual(['ada', 'bob', 'mira']);
   });
 
+  it('classifies right after a failed sync: the retry wait only holds back syncs', async () => {
+    h.reader.teamRolesError = new Error('search timed out');
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.teamSizeCalls).toBe(1);
+
+    h.reader.teamRolesError = null;
+    h.reader.reviewed = [...reviewed(57, ['acme/team-platform']), ...reviewed(43, ['viewer'], 100)];
+    const view = await sweepToEnd();
+    expect(view.lines[1]).toMatchObject({ step: 'teams', state: 'done' });
+    expect(loadViewer(h.store)?.homeTeams).toEqual(['acme/team-platform']);
+  });
+
   it('refuses a team the viewer is not on', async () => {
     await sweepToEnd();
     await expect(h.engine.setTeamRole('acme/other', 'home')).rejects.toThrow('not one of your teams');

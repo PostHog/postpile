@@ -24,6 +24,7 @@ import { writeReadPlan } from './actions/local-change.ts';
 import { errorText } from './errors.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
+import type { GitHubQuota } from './github-quota.ts';
 import { TeamRoleKeeper } from './team-roles.ts';
 import { loadViewer, saveViewer } from './viewer-meta.ts';
 import type { ActionLog } from './writes/action-log.ts';
@@ -136,11 +137,12 @@ export class GitHubSync {
     private readonly now: () => Date,
     private readonly log: ActionLog,
     private readonly pendingWrites: PendingWrites,
+    quota: GitHubQuota,
     private readonly textLog: (line: string) => void = () => {},
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.teamMembers = new TeamMembers(store, reader, now);
-    this.teamRoles = new TeamRoleKeeper(store, reader, now);
+    this.teamRoles = new TeamRoleKeeper(store, reader, now, quota, textLog);
   }
 
   /** The stored notification threads, from the per-run snapshot. */

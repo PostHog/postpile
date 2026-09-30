@@ -244,8 +244,11 @@ export class FakeReader implements GitHubReader {
   reviewedCalls: [string, string[], string, number][] = [];
   /** Set to make the team role reads throw. */
   teamRolesError: Error | null = null;
+  /** How often teamSizes was asked: every classification starts with it. */
+  teamSizeCalls = 0;
 
   async teamSizes(_login: string): Promise<ViewerTeamSize[]> {
+    this.teamSizeCalls += 1;
     if (this.teamRolesError) {
       throw this.teamRolesError;
     }
