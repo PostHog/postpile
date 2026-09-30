@@ -14,14 +14,14 @@ export function cleanPrBody(body: string): string {
 }
 
 /**
- * Links in a description open in the browser only when absolute http(s) or
- * mailto. Relative links ("docs/x.md") would resolve against the app's own
+ * Links open in the browser only when absolute https, the only scheme the
+ * main process opens. Relative links ("docs/x.md") would resolve against the app's own
  * page and javascript: must never run, so both render as plain text.
  */
 export function safeLinkUrl(url: string): string | null {
   try {
     const parsed = new URL(url);
-    return ['https:', 'http:', 'mailto:'].includes(parsed.protocol) ? parsed.href : null;
+    return parsed.protocol === 'https:' ? parsed.href : null;
   } catch {
     return null;
   }
