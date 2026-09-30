@@ -9,6 +9,7 @@ import { stackPlaces } from '../lib/stacks.ts';
 import { isDraftTile, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
+import { AgentApproveButton, MarkReadPill } from './AgentActions.tsx';
 import { Avatar } from './Avatar.tsx';
 import { Button, buttonClasses } from './Button.tsx';
 import { ExternalIcon, KindIcon } from './icons.tsx';
@@ -187,6 +188,8 @@ export function Tile(props: TileProps) {
   const footerAction = view.offers.footer;
   const markLabel = view.offers.markLabel;
   const github = view.offers.github;
+  // The ✨ pill only when the agent backs the Mark read; it stays a plain one otherwise.
+  const agentBacked = view.agent.markRead?.state === 'active';
 
   function selectLead() {
     if (lead) {
@@ -290,6 +293,7 @@ export function Tile(props: TileProps) {
               Open
             </Button>
           )}
+          <AgentApproveButton offer={view.agent.approve} label={tile.kind === 'stack' ? 'Approve stack' : 'Approve'} busyKey={`approveTile:${tile.id}`} from="agent_tile" />
           {(footerAction === 'mark_read' || footerAction === 'mark_done') && (
             <Button
               variant="primary"
@@ -299,9 +303,10 @@ export function Tile(props: TileProps) {
                   : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks every PR here read; GitHub follows after 6s')
               }
               disabled={view.pendingWrite !== null || actions.isBusy(`markRead:${tile.id}`)}
-              onClick={() => void actions.markRead(tile.id, view.afterRead)}
+              onClick={() => void actions.markRead(tile.id, view.afterRead, agentBacked ? 'agent_tile' : undefined)}
             >
               {markLabel}
+              <MarkReadPill backing={view.agent.markRead} />
             </Button>
           )}
           {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : secondary} />}

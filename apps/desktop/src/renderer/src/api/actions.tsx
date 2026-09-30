@@ -5,7 +5,9 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type {
   ActionResult,
+  AgentActionFrom,
   AppConfig,
+  BatchApproveResult,
   ChatReply,
   CleanupAge,
   FeedbackInput,
@@ -22,6 +24,7 @@ import type {
   MemoryRecheckResult,
   OpenedReadResult,
   PendingWritesResult,
+  PrApproveResult,
   PrDetail,
   PrKey,
   RepoOverview,
@@ -32,6 +35,7 @@ import type {
   SetupRefineRequest,
   SetupRefineResult,
   SetupSweepView,
+  SkippedTile,
   SnoozeCondition,
   SyncReport,
   TeamRole,
@@ -46,8 +50,9 @@ import type {
 } from '@postpile/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
+import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
 import { markReadNotice } from '../lib/mark-read.ts';
-import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withTile } from '../lib/optimistic.ts';
+import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withApprovedPrs, withTile } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
 import { useLiveStatus } from './live.ts';
@@ -127,12 +132,20 @@ export interface Actions {
   markOpenedRead(prKey: PrKey): Promise<void>;
   /** `headOid`: the head commit on screen; the server refuses the approval when the PR moved past it. */
   approve(prKey: PrKey, headOid: string): Promise<void>;
+  /**
+   * The ✨ Approve of a tile or the topic, after the confirm list: one call for
+   * the covered PRs. Optimistic like the pane's approve, never an Undo.
+   * `busyKey` is the button's own (`isBusy`).
+   */
+  approveAgent(input: { busyKey: string; prs: { prKey: PrKey; headOid: string }[]; from: AgentActionFrom }): Promise<void>;
   /** "Remove <team>": removes the team's review request, unsubscribes and marks the PR done. Final, no undo; blocked while locked. */
   removeTeamRequest(prKey: PrKey, team: string): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
   /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
-  markRead(tileId: string, afterRead?: TileAfterRead): Promise<void>;
+  markRead(tileId: string, afterRead?: TileAfterRead, from?: AgentActionFrom): Promise<void>;
+  /** The topic's ✨ "Mark N read": the covered tiles as one batch with one Undo. `skipped` only words the toast. */
+  markTilesRead(input: { busyKey: string; tileIds: string[]; skipped: SkippedTile[] }): Promise<void>;
   /**
    * The detail pane's Mark read / Mark done on a stack or set: only `prKey`.
    * Same queue, lock and undo as markRead, undo brings back that PR only.
@@ -364,6 +377,49 @@ export function ActionsProvider(props: { children: ReactNode }) {
         show('error', errorText(error));
         return false;
       }
+    });
+  }
+
+  /**
+   * Every approve, the pane's and the ✨ ones. Final, so never an Undo: the
+   * cache shows the PRs approved and the toast says "Approved" before GitHub
+   * answers. A failed PR is put back (the whole call, when it all failed) and
+   * the server's message replaces the toast. The busy key holds until the
+   * refetch: the topic's own offers are core's and are not worked out here.
+   */
+  async function runApprove(busyKey: string, prKeys: PrKey[], task: () => Promise<ActionResult & { results: PrApproveResult[] }>): Promise<void> {
+    if (isBlocked('approve')) {
+      return;
+    }
+    await withBusy(busyKey, async () => {
+      const showApproved = (keys: PrKey[]) => {
+        const at = new Date().toISOString();
+        return Promise.all([
+          changeCache<TopicDetail>(['topic'], (detail) => withApprovedPrs(detail, keys)),
+          ...keys.map((key) => changeCache<PrDetail>(queryKeys.pr(key), (detail) => approvedDetail(detail, at))),
+        ]).then((rollbacks) => () => rollbacks.forEach((rollback) => rollback()));
+      };
+      let rollback: (() => void) | null = null;
+      try {
+        rollback = await showApproved(prKeys);
+        show('ok', approvedMessage(prKeys.length));
+        const result = await task();
+        const failed = result.results.filter((entry) => !entry.ok).map((entry) => entry.prKey);
+        if (failed.length > 0) {
+          rollback();
+          const worked = prKeys.filter((key) => !failed.includes(key));
+          rollback = worked.length > 0 ? await showApproved(worked) : null;
+          show('error', result.message);
+        }
+        if (result.settleToken) {
+          const entry = { token: result.settleToken, until: Date.now() + UNDO_WINDOW_MS };
+          setPendingUndos((current) => [...current, entry]);
+        }
+      } catch (error) {
+        rollback?.();
+        show('error', errorText(error));
+      }
+      await refreshAll();
     });
   }
 
@@ -654,8 +710,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
     approve: async (prKey, headOid) => {
-      const optimistic = () => changeCache<PrDetail>(queryKeys.pr(prKey), (detail) => approvedDetail(detail, new Date().toISOString()));
-      await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`, { headOid }), null, optimistic);
+      await runApprove(`approve:${prKey}`, [prKey], async () => {
+        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid });
+        return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
+      });
+    },
+    approveAgent: async (input) => {
+      const prKeys = input.prs.map((pr) => pr.prKey);
+      await runApprove(input.busyKey, prKeys, () => request<BatchApproveResult>('POST', '/api/agent-actions/approve', { prs: input.prs, from: input.from }));
     },
     removeTeamRequest: async (prKey, team) => {
       await run(`removeTeam:${prKey}`, 'removeTeam', () => request('POST', `${prPath(prKey)}/remove-team-request`, { team }));
@@ -664,7 +726,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       sendTelemetry('glance_retry_clicked', {});
       await run(`retryGlance:${prKey}`, null, () => request('POST', `${prPath(prKey)}/glance/retry`));
     },
-    markRead: async (tileId, afterRead) => {
+    markRead: async (tileId, afterRead, from) => {
       const shape: NoticeShape | null = afterRead
         ? (result) => {
             const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead });
@@ -673,7 +735,25 @@ export function ActionsProvider(props: { children: ReactNode }) {
         : null;
       // Locked, a mark-read changes nothing in the app until it is a pending write: nothing to show early.
       const optimistic = afterRead && writes?.enabled ? () => changeTile(tileId, markedReadTile) : null;
-      await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`), shape, optimistic);
+      // A tile whose Mark read carries the ✨ pill goes through the agent route, for the telemetry origin.
+      const send = from
+        ? () => request<ActionResult>('POST', '/api/agent-actions/mark-read', { tileIds: [tileId], from })
+        : () => request<ActionResult>('POST', `${tilePath(tileId)}/mark-read`);
+      await run(`markRead:${tileId}`, 'markRead', send, shape, optimistic);
+    },
+    markTilesRead: async (input) => {
+      const shape: NoticeShape = (result) => ({
+        message: result.ok ? batchMarkReadMessage(input.tileIds.length, input.skipped, result.message, writes?.enabled ?? false) : result.message,
+        snoozeTileId: null,
+      });
+      const optimistic = writes?.enabled
+        ? async () => {
+            const rollbacks = await Promise.all(input.tileIds.map((tileId) => changeTile(tileId, markedReadTile)));
+            return () => rollbacks.forEach((rollback) => rollback());
+          }
+        : null;
+      const body = { tileIds: input.tileIds, from: 'agent_topic' };
+      await run(input.busyKey, 'markRead', () => request<ActionResult>('POST', '/api/agent-actions/mark-read', body), shape, optimistic);
     },
     markPrRead: async (tileId, prKey, afterRead) => {
       const shape: NoticeShape = (result) => {

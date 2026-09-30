@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Added
+
+- Agent-assisted Approve and Mark read on topics and tiles, marked ✨; Approve updates at once and no longer shows Undo.
+
 ## 0.12.4 (2026-09-30)
 
 ### Changed
