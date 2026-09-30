@@ -84,8 +84,8 @@ function prLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   }
   labels.push(...snoozeLabels(board, key, pr));
   const snooze = board.snoozes.get(key);
-  if (snooze && pr.state !== 'OPEN' && (snooze.condition.kind === 'new_push' || snooze.condition.kind === 'ci_green')) {
-    labels.push('shape:merged PR with push/CI snooze');
+  if (snooze && pr.state !== 'OPEN') {
+    labels.push('shape:finished PR with snooze');
   }
   if (pr.truncated) {
     labels.push('shape:truncated snapshot');
@@ -147,7 +147,7 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:truncated snapshot',
   'shape:lock on with pending write',
   'shape:NOT_YOURS routed request',
-  'shape:merged PR with push/CI snooze',
+  'shape:finished PR with snooze',
   ...['open', 'draft', 'merged', 'closed'].flatMap((state) => ['viewer', 'teammate', 'other', 'bot'].map((author) => `pr-author:${state}/${author}`)),
   'request:you',
   'request:team_for_you',

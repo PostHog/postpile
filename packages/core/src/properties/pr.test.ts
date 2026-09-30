@@ -3,33 +3,13 @@
 // POSTPILE_PROPERTY_RUNS=10000 pnpm test runs more boards per invariant.
 import { describe, expect, it } from 'vitest';
 import { pingRule } from '../pings.ts';
-import { buildBoard, checkBoards, PR_INVARIANTS, PROPERTY_TIMEOUT_MS, tileStateOf, type BoardSpec, type PrSpec } from '../testing/index.ts';
+import { buildBoard, checkBoards, PR_INVARIANTS, PROPERTY_TIMEOUT_MS, QUIET_PR, tileStateOf, type BoardSpec } from '../testing/index.ts';
 
 describe('pr invariants', () => {
   for (const invariant of PR_INVARIANTS) {
     it(invariant.name, () => checkBoards(invariant), PROPERTY_TIMEOUT_MS);
   }
 });
-
-/** ada's open PR, pinged, with nothing else going on. */
-const quietPr: PrSpec = {
-  author: 'other',
-  draft: false,
-  steps: [],
-  end: { kind: 'open' },
-  ci: 'none',
-  tracking: { kind: 'thread', reason: 'review_requested', readAfter: null },
-  threadsResolved: false,
-  approvedAfter: null,
-  markedReadAfter: null,
-  snooze: null,
-  glance: null,
-  lookCloser: false,
-  overrides: [],
-  truncated: false,
-  staleSnapshot: false,
-  pendingWrite: false,
-};
 
 describe('pings, scenarios the properties found', () => {
   // Found 2026-09-29 by "a ping is about unseen loud news and never comes
@@ -44,7 +24,7 @@ describe('pings, scenarios the properties found', () => {
           kind: 'single',
           prs: [
             {
-              ...quietPr,
+              ...QUIET_PR,
               steps: [
                 { kind: 'request', target: 'other_team', byBot: true },
                 { kind: 'comment', by: 'other', text: 'plain', thread: null },

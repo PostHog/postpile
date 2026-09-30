@@ -61,16 +61,15 @@ function snoozeContext(board: PropertyBoard, key: PrKey, events: PrEvent[] = eve
   return { pr: prOf(board, key), events, now: board.now, viewer: board.viewer };
 }
 
-/** A human's loud news after the start breaks a snooze; a push or CI snooze on a finished PR is over; the app's Look closer event never wakes one. */
+/** A human's loud news after the start breaks a snooze; every snooze on a finished PR is over; the app's Look closer event never wakes one. */
 export const snoozeLifecycle: Invariant = {
-  name: 'snoozes: human news breaks, a finished PR ends push and CI snoozes, Look closer never wakes',
+  name: 'snoozes: human news breaks, a finished PR ends every snooze, Look closer never wakes',
   check(board) {
     for (const [key, snooze] of board.snoozes) {
       const pr = prOf(board, key);
       const events = eventsOf(board, key);
       const phase = snoozePhase(snooze, snoozeContext(board, key));
-      const waitsOnCode = snooze.condition.kind === 'new_push' || snooze.condition.kind === 'ci_green';
-      ensure(!(waitsOnCode && pr.state !== 'OPEN') || phase !== 'active', `${key}: ${snooze.condition.kind} snooze still active on a ${pr.state} PR`);
+      ensure(pr.state === 'OPEN' || phase !== 'active', `${key}: ${snooze.condition.kind} snooze still active on a ${pr.state} PR`);
       const humanNews = events.filter((event) => event.at > snooze.since && isNews(event) && !isAutomation(event, reviewRequestTarget(event, pr), board.viewer));
       ensure(humanNews.length === 0 || phase === 'broken', `${key}: human news after the snooze, phase ${phase}`);
       const withoutLookCloser = events.filter((event) => event.kind !== 'look_closer');

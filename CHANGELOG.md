@@ -14,7 +14,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - A review request a bot made for you counts as an ask everywhere: it pings, wakes a snooze, and keeps quiet reads from marking the thread read as bot activity.
 - A dismissed review no longer counts as reviewed for "To review" while whose move says "Review".
 - Snoozes belong to PRs, not tiles, so they survive a PR joining a stack or set. A new unsnoozed PR in a snoozed tile makes the tile show again.
-- A snooze waiting for a push or green CI ends when the PR is merged or closed, so its topic can retire.
+- Every snooze ends when its PR is merged or closed, so its topic can retire. A "someone replies" or "until" snooze on a finished PR still held it.
 - A finished topic's retired time no longer moves when the topic is renamed.
 - A mention the agent turns quiet no longer brings back a finished topic when the full sync is first to see it.
 - A done PR in the detail pane offers only Open on GitHub, like a done tile, also on a snoozed tile. A handled PR by someone else with nothing asked still led with Approve.

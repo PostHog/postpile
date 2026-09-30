@@ -48,25 +48,24 @@ function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
   );
 }
 
-/** A merged or closed PR gets no push or CI run worth waiting for. */
-function isFinished(pr: Pr): boolean {
-  return pr.state !== 'OPEN';
-}
-
 function newPush(snooze: Snooze, context: SnoozeContext): boolean {
-  return isFinished(context.pr) || context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
+  return context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
 }
 
 function ciGreen(context: SnoozeContext): boolean {
-  return isFinished(context.pr) || context.pr.checks.rollup === 'SUCCESS';
+  return context.pr.checks.rollup === 'SUCCESS';
 }
 
 /**
  * True once the snooze condition is met: a human reply, a push, green CI, or
- * the time passed. A push or CI snooze also ends when the PR is merged or
- * closed; otherwise it could never end and kept the topic from retiring.
+ * the time passed. Every snooze also ends when the PR is merged or closed
+ * (decided 2026-09-30): nothing left to wait for, and a snooze that holds a
+ * finished PR keeps its topic from retiring.
  */
 export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
+  if (context.pr.state !== 'OPEN') {
+    return true;
+  }
   switch (snooze.condition.kind) {
     case 'someone_replies':
       return someoneReplied(snooze, context);

@@ -42,13 +42,17 @@ describe('isSnoozeOver', () => {
     expect(isSnoozeOver(green, context({ pr: makePr({ checks: { rollup: 'SUCCESS', contexts: [] } }) }))).toBe(true);
   });
 
-  it('a push or CI snooze ends when the PR is merged or closed', () => {
+  it('every snooze ends when the PR is merged or closed', () => {
     const failingMerged = makePr({ state: 'MERGED', checks: { rollup: 'FAILURE', contexts: [] } });
     const closed = makePr({ state: 'CLOSED', checks: { rollup: 'FAILURE', contexts: [] } });
-    expect(isSnoozeOver(snooze({ kind: 'ci_green' }), context({ pr: failingMerged }))).toBe(true);
-    expect(isSnoozeOver(snooze({ kind: 'new_push' }), context({ pr: failingMerged }))).toBe(true);
-    expect(isSnoozeOver(snooze({ kind: 'new_push' }), context({ pr: closed }))).toBe(true);
-    expect(isSnoozeOver(snooze({ kind: 'someone_replies' }), context({ pr: closed }))).toBe(false);
+    const later = snooze({ kind: 'until_time', until: at(999) });
+    for (const pr of [failingMerged, closed]) {
+      expect(isSnoozeOver(snooze({ kind: 'ci_green' }), context({ pr }))).toBe(true);
+      expect(isSnoozeOver(snooze({ kind: 'new_push' }), context({ pr }))).toBe(true);
+      expect(isSnoozeOver(snooze({ kind: 'someone_replies' }), context({ pr }))).toBe(true);
+      expect(isSnoozeOver(later, context({ pr }))).toBe(true);
+    }
+    expect(isSnoozeOver(later, context())).toBe(false);
   });
 });
 

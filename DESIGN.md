@@ -142,8 +142,8 @@ team-devex" instead of the bot's name.
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
 - `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
-  yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); a push or CI snooze also
-  ends when its PR is merged or closed.
+  yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); every snooze also ends
+  when its PR is merged or closed.
 - `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
   without their review they have not seen yet, see "Merged without your review"), or approved by
@@ -3942,9 +3942,9 @@ tile. Existing snoozes are carried over by migration 019 (`pr_snooze`; the
 old `snooze` table stays until 019 has shipped). A CI snooze on a multi-PR
 tile is now checked per PR, so the tile shows once any tracked PR is green
 (open question whether it should wait for all). Events on pulled-in,
-untracked stack layers no longer touch a snooze. A snooze waiting for
-a push or for green CI ends when the PR is merged or closed; it could never
-finish before and kept the topic from retiring. The human-only wake rule is
+untracked stack layers no longer touch a snooze. Every snooze ends when
+its PR is merged or closed (push and CI snoozes first, every kind since
+2026-09-30); it could never finish before and kept the topic from retiring. The human-only wake rule is
 unchanged: the app's own Look-closer event does not break a snooze (its
 ping already skips snoozed tiles).
 

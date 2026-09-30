@@ -80,6 +80,26 @@ export interface PrSpec {
   pendingWrite: boolean;
 }
 
+/** A scenario's starting point: ada's open PR, pinged for a review request, with nothing else going on. */
+export const QUIET_PR: PrSpec = {
+  author: 'other',
+  draft: false,
+  steps: [],
+  end: { kind: 'open' },
+  ci: 'none',
+  tracking: { kind: 'thread', reason: 'review_requested', readAfter: null },
+  threadsResolved: false,
+  approvedAfter: null,
+  markedReadAfter: null,
+  snooze: null,
+  glance: null,
+  lookCloser: false,
+  overrides: [],
+  truncated: false,
+  staleSnapshot: false,
+  pendingWrite: false,
+};
+
 export type GroupKind = 'single' | 'stack' | 'set';
 
 /** One tile to be: a single PR, a real stack (by base and head branches) or an agent set. */

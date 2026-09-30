@@ -11,7 +11,7 @@ now".
   review request asks, did you act after X, which events ask). Every read
   goes through one planner (`planRead` in `core/read-plan.ts`), waiting
   GitHub writes through `pendingWriteStep`. Snoozes are per PR (migration
-  019 `pr_snooze`); push and CI snoozes end on merge or close. Topic status
+  019 `pr_snooze`); every snooze ends on merge or close. Topic status
   has one writer (`nextTopicStatus` / `changeTopicStatus`, `retiredAt` in
   migration 020). Loudness and pings are decision tables. PR facts
   (`PrSummary.facts`) and button offers (`TileView.offers`) come from

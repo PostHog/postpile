@@ -75,10 +75,9 @@ export const queueCountsMatchRows: Invariant = {
 };
 
 /**
- * A finished topic can retire: every PR merged or closed, no loud news
- * unseen, no unseen merge without review, and no snooze that still holds
- * (a push or CI snooze never holds a finished PR) leaves every tile done,
- * and then nothing in the row needs you.
+ * A finished topic can retire: every PR merged or closed (which ends every
+ * snooze), no loud news unseen and no unseen merge without review leaves
+ * every tile done, and then nothing in the row needs you.
  */
 export const finishedTopicRetires: Invariant = {
   name: 'a finished topic with nothing unseen has every tile done and needs nothing',
@@ -86,14 +85,9 @@ export const finishedTopicRetires: Invariant = {
     const keys = [...new Set(views.flatMap((view) => view.tile.members.map((member) => member.prKey)))];
     const allOver = keys.length > 0 && keys.every((key) => prOf(board, key).state !== 'OPEN');
     if (allOver) {
-      const onlyCodeSnoozes = [...board.snoozes.values()].every((snooze) => snooze.condition.kind === 'new_push' || snooze.condition.kind === 'ci_green');
-      if (onlyCodeSnoozes) {
-        ensure(views.every((view) => view.state.kind !== 'snoozed'), 'a push or CI snooze holds a finished tile');
-      }
-      const nothingUnseen = views.every(
-        (view) =>
-          view.state.kind !== 'snoozed' &&
-          view.tile.members.every((member) => {
+      ensure(views.every((view) => view.state.kind !== 'snoozed'), 'a snooze holds a finished tile');
+      const nothingUnseen = views.every((view) =>
+        view.tile.members.every((member) => {
             const events = eventsOf(board, member.prKey);
             const news = member.provenance.kind !== 'found' && events.some(isNews);
             const merge = isTracked(member.provenance) && !board.notYours.has(member.prKey) && events.some(isUnseenMergeWithoutReview);
