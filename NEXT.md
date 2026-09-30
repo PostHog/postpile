@@ -1068,6 +1068,14 @@ the app meanwhile.
 
 ## Decided
 
+- **✨ marks agent-backed actions** (2026-09-30, DESIGN.md "Agent-assisted
+  actions"): a ✨ goes on a button or action only when it is on offer
+  because an agent's verdict supports it, in a pill that says what the
+  agent judged (risk level, or why it cannot back it). Topic and tile
+  Approve take only agent-safe PRs (Looks safe, low or medium risk, current
+  glance) and ask first. Not backed means greyed out with the reason;
+  nothing to act on means no button. Mark read skips tiles with asks for you.
+
 - **Groups inside a topic** (2026-09-30, DESIGN.md "Groups inside a topic"):
   the tile grid's All / Unread toggle is gone; a topic shows three groups,
   always Unread, Open, Dealt with (n), empty ones hidden, Dealt with folded

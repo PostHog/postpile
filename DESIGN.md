@@ -3158,6 +3158,64 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   with. The fake engine builds its tiles through `buildTileView`, and its
   rules test checks the groups and the counts per topic and in total.
 
+## Agent-assisted actions (2026-09-30)
+
+Approve and Mark read on a whole topic or tile, offered when the agent's
+current verdicts back them. Mockup: https://claude.ai/artifact/UQz3CKZwhJbSg6MgbQrhMS.
+Owner decisions (2026-09-30):
+
+- **The ✨ rule.** ✨ marks an action that is on offer because an agent's
+  verdict supports it. It sits in a pill on the button, and the pill says
+  what the agent judged: the risk level (`✨ low`, `✨ medium`) or why it
+  cannot back the action (`✨ look closer`, `✨ high`, `✨ rechecking…`).
+  Actions that work without the agent never carry ✨.
+- **Agent-safe PR.** A current glance (not `glanceStale`, not missing),
+  verdict `LOOKS_SAFE`, risk low or medium. The risk level is the first
+  word of the glance's `risk` line ("medium - touches the worker loop"). An
+  unreadable risk word counts as high.
+- **Approvable PR.** Exactly today's Approve rule (`paneOffers`, primary
+  action `approve`): someone else's open non-draft PR, tracked (not a
+  pulled-in layer), not approved at its head, not dealt with.
+- **Greyed out or gone.** Something to act on but no agent backing: the
+  button stays, disabled, with the reason in its pill. Nothing to act on at
+  all: no button.
+- **Tile Approve** (new button in the tile footer). Gone when the tile has no
+  approvable PR. Active when every approvable PR in the tile is agent-safe:
+  it approves all of them (a stack base to head), and the pill shows the
+  highest risk. Otherwise greyed out. The reason is `rechecking…` when any
+  approvable PR's glance is stale or missing, else `look closer` or `high`.
+- **Topic Approve** (topic header). It covers the approvable PRs in the
+  topic's tiles, leaving out snoozed tiles. It approves only the agent-safe
+  ones: "Approve 3 of 5 PRs", or "Approve 3 PRs" when all qualify. Each PR
+  left out is named with its reason (look closer, high risk, rechecking).
+  A PR whose recheck comes back safe joins the count. Greyed out when no
+  approvable PR is agent-safe, with `rechecking…` if any is rechecking,
+  else `look closer`.
+- **Approve is final, so it asks first.** Both Approve buttons open a
+  confirm list: each PR with its verdict and risk line, plus the PRs left
+  out and why. Each PR goes through the existing approve path with its
+  head guard (`approve(prKey, headOid)`), and the result is reported per PR.
+  Optimistic like the pane's Approve.
+- **Mark read skips asks.** On a tile, the existing Mark read button gains
+  a `✨ low` / `✨ medium` pill when the agent backs it. That means the
+  tile's unread news holds no ask for you (the "New moves only" asks), and
+  every unread PR in it has a current glance that is not `LOOK_CLOSER`, at
+  low or medium risk. Without that backing it stays a plain Mark read, as
+  today; a normal action gets no greyed ✨. On the topic, "Mark N read" covers
+  the unread, unsnoozed tiles whose Mark read is backed. Tiles with an ask
+  for you are skipped and stay unread. It is gone when no tile is unread,
+  greyed out (`✨ asks for you` or `✨ rechecking…`) when tiles are unread
+  but none qualify. It runs through the existing tile Mark read path and
+  keeps the 6s Undo for the whole batch.
+- **Core decides, the renderer displays.** Core ships each offer on
+  `TileView` and on the topic's view model: kind, state (active/greyed),
+  counts, risk, reason, covered PRs or tiles, and left-out PRs with reasons.
+  The renderer works none of it out (see "Groups inside a topic" and the
+  static renderer rule test).
+- **Telemetry.** `pr_approved` with `from: agent_tile | agent_topic` and
+  `was_agent_approved: true`. `marked_read` with `origin: agent_tile |
+  agent_topic` and the tile count.
+
 ## You already dealt with it
 
 Decided 2026-09-29 (evening), agreed before building. When the user acts on
