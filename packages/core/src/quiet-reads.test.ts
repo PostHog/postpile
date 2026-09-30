@@ -4,6 +4,7 @@ import {
   botNames,
   botOnlySinceRead,
   botsFromQuietDetail,
+  isClearableNonPr,
   openedReadCheck,
   quietReadCheck,
   quietReadDetail,
@@ -238,6 +239,16 @@ describe('touchedReadCheck', () => {
   });
 });
 
+describe('isClearableNonPr', () => {
+  it('clears releases and issues past the grace, never PRs or read threads', () => {
+    const release = { ...makeThreadFor(pr, { updatedAt: at(10) }), subjectType: 'Release', number: null };
+    expect(isClearableNonPr(release, at(21))).toBe(true);
+    expect(isClearableNonPr(release, at(15))).toBe(false);
+    expect(isClearableNonPr({ ...release, unread: false }, at(60))).toBe(false);
+    expect(isClearableNonPr(makeThreadFor(pr, { updatedAt: at(10) }), at(60))).toBe(false);
+  });
+});
+
 describe('quiet read detail', () => {
   it('round-trips the bot names through the action log detail', () => {
     const detail = quietReadDetail(['trunk-io[bot]', 'CI']);
@@ -252,6 +263,7 @@ describe('quiet read detail', () => {
     expect(quietReasonDetail('opened')).toBe('opened in PostPile');
     expect(quietReasonFromDetail(quietReasonDetail('changes_requested'))).toBe('changes_requested');
     expect(quietReasonFromDetail(quietReasonDetail('opened'))).toBe('opened');
+    expect(quietReasonFromDetail(quietReasonDetail('not_pr'))).toBe('not_pr');
     expect(quietReasonFromDetail(quietReadDetail(['CI']))).toBe('bots');
   });
 });

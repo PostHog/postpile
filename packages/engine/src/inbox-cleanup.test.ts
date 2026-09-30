@@ -9,13 +9,23 @@ const OLD_20 = '2026-08-13T12:00:00.000Z';
 const OLD_40 = '2026-07-24T12:00:00.000Z';
 const CUTOFF_14 = '2026-08-19T12:00:00.000Z';
 
-/** One fresh unread PR thread plus two old unread issue threads (20 and 40 days). */
+/**
+ * An unread PR thread older than the sync looks at (30 days): never fetched,
+ * never cleared by PostPile. Releases and issues would be (they are marked
+ * read on GitHub by the sync since 2026-09-30), so the old threads here are PRs.
+ */
+function oldPrThread(number: number, updatedAt: string) {
+  return makeThreadFor(makePr({ number }), { updatedAt });
+}
+
+/** One fresh unread PR thread, an old review request (20 days) and an old PR thread never fetched (40 days), all unread. */
 async function withOldThreads(options: { writesEnabled?: boolean } = {}): Promise<Harness> {
   const h = makeHarness(options);
   const pr = reviewRequestedPr(1);
   h.reader.addPr(pr, makeThreadFor(pr));
-  const issue = (number: number, updatedAt: string) => ({ ...makeThreadFor(makePr({ number }), { updatedAt }), subjectType: 'Issue' });
-  h.reader.threads = [...h.reader.threads, issue(20, OLD_20), issue(40, OLD_40)];
+  const old = reviewRequestedPr(20);
+  h.reader.addPr(old, makeThreadFor(old, { updatedAt: OLD_20 }));
+  h.reader.threads = [...h.reader.threads, oldPrThread(40, OLD_40)];
   await h.engine.sync({ maxAgentCalls: 0 });
   return h;
 }
@@ -39,10 +49,11 @@ describe('inbox cleanup', () => {
   it('turns quiet after a normal sync gap once the dialog was answered, and prominent again after 5 days', async () => {
     let clock = NOW;
     const h = makeHarness({ now: () => clock });
-    h.reader.threads = [{ ...makeThreadFor(makePr({ number: 20 }), { updatedAt: OLD_20 }), subjectType: 'Issue' }];
+    h.reader.threads = [oldPrThread(40, OLD_40)];
     await h.engine.sync({ maxAgentCalls: 0 });
     // Any choice in the dialog answers the banner; one that leaves the old thread unread keeps the count.
     await h.engine.cleanUpInbox(30);
+    h.reader.threads = [oldPrThread(40, OLD_40)];
     clock = new Date('2026-09-03T12:00:00.000Z');
     await h.engine.sync({ maxAgentCalls: 0 });
     expect((await h.engine.inboxCleanup()).look).toBe('line');
@@ -126,7 +137,7 @@ describe('inbox cleanup', () => {
     const h = makeHarness({ now: () => NOW });
     const pr = reviewRequestedPr(1);
     topicWithPrs(h, 't', [pr]);
-    h.reader.threads = [...h.reader.threads, { ...makeThreadFor(makePr({ number: 20 }), { updatedAt: OLD_20 }), subjectType: 'Issue' }];
+    h.reader.threads = [...h.reader.threads, oldPrThread(40, OLD_40)];
     h.store.meta.set('start_fresh_baseline', NOW.toISOString());
     await h.engine.sync({ maxAgentCalls: 0 });
     expect((await h.engine.getTopic('t'))?.tiles[0]?.state.kind).toBe('unread');
@@ -137,7 +148,7 @@ describe('inbox cleanup', () => {
   it('hides the cleanup for 7 days on "Not now"', async () => {
     let clock = NOW;
     const h = makeHarness({ now: () => clock });
-    h.reader.threads = [{ ...makeThreadFor(makePr({ number: 20 }), { updatedAt: OLD_20 }), subjectType: 'Issue' }];
+    h.reader.threads = [oldPrThread(40, OLD_40)];
     await h.engine.sync({ maxAgentCalls: 0 });
     await h.engine.hideInboxCleanup();
     expect(await h.engine.inboxCleanup()).toMatchObject({ look: 'none', hiddenUntil: '2026-09-09T12:00:00.000Z' });

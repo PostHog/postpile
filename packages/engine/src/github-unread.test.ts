@@ -2,6 +2,7 @@
 // unread on GitHub ends one of two ways, cleared by PostPile because it is
 // obviously clearable, or unread in PostPile. The shapes of the 155-thread
 // case that started it, end to end through sync and the quiet reads.
+import type { NotificationThread } from '@postpile/core';
 import { at, makeComment, makePr, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -42,6 +43,40 @@ describe('GitHub unread is PostPile unread', () => {
     expect(markReadCalls(h)).toEqual([]);
     expect((await tileOf(h, 'team'))?.state.kind).toBe('unread');
     expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(true);
+  });
+
+  it('marks a release notification read on GitHub by itself and shows nothing for it', async () => {
+    const h = makeHarness();
+    const release: NotificationThread = {
+      id: 'thread-release',
+      reason: 'subscribed',
+      unread: true,
+      updatedAt: at(10),
+      lastReadAt: null,
+      subjectType: 'Release',
+      repo: 'acme/web-sdk',
+      number: null,
+      title: 'web-sdk 1.260.0',
+    };
+    h.reader.threads = [release];
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(markReadCalls(h)).toEqual(['markThreadRead thread-release']);
+    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({ origin: 'quiet', outcome: 'github', prKey: null, threadId: 'thread-release', detail: 'not a pull request' });
+    expect(h.store.notifications.get('thread-release')?.unread).toBe(false);
+    expect(await h.engine.handledQuietly()).toEqual([]);
+    expect(await h.engine.listTopics()).toEqual([]);
+  });
+
+  it('leaves a release unread while GitHub writes are locked', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    h.reader.threads = [{ ...makeThreadFor(makePr({ number: 90 }), { updatedAt: at(10) }), subjectType: 'Issue' }];
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.writer.calls).toEqual([]);
+    expect(h.store.pendingWrites.list()).toEqual([]);
   });
 
   it('shows a done PR unread again when a person flags its thread, until it is read', async () => {

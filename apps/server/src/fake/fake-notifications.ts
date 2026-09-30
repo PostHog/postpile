@@ -20,7 +20,9 @@ function hasUnseenActivity(events: PrEvent[], prKey: string, readAt: string | nu
  * Sample notification threads for the tiles and the debug view: one per
  * pinged sample PR (reason from its provenance, unread while it has unseen
  * activity: GitHub unread is PostPile unread), plus a few that never become
- * tiles so every landing kind shows up.
+ * tiles so every landing kind shows up. The issue and the release are read:
+ * PostPile marks notifications that are not PRs read by itself (their
+ * "Handled quietly" rows are in fake-quiet.ts).
  */
 export function sampleThreads(data: SampleData, now: Date): NotificationThread[] {
   const threads = new Map<string, NotificationThread>();
@@ -45,14 +47,14 @@ export function sampleThreads(data: SampleData, now: Date): NotificationThread[]
     }
   }
   const extras: NotificationThread[] = [
-    // Old unread threads, so the inbox cleanup line and dialog show in fake mode.
+    // Old unread PR threads the sync never fetches, so the inbox cleanup line and dialog show in fake mode.
     ...[16, 22, 45].map((days, index): NotificationThread => ({
       id: `sample-thread-old-${days}`,
       reason: index === 1 ? 'mention' : 'subscribed',
       unread: true,
       updatedAt: hoursBefore(now, days * 24),
       lastReadAt: null,
-      subjectType: 'Issue',
+      subjectType: 'PullRequest',
       repo: SAMPLE_REPO,
       number: 1000 + days,
       title: ['Flaky test tracker (weekly)', 'RFC: move the dev env to Flox', 'Old CI cost report'][index] ?? 'Old thread',
@@ -60,9 +62,9 @@ export function sampleThreads(data: SampleData, now: Date): NotificationThread[]
     {
       id: 'sample-thread-issue-1700',
       reason: 'mention',
-      unread: true,
+      unread: false,
       updatedAt: hoursBefore(now, 3),
-      lastReadAt: null,
+      lastReadAt: hoursBefore(now, 2.5),
       subjectType: 'Issue',
       repo: SAMPLE_REPO,
       number: 1700,

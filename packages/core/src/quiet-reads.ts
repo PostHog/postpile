@@ -3,8 +3,10 @@
 // it read on GitHub by itself when nothing is asked of the user. A second
 // reason: the user acted on the PR after every unread event ("You already
 // dealt with it"), and a third, opening the PR in PostPile, is decided by the
-// engine from the tile. Rules only, no IO. DESIGN.md "Handled quietly" and
-// "You already dealt with it" have the reasons behind each rule.
+// engine from the tile. Notifications that are not PRs (releases, issues)
+// are marked read too. Rules only, no IO. DESIGN.md "Handled quietly", "You
+// already dealt with it" and "GitHub unread is PostPile unread" have the
+// reasons behind each rule.
 //
 // A thread unread on GitHub keeps its tile unread until one of these clears
 // it (DESIGN.md "GitHub unread is PostPile unread"), so none of them may look
@@ -171,8 +173,9 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
  * - bots: only bot activity since the user's last read
  * - approved, changes_requested, reviewed, replied: the user acted on the PR after every unread event
  * - opened: the user opened the PR in PostPile while nothing was asked of them
+ * - not_pr: a notification that is not a PR (a release, an issue)
  */
-export type QuietReason = 'bots' | TouchReason | 'opened';
+export type QuietReason = 'bots' | TouchReason | 'opened' | 'not_pr';
 
 /** The "you acted after it" reasons, by the user's newest review or comment. */
 export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'replied';
@@ -255,6 +258,20 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   return { kind: 'mark', reason: touchReason(touch.kind) };
 }
 
+/**
+ * A notification that is not a PR (a release, an issue, a discussion):
+ * PostPile shows none of them, so it marks them read on GitHub by itself
+ * (DESIGN.md "GitHub unread is PostPile unread": "People who use PostPile
+ * expect PostPile to clear all of this"), after the same grace as the other
+ * quiet reads. Nothing else is checked: nothing in the app could show it.
+ */
+export function isClearableNonPr(thread: NotificationThread, now: IsoTime): boolean {
+  if (!thread.unread || thread.subjectType === 'PullRequest') {
+    return false;
+  }
+  return new Date(now).getTime() - new Date(thread.updatedAt).getTime() >= QUIET_GRACE_MS;
+}
+
 /** One tile that holds the opened PR, as far as the "opened in PostPile" rule cares. */
 export interface OpenedTile {
   snoozed: boolean;
@@ -327,6 +344,7 @@ const QUIET_REASON_DETAILS: Record<Exclude<QuietReason, 'bots'>, string> = {
   reviewed: 'you reviewed after it',
   replied: 'you replied after it',
   opened: 'opened in PostPile',
+  not_pr: 'not a pull request',
 };
 
 /** Action log detail of a quiet mark-read, naming the bots. */

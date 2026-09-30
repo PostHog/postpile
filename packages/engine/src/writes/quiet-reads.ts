@@ -1,4 +1,5 @@
 import {
+  isClearableNonPr,
   isTracked,
   openedReadCheck,
   prAfterMarkRead,
@@ -22,20 +23,22 @@ import { readLocally } from '../actions/local-change.ts';
 import type { GitHubWrites } from './github-writes.ts';
 import { markThreadReadIfUnchanged } from './thread-mark-read.ts';
 
-/** A thread that passed the rules, with the action log detail that says why. */
+/** A thread that passed the rules, with the action log detail that says why. `prKey` is null for a notification that is not a PR. */
 interface QuietCandidate {
   thread: NotificationThread;
-  prKey: PrKey;
+  prKey: PrKey | null;
   detail: string;
 }
 
 export interface QuietReadsResult {
-  /** Threads marked read on GitHub. */
+  /** PR threads marked read on GitHub. */
   marked: PrKey[];
+  /** Notifications that are not PRs (releases, issues) marked read on GitHub, by thread id. */
+  otherMarked: string[];
   errors: string[];
 }
 
-const NOTHING_DONE: QuietReadsResult = { marked: [], errors: [] };
+const NOTHING_DONE: QuietReadsResult = { marked: [], otherMarked: [], errors: [] };
 
 /** The log detail when a thread may be marked read: only bots since the last read, else the user acted after it. */
 function quietDetail(input: QuietReadInput): string | null {
@@ -55,12 +58,14 @@ function quietDetail(input: QuietReadInput): string | null {
  * read that turned unread only because of bots get marked read on GitHub,
  * when nothing is asked of the user (`quietReadCheck`), and so do threads
  * whose unread events all came before the user's own review or comment
- * (`touchedReadCheck`, "You already dealt with it"). Only while GitHub
- * writes are unlocked: locked, nothing happens and nothing piles up as a
- * pending write. Each thread is read again right before the write and left
- * alone when it moved since the sync. Every write goes through
- * GitHubWrites and is logged with origin `quiet`. Locked, the thread stays
- * unread on GitHub and so in PostPile.
+ * (`touchedReadCheck`, "You already dealt with it"). Notifications that are
+ * not PRs are
+ * marked read too (`isClearableNonPr`): PostPile shows none of them. Only
+ * while GitHub writes are unlocked: locked, nothing happens and nothing
+ * piles up as a pending write, and the thread stays unread in PostPile.
+ * Each thread is read again right before the write and left alone when it
+ * moved since the sync. Every write goes through GitHubWrites and is logged
+ * with origin `quiet`.
  */
 export class QuietReads {
   constructor(
@@ -70,8 +75,8 @@ export class QuietReads {
     private readonly now: () => Date,
   ) {}
 
-  /** Whether the tile is unread is no input: a thread unread on GitHub always makes it so (DESIGN.md "GitHub unread is PostPile unread"). */
-  private candidates(board: Board): QuietCandidate[] {
+  /** PR threads the rules may mark read. Whether the tile is unread is no input: an unread thread always makes it so. */
+  private prCandidates(board: Board): QuietCandidate[] {
     const viewer = board.viewer;
     if (viewer === null) {
       return [];
@@ -100,6 +105,15 @@ export class QuietReads {
     return result.slice(0, QUIET_READS_PER_RUN);
   }
 
+  /** Releases, issues and other notifications that are not PRs, unread on GitHub past the grace. */
+  private otherCandidates(now: string): QuietCandidate[] {
+    return this.store.notifications
+      .list()
+      .filter((thread) => isClearableNonPr(thread, now))
+      .slice(0, QUIET_READS_PER_RUN)
+      .map((thread) => ({ thread, prKey: null, detail: quietReasonDetail('not_pr') }));
+  }
+
   /**
    * True when GitHub took the mark-read. Read elsewhere or moved since the
    * sync: left for the next run, nothing logged (unlike the queue, which
@@ -113,7 +127,9 @@ export class QuietReads {
     }
     // Mirror GitHub: the thread is read up to its last update, and so are the events before it.
     this.store.notifications.markRead(candidate.thread.id, result.readAt);
-    readLocally(this.store, prReadScope(candidate.prKey, false), { kind: 'quiet', readAt: result.readAt }, result.readAt);
+    if (candidate.prKey !== null) {
+      readLocally(this.store, prReadScope(candidate.prKey, false), { kind: 'quiet', readAt: result.readAt }, result.readAt);
+    }
     return true;
   }
 
@@ -201,15 +217,21 @@ export class QuietReads {
       return NOTHING_DONE;
     }
     const nowIso = this.now().toISOString();
-    const result: QuietReadsResult = { marked: [], errors: [] };
-    for (const candidate of this.candidates(Board.load(this.store, nowIso))) {
+    const result: QuietReadsResult = { marked: [], otherMarked: [], errors: [] };
+    const candidates = [...this.prCandidates(Board.load(this.store, nowIso)), ...this.otherCandidates(nowIso)];
+    for (const candidate of candidates) {
       try {
-        if (await this.markOne(candidate)) {
+        if (!(await this.markOne(candidate))) {
+          continue;
+        }
+        if (candidate.prKey === null) {
+          result.otherMarked.push(candidate.thread.id);
+        } else {
           result.marked.push(candidate.prKey);
         }
       } catch (error) {
         // GitHubWrites logged it as failed; the thread stays unread and the next sync tries again.
-        result.errors.push(`quiet mark-read of ${candidate.prKey}: ${errorText(error)}`);
+        result.errors.push(`quiet mark-read of ${candidate.prKey ?? `notification ${candidate.thread.id}`}: ${errorText(error)}`);
       }
     }
     advanceSeenFromGitHub(this.store, result.marked, nowIso);

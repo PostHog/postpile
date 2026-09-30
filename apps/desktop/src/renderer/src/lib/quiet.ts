@@ -22,6 +22,7 @@ const REASON_TEXT: Record<Exclude<QuietReason, 'bots'>, string> = {
   reviewed: 'you reviewed after it',
   replied: 'you replied after it',
   opened: 'opened in PostPile',
+  not_pr: 'not a pull request',
 };
 
 /** "only trunk-io, CI", "you approved after it", "opened in PostPile". */

@@ -27,21 +27,26 @@ export function sampleQuietReadTimes(now: Date): Map<string, string> {
   return new Map(QUIET_SAMPLES.map((sample) => [`${SAMPLE_REPO}#${sample.number}`, hoursBefore(now, sample.hoursAgo)]));
 }
 
+/** Notifications that are not PRs, marked read by the sync (in the log and the debug view, not in "Handled quietly"). */
+const NOT_PR_SAMPLES: { threadId: string; hoursAgo: number }[] = [{ threadId: 'sample-thread-issue-1700', hoursAgo: 2.5 }];
+
 /**
  * Action log rows as the real sync writes them for "Handled quietly", on
  * sample threads that are read. Oldest first, so the log ids grow with time.
  */
 export function sampleQuietReads(now: Date): NewActionLogEntry[] {
-  return QUIET_SAMPLES.toSorted((a, b) => b.hoursAgo - a.hoursAgo).map((sample) => ({
-    at: hoursBefore(now, sample.hoursAgo),
+  const prRows = QUIET_SAMPLES.map((sample) => ({ hoursAgo: sample.hoursAgo, threadId: `sample-thread-${sample.number}`, prKey: `${SAMPLE_REPO}#${sample.number}`, detail: sample.detail }));
+  const otherRows = NOT_PR_SAMPLES.map((sample) => ({ hoursAgo: sample.hoursAgo, threadId: sample.threadId, prKey: null, detail: quietReasonDetail('not_pr') }));
+  return [...prRows, ...otherRows].toSorted((a, b) => b.hoursAgo - a.hoursAgo).map((row) => ({
+    at: hoursBefore(now, row.hoursAgo),
     action: 'mark_read',
     origin: 'quiet',
     outcome: 'github',
-    threadId: `sample-thread-${sample.number}`,
-    prKey: `${SAMPLE_REPO}#${sample.number}`,
+    threadId: row.threadId,
+    prKey: row.prKey,
     tileId: null,
     batch: null,
-    detail: sample.detail,
+    detail: row.detail,
   }));
 }
 
