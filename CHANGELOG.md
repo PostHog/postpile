@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- Mark read no longer pops a tile back to unread a few seconds later just because the PR moved after the last sync (your own pushes, a bot's review). PostPile fetches the PR again and marks it read after all when only your own activity and automation came since. When a person commented or reviewed since, the tile stays unread and a toast says what is new, e.g. "New since you looked: a review from alice".
+
 ## 0.12.0 (2026-09-30)
 
 ### Added

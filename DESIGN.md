@@ -2804,6 +2804,26 @@ pending-send result all say "GitHub didn't take it: <reason>; still unread"
 (a failed pending send says "still pending"). A mark-read with writes off
 at send time is now logged `skipped` instead of `local`.
 
+**Newer activity after a click** (2026-09-30). A user's mark-read (tile,
+PR, detail, debug view, a pending send) that the guard skips for activity
+after the last sync used to pop the tile back unread about 6s after the
+click, even when the new activity was the user's own pushes and a review
+bot's comments. Now the queue decides it again before putting anything back
+(`ClickedReadRetry`, core `clickedReadCheck`): the PR is fetched with the
+same refresh as after a write (or the running full sync; nothing while the
+quota is critical), then the bot-only rule runs from the click's cutoff (the
+thread's `updated_at` the click saw). Only the viewer's own activity and
+automation since, bot reviews on the viewer's own open PR included (the
+click means "I saw what PostPile showed me"), and the thread is marked read
+on GitHub now, guarded again against the fresh `updated_at`, logged
+"marked after refresh: only your own activity". A person's activity since,
+or a snapshot that still does not cover the thread, and it stays unread:
+the click is put back, logged "kept unread: new review from alice", and the
+live status carries `keptUnread` for the toast ("New since you looked: a
+review from alice"). While it decides the thread is held: the inbox leaves
+its row alone, so the tile never turns unread in between. Not on quit. The
+quiet reads keep their own rules.
+
 **One door.** `GitHubWrites` is the only thing in the engine that calls the
 writer: approve, comment and the mark-read queue go through it. Every call
 asks the switch and writes an `action_log` row (reached GitHub, failed with
