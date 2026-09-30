@@ -36,7 +36,7 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
   const live = liveLabel(props.live, now);
   const liveOn = props.live !== undefined && props.live.state !== 'off';
   const quota = quotaLabel(props.live);
-  const unread = new Set(props.topics.flatMap((item) => item.unreadPrKeys)).size;
+  const unread = props.topics.reduce((total, item) => total + item.unreadTiles, 0);
   const counts = props.detail ? countPrs(props.detail.tiles) : null;
   const tools = toolsFooter(useTools().data);
   const lastSync = actions.lastSync;

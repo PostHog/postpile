@@ -400,7 +400,7 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   thread unread on GitHub, a pulled-in layer's loud news, an unseen Look
   closer event) gets `UnreadDot` ("Unread") before its number, on the tile
   (single-PR tiles too) and in `DetailContext`'s list. A topic with unread
-  PRs gets it too, and its bubble counts `TopicListItem.unreadPrs`. The renderer only reads the
+  PRs gets it too, and its bubble counts `TopicListItem.unreadTiles` (counts are tiles, dots are per PR; the footer's number too). The renderer only reads the
   field. `DetailContext` shows kind, title, "PR x of n"
   and the arrows only for several PRs; one PR is just "PR".
 - Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):

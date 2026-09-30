@@ -1945,8 +1945,9 @@ unseen loud news, or an unseen Look closer event. Single-PR tiles get it
 too (the multi-PR-only rule is gone), a snoozed tile keeps the dots of its
 unread threads, open and done tiles have none. Seen but still owed is not a
 dot: the honey "Your move" (tile footer, sidebar chip) says it. A topic with
-unread PRs shows the dot, and its bubble counts unread PRs instead of tiles
-(`TopicListItem.unreadPrs`, also the footer's unread number). The passages
+unread PRs shows the dot. Counts are tiles, dots are per PR (owner,
+2026-09-30): the sidebar bubble and the footer's unread number count unread
+tiles (`TopicListItem.unreadTiles`), not PRs. The passages
 above describe the "Not done yet" rule this replaced.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
-import { unreadTiles, type TileFilter } from '../lib/selection.ts';
+import { isUnreadTile, unreadTiles, type TileFilter } from '../lib/selection.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';
@@ -39,6 +39,14 @@ function TileCount(props: { count: number }) {
  * Tiles in one column, never side by side: the selected tile's notch then
  * always points straight at the detail pane.
  */
+/** A tile the Unread filter lists never fades for the queue filter: it is what the user asked to see. */
+function filterMatchFor(view: TileView, props: TileGridProps): boolean | null {
+  if (props.queueFilter === null || (props.filter === 'unread' && isUnreadTile(view))) {
+    return null;
+  }
+  return tileMatchesFilter(view, props.queueFilter);
+}
+
 function Grid(props: TileGridProps & { views: TileView[] }) {
   return (
     <div className="flex flex-col gap-3.5">
@@ -51,7 +59,7 @@ function Grid(props: TileGridProps & { views: TileView[] }) {
           selected={view.tile.id === props.selectedTileId}
           selectedPrKey={props.selectedPrKey}
           onSelect={(prKey) => props.onSelect(view.tile.id, prKey)}
-          filterMatch={props.queueFilter === null ? null : tileMatchesFilter(view, props.queueFilter)}
+          filterMatch={filterMatchFor(view, props)}
         />
       ))}
     </div>
@@ -108,7 +116,7 @@ export function TileGrid(props: TileGridProps) {
   const matching = props.matchingTileIds;
   const ordered = tilesInTierOrder(props.detail.tiles);
   const tiles = matching ? ordered.filter((view) => matching.has(view.tile.id)) : ordered;
-  const unread = tiles.filter((view) => view.state.kind === 'unread' || view.state.unreadOnGitHub);
+  const unread = tiles.filter(isUnreadTile);
   const [live, snoozed, done] = useHeldPlace(
     props.selectedTileId,
     props.selectedTileId,

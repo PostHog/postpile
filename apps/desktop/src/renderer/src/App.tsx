@@ -69,6 +69,8 @@ export function App() {
   const [query, setQuery] = useState('');
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
   const [tileFilter, setTileFilter] = useState<TileFilter>('all');
+  // Switching the grid to Unread clears the selection in the open topic (until the next pick or topic change).
+  const [deselectedTopicId, setDeselectedTopicId] = useState<string | null>(null);
   const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   const changeQueueFilter = (filter: QueueFilter | null): void => {
     setQueueFilter(filter);
@@ -136,7 +138,8 @@ export function App() {
   const allTiles = topic.data?.tiles ?? [];
   const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
   const keptTile = keptNow && keptNow.topicId === activeTopicId ? keptNow : null;
-  const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile, tileFilter);
+  const noTile = deselectedTopicId !== null && deselectedTopicId === activeTopicId && nav.current.tileId === null;
+  const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile, tileFilter, noTile);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
   const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown, selected.auto && selected.view ? { tileFilter, state: selected.view.state.kind } : null);
@@ -167,6 +170,16 @@ export function App() {
     // pinKey stands for pin, whose object is new on every render.
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- pinKey stands for pin, replaceEntry changes every render
   }, [pinKey]);
+  const changeTileFilter = (next: TileFilter): void => {
+    setTileFilter(next);
+    if (next === 'unread' && tileFilter !== 'unread' && activeTopicId !== null) {
+      setDeselectedTopicId(activeTopicId);
+      replaceEntry({ ...nav.current, tileId: null, prKey: null });
+    }
+  };
+  useEffect(() => {
+    setDeselectedTopicId(null);
+  }, [activeTopicId]);
   const pickTile = (tileId: string, prKey: string) => {
     const view = topic.data?.tiles.find((candidate) => candidate.tile.id === tileId);
     if (view) {
@@ -274,7 +287,7 @@ export function App() {
           onSelect={pickTile}
           selectedIsAuto={selected.auto}
           filter={tileFilter}
-          onFilter={setTileFilter}
+          onFilter={changeTileFilter}
           matchingTileIds={withSelectedTile(matchingTileIds, selected.auto ? null : (selected.view?.tile.id ?? null))}
           queueFilter={queueFilter}
         />
