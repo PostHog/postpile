@@ -226,6 +226,7 @@ export class ReadModels {
           repoLabel: repoLabels[index] ?? null,
           tileUnread,
           unreadOnGitHub: board.threads.get(pr.key)?.unread === true,
+          lastReadAt: board.threads.get(pr.key)?.lastReadAt ?? null,
           now: board.now,
           pendingWrite: pending.get(pr.key) ?? null,
         }),

@@ -4,7 +4,7 @@ import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { ruleLoudness } from './loudness.ts';
 import { mentionsAnyTeam, mentionsTeam, mentionsUser, sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
-import { isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
+import { homeTeamsOf, isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
@@ -18,6 +18,8 @@ interface RawEvent {
   url: string | null;
   sourceId: string;
   subject: string | null;
+  /** comment_edited: the edit time, part of the event id so a later edit is a new event. */
+  version?: IsoTime;
 }
 
 interface ApprovalPoint {
@@ -146,6 +148,95 @@ function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null
     url: comment.url,
     sourceId: comment.id,
     subject: finalKind === 'team_mention' ? mentionedTeam(comment, viewer) : null,
+  };
+}
+
+/** The comment was edited after it was posted. A review body edited while the review was still pending does not count. */
+function editedAt(comment: Comment): IsoTime | null {
+  const at = comment.lastEditedAt ?? null;
+  return at !== null && at > comment.createdAt ? at : null;
+}
+
+/** Who made the latest edit: the editor, else the author (GitHub does not always say). */
+function editorOf(comment: Comment): string {
+  return comment.editor || comment.author;
+}
+
+/**
+ * An edit is automation when a bot account made it, or when the author
+ * edited their own comment and the comment is automation (a bot body on a
+ * user account).
+ */
+function isMachineEdit(comment: Comment): boolean {
+  const editor = editorOf(comment);
+  return sameLogin(editor, comment.author) ? isMachineComment(comment) : isBot(editor);
+}
+
+/**
+ * Whom a person's edited comment now @-mentions: the viewer, else one of
+ * their home teams; null for none, and for automation or the viewer's own
+ * edits. The old body is not fetched, so a mention that was there before the
+ * edit counts too: the edit event is new and unseen only when the edit came
+ * after the viewer's last read (DESIGN.md "Handled quietly" › Comment edits).
+ */
+function editMentionTarget(comment: Comment, viewer: Viewer): string | null {
+  if (isMachineEdit(comment) || sameLogin(editorOf(comment), viewer.login)) {
+    return null;
+  }
+  if (mentionsUser(comment.body, viewer.login)) {
+    return viewer.login;
+  }
+  return homeTeamsOf(viewer).find((team) => mentionsTeam(comment.body, team)) ?? null;
+}
+
+/**
+ * What a comment_edited event asks of the viewer: 'you' when a person's
+ * edited comment now mentions them, 'team' when it mentions one of their
+ * home teams, null otherwise (other kinds, automation, no mention). One
+ * home for loudness, asks, pings and the headline.
+ */
+export function editMentionOf(event: Pick<PrEvent, 'kind' | 'sourceId'>, pr: Pr, viewer: Viewer): 'you' | 'team' | null {
+  if (event.kind !== 'comment_edited') {
+    return null;
+  }
+  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+  const target = comment ? editMentionTarget(comment, viewer) : null;
+  if (target === null) {
+    return null;
+  }
+  return sameLogin(target, viewer.login) ? 'you' : 'team';
+}
+
+function editSummary(comment: Comment, editor: string, machine: boolean, target: string | null, viewer: Viewer): string {
+  if (machine && sameLogin(editor, comment.author)) {
+    return withText(`${editor} updated its comment`, comment.body);
+  }
+  if (target === null) {
+    return withText(`${editor} edited a comment`, comment.body);
+  }
+  const whom = sameLogin(target, viewer.login) ? 'you' : 'your team';
+  return withText(`${editor} edited a comment to mention ${whom}`, comment.body);
+}
+
+/** One event for a comment's latest edit, at the edit time; null for a comment never edited. */
+function editEvent(comment: Comment, viewer: Viewer): RawEvent | null {
+  const at = editedAt(comment);
+  if (at === null) {
+    return null;
+  }
+  const editor = editorOf(comment);
+  const machine = isMachineEdit(comment);
+  const target = editMentionTarget(comment, viewer);
+  return {
+    kind: 'comment_edited',
+    actor: editor,
+    isBot: machine,
+    at,
+    summary: editSummary(comment, editor, machine, target, viewer),
+    url: comment.url,
+    sourceId: comment.id,
+    subject: target,
+    version: at,
   };
 }
 
@@ -326,6 +417,10 @@ function collectRawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null)
     if (event) {
       raw.push(event);
     }
+    const edit = editEvent(comment, viewer);
+    if (edit) {
+      raw.push(edit);
+    }
   }
   raw.push(...reviewEvents(pr));
   raw.push(...commitEvents(pr, viewer, userState));
@@ -339,6 +434,11 @@ function collectRawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null)
 
 export function eventId(prKey: string, kind: EventKind, sourceId: string): string {
   return `${prKey}:${kind}:${sourceId}`;
+}
+
+/** A comment_edited event's id: the comment and the edit time, so re-syncs keep it and a later edit is a new one. */
+export function editEventId(prKey: string, commentId: string, editedAt: IsoTime): string {
+  return eventId(prKey, 'comment_edited', `${commentId}@${editedAt}`);
 }
 
 /**
@@ -361,11 +461,11 @@ export function deriveEvents(
       viewer,
       userState,
       subject: raw.subject,
-      userRepliedAfter: ADDRESSED_KINDS.includes(raw.kind) && spokeAfter(pr, viewer.login, raw.at),
+      userRepliedAfter: (ADDRESSED_KINDS.includes(raw.kind) || raw.kind === 'comment_edited') && spokeAfter(pr, viewer.login, raw.at),
       requestAnswered: requestAnswered(pr, viewer, raw),
     });
     return {
-      id: eventId(pr.key, raw.kind, raw.sourceId),
+      id: raw.version === undefined ? eventId(pr.key, raw.kind, raw.sourceId) : editEventId(pr.key, raw.sourceId, raw.version),
       prKey: pr.key,
       kind: raw.kind,
       actor: raw.actor,

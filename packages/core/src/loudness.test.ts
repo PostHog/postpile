@@ -133,7 +133,7 @@ describe('loudness table', () => {
       question_to_user: true, comment: true, review_approved: true, review_changes_requested: true,
       review_commented: true, commits_pushed: true, commits_after_approval: true, force_pushed: true, merged: true,
       merged_without_review: true, closed: true, reopened: true, ready_for_review: true, converted_to_draft: true,
-      ci: true, deploy: true, merge_queue: true, bot_comment: true, look_closer: true,
+      ci: true, deploy: true, merge_queue: true, bot_comment: true, comment_edited: true, look_closer: true,
     };
     const kinds = Object.keys(kindNames) as LoudnessInput['kind'][];
     const prs = [makePr(), makePr({ author: viewer.login }), makePr({ isDraft: true }), makePr({ state: 'MERGED' })];

@@ -1,7 +1,8 @@
 // The events a PR snapshot should give, restated from its raw fields (DESIGN
 // "Rules layer: one home per fact", the loudness table in loudness.ts): one
 // event per comment, sent review, commit, timeline item and finished CI run,
-// its kind, and its loudness by rule as a whitelist of loud cases. The event
+// its kind, and its loudness by rule as a whitelist of loud cases; one more
+// per comment edited after it was posted, at its latest edit. The event
 // invariant compares the board's events against this list, so `deriveEvents`
 // and `ruleLoudness` are checked against the recipe, not against themselves.
 import { sameLogin } from '../mentions.ts';
@@ -11,6 +12,7 @@ import {
   asksViewer,
   changesAnswer,
   isAutomationLogin,
+  isHomeTeam,
   isMachineComment,
   isOwner,
   lastSpoke,
@@ -19,6 +21,7 @@ import {
   mentionsViewerTeam,
   saysDeploy,
   viewerOwns,
+  viewerTeamsMentioned,
   viewerWasAsked,
 } from './spec-facts.ts';
 
@@ -113,6 +116,47 @@ function mergedWithoutViewer(pr: Pr, viewer: Viewer): boolean {
   return !viewerOwns(pr, viewer) && viewerWasAsked(pr, viewer) && lastSpoke(pr, viewer.login, true) === null;
 }
 
+/**
+ * What an edited body asks of the viewer: 'you' when it @-mentions them,
+ * 'team' when it names one of their home teams, else null (DESIGN "Handled
+ * quietly" › Comment edits; the old body is not known).
+ */
+export function editedBodyAsks(body: string, viewer: Viewer): 'you' | 'team' | null {
+  if (mentionsViewer(body)) {
+    return 'you';
+  }
+  return viewerTeamsMentioned(body, viewer).some((team) => isHomeTeam(viewer, team)) ? 'team' : null;
+}
+
+/** A comment_edited event by a person (not automation, not the viewer): what its comment's body now asks of the viewer. */
+export function editAsks(pr: Pr, viewer: Viewer, event: { kind: EventKind; actor: string; isBot: boolean; sourceId: string }): 'you' | 'team' | null {
+  if (event.kind !== 'comment_edited' || event.isBot || event.actor === '' || sameLogin(event.actor, viewer.login)) {
+    return null;
+  }
+  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+  return comment ? editedBodyAsks(comment.body, viewer) : null;
+}
+
+/** Automation editing its own comment (a sticky CI report): a status update. */
+export function isStatusUpdate(pr: Pr, event: { kind: EventKind; actor: string; isBot: boolean; sourceId: string }): boolean {
+  if (event.kind !== 'comment_edited' || !(event.isBot || event.actor === '')) {
+    return false;
+  }
+  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+  return comment !== undefined && sameLogin(comment.author, event.actor);
+}
+
+/** Edited after it was posted: one event at the latest edit, by the editor (the author when unknown). */
+function editExpected(pr: Pr, comment: Comment): RawExpected | null {
+  const editedAt = comment.lastEditedAt ?? null;
+  if (editedAt === null || editedAt <= comment.createdAt) {
+    return null;
+  }
+  const editor = comment.editor || comment.author;
+  const isBot = sameLogin(editor, comment.author) ? isMachineComment(comment) : isAutomationLogin(editor);
+  return { id: `${pr.key}:comment_edited:${comment.id}@${editedAt}`, kind: 'comment_edited', actor: editor, at: editedAt, isBot, subject: null, body: comment.body };
+}
+
 const TIMELINE_KINDS: Record<string, EventKind> = {
   head_ref_force_pushed: 'force_pushed',
   added_to_merge_queue: 'merge_queue',
@@ -128,6 +172,10 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
     const kind = commentKind(pr, comment, viewer);
     if (kind !== null) {
       events.push({ id: `${pr.key}:${kind}:${comment.id}`, kind, actor: comment.author, at: comment.createdAt, isBot: isMachineComment(comment), subject: null, body: comment.body });
+    }
+    const edit = editExpected(pr, comment);
+    if (edit !== null) {
+      events.push(edit);
     }
   }
   for (const review of pr.reviews) {
@@ -184,8 +232,9 @@ function spokeAfter(pr: Pr, login: string, at: IsoTime, reviewsOnly = false): bo
  * the viewer's changes request, a review on the viewer's PR (one they own), a review
  * request for the viewer or their team that is still open on a non-draft
  * PR, ready for review when the viewer was asked, a comment on the
- * viewer's PR. Never loud: the viewer's own activity and automation (a bot
- * push to a draft is muted). A request for the viewer counts as a person's
+ * viewer's PR, a person's comment edit whose body now mentions the viewer or
+ * a home team (not spoken after). Never loud: the viewer's own activity and
+ * automation (a bot push to a draft is muted). A request for the viewer counts as a person's
  * whoever clicked it. Everything else is quiet.
  */
 function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Loudness; reason: string } {
@@ -200,6 +249,17 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
     return event.isBot && SPEC_PUSH_KINDS.includes(event.kind) && pr.isDraft ? { loudness: 'muted', reason: 'bot pushed to a draft' } : quiet('bot activity');
   }
   const own = viewerOwns(pr, viewer);
+  if (event.kind === 'comment_edited') {
+    // A person's edit: quiet, unless the body now mentions the viewer or a home team and they have not spoken since.
+    const asks = editedBodyAsks(event.body ?? '', viewer);
+    if (asks === null) {
+      return quiet('edited a comment');
+    }
+    if (spokeAfter(pr, viewer.login, event.at)) {
+      return quiet('you already replied');
+    }
+    return loud(asks === 'you' ? 'edited to mention you' : 'edited to mention your team');
+  }
   if (SPEC_ADDRESSED_KINDS.includes(event.kind)) {
     if (spokeAfter(pr, viewer.login, event.at)) {
       return quiet('you already replied');

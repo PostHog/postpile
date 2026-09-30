@@ -42,6 +42,8 @@ export interface PrSummaryInput {
   tileUnread: boolean;
   /** The PR's notification thread is unread on GitHub. */
   unreadOnGitHub: boolean;
+  /** GitHub's read time of the PR's thread, null without one or never read: whether the viewer read before acting (`isPrDone`). */
+  lastReadAt: IsoTime | null;
   /** Now, for what the PR would turn into once marked read (`afterRead`). */
   now: IsoTime;
   /** A mark-read of this PR waiting for the writes lock, or null. */
@@ -93,7 +95,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
     unreadOnGitHub: input.unreadOnGitHub,
-    done: isPrDone(pr, userState, viewer, events, notYours),
+    done: isPrDone(pr, userState, viewer, events, notYours, input.lastReadAt),
     ownTeamRequests: viewer ? ownTeamRequests(pr, viewer) : [],
     pendingWrite: input.pendingWrite,
     turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours }) : NO_TURN,

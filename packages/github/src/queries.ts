@@ -61,7 +61,7 @@ fragment reviewer on RequestedReviewer {
   ... on Team { slug organization { login } }
 }
 
-fragment comment on Comment { author { ...actor } body createdAt }
+fragment comment on Comment { author { ...actor } body createdAt lastEditedAt updatedAt editor { ...actor } }
 
 fragment prData on PullRequest {
   number title url body state isDraft

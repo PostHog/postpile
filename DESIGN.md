@@ -3166,6 +3166,23 @@ Merging or closing counts only when the viewer did it.
    - Log details "you approved after it", "you requested changes after it",
      "you reviewed after it", "you replied after it" (the newest touch);
      `QuietReadView.reason` carries it to the view.
+   - Read before acting (2026-09-30): acting alone no longer says the user
+     saw what came before. Real case: a teammate commented at 12:35:25, the
+     user marked the PR ready at 12:35:31 without reading it. Core
+     `sawBeforeActing` counts a person's event as seen before an action
+     only when a real read lies between them: GitHub's read time of the
+     thread, or PostPile's Mark read or opened read (`handledAt`). Events
+     that turned seen only because the user acted (part 1) do not count.
+     `touchedReadCheck` skips with `acted_without_seeing` unless every
+     person's event before the touch passes. The same rule makes a PR
+     handled without a click (`actedAfterSeeing`, read by `isPrDone`, never
+     stored): the user's newest own activity (comment, review, push to their
+     own PR, marking it ready) comes after the newest person's event and
+     every person's event before it passes; done still needs no move of
+     theirs. Real case: read on GitHub at 12:35:19, marked ready at 12:35:31,
+     own PR waiting on reviewers: done. Only the newest read of each kind is
+     stored, so an earlier read followed by a later one after the action
+     does not count.
 3. *Opening a PR in PostPile*: opening a PR in the detail pane marks its
    GitHub thread read and handles the PR in PostPile too (events seen,
    `handledAt`; since 2026-09-29, before it only marked the thread read),
@@ -3247,17 +3264,20 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    the snapshot from then still covers the thread. A snapshot cut off at
    the query's caps covers only when what fell off is older than the read
    (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
-2. *Not the user's own open PR.* Bot reviews and CI on your own PR can mean
-   work (a failing check, a review bot's finding), so they stay unread while
-   it is open. A merged or closed own PR is fine (2026-09-29: every own PR
-   merges through trunk after the last comment, so 14 merged own PRs stayed
-   unread after 0.10.0).
+2. *No bot finding on the user's own open PR.* A review bot's finding on
+   your own PR can mean work, so it stays unread while it is open. A merged
+   or closed own PR is fine (2026-09-29: every own PR merges through trunk
+   after the last comment, so 14 merged own PRs stayed unread after 0.10.0).
+   Since 2026-09-30 only a finding blocks: a bot's review or its comment in
+   a review thread (core `isAutomationFinding`). Plain bot comments (a
+   stale-PR nudge, a sticky CI report), their edits, CI and deploys do not.
 3. *No unseen merge without the user's review* ("Merged without your
    review", rule 5: PostPile never marks those read by itself). Checked on
    its own, since a merge queue bot merging counts as bot activity.
 4. *Nothing asked of the user.* No unseen loud news on the PR, and whose
    turn (`prWhoseTurn`, with the glance's NOT_YOURS as the tile reads it)
-   is not `you`. Until 2026-09-30 this read "the PR's tile is not unread";
+   is not a new `you` (since 2026-09-30, "New moves only" below; before,
+   any `you` blocked). Until 2026-09-30 this read "the PR's tile is not unread";
    since "GitHub unread is PostPile unread" a tile is unread while its
    thread is, so that check would block every quiet read.
 5. *Grace.* 10 minutes (`QUIET_GRACE_MS`) after the newer of the newest
@@ -3295,6 +3315,53 @@ tile when one holds the PR. Quiet on purpose: no coral, the count is faint
 mono. The notifications debug view shows the same entry as the row's last
 action. They count toward the hourly `pings_summarized` telemetry
 (`handled_quietly`).
+
+**Comment edits** (2026-09-30). A PR thread kept moving with no new
+comment, review or timeline item (real data: the thread's `updated_at` went
+12:00:27, then 12:11:09). Bots edit their sticky comments instead of posting
+new ones (a CI report edited 2s before the thread moved, a review summary,
+test analytics, a review bot), GitHub keeps the notification unread for it,
+and PostPile only derived comment events from `createdAt`, so the tile said
+"new activity on GitHub" with nothing that could clear it. The PR query now
+also asks for `lastEditedAt`, `editor` and `updatedAt` on issue comments,
+review bodies and review-thread comments (the same `comment` fragment, no
+extra request), and each comment edited after it was posted gives one
+`comment_edited` event at its latest edit, by the editor (else the author),
+id `<prKey>:comment_edited:<comment id>@<edit time>` so re-syncs keep it and
+a later edit is a new event. A bot editing its comment is automation, so
+the bots-only read clears it, also on the user's own open PR (not a
+finding). A person's edit is quiet news the events agent judges; it is loud
+and an ask when the edited body mentions the viewer or a home team (Codex
+review: a person editing in "@viewer" is a real ask). The old body is not
+fetched, so a mention already there counts too: the event is new and
+unseen only when the edit came after the viewer's last read. It is also an
+unanswered ask for whose move and the tier (Codex review on PR #41, core
+`askKindOf`): a mention edit asks like a mention (Reply, Needs reply), a
+home-team one like a team mention (until seen), from the edit time, and a
+later comment or review of the viewer answers it. Headline: a
+person's edit ranks with comments (an ask when it mentions them), a bot's
+with automation. Known gap: an edit of a comment that fell off the query's
+comment cap is not seen.
+
+**New moves only** (2026-09-30). A move of the user's that stood before
+their last read no longer keeps a thread unread: the bots-only and judged
+reads block on whose turn only when the move is new since the rule's
+boundary (the read, or the last look). Core `isNewYourMove` works the move
+out on the PR as it stood then and blocks when the move is another kind or
+was not there. `prAsOf` is honest history (Codex review on PR #41, owner:
+no shortcuts): reviews, comments, commits and timeline items after the
+boundary are taken out, requests asked after it dropped and ones removed
+after it (by hand, or by the reviewer's review) put back, a ready or draft
+switch and a merge, close or reopen after it undone, the in-app approval
+after it dropped; only a resolved thread and CI stay as they are now. So a
+bot reopening an approved own PR is a new move. A re-review request after
+the read blocks. The real case that asked for this (the user's own agent
+PR, approved by them on Sep 15, read on Sep 18, then a teammate removed a
+team request, a stale-PR bot nudged and CI ran) still stays unread: on Sep
+18 the PR waited on the team, so "Merge, it is approved" is new. Owner,
+2026-09-30: only new moves that ask something block (reply, review,
+re-review, address changes); merging an approved PR of theirs never does,
+so the real case clears.
 
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide
@@ -4584,7 +4651,11 @@ clears Reply, the answered-changes Re-review and Needs reply (a re-review
 a pending request asks for stays). The generator also makes re-requests
 after a changes request, a second outsider (alice), automation without the
 [bot] suffix (renovate), pending reviews, review bodies, merge queue and
-deploy items, sets that hold a stack and dissolved sets. The property
+deploy items, sets that hold a stack and dissolved sets, and (2026-09-30)
+comment edits: a bot updating its sticky comment, a person's plain edit or
+one adding a mention, by the author or someone else. The PR as it stood at
+a boundary is restated as `specSnapshotAt`, and `newMoveMatchesTheSpec`
+checks `isNewYourMove` at the read and the last look on every thread. The property
 invariants alone now kill 83% of the rule-file mutants (28% before, at the
 same rule code; 300 boards per invariant).
 

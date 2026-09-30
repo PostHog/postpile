@@ -5,14 +5,16 @@
 import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
-import { judgedReadCheck, quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
+import { isAutomationFinding, isNewYourMove, judgedReadCheck, quietReadCheck, touchedReadCheck, type JudgedReadCheck, type QuietReadCheck } from '../quiet-reads.ts';
 import { ownedByTeammate, requestedTeam, reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
 import { isRoutingTeam } from '../team-roles.ts';
+import { actedAfterSeeing } from '../saw-before-acting.ts';
 import { snoozePhase } from '../snooze.ts';
+import { isPrDone } from '../tiles.ts';
 import { sameLogin } from '../mentions.ts';
 import { isUnseenLoud } from '../loudness.ts';
 import { prWhoseTurn } from '../whose-turn.ts';
-import type { Pr, PrKey } from '../types.ts';
+import type { Pr, PrEvent, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import type { Person } from './board-spec.ts';
@@ -178,6 +180,13 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   if (teamRequestHold(pr, board.viewer, board.notYours.has(key))?.kind === 'changes') {
     labels.push('shape:routed request held by changes');
   }
+  labels.push(...editLabels(pr, events));
+  const lastReadAt = board.threads.get(key)?.lastReadAt ?? null;
+  const userState = board.userStates.get(key) ?? null;
+  const actedAfterReading = pr.state === 'OPEN' && !userState?.handledAt && actedAfterSeeing(pr, events, board.viewer, { lastReadAt, handledAt: null });
+  if (actedAfterReading && isPrDone(pr, userState, board.viewer, events, board.notYours.has(key), lastReadAt)) {
+    labels.push('shape:done by acting after reading');
+  }
   const fresh = events.filter((event) => event.seenAt === null);
   labels.push(`ping:${pingRule(fresh, pr, board.viewer, false).class}`);
   const thread = board.threads.get(key);
@@ -192,12 +201,56 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
       prFetchedAt: board.prFetchedAt.get(key) ?? null,
       now: board.now,
     };
-    labels.push(`quiet-read:${quietReadCheck(input).kind}`, `touched-read:${touchedReadCheck(input).kind}`);
+    const quiet = quietReadCheck(input);
+    const touched = touchedReadCheck(input);
+    labels.push(`quiet-read:${quiet.kind}`, `touched-read:${touched.kind}`);
+    if (touched.kind === 'skip' && touched.why === 'acted_without_seeing') {
+      labels.push('touched-read:acted_without_seeing');
+    }
     const judged = judgedReadCheck(input);
     labels.push(judged.kind === 'mark' ? 'judged-read:mark' : `judged-read:${judged.why}`);
+    labels.push(...ownPrQuietLabels(board, key, pr, quiet, judged));
   }
   if (prWhoseTurn({ pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer }).kind === 'them') {
     labels.push('pr-turn:them');
+  }
+  return labels;
+}
+
+/** Comment edits (DESIGN "Handled quietly" › Comment edits): a bot updating its sticky comment, a person's plain edit, an edit that mentions the viewer. */
+function editLabels(pr: Pr, events: PrEvent[]): string[] {
+  const labels: string[] = [];
+  for (const event of events.filter((candidate) => candidate.kind === 'comment_edited')) {
+    const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+    if (event.isBot) {
+      labels.push(comment && sameLogin(comment.author, event.actor) ? 'edit:bot updates its comment' : 'edit:bot edits another comment');
+    } else if (event.ruleLoudness === 'loud') {
+      labels.push('edit:person mentions you');
+    } else {
+      labels.push('edit:person, quiet');
+    }
+  }
+  return labels;
+}
+
+/** The own-PR and new-move branches of the quiet reads (2026-09-30): cleared with only bot noise on an own open PR, kept for a finding, cleared with a move that stood before. */
+function ownPrQuietLabels(board: PropertyBoard, key: PrKey, pr: Pr, quiet: QuietReadCheck, judged: JudgedReadCheck): string[] {
+  const labels: string[] = [];
+  const ownOpen = pr.state === 'OPEN' && specOwners(pr).some((owner) => sameLogin(owner, board.viewer.login));
+  if (ownOpen && quiet.kind === 'mark') {
+    labels.push('shape:own open PR cleared with bot noise');
+  }
+  const events = board.events.get(key) ?? [];
+  const lastReadAt = board.threads.get(key)?.lastReadAt ?? null;
+  if (ownOpen && lastReadAt !== null && events.some((event) => event.at > lastReadAt && isAutomationFinding(event, pr))) {
+    labels.push('shape:bot finding on own open PR');
+  }
+  const input = { pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer, notYours: board.notYours.has(key) };
+  if (prWhoseTurn(input).kind === 'you' && (quiet.kind === 'mark' || judged.kind === 'mark')) {
+    labels.push('shape:cleared with a move that stood before');
+  }
+  if (lastReadAt !== null && isNewYourMove(input, lastReadAt)) {
+    labels.push('shape:new move since the read');
   }
   return labels;
 }
@@ -312,6 +365,15 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:loud news on a read tile',
   'shape:snoozed with an unread thread',
   'shape:unread by the thread alone',
+  'edit:bot updates its comment',
+  'edit:person, quiet',
+  'edit:person mentions you',
+  'touched-read:acted_without_seeing',
+  'shape:own open PR cleared with bot noise',
+  'shape:bot finding on own open PR',
+  'shape:cleared with a move that stood before',
+  'shape:new move since the read',
+  'shape:done by acting after reading',
   'request-to:ada',
   'review:PENDING',
   ...['open', 'draft', 'merged', 'closed'].flatMap((state) => ['viewer', 'teammate', 'other', 'bot'].map((author) => `pr-author:${state}/${author}`)),

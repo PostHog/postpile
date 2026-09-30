@@ -11,8 +11,10 @@ import { topicPeople } from '../topic-queues.ts';
 import {
   actorsFromQuietDetail,
   botsFromQuietDetail,
+  isNewYourMove,
   judgedReadCheck,
   judgedReadDetail,
+  lastLookedAt,
   quietReadCheck,
   quietReadDetail,
   quietReasonDetail,
@@ -20,12 +22,13 @@ import {
   touchedReadCheck,
 } from '../quiet-reads.ts';
 import type { JudgedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
-import type { PrEvent, PrKey, Verdict } from '../types.ts';
+import { prAsOf } from '../pr-as-of.ts';
+import type { Pr, PrEvent, PrKey, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
 import { ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
 import { SPEC_ADDRESSED_KINDS } from './spec-events.ts';
-import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwnerRelation, specOwners, specRelation } from './spec-facts.ts';
+import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwnerRelation, specOwners, specRelation, specSnapshotAt } from './spec-facts.ts';
 import {
   effectiveLoudnessOf,
   expectedDone,
@@ -33,6 +36,7 @@ import {
   expectedForWhom,
   expectedLookCloser,
   expectedLookCloserText,
+  expectedNewMove,
   expectedPing,
   expectedPingText,
   expectedQuietRead,
@@ -160,7 +164,7 @@ export const doneMatchesTheSpec: Invariant = {
   name: 'a PR is done exactly when the spec says: approved or handled with nothing owed, or finished and seen',
   check(board, views) {
     for (const row of allRows(views)) {
-      const expected = expectedDone(turnInput(board, row.key));
+      const expected = expectedDone({ ...turnInput(board, row.key), lastReadAt: board.threads.get(row.key)?.lastReadAt ?? null });
       ensure(row.done === expected, `${row.key}: done ${row.done}, expected ${expected}`);
     }
   },
@@ -246,7 +250,6 @@ export const quietReadsMatchTheSpec: Invariant = {
         continue;
       }
       const pr = prOf(board, key);
-      const yourMove = expectedTurn(turnInput(board, key)).kind === 'you';
       for (const now of [board.now, dayLater(board.now)]) {
         const input = {
           thread,
@@ -259,13 +262,13 @@ export const quietReadsMatchTheSpec: Invariant = {
           now,
         };
         const quietCheck = quietReadCheck(input);
-        const expectedQuiet = JSON.stringify(expectedQuietRead({ ...input, yourMove }));
+        const expectedQuiet = JSON.stringify(expectedQuietRead(input));
         ensure(JSON.stringify(quietCheck) === expectedQuiet, `${key}: bot-only read ${JSON.stringify(quietCheck)}, expected ${expectedQuiet}`);
         const touchedCheck = touchedReadCheck(input);
         const expectedTouched = JSON.stringify(expectedTouchedRead(input));
         ensure(JSON.stringify(touchedCheck) === expectedTouched, `${key}: acted-after read ${JSON.stringify(touchedCheck)}, expected ${expectedTouched}`);
         const judgedCheck = judgedReadCheck(input);
-        const expectedJudged = JSON.stringify(expectedJudgedRead({ ...input, yourMove }));
+        const expectedJudged = JSON.stringify(expectedJudgedRead(input));
         ensure(JSON.stringify(judgedCheck) === expectedJudged, `${key}: judged read ${JSON.stringify(judgedCheck)}, expected ${expectedJudged}`);
         quietDetailsReadBack(key, quietCheck, touchedCheck, judgedCheck);
       }
@@ -322,6 +325,36 @@ export const lookCloserMatchesTheSpec: Invariant = {
   },
 };
 
+/** What the PR as of a boundary says, as one comparable line (request lists as sets). */
+function asOfLine(pr: Pr): string {
+  const sorted = (list: string[]) => list.map((item) => item.toLowerCase()).toSorted();
+  return JSON.stringify([pr.state, pr.isDraft, pr.reviewDecision, pr.headOid, sorted(pr.reviewerUsers), sorted(pr.reviewerTeams), pr.reviews.map((review) => review.id), pr.comments.map((comment) => comment.id), pr.timeline.map((item) => item.id)]);
+}
+
+/**
+ * Whether the viewer's move is new since a boundary (the thread's read, the
+ * last look) is the spec's (DESIGN "Handled quietly" › New moves only):
+ * worked out on the snapshot as it stood then, restated from raw fields
+ * (`specSnapshotAt`). Checked at both boundaries on every PR with a thread,
+ * whatever the quiet reads decided first.
+ */
+export const newMoveMatchesTheSpec: Invariant = {
+  name: 'a move counts as new since the read exactly when the spec says, on the PR as it stood then',
+  check(board) {
+    for (const [key, thread] of board.threads) {
+      const pr = prOf(board, key);
+      const input = { pr, events: eventsOf(board, key), userState: board.userStates.get(key) ?? null, viewer: board.viewer, notYours: board.notYours.has(key) };
+      const boundaries = [thread.lastReadAt, lastLookedAt(thread, pr, input.events, board.viewer)].filter((time): time is string => time !== null);
+      for (const since of boundaries) {
+        ensure(asOfLine(prAsOf(pr, since)) === asOfLine(specSnapshotAt(pr, since)), `${key}: PR as of ${since} ${asOfLine(prAsOf(pr, since))}, expected ${asOfLine(specSnapshotAt(pr, since))}`);
+        const got = isNewYourMove(input, since);
+        const want = expectedNewMove(input, since);
+        ensure(got === want, `${key}: new move since ${since} ${got}, expected ${want}`);
+      }
+    }
+  },
+};
+
 export const RULE_INVARIANTS: readonly Invariant[] = [
   prFactsMatchTheSpec,
   ownershipMatchesTheSpec,
@@ -332,5 +365,6 @@ export const RULE_INVARIANTS: readonly Invariant[] = [
   unseenCountMatchesTheSpec,
   pingsMatchTheSpec,
   quietReadsMatchTheSpec,
+  newMoveMatchesTheSpec,
   lookCloserMatchesTheSpec,
 ];

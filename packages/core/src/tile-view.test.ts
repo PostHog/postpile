@@ -22,6 +22,7 @@ function summaryInput(pr: Pr, events: PrEvent[], overrides: Partial<PrSummaryInp
     repoLabel: null,
     tileUnread: false,
     unreadOnGitHub: false,
+    lastReadAt: null,
     now: at(100),
     pendingWrite: null,
     ...overrides,

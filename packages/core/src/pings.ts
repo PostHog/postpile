@@ -4,6 +4,7 @@
 import { isAutomation } from './bots.ts';
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { clipText } from './dossier.ts';
+import { editMentionOf } from './events.ts';
 import type { GitHubQuotaView } from './github-quota.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isRoutedTeamRequestEvent } from './glance-pings.ts';
@@ -145,8 +146,8 @@ export const OFF_POLL_STATUS: LivePollStatus = {
 };
 
 /**
- * Loud events that are about the user in person: someone talks to them,
- * or, on an open PR, asks for their review, blocks their own PR, addresses
+ * Loud events that are about the user in person: someone talks to them
+ * (also by editing a comment to mention them or a home team), or, on an open PR, asks for their review, blocks their own PR, addresses
  * their changes request (the author pushed or replied after it), or pushes
  * after their approval when the agent raised that push (it starts quiet).
  * Other loud events (a comment or an approval on their PR, a merge without
@@ -157,10 +158,11 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
     return false;
   }
   // Nobody reviews a draft right away: only a personal question or mention pings.
+  const editMention = editMentionOf(event, pr, viewer);
   if (pr.isDraft && pr.state === 'OPEN') {
-    return PERSONAL_ASK_KINDS.includes(event.kind);
+    return PERSONAL_ASK_KINDS.includes(event.kind) || editMention === 'you';
   }
-  if (ADDRESSED_KINDS.includes(event.kind)) {
+  if (ADDRESSED_KINDS.includes(event.kind) || editMention !== null) {
     return true;
   }
   // A review request or a push on a merged or closed PR leaves nothing to do.
@@ -182,13 +184,13 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
 }
 
 /**
- * A ping about the viewer in person: a mention, question or reply to them, or
- * a review request that names them and not a team, or the author's answer to
+ * A ping about the viewer in person: a mention, question or reply to them
+ * (or a comment edited to mention them), or a review request that names them and not a team, or the author's answer to
  * their changes request. A team mention, a team request and other push or
  * changes-request events are not (they may still ping).
  */
 export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
-  if (PERSONAL_ASK_KINDS.includes(event.kind) || isChangesAnswerEvent(event, pr, viewer)) {
+  if (PERSONAL_ASK_KINDS.includes(event.kind) || editMentionOf(event, pr, viewer) === 'you' || isChangesAnswerEvent(event, pr, viewer)) {
     return true;
   }
   if (event.kind !== 'review_requested') {
@@ -383,6 +385,8 @@ function headline(event: PrEvent, pr: Pr): string {
       return 'New commits after your approval';
     case 'review_changes_requested':
       return `${who} requested changes`;
+    case 'comment_edited':
+      return `${who} edited a comment`;
     default:
       return `${who}: ${event.kind.replaceAll('_', ' ')}`;
   }

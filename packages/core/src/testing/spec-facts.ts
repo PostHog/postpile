@@ -524,3 +524,88 @@ export function newestTouch(pr: Pr, viewer: Viewer, kinds: readonly SpecTouchKin
   const touches = viewerTouches(pr, viewer).filter((touch) => kinds === null || kinds.includes(touch.kind));
   return touches.toSorted((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)).at(-1) ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// The PR as it stood earlier (DESIGN "Handled quietly" › New moves only)
+// ---------------------------------------------------------------------------
+
+/** GitHub's decision from the standing verdicts: changes first, then an approval, else review required. */
+function decisionOfVerdicts(pr: Pr): Pr['reviewDecision'] {
+  if (standingChangesBy(pr).length > 0) {
+    return 'CHANGES_REQUESTED';
+  }
+  const authors = [...new Set(pr.reviews.map((review) => review.author.toLowerCase()))];
+  return authors.some((login) => newestVerdict(pr, login)?.state === 'APPROVED') ? 'APPROVED' : 'REVIEW_REQUIRED';
+}
+
+/**
+ * The pending requests at `at`, replayed forward from the PR's start (the
+ * generated world keeps every request in the timeline): a request adds its
+ * subject, a removal takes it off, a sent review takes the reviewer off.
+ */
+function requestsReplayedTo(pr: Pr, at: IsoTime): string[] {
+  const steps: { at: IsoTime; add: boolean; subject: string }[] = [];
+  for (const item of pr.timeline) {
+    if (item.at <= at && item.subject !== null && (item.kind === 'review_requested' || item.kind === 'review_request_removed')) {
+      steps.push({ at: item.at, add: item.kind === 'review_requested', subject: item.subject });
+    }
+  }
+  for (const review of pr.reviews) {
+    if (review.submittedAt <= at && review.state !== 'PENDING') {
+      steps.push({ at: review.submittedAt, add: false, subject: review.author });
+    }
+  }
+  let pending: string[] = [];
+  for (const step of steps.toSorted((a, b) => a.at.localeCompare(b.at))) {
+    pending = pending.filter((subject) => !sameLogin(subject, step.subject));
+    if (step.add) {
+      pending.push(step.subject);
+    }
+  }
+  return pending;
+}
+
+/** Open, merged or closed at `at`: the last merge, close or reopen by then (every generated PR starts open). */
+function stateReplayedTo(pr: Pr, at: IsoTime): Pr['state'] {
+  const last = pr.timeline.filter((item) => item.at <= at && (item.kind === 'merged' || item.kind === 'closed' || item.kind === 'reopened')).toSorted((a, b) => a.at.localeCompare(b.at)).at(-1);
+  if (last?.kind === 'merged') {
+    return 'MERGED';
+  }
+  return last?.kind === 'closed' ? 'CLOSED' : 'OPEN';
+}
+
+/**
+ * The snapshot at `at`, as the history says it was: reviews, comments and
+ * thread comments, commits with the head and timeline items up to it, the
+ * requests and the state replayed up to it, the draft state before the
+ * first switch after it. The decision is worked out again only when a
+ * review came after it, and never where GitHub has no review rule.
+ */
+export function specSnapshotAt(pr: Pr, at: IsoTime): Pr {
+  const pending = requestsReplayedTo(pr, at);
+  const state = stateReplayedTo(pr, at);
+  const firstSwitch = pr.timeline.filter((item) => (item.kind === 'ready_for_review' || item.kind === 'converted_to_draft') && item.at > at).toSorted((a, b) => a.at.localeCompare(b.at))[0];
+  const commits = pr.commits.filter((commit) => commit.committedAt <= at);
+  const trimmed: Pr = {
+    ...pr,
+    state,
+    mergedAt: state === 'MERGED' ? pr.mergedAt : null,
+    mergedBy: state === 'MERGED' ? pr.mergedBy : null,
+    isDraft: firstSwitch === undefined ? pr.isDraft : firstSwitch.kind === 'ready_for_review',
+    reviewerUsers: pending.filter((subject) => !subject.includes('/')),
+    reviewerTeams: pending.filter((subject) => subject.includes('/')),
+    reviews: pr.reviews.filter((review) => review.submittedAt <= at),
+    commits,
+    headOid: commits.length > 0 ? commits[commits.length - 1]!.oid : pr.headOid,
+    comments: pr.comments.filter((comment) => comment.createdAt <= at),
+    threads: pr.threads.map((thread) => ({ ...thread, comments: thread.comments.filter((comment) => comment.createdAt <= at) })).filter((thread) => thread.comments.length > 0),
+    timeline: pr.timeline.filter((item) => item.at <= at),
+  };
+  const reviewCameAfter = trimmed.reviews.length < pr.reviews.length;
+  return { ...trimmed, reviewDecision: reviewCameAfter && pr.reviewDecision !== 'NONE' ? decisionOfVerdicts(trimmed) : pr.reviewDecision };
+}
+
+/** The in-app approval as it stood at `at`. */
+export function specUserStateAt(userState: UserPrState | null, at: IsoTime): UserPrState | null {
+  return userState?.approvedAt && userState.approvedAt > at ? { ...userState, approvedAt: null, approvedCommitOid: null } : userState;
+}

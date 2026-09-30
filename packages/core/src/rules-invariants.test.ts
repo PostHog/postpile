@@ -64,6 +64,7 @@ function tileView(input: BoardInput): TileView {
       repoLabel: null,
       tileUnread: state.kind === 'unread',
       unreadOnGitHub: threads.get(pr.key)?.unread === true,
+      lastReadAt: threads.get(pr.key)?.lastReadAt ?? null,
       now: NOW,
       pendingWrite: null,
     });

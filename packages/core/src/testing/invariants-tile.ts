@@ -9,6 +9,7 @@ import { tileListRank } from '../tile-view.ts';
 import type { TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, expectedUnreadRows, isNews, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
+import { editAsks } from './spec-events.ts';
 import { expectedFooter, expectedGitHubLink, expectedLeadPr, expectedMarkLabel, expectedPane, expectedPrimaryAction } from './spec-offers.ts';
 import { expectedDone, expectedSnoozePhase, isUnseenMergeWithoutViewer } from './spec-rules.ts';
 
@@ -30,7 +31,7 @@ function isSnoozedByRule(board: PropertyBoard, view: TileView): boolean {
 
 /** Done by the spec (spec-rules.ts `expectedDone`), not by `isPrDone`. */
 function prDone(board: PropertyBoard, key: string): boolean {
-  return expectedDone({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) });
+  return expectedDone({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key), lastReadAt: board.threads.get(key)?.lastReadAt ?? null });
 }
 
 /** A tile is snoozed exactly while every tracked PR in it has an active snooze (DESIGN "Snoozes belong to PRs"). */
@@ -83,13 +84,13 @@ function headlineRank(event: PrEvent, pr: Pr, board: PropertyBoard): number {
   if (event.kind === 'team_mention' && isRoutingOnlyMention(event, pr, board)) {
     return 4;
   }
-  if (['mention', 'team_mention', 'question_to_user', 'reply_to_user'].includes(event.kind)) {
+  if (['mention', 'team_mention', 'question_to_user', 'reply_to_user'].includes(event.kind) || editAsks(pr, board.viewer, event) !== null) {
     return 0;
   }
   if (event.kind === 'review_approved' || event.kind === 'review_changes_requested') {
     return 2;
   }
-  return event.kind === 'comment' || event.kind === 'review_commented' ? 3 : 4;
+  return event.kind === 'comment' || event.kind === 'review_commented' || event.kind === 'comment_edited' ? 3 : 4;
 }
 
 function expectedHeadline(events: PrEvent[], pr: Pr, board: PropertyBoard): PrEvent | undefined {
@@ -509,7 +510,7 @@ export const noViewerAsksNothing: Invariant = {
         ensure(row.turn.kind === 'none' && row.tier === 'rest', `${row.key}: ${describeTurn(row.turn)}, tier ${row.tier} without a viewer`);
         const facts = row.facts;
         ensure(facts.reviewRequest === null && facts.lastTouch === null && facts.openAsk === null && row.ownTeamRequests.length === 0, `${row.key}: facts without a viewer`);
-        const done = expectedDone({ pr: prOf(board, row.key), events: eventsOf(board, row.key), viewer: null, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key) });
+        const done = expectedDone({ pr: prOf(board, row.key), events: eventsOf(board, row.key), viewer: null, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key), lastReadAt: null });
         ensure(row.done === done, `${row.key}: done ${row.done} without a viewer, expected ${done}`);
       }
     }

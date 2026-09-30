@@ -1068,6 +1068,14 @@ the app meanwhile.
 
 ## Decided
 
+- **Comment edits, findings, new moves, read before acting** (2026-09-30,
+  DESIGN.md "Handled quietly" › Comment edits and New moves only, "You
+  already dealt with it" › Read before acting): a comment's latest edit is a
+  `comment_edited` event (bots clear quietly, a person's edit that mentions
+  you is an ask); on your own open PR only a bot review or inline comment
+  keeps the thread unread; a move that stood before your last read does not;
+  acting counts as having seen earlier news only with a read in between,
+  and then also makes the PR done without a click.
 - **Tiles lead with the important news** (2026-09-30, DESIGN.md "Tile faces"
   › Headline event): the strip's event is chosen by importance across the
   tile (asks, merged or closed without review, verdicts, human comments,

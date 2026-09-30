@@ -48,6 +48,7 @@ const GLYPHS: Record<EventKind, EventGlyph> = {
   deploy: 'deploy',
   merge_queue: 'queue',
   bot_comment: 'bot',
+  comment_edited: 'bubble',
   look_closer: 'eye',
 };
 

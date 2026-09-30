@@ -34,7 +34,14 @@ export interface RawRequestedReviewer {
   organization?: { login: string };
 }
 
-export interface RawComment {
+/** What the `comment` fragment adds about edits. Missing in fixtures written before it was asked for. */
+export interface RawEdit {
+  lastEditedAt?: string | null;
+  updatedAt?: string;
+  editor?: RawActor | null;
+}
+
+export interface RawComment extends RawEdit {
   id: string;
   author: RawActor | null;
   body: string;
@@ -44,7 +51,7 @@ export interface RawComment {
   state?: string;
 }
 
-export interface RawReview {
+export interface RawReview extends RawEdit {
   id: string;
   author: RawActor | null;
   state: string;

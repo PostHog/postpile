@@ -25,6 +25,7 @@ import type {
   RawCheckContext,
   RawComment,
   RawCommit,
+  RawEdit,
   RawPullRequest,
   RawRequestedReviewer,
   RawReview,
@@ -147,6 +148,18 @@ function toReview(raw: RawReview): Review {
   };
 }
 
+/** The last edit of a comment or review body: when, by whom (null when GitHub does not say), and the comment's updatedAt. */
+function toEdit(raw: RawEdit): Pick<Comment, 'lastEditedAt' | 'editor' | 'updatedAt'> {
+  const edit: Pick<Comment, 'lastEditedAt' | 'editor' | 'updatedAt'> = {
+    lastEditedAt: isoTimeOrNull(raw.lastEditedAt ?? null),
+    editor: raw.editor ? actorLogin(raw.editor) : null,
+  };
+  if (raw.updatedAt) {
+    edit.updatedAt = isoTime(raw.updatedAt);
+  }
+  return edit;
+}
+
 function toIssueComment(raw: RawComment): Comment {
   return {
     id: raw.id,
@@ -157,6 +170,7 @@ function toIssueComment(raw: RawComment): Comment {
     url: raw.url,
     path: null,
     threadId: null,
+    ...toEdit(raw),
   };
 }
 
@@ -170,6 +184,7 @@ function toReviewBodyComment(raw: RawReview): Comment {
     url: raw.url,
     path: null,
     threadId: null,
+    ...toEdit(raw),
   };
 }
 
@@ -193,6 +208,7 @@ function toThread(raw: RawReviewThread): ReviewThread {
     url: c.url,
     path: raw.path,
     threadId: raw.id,
+    ...toEdit(c),
   }));
   return { id: raw.id, path: raw.path, isResolved: raw.isResolved, comments };
 }

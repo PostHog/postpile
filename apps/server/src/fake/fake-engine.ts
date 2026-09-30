@@ -541,6 +541,7 @@ export class FakeEngine implements EngineService {
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
           unreadOnGitHub: threads.get(pr.key)?.unread === true,
+          lastReadAt: threads.get(pr.key)?.lastReadAt ?? null,
           now: this.timestamp(),
           pendingWrite: pending.get(pr.key) ?? null,
         }),

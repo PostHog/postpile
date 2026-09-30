@@ -256,6 +256,23 @@ class PrHistory {
     }
   }
 
+  /** Edits an earlier comment in place (the thread holds the same object); a review body's review gets the new text too. */
+  private edit(step: Extract<StepSpec, { kind: 'edit' }>, time: string): void {
+    const comment = this.comments[step.pick % Math.max(this.comments.length, 1)];
+    if (comment === undefined) {
+      return;
+    }
+    comment.editor = step.by === 'author' ? comment.author : LOGINS[step.by];
+    comment.lastEditedAt = time;
+    if (step.text !== null) {
+      comment.body = COMMENT_BODIES[step.text];
+      const review = this.reviews.find((candidate) => candidate.id === comment.id);
+      if (review) {
+        review.body = comment.body;
+      }
+    }
+  }
+
   private review(step: Extract<StepSpec, { kind: 'review' }>, index: number, time: string): void {
     const login = LOGINS[step.by];
     const id = this.id('rv', index);
@@ -318,6 +335,9 @@ class PrHistory {
         break;
       case 'comment':
         this.comment(step, index, time);
+        break;
+      case 'edit':
+        this.edit(step, time);
         break;
       case 'review':
         this.review(step, index, time);
@@ -793,6 +813,7 @@ function prRows(board: PropertyBoard, tile: Tile, state: TileState, viewer: View
         repoLabel: null,
         tileUnread: state.kind === 'unread',
         unreadOnGitHub: board.threads.get(pr.key)?.unread === true,
+        lastReadAt: board.threads.get(pr.key)?.lastReadAt ?? null,
         now: board.now,
         pendingWrite: board.pendingWrites.get(pr.key) ?? null,
       }),
