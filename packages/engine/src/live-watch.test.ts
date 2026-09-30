@@ -233,7 +233,7 @@ describe('freshness check', () => {
 });
 
 describe('refresh after a write and on focus', () => {
-  it('fetches the PR again right after an approve', async () => {
+  it('fetches the PR again right after an approve, without holding up the answer', async () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
@@ -241,12 +241,28 @@ describe('refresh after a write and on focus', () => {
     const approved = { ...pr, reviewDecision: 'APPROVED' as const, reviews: [makeReview({ id: 'r-me', author: viewer.login, state: 'APPROVED' })] };
     h.reader.prs.set(pr.key, approved);
     const fetches = h.reader.fetchedRefs.length;
+    const changesBefore = (await h.engine.livePollStatus()).changeCount;
+    // GitHub answers the refetch only once the test lets it.
+    let answer = () => {};
+    const gate = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const fetchPrs = h.reader.fetchPrs.bind(h.reader);
+    h.reader.fetchPrs = async (refs) => {
+      await gate;
+      return fetchPrs(refs);
+    };
 
     const result = await h.engine.approve(pr.key, pr.headOid);
 
     expect(result.ok).toBe(true);
+    expect(h.store.prs.get(pr.key)?.reviewDecision).not.toBe('APPROVED');
+    answer();
+    await h.engine.writeRefreshSettled();
     expect(h.reader.fetchedRefs.slice(fetches)).toEqual([[pr.ref]]);
     expect(h.store.prs.get(pr.key)?.reviewDecision).toBe('APPROVED');
+    // The renderer refetches on a moved changeCount.
+    expect((await h.engine.livePollStatus()).changeCount).toBe(changesBefore + 1);
   });
 
   it('keeps a teammate\'s comment that the refresh after an approve brings in unseen', async () => {
@@ -263,6 +279,7 @@ describe('refresh after a write and on focus', () => {
     });
 
     await h.engine.approve(pr.key, pr.headOid);
+    await h.engine.writeRefreshSettled();
 
     const fresh = h.store.events.listForPr(pr.key).filter((event) => event.sourceId === 'c-new');
     expect(fresh).toHaveLength(1);

@@ -1587,6 +1587,27 @@ unlocked. A visit on github.com keeps the old behaviour (events seen, no
 `handledAt`), since PostPile can't check the conditions at the moment of
 the visit.
 
+**A click shows its result right away** (2026-09-30). Approve, Mark read /
+Mark done and Snooze showed nothing for seconds: approve waited for the
+GitHub write plus a poll cycle refetching the PR, and every action waited
+for a refetch of all queries before the screen changed. Now:
+
+- The renderer changes its cache on click (`lib/optimistic.ts`): a marked
+  tile takes its `afterRead` (done or open, whose move), its rows their own
+  `afterRead`; a per-PR mark changes only that row (the tile state is the
+  server's call); a snoozed tile shows snoozed; an approved PR's button reads
+  "Approved". Nothing is re-derived: where the shipped fields don't say
+  enough, the button only shows its pending state until the refetch.
+- The button stays busy until the refetch lands, so it never offers the old
+  action again in between. A failed action puts the old cache back and shows
+  the error toast. The toast and Undo come as soon as the server answers.
+- Locked, a mark-read changes nothing early (it only becomes a pending
+  write), and a blocked approve changes nothing at all.
+- The server answers approve right after the write and the local mark-read;
+  the PR refetch runs after it and reaches the renderer through the live
+  status (`changeCount`). The head check and the writes lock still come
+  before the write.
+
 **The verdict pill follows the footer.** A multi-PR tile showed the lead
 PR's verdict ("Not yours" from the first PR) while the footer talked about
 another one. The lead PR (core `leadPrKey`, shipped as
