@@ -14,6 +14,7 @@ import type { GitHubReader } from '@postpile/github';
 import type { LocalChange } from './actions/local-change.ts';
 import { NO_LOCAL_CHANGE } from './actions/local-change.ts';
 import { errorText } from './errors.ts';
+import type { ClickedReadRetry } from './writes/clicked-read-retry.ts';
 import { notTakenDetail, type GitHubWrites } from './writes/github-writes.ts';
 import { markThreadReadIfUnchanged } from './writes/thread-mark-read.ts';
 
@@ -104,8 +105,10 @@ function toPending(batch: DeferredBatch<MarkReadPayload>): PendingBatch {
  *
  * A mark-read covers the whole thread on GitHub, including activity that came
  * after the last on-demand sync. So each thread is read again first; if it
- * moved since the sync, it stays unread and the next sync picks the new
- * activity up instead of it being lost.
+ * moved since the sync, the PR is fetched again and the click decided again
+ * (`ClickedReadRetry`): only the user's own activity and automation since,
+ * and it is marked read after all; a person's activity, and it stays unread
+ * with a notice, so nothing new is lost.
  *
  * A batch is only sent when it was queued with writes on and they are still
  * on when its window ends. Otherwise it is parked (`onParked`) as a pending
@@ -120,6 +123,8 @@ export class MarkReadQueue {
   /** Things the user should hear about, drained into the next sync report. */
   private notes: string[] = [];
   private flushing = false;
+  /** Decides a thread skipped for newer activity again; set by the engine, which owns the refresh. */
+  private retry: ClickedReadRetry | null = null;
 
   constructor(
     private readonly writes: GitHubWrites,
@@ -142,6 +147,11 @@ export class MarkReadQueue {
     return this.writes.enabled();
   }
 
+  /** Every batch comes from a user's click, so a skip for newer activity gets a refresh and a second decision. */
+  retryWith(retry: ClickedReadRetry): void {
+    this.retry = retry;
+  }
+
   private async markOne(thread: PendingThread, context: SendContext): Promise<ThreadOutcome> {
     const logContext = { origin: context.origin, prKey: thread.prKey, tileId: context.tileId, batch: context.batchId };
     const log = (outcome: 'observed' | 'skipped', detail: string) =>
@@ -151,6 +161,10 @@ export class MarkReadQueue {
       this.onMarked(thread.id, result.lastReadAt ?? thread.updatedAt);
       log('observed', 'already read on GitHub');
       return { kind: 'observed' };
+    }
+    // Decided before `send` puts anything back, so the tile does not flicker unread and read again. Not on quit: nothing waits for a refresh then.
+    if (result.kind === 'moved' && this.retry && !this.flushing && thread.prKey !== null) {
+      return this.retry.afterNewerActivity(thread, thread.prKey, logContext);
     }
     if (result.kind === 'moved') {
       log('skipped', notTakenDetail(NEWER_ACTIVITY_REASON));

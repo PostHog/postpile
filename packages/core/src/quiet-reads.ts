@@ -18,13 +18,13 @@
 import { isAutomation } from './bots.ts';
 import type { NotificationLanding } from './debug-views.ts';
 import { isRoutingTeamMention } from './events.ts';
-import { ADDRESSED_KINDS } from './kinds.ts';
+import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
 import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
 import { isViewerSubject } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { reviewRequestTarget } from './review-request.ts';
-import type { CappedList, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
+import type { CappedList, EventKind, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 /** How long after the newest bot activity PostPile waits, so a person who answers the bot right away still counts. */
@@ -440,6 +440,118 @@ const AFTER_EVERY_GRACE = '9999-12-31T23:59:59.999Z';
 export function clearableByRule(input: QuietReadInput): boolean {
   const afterGrace = { ...input, now: AFTER_EVERY_GRACE };
   return quietReadCheck(afterGrace).kind === 'mark' || touchedReadCheck(afterGrace).kind === 'mark' || judgedReadCheck(afterGrace).kind === 'mark';
+}
+
+/**
+ * A user's Mark read that GitHub skipped for activity after the last sync,
+ * decided again once the PR was fetched (DESIGN.md "GitHub writes: lock,
+ * action log" › Newer activity after a click):
+ * - mark: after what PostPile showed at the click there is only the
+ *   viewer's own activity and automation (`bots` names the automation, empty
+ *   for none), so GitHub may mark it read now
+ * - keep, stale_snapshot: the fetched snapshot still does not cover the
+ *   thread, so a person's comment may be missing
+ * - keep, people: someone else, not automation, did something after the
+ *   click; `news` holds those events, newest first
+ */
+export type ClickedReadCheck =
+  | { kind: 'mark'; bots: string[] }
+  | { kind: 'keep'; why: 'stale_snapshot' }
+  | { kind: 'keep'; why: 'people'; news: PrEvent[] };
+
+export interface ClickedReadInput extends Pick<QuietReadInput, 'pr' | 'events' | 'viewer' | 'prFetchedAt'> {
+  /** The thread as GitHub has it now, after the skip. */
+  thread: NotificationThread;
+  /** The thread's updated_at the click saw: everything up to it was on screen. */
+  shownUpTo: IsoTime;
+}
+
+/**
+ * The bot-only rule from the click on, for an explicit Mark read. The click
+ * means "I saw what PostPile showed me and I'm done", so unlike the quiet
+ * reads automation on the viewer's own open PR does not block, and nothing
+ * known after the click (only the viewer's own pushes, say) is no reason to
+ * keep it. The one thing that must not vanish unseen is a person's activity
+ * after the click.
+ */
+export function clickedReadCheck(input: ClickedReadInput): ClickedReadCheck {
+  const { pr, events, viewer, shownUpTo } = input;
+  if (!prCoversThread(input, shownUpTo)) {
+    return { kind: 'keep', why: 'stale_snapshot' };
+  }
+  const others = events.filter((event) => event.at > shownUpTo && !isOwnEvent(event, viewer));
+  if (others.length === 0) {
+    return { kind: 'mark', bots: [] };
+  }
+  const bots = botOnlySinceRead(pr, events, shownUpTo, viewer);
+  if (bots !== null) {
+    return { kind: 'mark', bots: botNames(bots) };
+  }
+  const news = others.filter((event) => !isAutomationOn(event, pr, viewer)).toSorted((a, b) => b.at.localeCompare(a.at));
+  return { kind: 'keep', why: 'people', news };
+}
+
+/** An event kind in the words of "a review from alice". */
+function newsNoun(kind: EventKind): string {
+  if (PUSH_KINDS.includes(kind)) {
+    return 'push';
+  }
+  switch (kind) {
+    case 'mention':
+    case 'team_mention':
+      return 'mention';
+    case 'question_to_user':
+      return 'question';
+    case 'reply_to_user':
+      return 'reply';
+    case 'comment':
+    case 'bot_comment':
+      return 'comment';
+    case 'review_approved':
+    case 'review_changes_requested':
+    case 'review_commented':
+      return 'review';
+    case 'review_requested':
+      return 'review request';
+    case 'merged':
+    case 'merged_without_review':
+      return 'merge';
+    default:
+      return 'change';
+  }
+}
+
+/** The newest news in words, "review from alice", plus " and 2 more". */
+function newsWords(news: PrEvent[]): string {
+  const newest = news[0];
+  if (newest === undefined) {
+    return 'activity';
+  }
+  const more = news.length > 1 ? ` and ${news.length - 1} more` : '';
+  return `${newsNoun(newest.kind)} from ${newest.actor === '' ? CI_ACTOR : newest.actor}${more}`;
+}
+
+/** Why a clicked mark-read stays unread, for the sync report and the pending-send result: "new review from alice". */
+export function clickedReadReason(check: Extract<ClickedReadCheck, { kind: 'keep' }>): string {
+  return check.why === 'people' ? `new ${newsWords(check.news)}` : 'activity after the last sync';
+}
+
+/** Action log detail of a clicked mark-read after the refresh: "marked after refresh: only your own activity", "kept unread: new review from alice". */
+export function clickedReadDetail(check: ClickedReadCheck): string {
+  if (check.kind === 'keep') {
+    return `kept unread: ${clickedReadReason(check)}`;
+  }
+  return check.bots.length === 0
+    ? 'marked after refresh: only your own activity'
+    : `marked after refresh: only your own activity and automation (${check.bots.join(', ')})`;
+}
+
+/** The toast when a clicked mark-read stays unread: "New since you looked: a review from alice". */
+export function clickedReadNotice(check: ClickedReadCheck): string {
+  if (check.kind === 'keep' && check.why === 'people') {
+    return `New since you looked: a ${newsWords(check.news)}`;
+  }
+  return 'New activity on GitHub since you looked: still unread';
 }
 
 /**

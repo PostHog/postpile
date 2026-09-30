@@ -9,6 +9,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The sidebar topic bubble and the footer unread number count unread tiles again (0.12.0 counted PRs). The per-PR dots stay.
 - Queue filters (Mine, Team, Reply, Review) only pick topics; they no longer fade tiles inside a topic.
 - The grid's Unread filter lists unread tiles without fading them, and switching to it clears the tile selection.
+- Mark read no longer pops a tile back to unread a few seconds later just because the PR moved after the last sync (your own pushes, a bot's review). PostPile fetches the PR again and marks it read after all when only your own activity and automation came since. When a person commented or reviewed since, the tile stays unread and a toast says what is new, e.g. "New since you looked: a review from alice".
 
 ## 0.12.0 (2026-09-30)
 

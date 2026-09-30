@@ -109,6 +109,19 @@ export interface LivePollStatus {
   catchUpChanges: number;
   /** Set while the GitHub quota is low or critical and background work waits (DESIGN.md "GitHub quota"); null when ok. */
   githubQuota: GitHubQuotaView | null;
+  /** The newest clicked mark-read that stayed unread after its refresh, for the toast; null before the first. */
+  keptUnread: KeptUnreadNotice | null;
+}
+
+/**
+ * A Mark read GitHub skipped for newer activity that stayed unread after
+ * the PR was fetched again: "New since you looked: a review from alice".
+ * `id` grows, so the renderer shows each one once.
+ */
+export interface KeptUnreadNotice {
+  id: number;
+  message: string;
+  prKey: PrKey;
 }
 
 /** Before the poll starts, and for hosts that never start it (CLI, standalone server). */
@@ -128,6 +141,7 @@ export const OFF_POLL_STATUS: LivePollStatus = {
   nextAutoSyncAt: null,
   catchUpChanges: 0,
   githubQuota: null,
+  keptUnread: null,
 };
 
 /**
