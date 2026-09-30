@@ -57,20 +57,21 @@ function clearableNow(board: Board, prKey: PrKey, fetchedAt: Map<PrKey, string>)
  * PostPile unread"): every retired topic with a member PR whose thread is
  * unread on GitHub becomes active again, whether the thread just turned
  * unread or was unread when the topic retired (before 2026-09-30 the retire
- * gate did not look at threads). A thread the quiet reads clear by rule
- * (`clearableByRule`, grace aside) brings nothing back while GitHub writes
- * are on: the next full sync clears it. Runs after the quiet reads in the
- * full sync and in every poll that moved the inbox. Returns how many topics
- * came back.
+ * gate did not look at threads). The full sync runs it after its quiet
+ * reads and reads the unread state they left: a failed or capped quiet
+ * write brings the topic back. The poll passes `skipClearableByRule` while
+ * GitHub writes are on: a thread the quiet reads clear by rule
+ * (`clearableByRule`, grace aside) waits for the next full sync, which
+ * clears it or brings the topic back. Returns how many topics came back.
  */
-export function reviveUnreadTopics(store: Store, at: string, writesOn: boolean): number {
+export function reviveUnreadTopics(store: Store, at: string, skipClearableByRule: boolean): number {
   const retired = store.topics.list().filter((topic) => topic.status === 'retired');
   if (retired.length === 0) {
     return 0;
   }
   const board = Board.load(store, at);
   const fetchedAt = store.prs.fetchedAtByKey();
-  const holdsUnread = (key: PrKey) => board.threads.get(key)?.unread === true && !(writesOn && clearableNow(board, key, fetchedAt));
+  const holdsUnread = (key: PrKey) => board.threads.get(key)?.unread === true && !(skipClearableByRule && clearableNow(board, key, fetchedAt));
   let revived = 0;
   store.transaction(() => {
     for (const topic of retired) {

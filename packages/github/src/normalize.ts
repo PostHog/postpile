@@ -1,5 +1,6 @@
 import {
   prKey,
+  type CapHit,
   type CheckContext,
   type CheckRollup,
   type Checks,
@@ -15,6 +16,7 @@ import {
   type TimelineItem,
   type TimelineItemKind,
 } from '@postpile/core';
+import { QUERY_CAPS } from './queries.ts';
 import type { BranchPr } from './reader.ts';
 import type {
   RawActor,
@@ -301,6 +303,41 @@ function cutOff(list: { totalCount?: number; nodes: unknown[] }): boolean {
  * human comment followed by 60 bot comments), so the snapshot is flagged
  * and no quiet mark-read trusts it.
  */
+/** The oldest of the times, null for none. */
+function oldestOf(times: string[]): string | null {
+  return times.length === 0 ? null : isoTime(times.toSorted()[0]!);
+}
+
+/** The list came back full at its cap with more on GitHub: the cap, not GitHub, left items out. */
+function hitCap(list: { totalCount?: number; nodes: unknown[] }, cap: number): boolean {
+  return list.nodes.length >= cap && cutOff(list);
+}
+
+/**
+ * The capped lists that hit their cap, read from the raw answer before any
+ * node is dropped (draft-only threads, draft comments, timeline items not
+ * read), with how many nodes came back and the oldest of them. Core decides
+ * from these whether a cut snapshot still covers an unread interval
+ * (`cutSnapshotCovers`).
+ */
+function capHits(raw: RawPullRequest): CapHit[] {
+  const hits: CapHit[] = [];
+  const add = (list: CapHit['list'], connection: { totalCount?: number; nodes: unknown[] }, cap: number, times: string[] | null) => {
+    if (hitCap(connection, cap)) {
+      hits.push({ list, nodes: connection.nodes.length, oldestAt: times === null ? null : oldestOf(times) });
+    }
+  };
+  add('reviews', raw.reviews, QUERY_CAPS.reviews, raw.reviews.nodes.map((review) => review.submittedAt ?? review.createdAt));
+  add('comments', raw.comments, QUERY_CAPS.comments, raw.comments.nodes.map((comment) => comment.createdAt));
+  add('review_threads', raw.reviewThreads, QUERY_CAPS.reviewThreads, null);
+  for (const thread of raw.reviewThreads.nodes) {
+    add('thread_comments', thread.comments, QUERY_CAPS.threadComments, null);
+  }
+  add('commits', raw.commits, QUERY_CAPS.commits, raw.commits.nodes.map((node) => node.commit.committedDate));
+  add('timeline', raw.timelineItems, QUERY_CAPS.timeline, raw.timelineItems.nodes.map((item) => item.createdAt));
+  return hits;
+}
+
 function isTruncated(raw: RawPullRequest): boolean {
   const lists = [raw.reviews, raw.comments, raw.reviewThreads, raw.commits, raw.timelineItems];
   return lists.some(cutOff) || raw.reviewThreads.nodes.some((thread) => cutOff(thread.comments));
@@ -352,5 +389,6 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     previousBaseRefs: previousBaseRefs(raw.baseRefChanges),
     isCrossRepository: raw.isCrossRepository ?? false,
     truncated: isTruncated(raw),
+    capHits: capHits(raw),
   };
 }

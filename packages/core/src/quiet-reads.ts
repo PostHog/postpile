@@ -24,7 +24,7 @@ import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './l
 import { isViewerSubject } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { reviewRequestTarget } from './review-request.ts';
-import type { IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
+import type { CappedList, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 /** How long after the newest bot activity PostPile waits, so a person who answers the bot right away still counts. */
@@ -109,44 +109,23 @@ export interface SnapshotCoverInput {
   since?: IsoTime | null;
 }
 
-/**
- * How many items of each activity list the PR query keeps (packages/github
- * `queries.ts`): the newest N of reviews, comments, review threads, commits
- * and timeline items; the first 30 comments of a review thread.
- */
-export const SNAPSHOT_CAPS = { reviews: 50, comments: 60, reviewThreads: 50, commits: 50, timeline: 60, threadComments: 30 } as const;
-
-/**
- * Normalizing drops a few nodes (draft review comments, threads holding only
- * drafts, timeline items it does not read), so a stored list this close to
- * its cap may still have been cut.
- */
-const CAP_SLACK = 5;
-
-function mayBeCut(length: number, cap: number): boolean {
-  return length >= cap - CAP_SLACK;
-}
+/** Capped lists that keep the newest N items: what falls off is older than what came back. */
+const NEWEST_N_LISTS: readonly CappedList[] = ['reviews', 'comments', 'commits', 'timeline'];
 
 /**
  * A snapshot cut off at the caps still holds everything since `since` when
- * every newest-N list that may be cut kept an item at or before `since`:
- * what fell off is older than that. Review threads cannot vouch: a reply in
- * an older thread past the cap, or past the first 30 comments of a thread,
- * never arrives, whenever it was written. Most flagged snapshots have no list
- * near a cap at all (GitHub counts items the query never returns); those
- * lost nothing to the caps.
+ * every list that hit its cap (`Pr.capHits`, read from the raw answer) keeps
+ * the newest N and came back with an item at or before `since`: what fell
+ * off is older than that. Review threads never vouch: the query keeps the
+ * newest threads by creation and each thread's first 30 comments, so a reply
+ * past either cap can come at any time. Without the raw evidence (a snapshot
+ * stored before it was recorded) a cut snapshot never vouches.
  */
 export function cutSnapshotCovers(pr: Pr, since: IsoTime): boolean {
-  if (mayBeCut(pr.threads.length, SNAPSHOT_CAPS.reviewThreads) || pr.threads.some((thread) => mayBeCut(thread.comments.length, SNAPSHOT_CAPS.threadComments))) {
+  if (pr.capHits === undefined) {
     return false;
   }
-  const lists: [IsoTime[], number][] = [
-    [pr.reviews.map((review) => review.submittedAt), SNAPSHOT_CAPS.reviews],
-    [pr.comments.filter((comment) => comment.kind === 'comment').map((comment) => comment.createdAt), SNAPSHOT_CAPS.comments],
-    [pr.commits.map((commit) => commit.committedAt), SNAPSHOT_CAPS.commits],
-    [pr.timeline.map((item) => item.at), SNAPSHOT_CAPS.timeline],
-  ];
-  return lists.every(([times, cap]) => !mayBeCut(times.length, cap) || times.toSorted()[0]! <= since);
+  return pr.capHits.every((hit) => NEWEST_N_LISTS.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since);
 }
 
 /**

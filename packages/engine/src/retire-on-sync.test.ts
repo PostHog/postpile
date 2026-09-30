@@ -216,6 +216,29 @@ describe('Engine.sync retires finished topics', () => {
     expect(h.store.topics.get('depot')?.status).toBe('active');
   });
 
+  it('brings a retired topic back when the quiet read that would clear its thread fails', async () => {
+    let now = FOUR_DAYS_LATER;
+    const h = makeHarness({ now: () => now });
+    const pr = mergedPr(1);
+    await syncedAndRead(h, [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
+    const readAt = h.store.notifications.getByPrKeys([pr.key]).get(pr.key)!.lastReadAt!;
+
+    now = new Date('2026-09-06T12:00:00Z');
+    const botAt = '2026-09-06T11:00:00.000Z';
+    const withBot = { ...pr, comments: [makeComment({ id: 'c-bot', author: 'vercel[bot]', body: 'Preview deployed', createdAt: botAt })], updatedAt: botAt };
+    h.reader.addPr(withBot, makeThreadFor(withBot, { lastReadAt: readAt, updatedAt: botAt }));
+    h.reader.etag = 'etag-2';
+    h.writer.markThreadRead = async () => {
+      throw new Error('GitHub said 502');
+    };
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(true);
+    expect(h.store.topics.get('depot')?.status).toBe('active');
+  });
+
   it('brings a retired topic back while the thread of a new event is unread, also when the agent turns the event quiet', async () => {
     let now = FOUR_DAYS_LATER;
     const h = makeHarness({ now: () => now });

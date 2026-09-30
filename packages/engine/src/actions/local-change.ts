@@ -5,6 +5,8 @@ import type { Store } from '@postpile/store';
 export interface LocalThreadRead {
   id: string;
   lastReadAt: IsoTime | null;
+  /** The read time the click wrote: a row that no longer holds it has newer news from GitHub, and a put-back leaves it. */
+  readAt: IsoTime;
 }
 
 /**
@@ -29,7 +31,7 @@ export function readThreadsLocally(store: Store, threads: PendingThread[]): Loca
   for (const thread of before) {
     store.notifications.markRead(thread.id, thread.readAt);
   }
-  return before.map(({ id, lastReadAt }) => ({ id, lastReadAt }));
+  return before;
 }
 
 /** Writes a read plan to the store: its events seen, its PRs handled. Returns what changed, for undo. */
@@ -69,7 +71,11 @@ export function putBackLocalChange(store: Store, change: LocalChange): void {
       store.userPrStates.clearHandled(key);
     }
     for (const thread of change.threads) {
-      store.notifications.markUnread(thread.id, thread.lastReadAt);
+      // Only while the row is still the click's own write: a read or new activity GitHub reported since is newer and stays.
+      const stored = store.notifications.get(thread.id);
+      if (stored !== null && !stored.unread && stored.lastReadAt === thread.readAt) {
+        store.notifications.markUnread(thread.id, thread.lastReadAt);
+      }
     }
   });
 }
