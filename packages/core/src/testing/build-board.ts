@@ -10,7 +10,6 @@ import { at, makePr } from '../fixtures.ts';
 import { deriveEvents } from '../events.ts';
 import { ownEventsOnReadThread } from '../github-read.ts';
 import { lookCloserEvent, lookCloserPingCheck } from '../glance-pings.ts';
-import { prKey } from '../keys.ts';
 import { sameLogin } from '../mentions.ts';
 import { isTracked } from '../provenance.ts';
 import { applyReadPlan, planRead, prReadScope, type ReadCause } from '../read-plan.ts';
