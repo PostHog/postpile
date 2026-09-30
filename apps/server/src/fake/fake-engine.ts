@@ -70,6 +70,10 @@ import type {
   TileState,
   TileView,
   PrSummaryInput,
+  AgentActionFrom,
+  ApprovePrRequest,
+  BatchApproveResult,
+  PrApproveResult,
   ToolsView,
   Topic,
   TopicDetail,
@@ -88,6 +92,8 @@ import {
   UNDO_WINDOW_MS,
   viewerApproval,
   agentPrFacts,
+  approvalsSummary,
+  tilesReadScope,
   buildPrSummary,
   buildTileView,
   topicAgentOffers,
@@ -1040,6 +1046,19 @@ export class FakeEngine implements EngineService {
     return ok(`fake: approved ${prKey} locally, nothing sent to GitHub`);
   }
 
+  /** Like the engine's approveMany: each PR through the fake approve, reported per PR, no undo. */
+  async approveMany(prs: ApprovePrRequest[], _from: AgentActionFrom): Promise<BatchApproveResult> {
+    if (prs.length === 0) {
+      return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
+    }
+    const results: PrApproveResult[] = [];
+    for (const { prKey, headOid } of prs) {
+      const result = await this.approve(prKey, headOid);
+      results.push({ prKey, ok: result.ok, message: result.message });
+    }
+    return { ...approvalsSummary(results), undoToken: null, results };
+  }
+
   /**
    * Like PrActions.removeTeamRequest, in memory: the team leaves the PR's
    * requested teams, the sample thread is unsubscribed (logged only) and the
@@ -1149,6 +1168,23 @@ export class FakeEngine implements EngineService {
     const keys = tile.members.map((member) => member.prKey);
     const pinged = tile.members.filter((member) => member.provenance.kind !== 'pulled_in').map((member) => member.prKey);
     return this.markPrsRead(keys, pinged, 'tile', tileId);
+  }
+
+  /** Like TileActions.markTilesRead: every tile's read in one batch, one undo token. */
+  async markTilesRead(tileIds: string[], _from: AgentActionFrom): Promise<ActionResult> {
+    const tiles: Tile[] = [];
+    for (const tileId of tileIds) {
+      const tile = this.findTile(tileId);
+      if (!tile) {
+        return fail(`no tile ${tileId}`);
+      }
+      tiles.push(tile);
+    }
+    if (tiles.length === 0) {
+      return fail('no tiles to mark read');
+    }
+    const scope = tilesReadScope(tiles);
+    return this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', tiles.length === 1 ? (tiles[0]?.id ?? null) : null);
   }
 
   /** Like TileActions.markPrRead: one PR of the tile, handled unless it is a pulled-in layer. */

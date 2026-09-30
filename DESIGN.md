@@ -4133,8 +4133,10 @@ topic names are never event props.
 2. *Retention*: `app_active` (once per calendar day), `window_focused`
    (throttled to once per 30 minutes).
 3. *Core actions*: `tile_opened` (`for_whom` gained `routing` on
-   2026-09-30), `pr_approved`, `marked_read` (origin
-   `tile`, `detail`, `debug` or `cleanup`), `team_request_removed` (no
+   2026-09-30), `pr_approved` (from `detail`, `tile`, `agent_tile` or
+   `agent_topic`; `was_agent_approved` true for the agent ones), `marked_read`
+   (origin `tile`, `detail`, `debug`, `cleanup`, `agent_tile` or
+   `agent_topic`; count is the tile count for the agent ones), `team_request_removed` (no
    props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,

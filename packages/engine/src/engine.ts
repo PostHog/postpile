@@ -4,6 +4,10 @@ import type {
   ListScope,
   ActionLogEntry,
   ActionResult,
+  AgentActionFrom,
+  ApprovePrRequest,
+  BatchApproveResult,
+  PrApproveResult,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -72,6 +76,7 @@ import type {
 } from '@postpile/core';
 import { arch, release } from 'node:os';
 import {
+  approvalsSummary,
   emptyAgentCallStats,
   normalizeRepoScope,
   OFF_POLL_STATUS,
@@ -947,12 +952,29 @@ export class Engine implements EngineService {
   async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
     const result = await this.prActions.approve(prKey, headOid);
     if (result.ok) {
-      // Approve only ever runs from the detail pane's action bar (CLAUDE.md
-      // "Approve is final"); was_agent_approved is reserved for a future
-      // agent-driven approve, which does not exist yet.
+      // The single approve runs from the detail pane's action bar (CLAUDE.md
+      // "Approve is final"); the agent-backed ones go through approveMany.
       this.telemetry.capture('pr_approved', { from: 'detail', was_agent_approved: false });
     }
     return result;
+  }
+
+  async approveMany(prs: ApprovePrRequest[], from: AgentActionFrom): Promise<BatchApproveResult> {
+    if (prs.length === 0) {
+      return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
+    }
+    const results: PrApproveResult[] = [];
+    let settleToken: string | undefined;
+    for (const { prKey, headOid } of prs) {
+      const result = await this.prActions.approve(prKey, headOid);
+      results.push({ prKey, ok: result.ok, message: result.message });
+      if (result.ok) {
+        this.telemetry.capture('pr_approved', { from, was_agent_approved: true });
+        settleToken = result.settleToken ?? settleToken;
+      }
+    }
+    const summary = approvalsSummary(results);
+    return { ...summary, undoToken: null, results, ...(settleToken ? { settleToken } : {}) };
   }
 
   async removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult> {
@@ -975,6 +997,14 @@ export class Engine implements EngineService {
     const result = await this.tiles.markPrRead(tileId, prKey);
     if (result.ok) {
       this.telemetry.capture('marked_read', { count: 1, origin: 'detail' });
+    }
+    return result;
+  }
+
+  async markTilesRead(tileIds: string[], from: AgentActionFrom): Promise<ActionResult> {
+    const result = this.tiles.markTilesRead(tileIds);
+    if (result.ok) {
+      this.telemetry.capture('marked_read', { count: tileIds.length, origin: from });
     }
     return result;
   }
