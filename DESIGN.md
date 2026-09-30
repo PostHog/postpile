@@ -1758,6 +1758,44 @@ updates it while I'm looking at it."
   write (`detailPendingWrite`), not the tile's, so a locked mark-read of
   one PR does not block its neighbours (Codex review on PR #15).
 
+## PR ownership: bot PRs belong to their assignees (2026-09-30)
+
+Coding agents open PRs through a GitHub App on someone's behalf: the author
+is the bot (GraphQL `__typename: Bot`, read as `name[bot]`), and the person
+the PR is for is its assignee. Looking only at the author, such a PR never
+became "Your PR", never landed in My PRs, and a teammate's agent PR never
+counted as a teammate's.
+
+- **The rule** (`prOwners` in `pr-owners.ts`): a PR's owners are its author,
+  except when the author is a bot (`isBot`) and the PR has assignees; then
+  the owners are the assignees. A person's PR does not become the viewer's
+  because the viewer is assigned, and a bot PR without assignees stays the
+  bot's (automation, as before). `isPrOwner(pr, login)` and `prOwner(pr)`
+  (the first owner, for sentences) sit next to it; `ownedByTeammate` in
+  `review-request.ts` and `ownerRelation` in `topic-queues.ts` build on it.
+- **Where it counts**: every "the viewer wrote this PR" or "a teammate wrote
+  this PR" decision reads owners: tiers (mine, team), whose turn (own PR vs
+  someone else's; "lyra to merge", "Review for team-platform: lyra's PR" name
+  the owner, not the bot), for whom ("Your PR"), the Mine / Team filters and
+  counts (`PrSummary.authorRelation` is the owner relation), team requests
+  (`team_for_you`, who covers them), "addressed your changes" (an owner's
+  reply answers), loudness and pings on own PRs, quiet reads, why-here,
+  topic relation and driver, sidebar faces and the tile's people, the
+  own-PR note in agent prompts, and "Ask <owner>" (`PrFacts.owners`,
+  `PrFacts.ownerIsAutomation`).
+- **Where it does not**: who opened the PR stays `pr.author` wherever it is
+  shown (the PR row's avatar, "opened by", memory sources, MCP lines). Agent
+  prompts say both: "by @acme-agent[bot], for @alice".
+- **Fetching**: the batched PR query reads `assignees(first: 10)`; stored
+  snapshots keep them in the PR JSON (`Pr.assignees`, missing on older
+  snapshots and read as none). The full sync's finder asks
+  `is:pr is:open assignee:@me` next to the viewer's own open PRs and keeps
+  only hits a bot opened (found as `own_open`, "agent PR assigned to you").
+  GitHub notifies the assignee with reason `assign` (code AS), so an agent
+  PR usually arrives through the inbox anyway.
+- **Shown on the tile**: see "PR rows" under "Tile faces": when someone other
+  than the author is assigned, the row and the detail pane say so.
+
 ## Tile faces: why it's here, status, whose turn
 
 Every tile answers four questions without opening it. All four are derived in
@@ -1824,7 +1862,12 @@ own diff red (`--diff-red`), never coral: coral stays for "new".
 the tile from being done ("Not done yet", see below), mono number, the stack mark for a stack layer ("1/3", see
 "Stacks as one unit"), bold title, (for-whom chip when it differs, repo
 label), then the state word, open threads (bubble + count) and the author's
-avatar. A single PR sits in a white bordered box and its row leaves the
+avatar. When someone other than the author is assigned (2026-09-30, an agent
+PR a bot opened for a person, see "PR ownership"), "assigned to" follows in
+quiet grey with each assignee's avatar and login, at most two and then
+"+N", every name in the tooltip (`assigneeLine` in the renderer's
+`lib/assignees.ts`, `AssignedTo`); the detail pane shows "opened by
+<author> · assigned to <assignees>" under the branch line. A single PR sits in a white bordered box and its row leaves the
 title out (2026-09-29: the tile's heading already is the title; the row's
 tooltip keeps it); a stack or set's rows sit in one tinted rounded box, the
 selected row highlighted, drafts and closed layers on a grey row.
@@ -2331,7 +2374,8 @@ avatars and filters", QueuesB2).
   (your move first, `tilesInTierOrder`). Before, only the
   addressed case had a section (To review), and a change request the author
   had not touched fell to Team's PRs or Other topics.
-- **Authorship**: the viewer's own PR stays under My PRs whatever area or
+- **Authorship**: the viewer's own PR (`prOwners`: also a bot's PR assigned
+  to them, 2026-09-30) stays under My PRs whatever area or
   team the code belongs to; only Needs reply ranks above it (as in
   ghatchup). An area is a label for where the code lives and never moves a
   topic between sections.
@@ -2406,7 +2450,7 @@ avatars and filters", QueuesB2).
 - **Filters**: Mine (your avatar), Team (up to three teammates), Reply,
   Review, each with its PR count over all topics. One at a time, a second
   click clears. A filter keeps topics with a matching PR (Mine: open PR you
-  wrote; Team: open PR a teammate wrote; Reply / Review: that tier) and
+  own; Team: open PR a teammate owns, see "PR ownership"; Reply / Review: that tier) and
   drops sections left empty. It narrows together with the title bar
   search. In the open topic, matching tiles get the warm strip fill and a
   honey line, the rest fade to 45% but stay. Plain UI state, not in the

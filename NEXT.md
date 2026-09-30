@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- PR assignees and ownership (2026-09-30, DESIGN.md "PR ownership: bot PRs
+  belong to their assignees"): the PR query reads `assignees(first: 10)`,
+  kept in the PR JSON (`Pr.assignees`, no migration). Core `prOwners`
+  (author, or a bot author's assignees) drives tiers, whose turn, for whom,
+  queues and filters, team requests, changes answered, loudness, pings,
+  quiet reads, why-here, topic relation and driver, faces, "Ask <owner>"
+  and the own-PR prompt note; shown authorship stays `pr.author`. The
+  finder adds `is:pr is:open assignee:@me`, bot-opened hits only. PR rows
+  and the detail pane show "assigned to" (faces, two then "+N") when
+  someone other than the author is assigned. Sample data: #1970 (the
+  viewer's agent PR) and #1972 (three teammates' agent PR). Not changed:
+  the setup sweep's activity search (still `author:@me`) and the title bar
+  search (matches the author, not assignees).
+
 - Rules layer: one home per fact (2026-09-29, DESIGN.md "Rules layer: one
   home per fact"): one module per predicate family (automation, who a
   review request asks, did you act after X, which events ask). Every read
@@ -1043,6 +1057,11 @@ the app meanwhile.
   plus such a layer dots both rows while the tracked PR is not done. The
   quiet-read grace counts from the newest activity, human or bot. DESIGN.md
   "Decided from the property tests".
+- **Bot-authored PRs belong to their assignees; tiles show assignees that
+  differ from the author** (2026-09-30): a PR's owners are its author,
+  except a bot author with assignees, then the assignees. A person's PR
+  never becomes the viewer's through an assignment. DESIGN.md "PR
+  ownership".
 
 - **Review requests by whom they ask; routed reviews ping on Look closer**
   (2026-09-29): a `review_requested` event aimed at the viewer or their team
