@@ -1,4 +1,4 @@
-import { formatDossier, formatFacts, type PrDetail, type SyncReport, type TopicDetail, type TopicListItem } from '@postpile/core';
+import { formatDossier, formatFacts, TILE_GROUP_LABELS, type PrDetail, type SyncReport, type TopicDetail, type TopicListItem } from '@postpile/core';
 import type { PollCycle } from '@postpile/engine';
 import { formatCallStats, formatFactCounts } from './format-memory.ts';
 
@@ -75,7 +75,8 @@ export function formatTopic(detail: TopicDetail): string {
   }
   lines.push('');
   for (const view of detail.tiles) {
-    lines.push(`[${view.state.kind}] ${view.tile.kind}: ${view.tile.title}`);
+    const snoozed = view.state.kind === 'snoozed' ? ', snoozed' : '';
+    lines.push(`[${TILE_GROUP_LABELS[view.group].toLowerCase()}${snoozed}] ${view.tile.kind}: ${view.tile.title}`);
     for (const reason of view.state.unreadBecause) {
       lines.push(`    ! ${reason.prKey}: ${reason.summary}`);
     }

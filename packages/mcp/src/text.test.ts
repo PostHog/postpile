@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ago, echo, fenced, stripInvisible, turnText } from './text.ts';
+import type { TileView } from '@postpile/core';
+import { ago, echo, fenced, stripInvisible, tileLine, turnText } from './text.ts';
 
 describe('mcp text', () => {
   it('fences data with a random id that the data cannot close', () => {
@@ -39,5 +40,13 @@ describe('mcp text', () => {
     expect(turnText({ kind: 'them', who: 'lyra', what: 'to merge', prKey: 'acme/app#1902' })).toBe('Their move: lyra to merge');
     expect(turnText({ kind: 'them', who: 'sol', what: '', prKey: 'acme/app#1', lead: 'Waiting on' })).toBe('Their move: Waiting on sol');
     expect(turnText({ kind: 'none', who: null, what: '', prKey: null })).toBe("Nobody's move");
+  });
+
+  it('names a tile by its group, "dealt with" instead of done, and says when it is snoozed', () => {
+    const none = { kind: 'none', who: null, what: '', prKey: null };
+    const view = (kind: string, group: string) => ({ tile: { kind: 'single', title: 'Pin Node' }, state: { kind }, group, turn: none }) as unknown as TileView;
+    expect(tileLine(view('done', 'dealt_with'))).toMatch(/^\[PR, dealt with\] Pin Node/);
+    expect(tileLine(view('snoozed', 'unread'))).toMatch(/^\[PR, unread, snoozed\] Pin Node/);
+    expect(tileLine(view('open', 'open'))).toMatch(/^\[PR, open\] Pin Node/);
   });
 });
