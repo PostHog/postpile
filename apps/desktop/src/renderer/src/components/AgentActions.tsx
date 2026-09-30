@@ -14,7 +14,7 @@ import { VerdictPill } from './pills.tsx';
 export function AgentPill(props: { word: string; off: boolean }) {
   const look = props.off ? 'text-muted inset-ring inset-ring-edge-control' : 'bg-safe-soft text-safe';
   return (
-    <span className={`flex h-[18px] items-center gap-1 rounded-full px-1.5 text-[11px] font-semibold ${look}`}>
+    <span className={`box-border flex h-[18px] shrink-0 items-center gap-1 rounded-full px-1.5 text-[11px] leading-none font-semibold ${look}`}>
       <span aria-hidden="true">✨</span>
       {props.word}
     </span>
