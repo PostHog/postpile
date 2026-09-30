@@ -2968,24 +2968,33 @@ finished topics included.
   by `QuietReads` with detail "not a pull request", in the action log and
   the debug view, not under Handled quietly.
 - Retire gate needs every thread read; `reviveUnreadTopics` runs after the
-  retire step of the full sync and in every poll that moved the inbox. A
-  thread the quiet reads would clear by rule (`clearableByRule`, the grace
-  set aside) brings nothing back while writes are on, so a deploy bot on a
-  merged PR does not reopen its topic for three days. The quiet reads
-  moved before the retire step.
+  retire step of the full sync and in every poll that moved the inbox. The
+  full sync reads the unread state its quiet reads left, so a failed or
+  capped write brings the topic back. The poll skips a thread the quiet
+  reads would clear by rule (`clearableByRule`, the grace set aside) while
+  writes are on, so a deploy bot on a merged PR does not reopen its topic
+  for three days; the next full sync clears it or brings the topic back.
+  The quiet reads moved before the retire step and share one budget of
+  `QUIET_READS_PER_RUN` threads, PR threads first.
+- The click's local thread read is put back (undo, parked, not taken) only
+  while the row still holds the read time the click wrote; a read or new
+  activity GitHub reported meanwhile stays.
 - Snapshots cut off at the query caps (`Pr.truncated`, 48 of the 130
-  unread PR threads on the day's real data) used to never clear. Most
-  capped lists keep the newest N (50 reviews, 60 comments, 50 commits, 60
-  timeline items), so a cut snapshot still covers the unread interval when
-  every such list near its cap (within 5: normalizing drops a few nodes)
-  kept an item at or before the rule's boundary (GitHub's read time for
-  bots only, the touch for "you acted after it", the last look for the
-  judged rule). Review threads never vouch: the 50 kept are the newest by
-  creation and each keeps its first 30 comments, so a reply past either
-  cap can come at any time; a thread list or a thread's comments near its
-  cap keeps the snapshot untrusted. Core `cutSnapshotCovers` behind
-  `snapshotCoversThread`. Most flagged snapshots on real data had no list
-  near a cap at all (GitHub counts items the query never returns).
+  unread PR threads on the day's real data) used to never clear.
+  Normalizing (packages/github, caps in `QUERY_CAPS`) now records from the
+  raw answer, before it drops any node, which lists came back full at their
+  cap with more on GitHub, with the node count and the oldest item
+  (`Pr.capHits`). Most capped lists keep the newest N (50 reviews, 60
+  comments, 50 commits, 60 timeline items), so a cut snapshot still covers
+  the unread interval when every list that hit its cap is one of those and
+  came back with an item at or before the rule's boundary (GitHub's read
+  time for bots only, the touch for "you acted after it", the last look for
+  the judged rule). Review threads never vouch: the 50 kept are the newest
+  by creation and each keeps its first 30 comments, so a reply past either
+  cap can come at any time. A snapshot stored before `capHits` existed never
+  vouches until it is fetched again. Core `cutSnapshotCovers` behind
+  `snapshotCoversThread`. A snapshot flagged while no list hit its cap
+  (GitHub counts items the query never returns) covers.
 
 ## Inbox cleanup
 

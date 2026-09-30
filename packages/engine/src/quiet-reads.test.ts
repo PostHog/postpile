@@ -86,7 +86,7 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
   it('leaves a PR whose snapshot was cut off after the last read: a human reply may be past the caps', async () => {
     // 60 bot comments after the read at minute 20 fill the comment cap: an older reply may have fallen off.
     const flood = Array.from({ length: 60 }, (_, index) => makeComment({ id: `c-bot-${index}`, author: 'github-actions[bot]', body: 'Bundle size: +2 kB', createdAt: at(25) }));
-    const h = await synced(alicePr({ truncated: true, comments: flood }));
+    const h = await synced(alicePr({ truncated: true, capHits: [{ list: 'comments', nodes: 60, oldestAt: at(25) }], comments: flood }));
 
     expect(h.writer.calls).toEqual([]);
     expect(quietRows(h)).toEqual([]);
@@ -95,7 +95,7 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
   it('trusts a snapshot cut off only before the last read', async () => {
     // Everything that fell off the 60-comment cap is older than the read at minute 20.
     const older = Array.from({ length: 59 }, (_, index) => makeComment({ id: `c-old-${index}`, author: 'rowan', body: 'noted', createdAt: at(10) }));
-    const pr = alicePr({ truncated: true, comments: [...older, botComment] });
+    const pr = alicePr({ truncated: true, capHits: [{ list: 'comments', nodes: 60, oldestAt: at(10) }], comments: [...older, botComment] });
     const h = await synced(pr);
 
     expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);

@@ -179,6 +179,27 @@ export interface Pr {
    * snapshots stored before it existed: read as false.
    */
   truncated?: boolean;
+  /**
+   * The capped lists that hit their cap, from the raw answer before any
+   * node was dropped: the list, how many nodes came back, and the oldest
+   * item among them (null where no time applies). Empty when no list hit
+   * its cap (a snapshot can be `truncated` because GitHub counts items it
+   * never returns). Missing on snapshots stored before it existed: then a
+   * truncated snapshot never vouches (`cutSnapshotCovers`).
+   */
+  capHits?: CapHit[];
+}
+
+/** The PR query's capped activity lists (packages/github `queries.ts`). */
+export type CappedList = 'reviews' | 'comments' | 'review_threads' | 'thread_comments' | 'commits' | 'timeline';
+
+/** One capped list that came back full with more on GitHub. */
+export interface CapHit {
+  list: CappedList;
+  /** Nodes GitHub returned, before normalizing dropped any. */
+  nodes: number;
+  /** The oldest of them; null for review threads and a thread's comments. */
+  oldestAt: IsoTime | null;
 }
 
 // ---------------------------------------------------------------------------

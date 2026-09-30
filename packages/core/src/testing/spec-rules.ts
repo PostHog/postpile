@@ -661,25 +661,19 @@ function withinGrace(now: IsoTime, times: IsoTime[]): boolean {
 }
 
 /**
- * A snapshot cut off at the query's caps (newest 50 reviews, 60 comments,
- * 50 commits, 60 timeline items; 50 review threads, first 30 comments each)
- * still holds everything since `since` when each of the newest-N lists that
- * may be cut (within 5 of its cap: normalizing drops a few nodes) kept an
- * item at or before `since`, and no review thread list or thread's comments
- * may be cut (a reply there can come at any time).
+ * A snapshot cut off at the query's caps still holds everything since
+ * `since` when it carries the raw cap evidence and every list that hit its
+ * cap keeps the newest N (reviews, comments, commits, timeline) with its
+ * oldest returned item at or before `since`. A review thread list or a
+ * thread's comments at their cap never vouch (a reply there can come at any
+ * time); no evidence never vouches.
  */
 export function cutSnapshotHoldsSince(pr: Pr, since: IsoTime): boolean {
-  const near = (length: number, cap: number) => length >= cap - 5;
-  if (near(pr.threads.length, 50) || pr.threads.some((thread) => near(thread.comments.length, 30))) {
+  if (pr.capHits === undefined) {
     return false;
   }
-  const oldestAtOrBefore = (times: IsoTime[], cap: number) => !near(times.length, cap) || times.some((time) => time <= since);
-  return (
-    oldestAtOrBefore(pr.reviews.map((review) => review.submittedAt), 50) &&
-    oldestAtOrBefore(pr.comments.filter((comment) => comment.kind === 'comment').map((comment) => comment.createdAt), 60) &&
-    oldestAtOrBefore(pr.commits.map((commit) => commit.committedAt), 50) &&
-    oldestAtOrBefore(pr.timeline.map((item) => item.at), 60)
-  );
+  const newestN = ['reviews', 'comments', 'commits', 'timeline'];
+  return pr.capHits.every((hit) => newestN.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since);
 }
 
 /** The snapshot vouches for the thread: fetched at or after the thread's last update, and complete, or cut off only before `since`. */

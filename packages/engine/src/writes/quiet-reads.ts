@@ -87,11 +87,6 @@ export class QuietReads {
     private readonly now: () => Date,
   ) {}
 
-  /** GitHub writes are on, so the quiet reads can clear what the rules allow. */
-  writesEnabled(): boolean {
-    return this.writes.enabled();
-  }
-
   /** PR threads the rules may mark read. Whether the tile is unread is no input: an unread thread always makes it so. */
   private prCandidates(board: Board): QuietCandidate[] {
     const viewer = board.viewer;
@@ -119,7 +114,7 @@ export class QuietReads {
         result.push({ thread, prKey, detail });
       }
     }
-    return result.slice(0, QUIET_READS_PER_RUN);
+    return result;
   }
 
   /** Releases, issues and other notifications that are not PRs, unread on GitHub past the grace. */
@@ -127,7 +122,6 @@ export class QuietReads {
     return this.store.notifications
       .list()
       .filter((thread) => isClearableNonPr(thread, now))
-      .slice(0, QUIET_READS_PER_RUN)
       .map((thread) => ({ thread, prKey: null, detail: quietReasonDetail('not_pr') }));
   }
 
@@ -235,7 +229,8 @@ export class QuietReads {
     }
     const nowIso = this.now().toISOString();
     const result: QuietReadsResult = { marked: [], otherMarked: [], errors: [] };
-    const candidates = [...this.prCandidates(Board.load(this.store, nowIso)), ...this.otherCandidates(nowIso)];
+    // One budget for both, PR threads first: they are what the tiles show.
+    const candidates = [...this.prCandidates(Board.load(this.store, nowIso)), ...this.otherCandidates(nowIso)].slice(0, QUIET_READS_PER_RUN);
     for (const candidate of candidates) {
       try {
         if (!(await this.markOne(candidate))) {

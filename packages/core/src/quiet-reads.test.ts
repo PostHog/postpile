@@ -106,18 +106,17 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ prFetchedAt: at(31) })).kind).toBe('mark');
   });
 
-  it('trusts a snapshot cut off at the query caps only where what fell off is older than the read', () => {
-    const comments = (minute: number) => Array.from({ length: 60 }, (_, index) => makeComment({ id: `c${index}`, author: 'lyra', body: 'noted', createdAt: at(minute) }));
-    const cut = (overrides: Partial<Pr>) => ({ ...pr, truncated: true, ...overrides });
-    // Read at 20: the oldest of the newest 60 comments is at 21, so an older one past the cap may be after the read.
-    expect(quietReadCheck(input({ pr: cut({ comments: comments(21) }) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
-    expect(quietReadCheck(input({ pr: cut({ comments: comments(10) }) })).kind).toBe('mark');
-    // No list near its cap: GitHub counted items the query never returns, nothing fell off.
-    expect(quietReadCheck(input({ pr: cut({}) })).kind).toBe('mark');
-    // A review thread near its cap never vouches: a reply there can come at any time.
-    const thread = { id: 'rt1', path: 'a.ts', isResolved: false, comments: comments(10).slice(0, 30).map((comment) => ({ ...comment, kind: 'review_comment' as const, threadId: 'rt1' })) };
-    expect(quietReadCheck(input({ pr: cut({ threads: [thread] }) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
-    expect(quietReadCheck(input({ pr: cut({ comments: comments(10) }), prFetchedAt: at(30) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+  it('trusts a snapshot cut off at the query caps only where the raw cap evidence says what fell off is older than the read', () => {
+    const cut = (capHits: Pr['capHits']) => ({ ...pr, truncated: true, capHits });
+    // Read at 20: the oldest of the 60 comments that came back is at 21, so one that fell off may be after the read.
+    expect(quietReadCheck(input({ pr: cut([{ list: 'comments', nodes: 60, oldestAt: at(21) }]) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(quietReadCheck(input({ pr: cut([{ list: 'comments', nodes: 60, oldestAt: at(10) }]) })).kind).toBe('mark');
+    // Flagged, but no list hit its cap: GitHub counted items the query never returns.
+    expect(quietReadCheck(input({ pr: cut([]) })).kind).toBe('mark');
+    // Review threads at their cap never vouch, and neither does a snapshot stored without the evidence.
+    expect(quietReadCheck(input({ pr: cut([{ list: 'review_threads', nodes: 50, oldestAt: null }]) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(quietReadCheck(input({ pr: cut(undefined) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(quietReadCheck(input({ pr: cut([]), prFetchedAt: at(30) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
   });
 
   it('leaves it when a person did something since the last read', () => {

@@ -1,4 +1,4 @@
-import { deriveEvents, quietReadCheck, touchedReadCheck, type Pr } from '@postpile/core';
+import { cutSnapshotCovers, deriveEvents, quietReadCheck, touchedReadCheck, type Pr } from '@postpile/core';
 import { viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from './fake-fetch.ts';
@@ -172,9 +172,34 @@ describe('toPr: truncation', () => {
       });
 
     expect(pr.truncated).toBe(true);
+    expect(pr.capHits).toEqual([{ list: 'comments', nodes: 60, oldestAt: '2026-09-20T11:00:00.000Z' }]);
     expect(check(pr)).toEqual({ kind: 'skip', why: 'stale_snapshot' });
     // The same comments as a complete list would pass as bots only.
     expect(check({ ...pr, truncated: false }).kind).toBe('mark');
+  });
+
+  it('records cap hits from the raw answer: 50 threads came back, 6 of them draft-only, and the snapshot stays untrusted', () => {
+    const raw = rawPr();
+    const template = raw.reviewThreads.nodes[0]!;
+    raw.reviewThreads.nodes = Array.from({ length: 50 }, (_, index) => ({
+      ...template,
+      id: `RT${index}`,
+      comments: { totalCount: 1, nodes: [{ ...template.comments.nodes[0]!, id: `RC${index}`, state: index < 6 ? 'PENDING' : 'SUBMITTED' }] },
+    }));
+    raw.reviewThreads.totalCount = 60;
+    const pr = toPr(ref, raw);
+    expect(pr.threads).toHaveLength(44);
+    expect(pr.capHits).toEqual([{ list: 'review_threads', nodes: 50, oldestAt: null }]);
+    expect(cutSnapshotCovers(pr, '2026-09-30T00:00:00.000Z')).toBe(false);
+  });
+
+  it('records no cap hit for a list GitHub counts longer than it returns below the cap', () => {
+    const raw = rawPr();
+    raw.reviews.totalCount = raw.reviews.nodes.length + 2;
+    const pr = toPr(ref, raw);
+    expect(pr.truncated).toBe(true);
+    expect(pr.capHits).toEqual([]);
+    expect(cutSnapshotCovers(pr, '2020-01-01T00:00:00.000Z')).toBe(true);
   });
 
   it('flags a PR with more comments in one thread than the query took', () => {

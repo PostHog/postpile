@@ -168,4 +168,20 @@ describe('GitHub unread is PostPile unread', () => {
     expect((await tileOf(h, 'undo'))?.state.kind).toBe('unread');
     expect(h.writer.calls).toEqual([]);
   });
+
+  it('keeps a read GitHub reported during the undo window when the Mark read is undone', async () => {
+    const h = makeHarness();
+    const pr = makePr({ number: 16, comments: [makeComment({ id: 'c-ada', author: 'ada', body: 'ping', createdAt: at(30) })], updatedAt: at(30) });
+    topicWithPrs(h, 'seen', [pr]);
+    h.reader.addPr(pr, makeThreadFor(pr, { reason: 'subscribed', updatedAt: at(30) }));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const thread = h.store.notifications.getByPrKeys([pr.key]).get(pr.key)!;
+
+    const marked = await h.engine.markRead(`pr:${pr.key}`);
+    // A poll learns the thread was read on github.com meanwhile.
+    h.store.notifications.markRead(thread.id, at(40));
+    await h.engine.undo(marked.undoToken);
+
+    expect(h.store.notifications.get(thread.id)).toMatchObject({ unread: false, lastReadAt: at(40) });
+  });
 });
