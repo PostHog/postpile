@@ -61,13 +61,14 @@ describe('pings, scenarios the properties found', () => {
 });
 
 describe('whose move, scenarios the properties found', () => {
-  /** ada's PR: you asked for changes, ada asked you again, `pusher` pushed, and you only commented since. */
-  function reRequestedBoard(pusher: 'other' | 'bot'): BoardSpec {
+  /** ada's PR: you asked for changes, ada asked you again, `pusher` pushed (or nobody did), and you only commented since. */
+  function reRequestedBoard(pusher: 'other' | 'bot' | null): BoardSpec {
+    const push: StepSpec[] = pusher === null ? [] : [{ kind: 'push', by: pusher, force: false }];
     const steps: StepSpec[] = [
       { kind: 'request', target: 'viewer', byBot: false },
       { kind: 'review', by: 'viewer', state: 'CHANGES_REQUESTED' },
       { kind: 'request', target: 'viewer', byBot: false },
-      { kind: 'push', by: pusher, force: false },
+      ...push,
       { kind: 'comment', by: 'viewer', text: 'plain', thread: null },
     ];
     return {
@@ -88,4 +89,13 @@ describe('whose move, scenarios the properties found', () => {
       expect(row.turn).toMatchObject({ kind: 'you', move: 're_review', what: 'Re-review, ada asked' });
     });
   }
+
+  // The same without a push said "ada to address your changes": the review
+  // of the unchanged head still counted. Decided 2026-09-30: an explicit
+  // re-request means "look again", push or not.
+  it('a re-request after your changes without a push is a Re-review under Changes you requested', () => {
+    const row = tileViewsOf(buildBoard(reRequestedBoard(null)))[0]!.prs[0]!;
+    expect(row.tier).toBe('changes_requested');
+    expect(row.turn).toMatchObject({ kind: 'you', move: 're_review', what: 'Re-review, ada asked' });
+  });
 });

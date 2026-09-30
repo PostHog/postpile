@@ -26,9 +26,10 @@ export type WhoseTurnKind = 'you' | 'them' | 'none';
 /**
  * The kind of move a `you` turn asks for, so the sidebar row can name it.
  * reply: an ask (question, mention, reply, team mention), also on a draft.
- * re_review: the author addressed your changes. review: a review request,
- * personal or for your team. address_changes: threads or a change request
- * on your own PR or draft. merge: your PR is approved. CI is never a move
+ * re_review: the author addressed your changes, or asked you again while
+ * they stand. review: a review request, personal or for your team.
+ * address_changes: threads or a change request on your own PR or draft.
+ * merge: your PR is approved. CI is never a move
  * (DESIGN.md "CI is not a signal").
  */
 export type YourMove = 'reply' | 're_review' | 'review' | 'address_changes' | 'merge';
@@ -266,6 +267,13 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
       return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
     }
     return you(ctx, 'review', reviewText(ctx, ask, 'Review'));
+  }
+  if (reviewed !== null && ask === 'you' && viewerRequestedChanges(pr, ctx.viewer)) {
+    // Asked again without a push: GitHub drops a reviewer from the requested
+    // list once they review, so a pending personal request after the
+    // viewer's review is the author's re-request. An explicit re-request
+    // means "look again", push or not (2026-09-30).
+    return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
   }
   if (reviewed?.state === 'APPROVED') {
     return them(ctx, pr.author, 'to merge');

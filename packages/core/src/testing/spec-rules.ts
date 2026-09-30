@@ -198,7 +198,8 @@ function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review
  * Someone else's open PR. An approval stands on any commit. A review is the
  * viewer's move only with a real request (personal, their team on a
  * teammate's PR, or routed and not waiting) and no review of the head; while
- * their changes request stands it is a re-review (2026-09-30).
+ * their changes request stands it is a re-review (2026-09-30), and so is a
+ * personal request after a review of the head (asked again without a push).
  */
 function othersPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
@@ -216,6 +217,10 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
   const request = pendingRequest(pr, viewer);
   if (headReview === null && (request === 'you' || request === 'team_for_you' || request === 'team')) {
     return viewerAskedForChanges(pr, viewer) ? you('re_review', reviewWords(pr, viewer, request, 'Re-review')) : you('review', reviewWords(pr, viewer, request, 'Review'));
+  }
+  if (headReview !== null && request === 'you' && viewerAskedForChanges(pr, viewer)) {
+    // Re-requested without a push: a review takes the reviewer off the list, so only the author put them back.
+    return you('re_review', reviewWords(pr, viewer, request, 'Re-review'));
   }
   if (headReview !== null) {
     const opened = threadsViewerOpened(pr, viewer);
