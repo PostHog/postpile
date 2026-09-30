@@ -16,8 +16,8 @@ export function TurnLine(props: { turn: WhoseTurn; greyed?: boolean }) {
           <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${props.greyed ? 'bg-ghost' : 'bg-honey ring-2 ring-honey/22'}`} />
           <span className="truncate">Your move</span>
         </span>
-        {/* The move goes first when space runs out, then the label, down to the dot. */}
-        <span className="min-w-0 shrink-[100] truncate">{turn.what}</span>
+        {/* The move needs room to read: below 14rem of footer it drops out whole (no sliver), and the label truncates alone. */}
+        <span className="hidden min-w-0 truncate @min-[14rem]:block">{turn.what}</span>
       </span>
     );
   }

@@ -286,7 +286,7 @@ export function Tile(props: TileProps) {
       </div>
       <div className={`mt-auto flex min-h-[46px] flex-wrap items-center gap-x-2 gap-y-1.5 rounded-b-tile py-1.5 pr-3 pl-[15px] ${footer}`}>
         {/* Zero basis: the turn line shrinks (to the dot) before it can push the buttons; buttons that alone do not fit wrap below it. */}
-        <div className="flex min-w-0 flex-1 basis-0">
+        <div className="@container flex min-w-0 flex-1 basis-0">
           <TurnLine turn={view.turn} greyed={done} />
         </div>
         <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5">
