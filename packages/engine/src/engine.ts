@@ -86,7 +86,7 @@ import type { AutoSyncOptions } from './auto-sync.ts';
 import { isPostHogMember } from '@postpile/core/telemetry-identity';
 import { PingSummary } from './telemetry/ping-summary.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
-import { loadViewer, saveViewer } from './viewer-meta.ts';
+import { loadViewer } from './viewer-meta.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -136,6 +136,7 @@ import { SetupFlow } from './setup/setup-flow.ts';
 import { SetupSweep } from './setup/setup-sweep.ts';
 import { SyncRun } from './sync-run.ts';
 import { TeamMembers } from './team-members.ts';
+import { saveViewerFollowingRoles } from './team-role-events.ts';
 import { TeamRoleKeeper } from './team-roles.ts';
 import { ToolHealth } from './tools/tool-health.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
@@ -821,7 +822,7 @@ export class Engine implements EngineService {
       throw new Error(`not one of your teams: ${team}`);
     }
     const roles = this.teamRoles.setRole(team, role);
-    saveViewer(store, await this.teamMembers.attach(withHomeTeams(viewer, roles)));
+    saveViewerFollowingRoles(store, await this.teamMembers.attach(withHomeTeams(viewer, roles)), this.deps.now().toISOString());
     return this.teamRoles.view(viewer);
   }
 

@@ -32,6 +32,8 @@ now".
   while the GitHub quota is low, and 2h after a failed try); meta
   `team_roles`. The user flips a role under the sweep and in "Your teams"
   below the instructions (`GET/POST /api/team-roles`); a flip sticks.
+  A role change derives stored events again from their snapshots, so team
+  mention loudness follows at once.
   `TeamMembers` fetches home teams only; no home team means no teammates
   and no Team filter. Fake mode has client-approvers as a routing team.
 

@@ -171,6 +171,25 @@ export function isRoutingTeam(team: string, viewer: Viewer): boolean {
   return isOwnTeam(team, viewer.teams) && !isHomeTeam(team, viewer);
 }
 
+/** A team list to compare: lower case, sorted. */
+function comparableTeams(teams: string[]): string {
+  return teams.map((team) => team.toLowerCase()).sort().join(',');
+}
+
+/**
+ * The two viewers split their teams differently into home and routing
+ * teams: a first classification that changed a role, a flip, a team joined
+ * or left. Stored events carry loudness decided with the old split
+ * (`routing team mention`), so they are derived again.
+ */
+export function teamRolesDiffer(before: Viewer, after: Viewer): boolean {
+  const routing = (viewer: Viewer): string[] => viewer.teams.filter((team) => !isHomeTeam(team, viewer));
+  return (
+    comparableTeams(homeTeamsOf(before)) !== comparableTeams(homeTeamsOf(after)) ||
+    comparableTeams(routing(before)) !== comparableTeams(routing(after))
+  );
+}
+
 /** The viewer's teams, home teams first. */
 export function teamsHomeFirst(viewer: Viewer): string[] {
   const home = homeTeamsOf(viewer);

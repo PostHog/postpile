@@ -35,8 +35,9 @@ import type { Store } from '@postpile/store';
 import { errorText } from '../errors.ts';
 import type { InstructionsHistory } from '../instructions/history.ts';
 import type { TeamMembers } from '../team-members.ts';
+import { saveViewerFollowingRoles } from '../team-role-events.ts';
 import type { TeamRoleKeeper } from '../team-roles.ts';
-import { loadViewer, saveViewer } from '../viewer-meta.ts';
+import { loadViewer } from '../viewer-meta.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -180,7 +181,7 @@ export class SetupSweep {
       const fromGitHub = await this.deps.reader.viewer();
       const roles = await this.teamRoles(job, fromGitHub);
       const viewer = await this.deps.teamMembers.attach(withHomeTeams(fromGitHub, roles));
-      saveViewer(this.deps.store, viewer);
+      saveViewerFollowingRoles(this.deps.store, viewer, this.deps.now().toISOString());
       const teams = viewer.teams.length > 0 ? `teams ${viewer.teams.join(', ')}` : 'no teams visible';
       SetupSweep.finish(line, 'done', `Signed in as @${viewer.login} · ${teams} · ${plural(viewer.teamMembers?.length ?? 0, 'teammate')}`);
       return viewer;

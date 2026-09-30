@@ -25,6 +25,7 @@ import { errorText } from './errors.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
 import type { GitHubQuota } from './github-quota.ts';
+import { saveViewerFollowingRoles } from './team-role-events.ts';
 import { TeamRoleKeeper } from './team-roles.ts';
 import { loadViewer, saveViewer } from './viewer-meta.ts';
 import type { ActionLog } from './writes/action-log.ts';
@@ -662,7 +663,7 @@ export class GitHubSync {
     this.beginRun();
     // Roles first: only home teams' members are teammates.
     const viewer = await this.teamMembers.attach(await this.teamRoles.attach(await this.reader.viewer()));
-    saveViewer(this.store, viewer);
+    saveViewerFollowingRoles(this.store, viewer, this.now().toISOString());
     const notifications = await this.syncNotifications('sync');
 
     const candidates = this.candidates();

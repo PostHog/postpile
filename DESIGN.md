@@ -2316,9 +2316,14 @@ The user flips a role under the setup sweep and in "Your teams" in the
 instructions pane ("team-devex · Home team (57% of your reviews) · Make
 routing only"; `GET/POST /api/team-roles`). A flip is `source: 'user'`,
 sticks, and updates the stored viewer at once (home teams, and the members
-of a new home team, a GitHub read). Events are classified when a PR is
-stored, so the loudness of team mentions already stored follows a flip on
-the PR's next fetch. Prompts name routing teams only when a team routes
+of a new home team, a GitHub read). Events get their loudness when they
+are derived, so whenever the stored viewer splits its teams differently
+(`teamRolesDiffer`: the first classification that changes a role, a flip,
+a sweep, a team joined or left), every stored PR's events are derived again
+from its stored snapshot (`saveViewerFollowingRoles`, no GitHub read;
+2026-09-30, was: on the PR's next fetch). Seen state and overrides (the
+user's and the agent's) stay, so a team mention goes quiet on a flip to
+routing and loud again on the flip back. Prompts name routing teams only when a team routes
 ("Teams that only route review requests to them (not their team)"), so
 prompt hashes do not move for everyone else.
 

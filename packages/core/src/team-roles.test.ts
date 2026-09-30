@@ -10,6 +10,7 @@ import {
   teamRoleReason,
   teamRolesLine,
   teamRolesView,
+  teamRolesDiffer,
   teamsWithoutRole,
   withHomeTeams,
   type ReviewedPr,
@@ -177,6 +178,17 @@ describe('home teams on the viewer', () => {
     expect(isRoutingTeam(APPROVERS, roled)).toBe(true);
     expect(isHomeTeam(APPROVERS, roled)).toBe(false);
     expect(isRoutingTeam('acme/other', roled)).toBe(false);
+  });
+
+  it('tells when two viewers split their teams differently', () => {
+    const roled = withHomeTeams(viewer, stored);
+    expect(teamRolesDiffer(viewer, roled)).toBe(true);
+    expect(teamRolesDiffer(roled, withHomeTeams(viewer, stored))).toBe(false);
+    expect(teamRolesDiffer(roled, { ...roled, homeTeams: [...roled.homeTeams!].reverse().map((team) => team.toUpperCase()) })).toBe(false);
+    expect(teamRolesDiffer(roled, withHomeTeams(viewer, setTeamRole(stored, APPROVERS, 'home')))).toBe(true);
+    // Every team home, spelled out or not decided yet: the same split.
+    expect(teamRolesDiffer(viewer, { ...viewer, homeTeams: viewer.teams })).toBe(false);
+    expect(teamRolesDiffer(viewer, { ...viewer, teams: [...viewer.teams, 'acme/new'] })).toBe(true);
   });
 
   it('allows no home team', () => {
