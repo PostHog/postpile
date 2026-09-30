@@ -10,9 +10,12 @@ export type TeamRole = 'home' | 'routing';
 
 /** A team is home when at least this share of the viewer's reviews came through its request. */
 export const HOME_TEAM_SHARE = 0.2;
-/** With fewer reviews than this in the window the share says too little: the team size decides. */
+/** With fewer reviews than this in the window the share says too little: the team size decides alone. */
 export const MIN_REVIEWS_FOR_SHARE = 30;
-/** The size fallback: a team with at most this many members is home. */
+/**
+ * A home team has at most this many members, whatever its share: a big
+ * approver group asked on most PRs is not a set of teammates (2026-09-30).
+ */
 export const HOME_TEAM_MAX_MEMBERS = 10;
 /** How far back the review history goes. */
 export const TEAM_ROLE_WINDOW_DAYS = 90;
@@ -65,22 +68,32 @@ function cameThroughTeam(review: ReviewedPr, team: string, login: string): boole
 }
 
 /**
- * The rule: a team is home when at least HOME_TEAM_SHARE of the viewer's
- * reviews came through it. With fewer than MIN_REVIEWS_FOR_SHARE reviews,
- * a team of at most HOME_TEAM_MAX_MEMBERS members is home, a bigger one
- * routing; an unknown size counts as home (today's behaviour). No home team
- * at all is a valid answer.
+ * The rule: a team is home when it has at most HOME_TEAM_MAX_MEMBERS
+ * members and at least HOME_TEAM_SHARE of the viewer's reviews came through
+ * it (2026-09-30: share alone made a 40-person approver group home). With
+ * fewer than MIN_REVIEWS_FOR_SHARE reviews the share says too little and
+ * the size decides alone. An unknown size counts as small. No home team at
+ * all is a valid answer.
+ *
+ * The basis names what decided: a share below the line decides whatever
+ * the size ('share'), then a team too large ('size'), then the share
+ * ('share', enough reviews) or the size ('size', too few).
  */
 export function classifyTeams(input: ClassifyTeamsInput): TeamClassification[] {
   const total = input.reviews.length;
+  const enoughReviews = total >= MIN_REVIEWS_FOR_SHARE;
   return input.teams.map(({ team, members }): TeamClassification => {
     const reviews = input.reviews.filter((review) => cameThroughTeam(review, team, input.login)).length;
     const share = total > 0 ? reviews / total : null;
-    if (total >= MIN_REVIEWS_FOR_SHARE) {
-      return { team, role: reviews / total >= HOME_TEAM_SHARE ? 'home' : 'routing', basis: 'share', reviews, share, members };
-    }
+    const numbers = { team, reviews, share, members };
     const small = members === null || members <= HOME_TEAM_MAX_MEMBERS;
-    return { team, role: small ? 'home' : 'routing', basis: 'size', reviews, share, members };
+    if (enoughReviews && reviews / total < HOME_TEAM_SHARE) {
+      return { ...numbers, role: 'routing', basis: 'share' };
+    }
+    if (!small) {
+      return { ...numbers, role: 'routing', basis: 'size' };
+    }
+    return { ...numbers, role: 'home', basis: enoughReviews ? 'share' : 'size' };
   });
 }
 
@@ -173,7 +186,10 @@ function percent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
 
-/** Why a team has its role, in words: "57% of your reviews", "4 members", "set by you". */
+/**
+ * Why a team has its role, in words: "57% of your reviews", "4 members",
+ * "40 members, too many for a home team", "set by you".
+ */
 export function teamRoleReason(entry: TeamRoleEntry): string {
   if (entry.source === 'user') {
     return 'set by you';
@@ -181,7 +197,13 @@ export function teamRoleReason(entry: TeamRoleEntry): string {
   if (entry.basis === 'share' && entry.share !== null) {
     return `${percent(entry.share)} of your reviews`;
   }
-  return entry.members === null ? 'size unknown' : `${entry.members} members`;
+  if (entry.members === null) {
+    return 'size unknown';
+  }
+  if (entry.role === 'routing') {
+    return `${entry.members} members, too many for a home team`;
+  }
+  return `${entry.members} members`;
 }
 
 /**

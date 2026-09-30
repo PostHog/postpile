@@ -2280,10 +2280,16 @@ decided yet and every team is home, so nothing changes until then.
 Classification, rules first, the user confirms (`classifyTeams`): a review
 "came through team T" when T was requested on the PR and the viewer was not
 requested personally (a personal request wins). A team is home when at
-least 20% of the viewer's reviews came through it (`HOME_TEAM_SHARE`).
-With fewer than 30 reviews in the window (`MIN_REVIEWS_FOR_SHARE`), size
-decides: 10 members or fewer is home, more is routing
-(`HOME_TEAM_MAX_MEMBERS`); an unknown size counts as home. Input, two
+least 20% of the viewer's reviews came through it (`HOME_TEAM_SHARE`) and
+it has at most 10 members (`HOME_TEAM_MAX_MEMBERS`; added 2026-09-30: with
+share alone, a 40-person approver group asked on most PRs got over 20% of
+the reviews, became home and filled Team's PRs with 40 "teammates"). With
+fewer than 30 reviews in the window (`MIN_REVIEWS_FOR_SHARE`), size
+decides alone: 10 members or fewer is home, more is routing. An unknown
+size counts as small. The stored `basis` names what decided: a share
+below 20% is `share` whatever the size, then a team too large is `size`
+("40 members, too many for a home team"), else `share` or, under 30
+reviews, `size`. Input, two
 read-only GitHub reads: member counts of the viewer's teams in one GraphQL
 request (`teamSizes`, `members { totalCount }`), and `is:pr
 reviewed-by:<login> -author:<login> updated:>=<90 days ago> org:<each of

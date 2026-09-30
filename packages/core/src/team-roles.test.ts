@@ -31,7 +31,7 @@ const teams = [
 ];
 
 describe('classifyTeams', () => {
-  it('makes a team home when at least 20% of the reviews came through it', () => {
+  it('makes a small team home when at least 20% of the reviews came through it', () => {
     const history = [...reviews(57, [DEVEX]), ...reviews(4, [APPROVERS], 100), ...reviews(39, ['lyra'], 200)];
     const [devex, approvers] = classifyTeams({ login: 'alice', teams, reviews: history });
     expect(devex).toMatchObject({ team: DEVEX, role: 'home', basis: 'share', reviews: 57, share: 0.57, members: 3 });
@@ -60,6 +60,38 @@ describe('classifyTeams', () => {
     const history = [...reviews(4, [APPROVERS]), ...reviews(4, [DEVEX], 50), ...reviews(92, ['alice'], 100)];
     const roles = classifyTeams({ login: 'alice', teams, reviews: history }).map((entry) => entry.role);
     expect(roles).toEqual(['routing', 'routing']);
+  });
+
+  it('keeps a team with more than 10 members routing even when most reviews came through it', () => {
+    const big = [
+      { team: APPROVERS, members: 40 },
+      { team: DEVEX, members: 3 },
+    ];
+    const history = [...reviews(60, [APPROVERS]), ...reviews(25, [DEVEX], 100), ...reviews(15, [], 200)];
+    const [approvers, devex] = classifyTeams({ login: 'alice', teams: big, reviews: history });
+    expect(approvers).toMatchObject({ role: 'routing', basis: 'size', reviews: 60, share: 0.6, members: 40 });
+    expect(devex).toMatchObject({ role: 'home', basis: 'share', share: 0.25 });
+  });
+
+  it('names the share when it is below the line, whatever the size', () => {
+    const big = [{ team: APPROVERS, members: 40 }];
+    const history = [...reviews(5, [APPROVERS]), ...reviews(95, [])];
+    expect(classifyTeams({ login: 'alice', teams: big, reviews: history })[0]).toMatchObject({ role: 'routing', basis: 'share' });
+  });
+
+  it('keeps a team of exactly 10 home on share, and one of unknown size too', () => {
+    const sized = [
+      { team: 'acme/ten', members: HOME_TEAM_MAX_MEMBERS },
+      { team: 'acme/eleven', members: HOME_TEAM_MAX_MEMBERS + 1 },
+      { team: 'acme/unknown', members: null },
+    ];
+    const history = reviews(MIN_REVIEWS_FOR_SHARE, ['acme/ten', 'acme/eleven', 'acme/unknown']);
+    const roles = classifyTeams({ login: 'alice', teams: sized, reviews: history }).map((entry) => [entry.role, entry.basis]);
+    expect(roles).toEqual([
+      ['home', 'share'],
+      ['routing', 'size'],
+      ['home', 'share'],
+    ]);
   });
 
   it('falls back to the team size with fewer than 30 reviews', () => {
@@ -158,6 +190,7 @@ describe('wording', () => {
   it('says why a team has its role', () => {
     expect(teamRoleReason(stored.teams[DEVEX]!)).toBe('57% of your reviews');
     expect(teamRoleReason({ ...stored.teams[DEVEX]!, basis: 'size' })).toBe('3 members');
+    expect(teamRoleReason({ ...stored.teams[APPROVERS]!, basis: 'size', members: 40 })).toBe('40 members, too many for a home team');
     expect(teamRoleReason({ ...stored.teams[DEVEX]!, basis: 'size', members: null })).toBe('size unknown');
     expect(teamRoleReason(setTeamRole(stored, DEVEX, 'routing').teams[DEVEX]!)).toBe('set by you');
   });
@@ -165,6 +198,10 @@ describe('wording', () => {
   it('writes the sweep line', () => {
     expect(teamRolesLine(stored, [DEVEX, APPROVERS])).toBe(
       'Home team: team-devex (57% of your reviews came through it) · Routing only: client-approvers (4% of your reviews came through it)',
+    );
+    const big: TeamRoles = { ...stored, teams: { ...stored.teams, [APPROVERS]: { ...stored.teams[APPROVERS]!, basis: 'size', share: 0.6, members: 40 } } };
+    expect(teamRolesLine(big, [DEVEX, APPROVERS])).toBe(
+      'Home team: team-devex (57% of your reviews came through it) · Routing only: client-approvers (40 members, too many for a home team)',
     );
     const none = setTeamRole(stored, DEVEX, 'routing');
     expect(teamRolesLine(none, [DEVEX, APPROVERS])).toBe(

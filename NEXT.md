@@ -26,8 +26,8 @@ now".
   only brings its review requests (routed on any PR, taken by anyone's
   review of the head, neutral "For <slug>" chip without band) and quiet
   mentions, and its members are not teammates. Rules decide from the last
-  90 days of reviews (`classifyTeams`: 20% of reviews through the team,
-  size fallback of 10 members under 30 reviews), in the setup sweep and on
+  90 days of reviews (`classifyTeams`: 20% of reviews through the team and
+  at most 10 members; size alone under 30 reviews), in the setup sweep and on
   the next sync of installs without roles or for a newly joined team; meta
   `team_roles`. The user flips a role under the sweep and in "Your teams"
   below the instructions (`GET/POST /api/team-roles`); a flip sticks.
@@ -1077,7 +1077,9 @@ the app meanwhile.
   never becomes the viewer's through an assignment. DESIGN.md "PR
   ownership".
 - **Teams are home or routing** (2026-09-30): decided from review history
-  (20% of reviews via the team; size fallback ≤10 with under 30 reviews);
+  (20% of reviews via the team and has at most 10 members, 2026-09-30:
+  share alone made a 40-person approver group home; size alone decides
+  with under 30 reviews);
   the user can flip; no home team is valid; bot-made review requests count
   like human ones. A routing team's chip is neutral without band (sea
   means your team), its mentions are FYI, and its request is never "For
