@@ -7,33 +7,42 @@
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { ownedByTeammate, reviewedHead, reviewRequestTarget, teamSlug } from './review-request.ts';
+import { isRoutingTeam } from './team-roles.ts';
 import type { Glance, IsoTime, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
-/** The PR is from outside the viewer's team (not theirs, not a teammate's, see `prOwners`): a team request on it is routed. */
-function fromOutsideTeam(pr: Pr, viewer: Viewer): boolean {
-  return !isPrOwner(pr, viewer.login) && !ownedByTeammate(pr, viewer);
+/**
+ * A request for this team on this PR is routed: the team only routes
+ * reviews to the viewer (on anyone's PR but theirs, 2026-09-30), or it is
+ * a home team and the PR is from outside it (not theirs, not a teammate's,
+ * see `prOwners`).
+ */
+function isRoutedTeam(team: string, pr: Pr, viewer: Viewer): boolean {
+  if (isPrOwner(pr, viewer.login) || !isOwnTeam(team, viewer.teams)) {
+    return false;
+  }
+  return isRoutingTeam(team, viewer) || !ownedByTeammate(pr, viewer);
 }
 
 /**
- * A review request event for one of the viewer's teams on a PR from outside
- * the team. Routed on purpose ignores a teammate's review: a Look closer
- * verdict pings anyway (DESIGN.md "Routed team requests ping when the glance
- * says Look closer").
+ * A review request event for one of the viewer's teams that is routed
+ * (`isRoutedTeam`). Routed on purpose ignores a teammate's review: a Look
+ * closer verdict pings anyway (DESIGN.md "Routed team requests ping when
+ * the glance says Look closer").
  */
 export function isRoutedTeamRequestEvent(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
-  if (event.kind !== 'review_requested' || !fromOutsideTeam(pr, viewer)) {
+  if (event.kind !== 'review_requested') {
     return false;
   }
   const subject = reviewRequestTarget(event, pr);
-  return subject !== null && !sameLogin(subject, viewer.login) && isOwnTeam(subject, viewer.teams);
+  return subject !== null && !sameLogin(subject, viewer.login) && isRoutedTeam(subject, pr, viewer);
 }
 
-/** The viewer's team with a pending review request routed to it on this open PR, or null. */
+/** The viewer's team with a pending routed review request on this open PR, or null. */
 export function routedTeamRequest(pr: Pr, viewer: Viewer): string | null {
-  if (pr.state !== 'OPEN' || pr.isDraft || !fromOutsideTeam(pr, viewer)) {
+  if (pr.state !== 'OPEN' || pr.isDraft) {
     return null;
   }
-  return pr.reviewerTeams.find((team) => isOwnTeam(team, viewer.teams)) ?? null;
+  return pr.reviewerTeams.find((team) => isRoutedTeam(team, pr, viewer)) ?? null;
 }
 
 /**

@@ -16,8 +16,9 @@ import { unansweredAsk } from './whose-turn.ts';
  * viewer owns it (`prOwners`: wrote it, or a bot opened it and assigned
  * them). team: a teammate owns it. to_review: a review is asked
  * of the viewer or their team and they have not reviewed the head. A
- * personal request and a team request on a teammate's PR go before `team`;
- * a teammate's PR with only a taken team request stays `team`.
+ * personal request, a home team request on a teammate's PR and a routing
+ * team's request go before `team`; a teammate's PR with only a taken team
+ * request stays `team`.
  * team_mentioned: the team was @-mentioned. rest: everything else, and every
  * PR that is not open.
  */
@@ -78,6 +79,10 @@ export function prTier(input: PrTierInput): PrTier {
   const request = pr.isDraft || reviewedHead(pr, viewer, input.userState) ? null : reviewRequest(pr, viewer);
   // A personal request, or a team request on a teammate's PR, is owed even to a teammate.
   if (isPersonalRequest(request)) {
+    return 'to_review';
+  }
+  // Routed on a teammate's PR can only be a routing team's request (2026-09-30): a review owed, not Team's PRs.
+  if (request === 'team' && ownedByTeammate(pr, viewer)) {
     return 'to_review';
   }
   if (ownedByTeammate(pr, viewer)) {

@@ -6,12 +6,13 @@ import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { lastTouch } from './last-touch.ts';
-import { isOwnTeam, sameLogin } from './mentions.ts';
+import { sameLogin } from './mentions.ts';
 import { isPrOwner, prOwner } from './pr-owners.ts';
 import {
   changesRequestedBy,
   isApprovedByViewer,
   isPersonalRequest,
+  requestedTeam,
   requestsOfViewer,
   reviewRequest,
   teamRequestHold,
@@ -167,8 +168,9 @@ function requester(ctx: PrContext): string | null {
   return requests[requests.length - 1]?.actor ?? null;
 }
 
+/** The slug of the team the pending request is for ("team-devex"), home or routing. */
 function ownTeamSlug(ctx: PrContext): string {
-  const team = ctx.pr.reviewerTeams.find((slug) => isOwnTeam(slug, ctx.viewer.teams)) ?? 'your team';
+  const team = requestedTeam(ctx.pr, ctx.viewer) ?? 'your team';
   return team.split('/').pop() ?? team;
 }
 

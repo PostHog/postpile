@@ -1,4 +1,4 @@
-import { isBot, isMachineComment, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
+import { homeTeamsOf, isBot, isMachineComment, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
 import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, PrEvent, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
@@ -148,9 +148,20 @@ export function workContextBlock(context: PromptContext): string {
 only: use it to tell what matters to them now, never over their instructions above:\n\n${text}\n`;
 }
 
+/**
+ * Who the user is. With team roles decided (2026-09-30) and some team only
+ * routing reviews, the line says which teams are theirs and which only
+ * route work to them; otherwise it stays as before, so prompts do not move.
+ */
 export function viewerLine(viewer: Viewer): string {
-  const teams = viewer.teams.length > 0 ? ` Their teams: ${viewer.teams.join(', ')}.` : '';
-  return `The user is @${viewer.login} on GitHub.${teams}`;
+  const home = homeTeamsOf(viewer);
+  const routing = viewer.teams.filter((team) => !home.includes(team));
+  if (routing.length === 0) {
+    const teams = viewer.teams.length > 0 ? ` Their teams: ${viewer.teams.join(', ')}.` : '';
+    return `The user is @${viewer.login} on GitHub.${teams}`;
+  }
+  const own = home.length > 0 ? ` Their own team: ${home.join(', ')}.` : ' They have no home team.';
+  return `The user is @${viewer.login} on GitHub.${own} Teams that only route review requests to them (not their team): ${routing.join(', ')}.`;
 }
 
 /** "person:alice", as facts are shown in prompts. */

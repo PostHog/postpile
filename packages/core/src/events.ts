@@ -2,8 +2,9 @@ import { isBot, isMachineComment } from './bots.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { ruleLoudness } from './loudness.ts';
-import { mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
+import { mentionsAnyTeam, mentionsTeam, mentionsUser, sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
+import { teamsHomeFirst } from './team-roles.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
@@ -80,6 +81,14 @@ function addressedKind(comment: Comment, pr: Pr, viewer: Viewer): EventKind | nu
   return null;
 }
 
+/**
+ * The team a team mention names, home teams first: its loudness depends on
+ * the team's role (a routing team's mention is FYI, 2026-09-30).
+ */
+function mentionedTeam(comment: Comment, viewer: Viewer): string | null {
+  return teamsHomeFirst(viewer).find((team) => mentionsTeam(comment.body, team)) ?? null;
+}
+
 function commentSummary(kind: EventKind, comment: Comment): string {
   switch (kind) {
     case 'mention':
@@ -121,7 +130,7 @@ function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null
     summary: commentSummary(finalKind, comment),
     url: comment.url,
     sourceId: comment.id,
-    subject: null,
+    subject: finalKind === 'team_mention' ? mentionedTeam(comment, viewer) : null,
   };
 }
 

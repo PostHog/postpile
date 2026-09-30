@@ -8,6 +8,7 @@ export * from './bots.ts';
 export * from './pr-owners.ts';
 export * from './kinds.ts';
 export * from './mentions.ts';
+export * from './team-roles.ts';
 export * from './provenance.ts';
 export * from './loudness.ts';
 export * from './events.ts';

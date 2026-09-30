@@ -79,6 +79,8 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; u
 const FOR_WHOM_TONES: Record<Exclude<ForWhom['kind'], 'none'>, string> = {
   you: 'bg-honey-soft text-honey-ink',
   team: 'bg-sea-soft text-sea-ink',
+  // A team that only routes reviews to you: neutral, since sea means "your team" (2026-09-30).
+  routing: 'bg-segment text-ink-2',
   own: 'bg-segment text-ink',
 };
 
@@ -88,8 +90,8 @@ const FOR_WHOM_SIZES = {
 };
 
 /**
- * "For whom" as words: "For you" (honey), "For team-devex" (sea), "Your PR"
- * (neutral). Nothing for everything else. The tooltip keeps the long reason
+ * "For whom" as words: "For you" (honey), "For team-devex" (sea, a home
+ * team), "For approvers" (neutral, a routing team), "Your PR" (neutral). Nothing for everything else. The tooltip keeps the long reason
  * (`whyTitle`). Greyed on done tiles.
  */
 export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance?: Provenance; greyed?: boolean; size?: keyof typeof FOR_WHOM_SIZES }) {

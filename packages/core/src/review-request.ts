@@ -1,12 +1,14 @@
 // Review requests as they concern the viewer: who a request asks (by its
 // target, never by who clicked it), and what the pending request means now:
-// personal, for their team on a teammate's PR (counts like personal), for
-// their team on someone else's PR (routed), or already taken by a teammate.
-// Rules only. Loudness, pings, whose turn, for whom, tiers and the done rule
-// all read the same answers.
+// personal, for their home team on a teammate's PR (counts like personal),
+// routed (a home team on someone else's PR, or any routing team), or already
+// taken. Rules only. Loudness, pings, whose turn, for whom, tiers and the
+// done rule all read the same answers. A bot-made request counts like a
+// human one everywhere.
 import { isBot } from './bots.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
 import { isPrOwner, prOwners } from './pr-owners.ts';
+import { isHomeTeam, isRoutingTeam } from './team-roles.ts';
 import type { IsoTime, Pr, PrEvent, Review, TimelineItem, UserPrState, Viewer } from './types.ts';
 
 /**
@@ -42,12 +44,13 @@ export function viewerAskedToReview(pr: Pr, viewer: Viewer): boolean {
 
 /**
  * you: the viewer is a requested reviewer.
- * team_for_you: one of the viewer's teams is requested on a PR a teammate
- * wrote, and no other teammate approved or requested changes yet. Counts
- * like a personal request (2026-09-28).
- * team: one of the viewer's teams is requested on a PR by someone outside
- * the team (routed), and no teammate reviewed yet.
- * team_taken: a teammate already picked the team request up.
+ * team_for_you: one of the viewer's home teams is requested on a PR a
+ * teammate wrote, and no other teammate approved or requested changes yet.
+ * Counts like a personal request (2026-09-28).
+ * team: routed. A home team is requested on a PR by someone outside the
+ * team and no teammate reviewed yet, or a routing team is requested (on
+ * anyone's PR) and nobody but the author reviewed the head (2026-09-30).
+ * team_taken: someone already picked the team request up.
  * null: no pending request for the viewer or their teams.
  */
 export type ReviewRequest = 'you' | 'team_for_you' | 'team' | 'team_taken' | null;
@@ -116,7 +119,7 @@ export function isApprovedByViewer(pr: Pr, userState: UserPrState | null, viewer
   return viewerApproval(pr, userState, viewerLogin) !== null;
 }
 
-/** The login is on one of the viewer's teams (never true before the member list is fetched). */
+/** The login is on one of the viewer's home teams (never true before the member list is fetched). */
 export function isTeammate(login: string, viewer: Viewer): boolean {
   return (viewer.teamMembers ?? []).some((member) => sameLogin(member, login));
 }
@@ -128,8 +131,8 @@ export function ownedByTeammate(pr: Pr, viewer: Viewer): boolean {
 
 /**
  * Humans other than the owners and the viewer who submitted a review and
- * are on one of the viewer's teams. Until the member list has been fetched
- * (`teamMembers` missing) any other reviewer counts.
+ * are on one of the viewer's home teams. Until the member list has been
+ * fetched (`teamMembers` missing) any other reviewer counts.
  */
 function teammateReviews(pr: Pr, viewer: Viewer): Review[] {
   const members = viewer.teamMembers;
@@ -141,20 +144,100 @@ function teammateReviews(pr: Pr, viewer: Viewer): Review[] {
   });
 }
 
+/** Each review author once, in review order. */
+function uniqueAuthors(reviews: Review[]): string[] {
+  const logins: string[] = [];
+  for (const review of reviews) {
+    if (!logins.some((login) => sameLogin(login, review.author))) {
+      logins.push(review.author);
+    }
+  }
+  return logins;
+}
+
 /**
- * Teammates who picked up the team request, each once, in review order. On
- * a teammate's PR only an approval or a change request counts; a comment
- * alone does not cover it. On anyone else's PR any review counts.
+ * Teammates who picked up a home team's request. On a teammate's PR only
+ * an approval or a change request counts; a comment alone does not cover
+ * it. On anyone else's PR any review counts.
  */
-export function teamRequestTakenBy(pr: Pr, viewer: Viewer): string[] {
+function homeTeamTakenBy(pr: Pr, viewer: Viewer): string[] {
   const byTeammate = ownedByTeammate(pr, viewer);
   const covering = teammateReviews(pr, viewer).filter(
     (review) => !byTeammate || review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED',
   );
-  const logins: string[] = [];
-  for (const review of covering) {
-    if (!logins.some((login) => sameLogin(login, review.author))) {
-      logins.push(review.author);
+  return uniqueAuthors(covering);
+}
+
+/**
+ * Who reviewed the head, other than the viewer, the author, the owners
+ * (`prOwners`) and bots. A
+ * routing team's members are not known, so anyone's review of the head
+ * takes its request (2026-09-30).
+ */
+function headReviewers(pr: Pr, viewer: Viewer): string[] {
+  const reviews = pr.reviews.filter(
+    (review) =>
+      review.state !== 'PENDING' &&
+      review.state !== 'DISMISSED' &&
+      review.commitOid === pr.headOid &&
+      !sameLogin(review.author, viewer.login) &&
+      !sameLogin(review.author, pr.author) &&
+      !isPrOwner(pr, review.author) &&
+      !isBot(review.author),
+  );
+  return uniqueAuthors(reviews);
+}
+
+function homeTeamPending(pr: Pr, viewer: Viewer): boolean {
+  return pr.reviewerTeams.some((team) => isHomeTeam(team, viewer));
+}
+
+function routingTeamPending(pr: Pr, viewer: Viewer): boolean {
+  return pr.reviewerTeams.some((team) => isRoutingTeam(team, viewer));
+}
+
+/** A pending home team request: for you on a teammate's PR, routed on anyone else's, or taken. */
+function homeTeamRequest(pr: Pr, viewer: Viewer): ReviewRequest {
+  if (!homeTeamPending(pr, viewer)) {
+    return null;
+  }
+  if (homeTeamTakenBy(pr, viewer).length > 0) {
+    return 'team_taken';
+  }
+  return ownedByTeammate(pr, viewer) ? 'team_for_you' : 'team';
+}
+
+/** A pending routing team request: routed on anyone's PR, even a teammate's, until someone reviewed the head. */
+function routingTeamRequest(pr: Pr, viewer: Viewer): ReviewRequest {
+  if (!routingTeamPending(pr, viewer)) {
+    return null;
+  }
+  return headReviewers(pr, viewer).length > 0 ? 'team_taken' : 'team';
+}
+
+/** Team requests from most to least owed. */
+const TEAM_REQUEST_ORDER: ReviewRequest[] = ['team_for_you', 'team', 'team_taken'];
+
+/** The routing team request is owed more than the home team one (a tie goes to the home team). */
+function routingOwedMore(home: ReviewRequest, routing: ReviewRequest): boolean {
+  if (routing === null) {
+    return false;
+  }
+  return home === null || TEAM_REQUEST_ORDER.indexOf(routing) < TEAM_REQUEST_ORDER.indexOf(home);
+}
+
+/**
+ * Who picked up the team request, each once, in review order: teammates
+ * for a home team (see `homeTeamTakenBy`), anyone who reviewed the head for
+ * a routing team.
+ */
+export function teamRequestTakenBy(pr: Pr, viewer: Viewer): string[] {
+  const home = homeTeamPending(pr, viewer) ? homeTeamTakenBy(pr, viewer) : [];
+  const routing = routingTeamPending(pr, viewer) ? headReviewers(pr, viewer) : [];
+  const logins = [...home];
+  for (const login of routing) {
+    if (!logins.some((known) => sameLogin(known, login))) {
+      logins.push(login);
     }
   }
   return logins;
@@ -165,13 +248,21 @@ export function reviewRequest(pr: Pr, viewer: Viewer): ReviewRequest {
   if (pr.reviewerUsers.some((login) => sameLogin(login, viewer.login))) {
     return 'you';
   }
-  if (!pr.reviewerTeams.some((team) => isOwnTeam(team, viewer.teams))) {
-    return null;
+  const home = homeTeamRequest(pr, viewer);
+  const routing = routingTeamRequest(pr, viewer);
+  return routingOwedMore(home, routing) ? routing : home;
+}
+
+/**
+ * Which of the viewer's teams the pending team request is for ("acme/team-devex"),
+ * the one `reviewRequest` answered for: a home team unless only the routing
+ * request is owed more. Null without a pending request for their teams.
+ */
+export function requestedTeam(pr: Pr, viewer: Viewer): string | null {
+  if (routingOwedMore(homeTeamRequest(pr, viewer), routingTeamRequest(pr, viewer))) {
+    return pr.reviewerTeams.find((team) => isRoutingTeam(team, viewer)) ?? null;
   }
-  if (teamRequestTakenBy(pr, viewer).length > 0) {
-    return 'team_taken';
-  }
-  return ownedByTeammate(pr, viewer) ? 'team_for_you' : 'team';
+  return pr.reviewerTeams.find((team) => isHomeTeam(team, viewer)) ?? null;
 }
 
 /**

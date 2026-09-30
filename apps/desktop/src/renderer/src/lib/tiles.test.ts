@@ -94,6 +94,8 @@ describe('tile helpers', () => {
     expect(sameForWhom({ kind: 'team', team: 'a/x' }, { kind: 'team', team: 'a/x' })).toBe(true);
     expect(sameForWhom({ kind: 'team', team: 'a/x' }, { kind: 'team', team: 'a/y' })).toBe(false);
     expect(sameForWhom({ kind: 'you' }, { kind: 'own' })).toBe(false);
+    expect(sameForWhom({ kind: 'routing', team: 'a/x' }, { kind: 'routing', team: 'a/x' })).toBe(true);
+    expect(sameForWhom({ kind: 'routing', team: 'a/x' }, { kind: 'team', team: 'a/x' })).toBe(false);
   });
 
   it('labels kinds', () => {

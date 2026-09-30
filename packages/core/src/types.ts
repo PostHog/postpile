@@ -216,12 +216,23 @@ export interface NotificationThread {
 
 export interface Viewer {
   login: string;
-  /** "org/team-slug" for every team the viewer belongs to. */
+  /**
+   * "org/team-slug" for every team the viewer belongs to, home and routing
+   * alike: review requests to any of them are found and shown.
+   */
   teams: string[];
   /**
-   * Every other login on those teams, fetched at most daily. Missing until
-   * the first fetch (or in a viewer stored before it existed); rules then
-   * fall back to treating any other reviewer as a teammate.
+   * The home teams among `teams` (`team-roles.ts`, 2026-09-30): their
+   * members are the viewer's teammates. The other teams only route review
+   * requests and mentions. Empty is valid (no home team: no teammates).
+   * Missing until the roles are first decided; every team then counts as
+   * home, like before roles existed.
+   */
+  homeTeams?: string[];
+  /**
+   * Every other login on the home teams, fetched at most daily. Missing
+   * until the first fetch (or in a viewer stored before it existed); rules
+   * then fall back to treating any other reviewer as a teammate.
    */
   teamMembers?: string[];
   /**

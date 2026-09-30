@@ -4,6 +4,7 @@ import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isViewerSubject, sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { viewerAskedToReview } from './review-request.ts';
+import { isRoutingTeam } from './team-roles.ts';
 import type { EventDisplayState, EventKind, IsoTime, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
 export interface LoudnessInput {
@@ -16,7 +17,7 @@ export interface LoudnessInput {
   pr: Pr;
   viewer: Viewer;
   userState: UserPrState | null;
-  /** review_requested / review_request_removed: login or "org/team-slug". */
+  /** review_requested / review_request_removed: login or "org/team-slug". team_mention: the team mentioned. */
   subject?: string | null;
   /** The viewer already spoke on the PR after this event, so it is handled. */
   userRepliedAfter?: boolean;
@@ -96,6 +97,13 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     when: (input) => input.kind === 'mention',
     loudness: 'loud',
     reason: 'mentions you',
+  },
+  {
+    // A routing team only routes work to the viewer; its mention keeps them posted (2026-09-30).
+    name: 'routing team mention',
+    when: (input) => input.kind === 'team_mention' && typeof input.subject === 'string' && isRoutingTeam(input.subject, input.viewer),
+    loudness: 'quiet',
+    reason: 'mentions a team that only routes reviews to you',
   },
   {
     name: 'team mention',

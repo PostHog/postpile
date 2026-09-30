@@ -40,7 +40,7 @@ function aboutBlock(input: SetupDraftInput): string {
   return [
     `- GitHub login: @${viewer.login}`,
     `- Teams: ${teams.length > 0 ? teams.join(', ') : '(none visible to the token)'}`,
-    `- Teammates on those teams: ${mates.length > 0 ? `${shown}${more}` : '(unknown)'}`,
+    `- Teammates on their home teams: ${mates.length > 0 ? `${shown}${more}` : '(unknown)'}`,
   ].join('\n');
 }
 

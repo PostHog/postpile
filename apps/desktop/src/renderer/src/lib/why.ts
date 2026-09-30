@@ -19,6 +19,7 @@ export function forWhomLabel(forWhom: ForWhom): string {
     case 'you':
       return 'For you';
     case 'team':
+    case 'routing':
       return `For ${forWhom.team}`;
     case 'own':
       return 'Your PR';

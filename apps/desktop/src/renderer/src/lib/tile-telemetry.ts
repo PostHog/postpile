@@ -6,6 +6,7 @@ type TileOpenedProps = TelemetryEventProps<'tile_opened'>;
 const FOR_WHOM: Record<TileView['forWhom']['kind'], TileOpenedProps['for_whom']> = {
   you: 'you',
   team: 'team',
+  routing: 'routing',
   own: 'your_pr',
   none: 'none',
 };

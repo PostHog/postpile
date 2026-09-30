@@ -6,7 +6,7 @@ import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { memoryRecheckPrompt } from './prompts/memory-recheck.ts';
 import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
-import { contextBlock, githubData, NO_CI_RULE, OWN_PR_NOTE } from './prompts/shared.ts';
+import { contextBlock, githubData, NO_CI_RULE, OWN_PR_NOTE, viewerLine } from './prompts/shared.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { Pr, Provenance } from '@postpile/core';
 import type { PromptContext } from './service.ts';
@@ -278,6 +278,23 @@ describe('own PRs in prompts', () => {
     expect(own).toContain(OWN_PR_NOTE);
     const others = oneGlancePrompt(makePr({ author: 'bob' }), { kind: 'pinged', reason: 'review_requested' });
     expect(others).not.toContain(OWN_PR_NOTE);
+  });
+});
+
+describe('viewerLine', () => {
+  it('stays as before while every team is a home team', () => {
+    expect(viewerLine({ login: 'alice', teams: ['acme/team-devex'] })).toBe('The user is @alice on GitHub. Their teams: acme/team-devex.');
+    expect(viewerLine({ login: 'alice', teams: ['acme/team-devex'], homeTeams: ['acme/team-devex'] })).toBe(
+      'The user is @alice on GitHub. Their teams: acme/team-devex.',
+    );
+  });
+
+  it('tells a routing team from their own team, and says when there is none', () => {
+    const teams = ['acme/team-devex', 'acme/client-approvers'];
+    expect(viewerLine({ login: 'alice', teams, homeTeams: ['acme/team-devex'] })).toBe(
+      'The user is @alice on GitHub. Their own team: acme/team-devex. Teams that only route review requests to them (not their team): acme/client-approvers.',
+    );
+    expect(viewerLine({ login: 'alice', teams, homeTeams: [] })).toContain('They have no home team.');
   });
 
   it('treats a bot PR assigned to the user as theirs and names the assignee', () => {
