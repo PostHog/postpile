@@ -1,10 +1,30 @@
-import { prKey, type ActivityPr, type IsoTime, type NotificationThread, type Pr, type PrKey, type PrRef, type Viewer } from '@postpile/core';
-import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem } from './http.ts';
+import {
+  prKey,
+  type ActivityPr,
+  type IsoTime,
+  type NotificationThread,
+  type Pr,
+  type PrKey,
+  type PrRef,
+  type ReviewedPr,
+  type Viewer,
+  type ViewerTeamSize,
+} from '@postpile/core';
+import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem, type GraphQLResult } from './http.ts';
 import { isoTime, toBranchPr, toPr } from './normalize.ts';
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { activityPrs, buildActivityQuery, probeNotifications, readRepoFile, type RawActivityResponse } from './setup-reads.ts';
 import { listTeamMembers } from './teams.ts';
+import {
+  REVIEWED_PRS_QUERY,
+  reviewedPrs,
+  reviewedSearch,
+  teamSizes,
+  VIEWER_TEAM_SIZES_QUERY,
+  type RawReviewedPage,
+  type RawTeamSizes,
+} from './team-role-reads.ts';
 import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, buildUpdatedAtQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
 import type { RawBatchResponse, RawBranchResponse, RawUpdatedAtResponse, RawViewerTeams } from './raw.ts';
 import {
@@ -222,5 +242,33 @@ export class GitHubClient implements GitHubReader {
 
   probeNotifications(): Promise<string | null> {
     return probeNotifications(this.http);
+  }
+
+  /** Partial data (an org behind SAML) is used as is, like the viewer's teams. */
+  async teamSizes(login: string): Promise<ViewerTeamSize[]> {
+    const response = await this.http.graphql<RawTeamSizes>(VIEWER_TEAM_SIZES_QUERY, { login });
+    if (!response.data && response.errors.length > 0) {
+      throw graphqlFailure('team sizes query', response.errors);
+    }
+    return teamSizes(response.data);
+  }
+
+  async reviewedPrRequests(login: string, orgs: string[], since: string, cap: number): Promise<ReviewedPr[]> {
+    const search = reviewedSearch(login, orgs, since);
+    const prs: ReviewedPr[] = [];
+    let after: string | null = null;
+    while (prs.length < cap) {
+      const response: GraphQLResult<RawReviewedPage> = await this.http.graphql<RawReviewedPage>(REVIEWED_PRS_QUERY, { search, after });
+      if (!response.data) {
+        throw graphqlFailure('reviewed PRs query', response.errors);
+      }
+      prs.push(...reviewedPrs(response.data));
+      const { hasNextPage, endCursor } = response.data.search.pageInfo;
+      if (!hasNextPage || endCursor === null) {
+        break;
+      }
+      after = endCursor;
+    }
+    return prs.slice(0, cap);
   }
 }

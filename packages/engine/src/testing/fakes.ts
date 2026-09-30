@@ -1,6 +1,18 @@
 // Fakes for engine tests. Nothing here touches GitHub or the claude CLI.
 import { FakeRunner } from '@postpile/agent';
-import type { ActivityPr, McpLauncher, NotificationThread, Pr, PrKey, PrRef, TelemetryEventName, TelemetryEventProps, Viewer } from '@postpile/core';
+import type {
+  ActivityPr,
+  McpLauncher,
+  NotificationThread,
+  Pr,
+  PrKey,
+  PrRef,
+  ReviewedPr,
+  TelemetryEventName,
+  TelemetryEventProps,
+  Viewer,
+  ViewerTeamSize,
+} from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
@@ -62,7 +74,8 @@ export class FakeReader implements GitHubReader {
   /** PRs whose batch fails in fetchPrsPartial, like GitHub's "Something went wrong" timeout. */
   failingPrs = new Set<PrKey>();
 
-  constructor(private readonly who: Viewer = fixtureViewer) {}
+  /** What viewer() answers; tests may swap it, e.g. for more teams. */
+  constructor(public who: Viewer = fixtureViewer) {}
 
   addPr(pr: Pr, thread: NotificationThread): void {
     this.prs.set(pr.key, pr);
@@ -221,6 +234,30 @@ export class FakeReader implements GitHubReader {
 
   async probeNotifications(): Promise<string | null> {
     return this.notificationsProblem;
+  }
+
+  /** Member counts for teamSizes; a team missing here has an unknown size. */
+  teamSizeCounts = new Map<string, number>();
+  /** What reviewedPrRequests answers. */
+  reviewed: ReviewedPr[] = [];
+  /** Every reviewedPrRequests call as [login, orgs, since, cap]. */
+  reviewedCalls: [string, string[], string, number][] = [];
+  /** Set to make the team role reads throw. */
+  teamRolesError: Error | null = null;
+
+  async teamSizes(_login: string): Promise<ViewerTeamSize[]> {
+    if (this.teamRolesError) {
+      throw this.teamRolesError;
+    }
+    return this.who.teams.map((team) => ({ team, members: this.teamSizeCounts.get(team) ?? null }));
+  }
+
+  async reviewedPrRequests(login: string, orgs: string[], since: string, cap: number): Promise<ReviewedPr[]> {
+    this.reviewedCalls.push([login, orgs, since, cap]);
+    if (this.teamRolesError) {
+      throw this.teamRolesError;
+    }
+    return this.reviewed.slice(0, cap);
   }
 }
 
