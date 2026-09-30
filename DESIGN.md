@@ -2664,6 +2664,75 @@ Fake mode runs the same flows on `FakeWrites`: the lock (off at start, not
 persisted), the log, queue sends after 6s that only flip the sample thread's
 "GitHub" unread flag, pending writes (in memory) with send and discard.
 
+## GitHub unread is PostPile unread (2026-09-30)
+
+Julian's GitHub inbox showed 155 unread notifications while PostPile showed six
+unread tiles, after a day of keeping up in PostPile. PostPile's "unread" meant
+"has unseen loud news", so quiet activity, done PRs, finished topics and
+releases stayed unread on GitHub with nothing to do about them in PostPile: a
+third state, done here and unread there. Julian: "I want nothing cleared that
+potentially affects me, meaning even merged PRs where my team was the only one
+assigned and I never looked. I want things cleared that are obviously
+clearable, or they should still be unread in PostPile." A Codex (gpt-6-astra)
+review of the 155 agreed: unread has to be a fact about the GitHub thread, not
+about loudness.
+
+**The rule.** Every notification that is unread on GitHub ends one of two
+ways, and there is no third:
+
+1. PostPile clears it by itself (marks it read on GitHub), because it is
+   obviously clearable (below), or
+2. it shows as unread in PostPile, and dealing with it there (Mark read, Mark
+   done, Approve, opening it) clears it on GitHub.
+
+A PR tile is unread while any tracked thread in it is unread on GitHub. Done,
+whose move and snooze stay separate facts: a done tile whose thread went unread
+again shows unread until it is cleared. A snoozed tile keeps its snooze but
+still counts in the Unread filter. A finished topic never holds an unread
+thread: the retire gate needs every thread read, and a retired topic whose
+thread turns unread comes back.
+
+**Obviously clearable.** PostPile marks a thread read on GitHub only when
+everything since your last GitHub read, or since your last comment or review on
+the PR, is one of:
+
+- automation (the existing bots-only rule), or
+- your own activity (the existing "you acted after it" rule), or
+- human activity that is not an ask, judged by the events agent as not needing
+  you. Julian: "I would actually want the agent to decide ... It's quiet if the
+  teammate comments, all right, for example. Then we can mark it read in
+  PostPile, but also on GitHub automatically." The events agent now also sees
+  new quiet human events on unread threads (a teammate's comment, someone
+  else's review, a push by the author), not only loud ones.
+
+Never clearable by itself: a review request to you or your team, a mention, a
+team mention, a question or reply to you, an unseen merge without your review.
+These stay unread until you deal with them, also after the PR merged and a
+teammate reviewed. Not clearance evidence either: an agent NOT_YOURS, age,
+merged or closed state, an old handled mark or approval.
+
+The existing safety checks stay: fresh and complete snapshot, the 10-minute
+grace after the newest activity, the writes lock (locked: the thread stays
+unread in PostPile), the guarded re-read of the thread before the write, and an
+action-log entry ("Handled quietly").
+
+**Notifications that are not PRs** (releases, issues): PostPile marks them read
+on GitHub by itself for now. Julian: "People who use PostPile (for example, to
+catch up after vacation or never having used the GitHub inbox) expect PostPile
+to clear all of this." Showing them is decided later.
+
+**Loudness keeps its job.** Pings, the coral "new since you looked", urgency
+and sections stay tied to loud news. An unread tile with only quiet news (the
+agent has not judged it yet, or a check blocked the clear) shows as unread but
+does not ping.
+
+**Start fresh.** The local-only "Start fresh here" hid things in PostPile that
+stayed unread on GitHub, the state this rule removes. The inbox cleanup keeps
+only "mark read on GitHub before <date>".
+
+**First run.** The clear pass runs first; whatever is left shows as unread,
+finished topics included.
+
 ## Inbox cleanup and start fresh
 
 Old unread threads pile up on GitHub (a first run on a busy account, a
