@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Added
+
+- The Dock shows how many tiles are your move as a badge, pings leave Notification Center once their tile is read or done in PostPile, and the Dock bounces once for a personal ask (mention, question, reply, review requested from you) while the window is in the background.
+
 ### Changed
 
 - Approve, Mark read, Mark done and Snooze change the tile and buttons as soon as they're clicked instead of after a few seconds. A failed action puts things back and says why.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
-import { pingRule, pingTemplate } from './pings.ts';
+import { isPersonalPing, pingRule, pingTemplate } from './pings.ts';
 import type { EventKind, Loudness, Pr, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
@@ -191,5 +191,29 @@ describe('ping table', () => {
         }
       }
     }
+  });
+});
+
+describe('isPersonalPing', () => {
+  const personalRequest = makePr({ number: 30, author: 'alice', timeline: [makeTimelineItem({ id: 'rr-me', subject: viewer.login })] });
+  const teamRequest = makePr({ number: 31, author: 'alice', timeline: [makeTimelineItem({ id: 'rr-team', subject: 'acme/team-platform' })] });
+
+  it('counts mentions, questions and replies', () => {
+    for (const kind of ['mention', 'question_to_user', 'reply_to_user'] as const) {
+      expect(isPersonalPing(makeEvent({ id: kind, kind }), pr)).toBe(true);
+    }
+  });
+
+  it('counts a review request that names the viewer', () => {
+    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-me' }), personalRequest)).toBe(true);
+  });
+
+  it('skips a review request for a team', () => {
+    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-team' }), teamRequest)).toBe(false);
+  });
+
+  it('skips team mentions and other kinds', () => {
+    expect(isPersonalPing(makeEvent({ id: 't', kind: 'team_mention' }), pr)).toBe(false);
+    expect(isPersonalPing(makeEvent({ id: 'c', kind: 'review_changes_requested' }), pr)).toBe(false);
   });
 });

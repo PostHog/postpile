@@ -21,6 +21,7 @@ import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { ConsolidationSchedule } from './consolidation-schedule.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
 import { ActiveDayReporter } from './active-day.ts';
+import { BoardWatcher } from './board-watcher.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
 import { welcomeOnce, WELCOME_FLAG_FILE } from './welcome.ts';
@@ -121,6 +122,7 @@ function mcpLauncher(): McpLauncher {
 let engine: EngineService | null = null;
 let server: RunningServer | null = null;
 let mainWindow: BrowserWindow | null = null;
+let boardWatcher: BoardWatcher | null = null;
 let consolidationSchedule: ConsolidationSchedule | null = null;
 // Set by Cmd+Q (before-quit). Until then, closing the window only hides it on macOS.
 let quitting = false;
@@ -147,6 +149,8 @@ let lastWindowFocusTelemetryMs = 0;
 // active users and retention). Checked at launch, on focus and every 30 minutes,
 // so a Mac that stays up past midnight still counts the new day.
 const ACTIVE_DAY_CHECK_MS = 30 * 60_000;
+// How often the live status is checked for a board change (Dock badge, pings in Notification Center).
+const BOARD_CHECK_MS = 5_000;
 let activeDay: ActiveDayReporter | null = null;
 
 function checkActiveDay(): void {
@@ -342,7 +346,7 @@ async function start(): Promise<void> {
   }
   const config = appConfigFromEnv();
   // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours.
-  server = await startServer({ engine, port: 0, token, config, updates: updateSourceFromEnv(app.getVersion()), telemetry });
+  server = await startServer({ engine, port: 0, token, config, updates: updateSourceFromEnv(app.getVersion()), telemetry, onWrite: () => void boardWatcher?.refresh() });
   console.log(
     `server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}, auto sync ${config.autoSyncMinutes > 0 ? `every ${config.autoSyncMinutes} min` : 'off'}`,
   );
@@ -357,6 +361,7 @@ async function start(): Promise<void> {
   // A click opens the tile: show the window, then let the renderer navigate.
   const notifier = new MacNotifier({
     enabled: process.env.POSTPILE_MAC_NOTIFICATIONS !== '0',
+    isWindowFocused: () => mainWindow?.isFocused() ?? false,
     onClick: (target) => {
       telemetry.capture('mac_ping_clicked', {});
       showWindow();
@@ -365,6 +370,22 @@ async function start(): Promise<void> {
       }
     },
   });
+  // The Dock badge counts the tiles that are the user's move; a ping leaves
+  // Notification Center once its tile is read or done. Both follow the board:
+  // poll cycles and syncs (the live status moves), local actions (the API's
+  // non-read requests) and each new ping.
+  const board = engine;
+  boardWatcher = new BoardWatcher(
+    board,
+    (snapshot) => {
+      app.setBadgeCount(snapshot.yourMoves);
+      notifier.closeRead(snapshot.unreadPrKeys);
+    },
+    (error) => console.warn('board watcher:', error),
+  );
+  const watcher = boardWatcher;
+  void watcher.refresh();
+  setInterval(() => void board.livePollStatus().then((status) => watcher.checkStatus(status)), BOARD_CHECK_MS).unref();
   // "Send test notification" in the status footer.
   ipcMain.handle('postpile:test-notification', () => notifier.showTest());
   // First launch: one calm welcome notification, so macOS asks for the
@@ -377,6 +398,7 @@ async function start(): Promise<void> {
     onNotify: (notifications) => {
       if (notifier.show(notifications) === 'shown') {
         telemetry.capture('mac_ping_shown', { count: notifications.length });
+        void watcher.refresh();
       }
     },
   });

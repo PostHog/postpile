@@ -3148,6 +3148,30 @@ teammate even".
   Notifications; the packaged app has its own "PostPile" entry, so the
   permission is asked (and set) once for each.
 
+**Dock badge, cleared pings and the bounce** (decided 2026-09-30, desktop
+main, `BoardWatcher`):
+
+- The Dock badge (`app.setBadgeCount`, 0 clears it) is the number of tiles
+  that are the user's move: live tiles, not done, not snoozed, summed across
+  topics in every repo, so it equals what the sidebar's "your moves" chips add
+  up to. It is read from `listTopics({ allRepos: true })` (`yourMoves`), no
+  rule is repeated in main. It is read at start, after each shown ping, when
+  the live status moves (`changeCount`, `catchUpChanges`, `syncRunning`;
+  checked every 5s) and after every non-read API request, which covers local
+  actions (mark read, done, snooze, approve). Fake mode shows it too.
+- A ping leaves Notification Center once its PR is not held by an unread tile
+  anymore (read, done or snoozed in PostPile), through
+  `Notification.close()`. `PingShelf` keeps the delivered notifications by PR
+  and drops references older than 24 hours; the list of unread PRs comes from
+  `unreadPrKeys()`. A summary is kept under its first ping's PR.
+- The Dock bounces once (`app.dock.bounce('informational')`) for a batch with
+  a personal ping, only while the window is not focused. Personal
+  (`isPersonalPing` in core, carried as `personal` on `Ping` and
+  `MacNotification`): mention, question, reply, or a review request that names
+  the user and not a team. Team mentions, team requests, routed Look closer
+  pings, pushes and changes requests do not bounce. A summary is personal when
+  any of its pings is.
+
 **Fake mode**: `FakeLivePoll` adds a sample question to the next open pinged
 tile on the first cycle at least 45s after the last one (so once a minute,
 as the sample X-Poll-Interval is 60) and pings for it with a fake rules decision, through the same

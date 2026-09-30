@@ -60,6 +60,7 @@ describe('Engine.pollOnce', () => {
         title: '@bob asks about the cache key',
         body: 'On #1.',
         target: { topicId: 'unsorted', tileId: `pr:${mentioned.key}`, prKey: mentioned.key },
+        personal: true,
       },
     ]);
     const prompts = h.runner.promptsFor('ping_decision');

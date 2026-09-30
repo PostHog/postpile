@@ -61,7 +61,7 @@ export class GlancePings {
       });
       const topicId = board.topicIdOf(key);
       const tile = topicId ? board.tilesForTopic(topicId).find((candidate) => candidate.members.some((member) => member.prKey === key)) : undefined;
-      this.waiting.push({ ...text, target: { topicId, tileId: tile?.id ?? null, prKey: key } });
+      this.waiting.push({ ...text, target: { topicId, tileId: tile?.id ?? null, prKey: key }, personal: false });
     }
   }
 

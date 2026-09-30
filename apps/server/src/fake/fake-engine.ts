@@ -713,6 +713,12 @@ export class FakeEngine implements EngineService {
     return [...found.values()];
   }
 
+  async unreadPrKeys(): Promise<PrKey[]> {
+    this.writes.settle();
+    const unread = this.data.tiles.filter((tile) => this.tileState(tile).kind === 'unread');
+    return [...new Set(unread.flatMap((tile) => tile.members.map((member) => member.prKey)))];
+  }
+
   /** Same urgency rule and order as the engine; ties keep the sample's order. */
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     // A first run without gh: nothing synced yet, so the empty state shows.

@@ -11,7 +11,7 @@ function done(overrides: Partial<Extract<PollCycle, { kind: 'done' }>> = {}): Po
 }
 
 function ping(n: number): Ping {
-  return { title: `ping ${n}`, body: 'body', target: { topicId: 'topic-1', tileId: `pr:acme/app#${n}`, prKey: `acme/app#${n}` } };
+  return { title: `ping ${n}`, body: 'body', target: { topicId: 'topic-1', tileId: `pr:acme/app#${n}`, prKey: `acme/app#${n}` }, personal: false };
 }
 
 /** A poll function answering from a script, recording how often it ran. */

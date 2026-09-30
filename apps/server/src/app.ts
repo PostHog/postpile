@@ -187,6 +187,8 @@ export function createApp(
   config: AppConfig,
   updates: UpdateSource = new UpdatesOff(''),
   telemetry: Telemetry = new NoopTelemetry(),
+  /** Called after every request that is not a read (a local action may have changed the board). */
+  onWrite: () => void = () => {},
 ): Hono {
   if (token === '') {
     throw new Error('createApp needs a non-empty token');
@@ -199,6 +201,9 @@ export function createApp(
       return c.json({ error: 'bad token' }, 401);
     }
     await next();
+    if (c.req.method !== 'GET' && c.req.method !== 'OPTIONS') {
+      onWrite();
+    }
   });
 
   app.onError((error, c) => c.json({ error: error.message }, isClientError(error) ? 400 : 500));

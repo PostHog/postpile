@@ -58,6 +58,8 @@ export interface Ping {
   title: string;
   body: string;
   target: PingTarget;
+  /** Aimed at the viewer in person (`isPersonalPing`): the Dock bounces for it. */
+  personal: boolean;
 }
 
 /** What the desktop shows: one ping, or a summary of a burst (count > 1). */
@@ -67,6 +69,8 @@ export interface MacNotification {
   /** For a summary, the first ping's target. */
   target: PingTarget | null;
   count: number;
+  /** At least one of its pings is personal. */
+  personal: boolean;
 }
 
 export type LivePollState = 'off' | 'waiting' | 'polling' | 'blocked' | 'backoff';
@@ -160,6 +164,22 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
     default:
       return false;
   }
+}
+
+/**
+ * A ping about the viewer in person: a mention, question or reply to them, or
+ * a review request that names them and not a team. A team mention, a team
+ * request and a push or changes-request event are not (they may still ping).
+ */
+export function isPersonalPing(event: PrEvent, pr: Pr): boolean {
+  if (PERSONAL_ASK_KINDS.includes(event.kind)) {
+    return true;
+  }
+  if (event.kind !== 'review_requested') {
+    return false;
+  }
+  const subject = reviewRequestTarget(event, pr);
+  return subject === null || !subject.includes('/');
 }
 
 function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {

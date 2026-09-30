@@ -770,6 +770,10 @@ export class Engine implements EngineService {
     return this.reads.listTopics(scope);
   }
 
+  async unreadPrKeys(): Promise<PrKey[]> {
+    return this.reads.unreadPrKeys();
+  }
+
   async listFinishedTopics(): Promise<FinishedTopic[]> {
     return this.reads.listFinishedTopics();
   }
