@@ -3,7 +3,7 @@
 // posted last must not lead a tile that also holds a merge without review or
 // a teammate's approval. DESIGN.md "Tile faces" › Why it's here.
 import { isAutomation } from './bots.ts';
-import { isRoutingTeamMention } from './events.ts';
+import { editMentionOf, isRoutingTeamMention } from './events.ts';
 import { requestsOfViewer, reviewRequestTarget } from './review-request.ts';
 import type { Pr, PrEvent, Viewer } from './types.ts';
 
@@ -12,7 +12,7 @@ export type HeadlineClass = 0 | 1 | 2 | 3 | 4 | 5;
 
 const ASK_KINDS = ['mention', 'question_to_user', 'reply_to_user'];
 const VERDICT_KINDS = ['review_approved', 'review_changes_requested'];
-const COMMENT_KINDS = ['comment', 'review_commented'];
+const COMMENT_KINDS = ['comment', 'review_commented', 'comment_edited'];
 
 function isAsk(event: PrEvent, pr: Pr, viewer: Viewer | null): boolean {
   if (event.kind === 'team_mention') {
@@ -21,6 +21,10 @@ function isAsk(event: PrEvent, pr: Pr, viewer: Viewer | null): boolean {
   }
   if (ASK_KINDS.includes(event.kind)) {
     return true;
+  }
+  if (event.kind === 'comment_edited') {
+    // A person's edit that now mentions the viewer or a home team is an ask; any other edit ranks with comments.
+    return viewer !== null && editMentionOf(event, pr, viewer) !== null;
   }
   return event.kind === 'review_requested' && viewer !== null && requestsOfViewer(pr, viewer).some((item) => item.id === event.sourceId);
 }

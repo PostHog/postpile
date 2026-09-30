@@ -96,6 +96,7 @@ describe('toPr: pending reviews', () => {
       },
       pr,
       events,
+      userState: null,
       viewer,
       prFetchedAt: '2026-09-21T00:00:00.000Z',
       now: '2026-09-21T00:00:00.000Z',
@@ -228,5 +229,47 @@ describe('toPr: assignees', () => {
     const raw = rawPr();
     delete raw.assignees;
     expect(toPr(ref, raw).assignees).toEqual([]);
+  });
+});
+
+describe('toPr: comment edits', () => {
+  it('keeps when and by whom issue comments, review bodies and thread comments were last edited', () => {
+    const raw = rawPr();
+    Object.assign(raw.comments.nodes[0]!, {
+      lastEditedAt: '2026-09-19T12:30:00Z',
+      updatedAt: '2026-09-19T12:30:00Z',
+      editor: { __typename: 'Bot', login: 'github-actions' },
+    });
+    Object.assign(raw.reviews.nodes[0]!, { lastEditedAt: '2026-09-19T10:05:00Z', editor: { __typename: 'User', login: 'bob' } });
+    Object.assign(raw.reviewThreads.nodes[0]!.comments.nodes[0]!, { lastEditedAt: '2026-09-19T09:40:00Z', editor: null });
+    const pr = toPr(ref, raw);
+    const byId = (id: string) => pr.comments.find((comment) => comment.id === id);
+    expect(byId('IC1')).toMatchObject({ lastEditedAt: '2026-09-19T12:30:00.000Z', editor: 'github-actions[bot]', updatedAt: '2026-09-19T12:30:00.000Z' });
+    expect(byId('R1')).toMatchObject({ lastEditedAt: '2026-09-19T10:05:00.000Z', editor: 'bob' });
+    expect(byId('RC1')).toMatchObject({ lastEditedAt: '2026-09-19T09:40:00.000Z', editor: null });
+    expect(pr.threads[0]?.comments[0]?.lastEditedAt).toBe('2026-09-19T09:40:00.000Z');
+  });
+
+  it('reads a comment without edit fields (older fixtures) as never edited', () => {
+    const pr = toPr(ref, rawPr());
+    expect(pr.comments.every((comment) => comment.lastEditedAt === null && comment.editor === null)).toBe(true);
+    expect(deriveEvents(pr, viewer, null).some((event) => event.kind === 'comment_edited')).toBe(false);
+  });
+
+  it('turns a bot sticky comment edit into one comment_edited event by the bot', () => {
+    const raw = rawPr();
+    raw.comments.nodes.push({
+      id: 'IC3',
+      url: 'https://github.com/acme/app/pull/42#issuecomment-3',
+      author: { __typename: 'Bot', login: 'github-actions' },
+      editor: { __typename: 'Bot', login: 'github-actions' },
+      body: '## CI report\nAll green',
+      createdAt: '2026-09-19T12:05:00Z',
+      lastEditedAt: '2026-09-19T12:40:00Z',
+    });
+    const edits = deriveEvents(toPr(ref, raw), viewer, null).filter((event) => event.kind === 'comment_edited');
+    expect(edits).toMatchObject([
+      { id: 'acme/app#42:comment_edited:IC3@2026-09-19T12:40:00.000Z', actor: 'github-actions[bot]', isBot: true, ruleLoudness: 'quiet', summary: 'github-actions[bot] updated its comment: ## CI report' },
+    ]);
   });
 });

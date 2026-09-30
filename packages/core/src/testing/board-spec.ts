@@ -53,6 +53,13 @@ export type StepSpec =
   /** GitHub's re-request button: ask every reviewer whose changes request stands again. */
   | { kind: 'rerequest' }
   | { kind: 'comment'; by: Person; text: CommentText; thread: 0 | 1 | null }
+  /**
+   * Edit an earlier comment or review body (the one at `pick`, modulo the
+   * comments so far; skipped when there is none): by its author (a bot
+   * updating its sticky comment, a person fixing a typo) or by someone
+   * else. `text` is the new body; null keeps it.
+   */
+  | { kind: 'edit'; pick: number; by: Person | 'author'; text: CommentText | null }
   /** `body`: the review's text, shown as a comment of kind review (none when left out). */
   | { kind: 'review'; by: Person; state: ReviewVerdict; body?: CommentText | null }
   | { kind: 'push'; by: Person; force: boolean }
@@ -239,6 +246,15 @@ const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
         { weight: 1, arbitrary: fc.constant<ReviewVerdict>('PENDING') },
       ),
       body: maybe(commentText, 25),
+    }),
+  },
+  {
+    weight: 3,
+    arbitrary: fc.record({
+      kind: fc.constant('edit' as const),
+      pick: stepIndex,
+      by: fc.oneof({ weight: 3, arbitrary: fc.constant<'author'>('author') }, { weight: 1, arbitrary: person }),
+      text: maybe(commentText, 60),
     }),
   },
   { weight: 3, arbitrary: fc.record({ kind: fc.constant('push' as const), by: person, force: fc.boolean() }) },

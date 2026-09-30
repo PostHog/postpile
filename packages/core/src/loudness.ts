@@ -17,7 +17,11 @@ export interface LoudnessInput {
   pr: Pr;
   viewer: Viewer;
   userState: UserPrState | null;
-  /** review_requested / review_request_removed: login or "org/team-slug". team_mention: the team mentioned. */
+  /**
+   * review_requested / review_request_removed: login or "org/team-slug".
+   * team_mention: the team mentioned. comment_edited: the viewer or home
+   * team a person's edited comment now mentions (`editMentionOf`), else null.
+   */
   subject?: string | null;
   /** The viewer already spoke on the PR after this event, so it is handled. */
   userRepliedAfter?: boolean;
@@ -45,6 +49,11 @@ function isOpenDraft(input: LoudnessInput): boolean {
 
 function isMachineActivity(input: LoudnessInput): boolean {
   return isAutomation(input, input.subject ?? null, input.viewer) || machineKinds.includes(input.kind);
+}
+
+/** A person's comment edit that now mentions the viewer or a home team (automation never gets here). */
+function isMentionEdit(input: LoudnessInput): boolean {
+  return input.kind === 'comment_edited' && typeof input.subject === 'string';
 }
 
 function isRequestForViewer(input: LoudnessInput): boolean {
@@ -88,7 +97,7 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
   },
   {
     name: 'addressed, already replied',
-    when: (input) => ADDRESSED_KINDS.includes(input.kind) && input.userRepliedAfter === true,
+    when: (input) => (ADDRESSED_KINDS.includes(input.kind) || isMentionEdit(input)) && input.userRepliedAfter === true,
     loudness: 'quiet',
     reason: 'you already replied',
   },
@@ -122,6 +131,20 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     when: (input) => ADDRESSED_KINDS.includes(input.kind),
     loudness: 'loud',
     reason: 'asks you a question',
+  },
+  {
+    // The old body is not fetched: an edit after the viewer's last read that mentions them counts as a new ask (DESIGN "Handled quietly" › Comment edits).
+    name: 'edit mentions you',
+    when: isMentionEdit,
+    loudness: 'loud',
+    reason: (input) => (sameLogin(input.subject ?? '', input.viewer.login) ? 'edited to mention you' : 'edited to mention your team'),
+  },
+  {
+    // A person fixing a typo or adding a line: quiet, the events agent judges it on an unread thread.
+    name: 'edited comment',
+    when: (input) => input.kind === 'comment_edited',
+    loudness: 'quiet',
+    reason: 'edited a comment',
   },
   {
     // The author pushed or replied after the viewer asked for changes: that is aimed at the viewer.

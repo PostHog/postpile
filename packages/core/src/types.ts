@@ -62,6 +62,17 @@ export interface Comment {
   path: string | null;
   /** Only for review_comment: the review thread it belongs to. */
   threadId: string | null;
+  /**
+   * When the body was last edited, null when never. Bots edit their sticky
+   * comments (CI reports, review summaries) instead of posting new ones,
+   * and GitHub keeps the thread unread for it (`comment_edited` events).
+   * Missing on snapshots stored before it was fetched: read as never.
+   */
+  lastEditedAt?: IsoTime | null;
+  /** Who made that edit (bots with the [bot] suffix); null when GitHub does not say. Missing on older snapshots. */
+  editor?: string | null;
+  /** GitHub's updatedAt of the comment. Stored for debugging, no rule reads it. Missing on older snapshots. */
+  updatedAt?: IsoTime;
 }
 
 export interface ReviewThread {
@@ -292,6 +303,8 @@ export type EventKind =
   | 'deploy'
   | 'merge_queue'
   | 'bot_comment'
+  /** Someone edited an existing comment, review body or review-thread comment: one event per comment, at its latest edit. */
+  | 'comment_edited'
   /** App-made, not from GitHub: the glance said Look closer on a review routed to the viewer's team (see glance-pings.ts). */
   | 'look_closer';
 
@@ -316,7 +329,7 @@ export interface LoudnessOverride {
 
 /** One activity line on a PR. Derived from the PR snapshot, never typed in by hand. */
 export interface PrEvent {
-  /** Stable across syncs: "<prKey>:<kind>:<sourceId>". */
+  /** Stable across syncs: "<prKey>:<kind>:<sourceId>"; a comment_edited event adds "@<edit time>", so a later edit is a new event. */
   id: string;
   prKey: PrKey;
   kind: EventKind;

@@ -25,6 +25,7 @@ const refKindByEvent: Partial<Record<EventKind, FactRefKind>> = {
   question_to_user: 'comment',
   comment: 'comment',
   bot_comment: 'comment',
+  comment_edited: 'comment',
   review_approved: 'review',
   review_changes_requested: 'review',
   review_commented: 'review',

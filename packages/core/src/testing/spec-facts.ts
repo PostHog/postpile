@@ -524,3 +524,48 @@ export function newestTouch(pr: Pr, viewer: Viewer, kinds: readonly SpecTouchKin
   const touches = viewerTouches(pr, viewer).filter((touch) => kinds === null || kinds.includes(touch.kind));
   return touches.toSorted((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)).at(-1) ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// The PR as it stood earlier (DESIGN "Handled quietly" › New moves only)
+// ---------------------------------------------------------------------------
+
+/** GitHub's decision from the standing verdicts: changes first, then an approval, else review required. */
+function decisionOfVerdicts(pr: Pr): Pr['reviewDecision'] {
+  if (standingChangesBy(pr).length > 0) {
+    return 'CHANGES_REQUESTED';
+  }
+  const authors = [...new Set(pr.reviews.map((review) => review.author.toLowerCase()))];
+  return authors.some((login) => newestVerdict(pr, login)?.state === 'APPROVED') ? 'APPROVED' : 'REVIEW_REQUIRED';
+}
+
+/**
+ * The snapshot at `at`: what came after it taken out (reviews, comments and
+ * thread comments, commits with the head, timeline items, a pending request
+ * whose newest ask came after it, a ready or draft switch after it), what
+ * went away after it not put back. The decision is worked out again only
+ * when a review came after it, and never where GitHub has no review rule.
+ */
+export function specSnapshotAt(pr: Pr, at: IsoTime): Pr {
+  const askedAfter = (subject: string) => pr.timeline.some((item) => item.kind === 'review_requested' && item.subject !== null && sameLogin(item.subject, subject) && item.at > at);
+  const firstSwitch = pr.timeline.filter((item) => (item.kind === 'ready_for_review' || item.kind === 'converted_to_draft') && item.at > at).toSorted((a, b) => a.at.localeCompare(b.at))[0];
+  const commits = pr.commits.filter((commit) => commit.committedAt <= at);
+  const trimmed: Pr = {
+    ...pr,
+    isDraft: firstSwitch === undefined ? pr.isDraft : firstSwitch.kind === 'ready_for_review',
+    reviewerUsers: pr.reviewerUsers.filter((login) => !askedAfter(login)),
+    reviewerTeams: pr.reviewerTeams.filter((team) => !askedAfter(team)),
+    reviews: pr.reviews.filter((review) => review.submittedAt <= at),
+    commits,
+    headOid: commits.length > 0 ? commits[commits.length - 1]!.oid : pr.headOid,
+    comments: pr.comments.filter((comment) => comment.createdAt <= at),
+    threads: pr.threads.map((thread) => ({ ...thread, comments: thread.comments.filter((comment) => comment.createdAt <= at) })).filter((thread) => thread.comments.length > 0),
+    timeline: pr.timeline.filter((item) => item.at <= at),
+  };
+  const reviewCameAfter = trimmed.reviews.length < pr.reviews.length;
+  return { ...trimmed, reviewDecision: reviewCameAfter && pr.reviewDecision !== 'NONE' ? decisionOfVerdicts(trimmed) : pr.reviewDecision };
+}
+
+/** The in-app approval as it stood at `at`. */
+export function specUserStateAt(userState: UserPrState | null, at: IsoTime): UserPrState | null {
+  return userState?.approvedAt && userState.approvedAt > at ? { ...userState, approvedAt: null, approvedCommitOid: null } : userState;
+}

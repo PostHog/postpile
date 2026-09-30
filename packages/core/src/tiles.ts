@@ -2,6 +2,7 @@ import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './l
 import { headlineClass, isAutomationEvent, pickHeadlineEvent } from './headline.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
 import { isApprovedByViewer, reviewPending } from './review-request.ts';
+import { actedAfterSeeing } from './saw-before-acting.ts';
 import { snoozePhase } from './snooze.ts';
 import { stackByPrKey } from './stacks.ts';
 import { prWhoseTurn } from './whose-turn.ts';
@@ -96,9 +97,19 @@ export function setIdFromTileId(tileId: string): string | null {
  * (marked read) while whose turn is not theirs and no review is still
  * pending of them or their team. Marking read a PR that still waits on the
  * viewer's review makes it read, not done. Without a viewer, handled is
- * enough.
+ * enough. Handled is also derived, never stored (2026-09-30): the viewer
+ * acted after everyone else and had read what came before
+ * (`actedAfterSeeing`, from `lastReadAt`, GitHub's read time of the
+ * PR's thread).
  */
-export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer | null = null, events: PrEvent[] = [], notYours = false): boolean {
+export function isPrDone(
+  pr: Pr,
+  userState: UserPrState | null,
+  viewer: Viewer | null = null,
+  events: PrEvent[] = [],
+  notYours = false,
+  lastReadAt: IsoTime | null = null,
+): boolean {
   if (pr.state !== 'OPEN') {
     // A merge without the user's review stays until they saw it, unless the glance says it is not theirs.
     return notYours || !events.some(isUnseenMergeWithoutReview);
@@ -107,11 +118,12 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer |
     // A later question or mention to the viewer still keeps it out of done.
     return viewer === null || prWhoseTurn({ pr, events, userState, viewer, notYours }).kind !== 'you';
   }
-  if (!userState?.handledAt) {
-    return false;
-  }
+  const handledAt = userState?.handledAt ?? null;
   if (viewer === null) {
-    return true;
+    return handledAt !== null;
+  }
+  if (handledAt === null && !actedAfterSeeing(pr, events, viewer, { lastReadAt, handledAt })) {
+    return false;
   }
   if (reviewPending(pr, viewer, userState, notYours)) {
     return false;
@@ -267,7 +279,8 @@ function allPingedDone(input: TileStateInput): boolean {
     if (!pr) {
       return false;
     }
-    return isPrDone(pr, input.userStates.get(member.prKey) ?? null, input.viewer ?? null, input.events.get(member.prKey) ?? [], input.notYours?.has(member.prKey) ?? false);
+    const lastReadAt = input.threads.get(member.prKey)?.lastReadAt ?? null;
+    return isPrDone(pr, input.userStates.get(member.prKey) ?? null, input.viewer ?? null, input.events.get(member.prKey) ?? [], input.notYours?.has(member.prKey) ?? false, lastReadAt);
   });
 }
 

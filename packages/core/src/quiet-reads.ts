@@ -17,13 +17,15 @@
 
 import { isAutomation } from './bots.ts';
 import type { NotificationLanding } from './debug-views.ts';
-import { isRoutingTeamMention } from './events.ts';
+import { editMentionOf, isRoutingTeamMention } from './events.ts';
 import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
 import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
 import { isViewerSubject } from './mentions.ts';
+import { eventsAsOf, prAsOf, userStateAsOf } from './pr-as-of.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { reviewRequestTarget } from './review-request.ts';
+import { sawEverythingBefore } from './saw-before-acting.ts';
 import type { CappedList, EventKind, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
@@ -75,10 +77,11 @@ export function botNames(events: PrEvent[]): string[] {
  *   sync left out at its cap, or whose fetch failed), or it was cut off at the query's caps
  *   (`Pr.truncated`), so a person's comment may be missing
  * - human_activity: someone else did something since the last read, or nothing known happened
- * - own_pr: bot reviews and CI on the user's own open PR can mean work for them (merged or closed: they can't)
+ * - own_pr: a bot's review or inline comment on the user's own open PR can mean work for them
+ *   (`isAutomationFinding`; merged or closed: it can't)
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
  * - unseen_loud: the PR has unseen loud news (an automation event the agent raised, the app's Look closer)
- * - your_move: whose turn is the user's
+ * - your_move: whose turn is the user's, and it was not before their last read (`isNewYourMove`)
  * - grace: the newest activity is less than QUIET_GRACE_MS old
  */
 export type QuietSkip = 'not_unread' | 'never_read' | 'stale_snapshot' | 'human_activity' | 'own_pr' | 'unseen_merge' | 'unseen_loud' | 'your_move' | 'grace';
@@ -152,13 +155,50 @@ function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetched
 }
 
 /**
- * The user's own PR while it is open. Bots there (a failing check, a review
- * bot's finding) can mean work, so their activity keeps the thread unread.
- * Once merged or closed they can't: every own PR merges through a queue bot
- * after the last comment (2026-09-29).
+ * The user's own PR while it is open. A review bot's finding there can mean
+ * work, so it keeps the thread unread (`isAutomationFinding`; plain bot
+ * comments and CI stopped counting on 2026-09-30). Once merged or closed
+ * nothing can: every own PR merges through a queue bot after the last
+ * comment (2026-09-29).
  */
 function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
   return pr.state === 'OPEN' && isPrOwner(pr, viewer.login);
+}
+
+const REVIEW_KINDS: readonly EventKind[] = ['review_approved', 'review_changes_requested', 'review_commented'];
+
+/**
+ * Automation that can mean work on the user's own open PR: a finding, that
+ * is a bot's review or a bot's comment in a review thread. Plain bot
+ * comments (a stale nudge, a sticky CI report), their edits, CI and deploys
+ * are not (2026-09-30).
+ */
+export function isAutomationFinding(event: PrEvent, pr: Pr): boolean {
+  if (REVIEW_KINDS.includes(event.kind)) {
+    return true;
+  }
+  if (event.kind === 'comment_edited') {
+    return false;
+  }
+  return pr.comments.some((comment) => comment.id === event.sourceId && comment.kind === 'review_comment');
+}
+
+/**
+ * Whose turn is the user's, and it was not at `since` (the rule's
+ * boundary: the last read, or the last look), worked out on the PR as it
+ * stood then (`prAsOf`). A move someone made after it (a re-review request,
+ * a changes request) keeps the thread unread; one that stood before it
+ * ("Merge, it is approved" since an approval before the read) does not
+ * (2026-09-30).
+ */
+export function isNewYourMove(input: Pick<QuietReadInput, 'pr' | 'events' | 'userState' | 'viewer' | 'notYours'>, since: IsoTime): boolean {
+  const { pr, events, viewer, notYours } = input;
+  const now = prWhoseTurn({ pr, events, userState: input.userState, viewer, notYours });
+  if (now.kind !== 'you') {
+    return false;
+  }
+  const before = prWhoseTurn({ pr: prAsOf(pr, since), events: eventsAsOf(events, since), userState: userStateAsOf(input.userState, since), viewer, notYours });
+  return before.kind !== 'you' || before.move !== now.move;
 }
 
 /** Whether PostPile may mark this PR thread read on GitHub by itself, and if not, the first reason why not. */
@@ -177,7 +217,7 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (botEvents === null) {
     return { kind: 'skip', why: 'human_activity' };
   }
-  if (isOwnOpenPr(pr, viewer)) {
+  if (isOwnOpenPr(pr, viewer) && botEvents.some((event) => isAutomationFinding(event, pr))) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (events.some(isUnseenMergeWithoutReview)) {
@@ -186,7 +226,7 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (events.some(isUnseenLoud)) {
     return { kind: 'skip', why: 'unseen_loud' };
   }
-  if (prWhoseTurn({ pr, events, userState: input.userState, viewer, notYours: input.notYours }).kind === 'you') {
+  if (isNewYourMove(input, thread.lastReadAt)) {
     return { kind: 'skip', why: 'your_move' };
   }
   // Counted from the thread's own update too: a bot push can carry an older commit date.
@@ -216,17 +256,29 @@ export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'repli
  * - stale_snapshot: the stored PR snapshot is older than the thread's last update, or cut off at the query's caps
  * - no_touch: the user never reviewed or commented on the PR (a push, merge or close does not count here)
  * - nothing_known: no event by someone else since the last read, so the thread is unread for a reason the app cannot see
+ * - acted_without_seeing: a person's event before the touch that no read of the user's covers (`sawBeforeActing`):
+ *   acting alone does not say they saw it (2026-09-30)
  * - activity_after: a person did something after the user's touch
- * - own_pr: bots acted after the touch on the user's own open PR, which can mean work
+ * - own_pr: a bot reviewed or commented inline after the touch on the user's own open PR, which can mean work
  * - unseen_merge: a merge without the user's review came after their touch
  * - unseen_loud: the PR has unseen loud news
  * - grace: the touch or the newest activity is less than QUIET_GRACE_MS old
  */
-export type TouchedSkip = 'not_unread' | 'stale_snapshot' | 'no_touch' | 'nothing_known' | 'activity_after' | 'own_pr' | 'unseen_merge' | 'unseen_loud' | 'grace';
+export type TouchedSkip =
+  | 'not_unread'
+  | 'stale_snapshot'
+  | 'no_touch'
+  | 'nothing_known'
+  | 'acted_without_seeing'
+  | 'activity_after'
+  | 'own_pr'
+  | 'unseen_merge'
+  | 'unseen_loud'
+  | 'grace';
 
 export type TouchedReadCheck = { kind: 'mark'; reason: TouchReason } | { kind: 'skip'; why: TouchedSkip };
 
-export type TouchedReadInput = Pick<QuietReadInput, 'thread' | 'pr' | 'events' | 'viewer' | 'prFetchedAt' | 'now'>;
+export type TouchedReadInput = Pick<QuietReadInput, 'thread' | 'pr' | 'events' | 'userState' | 'viewer' | 'prFetchedAt' | 'now'>;
 
 /** The reason a reading touch gives; READING_TOUCH_KINDS only, so anything else is a comment. */
 function touchReason(kind: TouchKind): TouchReason {
@@ -247,7 +299,7 @@ function touchReason(kind: TouchKind): TouchReason {
  * reviewed or commented after every unread event (DESIGN.md "You already
  * dealt with it"). Unread means after `last_read_at`, or everything when the
  * thread was never read. Bots after the touch are fine as in the bot-only
- * rule, except on the user's own open PR. Whose turn is not checked: the
+ * rule, except a bot's finding on the user's own open PR. Whose turn is not checked: the
  * mark-read changes nothing PostPile shows (the events before the touch are
  * seen already), so a move that is still theirs stays on the tile.
  */
@@ -268,11 +320,15 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   if (unread.length === 0) {
     return { kind: 'skip', why: 'nothing_known' };
   }
+  const reads = { lastReadAt, handledAt: input.userState?.handledAt ?? null };
+  if (!sawEverythingBefore(events, touch.at, reads, pr, viewer)) {
+    return { kind: 'skip', why: 'acted_without_seeing' };
+  }
   const late = unread.filter((event) => event.at > touch.at);
   if (!late.every((event) => isAutomationOn(event, pr, viewer))) {
     return { kind: 'skip', why: 'activity_after' };
   }
-  if (late.length > 0 && isOwnOpenPr(pr, viewer)) {
+  if (late.some((event) => isAutomationFinding(event, pr)) && isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (events.some((event) => isUnseenMergeWithoutReview(event) && event.at > touch.at)) {
@@ -290,15 +346,20 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
 
 /**
  * An ask of the viewer, never cleared by PostPile itself: a mention, team
- * mention, question or reply to them, a review request of them or their
- * team (whoever clicked it), a merge without their review they have not
- * seen. The agent lowering it does not change that: only the viewer deals
- * with an ask. A mention of only routing teams is FYI (DESIGN.md "Team
- * roles"), so it is not one: the agent judges it like other quiet news.
+ * mention, question or reply to them, a person's comment edit that now
+ * mentions them or a home team (`editMentionOf`), a review request of them
+ * or their team (whoever clicked it), a merge without their review they
+ * have not seen. The agent lowering it does not change that: only the
+ * viewer deals with an ask. A mention of only routing teams is FYI
+ * (DESIGN.md "Team roles"), so it is not one: the agent judges it like
+ * other quiet news.
  */
 export function isAskOfViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
   if (ADDRESSED_KINDS.includes(event.kind)) {
     return !isRoutingTeamMention(event, pr, viewer);
+  }
+  if (event.kind === 'comment_edited') {
+    return editMentionOf(event, pr, viewer) !== null;
   }
   if (event.kind === 'review_requested') {
     return isViewerSubject(reviewRequestTarget(event, pr), viewer);
@@ -350,9 +411,9 @@ export function lastLookedAt(thread: NotificationThread, pr: Pr, events: PrEvent
  * - unseen_loud: loud news since, or unseen loud news on the PR
  * - no_people: only automation since: the bot-only and acted-after rules decide
  * - not_judged: a person's activity since that the events agent has not judged yet
- * - own_pr: automation acted since on the user's own open PR, which can mean work
+ * - own_pr: a bot reviewed or commented inline since on the user's own open PR, which can mean work
  * - unseen_merge: a merge without the user's review they have not seen
- * - your_move: whose turn is the user's
+ * - your_move: whose turn is the user's, and it was not when they last looked (`isNewYourMove`)
  * - grace: the newest activity is less than QUIET_GRACE_MS old
  */
 export type JudgedSkip =
@@ -377,8 +438,9 @@ export type JudgedReadCheck = { kind: 'mark'; actors: string[] } | { kind: 'skip
  * since the user last looked (`lastLookedAt`) is automation or a person's
  * activity the events agent judged as not needing them, with no ask among it
  * (DESIGN.md "GitHub unread is PostPile unread", 2026-09-30). The same
- * safety checks as the bot-only rule: fresh complete snapshot, not bots on
- * the user's own open PR, no unseen merge, not their move, the grace. Agent
+ * safety checks as the bot-only rule: fresh complete snapshot, no bot
+ * finding on the user's own open PR, no unseen merge, no new move of theirs,
+ * the grace. Agent
  * NOT_YOURS, age, merged or closed, an old handled mark or approval are not
  * evidence here.
  */
@@ -411,13 +473,14 @@ export function judgedReadCheck(input: QuietReadInput): JudgedReadCheck {
   if (!people.every(isJudgedQuiet)) {
     return { kind: 'skip', why: 'not_judged' };
   }
-  if (people.length < after.length && isOwnOpenPr(pr, viewer)) {
+  const automation = after.filter((event) => isAutomationOn(event, pr, viewer));
+  if (automation.some((event) => isAutomationFinding(event, pr)) && isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (events.some(isUnseenMergeWithoutReview)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (prWhoseTurn({ pr, events, userState: input.userState, viewer, notYours: input.notYours }).kind === 'you') {
+  if (isNewYourMove(input, since)) {
     return { kind: 'skip', why: 'your_move' };
   }
   const newest = [thread.updatedAt, since, ...after.map((event) => event.at)].sort().at(-1) ?? thread.updatedAt;
@@ -507,6 +570,8 @@ function newsNoun(kind: EventKind): string {
     case 'comment':
     case 'bot_comment':
       return 'comment';
+    case 'comment_edited':
+      return 'comment edit';
     case 'review_approved':
     case 'review_changes_requested':
     case 'review_commented':

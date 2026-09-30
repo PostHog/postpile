@@ -16,7 +16,7 @@ import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
 import type { WhyCode } from '../why-here.ts';
 import type { YourMove } from '../whose-turn.ts';
-import { answersChanges, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS } from './spec-events.ts';
+import { answersChanges, editAsks, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS, SPEC_REVIEW_KINDS } from './spec-events.ts';
 import {
   askedToReReview,
   asksViewer,
@@ -36,6 +36,8 @@ import {
   requestSubjectOf,
   reviewStillOwed,
   routedRequestWaits,
+  specSnapshotAt,
+  specUserStateAt,
   standingChangesBy,
   teammateOwns,
   teamTakers,
@@ -337,14 +339,52 @@ export function isUnseenMergeWithoutViewer(event: PrEvent): boolean {
   return event.kind === 'merged_without_review' && event.seenAt === null && effectiveLoudnessOf(event) !== 'muted';
 }
 
+/** A read of the viewer's (GitHub's read time, PostPile's Mark read) at or after `from` and at or before `to`. */
+function readBetween(reads: (IsoTime | null)[], from: IsoTime, to: IsoTime): boolean {
+  return reads.some((read) => read !== null && read >= from && read <= to);
+}
+
+/** Someone else's event that is not automation. */
+function isPeoplesEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
+  return !isViewerLogin(viewer, event.actor) && !isAutomationEvent(pr, viewer, event);
+}
+
+/** Every person's event before `actedAt` has a read of the viewer's between it and the action (DESIGN "You already dealt with it" › Read before acting). */
+export function sawPeopleBefore(input: { pr: Pr; events: PrEvent[]; viewer: Viewer }, actedAt: IsoTime, reads: (IsoTime | null)[]): boolean {
+  return input.events.filter((event) => event.at < actedAt && isPeoplesEvent(input.pr, input.viewer, event)).every((event) => readBetween(reads, event.at, actedAt));
+}
+
+const HANDLING_TOUCHES: readonly SpecTouchKind[] = ['changes_request', 'approval', 'review', 'comment', 'push'];
+
+/**
+ * Handled without a click (2026-09-30): the viewer's newest own activity (a
+ * review, a comment, a push to their own PR, marking it ready) comes after
+ * every person's event, and a read of theirs (GitHub's read time, the
+ * stored Mark read) lies between each person's event and that activity.
+ */
+export function expectedActedAfterSeeing(input: { pr: Pr; events: PrEvent[]; viewer: Viewer; lastReadAt: IsoTime | null; handledAt: IsoTime | null }): boolean {
+  const { pr, viewer } = input;
+  const touch = newestTouch(pr, viewer, HANDLING_TOUCHES);
+  const readied = pr.timeline.filter((item) => item.kind === 'ready_for_review' && isViewerLogin(viewer, item.actor)).map((item) => item.at);
+  const actedAt = [touch?.at ?? null, ...readied].filter((time): time is IsoTime => time !== null).toSorted().at(-1);
+  if (actedAt === undefined) {
+    return false;
+  }
+  if (input.events.some((event) => isPeoplesEvent(pr, viewer, event) && event.at >= actedAt)) {
+    return false;
+  }
+  return sawPeopleBefore(input, actedAt, [input.lastReadAt, input.handledAt]);
+}
+
 /**
  * Done (2026-09-28): a merged or closed PR once its merge without the
  * viewer's review is seen (or the glance says not theirs); an open PR only
- * when approved by the viewer, or handled with no review still owed, and
- * in both cases not the viewer's move. Without a viewer, approved in the
- * app or handled is enough.
+ * when approved by the viewer, or handled (marked read, or acted on after
+ * reading everything a person said: `expectedActedAfterSeeing`) with no
+ * review still owed, and in both cases not the viewer's move. Without a
+ * viewer, approved in the app or marked read is enough.
  */
-export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer | null }): boolean {
+export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer | null; lastReadAt: IsoTime | null }): boolean {
   const { pr, viewer, userState } = input;
   if (pr.state !== 'OPEN') {
     return input.notYours || !input.events.some(isUnseenMergeWithoutViewer);
@@ -353,10 +393,14 @@ export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer
   if (viewerApproved(pr, viewer, userState)) {
     return notYourMove();
   }
-  if (!userState?.handledAt) {
+  const handledAt = userState?.handledAt ?? null;
+  if (viewer === null) {
+    return handledAt !== null;
+  }
+  if (handledAt === null && !expectedActedAfterSeeing({ pr, events: input.events, viewer, lastReadAt: input.lastReadAt, handledAt })) {
     return false;
   }
-  return viewer === null || (!reviewStillOwed(pr, viewer, userState, input.notYours) && notYourMove());
+  return !reviewStillOwed(pr, viewer, userState, input.notYours) && notYourMove();
 }
 
 // ---------------------------------------------------------------------------
@@ -472,8 +516,9 @@ export function expectedSnoozePhase(input: { pr: Pr; events: PrEvent[]; viewer: 
 // ---------------------------------------------------------------------------
 
 /**
- * Loud and about the viewer in person: on an open draft only a personal ask;
- * else any ask, and on an open PR a review request, a push after their
+ * Loud and about the viewer in person: on an open draft only a personal ask
+ * (a comment edited to mention them too); else any ask (an edit that now
+ * mentions them or a home team too), and on an open PR a review request, a push after their
  * approval, the author's answer to their changes, or a changes request on
  * their own PR.
  */
@@ -481,10 +526,11 @@ export function isAimedAtViewer(pr: Pr, viewer: Viewer, event: PrEvent): boolean
   if (effectiveLoudnessOf(event) !== 'loud') {
     return false;
   }
+  const edit = editAsks(pr, viewer, event);
   if (pr.isDraft && pr.state === 'OPEN') {
-    return SPEC_PERSONAL_ASK_KINDS.includes(event.kind);
+    return SPEC_PERSONAL_ASK_KINDS.includes(event.kind) || edit === 'you';
   }
-  if (SPEC_ADDRESSED_KINDS.includes(event.kind)) {
+  if (SPEC_ADDRESSED_KINDS.includes(event.kind) || edit !== null) {
     return true;
   }
   if (pr.state !== 'OPEN') {
@@ -570,6 +616,7 @@ const HEADLINES: Partial<Record<EventKind, string>> = {
   question_to_user: 'asked you something',
   reply_to_user: 'replied to you',
   review_changes_requested: 'requested changes',
+  comment_edited: 'edited a comment',
 };
 
 /** What the ping says about an event when the agent does not write it: who did what, then the PR. */
@@ -689,10 +736,41 @@ export interface QuietReadSpecInput {
   pr: Pr;
   events: PrEvent[];
   viewer: Viewer;
-  /** Whose move on the PR is the viewer's. */
-  yourMove: boolean;
+  userState: UserPrState | null;
+  /** The PR's glance says NOT_YOURS. */
+  notYours: boolean;
   prFetchedAt: IsoTime | null;
   now: IsoTime;
+}
+
+/**
+ * The viewer's move now, and it was not at `since`: no move then, or
+ * another kind of move, on the snapshot as it stood then
+ * (`specSnapshotAt`, the events up to then). A move that stood before does
+ * not keep a thread unread (2026-09-30).
+ */
+export function expectedNewMove(input: Pick<QuietReadSpecInput, 'pr' | 'events' | 'viewer' | 'userState' | 'notYours'>, since: IsoTime): boolean {
+  const now = expectedTurn({ pr: input.pr, events: input.events, viewer: input.viewer, userState: input.userState, notYours: input.notYours });
+  if (now.kind !== 'you') {
+    return false;
+  }
+  const then = expectedTurn({
+    pr: specSnapshotAt(input.pr, since),
+    events: input.events.filter((event) => event.at <= since),
+    viewer: input.viewer,
+    userState: specUserStateAt(input.userState, since),
+    notYours: input.notYours,
+  });
+  return then.kind !== 'you' || then.move !== now.move;
+}
+
+/** On the viewer's own open PR, automation that can mean work: a bot's review, or its comment in a review thread (not an edit of one). */
+function isFinding(pr: Pr, event: PrEvent): boolean {
+  if (SPEC_REVIEW_KINDS.includes(event.kind)) {
+    return true;
+  }
+  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+  return event.kind !== 'comment_edited' && comment !== undefined && comment.threadId !== null;
 }
 
 function othersEvents(input: Pick<QuietReadSpecInput, 'events' | 'viewer'>): PrEvent[] {
@@ -716,8 +794,9 @@ function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
 /**
  * "Handled quietly", bots only (DESIGN): a thread the viewer had read that
  * turned unread only because of automation, on a fresh complete snapshot,
- * not their own open PR, no unseen merge without their review, no unseen
- * loud news on the PR, not their move, and past the grace. Whether the tile
+ * no bot finding on their own open PR, no unseen merge without their
+ * review, no unseen loud news on the PR, no move of theirs new since the
+ * read, and past the grace. Whether the tile
  * is unread never matters: its thread is unread, so it always is. Liveness
  * too: all of that holds, so it marks.
  */
@@ -737,7 +816,7 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (since.length === 0 || !since.every((event) => isAutomationEvent(pr, viewer, event))) {
     return { kind: 'skip', why: 'human_activity' };
   }
-  if (isOwnOpenPr(pr, viewer)) {
+  if (isOwnOpenPr(pr, viewer) && since.some((event) => isFinding(pr, event))) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (input.events.some(isUnseenMergeWithoutViewer)) {
@@ -746,7 +825,7 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (input.events.some(isUnseenLoudEvent)) {
     return { kind: 'skip', why: 'unseen_loud' };
   }
-  if (input.yourMove) {
+  if (expectedNewMove(input, readAt)) {
     return { kind: 'skip', why: 'your_move' };
   }
   if (withinGrace(input.now, [thread.updatedAt, ...since.map((event) => event.at)])) {
@@ -764,11 +843,12 @@ const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_request
 
 /**
  * "You already dealt with it": the viewer reviewed or commented after every
- * unread event (bots after it are fine, except on their own open PR), on a
+ * unread event, having read every person's event before it (a read between
+ * the event and the touch, 2026-09-30) (bots after it are fine, except a bot finding on their own open PR), on a
  * fresh complete snapshot, no unseen merge without their review after the
  * touch, no unseen loud news on the PR, and past the grace.
  */
-export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>): TouchedReadCheck {
+export function expectedTouchedRead(input: QuietReadSpecInput): TouchedReadCheck {
   const { thread, pr, viewer } = input;
   if (!thread.unread) {
     return { kind: 'skip', why: 'not_unread' };
@@ -785,11 +865,14 @@ export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>)
   if (unread.length === 0) {
     return { kind: 'skip', why: 'nothing_known' };
   }
+  if (!sawPeopleBefore(input, touch.at, [readAt, input.userState?.handledAt ?? null])) {
+    return { kind: 'skip', why: 'acted_without_seeing' };
+  }
   const late = unread.filter((event) => event.at > touch.at);
   if (!late.every((event) => isAutomationEvent(pr, viewer, event))) {
     return { kind: 'skip', why: 'activity_after' };
   }
-  if (late.length > 0 && isOwnOpenPr(pr, viewer)) {
+  if (late.some((event) => isFinding(pr, event)) && isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (input.events.some((event) => isUnseenMergeWithoutViewer(event) && event.at > touch.at)) {
@@ -807,7 +890,8 @@ export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>)
 /**
  * An ask of the viewer (DESIGN "GitHub unread is PostPile unread": never
  * clearable by itself): a mention, team mention (of a home team), question
- * or reply to them, a review request naming them or their team (whoever
+ * or reply to them, a person's comment edit that now mentions them or a
+ * home team, a review request naming them or their team (whoever
  * made it), a merge without their review they have not seen. Whatever the
  * agent made of it.
  */
@@ -819,6 +903,9 @@ export function isAskEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
   }
   if (SPEC_ADDRESSED_KINDS.includes(event.kind)) {
     return true;
+  }
+  if (event.kind === 'comment_edited') {
+    return editAsks(pr, viewer, event) !== null;
   }
   if (event.kind === 'review_requested') {
     return asksViewer(viewer, requestSubjectOf(pr, event));
@@ -838,9 +925,9 @@ export function lastLooked(thread: NotificationThread, pr: Pr, viewer: Viewer): 
  * else since the viewer last looked is automation or a person's activity
  * the events agent (or the user) left below loud, with no ask among it and
  * no loud news; at least one person, else the bot-only and acted-after
- * rules decide. Plus the safety checks: fresh complete snapshot, no bots on
- * the viewer's own open PR, no unseen merge without their review, not their
- * move, past the grace. Liveness too: all of that holds, so it marks.
+ * rules decide. Plus the safety checks: fresh complete snapshot, no bot
+ * finding on the viewer's own open PR, no unseen merge without their
+ * review, no move of theirs new since they last looked, past the grace. Liveness too: all of that holds, so it marks.
  */
 export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   const { thread, pr, viewer } = input;
@@ -871,13 +958,14 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
     return { kind: 'skip', why: 'not_judged' };
   }
-  if (people.length < after.length && isOwnOpenPr(pr, viewer)) {
+  const automation = after.filter((event) => isAutomationEvent(pr, viewer, event));
+  if (automation.some((event) => isFinding(pr, event)) && isOwnOpenPr(pr, viewer)) {
     return { kind: 'skip', why: 'own_pr' };
   }
   if (input.events.some(isUnseenMergeWithoutViewer)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (input.yourMove) {
+  if (expectedNewMove(input, since)) {
     return { kind: 'skip', why: 'your_move' };
   }
   if (withinGrace(input.now, [thread.updatedAt, since, ...after.map((event) => event.at)])) {

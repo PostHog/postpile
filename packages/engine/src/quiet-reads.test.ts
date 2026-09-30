@@ -76,8 +76,16 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     expect(h.store.pendingWrites.list()).toEqual([]);
   });
 
-  it('leaves the viewer own PR alone: bot reviews there can mean work', async () => {
-    const h = await synced(alicePr({ author: viewer.login }));
+  it('marks the viewer own open PR when a bot only commented: a sticky report asks nothing (2026-09-30)', async () => {
+    const pr = alicePr({ author: viewer.login });
+    const h = await synced(pr);
+
+    expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);
+  });
+
+  it('leaves the viewer own PR alone after a bot review: that can mean work', async () => {
+    const review = makeReview({ id: 'r-bot', author: 'coderabbitai[bot]', state: 'COMMENTED', submittedAt: at(30) });
+    const h = await synced(alicePr({ author: viewer.login, reviews: [review] }));
 
     expect(h.writer.calls).toEqual([]);
     expect(quietRows(h)).toEqual([]);
@@ -226,15 +234,14 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
 
 // "You already dealt with it": alice asked the viewer at minute 1 and marked the PR ready at 10; the viewer approved from the gh CLI at 30.
 describe('Handled quietly: the full sync marks threads read the viewer acted on after every unread event', () => {
+  // A dependency bump approved from the CLI on a thread never read: only automation came before the approval, so nothing needed reading.
   function approvedFromTheCli(overrides: Partial<Pr> = {}): Pr {
     return makePr({
       number: 9,
-      author: 'alice',
-      title: 'Split the deploy job',
-      timeline: [
-        makeTimelineItem({ id: 't-ask', kind: 'review_requested', actor: 'alice', subject: viewer.login, at: at(1) }),
-        makeTimelineItem({ id: 't-ready', kind: 'ready_for_review', actor: 'alice', subject: null, at: at(10) }),
-      ],
+      author: 'dependabot[bot]',
+      title: 'Bump the deploy action',
+      commits: [makeCommit({ oid: 'c1', author: 'dependabot[bot]', committer: 'dependabot[bot]', committedAt: at(5) })],
+      timeline: [makeTimelineItem({ id: 't-ready', kind: 'ready_for_review', actor: 'dependabot[bot]', subject: null, at: at(10) })],
       reviews: [makeReview({ id: 'r-me', author: viewer.login, state: 'APPROVED', submittedAt: at(30) })],
       updatedAt: at(30),
       ...overrides,
@@ -266,13 +273,25 @@ describe('Handled quietly: the full sync marks threads read the viewer acted on 
     expect(h.store.pendingWrites.list()).toEqual([]);
   });
 
-  it('includes the viewer own PR when they replied after the review comments', async () => {
+  it('includes the viewer own PR when they read the review comments in PostPile and replied after', async () => {
     const review = makeComment({ id: 'c-rowan', author: 'rowan', body: 'Rename this?', createdAt: at(10) });
     const reply = makeComment({ id: 'c-me', author: viewer.login, body: 'Done in the next commit', createdAt: at(30) });
     const pr = makePr({ number: 9, author: viewer.login, comments: [review, reply], updatedAt: at(30) });
-    const h = await syncedNeverRead(pr);
+    const h = makeHarness();
+    // Mark read in PostPile at minute 20 while writes were locked: GitHub never saw a read.
+    h.store.userPrStates.markHandled(pr.key, at(20));
+    h.reader.addPr(pr, makeThreadFor(pr, { lastReadAt: null, updatedAt: pr.updatedAt, unread: true }));
+    await h.engine.sync({ maxAgentCalls: 0 });
 
     expect(quietRows(h)).toEqual([expect.objectContaining({ prKey: pr.key, detail: 'you replied after it' })]);
+  });
+
+  it('never counts a reply without a read of the comments before it (2026-09-30)', async () => {
+    const review = makeComment({ id: 'c-rowan', author: 'rowan', body: 'Rename this?', createdAt: at(10) });
+    const reply = makeComment({ id: 'c-me', author: viewer.login, body: 'Done in the next commit', createdAt: at(30) });
+    const h = await syncedNeverRead(makePr({ number: 9, author: viewer.login, comments: [review, reply], updatedAt: at(30) }));
+
+    expect(h.writer.calls).toEqual([]);
   });
 
   it('never counts a push as having read the comments', async () => {

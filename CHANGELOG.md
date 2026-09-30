@@ -2,6 +2,15 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Bots editing their sticky comments (CI reports, review summaries, test analytics) no longer keep PRs unread with nothing to do: each comment's latest edit is an event, and bot-only edits clear quietly. A person editing a comment to mention you is loud and stays unread.
+- On your own open PR only a bot's review or inline comment keeps the thread unread; plain bot comments, CI and deploys clear like elsewhere.
+- A move that was already yours before you last read the PR (for example "Merge, it is approved") no longer blocks clearing new bot or judged-quiet activity.
+- Acting on a PR (a comment, a review, marking it ready) counts as having seen earlier news only when you read the PR in between. When you did, the PR is done without a Mark read if nothing else is your move.
+
 ## 0.12.1 (2026-09-30)
 
 ### Changed

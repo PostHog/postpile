@@ -54,6 +54,7 @@ export interface ActivityList {
 
 const HUMAN_TALK: EventKind[] = [
   'comment',
+  'comment_edited',
   'reply_to_user',
   'question_to_user',
   'mention',
