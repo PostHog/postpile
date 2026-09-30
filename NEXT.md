@@ -1071,7 +1071,7 @@ the app meanwhile.
 - **Groups inside a topic** (2026-09-30, DESIGN.md "Groups inside a topic"):
   the tile grid's All / Unread toggle is gone; a topic shows three groups,
   always Unread, Open, Dealt with (n), empty ones hidden, Dealt with folded
-  until opened (kept for the session). Core ships each tile's `group` and
+  by default, then as the user last left it (kept for the session). Core ships each tile's `group` and
   `newBadge` and the unread counts; the renderer only displays them, and a
   static test fails when renderer code works unread or done out from raw
   state. "Done" as a tile label reads "Dealt with" (internal state stays

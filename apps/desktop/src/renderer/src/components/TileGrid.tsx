@@ -12,7 +12,7 @@ interface TileGridProps {
   onSelect: (tileId: string, prKey: string) => void;
   /** Tiles the search bar lets through; null shows all. */
   matchingTileIds: Set<string> | null;
-  /** The Dealt with group is open: folded by default, kept for the session. */
+  /** The user's last choice on the Dealt with group (open or closed), kept for the session; folded by default. */
   dealtWithOpen: boolean;
   onDealtWithOpen: (open: boolean) => void;
 }
@@ -59,7 +59,11 @@ function GroupSection(props: TileGridProps & { group: TileGroup; views: TileView
   );
 }
 
-/** "Dealt with (4)": folded by default, open on click (for the session), while filtering or while one of its tiles is selected. */
+/**
+ * "Dealt with (4)": open or closed as the user last clicked it (for the
+ * session), folded by default. Filtering or a selected tile in it opens it
+ * for as long as that lasts, without changing the user's choice.
+ */
 function DealtWithGroup(props: TileGridProps & { views: TileView[] }) {
   // Open while filtering too: a match should not hide behind a fold.
   const expanded = props.dealtWithOpen || props.matchingTileIds !== null || props.views.some((view) => view.tile.id === props.selectedTileId);
@@ -69,6 +73,7 @@ function DealtWithGroup(props: TileGridProps & { views: TileView[] }) {
         <button
           type="button"
           aria-expanded={expanded}
+          // A click says what the user wants from what they see: open when folded, closed when open.
           onClick={() => props.onDealtWithOpen(!expanded)}
           className="flex items-center gap-1 rounded-[3px] pl-0.5 text-[11.5px] leading-[normal] font-semibold text-muted hover:text-ink"
         >

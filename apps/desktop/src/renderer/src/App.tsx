@@ -69,7 +69,7 @@ export function App() {
   const [query, setQuery] = useState('');
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
   const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
-  // The grid's Dealt with group: folded until the user opens it, then open for the rest of the session, in every topic.
+  // The grid's Dealt with group: the user's last click on it (open or closed), kept for the session in every topic. Starts folded.
   const [dealtWithOpen, setDealtWithOpen] = useState(false);
   const changeQueueFilter = (filter: QueueFilter | null): void => {
     setQueueFilter(filter);

@@ -11,10 +11,13 @@ import { describe, expect, it } from 'vitest';
 // move the rule to core.
 const renderer = join(import.meta.dirname, '../renderer/src');
 
-const FORBIDDEN: { pattern: RegExp; instead: string }[] = [
+// `allowedIn`: lib/optimistic.ts guesses the state a click leaves until the
+// refetch brings core's answer (DESIGN "Groups inside a topic"), so it may
+// read the snoozed tile's unread thread flag.
+const FORBIDDEN: { pattern: RegExp; instead: string; allowedIn?: string }[] = [
   { pattern: /\.kind\s*[!=]==?\s*['"](unread|done)['"]/, instead: 'TileView.group' },
   { pattern: /['"](unread|done)['"]\s*[!=]==?\s*[\w.?]*\.kind\b/, instead: 'TileView.group' },
-  { pattern: /\.unreadOnGitHub\b/, instead: 'TileView.group or TileView.unreadPrKeys' },
+  { pattern: /\.unreadOnGitHub\b/, instead: 'TileView.group or TileView.unreadPrKeys', allowedIn: 'lib/optimistic.ts' },
   { pattern: /\.automation\b/, instead: 'TileView.newBadge' },
 ];
 
@@ -39,8 +42,8 @@ describe('renderer rules stay in core', () => {
       readFileSync(file, 'utf8')
         .split('\n')
         .forEach((line, index) => {
-          for (const { pattern, instead } of FORBIDDEN) {
-            if (pattern.test(line)) {
+          for (const { pattern, instead, allowedIn } of FORBIDDEN) {
+            if (pattern.test(line) && relative(renderer, file) !== allowedIn) {
               hits.push(`${relative(renderer, file)}:${index + 1}: use ${instead} (${line.trim()})`);
             }
           }

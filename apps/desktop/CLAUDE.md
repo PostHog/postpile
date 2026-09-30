@@ -463,7 +463,8 @@ corrections go through `correctMemory` with `relation` set
 `TileView.group`, always Unread, Open, Dealt with (`gridGroups` in
 `lib/queues.ts`, order typed with core's `TileGroupOrder`), tier order
 inside, snoozed last; empty groups don't render. Dealt with is folded
-until opened (`dealtWithOpen` in `App`, kept for the session), and opens
+until opened, then as the user last clicked it (`dealtWithOpen` in `App`,
+kept for the session; search or a selection never changes it), and opens
 while the search filters or one of its tiles is selected. No All / Unread
 toggle (removed 2026-09-30). Queue filters pick topics; tiles inside a topic are never faded by them.
 A click anywhere on a tile selects it (`onTileClick` in `Tile.tsx`), except

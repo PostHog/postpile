@@ -86,6 +86,17 @@ describe('markedReadTile', () => {
   });
 });
 
+describe('snoozedTile', () => {
+  it('keeps a tile with an unread thread in Unread and moves one unread only by other news to Open', () => {
+    const threadUnread = unreadTile([summary(1)]);
+    expect([snoozedTile(threadUnread).group, snoozedTile(threadUnread).newBadge]).toEqual(['unread', false]);
+    // Unread only through a pulled-in layer's loud news or a Look closer event: no thread unread on GitHub.
+    const newsOnly = withOffers({ ...threadUnread, state: { ...threadUnread.state, unreadOnGitHub: false } });
+    expect(newsOnly.group).toBe('unread');
+    expect(snoozedTile(newsOnly).group).toBe('open');
+  });
+});
+
 describe('markedReadPr', () => {
   it('changes only that row and leaves the tile state to the server', () => {
     const view = { ...unreadTile([summary(1), summary(3)]), unreadPrKeys: ['acme/app#1', 'acme/app#3'] };

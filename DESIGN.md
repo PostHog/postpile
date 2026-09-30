@@ -3104,9 +3104,11 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   optimistic guess after a click (`lib/optimistic.ts`), from `afterRead`,
   until the refetch brings core's answer.
 - **Three groups, always in this order: Unread, Open, Dealt with (n).**
-  Empty groups don't show. Dealt with is folded by default and opens on
-  click, for the rest of the session in every topic (App state); it also
-  opens while the search filters or while one of its tiles is selected.
+  Empty groups don't show. Dealt with is folded by default and follows the
+  user's last click on it: opened stays open, closed stays closed, for the
+  rest of the session in every topic (App state). The search filtering or a
+  selected tile in it opens it only while that lasts and leaves the user's
+  choice as it was.
   The group's name and count sit right on top of its first tile, no box
   around them. Core's order is `TILE_GROUP_ORDER`; the renderer's copy is
   typed with `TileGroupOrder`, so a drift fails to compile.

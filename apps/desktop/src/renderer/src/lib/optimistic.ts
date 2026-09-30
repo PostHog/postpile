@@ -43,12 +43,14 @@ export function markedReadPr(view: TileView, prKey: PrKey): TileView {
 }
 
 /**
- * A snoozed tile: snoozed wins over unread, open and done while it holds. It
- * keeps its group (an unread thread keeps it in Unread; a done tile offers
- * no snooze); only the strip and its NEW pill go.
+ * A snoozed tile: snoozed wins over unread, open and done while it holds.
+ * It stays in Unread only while a thread is unread on GitHub, as core's
+ * group says for a snoozed tile; unread only by pulled-in news or a Look
+ * closer event, it goes to Open. The strip and its NEW pill go.
  */
 export function snoozedTile(view: TileView): TileView {
-  return { ...view, state: { ...view.state, kind: 'snoozed', unreadBecause: [], unseenMerges: undefined }, newBadge: false };
+  const state: TileState = { ...view.state, kind: 'snoozed', unreadBecause: [], unseenMerges: undefined };
+  return { ...view, state, group: state.unreadOnGitHub ? 'unread' : 'open', newBadge: false };
 }
 
 /** The PR after the viewer's approval of the commit on screen, so Approve turns into "Approved". */

@@ -6,7 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- A topic shows its tiles in three groups, always in this order: Unread, Open and Dealt with. The All / Unread toggle is gone. Dealt with starts folded and stays open for the session once opened; empty groups don't show.
+- A topic shows its tiles in three groups, always in this order: Unread, Open and Dealt with. The All / Unread toggle is gone. Dealt with starts folded and stays open or closed as you last left it for the session; empty groups don't show.
 - Tiles that used to be labelled "Done" say "Dealt with", in the app and in MCP answers. Topics that are over stay "Finished".
 - Snoozed tiles sit in Open, or in Unread while a thread is unread on GitHub, instead of their own folded row.
 
