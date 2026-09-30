@@ -367,6 +367,15 @@ function newestUnseenLoudAt(events: PrEvent[]): string {
   return newest;
 }
 
+/**
+ * Your move is a re-review: the author answered your changes, or asked you
+ * again while they stand. The sidebar lists these first under Changes you
+ * requested, so the order follows the move.
+ */
+export function isReReviewMove(turn: WhoseTurn): boolean {
+  return turn.kind === 'you' && turn.move === 're_review';
+}
+
 /** Your move, and it is only merging your own approved PR (multi-PR tiles add " on #n"). */
 export function isMergeApprovedMove(turn: WhoseTurn): boolean {
   return turn.kind === 'you' && turn.move === 'merge';

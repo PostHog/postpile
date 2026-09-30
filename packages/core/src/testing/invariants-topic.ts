@@ -4,13 +4,12 @@
 import { topicQueues, emptyTierCounts, pingedPrKeys, personRelation } from '../topic-queues.ts';
 import { topicMove, topicUrgency } from '../topic-urgency.ts';
 import { prTier } from '../pr-tier.ts';
-import { changesAnswered } from '../changes-answered.ts';
 import type { PrEvent } from '../types.ts';
 import type { TileView } from '../views.ts';
-import type { YourMove } from '../whose-turn.ts';
+import { isReReviewMove, prWhoseTurn, type YourMove } from '../whose-turn.ts';
 import { tileViewsOf } from './build-board.ts';
 import { ensure, eventsOf, isNews, isTrackedHere, prOf, type Invariant } from './invariant.ts';
-import { isUnseenMergeWithoutViewer } from './spec-rules.ts';
+import { expectedTurn, isUnseenMergeWithoutViewer } from './spec-rules.ts';
 
 /** Most urgent first, like the sidebar sections: spelled out here, not read from `YOUR_MOVE_ORDER`. */
 const MOVE_ORDER: readonly YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'merge'];
@@ -45,34 +44,47 @@ export const topicCountsMatchTiles: Invariant = {
   },
 };
 
-/** The queue counts count each tracked PR once, by the tier its rows show; pulled-in layers never count. */
+/**
+ * The queue counts count each tracked PR once, by the tier its rows show;
+ * pulled-in layers never count. Changes you requested PRs whose spec move
+ * is a re-review (addressed, or asked again) count as addressed, so the
+ * section's order follows the move (2026-09-30).
+ */
 export const queueCountsMatchRows: Invariant = {
-  name: "a topic's queue counts match its tracked rows",
+  name: "a topic's queue counts match its tracked rows, re-reviews counted as addressed",
   check(board, views) {
     const pinged = pingedPrKeys(views.map((view) => view.tile));
     const keys = [...new Set(views.flatMap((view) => view.tile.members.map((member) => member.prKey)))];
     const queues = topicQueues(
       keys.map((key) => {
         const pr = prOf(board, key);
+        const userState = board.userStates.get(key) ?? null;
+        const turn = prWhoseTurn({ pr, events: eventsOf(board, key), userState, viewer: board.viewer, notYours: board.notYours.has(key) });
         return {
           tier: prTier({ pr, events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, reason: board.threads.get(key)?.reason ?? null }),
           author: personRelation(pr.author, board.viewer),
           state: pr.state,
           pulledIn: !pinged.has(key),
           quiet: false,
-          changesAddressed: changesAnswered(pr, board.viewer) !== null,
+          changesAddressed: isReReviewMove(turn),
         };
       }),
     );
     const expected = emptyTierCounts();
+    let reReviews = 0;
     const counted = new Set<string>();
     for (const row of views.flatMap((view) => view.prs)) {
       if (isTrackedHere(row.provenance) && !counted.has(row.key)) {
         counted.add(row.key);
         expected[row.tier] += 1;
+        const spec = expectedTurn({ pr: prOf(board, row.key), events: eventsOf(board, row.key), viewer: board.viewer, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key) });
+        if (row.tier === 'changes_requested' && spec.kind === 'you' && spec.move === 're_review') {
+          reReviews += 1;
+        }
       }
     }
     ensure(JSON.stringify(queues.tiers) === JSON.stringify(expected), `queue counts ${JSON.stringify(queues.tiers)}, rows ${JSON.stringify(expected)}`);
+    ensure(queues.changesAddressed === reReviews, `addressed ${queues.changesAddressed}, spec re-reviews under Changes you requested ${reReviews}`);
   },
 };
 

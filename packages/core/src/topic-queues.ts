@@ -75,13 +75,16 @@ export interface QueuedPr {
   pulledIn: boolean;
   /** In a quiet repo ("Let it go stale"). */
   quiet: boolean;
-  /** The author addressed the viewer's change request (`changesAnswered`). */
+  /**
+   * The PR's move is a re-review (`isReReviewMove`): the author addressed
+   * the viewer's change request, or asked them again while it stands.
+   */
   changesAddressed: boolean;
 }
 
 /**
  * PR counts per tier, plus open PRs by author for the Mine and Team filters,
- * and how many Changes you requested PRs the author addressed. Tiers only
+ * and how many Changes you requested PRs are the viewer's re-review. Tiers only
  * put open PRs in the queues; merged and closed ones are `rest`.
  * Pulled-in stack layers and PRs in quiet repos stay out of every count.
  */
@@ -91,7 +94,7 @@ export interface TopicQueues {
   byYou: number;
   /** Open PRs someone else on the viewer's teams wrote. */
   byTeam: number;
-  /** changes_requested PRs whose author addressed the changes: the viewer's move again. */
+  /** changes_requested PRs whose move is a re-review (addressed, or asked again): the viewer's move again. */
   changesAddressed: number;
 }
 
