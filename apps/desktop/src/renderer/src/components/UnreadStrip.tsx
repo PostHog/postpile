@@ -87,7 +87,7 @@ export function UnseenMergeStrip(props: { view: TileView }) {
           <Glyph glyph={eventGlyph(merge.kind)} />
         </span>
       </span>
-      <span className="min-w-0 truncate" title={`${merge.summary}. Not seen yet; Mark done once you have looked.`}>
+      <span className="min-w-0 truncate" title={`${merge.summary}. Not seen yet; Done for now once you have looked.`}>
         {split ? (
           <>
             <span className="font-[650]">{split.actor}</span>

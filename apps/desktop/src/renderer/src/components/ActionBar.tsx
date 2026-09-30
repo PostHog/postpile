@@ -7,6 +7,7 @@ import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button, buttonClasses } from './Button.tsx';
 import { ChatIcon, Glyph } from './icons.tsx';
+import { MarkButton } from './MarkButton.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';
 import { RemoveTeamButton } from './RemoveTeamButton.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
@@ -138,15 +139,14 @@ export function ActionBar(props: ActionBarProps) {
       </Button>
     ),
     mark: offers.markLabel && (
-      <Button
+      <MarkButton
+        prKey={pr.key}
         variant={variantOf('mark')}
-        size="md"
+        label={offers.markLabel}
         title={markReadTitle}
         disabled={pending !== null || actions.isBusy(onePr ? `markPr:${tileId}:${pr.key}` : `markRead:${tileId}`)}
         onClick={() => void markRead()}
-      >
-        {offers.markLabel}
-      </Button>
+      />
     ),
     // One "Remove <team>" per team of yours still asked on this PR; never the lead.
     removeTeam: removeTeamButtons(offers.removeTeams).map((button) => (

@@ -46,11 +46,11 @@ function view(kind: TileStateKind, turn: WhoseTurn, afterRead: TileAfterRead, pr
 }
 
 describe('tile footer', () => {
-  it('says Mark read on an unread tile, Mark done only where a mark-read makes it done', () => {
+  it('says Mark read on an unread tile, Done for now only where a mark-read makes it done', () => {
     expect(tileOffers(view('unread', REREVIEW, stillYours)).markLabel).toBe('Mark read');
-    expect(tileOffers(view('open', NONE, doneAfter)).markLabel).toBe('Mark done');
+    expect(tileOffers(view('open', NONE, doneAfter)).markLabel).toBe('Done for now');
     expect(tileOffers(view('open', NONE, { done: false, turn: NONE })).markLabel).toBe('Mark read');
-    expect(tileOffers(view('snoozed', NONE, doneAfter)).markLabel).toBe('Mark done');
+    expect(tileOffers(view('snoozed', NONE, doneAfter)).markLabel).toBe('Done for now');
   });
 
   it('leads with Snooze and a GitHub link on a read tile that is still your move', () => {
@@ -67,7 +67,7 @@ describe('tile footer', () => {
     expect(tileOffers(view('done', NONE, { done: false, turn: NONE }))).toMatchObject({ markLabel: null, snooze: false });
   });
 
-  // Bug fixed 2026-09-29: the footer still said "Mark done" where the pane led with Open.
+  // Bug fixed 2026-09-29: the footer still said "Done for now" where the pane led with Open.
   it('opens a snoozed tile whose tracked PRs are all done, keeping Snooze to take it back', () => {
     const offers = tileOffers(view('snoozed', NONE, doneAfter, [row(1, { done: true }), row(2, { provenance: pulled })]));
     expect(offers).toMatchObject({ footer: 'open', markLabel: null, snooze: true, github: null });
@@ -114,7 +114,7 @@ describe('detail pane', () => {
   it('on a stack or set acts on the selected PR, never offering Snooze', () => {
     const yours = row(2, { turn: REREVIEW, afterRead: stillYours, primaryAction: 'approved' });
     const set = view('open', REREVIEW, stillYours, [row(1, { primaryAction: 'approved' }), yours]);
-    expect(paneOffers(set, set.prs[0]!)).toMatchObject({ scope: 'pr', lead: 'mark_done', markLabel: 'Mark done', snooze: false });
+    expect(paneOffers(set, set.prs[0]!)).toMatchObject({ scope: 'pr', lead: 'mark_done', markLabel: 'Done for now', snooze: false });
     expect(paneOffers(set, yours)).toMatchObject({ lead: 'open_on_github', markLabel: null, open: true });
     const quietLayer = row(3, { provenance: pulled, primaryAction: 'approved' });
     expect(paneOffers(view('open', NONE, doneAfter, [row(1), quietLayer]), quietLayer).markLabel).toBeNull();

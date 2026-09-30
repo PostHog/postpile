@@ -2,6 +2,14 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- The detail pane's activity list puts the unread dot on every event you have not seen yet, not only loud ones. When a PR is unread because GitHub changed the notification and no event explains it, the list starts with one dotted line saying so.
+- The "Mark done" button is now "Done for now".
+- The automatic mark when you open a PR and move on is visible: the button fills over the 1.5s dwell, then says "Marks read when you leave" (or "done"), and a small X ("Keep unread") cancels it for that PR.
+
 ## 0.12.2 (2026-09-30)
 
 ### Changed

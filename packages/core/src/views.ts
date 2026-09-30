@@ -192,7 +192,7 @@ export interface PrSummary {
   facts: PrFacts;
   /**
    * What a mark-read of this PR alone would leave (`prAfterMarkRead`): the
-   * detail pane says "Mark done" only when `done` is true. Always not done
+   * detail pane says "Done for now" only when `done` is true. Always not done
    * for a pulled-in stack layer.
    */
   afterRead: TileAfterRead;
@@ -246,7 +246,7 @@ export interface TileView {
   turn: WhoseTurn;
   /**
    * What a mark-read would leave (`tileAfterMarkRead`): done or not, and
-   * whose move. The tile's button says "Mark done" only when it is done.
+   * whose move. The tile's button says "Done for now" only when it is done.
    */
   afterRead: TileAfterRead;
   /** A mark-read of one of its PRs waits for the writes lock; null when none does. */
@@ -292,6 +292,8 @@ export interface TopicDetail {
 export interface EventView {
   event: PrEvent;
   display: EventDisplayState;
+  /** The event's own seen state is unseen (`eventView`): the detail pane's dot. Muted events count as seen. */
+  unseen: boolean;
 }
 
 export interface PrDetail {

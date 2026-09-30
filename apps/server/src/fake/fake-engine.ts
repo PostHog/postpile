@@ -92,7 +92,7 @@ import {
   deriveTileState,
   isRetiredSince,
   snoozeWrites,
-  displayState,
+  eventView,
   compareTopicUrgency,
   actionTrail,
   cleanupCutoff,
@@ -976,13 +976,13 @@ export class FakeEngine implements EngineService {
     }
     const events: EventView[] = this.eventsOf(prKey)
       .toSorted((a, b) => b.at.localeCompare(a.at))
-      .map((event) => ({ event, display: displayState(event) }));
+      .map(eventView);
     const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
       pr,
       fetchedAt: this.fetchedAtOf(prKey),
       events,
-      activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr),
+      activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr, this.prThreads().get(prKey) ?? null),
       whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: this.isGlanceStale(prKey),

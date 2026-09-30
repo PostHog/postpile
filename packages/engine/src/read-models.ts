@@ -17,7 +17,7 @@ import {
   buildPrSummary,
   buildTileView,
   compareTopicUrgency,
-  displayState,
+  eventView,
   FINISHED_TOPICS_MS,
   topicMove,
   isPrInQuietRepo,
@@ -459,7 +459,7 @@ export class ReadModels {
         .filter((tile) => tile.members.some((m) => m.prKey === key))
         .map((tile) => tile.id),
     );
-    const events = (board.events.get(key) ?? []).map((event) => ({ event, display: displayState(event) }));
+    const events = (board.events.get(key) ?? []).map(eventView);
     const viewer = loadViewer(this.store);
     const news = whatsNew(pr, board.events.get(key) ?? [], viewer);
     const stale = this.staleGlances(board, [key]).has(key);
@@ -468,7 +468,7 @@ export class ReadModels {
       pr,
       fetchedAt: this.store.prs.fetchedAt(key),
       events,
-      activity: activityList(events, viewer, news?.anchor.at ?? null, pr),
+      activity: activityList(events, viewer, news?.anchor.at ?? null, pr, board.threads.get(key) ?? null),
       whatsNew: news,
       glance,
       glanceStale: stale,
