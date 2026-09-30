@@ -147,6 +147,7 @@ import { WorkContextMemory } from './work-context/work-context.ts';
 import type { GitHubWrites } from './writes/github-writes.ts';
 import type { PendingWrites } from './writes/pending-writes.ts';
 import { QuietReads } from './writes/quiet-reads.ts';
+import { ClickedReadRetry } from './writes/clicked-read-retry.ts';
 
 export interface EngineDeps {
   store: Store;
@@ -276,6 +277,9 @@ export class Engine implements EngineService {
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
   private readonly agentRefresher: AgentRefresher;
+  /** Threads a clicked mark-read's retry holds: the inbox leaves their rows alone meanwhile. */
+  private readonly heldThreads = new Set<string>();
+  private readonly clickedReadRetry: ClickedReadRetry;
   private readonly outsideProposals: OutsideProposals;
   private readonly teamMembers: TeamMembers;
   private readonly teamRoles: TeamRoleKeeper;
@@ -344,8 +348,19 @@ export class Engine implements EngineService {
       glancePings: new GlancePings(store, now),
       raisedPings: new RaisedPings(decider),
     };
-    const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, this.quota, deps.syncLog ?? ((line) => console.log(line)));
+    const github = new GitHubSync(
+      store,
+      deps.reader,
+      now,
+      log,
+      deps.pendingWrites,
+      this.quota,
+      deps.syncLog ?? ((line) => console.log(line)),
+      this.heldThreads,
+    );
     this.github = github;
+    this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
+    deps.markReadQueue.retryWith(this.clickedReadRetry);
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);
@@ -463,6 +478,24 @@ export class Engine implements EngineService {
     } catch (error) {
       (this.deps.syncLog ?? console.log)(`refresh after write: ${key}: ${errorText(error)}`);
     }
+  }
+
+  /**
+   * A clicked mark-read GitHub skipped for newer activity: the PR fetched
+   * again before the click is decided again (ClickedReadRetry). The same
+   * refresh as after a write, or the running full sync. Nothing while the
+   * GitHub quota is nearly used: the snapshot then stays stale and the click
+   * stays unread.
+   */
+  private async refreshForRetry(key: PrKey): Promise<void> {
+    if (this.quota.state().level === 'critical') {
+      return;
+    }
+    if (this.syncing) {
+      await this.syncing.catch(() => {});
+      return;
+    }
+    await this.refreshAfterWrite(key);
   }
 
   /** Topics the poll brought news for: one catch-up run each, coalesced by the queue. Off with a cap of 0. */
@@ -761,11 +794,12 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.syncsDone,
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.syncsDone + this.clickedReadRetry.decided(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
+      keptUnread: this.clickedReadRetry.notice(),
     };
   }
 

@@ -5,6 +5,9 @@ import {
   botOnlySinceRead,
   actorsFromQuietDetail,
   botsFromQuietDetail,
+  clickedReadCheck,
+  clickedReadDetail,
+  clickedReadNotice,
   isClearableNonPr,
   judgedReadCheck,
   judgedReadDetail,
@@ -14,6 +17,7 @@ import {
   quietReasonDetail,
   quietReasonFromDetail,
   touchedReadCheck,
+  type ClickedReadInput,
   type QuietReadInput,
   type TouchedReadInput,
 } from './quiet-reads.ts';
@@ -371,5 +375,61 @@ describe('openedReadCheck', () => {
     expect(opened({ tiles: [] })).toEqual({ kind: 'skip', why: 'no_tile' });
     expect(opened({ prFetchedAt: at(29) })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
     expect(opened({ prTruncated: true })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+  });
+});
+
+describe('clickedReadCheck', () => {
+  const ownPr = makePr({ number: 7, author: viewer.login });
+
+  function ownPush(minute: number): PrEvent {
+    return makeEvent({ id: `push-${minute}`, prKey: ownPr.key, kind: 'commits_pushed', actor: viewer.login, at: at(minute) });
+  }
+
+  function clicked(overrides: Partial<ClickedReadInput> = {}): ClickedReadInput {
+    return {
+      thread: makeThreadFor(ownPr, { lastReadAt: at(10), updatedAt: at(40), unread: true, reason: 'author' }),
+      pr: ownPr,
+      events: [humanComment(5), ownPush(35)],
+      viewer,
+      prFetchedAt: at(45),
+      shownUpTo: at(20),
+      ...overrides,
+    };
+  }
+
+  it('marks when only the viewer own pushes came after the click', () => {
+    const check = clickedReadCheck(clicked());
+    expect(check).toEqual({ kind: 'mark', bots: [] });
+    expect(clickedReadDetail(check)).toBe('marked after refresh: only your own activity');
+  });
+
+  it('marks when nothing known came after the click', () => {
+    expect(clickedReadCheck(clicked({ events: [humanComment(5)] }))).toEqual({ kind: 'mark', bots: [] });
+  });
+
+  it('marks a bot review on the viewer own open PR: the click was explicit, unlike the quiet reads', () => {
+    const botReview = makeEvent({ id: 'bot-review', prKey: ownPr.key, kind: 'review_commented', actor: 'codex[bot]', isBot: true, at: at(38) });
+    const check = clickedReadCheck(clicked({ events: [ownPush(35), botReview, ciResult(39)] }));
+    expect(check).toEqual({ kind: 'mark', bots: ['codex[bot]', 'CI'] });
+    expect(clickedReadDetail(check)).toBe('marked after refresh: only your own activity and automation (codex[bot], CI)');
+  });
+
+  it('keeps it unread when a person did something after the click, naming the newest', () => {
+    const review = makeEvent({ id: 'review', prKey: ownPr.key, kind: 'review_commented', actor: 'bob', at: at(37) });
+    const check = clickedReadCheck(clicked({ events: [ownPush(35), humanComment(36), review, botComment(38)] }));
+    expect(check).toEqual({ kind: 'keep', why: 'people', news: [review, humanComment(36)] });
+    expect(clickedReadDetail(check)).toBe('kept unread: new review from bob and 1 more');
+    expect(clickedReadNotice(check)).toBe('New since you looked: a review from bob and 1 more');
+  });
+
+  it('ignores a person activity up to what the click showed', () => {
+    expect(clickedReadCheck(clicked({ events: [humanComment(20), ownPush(35)] })).kind).toBe('mark');
+  });
+
+  it('keeps it unread while the snapshot does not cover the thread', () => {
+    const check = clickedReadCheck(clicked({ prFetchedAt: at(39) }));
+    expect(check).toEqual({ kind: 'keep', why: 'stale_snapshot' });
+    expect(clickedReadDetail(check)).toBe('kept unread: activity after the last sync');
+    expect(clickedReadNotice(check)).toBe('New activity on GitHub since you looked: still unread');
   });
 });

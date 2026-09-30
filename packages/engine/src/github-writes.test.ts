@@ -381,7 +381,7 @@ describe('a mark-read GitHub did not take goes back to unread', () => {
     expect(report.errors).toContain(`mark-read of ${pr.key}: GitHub didn't take it: boom thread-1; still unread`);
   });
 
-  it('a queue send skipped for newer activity puts the tile back to unread', async () => {
+  it('a queue send skipped for newer activity the refresh cannot cover puts the tile back to unread', async () => {
     const h = await synced();
     await h.engine.markRead(tileId);
     const [thread] = h.reader.threads;
@@ -394,7 +394,7 @@ describe('a mark-read GitHub did not take goes back to unread', () => {
     expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({
       origin: 'queue',
       outcome: 'skipped',
-      detail: "GitHub didn't take it: activity after the last sync; still unread",
+      detail: 'kept unread: activity after the last sync',
     });
   });
 

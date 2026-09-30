@@ -1,7 +1,7 @@
 // The one place the renderer changes anything. Components call useActions();
 // nothing else may send a POST or DELETE to the API. Actions that end up as a
 // GitHub write go through the guard in lib/guard.ts first.
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type {
   ActionResult,
@@ -232,7 +232,12 @@ export function ActionsProvider(props: { children: ReactNode }) {
   // Before this window's first sync: the one the engine stored, e.g. a start sync that failed.
   const storedLastSync = useLastSyncReport().data ?? null;
   // Syncs this window did not start (the hourly auto sync) show in the title bar the same way.
-  const backgroundSync = useLiveStatus().data?.syncRunning ?? false;
+  const live = useLiveStatus().data;
+  const backgroundSync = live?.syncRunning ?? false;
+  const liveLoaded = live !== undefined;
+  const keptUnread = live?.keptUnread ?? null;
+  // The newest kept-unread notice this window has seen; undefined until the live status first loads.
+  const seenKeptUnread = useRef<number | null | undefined>(undefined);
 
   // Notices fade on their own; problems stay a little longer.
   useEffect(() => {
@@ -242,6 +247,19 @@ export function ActionsProvider(props: { children: ReactNode }) {
     const timer = setTimeout(() => setNotice(null), notice.tone === 'ok' ? NOTICE_MS : PROBLEM_NOTICE_MS);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // A Mark read GitHub skipped for newer activity that stayed unread after the engine's refresh:
+  // the toast says what is new. One from before this window opened is not shown.
+  useEffect(() => {
+    if (!liveLoaded) {
+      return;
+    }
+    if (seenKeptUnread.current !== undefined && keptUnread !== null && keptUnread.id !== seenKeptUnread.current) {
+      show('error', keptUnread.message);
+    }
+    seenKeptUnread.current = keptUnread?.id ?? null;
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- show is new every render; only a new notice matters
+  }, [liveLoaded, keptUnread?.id]);
 
   // Drop undo entries once the engine has sent them to GitHub (or, while
   // locked, turned them into pending writes), then refetch so tiles and the
