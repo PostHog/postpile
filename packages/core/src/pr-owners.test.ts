@@ -42,6 +42,11 @@ describe('prOwners', () => {
     expect(prOwners(makePr({ author: BOT }))).toEqual([BOT]);
   });
 
+  it('keeps a deleted author (empty login) as the owner, assignees or not', () => {
+    expect(prOwners(makePr({ author: '', assignees: [me] }))).toEqual(['']);
+    expect(isPrOwner(makePr({ author: '', assignees: [me] }), me)).toBe(false);
+  });
+
   it('matches logins without case and names the first owner', () => {
     expect(isPrOwner(agentPr(['Viewer']), me)).toBe(true);
     expect(isPrOwner(agentPr(['lyra']), me)).toBe(false);

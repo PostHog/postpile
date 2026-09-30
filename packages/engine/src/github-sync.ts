@@ -547,10 +547,12 @@ export class GitHubSync {
     }
     const remote = await this.reader.prUpdatedAts(refs);
     const stored = this.store.prs.updatedAtByKey();
+    // Snapshots stored before assignees were read (2026-09-30) refetch once, or a bot PR's owners stay unknown until it moves.
+    const withoutAssignees = new Set(this.store.prs.listAll().filter((pr) => pr.assignees === undefined).map((pr) => pr.key));
     const moved = refs.filter((ref) => {
       const updatedAt = remote.get(prKey(ref));
       const was = stored.get(prKey(ref));
-      return updatedAt !== undefined && (was === undefined || updatedAt > was);
+      return updatedAt !== undefined && (was === undefined || updatedAt > was || withoutAssignees.has(prKey(ref)));
     });
     if (origin === 'sync' || moved.length > 0) {
       const which = moved.length > 0 ? `: ${moved.map(prKey).join(', ')}` : '';

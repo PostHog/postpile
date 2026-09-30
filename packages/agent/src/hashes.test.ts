@@ -59,6 +59,12 @@ describe('glanceItemInputHash', () => {
     expect(glanceHash(item.pr, { context: { ...emptyContext, tailoring: 'x' } })).not.toBe(base);
   });
 
+  it('changes when a bot PR gets assignees, not when a person’s PR does', () => {
+    const botPr = makePr({ author: 'acme-agent[bot]' });
+    expect(glanceHash(makePr({ author: 'acme-agent[bot]', assignees: ['viewer'] }))).not.toBe(glanceHash(botPr));
+    expect(glanceHash(makePr({ assignees: ['viewer'] }))).toBe(base);
+  });
+
   it('does not depend on the other PRs in the batch or the attempt', () => {
     const other = { pr: makePr({ ref: { repo: 'acme/app', number: 2 } }), provenance: { kind: 'pinged', reason: 'mention' } } as const;
     expect(glanceItemInputHash(glanceBatch({ items: [other, item], attempt: 2 }), item)).toBe(base);

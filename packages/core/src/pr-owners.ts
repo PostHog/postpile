@@ -12,10 +12,12 @@ type OwnedPr = Pick<Pr, 'author' | 'assignees'>;
  * The PR's owners: its author, except when the author is a bot and the PR
  * has assignees; then the assignees. A human author stays the only owner
  * even with assignees, and a bot PR without assignees stays the bot's.
+ * A deleted author comes back as '' and counts as a person here, although
+ * `isBot('')` is true for actor-less events.
  */
 export function prOwners(pr: OwnedPr): string[] {
   const assignees = pr.assignees ?? [];
-  if (isBot(pr.author) && assignees.length > 0) {
+  if (pr.author !== '' && isBot(pr.author) && assignees.length > 0) {
     return assignees;
   }
   return [pr.author];
