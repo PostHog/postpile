@@ -19,6 +19,15 @@ export function isAutomationLogin(login: string): boolean {
   return login === '' || AUTOMATION_LOGINS.some((bot) => sameLogin(bot, login));
 }
 
+/**
+ * Whose PR it is (DESIGN "PR ownership"): the author, or the assignees of a
+ * PR a bot opened. A deleted author ('') stays the owner.
+ */
+export function specOwners(pr: Pr): string[] {
+  const assignees = pr.assignees ?? [];
+  return pr.author !== '' && isAutomationLogin(pr.author) && assignees.length > 0 ? assignees : [pr.author];
+}
+
 export function isViewerLogin(viewer: Viewer, login: string): boolean {
   return login !== '' && sameLogin(login, viewer.login);
 }

@@ -14,7 +14,7 @@ import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
 import { ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
 import { SPEC_ADDRESSED_KINDS } from './spec-events.ts';
-import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest } from './spec-facts.ts';
+import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwners } from './spec-facts.ts';
 import {
   effectiveLoudnessOf,
   expectedDone,
@@ -54,7 +54,7 @@ export const prFactsMatchTheSpec: Invariant = {
       ensure(JSON.stringify(row.facts.lastTouch) === JSON.stringify(expectedTouch), `${row.key}: last touch ${JSON.stringify(row.facts.lastTouch)}, expected ${JSON.stringify(expectedTouch)}`);
       const ask = openAsk(pr, eventsOf(board, row.key), board.viewer, SPEC_ADDRESSED_KINDS);
       ensure((row.facts.openAsk?.id ?? null) === (ask?.id ?? null), `${row.key}: open ask ${row.facts.openAsk?.id ?? 'none'}, expected ${ask?.id ?? 'none'}`);
-      ensure(row.facts.authorIsAutomation === isAutomationLogin(pr.author), `${row.key}: author automation ${row.facts.authorIsAutomation}`);
+      ensure(row.facts.ownerIsAutomation === specOwners(pr).every(isAutomationLogin), `${row.key}: owner automation ${row.facts.ownerIsAutomation}`);
       const teams = pr.state === 'OPEN' ? pr.reviewerTeams.filter((team) => isViewerTeam(board.viewer, team)) : [];
       ensure(JSON.stringify(row.ownTeamRequests) === JSON.stringify(teams), `${row.key}: own team requests ${row.ownTeamRequests.join(', ')}, expected ${teams.join(', ')}`);
     }
