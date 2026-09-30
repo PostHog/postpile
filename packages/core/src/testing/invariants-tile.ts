@@ -4,6 +4,7 @@
 import type { WhoseTurn, WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
 import type { PrTier } from '../pr-tier.ts';
+import { pickHeadlineEvent } from '../headline.ts';
 import { tileListRank } from '../tile-view.ts';
 import type { TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
@@ -69,7 +70,8 @@ function expectedReasonIds(board: PropertyBoard, key: string): string[] {
     const loudness = event.override ? event.override.loudness : event.ruleLoudness;
     return event.seenAt === null && loudness === 'quiet' && (thread.lastReadAt === null || event.at > thread.lastReadAt);
   });
-  return quiet.length > 0 ? [quiet.at(-1)!.id] : [`thread:${thread.id}`];
+  const headline = pickHeadlineEvent(quiet, prOf(board, key), board.viewer);
+  return headline ? [headline.id] : [`thread:${thread.id}`];
 }
 
 /**

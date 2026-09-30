@@ -1,4 +1,5 @@
 import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
+import { isAutomationEvent, pickHeadlineEvent } from './headline.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
 import { isApprovedByViewer, reviewPending } from './review-request.ts';
 import { snoozePhase } from './snooze.ts';
@@ -118,8 +119,10 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer |
   return prWhoseTurn({ pr, events, userState, viewer, notYours }).kind !== 'you';
 }
 
-function reasonOf(prKey: PrKey, event: PrEvent): UnreadReason {
-  return { prKey, eventId: event.id, kind: event.kind, actor: event.actor, summary: event.summary, at: event.at };
+function reasonOf(input: TileStateInput, prKey: PrKey, event: PrEvent): UnreadReason {
+  const pr = input.prs.get(prKey);
+  const automation = pr !== undefined && isAutomationEvent(event, pr, input.viewer ?? null);
+  return { prKey, eventId: event.id, kind: event.kind, actor: event.actor, summary: event.summary, at: event.at, automation, loud: effectiveLoudness(event) === 'loud' };
 }
 
 function byTime(a: UnreadReason, b: UnreadReason): number {
@@ -131,7 +134,7 @@ function reasonsWhere(input: TileStateInput, members: TileMember[], wanted: (eve
   for (const member of members) {
     for (const event of input.events.get(member.prKey) ?? []) {
       if (wanted(event)) {
-        reasons.push(reasonOf(member.prKey, event));
+        reasons.push(reasonOf(input, member.prKey, event));
       }
     }
   }
@@ -179,22 +182,24 @@ function newestEvent(events: PrEvent[]): PrEvent | undefined {
 
 /**
  * Why one PR's unread thread keeps the tile unread: its unseen loud events;
- * without any, its newest unseen quiet event since the thread's last read
+ * without any, its most important unseen quiet event since the thread's last read
+ * (`pickHeadlineEvent`, not just the newest: a deploy bot posts last)
  * (muted counts as noise); without that either, the thread itself, named
  * after the PR's newest event.
  */
 function threadReasons(input: TileStateInput, member: TileMember): UnreadReason[] {
   const events = input.events.get(member.prKey) ?? [];
+  const pr = input.prs.get(member.prKey);
   const loud = events.filter(isUnseenLoud);
   if (loud.length > 0) {
-    return loud.map((event) => reasonOf(member.prKey, event));
+    return loud.map((event) => reasonOf(input, member.prKey, event));
   }
   const thread = input.threads.get(member.prKey)!;
   const lastReadAt = thread.lastReadAt;
   const quiet = events.filter((event) => event.seenAt === null && effectiveLoudness(event) === 'quiet' && (lastReadAt === null || event.at > lastReadAt));
-  const newestQuiet = newestEvent(quiet);
-  if (newestQuiet) {
-    return [reasonOf(member.prKey, newestQuiet)];
+  const headline = pr ? pickHeadlineEvent(quiet, pr, input.viewer ?? null) : newestEvent(quiet);
+  if (headline) {
+    return [reasonOf(input, member.prKey, headline)];
   }
   const newest = newestEvent(events);
   return [
@@ -205,13 +210,15 @@ function threadReasons(input: TileStateInput, member: TileMember): UnreadReason[
       actor: newest?.actor ?? '',
       summary: THREAD_REASON_SUMMARY,
       at: thread.updatedAt,
+      automation: false,
+      loud: false,
     },
   ];
 }
 
 /** A member unread without an unread thread (`loudWithoutThreadMembers`): its unseen loud events. */
 function loudReasonsOf(input: TileStateInput, member: TileMember): UnreadReason[] {
-  return (input.events.get(member.prKey) ?? []).filter(isUnseenLoud).map((event) => reasonOf(member.prKey, event));
+  return (input.events.get(member.prKey) ?? []).filter(isUnseenLoud).map((event) => reasonOf(input, member.prKey, event));
 }
 
 function unreadReasons(input: TileStateInput, threadMembers: TileMember[], loudMembers: TileMember[]): UnreadReason[] {

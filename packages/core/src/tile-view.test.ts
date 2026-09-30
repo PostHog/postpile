@@ -102,7 +102,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   };
 }
 
-const reason = (prKey: string) => ({ prKey, eventId: 'e', kind: 'comment' as const, actor: 'ada', summary: 'x', at: at(1) });
+const reason = (prKey: string) => ({ prKey, eventId: 'e', kind: 'comment' as const, actor: 'ada', summary: 'x', at: at(1), automation: false, loud: false });
 
 /** The dots of a tile in `kind`, whose unread reasons name `reasons`; rows with an unread thread count as thread keys. */
 function dotsOf(prs: PrSummary[], kind: TileState['kind'], reasons: string[] = []): string[] {

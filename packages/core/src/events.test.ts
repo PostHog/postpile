@@ -32,6 +32,13 @@ describe('deriveEvents: comments', () => {
     });
   });
 
+  it('strips HTML comment markers from summaries and falls back to the kind label', () => {
+    const marked = makePr({ comments: [makeComment({ id: 'c1', author: 'deployment-status-posthog[bot]', body: '<!-- deploy-notify-bot -->\n  Deployed   to   prod' })] });
+    expect(deriveEvents(marked, viewer, null)[0]?.summary).toBe('deployment-status-posthog[bot] deploy: Deployed to prod');
+    const bare = makePr({ comments: [makeComment({ id: 'c2', author: 'deployment-status-posthog[bot]', body: '<!-- deploy-notify-bot -->' })] });
+    expect(deriveEvents(bare, viewer, null)[0]?.summary).toBe('deployment-status-posthog[bot] deploy');
+  });
+
   it('needs a word boundary after the login', () => {
     const pr = makePr({ comments: [makeComment({ body: 'ping @viewers' })] });
     expect(deriveEvents(pr, viewer, null)[0]?.kind).toBe('comment');

@@ -27,9 +27,11 @@ interface ApprovalPoint {
 
 const deployBody = /\b(deploy(ed|ment)?|preview)\b/i;
 
+/** The first line with text, HTML comments (bot markers) removed and whitespace collapsed. */
 function oneLine(text: string, max = 100): string {
-  const line = text.split('\n').find((part) => part.trim() !== '') ?? '';
-  const trimmed = line.trim();
+  const visible = text.replace(/<!--[\s\S]*?-->/g, '');
+  const line = visible.split('\n').find((part) => part.trim() !== '') ?? '';
+  const trimmed = line.replace(/\s+/g, ' ').trim();
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 

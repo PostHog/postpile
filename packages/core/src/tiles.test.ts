@@ -169,7 +169,7 @@ describe('deriveTileState', () => {
     const state = deriveTileState(stateInput(tile, [pr], [loud], [], [unreadThread]));
     expect(state).toEqual({
       kind: 'unread',
-      unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', actor: 'bob', summary: 'bob mentioned you', at: loud.at }],
+      unreadBecause: [{ prKey: pr.key, eventId: 'e1', kind: 'mention', actor: 'bob', summary: 'bob mentioned you', at: loud.at, automation: false, loud: true }],
       unreadOnGitHub: true,
       loud: true,
     });
@@ -205,7 +205,20 @@ describe('deriveTileState', () => {
     expect(quiet.unreadBecause.map((r) => [r.eventId, r.summary])).toEqual([['quiet', 'lyra commented']]);
     const seen = events.map((event) => ({ ...event, seenAt: at(40) }));
     const bare = deriveTileState(stateInput(tile, [pr], seen, [handled], [unreadThread]));
-    expect(bare.unreadBecause).toEqual([{ prKey: pr.key, eventId: `thread:${unreadThread.id}`, kind: 'comment', actor: 'bob', summary: 'new activity on GitHub', at: unreadThread.updatedAt }]);
+    expect(bare.unreadBecause).toEqual([{ prKey: pr.key, eventId: `thread:${unreadThread.id}`, kind: 'comment', actor: 'bob', summary: 'new activity on GitHub', at: unreadThread.updatedAt, automation: false, loud: false }]);
+  });
+
+  it('leads with the merge without review, not the deploy bot that posted last', () => {
+    const events = [
+      makeEvent({ id: 'approval', kind: 'review_approved', at: at(10), actor: 'lyra', isBot: false }),
+      makeEvent({ id: 'merge', kind: 'merged_without_review', at: at(20), actor: 'trunk-io[bot]', isBot: true, summary: 'trunk-io[bot] merged without your review' }),
+      makeEvent({ id: 'ci', kind: 'ci', at: at(25), actor: '', isBot: true }),
+      makeEvent({ id: 'deploy', kind: 'deploy', at: at(30), actor: 'deployment-status-posthog[bot]', isBot: true, summary: 'deploy' }),
+    ];
+    const state = deriveTileState(stateInput(tile, [pr], events, [handled], [unreadThread]));
+    expect(state.unreadBecause.map((r) => r.eventId)).toEqual(['merge']);
+    const botOnly = deriveTileState(stateInput(tile, [pr], events.filter((e) => e.isBot && e.kind !== 'merged_without_review'), [handled], [unreadThread]));
+    expect(botOnly.unreadBecause.map((r) => [r.eventId, r.automation, r.loud])).toEqual([['deploy', true, false]]);
   });
 
   it('shows a done PR unread while its thread is unread on GitHub, done once read', () => {

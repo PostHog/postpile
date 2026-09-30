@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- A tile unread on quiet events leads with the most important one (asks, merges without your review, human reviews) instead of the newest bot event, bots never get NEW, and HTML comment markers no longer show in summaries.
+
 ## 0.12.0 (2026-09-30)
 
 ### Added

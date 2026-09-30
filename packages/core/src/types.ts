@@ -549,6 +549,9 @@ export interface UnreadReason {
   summary: string;
   /** When the event happened, so the UI can say how long it has waited. */
   at: IsoTime;
+  /** Made by automation (core `isAutomation`): the strip never shows NEW on it unless it is loud. */
+  automation: boolean;
+  loud: boolean;
 }
 
 /** Derived, never stored. */
