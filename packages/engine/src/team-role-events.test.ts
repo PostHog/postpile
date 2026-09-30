@@ -3,6 +3,7 @@
 import { makeComment, makePr, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
+import { loadViewer } from './viewer-meta.ts';
 
 const PLATFORM = 'acme/team-platform';
 const APPROVERS = 'acme/client-approvers';
@@ -45,6 +46,23 @@ describe('stored events after a team role change', () => {
     await h.engine.setTeamRole(APPROVERS, 'home');
     expect(mention(h)).toMatchObject({ ruleLoudness: 'loud', seenAt: null });
     expect(h.reader.fetchedRefs).toHaveLength(fetches);
+  });
+
+  it('keeps both of two quick flips: they run one after the other', async () => {
+    const { h } = harness();
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    await Promise.all([h.engine.setTeamRole(APPROVERS, 'home'), h.engine.setTeamRole(PLATFORM, 'routing')]);
+
+    const roles = await h.engine.getTeamRoles();
+    expect(roles.teams.map((team) => [team.team, team.role])).toEqual(
+      expect.arrayContaining([
+        [APPROVERS, 'home'],
+        [PLATFORM, 'routing'],
+      ]),
+    );
+    expect(loadViewer(h.store)?.homeTeams).toEqual([APPROVERS]);
+    expect(loadViewer(h.store)?.teamMembers).toEqual(['ada', 'mira']);
   });
 
   it('follows the first classification that changes a role, without fetching the PR again', async () => {

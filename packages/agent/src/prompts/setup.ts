@@ -31,16 +31,26 @@ function sourcesOf(input: SetupDraftInput, kind: SetupSource['kind']): SetupSour
   return input.sources.filter((source) => source.kind === kind);
 }
 
+/** Unknown only while the member list was never fetched; no home team is a known, empty answer. */
+function teammatesText(viewer: SetupDraftInput['material']['viewer']): string {
+  const mates = viewer.teamMembers;
+  if (mates === undefined) {
+    return '(unknown)';
+  }
+  if (mates.length === 0) {
+    return viewer.homeTeams !== undefined && viewer.homeTeams.length === 0 ? '(none; no home team)' : '(none)';
+  }
+  const more = mates.length > TEAMMATES_SHOWN ? ` and ${mates.length - TEAMMATES_SHOWN} more` : '';
+  return `${mates.slice(0, TEAMMATES_SHOWN).join(', ')}${more}`;
+}
+
 function aboutBlock(input: SetupDraftInput): string {
   const { viewer } = input.material;
   const teams = sourcesOf(input, 'team').map((source) => `${source.label.replace(/^Team /, '')} [${source.id}]`);
-  const mates = viewer.teamMembers ?? [];
-  const shown = mates.slice(0, TEAMMATES_SHOWN).join(', ');
-  const more = mates.length > TEAMMATES_SHOWN ? ` and ${mates.length - TEAMMATES_SHOWN} more` : '';
   return [
     `- GitHub login: @${viewer.login}`,
     `- Teams: ${teams.length > 0 ? teams.join(', ') : '(none visible to the token)'}`,
-    `- Teammates on their home teams: ${mates.length > 0 ? `${shown}${more}` : '(unknown)'}`,
+    `- Teammates on their home teams: ${teammatesText(viewer)}`,
   ].join('\n');
 }
 

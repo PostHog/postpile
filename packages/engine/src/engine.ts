@@ -279,6 +279,8 @@ export class Engine implements EngineService {
   private readonly outsideProposals: OutsideProposals;
   private readonly teamMembers: TeamMembers;
   private readonly teamRoles: TeamRoleKeeper;
+  /** The last queued team role flip; `setTeamRole` chains on it. */
+  private teamRoleFlips: Promise<unknown> = Promise.resolve();
   private agentRequests: AgentRequestInbox | null = null;
 
   constructor(private readonly deps: EngineDeps) {
@@ -815,7 +817,7 @@ export class Engine implements EngineService {
     return this.teamRoles.view(loadViewer(this.deps.store));
   }
 
-  async setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {
+  private async applyTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {
     const { store } = this.deps;
     const viewer = loadViewer(store);
     if (!viewer?.teams.includes(team)) {
@@ -824,6 +826,17 @@ export class Engine implements EngineService {
     const roles = this.teamRoles.setRole(team, role);
     saveViewerFollowingRoles(store, await this.teamMembers.attach(withHomeTeams(viewer, roles)), this.deps.now().toISOString());
     return this.teamRoles.view(viewer);
+  }
+
+  /**
+   * Flips run one at a time: each reads the viewer and roles the previous
+   * one saved, so two quick flips cannot overwrite each other with a stale
+   * role map while the member fetch is awaited.
+   */
+  async setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {
+    const flip = this.teamRoleFlips.then(() => this.applyTeamRole(team, role));
+    this.teamRoleFlips = flip.catch(() => undefined);
+    return flip;
   }
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {
