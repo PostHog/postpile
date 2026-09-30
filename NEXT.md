@@ -1134,7 +1134,9 @@ the app meanwhile.
   Mark read / Mark done / Approve act on the selected PR (per-PR label, per-PR
   undo, Snooze in the pane only on single-PR tiles), the tile footer on the
   tile. One coral dot per unread PR (since 2026-09-30 the dot means exactly
-  "unread", it was "Not done yet" before), no second read-only dot.
+  "unread", it was "Not done yet" before), no second read-only dot. Counts
+  are tiles, dots are per PR: the sidebar bubble and footer number count
+  unread tiles (owner, 2026-09-30).
   Opening a PR in PostPile also handles it, checked per PR. The lead PR
   (core `leadPrKey`) prefers the turn's PR. Whose turn names the
   re-reviewer after a push and a re-request. The own-PR bot exception only applies while the PR is

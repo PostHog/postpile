@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { TileView, TopicDetail, TopicListItem } from '@postpile/core';
-import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
-import { unreadTiles, type TileFilter } from '../lib/selection.ts';
+import { tilesInTierOrder } from '../lib/queues.ts';
+import { isUnreadTile, unreadTiles, type TileFilter } from '../lib/selection.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';
@@ -19,7 +19,6 @@ interface TileGridProps {
   /** Tiles the search bar lets through; null shows all. */
   matchingTileIds: Set<string> | null;
   /** The sidebar's queue filter: matching tiles stand out, the others fade but stay. */
-  queueFilter: QueueFilter | null;
 }
 
 function FilterButton(props: { label: string; active: boolean; onClick: () => void }) {
@@ -51,7 +50,6 @@ function Grid(props: TileGridProps & { views: TileView[] }) {
           selected={view.tile.id === props.selectedTileId}
           selectedPrKey={props.selectedPrKey}
           onSelect={(prKey) => props.onSelect(view.tile.id, prKey)}
-          filterMatch={props.queueFilter === null ? null : tileMatchesFilter(view, props.queueFilter)}
         />
       ))}
     </div>
@@ -108,7 +106,7 @@ export function TileGrid(props: TileGridProps) {
   const matching = props.matchingTileIds;
   const ordered = tilesInTierOrder(props.detail.tiles);
   const tiles = matching ? ordered.filter((view) => matching.has(view.tile.id)) : ordered;
-  const unread = tiles.filter((view) => view.state.kind === 'unread' || view.state.unreadOnGitHub);
+  const unread = tiles.filter(isUnreadTile);
   const [live, snoozed, done] = useHeldPlace(
     props.selectedTileId,
     props.selectedTileId,

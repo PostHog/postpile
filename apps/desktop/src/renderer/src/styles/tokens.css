@@ -111,7 +111,6 @@
   /* An unread topic row in the sidebar (with a faint honey ring). */
   --warm-row: #fdf8ee;
   /* A tile matching the sidebar's queue filter: warm strip fill, honey line. */
-  --match-line: #e8c97a;
   --move: #fff6dd;
   --move-line: #f1e2b5;
   --move-hover: #fffcf4; /* secondary buttons in the "Your move" footer */

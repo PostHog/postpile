@@ -35,7 +35,8 @@ function urgencyOf(views: TileView[]) {
 }
 
 /**
- * Unread count, your moves and "needs you" say what the tiles say. The count
+ * Unread count, your moves and "needs you" say what the tiles say. The shown count
+ * (sidebar bubble, footer) is `unreadTiles`; `unreadPrs` only backs the per-PR dots. The count
  * is every unread tile and every tile with a thread unread on GitHub,
  * snoozed ones too; only
  * unread tiles with loud news light the topic up (loudness keeps its job).

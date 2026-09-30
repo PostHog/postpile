@@ -400,7 +400,7 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   thread unread on GitHub, a pulled-in layer's loud news, an unseen Look
   closer event) gets `UnreadDot` ("Unread") before its number, on the tile
   (single-PR tiles too) and in `DetailContext`'s list. A topic with unread
-  PRs gets it too, and its bubble counts `TopicListItem.unreadPrs`. The renderer only reads the
+  PRs gets it too, and its bubble counts `TopicListItem.unreadTiles` (counts are tiles, dots are per PR; the footer's number too). The renderer only reads the
   field. `DetailContext` shows kind, title, "PR x of n"
   and the arrows only for several PRs; one PR is just "PR".
 - Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):
@@ -455,8 +455,8 @@ or a queue filter narrows; a finished topic is not in `useTopics`, so
 Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
 not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set
-(`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
-the ones a queue filter does not match and folds snoozed / done ones.
+(`RelationLine`), local only. `TileGrid` shows tiles in tier order, folds
+snoozed / done ones. Queue filters pick topics; tiles inside a topic are never faded by them.
 A click anywhere on a tile selects it (`onTileClick` in `Tile.tsx`), except
 on a control inside it (button, link, menu: `clickedControl`), which keeps
 its own action; a PR row selects that PR. The keyboard path is the title,
