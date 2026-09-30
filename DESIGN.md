@@ -2614,8 +2614,8 @@ avatars and filters", QueuesB2).
   click clears. A filter keeps topics with a matching PR (Mine: open PR you
   own; Team: open PR a teammate owns, see "PR ownership"; Reply / Review: that tier) and
   drops sections left empty. It narrows together with the title bar
-  search. In the open topic, matching tiles get the warm strip fill and a
-  honey line, the rest fade to 45% but stay. Plain UI state, not in the
+  search. Queue filters pick topics;
+  tiles inside a topic are never faded by them (owner, 2026-09-30). Plain UI state, not in the
   back / forward history. The avatars come from `GET /api/viewer`. Without
   a home team (`ViewerView.homeTeams` empty) the Team button hides, unless
   it is the active filter (2026-09-30, see "Team roles").

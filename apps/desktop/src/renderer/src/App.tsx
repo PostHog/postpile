@@ -289,7 +289,6 @@ export function App() {
           filter={tileFilter}
           onFilter={changeTileFilter}
           matchingTileIds={withSelectedTile(matchingTileIds, selected.auto ? null : (selected.view?.tile.id ?? null))}
-          queueFilter={queueFilter}
         />
       </MainPane>
     );

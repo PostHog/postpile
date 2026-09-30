@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { TileView, TopicDetail, TopicListItem } from '@postpile/core';
-import { tileMatchesFilter, tilesInTierOrder, type QueueFilter } from '../lib/queues.ts';
+import { tilesInTierOrder } from '../lib/queues.ts';
 import { isUnreadTile, unreadTiles, type TileFilter } from '../lib/selection.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { ChevronIcon } from './icons.tsx';
@@ -19,7 +19,6 @@ interface TileGridProps {
   /** Tiles the search bar lets through; null shows all. */
   matchingTileIds: Set<string> | null;
   /** The sidebar's queue filter: matching tiles stand out, the others fade but stay. */
-  queueFilter: QueueFilter | null;
 }
 
 function FilterButton(props: { label: string; active: boolean; onClick: () => void }) {
@@ -39,14 +38,6 @@ function TileCount(props: { count: number }) {
  * Tiles in one column, never side by side: the selected tile's notch then
  * always points straight at the detail pane.
  */
-/** A tile the Unread filter lists never fades for the queue filter: it is what the user asked to see. */
-function filterMatchFor(view: TileView, props: TileGridProps): boolean | null {
-  if (props.queueFilter === null || (props.filter === 'unread' && isUnreadTile(view))) {
-    return null;
-  }
-  return tileMatchesFilter(view, props.queueFilter);
-}
-
 function Grid(props: TileGridProps & { views: TileView[] }) {
   return (
     <div className="flex flex-col gap-3.5">
@@ -59,7 +50,6 @@ function Grid(props: TileGridProps & { views: TileView[] }) {
           selected={view.tile.id === props.selectedTileId}
           selectedPrKey={props.selectedPrKey}
           onSelect={(prKey) => props.onSelect(view.tile.id, prKey)}
-          filterMatch={filterMatchFor(view, props)}
         />
       ))}
     </div>

@@ -455,8 +455,8 @@ or a queue filter narrows; a finished topic is not in `useTopics`, so
 Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
 not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set
-(`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
-the ones a queue filter does not match and folds snoozed / done ones.
+(`RelationLine`), local only. `TileGrid` shows tiles in tier order, folds
+snoozed / done ones. Queue filters pick topics; tiles inside a topic are never faded by them.
 A click anywhere on a tile selects it (`onTileClick` in `Tile.tsx`), except
 on a control inside it (button, link, menu: `clickedControl`), which keeps
 its own action; a PR row selects that PR. The keyboard path is the title,
