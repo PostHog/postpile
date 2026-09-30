@@ -503,7 +503,8 @@ now".
   "why now" strip with the actor's avatar and an ink event glyph, a segment
   status pill per PR with open threads, a whose-turn footer (you / them /
   none, rules in core `whoseTurn`), people stack in the header. Same
-  badges, pills and glyphs in the detail pane. Primary buttons are ink.
+  badges, pills and glyphs in the detail pane. Primary buttons are ink
+  (Approve green since 2026-09-30, see Decided).
 - Live poll and Mac pings (DESIGN.md "Live poll and Mac pings"): the desktop
   app polls `GET /notifications` every 60s or GitHub's X-Poll-Interval, and
   once when the window gets focus (ETag, 304 = free), backs off on
@@ -1058,6 +1059,16 @@ the app meanwhile.
 
 ## Decided
 
+- **Equal tiles and detail, whole-tile click** (2026-09-30, owner review of
+  the polish pass): the tile column and the detail pane split what the
+  sidebar leaves evenly by default (dragged widths stay); the 720px tile cap
+  is gone. Selecting a tile shifts nothing (every frame is a 1px border), and
+  a click anywhere on a tile selects it; controls inside keep their own action.
+- **Green Approve** (2026-09-30, interface polish pass): Approve, the one
+  irreversible-and-positive action, leads in `--safe` green with
+  `--elev-safe`, the same color as the "Approved" state it produces. Every
+  other lead (Snooze, Mark read, Mark done) stays ink; accent blue stays for
+  selection and focus only. Replaces "Ink primary buttons" for Approve.
 - **Dock badge, cleared pings, bounce** (2026-09-30): the Dock badge is the
   number of tiles that are your move (live, not done, not snoozed), the same
   count the sidebar chips add up to. A ping leaves Notification Center once

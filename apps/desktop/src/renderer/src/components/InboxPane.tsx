@@ -8,7 +8,7 @@ import { Button } from './Button.tsx';
 
 function Card(props: { title: string; meta: string; reason: string; onDecide: (accept: boolean) => void; busy: boolean; children?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 rounded-tile border border-hairline bg-surface p-3.5 shadow-tile">
+    <div className="flex flex-col gap-2 rounded-tile bg-surface p-3.5 shadow-tile">
       <div className="flex items-baseline gap-2">
         <span className="min-w-0 flex-1 text-[13px] font-semibold select-text">{props.title}</span>
         <span className="shrink-0 font-mono text-[10.5px] text-faint">{props.meta}</span>

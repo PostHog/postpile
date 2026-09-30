@@ -23,12 +23,16 @@ interface TileGridProps {
 }
 
 function FilterButton(props: { label: string; active: boolean; onClick: () => void }) {
-  const look = props.active ? 'bg-surface text-ink shadow-segment' : 'text-muted hover:text-ink';
+  const look = props.active ? 'bg-surface font-medium text-ink shadow-segment' : 'text-muted hover:text-ink';
   return (
     <button type="button" onClick={props.onClick} className={`h-[22px] rounded-[5px] px-2.5 text-[11.5px] ${look}`}>
       {props.label}
     </button>
   );
+}
+
+function TileCount(props: { count: number }) {
+  return <span className="font-mono text-[10.5px] font-semibold text-hint tabular-nums">{props.count}</span>;
 }
 
 /**
@@ -119,13 +123,24 @@ export function TileGrid(props: TileGridProps) {
   const shown = filter === 'unread' ? unreadTiles([...live, ...snoozed, ...done], props.selectedIsAuto ? null : props.selectedTileId) : live;
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="flex items-center gap-2.5 border-t border-hairline pt-3">
+      <div className="flex items-center gap-2.5 pt-[13px] shadow-[inset_0_1px_0_var(--hairline)]">
         <span className="text-xs font-semibold text-ink-2">Tiles</span>
-        <span className="font-mono text-[10.5px] text-faint">
-          {tiles.length} · {unread.length} unread
-          {tiles.length < props.detail.tiles.length && ` · ${props.detail.tiles.length - tiles.length} filtered out`}
+        <span className="flex items-baseline gap-[5px] text-[11px] text-faint">
+          <TileCount count={tiles.length} />
+          <span className="text-ghost">·</span>
+          <span>
+            <TileCount count={unread.length} /> unread
+          </span>
+          {tiles.length < props.detail.tiles.length && (
+            <>
+              <span className="text-ghost">·</span>
+              <span>
+                <TileCount count={props.detail.tiles.length - tiles.length} /> filtered out
+              </span>
+            </>
+          )}
         </span>
-        <div className="ml-auto flex rounded-control bg-segment p-0.5">
+        <div className="ml-auto flex gap-px rounded-control bg-segment p-0.5 inset-ring inset-ring-ink/4">
           <FilterButton label="All" active={filter === 'all'} onClick={() => onFilter('all')} />
           <FilterButton label="Unread" active={filter === 'unread'} onClick={() => onFilter('unread')} />
         </div>

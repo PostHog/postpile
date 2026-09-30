@@ -5,6 +5,20 @@
 @import 'tailwindcss';
 
 @theme {
+  /* The root font size is 13px (a desktop app), but Tailwind's scale is in rem,
+     so without this h-7 was 22.75px and text-xs 9.75px. Pinned to px, the
+     classes mean what the mockups say: px-3 is 12px, h-7 is 28px. */
+  --spacing: 4px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --radius: 4px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --container-sm: 384px;
+
   --color-*: initial;
   --color-transparent: transparent;
   --color-current: currentColor;
@@ -19,6 +33,7 @@
   --color-actionbar: var(--bg-actionbar);
   --color-segment: var(--bg-segment);
   --color-chip: var(--bg-chip);
+  --color-pill-quiet: var(--bg-pill-quiet);
 
   /* Text */
   --color-ink: var(--ink);
@@ -27,6 +42,7 @@
   --color-hint: var(--hint);
   --color-faint: var(--faint);
   --color-ghost: var(--ghost);
+  --color-ink-read: var(--ink-read);
 
   /* Lines */
   --color-hairline: var(--hairline);
@@ -37,12 +53,29 @@
   --color-frame: var(--frame);
   --color-dot-quiet: var(--dot-quiet);
 
+  /* Rings as colors: inset-ring-edge-hairline, inset-ring-edge-control, ... */
+  --color-edge-hairline: var(--ring-hairline);
+  --color-edge-control: var(--ring-control);
+  --color-edge-control-soft: var(--ring-control-soft);
+  --color-edge-field: var(--ring-field);
+  --color-edge-honey: var(--ring-honey);
+  --color-edge-honey-box: var(--ring-honey-box);
+  --color-edge-risk-box: var(--ring-risk-box);
+  --color-edge-accent-group: var(--ring-accent-group);
+  --color-edge-accent-picked: var(--ring-accent-picked);
+
   /* Accent */
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-accent-row: var(--accent-row);
   --color-accent-line: var(--accent-line);
   --color-on-accent: var(--on-accent);
+  --color-detail-context: var(--bg-detail-context);
+  --color-detail-context-line: var(--line-detail-context);
+  --color-group-selected: var(--bg-group-selected);
+  --color-set-sep: var(--set-sep);
+  --color-ref: var(--bg-ref);
+  --color-thumb: var(--thumb);
 
   /* Stack mark */
   --color-stack-tag: var(--stack-tag);
@@ -66,13 +99,16 @@
   --color-honey: var(--honey);
   --color-sea: var(--sea);
   --color-sea-pale: var(--sea-pale);
+  --color-sea-ring: var(--sea-ring);
   --color-match-line: var(--match-line);
   --color-quiet-soft: var(--quiet-soft);
   --color-why-done: var(--why-done);
   --color-warm-strip: var(--warm-strip);
   --color-warm-strip-line: var(--warm-strip-line);
+  --color-warm-row: var(--warm-row);
   --color-move: var(--move);
   --color-move-line: var(--move-line);
+  --color-move-hover: var(--move-hover);
   --color-on-ink: var(--on-ink);
 
   /* PR status pill */
@@ -87,6 +123,8 @@
   /* Verdicts */
   --color-safe: var(--safe);
   --color-safe-soft: var(--safe-soft);
+  --color-safe-hover: var(--safe-hover);
+  --color-safe-edge: var(--safe-edge);
   --color-mark-honey: var(--mark-honey);
   --color-safe-line: var(--safe-line);
   --color-mark-safe: var(--mark-safe);
@@ -94,6 +132,7 @@
   --color-mark-risk: var(--mark-risk);
   --color-closer: var(--closer);
   --color-closer-soft: var(--closer-soft);
+  --color-closer-line: var(--closer-line);
 
   /* PR states */
   --color-open: var(--open);
@@ -124,21 +163,29 @@
   --color-avatar-grey: var(--avatar-grey);
   --color-avatar-grey-ink: var(--avatar-grey-ink);
 
-  /* Radii: rounded-tile, rounded-row, rounded-control */
+  /* Radii: rounded-tile, rounded-row, rounded-control, ... */
   --radius-tile: var(--round-tile);
   --radius-row: var(--round-row);
   --radius-control: var(--round-control);
+  --radius-group: var(--round-group);
+  --radius-pr-row: var(--round-pr-row);
+  --radius-box: var(--round-box);
 
   /* Shadows: shadow-tile, shadow-selected, ... */
   --shadow-control: var(--elev-control);
   --shadow-primary: var(--elev-primary);
+  --shadow-safe: var(--elev-safe);
   --shadow-tile: var(--elev-tile);
+  --shadow-tile-lift: var(--elev-tile-lift);
   --shadow-selected: var(--elev-selected);
   --shadow-active-row: var(--elev-active-row);
   --shadow-segment: var(--elev-segment);
+  --shadow-face: var(--elev-face);
+  --shadow-bubble: var(--elev-bubble);
+  --shadow-move-footer: var(--elev-move-footer);
   --shadow-menu: var(--elev-menu);
-  --shadow-accent-top: var(--elev-accent-top);
   --shadow-picked: var(--elev-picked);
+  --shadow-picked-in-tile: var(--elev-picked-in-tile);
 
   /* Fonts: font-sans is the default, font-mono for numbers, ids, ages */
   --font-sans: var(--type-ui);
@@ -190,4 +237,24 @@ body {
 :where(button, a, summary, [role='button'], [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Scrollbars: a thin overlay-style thumb instead of Chromium's chunky pane
+   scrollbars. The 3px transparent border around a content-box background
+   leaves a 4px thumb inside the 10px gutter; the track stays transparent. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--thumb);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 99px;
 }

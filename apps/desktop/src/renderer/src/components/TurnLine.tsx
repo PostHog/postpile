@@ -11,8 +11,11 @@ export function TurnLine(props: { turn: WhoseTurn; greyed?: boolean }) {
   const { turn } = props;
   if (turn.kind === 'you') {
     return (
-      <span title={turnTitle(turn)} className={`flex min-w-0 items-center gap-1.5 text-xs ${props.greyed ? 'text-muted' : 'text-ink-2'}`}>
-        <span className={`shrink-0 font-bold ${props.greyed ? 'text-muted' : 'text-honey-ink'}`}>Your move</span>
+      <span title={turnTitle(turn)} className={`flex min-w-0 items-center gap-[7px] text-xs ${props.greyed ? 'text-muted' : 'text-ink-2'}`}>
+        <span className={`flex shrink-0 items-center gap-1.5 font-[650] ${props.greyed ? 'text-muted' : 'text-honey-ink'}`}>
+          <span aria-hidden="true" className={`size-1.5 rounded-full ${props.greyed ? 'bg-ghost' : 'bg-honey ring-2 ring-honey/22'}`} />
+          Your move
+        </span>
         <span className="truncate">{turn.what}</span>
       </span>
     );

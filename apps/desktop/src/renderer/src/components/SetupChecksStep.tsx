@@ -31,7 +31,7 @@ export function SetupChecksStep(props: { onContinue: () => void; onSkip: () => v
   const checking = checks.isFetching;
   const blocked = !view?.canContinue;
   return (
-    <section className="flex max-w-[760px] flex-col gap-3 rounded-tile border border-hairline bg-surface p-4 shadow-tile">
+    <section className="flex max-w-[760px] flex-col gap-3 rounded-tile bg-surface p-4 shadow-tile">
       <div className="flex flex-col gap-1">
         <h2 className="text-[15px] font-semibold text-ink">Check the basics</h2>
         <p className="text-xs text-ink-2">PostPile reads GitHub through the GitHub CLI and runs its agent through the Claude Code CLI. Nothing is changed here.</p>

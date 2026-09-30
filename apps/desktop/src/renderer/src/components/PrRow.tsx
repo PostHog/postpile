@@ -29,8 +29,9 @@ interface PrRowProps {
 }
 
 function rowBackground(props: PrRowProps, quiet: boolean): string {
+  // The picked row lifts out of the selected tile's blue group: white with an accent ring.
   if (props.selected) {
-    return 'bg-accent-row';
+    return 'bg-surface shadow-picked-in-tile';
   }
   if (props.grouped) {
     return quiet ? 'bg-segment hover:bg-chip' : 'hover:bg-surface';
@@ -54,11 +55,11 @@ export function PrRow(props: PrRowProps) {
   const quiet = lifecycle === 'draft' || lifecycle === 'closed';
   const greyed = props.greyed || quiet;
   // Titles are bold like in the 3a design; greyed rows step down to medium.
-  let titleLook = 'font-semibold text-ink';
+  let titleLook = 'font-semibold tracking-[-0.005em] text-ink';
   if (greyed) {
     titleLook = 'font-medium text-muted';
   } else if (pr.provenance.kind === 'pulled_in' && !props.selected) {
-    titleLook = 'font-semibold text-ink-2';
+    titleLook = 'font-semibold tracking-[-0.005em] text-ink-2';
   }
   const word = rowStateWord(pr.status);
   const viewerLogin = useViewer().data?.login ?? null;
@@ -69,11 +70,11 @@ export function PrRow(props: PrRowProps) {
       aria-pressed={props.selected}
       title={props.showTitle ? undefined : pr.title}
       onClick={props.onClick}
-      className={`flex h-8 min-w-0 items-center gap-2 px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${props.grouped ? 'rounded-[6px]' : ''} ${rowBackground(props, quiet)}`}
+      className={`flex h-8 min-w-0 items-center gap-2 px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${props.grouped ? 'rounded-pr-row' : ''} ${rowBackground(props, quiet)}`}
     >
       <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
       {props.notDone && <NotDoneDot />}
-      <span className={`shrink-0 font-mono text-[11px] ${greyed ? 'text-hint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
+      <span className="shrink-0 font-mono text-[11px] text-hint">#{prNumber(pr.key)}</span>
       {props.stackPlace && <StackMark place={props.stackPlace} greyed={props.greyed} />}
       {props.showTitle && <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>}
       {props.showForWhom && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={greyed} size="row" />}

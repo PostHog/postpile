@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
 import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
-import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
+import { countPrs, isDraftTile, isFyiNews, kindParts, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -100,7 +100,7 @@ describe('tile helpers', () => {
 
   it('labels kinds', () => {
     const view = setView([summary(1), summary(2, { provenance: pulled }), summary(3, { provenance: pulled })]);
-    expect(kindLabel(view)).toBe('Set · 3');
+    expect(kindParts(view)).toEqual({ word: 'Set', count: 3 });
   });
 
   it('uses the set take for set tiles and the lead for_you otherwise', () => {

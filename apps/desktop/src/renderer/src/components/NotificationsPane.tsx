@@ -97,7 +97,7 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
       )}
       {rows.length > 0 && shown.length === 0 && <p className="text-xs text-muted">No thread matches the filters.</p>}
       {shown.length > 0 && (
-        <ul className="flex shrink-0 flex-col overflow-hidden rounded-tile border border-hairline bg-surface shadow-tile">
+        <ul className="flex shrink-0 flex-col overflow-hidden rounded-tile bg-surface shadow-tile">
           <li
             aria-hidden="true"
             className="grid grid-cols-[52px_minmax(0,1fr)_128px_minmax(0,0.8fr)_36px] gap-3 border-b border-hairline bg-subtle py-1.5 pr-[186px] pl-3 text-[10.5px] font-medium text-faint"

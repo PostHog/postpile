@@ -5,6 +5,7 @@ import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Glyph } from './icons.tsx';
+import { SectionLabel } from './SectionLabel.tsx';
 
 // Loud events wear the same ink badge as the tile's unread strip; the rest go quieter.
 const BADGES: Record<EventDisplayState, string> = {
@@ -54,7 +55,7 @@ function ActivityRow(props: RowProps) {
   const actions = useActions();
   const now = useNow();
   return (
-    <div className="grid grid-cols-[16px_minmax(0,1fr)_auto] gap-2.5" title={`${props.display}: ${props.reason}`}>
+    <div className="grid grid-cols-[20px_minmax(0,1fr)_auto] gap-x-2" title={`${props.display}: ${props.reason}`}>
       <span className="flex flex-col items-center">
         <span className={`mt-px flex size-4 items-center justify-center rounded-full ${BADGES[props.display]}`}>
           <Glyph glyph={eventGlyph(props.kind)} />
@@ -117,8 +118,10 @@ export function ActivityTimeline(props: { activity: ActivityList }) {
   const shown = showAll ? earlier : earlier.slice(0, props.activity.cap);
   const empty = earlier.length === 0 && noise.length === 0;
   return (
-    <div className="flex flex-col">
-      <span className="pb-2 text-[11px] font-semibold tracking-[0.04em] text-hint">{fresh.length > 0 ? 'Earlier activity' : 'Activity'}</span>
+    <div className="flex flex-col px-3">
+      <span className="pb-2">
+        <SectionLabel>{fresh.length > 0 ? 'Earlier activity' : 'Activity'}</SectionLabel>
+      </span>
       {empty && <span className="text-xs text-hint">{fresh.length > 0 ? 'Nothing before that.' : 'No activity yet.'}</span>}
       {shown.map((line, index) => lineRow(line, index === shown.length - 1))}
       {earlier.length > props.activity.cap && (

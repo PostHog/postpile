@@ -59,31 +59,40 @@ function UnreadBubble(props: { item: TopicListItem }) {
     <span
       title={label}
       aria-label={label}
-      className={`flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-[5px] font-mono text-[10px] leading-none font-semibold ${tint}`}
+      className={`flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-[5px] font-mono text-[10px] leading-none font-semibold tabular-nums shadow-bubble ${tint}`}
     >
       {count}
     </span>
   );
 }
 
+/** The row's background decides the face rings: they cut the overlaps in the row's own color. */
+type RowTone = 'active' | 'unread' | 'read';
+
+const FACE_RINGS: Record<RowTone, string> = {
+  active: 'ring-surface',
+  unread: 'ring-warm-row',
+  read: 'ring-sidebar',
+};
+
 /**
  * Up to three faces (`TopicListItem.people`, PR authors only). You and your
- * teammates sit together in the team pill (sea tint, thin sea border, the
+ * teammates sit together in the team pill (sea tint, a sea inset ring, the
  * people icon first); the other authors follow outside it as plain avatars,
  * overlapping like the faces inside (the first one onto the pill's edge).
  */
-function FaceStack(props: { people: TopicPerson[]; active: boolean }) {
-  const ring = props.active ? 'ring-surface' : 'ring-sidebar';
+function FaceStack(props: { people: TopicPerson[]; tone: RowTone }) {
+  const ring = FACE_RINGS[props.tone];
   const pill = teamPill(props.people);
   return (
     <span className="flex shrink-0 items-center">
       {pill.ours.length > 0 && (
-        <span title={pill.title} className="flex h-[22px] items-center rounded-full border border-sea-pale bg-sea-soft pr-[2px] pl-1.5 text-sea-ink">
+        <span title={pill.title} className="flex h-[22px] items-center rounded-full bg-sea-soft pr-0.5 pl-1.5 text-sea-ink inset-ring inset-ring-sea-ring">
           <PeopleIcon size={11} />
           <span className="flex pl-[7px]">
             {pill.ours.map((person) => (
               <span key={person.login} className="-ml-[5px] rounded-full">
-                <Avatar login={person.login} className="ring-2 ring-sea-soft" />
+                <Avatar login={person.login} className="ring-[1.5px] ring-sea-soft" />
               </span>
             ))}
           </span>
@@ -94,7 +103,7 @@ function FaceStack(props: { people: TopicPerson[]; active: boolean }) {
         <span className={`flex ${pill.ours.length > 0 ? '' : 'pl-[5px]'}`}>
           {pill.others.map((person) => (
             <span key={person.login} className="-ml-[5px] rounded-full" title={person.login}>
-              <Avatar login={person.login} className={`ring-2 ${ring}`} />
+              <Avatar login={person.login} className={`ring-[1.5px] ${ring}`} />
             </span>
           ))}
         </span>
@@ -114,7 +123,10 @@ function YourMoveChip(props: { moves: TopicMove[] }) {
     return null;
   }
   return (
-    <span title={chip.title} className="flex h-[15px] shrink-0 items-center rounded bg-honey-soft px-1 text-[9.5px] font-semibold whitespace-nowrap text-honey-ink">
+    <span
+      title={chip.title}
+      className="flex h-[15px] shrink-0 items-center rounded bg-honey-soft px-[5px] text-[9.5px] font-semibold whitespace-nowrap text-honey-ink inset-ring inset-ring-honey-ink/10"
+    >
       {chip.label}
     </span>
   );
@@ -127,8 +139,8 @@ function YourMoveChip(props: { moves: TopicMove[] }) {
 function UnseenMergeChip(props: { count: number }) {
   const label = `${props.count} ${props.count === 1 ? 'PR' : 'PRs'} merged without your review, not seen yet`;
   return (
-    <span title={label} className="flex h-[15px] shrink-0 items-center gap-1 rounded bg-chip px-1 text-[9.5px] font-semibold whitespace-nowrap text-ink-2">
-      <span className="font-mono">{props.count}</span> merged without you
+    <span title={label} className="flex h-[15px] shrink-0 items-center gap-[3px] rounded bg-chip px-[5px] text-[9.5px] font-semibold whitespace-nowrap text-ink-2">
+      <span className="font-mono tabular-nums">{props.count}</span> merged without you
     </span>
   );
 }
@@ -136,28 +148,36 @@ function UnseenMergeChip(props: { count: number }) {
 /** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
 function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
   const { item } = props;
-  // Unread rows: bold ink name, the bubble and a light warm row. Read rows: regular, muted, no bubble.
+  // Active: the white lift of the selected PR row. Unread: bold ink name, the bubble and a warm row with a faint honey ring. Read: regular, quieter.
   const unread = unreadLook(item) !== null;
-  const name = unread ? 'font-semibold text-ink' : props.active ? 'font-medium text-ink-2' : 'font-normal text-muted';
-  let row = unread ? 'bg-warm-strip hover:bg-surface/60' : 'hover:bg-surface/60';
+  let tone: RowTone = unread ? 'unread' : 'read';
   if (props.active) {
-    row = 'bg-surface shadow-active-row';
+    tone = 'active';
   }
+  let name = unread ? 'font-semibold text-ink' : 'font-normal text-ink-read';
+  if (props.active && !unread) {
+    name = 'font-[550] text-ink';
+  }
+  const rows: Record<RowTone, string> = {
+    active: 'bg-surface shadow-active-row',
+    unread: 'bg-warm-row inset-ring inset-ring-honey/14 hover:bg-surface/55',
+    read: 'hover:bg-surface/55',
+  };
   return (
     <button
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 py-1.5 text-left ${row}`}
+      className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
     >
       <span className="flex w-full min-w-0 items-center gap-[7px]">
-        <span className={`truncate text-[12.5px] tracking-[-0.005em] ${name}`}>{item.topic.name}</span>
+        <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>
         <span className="ml-auto" />
-        <FaceStack people={item.people} active={props.active} />
+        <FaceStack people={item.people} tone={tone} />
         <UnreadBubble item={item} />
       </span>
       {/* The chip sits under the bubble; at 1100px row one has no room left, so the summary gives way first. */}
-      <span className="flex w-full min-w-0 items-center gap-[7px]">
+      <span className="flex w-full min-w-0 items-center gap-1.5">
         <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
           {topicSnippet(item)}
         </span>
@@ -175,8 +195,9 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
 function SectionHeader(props: { tier: PrTier | 'other' }) {
   const look = SECTION_LOOK[props.tier];
   return (
-    <span className={`flex items-center gap-1.5 px-2 pt-1 pb-[3px] text-[10.5px] font-bold tracking-[0.05em] uppercase ${look.text}`}>
-      <span className={`size-[7px] rounded-[2px] ${look.dot}`} />
+    // The dot hangs in the gutter (no left padding), so the label lands on the 18px line with the topic names.
+    <span className={`flex items-center pt-1.5 pr-2 pb-1 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}>
+      <span className={`mr-[3px] size-[5px] rounded-[1.5px] ${look.dot}`} />
       {look.label}
     </span>
   );
@@ -238,7 +259,7 @@ function InboxItem(props: { count: number; active: boolean; onSelect: () => void
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
       title="Topic changes and standing rules the agent proposes"
-      className={`flex items-center gap-2 rounded-row px-2.5 py-[7px] text-left text-[13px] ${
+      className={`flex items-center gap-2 rounded-row px-2 py-[7px] text-left text-[13px] ${
         props.active ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
       }`}
     >
@@ -332,7 +353,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       </div>
     );
   return (
-    <nav aria-label="Topics" className="@container flex min-h-0 flex-col gap-3.5 overflow-auto border-r border-hairline-strong bg-sidebar px-2.5 pt-3 pb-2.5">
+    <nav aria-label="Topics" className="flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar px-2.5 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
@@ -374,14 +395,20 @@ export function TopicSidebar(props: TopicSidebarProps) {
       {!narrowed && (
         <FinishedDrawer open={isOpen('finished')} onToggle={() => toggle('finished')} activeTopicId={props.activeTopicId} onSelect={props.onSelect} />
       )}
-      <div className="mt-auto flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
+      {/*
+        The list fades out at the bottom instead of stopping at a hard edge. Sticky, so it stays at
+        the bottom while the list scrolls; at the end of the list it slides under the footer, where
+        a sidebar-colored fade on the sidebar color shows nothing.
+      */}
+      <div aria-hidden="true" className="pointer-events-none sticky bottom-0 -mx-2.5 mt-auto -mb-[70px] h-14 shrink-0 bg-linear-to-b from-transparent to-sidebar" />
+      <div className="relative z-[1] flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
         <InboxCleanup place="line" />
         <button
           type="button"
           onClick={props.onOpenInstructions}
           aria-current={props.instructionsOpen ? 'true' : undefined}
           title="What the agent knows about you, in your words, with its version history"
-          className={`flex items-center gap-2 rounded-control px-2.5 py-[7px] text-left text-[12.5px] ${
+          className={`flex items-center gap-2 rounded-control px-2 py-[7px] text-left text-[12.5px] ${
             props.instructionsOpen ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
           }`}
         >
@@ -395,7 +422,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
           onClick={props.onOpenNotifications}
           aria-current={props.notificationsOpen ? 'true' : undefined}
           title="Debug: the raw GitHub notification threads as stored, and where each landed. Read only, nothing is marked read."
-          className={`flex items-center gap-2 rounded-control px-2.5 py-[7px] text-left text-[12.5px] ${
+          className={`flex items-center gap-2 rounded-control px-2 py-[7px] text-left text-[12.5px] ${
             props.notificationsOpen ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
           }`}
         >
@@ -410,7 +437,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
           onClick={props.onOpenQuiet}
           aria-current={props.quietOpen ? 'true' : undefined}
           title="Threads you had read that came back only because of bots, which PostPile marked read on GitHub in the last 7 days"
-          className={`flex items-center gap-2 rounded-control px-2.5 py-[7px] text-left text-[12.5px] ${
+          className={`flex items-center gap-2 rounded-control px-2 py-[7px] text-left text-[12.5px] ${
             props.quietOpen ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
           }`}
         >

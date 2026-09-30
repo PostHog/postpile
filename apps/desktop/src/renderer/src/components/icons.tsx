@@ -69,10 +69,20 @@ export function SyncIcon(props: IconProps) {
   );
 }
 
-export function ExternalIcon() {
+export function ExternalIcon(props: IconProps) {
+  const size = props.size ?? 12;
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={props.className} aria-hidden="true">
       <path d="M9 2.5h4.5V7M13.5 2.5L7 9M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" />
+    </svg>
+  );
+}
+
+/** The "head → base" arrow in the detail pane's branch line, 12×8. */
+export function BranchArrowIcon(props: { className?: string }) {
+  return (
+    <svg width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className={props.className} aria-hidden="true">
+      <path d="M1 4h9M7.5 1.5L10 4 7.5 6.5" />
     </svg>
   );
 }
@@ -110,9 +120,10 @@ export function QuoteIcon() {
   );
 }
 
-export function LockIcon() {
+export function LockIcon(props: IconProps) {
+  const size = props.size ?? 12;
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <rect x="3" y="7" width="10" height="7" rx="1.5" />
       <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
     </svg>
@@ -120,9 +131,10 @@ export function LockIcon() {
 }
 
 /** LockIcon with the shackle swung open: GitHub writes on. */
-export function UnlockIcon() {
+export function UnlockIcon(props: IconProps) {
+  const size = props.size ?? 12;
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <rect x="3" y="7" width="10" height="7" rx="1.5" />
       <path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7" />
     </svg>
@@ -139,26 +151,29 @@ export function ClockIcon() {
   );
 }
 
-export function ChevronIcon() {
+export function ChevronIcon(props: IconProps) {
+  const size = props.size ?? 10;
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <path d="M2.5 4l2.5 2.5L7.5 4" />
     </svg>
   );
 }
 
 /** Left-pointing chevron for "Back"; ForwardIcon mirrors it. */
-export function BackIcon() {
+export function BackIcon(props: IconProps) {
+  const size = props.size ?? 14;
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
       <path d="M10 3.5L5.5 8l4.5 4.5" />
     </svg>
   );
 }
 
-export function ForwardIcon() {
+export function ForwardIcon(props: IconProps) {
+  const size = props.size ?? 14;
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
       <path d="M6 3.5L10.5 8 6 12.5" />
     </svg>
   );

@@ -33,7 +33,7 @@ export function SetupSweepStep(props: {
   const finished = view !== null && view !== undefined && !view.running;
   const blank = finished && view.draft !== null && view.draft.model === null;
   return (
-    <section className="flex max-w-[760px] flex-col gap-3 rounded-tile border border-hairline bg-surface p-4 shadow-tile">
+    <section className="flex max-w-[760px] flex-col gap-3 rounded-tile bg-surface p-4 shadow-tile">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[15px] font-semibold text-ink">Sweep</h2>
         {view && <span className="font-mono text-[10.5px] text-faint">{elapsedLabel(view.startedAt, view.finishedAt ? new Date(view.finishedAt) : now)}</span>}

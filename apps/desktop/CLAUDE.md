@@ -253,7 +253,21 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - Hover, focus and selected states are utilities or props-driven class
   strings, never `onMouseEnter` handlers.
 - Type sizes follow the mockup with arbitrary values (`text-[11.5px]`);
-  spacing uses the scale where it is close enough.
+  spacing uses the scale where it is close enough. The root font size is
+  13px, so `app.css` pins `--spacing`, `text-xs`, `text-lg` and the radius
+  steps to px: `px-3` is 12px, `h-7` 28px, as the mockups read them.
+- Edges on white chips, secondary buttons, rows and boxes are inset rings
+  (`inset-ring inset-ring-edge-*`, tokens `--ring-*`), not borders: no layout
+  shift, crisp on tints. `shadow-tile` carries a card's hairline ring. The
+  tile is the exception: every tile frame is a 1px border (resting:
+  `border-edge-hairline bg-clip-padding shadow-tile-lift`, the ring's look),
+  so selection only changes colors and moves nothing.
+- One-line labels that the mockups size by their text get
+  `leading-[normal]`; the inherited 1.5 from preflight makes them taller.
+- The detail pane keeps three keylines from its edge: boxes and rows at
+  22px (pane padding), line starts at 34 (`px-3`), text after an icon at 62
+  (icon centered in a 20px slot, 8px gap). Section labels use
+  `SectionLabel`.
 - Numbers, PR numbers, ids and ages use `font-mono` (JetBrains Mono, bundled
   in `styles/fonts/`, no network). UI text uses the system font.
 - Plain CSS in `app.css` only for things Tailwind can't say well: the
@@ -296,7 +310,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
   optional box; secondary button there so Accept stays the one primary).
-- Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `NotDoneDot`
+- Shared kit: `Button` (variants primary, safe, secondary, move for the
+  "Your move" footer; sizes sm, md, icon, icon-md), `Menu`, `Avatar`, `SectionLabel`, `pills.tsx` (verdict, `NotDoneDot`
   (the coral dot before a PR number, core `TileView.notDonePrKeys`), `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
@@ -346,7 +361,7 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
 
 - For whom: `ForWhomChip` ("For you" honey, "For team-devex" sea, "For
   approvers" neutral for a routing team, "Your PR" neutral, nothing else)
-  from `TileView.forWhom` / `PrSummary.forWhom`, plus a 4px left band on
+  from `TileView.forWhom` / `PrSummary.forWhom`, plus a 3px left band on
   the tile in the same color (`BANDS` in `Tile.tsx`; a routing team gets
   no band, sea means your team); PR rows get the small chip, no band. The tooltip keeps the
   long why-here reason (`whyTitle`). Grey on done tiles.
@@ -389,7 +404,9 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
 - Coral (`unread`) means "new since you looked" and nothing else on a tile,
   with one exception: the not-done dot on PR rows (DESIGN.md "Actions act
   on what you look at": one dot, no second read-only one).
-  Primary buttons are ink; accent blue is for selection and focus only.
+  Primary buttons are ink, except Approve: `Button` variant `safe` (`--safe`
+  green, `--elev-safe`), the color of the "Approved" state it produces
+  (2026-09-30). Accent blue is for selection and focus only.
 
 ## Setup flow
 
@@ -415,7 +432,7 @@ keeps them and the main repo on a refine).
 
 Sidebar faces (`FaceStack` in `TopicSidebar`): `TopicListItem.people` is
 PR authors only (core `topicFaces`); `teamPill` (`lib/faces.ts`) splits
-them into the team pill (you and teammates: sea tint, `border-sea-pale`,
+them into the team pill (you and teammates: sea tint, `inset-ring-sea-ring`,
 `PeopleIcon` first, avatars overlapping, tooltip "You and your team: …")
 and the other authors after it, overlapping the same way.
 
@@ -434,6 +451,10 @@ not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set
 (`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
 the ones a queue filter does not match and folds snoozed / done ones.
+A click anywhere on a tile selects it (`onTileClick` in `Tile.tsx`), except
+on a control inside it (button, link, menu: `clickedControl`), which keeps
+its own action; a PR row selects that PR. The keyboard path is the title,
+a `<button>`. A click on the already selected tile keeps the open PR.
 Tiles stay in one column (DESIGN.md "Three-pane balance"). The selected
 tile keeps the place it had when it was selected (`useHeldPlace` over
 `holdPlace`, `lib/hold-place.ts`), and the open topic's sidebar row too,

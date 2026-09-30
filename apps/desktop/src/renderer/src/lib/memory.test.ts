@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DossierView } from '@postpile/core';
 import { at, makeDossierVersion, makeFact, makeFactRef } from '@postpile/core/fixtures';
-import { blockRefs, claimStaleReason, fixedText, refLabel, sinceLastLooked } from './memory.ts';
+import { blockRefs, claimStaleReason, fixedText, leadingPerson, refLabel, sinceLastLooked } from './memory.ts';
 
 function view(overrides: Partial<DossierView> = {}): DossierView {
   return {
@@ -59,7 +59,22 @@ describe('sinceLastLooked', () => {
     );
     expect(block.heading).toBe('Since you last looked');
     expect(block.changes.map((change) => change.text)).toEqual(['change 4']);
-    expect(block.counts).toBe('1 new event · 2 facts learned');
+    expect(block.counts).toEqual([
+      { count: 1, words: 'new event' },
+      { count: 2, words: 'facts learned' },
+    ]);
+  });
+});
+
+describe('leadingPerson', () => {
+  it('splits off a leading login of the topic', () => {
+    expect(leadingPerson('lyra asked on #1902', ['rowan', 'lyra'])).toEqual({ login: 'lyra', rest: ' asked on #1902' });
+  });
+
+  it('needs the whole word and a known login', () => {
+    expect(leadingPerson('lyrae asked', ['lyra'])).toBeNull();
+    expect(leadingPerson('#1911 opened', ['lyra'])).toBeNull();
+    expect(leadingPerson('lyra', ['lyra'])).toBeNull();
   });
 });
 

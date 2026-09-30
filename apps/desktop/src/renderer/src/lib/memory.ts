@@ -67,15 +67,21 @@ export function claimStaleReason(path: string, issues: DossierIssue[]): StaleRea
   return issues.find((issue) => issue.path === path)?.reason ?? null;
 }
 
+/** One count on the heading row: the number is drawn in mono, the words after it plain. */
+export interface SinceCount {
+  count: number;
+  words: string;
+}
+
 export interface SinceLastLooked {
   heading: string;
   changes: DossierChange[];
-  /** Extra counts under the list, e.g. "3 new events · 2 facts learned". Empty when nothing to add. */
-  counts: string;
+  /** Counts on the heading row, e.g. 3 "new events", 2 "facts learned". Empty when nothing to add. */
+  counts: SinceCount[];
 }
 
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
+function countOf(count: number, one: string, many: string): SinceCount {
+  return { count, words: count === 1 ? one : many };
 }
 
 /**
@@ -85,19 +91,29 @@ function plural(count: number, one: string, many: string): string {
 export function sinceLastLooked(view: DossierView): SinceLastLooked {
   const seen = view.changesSinceSeen;
   if (!seen) {
-    return { heading: 'Recent changes', changes: view.dossier.recentChanges.slice(0, RECENT_WHEN_NEVER_SEEN), counts: '' };
+    return { heading: 'Recent changes', changes: view.dossier.recentChanges.slice(0, RECENT_WHEN_NEVER_SEEN), counts: [] };
   }
-  const counts: string[] = [];
+  const counts: SinceCount[] = [];
   if (seen.newEvents > 0) {
-    counts.push(plural(seen.newEvents, 'new event', 'new events'));
+    counts.push(countOf(seen.newEvents, 'new event', 'new events'));
   }
   if (seen.factsAdded.length > 0) {
-    counts.push(plural(seen.factsAdded.length, 'fact learned', 'facts learned'));
+    counts.push(countOf(seen.factsAdded.length, 'fact learned', 'facts learned'));
   }
   if (seen.factsClosed.length > 0) {
-    counts.push(plural(seen.factsClosed.length, 'fact closed', 'facts closed'));
+    counts.push(countOf(seen.factsClosed.length, 'fact closed', 'facts closed'));
   }
-  return { heading: 'Since you last looked', changes: seen.changes, counts: counts.join(' · ') };
+  return { heading: 'Since you last looked', changes: seen.changes, counts };
+}
+
+/**
+ * A change line that starts with one of the topic's people ("lyra asked
+ * ...") split into that login and the rest, so the name can be set in
+ * ink; null when it starts with anything else.
+ */
+export function leadingPerson(text: string, logins: string[]): { login: string; rest: string } | null {
+  const login = logins.find((candidate) => candidate !== '' && text.startsWith(`${candidate} `));
+  return login ? { login, rest: text.slice(login.length) } : null;
 }
 
 /** The corrected text of a line the user fixed through Recheck, newest fix first; null when not fixed. */

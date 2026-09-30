@@ -120,9 +120,9 @@ export function WritesLock() {
         aria-label={writes.enabled ? 'GitHub writes on, click to lock' : 'GitHub writes off (read-only)'}
         aria-pressed={writes.enabled}
         aria-expanded={open}
-        className={`flex items-center gap-1 rounded px-1 hover:bg-subtle disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent ${writes.enabled ? 'text-ink-2' : 'text-closer'}`}
+        className={`flex items-center gap-[5px] rounded px-1 hover:bg-subtle disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent ${writes.enabled ? 'text-ink-2' : 'text-closer'}`}
       >
-        {writes.enabled ? <UnlockIcon /> : <LockIcon />}
+        {writes.enabled ? <UnlockIcon size={11} /> : <LockIcon size={11} />}
         {writes.enabled ? 'GitHub writes on' : 'read-only'}
         {count > 0 && (
           <span title={pendingBadgeTitle(pending)} className="ml-0.5 rounded-full bg-segment px-1.5 text-[10px] leading-[15px] font-semibold text-ink-2">

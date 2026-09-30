@@ -18,7 +18,8 @@ interface DetailPaneProps {
   noSelectionText: string;
 }
 
-const paneFrame = 'flex min-h-0 flex-col border-l border-hairline-strong bg-surface';
+// The left edge is an inset shadow, not a border, so the 22 / 34 / 62 keylines count from the pane's own edge.
+const paneFrame = 'flex min-h-0 flex-col bg-surface shadow-[inset_1px_0_0_var(--hairline-strong)]';
 
 /** Right pane: the selected tile's context header, then one of its PRs in full. */
 export function DetailPane(props: DetailPaneProps) {
@@ -68,7 +69,7 @@ export function DetailPane(props: DetailPaneProps) {
   }
 
   return (
-    <aside aria-label="Details" className={`${paneFrame} shadow-accent-top`}>
+    <aside aria-label="Details" className={paneFrame}>
       <DetailContext view={view} prKey={prKey} onSelectPr={props.onSelectPr} />
       {body}
     </aside>
