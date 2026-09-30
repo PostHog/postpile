@@ -59,7 +59,7 @@ describe('glance catch-up after a poll', () => {
     await vi.waitFor(() => expect(h.telemetry.events.map((e) => e.event)).toContain('catch_up_ran'));
     const ran = h.telemetry.events.find((e) => e.event === 'catch_up_ran');
     expect(ran?.props).toMatchObject({ topics: 1, ok: true, agent_calls: expect.any(Number) });
-    expect((ran?.props as { agent_calls: number }).agent_calls).toBeGreaterThan(0);
+    expect((ran?.props as { agent_calls: number } | undefined)?.agent_calls).toBeGreaterThan(0);
   });
 
   it('writes the first glance of a PR new to the app in its new topic', async () => {

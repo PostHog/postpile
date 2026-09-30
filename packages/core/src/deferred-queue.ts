@@ -118,6 +118,6 @@ export class DeferredQueue<T> {
     for (const token of tokens) {
       await this.sendNow(token);
     }
-    await Promise.all([...this.inFlight]);
+    await Promise.all(this.inFlight);
   }
 }

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { RepoEntry, RepoOverview } from '@postpile/core';
+import type { RepoEntry } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useRepos } from '../api/repos.ts';
 import { countTitle, scopeLabel, shortRepo, topicCount } from '../lib/repos.ts';

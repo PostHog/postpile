@@ -18,6 +18,7 @@ export function newFenceId(): string {
 // joiner characters, bidi marks, embeddings, overrides and isolates, word
 // joiner and invisible operators, the BOM, and Unicode tag characters (which
 // can spell out hidden ASCII).
+// oxlint-disable-next-line no-control-regex -- stripping control characters is the point
 const INVISIBLE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f­؜᠎​-‏‪-‮⁠-⁤⁦-⁯﻿\u{e0000}-\u{e007f}]/gu;
 
 /** Drops control characters and invisible Unicode that could hide text from a reader. */

@@ -201,7 +201,7 @@ describe('viewer', () => {
     const viewer = await new GitHubClient(fakeTokens, fake.fn).viewer();
 
     expect(viewer).toEqual({ login: 'viewer', teams: ['acme/infra', 'acme/devex'] });
-    expect((fake.requests[1]?.body as { variables: unknown }).variables).toEqual({ login: 'viewer' });
+    expect((fake.requests[1]?.body as { variables: unknown } | undefined)?.variables).toEqual({ login: 'viewer' });
   });
 
   it('returns no teams when the teams query fails outright', async () => {

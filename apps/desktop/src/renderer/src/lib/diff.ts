@@ -23,7 +23,7 @@ export function lineDiff(before: string, after: string): DiffLine[] {
   const a = linesOf(before);
   const b = linesOf(after);
   // common[i][j]: length of the LCS of a[i..] and b[j..].
-  const common = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  const common = Array.from({ length: a.length + 1 }, () => Array.from({ length: b.length + 1 }, () => 0));
   for (let i = a.length - 1; i >= 0; i -= 1) {
     for (let j = b.length - 1; j >= 0; j -= 1) {
       common[i]![j] = a[i] === b[j] ? common[i + 1]![j + 1]! + 1 : Math.max(common[i + 1]![j]!, common[i]![j + 1]!);
