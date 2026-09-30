@@ -6,6 +6,7 @@ import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Glyph } from './icons.tsx';
 import { SectionLabel } from './SectionLabel.tsx';
+import { MarkdownText } from './MarkdownText.tsx';
 
 // Loud events wear the same ink badge as the tile's unread strip; the rest go quieter.
 const BADGES: Record<EventDisplayState, string> = {
@@ -64,7 +65,9 @@ function ActivityRow(props: RowProps) {
       </span>
       <span className={`pb-2.5 text-[12.5px] leading-[1.45] select-text ${TEXT[props.display]}`}>
         <LineText summary={props.body ? summaryLead(props.summary) : props.summary} actor={props.actor} />
-        {props.body && <span className="mt-0.5 block font-normal break-words whitespace-pre-wrap [overflow-wrap:anywhere]">{props.body}</span>}
+        {props.body && <div className="mt-0.5 font-normal break-words [overflow-wrap:anywhere]">
+            <MarkdownText text={props.body} compact />
+          </div>}
         {props.unmuteId && (
           <button type="button" onClick={() => void actions.unmute(props.unmuteId!)} className="ml-2 text-[11.5px] text-muted underline hover:text-ink">
             Unmute

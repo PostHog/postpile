@@ -14,9 +14,10 @@ describe('cleanPrBody', () => {
 });
 
 describe('safeLinkUrl', () => {
-  it('keeps absolute web and mail links', () => {
+  it('keeps absolute https links only', () => {
     expect(safeLinkUrl('https://example.com/a?b=1')).toBe('https://example.com/a?b=1');
-    expect(safeLinkUrl('mailto:a@example.com')).toBe('mailto:a@example.com');
+    expect(safeLinkUrl('http://example.com')).toBeNull();
+    expect(safeLinkUrl('mailto:a@example.com')).toBeNull();
   });
 
   it('drops scripts, data and relative links', () => {
