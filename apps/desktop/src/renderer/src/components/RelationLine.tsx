@@ -34,12 +34,28 @@ export function RelationLine(props: { placement: TopicPlacement; topicId: string
   }
 
   return (
-    <div className="max-w-[680px]">
-      <div className="group flex items-center gap-2 text-xs text-hint">
-        <RelationBadge relation={placement.relation} />
-        <span className="min-w-0 truncate select-text">{text}</span>
-        {placement.corrected && <span className="text-[10.5px] whitespace-nowrap text-hint">set by you</span>}
-        <span className={`ml-auto flex shrink-0 gap-2 group-hover:opacity-100 ${whyOpen || choosing ? 'opacity-100' : 'opacity-0'}`}>
+    <div>
+      <div className="group flex items-start gap-2 text-[11.5px] leading-normal text-hint">
+        <p className="min-w-0 flex-1 select-text">
+          <RelationBadge relation={placement.relation} />
+          <span className="pl-[7px]">
+            {placement.ownerTeam ? (
+              <>
+                Owned by <span className="text-ink-2">{placement.ownerTeam}</span>
+              </>
+            ) : (
+              'Owner not known'
+            )}
+          </span>
+          {placement.whyYou && (
+            <>
+              <span className="px-[5px] text-ghost">·</span>
+              you're here because {placement.whyYou}
+            </>
+          )}
+          {placement.corrected && <span className="pl-2 text-[10.5px] whitespace-nowrap">set by you</span>}
+        </p>
+        <span className={`flex shrink-0 gap-2 group-hover:opacity-100 ${whyOpen || choosing ? 'opacity-100' : 'opacity-0'}`}>
           {props.dossierVersion !== null && (
             <button type="button" aria-expanded={whyOpen} onClick={() => setWhyOpen(!whyOpen)} className="text-[11px] text-hint hover:text-accent hover:underline">
               Why?

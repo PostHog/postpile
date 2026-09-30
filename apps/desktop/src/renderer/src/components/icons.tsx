@@ -140,9 +140,10 @@ export function ClockIcon() {
   );
 }
 
-export function ChevronIcon() {
+export function ChevronIcon(props: IconProps) {
+  const size = props.size ?? 10;
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <path d="M2.5 4l2.5 2.5L7.5 4" />
     </svg>
   );

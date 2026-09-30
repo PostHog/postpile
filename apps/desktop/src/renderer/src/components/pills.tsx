@@ -159,7 +159,7 @@ const RELATION_TONES: Record<TopicRelation, string> = {
 /** Small "team" / "routed" / "FYI" tag next to a topic name. */
 export function RelationBadge(props: { relation: TopicRelation }) {
   return (
-    <span className={`flex h-[15px] shrink-0 items-center rounded px-1 text-[9.5px] font-semibold tracking-[0.02em] ${RELATION_TONES[props.relation]}`}>
+    <span className={`inline-flex h-[15px] shrink-0 items-center rounded px-[5px] align-[1px] text-[9.5px] font-[650] tracking-[0.03em] ${RELATION_TONES[props.relation]}`}>
       {relationLabel(props.relation)}
     </span>
   );

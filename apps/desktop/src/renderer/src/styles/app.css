@@ -33,6 +33,7 @@
   --color-actionbar: var(--bg-actionbar);
   --color-segment: var(--bg-segment);
   --color-chip: var(--bg-chip);
+  --color-pill-quiet: var(--bg-pill-quiet);
 
   /* Text */
   --color-ink: var(--ink);
