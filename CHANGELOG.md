@@ -2,7 +2,7 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## Unreleased
+## 0.12.2 (2026-09-30)
 
 ### Changed
 
