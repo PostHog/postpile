@@ -140,6 +140,8 @@ export class GitHubSync {
     private readonly pendingWrites: PendingWrites,
     quota: GitHubQuota,
     private readonly textLog: (line: string) => void = () => {},
+    /** Threads a clicked mark-read is deciding again (ClickedReadRetry): the inbox leaves their rows alone meanwhile. */
+    private readonly heldThreads: ReadonlySet<string> = new Set(),
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.teamMembers = new TeamMembers(store, reader, now);
@@ -286,10 +288,12 @@ export class GitHubSync {
       .filter((stored) => stored.unread && !inboxIds.has(stored.id))
       .filter((stored) => inbox !== null || readById.get(stored.id)?.unread === false);
     const readAt = await this.readTimes(readElsewhere, readById);
+    // A held thread keeps its row until the clicked mark-read's retry writes what GitHub says.
+    const notHeld = (threads: NotificationThread[]) => threads.filter((thread) => !this.heldThreads.has(thread.id));
     this.store.transaction(() => {
-      this.store.notifications.upsertMany([...readById.values()]);
+      this.store.notifications.upsertMany(notHeld([...readById.values()]));
       if (!result.notModified) {
-        this.store.notifications.upsertMany(result.threads);
+        this.store.notifications.upsertMany(notHeld(result.threads));
       }
       const hadPending = this.pendingWrites.observeRead(new Set(readElsewhere.map((thread) => thread.id)), origin);
       const noticed = inbox !== null ? 'it left the unread list (unread list 200)' : 'the read list says read (unread list 304)';

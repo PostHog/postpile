@@ -1957,8 +1957,9 @@ unseen loud news, or an unseen Look closer event. Single-PR tiles get it
 too (the multi-PR-only rule is gone), a snoozed tile keeps the dots of its
 unread threads, open and done tiles have none. Seen but still owed is not a
 dot: the honey "Your move" (tile footer, sidebar chip) says it. A topic with
-unread PRs shows the dot, and its bubble counts unread PRs instead of tiles
-(`TopicListItem.unreadPrs`, also the footer's unread number). The passages
+unread PRs shows the dot. Counts are tiles, dots are per PR (owner,
+2026-09-30): the sidebar bubble and the footer's unread number count unread
+tiles (`TopicListItem.unreadTiles`), not PRs. The passages
 above describe the "Not done yet" rule this replaced.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
@@ -2625,8 +2626,8 @@ avatars and filters", QueuesB2).
   click clears. A filter keeps topics with a matching PR (Mine: open PR you
   own; Team: open PR a teammate owns, see "PR ownership"; Reply / Review: that tier) and
   drops sections left empty. It narrows together with the title bar
-  search. In the open topic, matching tiles get the warm strip fill and a
-  honey line, the rest fade to 45% but stay. Plain UI state, not in the
+  search. Queue filters pick topics;
+  tiles inside a topic are never faded by them (owner, 2026-09-30). Plain UI state, not in the
   back / forward history. The avatars come from `GET /api/viewer`. Without
   a home team (`ViewerView.homeTeams` empty) the Team button hides, unless
   it is the active filter (2026-09-30, see "Team roles").
@@ -2815,6 +2816,26 @@ cleared), so the tile is unread again. Log detail, sync report note and the
 pending-send result all say "GitHub didn't take it: <reason>; still unread"
 (a failed pending send says "still pending"). A mark-read with writes off
 at send time is now logged `skipped` instead of `local`.
+
+**Newer activity after a click** (2026-09-30). A user's mark-read (tile,
+PR, detail, debug view, a pending send) that the guard skips for activity
+after the last sync used to pop the tile back unread about 6s after the
+click, even when the new activity was the user's own pushes and a review
+bot's comments. Now the queue decides it again before putting anything back
+(`ClickedReadRetry`, core `clickedReadCheck`): the PR is fetched with the
+same refresh as after a write (or the running full sync; nothing while the
+quota is critical), then the bot-only rule runs from the click's cutoff (the
+thread's `updated_at` the click saw). Only the viewer's own activity and
+automation since, bot reviews on the viewer's own open PR included (the
+click means "I saw what PostPile showed me"), and the thread is marked read
+on GitHub now, guarded again against the fresh `updated_at`, logged
+"marked after refresh: only your own activity". A person's activity since,
+or a snapshot that still does not cover the thread, and it stays unread:
+the click is put back, logged "kept unread: new review from alice", and the
+live status carries `keptUnread` for the toast ("New since you looked: a
+review from alice"). While it decides the thread is held: the inbox leaves
+its row alone, so the tile never turns unread in between. Not on quit. The
+quiet reads keep their own rules.
 
 **One door.** `GitHubWrites` is the only thing in the engine that calls the
 writer: approve, comment and the mark-read queue go through it. Every call

@@ -4,7 +4,7 @@ import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import type { NavEntry } from './history.ts';
 import { applyQueueFilter } from './queues.ts';
 import { visibleTopic } from './search.ts';
-import { autoTile, filterKey, noSelectionText, keptFor, listedTopics, nextKept, resolveSelection, unreadTiles, withSelectedTile, type KeptView } from './selection.ts';
+import { autoTile, filterKey, noSelectionText, keptFor, isUnreadTile, listedTopics, nextKept, resolveSelection, unreadTiles, withSelectedTile, type KeptView } from './selection.ts';
 
 function item(id: string, toReview: number): TopicListItem {
   const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
@@ -146,6 +146,12 @@ describe('resolveSelection', () => {
     expect([selected.view?.tile.id, selected.prKey]).toEqual(['t2', 'o/r#3']);
   });
 
+  it('shows no tile right after switching to Unread, even with a pick', () => {
+    const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2'])];
+    const selected = resolveSelection(entry('t', 't2', 'o/r#2'), tiles, tiles, null, null, 'unread', true);
+    expect(selected).toEqual({ view: null, prKey: null, auto: false });
+  });
+
   it('follows the picked PR to the tile that holds it now', () => {
     // #3 left set t2 and is a single tile now; the first tile would be t1.
     const tiles = [tile('t1', ['o/r#1']), tile('t2', ['o/r#2']), tile('t3', ['o/r#3'])];
@@ -182,6 +188,11 @@ describe('grid helpers', () => {
     const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2']), tile('t3', ['o/r#3'])];
     expect(unreadTiles(tiles, 't2').map((view) => view.tile.id)).toEqual(['t1', 't2']);
     expect(unreadTiles(tiles, null).map((view) => view.tile.id)).toEqual(['t1']);
+  });
+
+  it('matches Unread for unread tiles and snoozed ones with an unread thread only', () => {
+    const snoozedUnread: TileState = { kind: 'snoozed', unreadBecause: [], unreadOnGitHub: true, loud: false };
+    expect([UNREAD, snoozedUnread, DONE].map((state) => isUnreadTile(tile('x', ['o/r#1'], state)))).toEqual([true, true, false]);
   });
 
   it('keeps a snoozed tile whose thread is unread on GitHub in the Unread list', () => {

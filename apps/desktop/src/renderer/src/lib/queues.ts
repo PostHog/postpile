@@ -48,10 +48,6 @@ export function prMatchesFilter(pr: PrSummary, filter: QueueFilter): boolean {
   return filter === 'reply' ? pr.tier === 'needs_reply' : REVIEW_TIERS.includes(pr.tier);
 }
 
-export function tileMatchesFilter(view: TileView, filter: QueueFilter): boolean {
-  return view.prs.some((pr) => prMatchesFilter(pr, filter));
-}
-
 /** How many of the topic's PRs the filter matches. */
 function topicFilterCount(item: TopicListItem, filter: QueueFilter): number {
   const { queues } = item;
