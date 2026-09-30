@@ -108,6 +108,8 @@ export interface RawPullRequest {
   state: string;
   isDraft: boolean;
   author: RawActor | null;
+  /** Assigned users. Missing in fixtures written before it was asked for. */
+  assignees?: { nodes: ({ login: string } | null)[] };
   baseRefName: string;
   headRefName: string;
   headRefOid: string;

@@ -153,7 +153,7 @@ describe('detail pane', () => {
   });
 
   it('asks no automation account and never the viewer', () => {
-    const bot = row(1, { facts: { ...NO_PR_FACTS, authorIsAutomation: true } });
+    const bot = row(1, { facts: { ...NO_PR_FACTS, owners: ['renovate[bot]'], ownerIsAutomation: true } });
     expect(paneOffers(view('unread', NONE, doneAfter, [bot]), bot).ask).toBe(false);
     const own = row(1, { authorRelation: 'you', primaryAction: 'mark_read' });
     expect(paneOffers(view('unread', NONE, doneAfter, [own]), own)).toMatchObject({ ask: false, approve: false, open: false, lead: 'mark_read' });

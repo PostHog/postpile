@@ -6,7 +6,8 @@ import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
 import { judgedReadCheck, quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
-import { reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
+import { ownedByTeammate, requestedTeam, reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
+import { isRoutingTeam } from '../team-roles.ts';
 import { snoozePhase } from '../snooze.ts';
 import { sameLogin } from '../mentions.ts';
 import { isUnseenLoud } from '../loudness.ts';
@@ -15,6 +16,7 @@ import type { Pr, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import type { Person } from './board-spec.ts';
+import { isAutomationLogin, specOwners } from './spec-facts.ts';
 
 function prStateLabel(pr: Pr): string {
   if (pr.state !== 'OPEN') {
@@ -37,13 +39,47 @@ function snoozeLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   return [`snooze:${snooze.condition.kind}`, `snooze-phase:${phase}`];
 }
 
+/** A bot opened the PR and assigned people, who own it (DESIGN "PR ownership"); a deleted author with assignees stays the owner. */
+function ownerLabels(pr: Pr): string[] {
+  const assignees = pr.assignees ?? [];
+  if (pr.author === '') {
+    return assignees.length > 0 ? ['shape:deleted author with assignees'] : [];
+  }
+  if (!isAutomationLogin(pr.author) || assignees.length === 0) {
+    return [];
+  }
+  const owners = specOwners(pr);
+  const labels = ['shape:bot PR with assignees'];
+  if (owners.some((owner) => sameLogin(owner, LOGINS.viewer))) {
+    labels.push('shape:bot PR owned by viewer');
+  }
+  if (owners.some((owner) => sameLogin(owner, LOGINS.teammate))) {
+    labels.push('shape:bot PR owned by teammate');
+  }
+  return labels;
+}
+
+/** A routing team's request decides the PR's review request (DESIGN "Team roles"): open or taken, and on a teammate's PR. */
+function routingLabels(board: PropertyBoard, pr: Pr): string[] {
+  const team = requestedTeam(pr, board.viewer);
+  const request = reviewRequest(pr, board.viewer);
+  if (team === null || !isRoutingTeam(team, board.viewer) || request === 'you') {
+    return [];
+  }
+  const labels = [`routing-request:${request}`];
+  if (request === 'team' && ownedByTeammate(pr, board.viewer)) {
+    labels.push('shape:routing request on a teammate PR');
+  }
+  return labels;
+}
+
 /** The PR-level labels: one per value of every dimension the rules branch on. */
 function prLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   const labels: string[] = [];
   const state = prStateLabel(pr);
   const author = authorLabel(pr);
-  labels.push(`pr:${state}`, `author:${author}`, `pr-author:${state}/${author}`);
-  labels.push(`request:${reviewRequest(pr, board.viewer) ?? 'none'}`);
+  labels.push(`pr:${state}`, `author:${author}`, `pr-author:${state}/${author}`, ...ownerLabels(pr));
+  labels.push(`request:${reviewRequest(pr, board.viewer) ?? 'none'}`, ...routingLabels(board, pr));
   for (const item of pr.timeline) {
     if (item.kind === 'review_requested') {
       labels.push(`request-to:${item.subject}`);
@@ -130,6 +166,12 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   if (events.some((event) => event.ruleLoudness === 'muted')) {
     labels.push('events:muted');
   }
+  if (events.some((event) => event.kind === 'team_mention' && event.ruleLoudness === 'loud')) {
+    labels.push('events:loud team mention');
+  }
+  if (events.some((event) => event.kind === 'team_mention' && event.ruleReason === 'mentions a team that only routes reviews to you')) {
+    labels.push('events:routing team mention');
+  }
   if (pr.reviewerUsers.some((login) => reReviewAsked(pr, login))) {
     labels.push('shape:re-review asked');
   }
@@ -212,6 +254,7 @@ export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsO
   if (board.spec.groups.some((group) => group.kind === 'dissolved_set')) {
     labels.add('shape:dissolved set');
   }
+  labels.add(`team-setup:${board.spec.teams}`);
   return labels;
 }
 
@@ -236,6 +279,19 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:second outsider',
   'shape:re-review asked',
   'shape:routed request held by changes',
+  'shape:bot PR owned by viewer',
+  'shape:bot PR owned by teammate',
+  'shape:deleted author with assignees',
+  'shape:routing request on a teammate PR',
+  'routing-request:team',
+  'routing-request:team_taken',
+  'team-setup:one_home',
+  'team-setup:home_and_routing',
+  'team-setup:no_home',
+  'team-setup:undecided',
+  'events:loud team mention',
+  'events:routing team mention',
+  'request-to:acme/approvers',
   'timeline:added_to_merge_queue',
   'timeline:deployed',
   'events:deploy',

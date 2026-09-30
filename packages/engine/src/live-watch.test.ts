@@ -194,6 +194,22 @@ describe('freshness check', () => {
     expect(lines).toContain(`sync: freshness check, 1 PRs checked, 1 moved: ${pr.key}`);
   });
 
+  it('refetches once a snapshot stored before assignees were read', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1, { author: 'acme-agent[bot]', assignees: ['viewer'] });
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const { assignees: _dropped, ...old } = pr;
+    h.store.prs.upsert(old, NOW.toISOString());
+
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(report.prsFetched).toBe(1);
+    expect(h.store.prs.get(pr.key)?.assignees).toEqual(['viewer']);
+
+    const again = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(again.prsFetched).toBe(0);
+  });
+
   it('runs from the poll at most once a minute', async () => {
     let clock = NOW;
     const h = makeHarness({ now: () => clock });

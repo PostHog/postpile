@@ -74,6 +74,8 @@ import type {
   TopicDetail,
   TopicListItem,
   UserPrState,
+  TeamRole,
+  TeamRolesView,
   ViewerView,
 } from '@postpile/core';
 import {
@@ -119,7 +121,7 @@ import {
   topicMove,
   OFF_POLL_STATUS,
   systemTimers,
-  personRelation,
+  ownerRelation,
   pingedPrKeys,
   prTier,
   prWhoseTurn,
@@ -155,6 +157,7 @@ import { AgentRefresher, AutoSyncSchedule, LivePoller, NEW_COMMITS_SINCE_LOOKED,
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeSetup } from './fake-setup.ts';
+import { FakeTeamRoles } from './fake-team-roles.ts';
 import { FakeMcp } from './fake-mcp.ts';
 import { FakeTopicChanges } from './fake-topic-changes.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
@@ -274,6 +277,7 @@ export class FakeEngine implements EngineService {
   private readonly live: FakeLivePoll;
   private readonly workContext: FakeWorkContext;
   private readonly setup: FakeSetup;
+  private readonly teamRoles: FakeTeamRoles;
   private readonly toolStatus: FakeTools;
   private readonly mcp: FakeMcp;
   private readonly topicChanges: FakeTopicChanges;
@@ -363,9 +367,11 @@ export class FakeEngine implements EngineService {
     findTileMessage: (id) => [...this.chats.values()].flat().find((message) => message.id === id),
     empty: options.forceSetup ?? false,
   });
+    this.teamRoles = new FakeTeamRoles(this.data, this.now);
     this.setup = new FakeSetup({
       instructions: this.instructions,
       viewer: () => this.viewer(),
+      teamRoles: () => this.teamRoles.view(),
       setQuiet: (repo) => {
         this.repoSettings = withQuietRepo(this.repoSettings, repo, true);
       },
@@ -439,7 +445,7 @@ export class FakeEngine implements EngineService {
   }
 
   private viewer(): Viewer {
-    return { login: this.data.viewer, teams: this.data.viewerTeams, teamMembers: this.data.viewerTeamMembers };
+    return { login: this.data.viewer, teams: this.data.viewerTeams, homeTeams: this.data.viewerHomeTeams, teamMembers: this.data.viewerTeamMembers };
   }
 
   private prsByKey(): Map<PrKey, Pr> {
@@ -765,7 +771,7 @@ export class FakeEngine implements EngineService {
         queues: topicQueues(
           prs.map(({ pr, member }) => ({
             tier: this.tierOf(pr, member),
-            author: personRelation(pr.author, viewer),
+            author: ownerRelation(pr, viewer),
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
             quiet: isPrInQuietRepo(pr.key, this.repoSettings),
@@ -841,7 +847,15 @@ export class FakeEngine implements EngineService {
   }
 
   async getViewer(): Promise<ViewerView> {
-    return { login: this.data.viewer, teamMembers: this.data.viewerTeamMembers };
+    return { login: this.data.viewer, teamMembers: this.data.viewerTeamMembers, homeTeams: this.data.viewerHomeTeams };
+  }
+
+  async getTeamRoles(): Promise<TeamRolesView> {
+    return this.teamRoles.view();
+  }
+
+  async setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {
+    return this.teamRoles.setRole(team, role);
   }
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {

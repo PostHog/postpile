@@ -1,8 +1,9 @@
 /**
  * Widths of the two resizable panes (sidebar and tile column). The detail
  * pane always takes the rest. Null means "not dragged": the pane uses its
- * default clamp from DESIGN.md "Three-pane balance", which is also what a
- * double-click on a divider resets to.
+ * default size from DESIGN.md "Three-pane balance", which is also what a
+ * double-click on a divider resets to. Only drags are stored, so a new
+ * default reaches everyone who never dragged that edge.
  */
 export type ResizablePane = 'sidebar' | 'tiles';
 
@@ -13,15 +14,23 @@ export interface PaneWidths {
 
 export const DEFAULT_PANE_WIDTHS: PaneWidths = { sidebar: null, tiles: null };
 
-/** The default column sizes, used while a pane has no dragged width. */
-const DEFAULT_COLUMNS: Record<ResizablePane, string> = {
-  sidebar: 'clamp(248px,22vw,330px)',
-  tiles: 'clamp(420px,33vw,480px)',
-};
+/** The sidebar's size while it has no dragged width. */
+const DEFAULT_SIDEBAR = 'clamp(248px,22vw,330px)';
 
+/**
+ * The tile column's size while it has no dragged width: half of what the
+ * sidebar leaves, so tiles and detail start equally wide. A calc, not `1fr`,
+ * because the divider's `left` adds it to the sidebar (100% is the grid width
+ * in both places).
+ */
+function defaultTiles(sidebar: string): string {
+  return `calc((100% - ${sidebar}) / 2)`;
+}
+
+/** The tile column's max is only a sanity cap; the room left for the detail pane is the real bound. */
 const PANE_LIMITS: Record<ResizablePane, { min: number; max: number }> = {
   sidebar: { min: 200, max: 440 },
-  tiles: { min: 340, max: 720 },
+  tiles: { min: 340, max: 1400 },
 };
 
 /** The detail pane never gets squeezed below this by a drag. */
@@ -37,15 +46,10 @@ export function clampPaneWidth(pane: ResizablePane, width: number, room: number)
   return Math.round(Math.min(max, Math.max(limits.min, width)));
 }
 
-function columnSize(pane: ResizablePane, widths: PaneWidths): string {
-  const width = widths[pane];
-  return width === null ? DEFAULT_COLUMNS[pane] : `${width}px`;
-}
-
 /** The CSS size of each column, for the grid and the divider positions. */
 export function paneColumns(widths: PaneWidths): { sidebar: string; tiles: string; template: string } {
-  const sidebar = columnSize('sidebar', widths);
-  const tiles = columnSize('tiles', widths);
+  const sidebar = widths.sidebar === null ? DEFAULT_SIDEBAR : `${widths.sidebar}px`;
+  const tiles = widths.tiles === null ? defaultTiles(sidebar) : `${widths.tiles}px`;
   return { sidebar, tiles, template: `${sidebar} ${tiles} minmax(0,1fr)` };
 }
 

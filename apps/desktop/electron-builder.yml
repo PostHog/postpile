@@ -26,6 +26,9 @@ files:
   # The bundle in out/ already holds everything. With pnpm electron-builder
   # finds no production deps today; this keeps it that way if one is added.
   - "!**/node_modules/**"
+  # Hidden source maps from electron-vite: uploaded to PostHog by the release
+  # workflow, never shipped inside the app.
+  - "!**/*.map"
 asar: true
 # The MCP launcher (see the file). Lands in Contents/Resources, executable,
 # and is signed and notarized with the rest of the bundle.

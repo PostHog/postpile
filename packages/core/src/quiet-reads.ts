@@ -17,10 +17,12 @@
 
 import { isAutomation } from './bots.ts';
 import type { NotificationLanding } from './debug-views.ts';
+import { isRoutingTeamMention } from './events.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
 import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
-import { isViewerSubject, sameLogin } from './mentions.ts';
+import { isViewerSubject } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import { reviewRequestTarget } from './review-request.ts';
 import type { IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
@@ -132,7 +134,7 @@ function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetched
  * after the last comment (2026-09-29).
  */
 function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
-  return pr.state === 'OPEN' && sameLogin(pr.author, viewer.login);
+  return pr.state === 'OPEN' && isPrOwner(pr, viewer.login);
 }
 
 /** Whether PostPile may mark this PR thread read on GitHub by itself, and if not, the first reason why not. */
@@ -267,11 +269,12 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
  * mention, question or reply to them, a review request of them or their
  * team (whoever clicked it), a merge without their review they have not
  * seen. The agent lowering it does not change that: only the viewer deals
- * with an ask.
+ * with an ask. A mention of only routing teams is FYI (DESIGN.md "Team
+ * roles"), so it is not one: the agent judges it like other quiet news.
  */
 export function isAskOfViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
   if (ADDRESSED_KINDS.includes(event.kind)) {
-    return true;
+    return !isRoutingTeamMention(event, pr, viewer);
   }
   if (event.kind === 'review_requested') {
     return isViewerSubject(reviewRequestTarget(event, pr), viewer);

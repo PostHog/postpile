@@ -2,7 +2,9 @@ import { isBot, isMachineComment } from './bots.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { ruleLoudness } from './loudness.ts';
-import { mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
+import { mentionsAnyTeam, mentionsTeam, mentionsUser, sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
+import { isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
@@ -79,6 +81,27 @@ function addressedKind(comment: Comment, pr: Pr, viewer: Viewer): EventKind | nu
   return null;
 }
 
+/**
+ * The team a team mention names, home teams first: its loudness depends on
+ * the team's role (a routing team's mention is FYI, 2026-09-30).
+ */
+function mentionedTeam(comment: Comment, viewer: Viewer): string | null {
+  return teamsHomeFirst(viewer).find((team) => mentionsTeam(comment.body, team)) ?? null;
+}
+
+/**
+ * A team mention that names only teams routing reviews to the viewer, none
+ * of their home teams: FYI, never an ask (DESIGN.md "Team roles").
+ */
+export function isRoutingTeamMention(event: Pick<PrEvent, 'kind' | 'sourceId'>, pr: Pr, viewer: Viewer): boolean {
+  if (event.kind !== 'team_mention') {
+    return false;
+  }
+  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+  const team = comment ? mentionedTeam(comment, viewer) : null;
+  return team !== null && isRoutingTeam(team, viewer);
+}
+
 function commentSummary(kind: EventKind, comment: Comment): string {
   switch (kind) {
     case 'mention':
@@ -120,7 +143,7 @@ function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null
     summary: commentSummary(finalKind, comment),
     url: comment.url,
     sourceId: comment.id,
-    subject: null,
+    subject: finalKind === 'team_mention' ? mentionedTeam(comment, viewer) : null,
   };
 }
 
@@ -199,7 +222,7 @@ function commitEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): Ra
 }
 
 function mergedWithoutViewerReview(pr: Pr, viewer: Viewer): boolean {
-  if (sameLogin(pr.author, viewer.login) || !viewerAskedToReview(pr, viewer)) {
+  if (isPrOwner(pr, viewer.login) || !viewerAskedToReview(pr, viewer)) {
     return false;
   }
   return lastSpokeAt(pr, viewer.login, { reviewsOnly: true }) === null;

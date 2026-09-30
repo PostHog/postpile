@@ -174,7 +174,17 @@ export class DossierUpdater {
     // No stored hash yet (a database from before it existed) counts as unchanged, so an upgrade costs nothing.
     const storedContextHash = store.meta.get(contextHashKey(topic.id));
     const contextChanged = storedContextHash !== null && storedContextHash !== dossierContextHash(context);
-    if (isEmptyDelta(delta) && !contextChanged) {
+    const signals = relationSignals({
+      viewer: this.deps.viewer,
+      prs: [...prs.values()],
+      threads: [...store.notifications.getByPrKeys(memberKeys).values()],
+      driver: topic.driver,
+    });
+    // The rules now decide a relation the dossier does not hold, with no new event to trigger an update: an
+    // agent PR that became the viewer's through its assignee (2026-09-30). Versions without a relation stay as they are.
+    const storedRelation = previous?.dossier.relation?.kind;
+    const relationOutdated = signals.relation !== null && storedRelation !== undefined && storedRelation !== signals.relation;
+    if (isEmptyDelta(delta) && !contextChanged && !relationOutdated) {
       this.skipPast(topic.id, cursorSeq, delta.toSeq, previous);
       return null;
     }
@@ -186,12 +196,7 @@ export class DossierUpdater {
       knownFacts: this.knownFacts(topic, memberKeys),
       staleFacts,
       chatTurns: store.chat.listUserForTopicSince(topic.id, previous?.createdAt ?? '', CHAT_TURNS_IN_DOSSIER_PROMPT),
-      relationSignals: relationSignals({
-        viewer: this.deps.viewer,
-        prs: [...prs.values()],
-        threads: [...store.notifications.getByPrKeys(memberKeys).values()],
-        driver: topic.driver,
-      }),
+      relationSignals: signals,
       areas: this.areasInUse(topic.id),
       currentArea: topic.area,
       viewer: this.deps.viewer,

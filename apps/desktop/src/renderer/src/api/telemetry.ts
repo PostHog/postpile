@@ -1,4 +1,5 @@
-import type { RendererTelemetryEvent, TelemetryEventProps } from '@postpile/core';
+import type { RENDERER_EXCEPTION_EVENT, RendererExceptionProps, RendererTelemetryEvent, TelemetryEventProps } from '@postpile/core';
+import { ErrorReporter } from '../lib/error-report.ts';
 import { request } from './client.ts';
 
 /**
@@ -10,3 +11,13 @@ import { request } from './client.ts';
 export function sendTelemetry<K extends RendererTelemetryEvent>(event: K, props: TelemetryEventProps<K>): void {
   request('POST', '/api/telemetry', { event, props }).catch(() => {});
 }
+
+const rendererExceptionEvent: typeof RENDERER_EXCEPTION_EVENT = 'renderer_exception';
+
+/** Same route, same fire-and-forget; the engine scrubs the error before it leaves, or drops it when telemetry is off. */
+function sendRendererException(report: RendererExceptionProps): void {
+  request('POST', '/api/telemetry', { event: rendererExceptionEvent, props: report }).catch(() => {});
+}
+
+/** One per window: main.tsx hooks it to the window's error events, ErrorBoundary to render errors. */
+export const errorReporter = new ErrorReporter(sendRendererException, () => (globalThis as { _posthogChunkIds?: unknown })._posthogChunkIds);

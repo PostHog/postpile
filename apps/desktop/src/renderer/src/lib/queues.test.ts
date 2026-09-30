@@ -14,6 +14,7 @@ import {
   firstGridTile,
   tilesInTierOrder,
   unreadLook,
+  visibleQueueFilters,
 } from './queues.ts';
 
 type Tiers = Partial<Record<PrTier, number>>;
@@ -42,6 +43,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     title: 'PR',
     url: '',
     author: 'rowan',
+    assignees: [],
     state: 'OPEN',
     primaryAction: 'approve',
     isDraft: false,
@@ -231,5 +233,14 @@ describe('unreadLook', () => {
     expect(unreadLook(item('a', {}, { unreadTiles: 2, urgentUnreadTiles: 1 }))).toBe('urgent');
     expect(unreadLook(item('b', {}, { unreadTiles: 2, urgentUnreadTiles: 0 }))).toBe('calm');
     expect(unreadLook(item('c', {}))).toBeNull();
+  });
+});
+
+describe('visibleQueueFilters', () => {
+  it('hides Team without a home team, unless it is the active filter', () => {
+    expect(visibleQueueFilters(['acme/team-devex'], null)).toEqual(['mine', 'team', 'reply', 'review']);
+    expect(visibleQueueFilters(null, null)).toEqual(['mine', 'team', 'reply', 'review']);
+    expect(visibleQueueFilters([], null)).toEqual(['mine', 'reply', 'review']);
+    expect(visibleQueueFilters([], 'team')).toEqual(['mine', 'team', 'reply', 'review']);
   });
 });

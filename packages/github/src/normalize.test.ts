@@ -188,3 +188,20 @@ describe('toPr: truncation', () => {
     expect(toPr(ref, raw).truncated).toBe(true);
   });
 });
+
+describe('toPr: assignees', () => {
+  it('reads the assigned logins, skipping deleted users', () => {
+    const raw = rawPr();
+    raw.author = { __typename: 'Bot', login: 'lyra-agent' };
+    raw.assignees = { nodes: [{ login: 'alice' }, null, { login: 'bob' }] };
+    const pr = toPr(ref, raw);
+    expect(pr.author).toBe('lyra-agent[bot]');
+    expect(pr.assignees).toEqual(['alice', 'bob']);
+  });
+
+  it('reads no assignees from a fixture written before they were asked for', () => {
+    const raw = rawPr();
+    delete raw.assignees;
+    expect(toPr(ref, raw).assignees).toEqual([]);
+  });
+});

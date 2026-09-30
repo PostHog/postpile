@@ -12,10 +12,13 @@ import {
   changesAnswer,
   isAutomationLogin,
   isMachineComment,
+  isOwner,
   lastSpoke,
+  mentionsOnlyRoutingTeams,
   mentionsViewer,
   mentionsViewerTeam,
   saysDeploy,
+  viewerOwns,
   viewerWasAsked,
 } from './spec-facts.ts';
 
@@ -32,8 +35,8 @@ export interface ExpectedEvent {
   reason: string;
 }
 
-/** An event before its loudness: what happened, by whom, when. */
-type RawExpected = Omit<ExpectedEvent, 'loudness' | 'reason'>;
+/** An event before its loudness: what happened, by whom, when; `body` for a comment's event. */
+type RawExpected = Omit<ExpectedEvent, 'loudness' | 'reason'> & { body?: string };
 
 /** A human speaking to the viewer directly. */
 export const SPEC_ADDRESSED_KINDS: readonly EventKind[] = ['mention', 'team_mention', 'reply_to_user', 'question_to_user'];
@@ -45,7 +48,7 @@ export const SPEC_PUSH_KINDS: readonly EventKind[] = ['commits_pushed', 'commits
 
 export const SPEC_REVIEW_KINDS: readonly EventKind[] = ['review_approved', 'review_changes_requested', 'review_commented'];
 
-/** Author events that can answer a changes request (pushes by any human but the reviewer). */
+/** Owner events that can answer a changes request (pushes by any human but the reviewer). */
 const ANSWER_KINDS: readonly EventKind[] = [...SPEC_PUSH_KINDS, 'comment', 'review_commented', 'reply_to_user', 'question_to_user', 'mention'];
 
 /** Machine kinds: quiet whoever made them. */
@@ -71,7 +74,7 @@ function commentKind(pr: Pr, comment: Comment, viewer: Viewer): EventKind | null
   if (comment.threadId !== null && viewerSpokeEarlierInThread(pr, comment, viewer)) {
     return asksQuestion(comment.body) ? 'question_to_user' : 'reply_to_user';
   }
-  if (mentionsViewerTeam(comment.body)) {
+  if (mentionsViewerTeam(comment.body, viewer)) {
     return 'team_mention';
   }
   return comment.kind === 'review' ? null : 'comment';
@@ -105,9 +108,9 @@ function commitsAfterApproval(pr: Pr, viewer: Viewer, userState: UserPrState | n
   return new Set(after.map((commit) => commit.oid));
 }
 
-/** Merged while the viewer was asked and never sent a review, on someone else's PR. */
+/** Merged while the viewer was asked and never sent a review, on a PR someone else owns. */
 function mergedWithoutViewer(pr: Pr, viewer: Viewer): boolean {
-  return !sameLogin(pr.author, viewer.login) && viewerWasAsked(pr, viewer) && lastSpoke(pr, viewer.login, true) === null;
+  return !viewerOwns(pr, viewer) && viewerWasAsked(pr, viewer) && lastSpoke(pr, viewer.login, true) === null;
 }
 
 const TIMELINE_KINDS: Record<string, EventKind> = {
@@ -124,7 +127,7 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
   for (const comment of pr.comments) {
     const kind = commentKind(pr, comment, viewer);
     if (kind !== null) {
-      add(kind, comment.id, comment.author, comment.createdAt, isMachineComment(comment));
+      events.push({ id: `${pr.key}:${kind}:${comment.id}`, kind, actor: comment.author, at: comment.createdAt, isBot: isMachineComment(comment), subject: null, body: comment.body });
     }
   }
   for (const review of pr.reviews) {
@@ -151,7 +154,7 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
   return events;
 }
 
-/** Part of the author's answer to the viewer's changes request (`changesAnswer`), by kind, actor and time. */
+/** Part of the owner's answer to the viewer's changes request (`changesAnswer`), by kind, actor and time. */
 export function answersChanges(pr: Pr, viewer: Viewer, event: { kind: EventKind; actor: string; at: IsoTime }): boolean {
   const answer = changesAnswer(pr, viewer);
   if (answer === null || !ANSWER_KINDS.includes(event.kind) || event.at <= answer.since) {
@@ -160,7 +163,7 @@ export function answersChanges(pr: Pr, viewer: Viewer, event: { kind: EventKind;
   if (SPEC_PUSH_KINDS.includes(event.kind)) {
     return !isAutomationLogin(event.actor) && !sameLogin(event.actor, viewer.login);
   }
-  return sameLogin(event.actor, pr.author);
+  return isOwner(pr, event.actor);
 }
 
 const LOUD_ADDRESSED: Record<string, string> = {
@@ -177,8 +180,8 @@ function spokeAfter(pr: Pr, login: string, at: IsoTime, reviewsOnly = false): bo
 
 /**
  * Loudness by rule, with the reason the event's line gives. Loud: an
- * addressed kind the viewer has not spoken after, the author's answer to
- * the viewer's changes request, a review on the viewer's PR, a review
+ * addressed kind the viewer has not spoken after, the owner's answer to
+ * the viewer's changes request, a review on the viewer's PR (one they own), a review
  * request for the viewer or their team that is still open on a non-draft
  * PR, ready for review when the viewer was asked, a comment on the
  * viewer's PR. Never loud: the viewer's own activity and automation (a bot
@@ -196,9 +199,16 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
   if (automation || MACHINE_KINDS.includes(event.kind)) {
     return event.isBot && SPEC_PUSH_KINDS.includes(event.kind) && pr.isDraft ? { loudness: 'muted', reason: 'bot pushed to a draft' } : quiet('bot activity');
   }
-  const own = sameLogin(pr.author, viewer.login);
+  const own = viewerOwns(pr, viewer);
   if (SPEC_ADDRESSED_KINDS.includes(event.kind)) {
-    return spokeAfter(pr, viewer.login, event.at) ? quiet('you already replied') : loud(LOUD_ADDRESSED[event.kind]!);
+    if (spokeAfter(pr, viewer.login, event.at)) {
+      return quiet('you already replied');
+    }
+    // A mention of teams that only route reviews to the viewer keeps them posted (DESIGN "Team roles"); a home team named too makes it loud.
+    if (event.kind === 'team_mention' && mentionsOnlyRoutingTeams(event.body ?? '', viewer)) {
+      return quiet('mentions a team that only routes reviews to you');
+    }
+    return loud(LOUD_ADDRESSED[event.kind]!);
   }
   if (answersChanges(pr, viewer, event)) {
     return loud('addressed your changes');
@@ -231,5 +241,13 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
 
 /** Every event the snapshot should give, with its loudness by rule. The app's Look closer event is not derived and not listed. */
 export function expectedEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): ExpectedEvent[] {
-  return rawEvents(pr, viewer, userState).map((event) => ({ ...event, ...loudnessOf(pr, viewer, event) }));
+  return rawEvents(pr, viewer, userState).map((raw) => ({
+    id: raw.id,
+    kind: raw.kind,
+    actor: raw.actor,
+    at: raw.at,
+    isBot: raw.isBot,
+    subject: raw.subject,
+    ...loudnessOf(pr, viewer, raw),
+  }));
 }

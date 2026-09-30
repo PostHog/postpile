@@ -7,7 +7,7 @@ import { judgedReadCheck, quietReadCheck, touchedReadCheck } from '../quiet-read
 import { snoozePhase } from '../snooze.ts';
 import type { NotificationThread, Pr, PrEvent, PrKey } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
-import type { BoardSpec } from './board-spec.ts';
+import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
 import { isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits } from './spec-facts.ts';
@@ -210,8 +210,14 @@ export const pingsOnlyForLiveNews: Invariant = {
   },
 };
 
-/** The same board with every review request aimed at the viewer or their team made by a person instead of a bot (PRs by the viewer left alone: their own request is their own activity). */
+/**
+ * The same board with every review request aimed at the viewer or their
+ * teams (approvers too when it is one of theirs) made by a person instead
+ * of a bot (PRs by the viewer left alone: their own request is their own
+ * activity).
+ */
 export function withHumanRequests(spec: BoardSpec): BoardSpec {
+  const targets: RequestTarget[] = spec.teams === 'one_home' ? ['viewer', 'team'] : ['viewer', 'team', 'routing_team'];
   return {
     ...spec,
     groups: spec.groups.map((group) => ({
@@ -219,7 +225,7 @@ export function withHumanRequests(spec: BoardSpec): BoardSpec {
       prs: group.prs.map((pr) =>
         pr.author === 'viewer'
           ? pr
-          : { ...pr, steps: pr.steps.map((step) => (step.kind === 'request' && (step.target === 'viewer' || step.target === 'team') ? { ...step, byBot: false } : step)) },
+          : { ...pr, steps: pr.steps.map((step) => (step.kind === 'request' && targets.includes(step.target) ? { ...step, byBot: false } : step)) },
       ),
     })),
   };

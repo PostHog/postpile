@@ -1,8 +1,13 @@
 import type { AgentCallKind, AgentCallStats } from '@postpile/core';
 
 /** Footer text like "4 agent calls". No cost: the user is on a subscription, and a dollar figure read like a bill (2026-09-29). */
+/** "agent call" or "agent calls", for a count drawn on its own. */
+export function callStatsWords(stats: AgentCallStats): string {
+  return stats.total === 1 ? 'agent call' : 'agent calls';
+}
+
 export function callStatsLabel(stats: AgentCallStats): string {
-  return `${stats.total} agent ${stats.total === 1 ? 'call' : 'calls'}`;
+  return `${stats.total} ${callStatsWords(stats)}`;
 }
 
 /** One line per kind for the hover title, e.g. "dossier_update: 2 calls, 1 failed". */

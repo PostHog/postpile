@@ -1,7 +1,10 @@
 import type { PrSummary } from '@postpile/core';
+import { useViewer } from '../api/viewer.ts';
+import { assigneeLine } from '../lib/assignees.ts';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import type { StackPlace } from '../lib/stacks.ts';
 import { prNumber } from '../lib/tiles.ts';
+import { AssignedTo } from './AssignedTo.tsx';
 import { Avatar } from './Avatar.tsx';
 import { Glyph, PrStateIcon } from './icons.tsx';
 import { ForWhomChip, NotDoneDot, RepoLabel, StackMark, StateWordLabel } from './pills.tsx';
@@ -26,8 +29,9 @@ interface PrRowProps {
 }
 
 function rowBackground(props: PrRowProps, quiet: boolean): string {
+  // The picked row lifts out of the selected tile's blue group: white with an accent ring.
   if (props.selected) {
-    return 'bg-accent-row';
+    return 'bg-surface shadow-picked-in-tile';
   }
   if (props.grouped) {
     return quiet ? 'bg-segment hover:bg-chip' : 'hover:bg-surface';
@@ -40,7 +44,8 @@ function rowBackground(props: PrRowProps, quiet: boolean): string {
  * PR keeps the tile unread, number, the stack mark for a stack layer
  * ("1/3"), title (not on a single-PR tile, whose heading is the title), then
  * the state word (review state, or the DRAFT chip, Merged, Closed), open
- * threads and the author. No CI here: checks only show in the detail
+ * threads and the author, then "assigned to" when someone else is assigned
+ * (an agent PR a bot opened for a person names that person). No CI here: checks only show in the detail
  * pane's facts. Drafts and closed layers sit on a grey row so they stay in
  * their stack without drawing the eye.
  */
@@ -50,24 +55,26 @@ export function PrRow(props: PrRowProps) {
   const quiet = lifecycle === 'draft' || lifecycle === 'closed';
   const greyed = props.greyed || quiet;
   // Titles are bold like in the 3a design; greyed rows step down to medium.
-  let titleLook = 'font-semibold text-ink';
+  let titleLook = 'font-semibold tracking-[-0.005em] text-ink';
   if (greyed) {
     titleLook = 'font-medium text-muted';
   } else if (pr.provenance.kind === 'pulled_in' && !props.selected) {
-    titleLook = 'font-semibold text-ink-2';
+    titleLook = 'font-semibold tracking-[-0.005em] text-ink-2';
   }
   const word = rowStateWord(pr.status);
+  const viewerLogin = useViewer().data?.login ?? null;
+  const assigned = assigneeLine(pr.author, pr.assignees, viewerLogin);
   return (
     <button
       type="button"
       aria-pressed={props.selected}
       title={props.showTitle ? undefined : pr.title}
       onClick={props.onClick}
-      className={`flex h-8 min-w-0 items-center gap-2 px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${props.grouped ? 'rounded-[6px]' : ''} ${rowBackground(props, quiet)}`}
+      className={`flex h-8 min-w-0 items-center gap-2 px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${props.grouped ? 'rounded-pr-row' : ''} ${rowBackground(props, quiet)}`}
     >
       <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
       {props.notDone && <NotDoneDot />}
-      <span className={`shrink-0 font-mono text-[11px] ${greyed ? 'text-hint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
+      <span className="shrink-0 font-mono text-[11px] text-hint">#{prNumber(pr.key)}</span>
       {props.stackPlace && <StackMark place={props.stackPlace} greyed={props.greyed} />}
       {props.showTitle && <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>}
       {props.showForWhom && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={greyed} size="row" />}
@@ -84,6 +91,7 @@ export function PrRow(props: PrRowProps) {
           </span>
         )}
         <Avatar login={pr.author} />
+        {assigned && <AssignedTo line={assigned} />}
       </span>
     </button>
   );

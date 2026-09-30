@@ -31,8 +31,8 @@ Read this file first. Details live elsewhere:
 - **Look:** "Crisp native" three-pane layout (topics | one-column tiles | detail), system font plus JetBrains Mono, and the "Warm reach" palette:
   - Honey means aimed at you, sea means your team.
   - Coral is **only** "new since you looked", plus the "not done yet" dot on PR rows (2026-09-29).
-  - Ink primary buttons; accent blue only for selection and focus.
-- **Tile spots:** a "for whom" word chip plus a 4px left band ("For you" honey, "For team-devex" sea, "Your PR" neutral, else nothing; replaced the RV/RT/@/... code badges 2026-09-28), actor avatar with event badge, worded segment pill, and a footer line saying whose move and what. The user prefers words and codes over pictograms, with people (GitHub avatars) first.
+  - Ink primary buttons, except Approve: it uses `--safe`, the same green as the "Approved" state it produces (2026-09-30). Accent blue only for selection and focus.
+- **Tile spots:** a "for whom" word chip plus a 3px left band ("For you" honey, "For team-devex" sea, "Your PR" neutral, else nothing; replaced the RV/RT/@/... code badges 2026-09-28), actor avatar with event badge, worded segment pill, and a footer line saying whose move and what. The user prefers words and codes over pictograms, with people (GitHub avatars) first.
 - **Rejected:**
   - Layouts: maps, timelines/lanes, kanban feel, one-card-per-view decks, agent-sized tiles.
   - Chat or stream as the main way content arrives.

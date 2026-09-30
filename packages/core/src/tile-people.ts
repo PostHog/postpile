@@ -1,9 +1,11 @@
 // The people a tile is about, for the small avatar stack in its header.
 import { isBot } from './bots.ts';
 import { sameLogin } from './mentions.ts';
+import { prOwners } from './pr-owners.ts';
 import type { Pr } from './types.ts';
 
-export type TilePersonRole = 'author' | 'you' | 'reviewer';
+/** assignee: owns a bot's PR through its assignment (`prOwners`). */
+export type TilePersonRole = 'author' | 'assignee' | 'you' | 'reviewer';
 
 export interface TilePerson {
   login: string;
@@ -14,9 +16,10 @@ export interface TilePerson {
 export const TILE_PEOPLE_MAX = 4;
 
 /**
- * Authors first (in member order), then the viewer when they reviewed any
- * of the PRs, then other people who reviewed or are asked to. Each login
- * once; bots only count as authors, the viewer only as author or reviewer.
+ * Owners first (in member order: the author, or the assignees of a bot's
+ * PR, `prOwners`), then the viewer when they reviewed any of the PRs, then
+ * other people who reviewed or are asked to. Each login once; bots only
+ * count as authors, the viewer only as owner or reviewer.
  */
 export function tilePeople(prs: Pr[], viewerLogin: string | null, max = TILE_PEOPLE_MAX): TilePerson[] {
   const people: TilePerson[] = [];
@@ -25,11 +28,17 @@ export function tilePeople(prs: Pr[], viewerLogin: string | null, max = TILE_PEO
       people.push({ login, role });
     }
   };
+  const isViewer = (login: string) => viewerLogin !== null && sameLogin(login, viewerLogin);
   for (const pr of prs) {
-    add(pr.author, viewerLogin !== null && sameLogin(pr.author, viewerLogin) ? 'you' : 'author');
+    for (const owner of prOwners(pr)) {
+      if (isViewer(owner)) {
+        add(owner, 'you');
+      } else {
+        add(owner, sameLogin(owner, pr.author) ? 'author' : 'assignee');
+      }
+    }
   }
   const reviewed = prs.flatMap((pr) => pr.reviews.filter((review) => review.state !== 'PENDING').map((review) => review.author));
-  const isViewer = (login: string) => viewerLogin !== null && sameLogin(login, viewerLogin);
   if (viewerLogin !== null && reviewed.some(isViewer)) {
     add(viewerLogin, 'you');
   }

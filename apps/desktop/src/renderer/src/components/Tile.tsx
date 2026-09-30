@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
@@ -5,12 +6,12 @@ import { glanceStateText } from '../lib/glance.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { isDraftTile, kindLabel, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { isDraftTile, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button, buttonClasses } from './Button.tsx';
-import { KindIcon } from './icons.tsx';
+import { ExternalIcon, KindIcon } from './icons.tsx';
 import { ForWhomChip, PendingWritePill, RepoLabel, VerdictPill } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
@@ -32,25 +33,41 @@ interface TileProps {
   filterMatch: boolean | null;
 }
 
-/** Drafts get a dashed frame (selection keeps its solid accent line). */
+/**
+ * Every frame is the same 1px border, only its color changes, so selecting a
+ * tile moves nothing. The resting edge is the hairline ring's color with the
+ * background clipped inside the border, so it blends with the column like the
+ * `shadow-tile` ring it replaces.
+ */
 function frameClasses(props: TileProps, draft: boolean): string {
   const dashed = draft ? 'border-dashed' : '';
   if (props.selected) {
-    return 'border-[1.5px] border-accent shadow-selected';
+    return 'border border-accent shadow-selected';
   }
   if (props.filterMatch === true) {
-    return `border border-match-line shadow-tile ${dashed}`;
+    return `border border-match-line shadow-tile-lift ${dashed}`;
   }
   if (props.view.state.kind === 'done') {
     return `border border-hairline-done ${dashed}`;
   }
-  return draft ? 'border border-dashed border-frame' : 'border border-hairline-strong shadow-tile';
+  return draft ? 'border border-dashed border-frame' : 'border border-edge-hairline bg-clip-padding shadow-tile-lift';
 }
 
-/** The left band per "for whom": honey for you, sea for your team, neutral for your own PR, none else. */
+/**
+ * A click on the tile's own surface selects it; a click that started on a
+ * control inside it (PR row, footer button, link, a menu item even when the
+ * menu is portaled, since React bubbles through portals) is that control's.
+ */
+function clickedControl(event: MouseEvent<HTMLElement>): boolean {
+  const target = event.target;
+  return target instanceof Element && target.closest('button, a, input, textarea, select, [role="menu"], [role="menuitem"], [role="dialog"]') !== null;
+}
+
+/** The left band per "for whom": honey for you, sea for your home team, neutral for your own PR, none else (a routing team too). */
 const BANDS: Record<ForWhom['kind'], string | null> = {
   you: 'bg-honey',
   team: 'bg-sea',
+  routing: null,
   own: 'bg-muted',
   none: null,
 };
@@ -63,6 +80,7 @@ const BANDS: Record<ForWhom['kind'], string | null> = {
 const DASHED_BANDS: Record<ForWhom['kind'], string | null> = {
   you: 'var(--color-honey)',
   team: 'var(--color-sea)',
+  routing: null,
   own: 'var(--color-muted)',
   none: null,
 };
@@ -74,12 +92,30 @@ function dashedBand(color: string): { backgroundImage: string } {
 /** The people involved as a small overlapping stack of avatars. */
 function PeopleStack(props: { people: TilePerson[] }) {
   return (
-    <span className="flex shrink-0 pl-[5px]">
+    <span className="flex shrink-0 pl-1">
       {props.people.map((person) => (
-        <span key={person.login} title={personTitle(person.login, person.role)} className="-ml-[5px] rounded-full">
-          <Avatar login={person.login} size="md" className="ring-2 ring-surface" />
+        <span key={person.login} title={personTitle(person.login, person.role)} className="-ml-1 rounded-full">
+          <Avatar login={person.login} size="mid" className="shadow-face" />
         </span>
       ))}
+    </span>
+  );
+}
+
+/** "Set · 2" next to the chips: blue on the selected tile, grey otherwise. */
+function KindLabel(props: { view: TileView; selected: boolean }) {
+  const { word, count } = kindParts(props.view);
+  const kind = props.view.tile.kind;
+  return (
+    <span className={`flex shrink-0 items-center gap-[5px] text-[12px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>
+      {kind !== 'single' && <KindIcon kind={kind} size={12} />}
+      <span>{word}</span>
+      {count !== null && (
+        <>
+          <span className={props.selected ? 'text-set-sep' : 'text-ghost'}>·</span>
+          <span className="font-mono text-[11px] font-semibold tabular-nums">{count}</span>
+        </>
+      )}
     </span>
   );
 }
@@ -94,11 +130,12 @@ function PrRows(props: TileProps & { done: boolean }) {
   const { view } = props;
   const grouped = view.prs.length > 1;
   const places = stackPlaces(view.tile.stacks);
+  // Grouped rows sit 3px inside the box, so its edge can be an inset ring; a lone row would cover one.
   const box = grouped
-    ? `gap-0.5 p-[3px] ${props.selected ? 'bg-accent-soft' : 'bg-subtle'} border ${props.selected ? 'border-accent-line' : 'border-hairline-soft'}`
-    : `overflow-hidden border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`;
+    ? `gap-0.5 rounded-group p-[3px] inset-ring ${props.selected ? 'bg-group-selected inset-ring-edge-accent-group' : 'bg-subtle inset-ring-hairline-soft'}`
+    : `overflow-hidden rounded-row border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`;
   return (
-    <div className={`flex flex-col rounded-row ${box}`}>
+    <div className={`flex flex-col ${box}`}>
       {view.prs.map((pr) => (
         <PrRow
           key={pr.key}
@@ -128,6 +165,9 @@ export function Tile(props: TileProps) {
   const draft = isDraftTile(view);
   // Unread: bold, full ink. Read: regular weight, a notch quieter (the your-move footer stays the reminder). Done and drafts: muted.
   let titleLook = unread ? 'font-semibold text-ink' : 'font-normal text-ink-2';
+  if (props.selected && !unread) {
+    titleLook = 'font-medium text-ink';
+  }
   if (done || draft) {
     titleLook = 'font-medium text-muted';
   }
@@ -137,12 +177,20 @@ export function Tile(props: TileProps) {
   const glanceUpdating = updatingNow({ syncing: actions.syncing, writing: lead?.glanceState === 'writing' });
   const forYou = tileForYou(view, props.sets);
   const updatedAt = tileUpdatedAt(view);
-  const background = done ? 'bg-done' : props.filterMatch === true ? 'bg-warm-strip' : 'bg-surface';
+  let background = 'bg-surface';
+  if (done) {
+    background = 'bg-done';
+  } else if (props.selected) {
+    background = 'bg-surface bg-(image:--bg-tile-selected)';
+  } else if (props.filterMatch === true) {
+    background = 'bg-warm-strip';
+  }
   // A filter never hides a tile of the open topic; the ones it does not match fade.
   const fade = props.filterMatch === false ? 'opacity-45 hover:opacity-80' : '';
   const menuPrKey = props.selected ? props.selectedPrKey : (lead?.key ?? null);
   const yourMove = view.turn.kind === 'you' && !done;
-  const footer = yourMove ? 'border-t border-move-line bg-move' : `border-t ${done ? 'border-hairline-done' : 'border-hairline-soft'}`;
+  const footer = yourMove ? 'bg-move shadow-move-footer' : done ? 'shadow-[inset_0_1px_0_var(--hairline-done)]' : 'shadow-[inset_0_1px_0_var(--hairline-soft)]';
+  const secondary = yourMove ? 'move' : 'secondary';
   // From core (`tileOffers`): never "Mark done" where a mark-read leaves the tile your move; read and still your move, Snooze leads.
   const footerAction = view.offers.footer;
   const markLabel = view.offers.markLabel;
@@ -154,41 +202,55 @@ export function Tile(props: TileProps) {
     }
   }
 
+  // A selected tile keeps the PR that is open.
+  function selectTile() {
+    if (!props.selected) {
+      selectLead();
+    }
+  }
+
+  // Mouse: anywhere on the tile. Keyboard: the title button (one focusable element, Enter / Space).
+  function onTileClick(event: MouseEvent<HTMLElement>) {
+    if (!clickedControl(event)) {
+      selectTile();
+    }
+  }
+
   return (
-    <article className={`relative flex min-w-0 flex-col rounded-tile ${background} ${frameClasses(props, draft)} ${fade}`}>
+    <article
+      onClick={onTileClick}
+      className={`relative flex min-w-0 cursor-pointer flex-col rounded-tile ${background} ${frameClasses(props, draft)} ${fade}`}
+    >
       {props.selected && (
         // The notch points at the detail pane, which shows this tile.
         <span
           aria-hidden="true"
-          className={`absolute top-1/2 -right-[7px] z-10 -mt-1.5 size-3 rotate-45 border-t-[1.5px] border-r-[1.5px] border-accent ${background}`}
+          className="absolute top-1/2 -right-[6.5px] z-10 -mt-[5.5px] size-[11px] rotate-45 rounded-tr-[2px] border-t border-r border-accent bg-surface"
         />
       )}
       {BANDS[view.forWhom.kind] && (
         // The "for whom" band down the left edge, in the chip's color; grey on
-        // done tiles, striped on drafts. A 4px strip cannot follow the tile's
+        // done tiles, striped on drafts. A 3px strip cannot follow the tile's
         // 12px corner by itself, so it sits in a full-size layer clipped to the
-        // tile's inner rounding (12px minus the frame) and follows the curve.
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[10.5px]">
+        // tile's inner rounding (12px minus the 1px frame) and follows the curve.
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[11px]">
           {draft ? (
             <span
-              className="absolute inset-y-0 left-0 w-1"
+              className="absolute inset-y-0 left-0 w-[3px]"
               style={dashedBand(done ? 'var(--color-ghost)' : (DASHED_BANDS[view.forWhom.kind] ?? ''))}
             />
           ) : (
-            <span className={`absolute inset-y-0 left-0 w-1 ${done ? 'bg-ghost' : BANDS[view.forWhom.kind]}`} />
+            <span className={`absolute inset-y-0 left-0 w-[3px] ${done ? 'bg-ghost' : BANDS[view.forWhom.kind]}`} />
           )}
         </span>
       )}
       {unread && <UnreadStrip view={view} />}
       {!unread && <UnseenMergeStrip view={view} />}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pt-3 pb-3">
-        <div className="flex cursor-pointer flex-col gap-2" onClick={selectLead}>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 pt-3 pr-3.5 pb-[13px] pl-[15px]">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center gap-[7px]">
             <ForWhomChip forWhom={view.forWhom} code={view.why} greyed={done} />
-            <span className={`flex shrink-0 items-center gap-[5px] text-[12px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>
-              {tile.kind !== 'single' && <KindIcon kind={tile.kind} size={13} />}
-              {kindLabel(view)}
-            </span>
+            <KindLabel view={view} selected={props.selected} />
             {draft && (
               <span
                 title="A draft: nobody reviews or approves it yet, and it won't merge soon"
@@ -207,22 +269,35 @@ export function Tile(props: TileProps) {
             )}
             <span className="ml-auto" />
             <PeopleStack people={view.people} />
-            {!unread && updatedAt && <span className="shrink-0 font-mono text-[10.5px] text-faint">{ageLabel(updatedAt, now)}</span>}
+            {!unread && updatedAt && (
+              <>
+                <span aria-hidden="true" className="mx-px h-3 w-px shrink-0 bg-hairline" />
+                <span className="min-w-4 shrink-0 text-right font-mono text-[10.5px] text-faint tabular-nums">{ageLabel(updatedAt, now)}</span>
+              </>
+            )}
           </div>
-          <h2 className={`text-[14.5px] leading-snug tracking-[-0.01em] ${titleLook}`}>{tile.title}</h2>
+          <h2 className={`text-[14.5px] leading-[1.375] tracking-[-0.012em] text-balance ${titleLook}`}>
+            <button type="button" aria-pressed={props.selected} onClick={selectTile} className="rounded-[3px] text-left">
+              {tile.title}
+            </button>
+          </h2>
           {view.pendingWrite && (
             <div className="flex">
               <PendingWritePill pending={view.pendingWrite} />
             </div>
           )}
-          {forYou && <p className={`line-clamp-3 text-[12.5px] leading-[1.45] ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
+          {forYou && <p className={`line-clamp-3 text-[12.5px] leading-normal text-pretty ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
         </div>
         <PrRows {...props} done={done} />
       </div>
-      <div className={`mt-auto flex min-h-[46px] items-center gap-2 rounded-b-[11px] px-3.5 ${footer}`}>
+      <div className={`mt-auto flex min-h-[46px] items-center gap-2 rounded-b-tile pr-3 pl-[15px] ${footer}`}>
         <TurnLine turn={view.turn} greyed={done} />
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {footerAction === 'open' && <Button onClick={selectLead}>Open</Button>}
+          {footerAction === 'open' && (
+            <Button variant={secondary} onClick={selectLead}>
+              Open
+            </Button>
+          )}
           {(footerAction === 'mark_read' || footerAction === 'mark_done') && (
             <Button
               variant="primary"
@@ -237,13 +312,14 @@ export function Tile(props: TileProps) {
               {markLabel}
             </Button>
           )}
-          {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : 'secondary'} />}
+          {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : secondary} />}
           {github && (
-            <a href={github.filesTab ? filesTabUrl(github.url) : github.url} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={buttonClasses('secondary', 'sm')}>
+            <a href={github.filesTab ? filesTabUrl(github.url) : github.url} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={`${buttonClasses(secondary, 'sm')} gap-[5px]`}>
               {github.label}
+              <ExternalIcon size={10} className="text-faint" />
             </a>
           )}
-          <TileMenu view={view} topics={props.topics} prKey={menuPrKey} />
+          <TileMenu view={view} topics={props.topics} prKey={menuPrKey} variant={secondary} />
         </div>
       </div>
     </article>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button, type ButtonSize, type ButtonVariant } from './Button.tsx';
 
 export interface MenuItem {
@@ -9,7 +9,7 @@ export interface MenuItem {
 }
 
 interface MenuProps {
-  label: string;
+  label: ReactNode;
   items: MenuItem[];
   size?: ButtonSize;
   variant?: ButtonVariant;

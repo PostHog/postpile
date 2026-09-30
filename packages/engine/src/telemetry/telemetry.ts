@@ -1,5 +1,5 @@
-import type { TelemetryEventName, TelemetryEventProps } from '@postpile/core';
-import { safeExceptionInfo, sanitizeTelemetryProps } from '@postpile/core';
+import type { RendererExceptionProps, SafeException, TelemetryEventName, TelemetryEventProps } from '@postpile/core';
+import { safeExceptionInfo, sanitizeTelemetryProps, scrubException } from '@postpile/core';
 import { hashedTelemetryId } from '@postpile/core/telemetry-identity';
 import { PostHog, type PostHogOptions } from 'posthog-node';
 import { loadOrCreateInstallId } from './install-id.ts';
@@ -28,7 +28,10 @@ export interface Telemetry {
   identifyPerson(info: TelemetryPersonInfo): void;
   /** Switches from the random install id to the hashed GitHub id, and links the two so PostHog treats them as one person. */
   setViewerIdentity(githubDatabaseId: number): void;
+  /** An uncaught error in this process (main or server), scrubbed before it is sent. */
   captureException(error: unknown, context?: Record<string, unknown>): void;
+  /** A renderer error from POST /api/telemetry, scrubbed here: the renderer sends it raw to the local server only. */
+  captureRendererException(report: RendererExceptionProps): void;
   shutdown(): Promise<void>;
 }
 
@@ -38,7 +41,34 @@ export class NoopTelemetry implements Telemetry {
   identifyPerson(_info: TelemetryPersonInfo): void {}
   setViewerIdentity(_githubDatabaseId: number): void {}
   captureException(_error: unknown, _context?: Record<string, unknown>): void {}
+  captureRendererException(_report: RendererExceptionProps): void {}
   async shutdown(): Promise<void> {}
+}
+
+/** How PostHog should read the frames, and what caught the error. */
+interface ExceptionShape {
+  platform: 'node:javascript' | 'web:javascript';
+  mechanism: string;
+}
+
+// Mechanism names as posthog-js uses them for the same browser hooks.
+const RENDERER_MECHANISMS: Record<RendererExceptionProps['source'], string> = {
+  window_error: 'onerror',
+  unhandled_rejection: 'onunhandledrejection',
+  react_render: 'react_error_boundary',
+};
+
+/** Set by posthog-cli's injected snippet in release builds (RELEASING.md); undefined otherwise. */
+function posthogChunkIds(): unknown {
+  return (globalThis as { _posthogChunkIds?: unknown })._posthogChunkIds;
+}
+
+/** Carries a scrubbed type/message pair into captureException without re-exposing the original (possibly unsafe) error. */
+class NamedError extends Error {
+  constructor(name: string, message: string) {
+    super(message);
+    this.name = name;
+  }
 }
 
 export interface PostHogTelemetryOptions {
@@ -115,41 +145,50 @@ export class PostHogTelemetry implements Telemetry {
     this.distinctId = hashed;
   }
 
+  /**
+   * Sends the scrubbed exception with an `$exception_list` built here rather
+   * than parsed by posthog-node from a stack string: the frames carry the
+   * bundle-relative file, line, column and posthog-cli chunk id, which is
+   * what PostHog needs to find the uploaded source map (the SDK would look
+   * chunk ids up by the full, unscrubbed path). The list passed as a
+   * property replaces the one the SDK builds. posthog-node still adds
+   * `$release_id` from the injected `_posthogReleaseId`, so the exception
+   * belongs to the release that built this bundle.
+   */
+  private sendException(info: SafeException, shape: ExceptionShape, context: Record<string, unknown>): void {
+    // PostHog wants the oldest frame first and the throwing frame last.
+    const frames = info.frames.toReversed().map((frame) => ({
+      platform: shape.platform,
+      filename: frame.file,
+      function: '?',
+      lineno: frame.line,
+      colno: frame.column ?? undefined,
+      in_app: true,
+      chunk_id: frame.chunkId ?? undefined,
+    }));
+    const exception = {
+      type: info.type,
+      value: info.message,
+      mechanism: { type: shape.mechanism, handled: false, synthetic: false },
+      stacktrace: frames.length > 0 ? { type: 'raw', frames } : undefined,
+    };
+    const properties = { ...this.superProps, ...this.clean(context), $exception_list: [exception] };
+    this.client.captureException(new NamedError(info.type, info.message), this.distinctId, properties);
+  }
+
   captureException(error: unknown, context: Record<string, unknown> = {}): void {
-    const info = safeExceptionInfo(error);
-    const properties = { ...this.superProps, ...this.clean(context) };
-    const safeError = new NamedError(info.type, info.message);
-    if (info.stack) {
-      // "at " lines are what posthog-node's stack parser expects; the frames
-      // themselves are already scrubbed down to app-bundle file:line pairs.
-      safeError.stack = `${info.type}: ${info.message}\n${info.stack
-        .split('\n')
-        .map((frame) => `    at ${frame}`)
-        .join('\n')}`;
-    }
-    // captureException exists on every posthog-node 3+ release; kept behind a
-    // feature check so an older/newer SDK without it still gets a plain event.
-    if (typeof this.client.captureException === 'function') {
-      this.client.captureException(safeError, this.distinctId, properties);
-      return;
-    }
-    this.client.capture({
-      distinctId: this.distinctId,
-      event: '$exception',
-      properties: { ...properties, $exception_type: info.type, $exception_message: info.message },
-    });
+    const info = safeExceptionInfo(error, posthogChunkIds());
+    this.sendException(info, { platform: 'node:javascript', mechanism: 'generic' }, { process_type: 'main', ...context });
+  }
+
+  captureRendererException(report: RendererExceptionProps): void {
+    // The renderer's own chunk ids: its bundle files are not loaded in this process.
+    const info = scrubException({ type: report.type, message: report.message, stack: report.stack }, report.chunk_ids);
+    this.sendException(info, { platform: 'web:javascript', mechanism: RENDERER_MECHANISMS[report.source] }, { process_type: 'renderer' });
   }
 
   async shutdown(): Promise<void> {
     await this.client.shutdown();
-  }
-}
-
-/** Carries a scrubbed type/message pair into captureException without re-exposing the original (possibly unsafe) error. */
-class NamedError extends Error {
-  constructor(name: string, message: string) {
-    super(message);
-    this.name = name;
   }
 }
 

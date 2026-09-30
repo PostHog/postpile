@@ -23,7 +23,7 @@ import {
   isQuietTile,
   isTopicInScope,
   labelBaseRepo,
-  personRelation,
+  ownerRelation,
   pingedPrKeys,
   prTier,
   prWhoseTurn,
@@ -327,7 +327,7 @@ export class ReadModels {
         queues: topicQueues(
           prs.map((pr) => ({
             tier: this.tierOf(board, pr, viewer),
-            author: personRelation(pr.author, viewer),
+            author: ownerRelation(pr, viewer),
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
             quiet: isPrInQuietRepo(pr.key, settings),
@@ -365,7 +365,7 @@ export class ReadModels {
   /** The stored viewer for the sidebar's filter buttons. */
   viewer(): ViewerView {
     const viewer = loadViewer(this.store);
-    return { login: viewer?.login ?? null, teamMembers: viewer?.teamMembers ?? [] };
+    return { login: viewer?.login ?? null, teamMembers: viewer?.teamMembers ?? [], homeTeams: viewer?.homeTeams ?? null };
   }
 
   /** Decided or expired in the last OUTSIDE_PROPOSAL_DAYS days, newest first; merges into this topic included. */

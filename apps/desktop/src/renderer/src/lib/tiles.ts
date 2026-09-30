@@ -11,21 +11,21 @@ export function prNumber(key: string): string {
  * chip when it differs from the tile's, so the usual case stays quiet.
  */
 export function sameForWhom(a: ForWhom, b: ForWhom): boolean {
-  if (a.kind === 'team' && b.kind === 'team') {
+  if ((a.kind === 'team' && b.kind === 'team') || (a.kind === 'routing' && b.kind === 'routing')) {
     return a.team === b.team;
   }
   return a.kind === b.kind;
 }
 
-/** "PR", "Stack · 3", "Set · 3". */
-export function kindLabel(view: TileView): string {
+/** The tile's kind as a word plus its PR count: "PR" alone, "Stack" and 3, "Set" and 3 (drawn as "Set · 3"). */
+export function kindParts(view: TileView): { word: string; count: number | null } {
   if (view.tile.kind === 'stack') {
-    return `Stack · ${view.prs.length}`;
+    return { word: 'Stack', count: view.prs.length };
   }
   if (view.tile.kind === 'set') {
-    return `Set · ${view.prs.length}`;
+    return { word: 'Set', count: view.prs.length };
   }
-  return 'PR';
+  return { word: 'PR', count: null };
 }
 
 /** The newest reason the tile is unread; the strip shows this one. */

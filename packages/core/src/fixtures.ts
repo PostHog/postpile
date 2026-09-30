@@ -47,6 +47,8 @@ export function makePr(overrides: Partial<Pr> & { number?: number; repo?: string
     deletions: 2,
     changedFiles: 1,
     files: [],
+    // The GitHub reader always fills it; only snapshots stored before 2026-09-30 lack it.
+    assignees: [],
     labels: [],
     reviewDecision: 'REVIEW_REQUIRED',
     reviewerUsers: [],
@@ -249,7 +251,7 @@ export class FakeTimers implements Timers {
 }
 
 /** PR facts with nothing aimed at anyone, for hand-built `PrSummary` rows. */
-export const NO_PR_FACTS: PrFacts = { authorIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
+export const NO_PR_FACTS: PrFacts = { owners: ['alice'], ownerIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
 
 /** A hand-built tile view with the offers and dots core would give it (`tileOffers`, `notDonePrKeys`). */
 export function withOffers(view: Omit<TileView, 'offers' | 'notDonePrKeys'>): TileView {

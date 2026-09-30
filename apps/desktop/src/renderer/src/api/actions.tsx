@@ -34,6 +34,9 @@ import type {
   SetupSweepView,
   SnoozeCondition,
   SyncReport,
+  TeamRole,
+  TeamRolesView,
+  TeamRoleView,
   TileAfterRead,
   TileView,
   ToolsView,
@@ -46,6 +49,7 @@ import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { markReadNotice } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withTile } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
+import { teamRoleNotice } from '../lib/team-roles.ts';
 import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
 import { useLastSyncReport } from './sync.ts';
@@ -152,6 +156,8 @@ export interface Actions {
   setRepoScope(repo: string | null): Promise<void>;
   /** "Let it go stale" on a repo, or waking it up again. Local, not a GitHub write. */
   setRepoQuiet(repo: string, quiet: boolean): Promise<void>;
+  /** "Make routing only" / "Make home team" on one of your teams. Local and sticky, not a GitHub write. */
+  setTeamRole(team: TeamRoleView, role: TeamRole): Promise<void>;
   /**
    * "Mark everything older than N days read on GitHub". A GitHub write: with
    * the lock closed it becomes one pending write. Returns whether it went through.
@@ -455,6 +461,16 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function setTeamRole(team: TeamRoleView, role: TeamRole): Promise<void> {
+    try {
+      await withBusy(`teamRole:${team.team}`, () => request<TeamRolesView>('POST', '/api/team-roles', { team: team.team, role }));
+      show('ok', teamRoleNotice(team.slug, role));
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not change ${team.slug}: ${errorText(error)}`);
+    }
+  }
+
   async function sendTestNotification(): Promise<void> {
     const send = window.postpile?.sendTestNotification;
     if (!send) {
@@ -676,6 +692,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     recheckMemory,
     setRepoScope,
     setRepoQuiet,
+    setTeamRole,
     sendTestNotification,
     // One busy key each: withBusy drops every copy of a key when one run ends.
     cleanUpInbox: (age) => run(CLEANUP_BUSY.markRead, 'cleanup', () => request('POST', '/api/inbox-cleanup/mark-read', { olderThanDays: age })),

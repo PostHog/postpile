@@ -7,7 +7,9 @@ import {
   DEBUG_NOTIFICATIONS_DEFAULT_LIMIT,
   DEBUG_NOTIFICATIONS_MAX_LIMIT,
   prKey,
+  RENDERER_EXCEPTION_EVENT,
   RENDERER_TELEMETRY_EVENTS,
+  rendererExceptionProps,
   TELEMETRY_EVENTS,
   type AppConfig,
   type TelemetryEventName,
@@ -215,8 +217,18 @@ export function createApp(
   // The renderer's only way to PostHog: an allow-listed event name plus props validated
   // against the same catalogue the engine's own Telemetry class uses. Unknown events and
   // disallowed props are refused with 400, never silently dropped or forwarded as is.
+  // A renderer error is the one event with free text: it goes to captureRendererException,
+  // which scrubs it the same way as the engine's own uncaught errors before it leaves.
   app.post('/api/telemetry', async (c) => {
     const body = telemetryBody.parse(await c.req.json());
+    if (body.event === RENDERER_EXCEPTION_EVENT) {
+      const report = rendererExceptionProps.safeParse(body.props);
+      if (!report.success) {
+        return c.json({ error: `bad props for ${body.event}: ${report.error.message}` }, 400);
+      }
+      telemetry.captureRendererException(report.data);
+      return c.json({ ok: true });
+    }
     if (!isRendererTelemetryEvent(body.event)) {
       return c.json({ error: `telemetry event not allowed from the renderer: ${body.event}` }, 400);
     }
@@ -248,6 +260,15 @@ export function createApp(
   // The sidebar's Finished drawer. Before /api/topics/:id, which would take "finished" as an id.
   app.get('/api/topics/finished', async (c) => c.json(await engine.listFinishedTopics()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
+  // Home or routing only per team (DESIGN.md "Team roles"). A flip is local and sticks; it may read the team's members from GitHub.
+  app.get('/api/team-roles', async (c) => c.json(await engine.getTeamRoles()));
+  app.post('/api/team-roles', async (c) => {
+    const body = z.object({ team: z.string().min(1), role: z.enum(['home', 'routing']) }).parse(await c.req.json());
+    if (!(await engine.getTeamRoles()).teams.some((entry) => entry.team === body.team)) {
+      throw new BadRequestError(`not one of your teams: ${body.team}`);
+    }
+    return c.json(await engine.setTeamRole(body.team, body.role));
+  });
   // The title bar's repo menu. Scope and quiet repos are kept in meta; local, never GitHub writes.
   app.get('/api/repos', async (c) => c.json(await engine.listRepos()));
   app.post('/api/repos/scope', async (c) => {

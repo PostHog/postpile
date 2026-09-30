@@ -8,7 +8,7 @@
 import { eventsSeenByTouch } from '../last-touch.ts';
 import { at, makePr } from '../fixtures.ts';
 import { deriveEvents } from '../events.ts';
-import { ADDRESSED_KINDS } from '../kinds.ts';
+import { awaitsJudgement } from '../quiet-reads.ts';
 import { ownEventsOnReadThread } from '../github-read.ts';
 import { lookCloserEvent, lookCloserPingCheck } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
@@ -41,19 +41,31 @@ import type {
   Viewer,
 } from '../types.ts';
 import type { PrSummary, TilePendingWrite, TileView } from '../views.ts';
-import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, SnoozeSpec, StepSpec } from './board-spec.ts';
+import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, SnoozeSpec, StepSpec, TeamSetup } from './board-spec.ts';
 
 export const PROPERTY_REPO = 'acme/app';
 export const PROPERTY_TOPIC_ID = 'topic-1';
 export const PROPERTY_TEAM = 'acme/team-platform';
 export const OTHER_TEAM = 'acme/team-infra';
+/** The viewer's second team on most boards: a big approvers group, routing only unless roles are undecided. */
+export const ROUTING_TEAM = 'acme/approvers';
 /** Who makes a bot's review request. */
 export const REQUEST_BOT = 'github-actions[bot]';
 
-export const LOGINS: Record<Person, string> = { viewer: 'viewer', teammate: 'lyra', other: 'ada', outsider: 'alice', bot: 'dependabot[bot]', app: 'renovate' };
+/** ghost: a deleted account, which GitHub reads back as ''. */
+export const LOGINS: Record<Person, string> = {
+  viewer: 'viewer',
+  teammate: 'lyra',
+  other: 'ada',
+  outsider: 'alice',
+  bot: 'dependabot[bot]',
+  app: 'renovate',
+  agent: 'acme-agent[bot]',
+  ghost: '',
+};
 
 /** Every automation account on a board: what the spec oracles call automation, without asking `isBot`. */
-export const AUTOMATION_LOGINS: readonly string[] = [LOGINS.bot, LOGINS.app, REQUEST_BOT];
+export const AUTOMATION_LOGINS: readonly string[] = [LOGINS.bot, LOGINS.app, LOGINS.agent, REQUEST_BOT];
 
 /** The login or team a request target names; the teammate asked is rowan, so lyra can still be the author. */
 export function requestSubject(target: RequestTarget): string {
@@ -64,6 +76,8 @@ export function requestSubject(target: RequestTarget): string {
       return PROPERTY_TEAM;
     case 'other_team':
       return OTHER_TEAM;
+    case 'routing_team':
+      return ROUTING_TEAM;
     case 'teammate':
       return 'rowan';
     case 'other':
@@ -71,9 +85,36 @@ export function requestSubject(target: RequestTarget): string {
   }
 }
 
-export function propertyViewer(spec: Pick<BoardSpec, 'teamMembersUnknown'>): Viewer {
-  const viewer: Viewer = { login: LOGINS.viewer, teams: [PROPERTY_TEAM] };
-  return spec.teamMembersUnknown ? viewer : { ...viewer, teamMembers: ['lyra', 'rowan'] };
+/** Who is on each of the viewer's teams (the viewer left out). */
+const TEAM_MEMBERS: Record<string, string[]> = { [PROPERTY_TEAM]: ['lyra', 'rowan'], [ROUTING_TEAM]: ['alice', 'rowan'] };
+
+/** The viewer's teams, and the home teams among them (undefined: roles not decided yet). */
+function viewerTeams(setup: TeamSetup): { teams: string[]; homeTeams: string[] | undefined } {
+  switch (setup) {
+    case 'one_home':
+      return { teams: [PROPERTY_TEAM], homeTeams: [PROPERTY_TEAM] };
+    case 'home_and_routing':
+      return { teams: [PROPERTY_TEAM, ROUTING_TEAM], homeTeams: [PROPERTY_TEAM] };
+    case 'no_home':
+      return { teams: [PROPERTY_TEAM, ROUTING_TEAM], homeTeams: [] };
+    case 'undecided':
+      return { teams: [PROPERTY_TEAM, ROUTING_TEAM], homeTeams: undefined };
+  }
+}
+
+/**
+ * The viewer as the engine stores it: the members of the home teams (every
+ * team while roles are undecided) are the teammates, fetched unless the
+ * recipe says the list never was; routing teams are never fetched.
+ */
+export function propertyViewer(spec: Pick<BoardSpec, 'teamMembersUnknown' | 'teams'>): Viewer {
+  const { teams, homeTeams } = viewerTeams(spec.teams);
+  const viewer: Viewer = homeTeams === undefined ? { login: LOGINS.viewer, teams } : { login: LOGINS.viewer, teams, homeTeams };
+  if (spec.teamMembersUnknown) {
+    return viewer;
+  }
+  const members = (homeTeams ?? teams).flatMap((team) => TEAM_MEMBERS[team] ?? []);
+  return { ...viewer, teamMembers: [...new Set(members)] };
 }
 
 export const COMMENT_BODIES: Record<CommentText, string> = {
@@ -81,8 +122,22 @@ export const COMMENT_BODIES: Record<CommentText, string> = {
   mention: 'cc @viewer',
   question: '@viewer can you check the migration?',
   team_mention: 'cc @acme/team-platform',
+  routing_mention: 'cc @acme/approvers',
+  teams_mention: 'cc @acme/approvers and @acme/team-platform',
   bot_marker: '<!-- bot --> automated comment: coverage went down',
   deploy: 'Deployed the preview',
+};
+
+/** The teams each comment names with an @-mention: what the spec oracles read instead of parsing the body. */
+export const MENTIONED_TEAMS: Record<CommentText, string[]> = {
+  plain: [],
+  mention: [],
+  question: [],
+  team_mention: [PROPERTY_TEAM],
+  routing_mention: [ROUTING_TEAM],
+  teams_mention: [ROUTING_TEAM, PROPERTY_TEAM],
+  bot_marker: [],
+  deploy: [],
 };
 
 /** The timeline item an automation step adds. */
@@ -98,9 +153,15 @@ function afterMinute(prIndex: number, count: number): number {
   return 10 * count + prIndex + 5;
 }
 
-/** A human who asks for a review: the author, or ada when a bot wrote the PR. */
+/** A human who asks for a review: the author, or ada when a GitHub App or a deleted account opened the PR. */
 function humanRequester(author: string): string {
-  return author === LOGINS.bot ? LOGINS.other : author;
+  return author === LOGINS.bot || author === LOGINS.agent || author === LOGINS.ghost ? LOGINS.other : author;
+}
+
+/** The viewer owns the PR the recipe describes: wrote it, or it is a bot's PR assigned to them (DESIGN "PR ownership"). */
+function viewerOwns(spec: PrSpec): boolean {
+  const botAuthor = spec.author === 'bot' || spec.author === 'app' || spec.author === 'agent';
+  return botAuthor && spec.assignees.length > 0 ? spec.assignees.includes('viewer') : spec.author === 'viewer';
 }
 
 /** Builds one PR snapshot step by step, skipping what GitHub would not allow. */
@@ -351,6 +412,7 @@ function compilePr(spec: PrSpec, place: PrPlace): CompiledPr {
     number: place.number,
     repo: PROPERTY_REPO,
     author,
+    assignees: spec.assignees.map((assignee) => LOGINS[assignee]),
     state,
     isDraft: history.isDraft,
     baseRef: place.baseRef,
@@ -440,15 +502,6 @@ export interface PropertyBoard {
   tiles: Tile[];
 }
 
-/** Kinds the events agent is never asked about for clearing: asks stay the viewer's to deal with. */
-const ASK_KINDS: readonly PrEvent['kind'][] = [...ADDRESSED_KINDS, 'review_requested', 'merged_without_review'];
-
-/** A person's unseen quiet event without an override: what the events agent now also judges on an unread thread. */
-function isJudgedByTheAgent(event: PrEvent, viewer: Viewer): boolean {
-  const person = !event.isBot && event.actor !== '' && !sameLogin(event.actor, viewer.login);
-  return person && event.seenAt === null && event.override === null && event.ruleLoudness === 'quiet' && !ASK_KINDS.includes(event.kind);
-}
-
 /**
  * GitHub's read time of the PR's thread: the recipe's read, and a Mark read
  * or Approve in the app, which reach GitHub at the click (the recipe's clicks
@@ -476,7 +529,8 @@ function storedPrState(input: {
   const { spec, compiled, clock, viewer, thread } = input;
   const pr = compiled.pr;
   let userState: UserPrState | null = null;
-  if (spec.approvedAfter !== null && pr.state === 'OPEN' && !sameLogin(pr.author, viewer.login)) {
+  // The app offers Approve only on a PR someone else owns.
+  if (spec.approvedAfter !== null && pr.state === 'OPEN' && !viewerOwns(spec)) {
     // Approved while open: at most after the last step, before any merge or close.
     const count = Math.min(spec.approvedAfter, spec.steps.length);
     userState = { prKey: pr.key, approvedAt: clock.after(count), approvedCommitOid: compiled.headAfter[count] ?? null, handledAt: null };
@@ -515,9 +569,9 @@ function storedPrState(input: {
     events = after.events;
     userState = after.userState;
   }
-  // The events agent judged people's unseen quiet activity (not asks) and left it quiet.
+  // The events agent judged people's unseen quiet activity and left it quiet (`awaitsJudgement` picks what the engine sends it: not asks).
   if (spec.judged) {
-    events = events.map((event) => (isJudgedByTheAgent(event, viewer) ? { ...event, override: { loudness: 'quiet', reason: 'nothing here needs you', by: 'agent' } } : event));
+    events = events.map((event) => (awaitsJudgement(event, pr, viewer) ? { ...event, override: { loudness: 'quiet', reason: 'nothing here needs you', by: 'agent' } } : event));
   }
   // The events agent's overrides, on derived events only.
   const derived = events.filter((event) => event.kind !== 'look_closer');
@@ -628,7 +682,9 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
       };
       board.threads.set(pr.key, thread);
     } else if (tracking.kind === 'found') {
-      const via = sameLogin(pr.author, viewer.login) ? 'own_open' : pr.state === 'MERGED' ? 'involved_merged' : 'review_requested';
+      // The finder's aliases: the viewer's own PRs (an agent PR assigned to them too), merged ones they took part in, a person's PR assigned to them, review requests.
+      const assigned = entry.spec.assignees.includes('viewer');
+      const via = viewerOwns(entry.spec) ? 'own_open' : pr.state === 'MERGED' ? 'involved_merged' : assigned ? 'assigned' : 'review_requested';
       board.found.set(pr.key, { prKey: pr.key, via, reason: 'found by the sync', foundAt: now });
     } else {
       pullInReasons.set(pr.key, `stack layer below #${pr.ref.number + 1}`);

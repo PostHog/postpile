@@ -70,6 +70,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
     title: `PR ${number}`,
     url: '',
     author: 'rowan',
+    assignees: [],
     state: 'OPEN',
     primaryAction: 'approve',
     isDraft: false,

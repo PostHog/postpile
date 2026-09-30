@@ -28,6 +28,8 @@ interface MemoryLineProps {
   canForget?: boolean;
   /** What "Why?" explains. Lines without one get no "Why?". */
   why?: MemoryTarget;
+  /** Size and line height of the text; the default fits lists in the detail pane. */
+  textClass?: string;
 }
 
 /**
@@ -45,15 +47,17 @@ export function MemoryLine(props: MemoryLineProps) {
   const { factId, topicId, text } = props.correction;
   return (
     <div>
-      <div className="group flex items-start gap-2 text-[12.5px] leading-[1.45]">
+      <div className={`group flex items-start gap-2 text-pretty ${props.textClass ?? 'text-[12.5px] leading-[1.45]'}`}>
         <span className="min-w-0 flex-1">
           <span className={`select-text ${greyed ? 'text-hint' : 'text-ink-2'} ${settled ? 'line-through' : ''}`}>{props.children}</span>
           {fixedTo !== null && <span className="ml-1.5 text-ink-2 select-text">{fixedTo}</span>}
-          {props.refs?.map((ref) => (
-            <span key={`${ref.kind}:${ref.prKey}:${ref.sourceId ?? ''}`} className="ml-1.5 inline-flex align-[1px]">
-              <SourceChip source={ref} />
+          {props.refs && props.refs.length > 0 && (
+            <span className="ml-1 inline-flex gap-[3px] align-[1px]">
+              {props.refs.map((ref) => (
+                <SourceChip key={`${ref.kind}:${ref.prKey}:${ref.sourceId ?? ''}`} source={ref} />
+              ))}
             </span>
-          ))}
+          )}
           {props.stale && (
             <span className="ml-1.5 rounded bg-closer-soft px-1.5 text-[10px] font-medium whitespace-nowrap text-closer">
               {staleBadge(staleLabel(props.stale), props.updating)}

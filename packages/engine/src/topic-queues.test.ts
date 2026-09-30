@@ -42,7 +42,7 @@ describe('topic list queues', () => {
     const tiers = Object.fromEntries((detail?.tiles ?? []).map((view) => [view.prs[0]?.key, view.tier]));
     expect(tiers).toEqual({ [review.key]: 'to_review', [mine.key]: 'mine', [merged.key]: 'rest' });
     expect(detail?.tiles.flatMap((view) => view.prs).find((pr) => pr.key === merged.key)?.authorRelation).toBe('team');
-    expect(await h.engine.getViewer()).toEqual({ login: viewer.login, teamMembers: ['lyra'] });
+    expect(await h.engine.getViewer()).toEqual({ login: viewer.login, teamMembers: ['lyra'], homeTeams: ['acme/team-platform'] });
   });
 
   it('keeps a topic calm when every unread tile is merged', async () => {

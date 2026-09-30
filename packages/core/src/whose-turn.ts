@@ -6,11 +6,13 @@ import { effectiveLoudness, isUnseenLoud } from './loudness.ts';
 import { isTracked } from './provenance.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { lastTouch } from './last-touch.ts';
-import { isOwnTeam, sameLogin } from './mentions.ts';
+import { sameLogin } from './mentions.ts';
+import { isPrOwner, prOwner } from './pr-owners.ts';
 import {
   changesRequestedBy,
   isApprovedByViewer,
   isPersonalRequest,
+  requestedTeam,
   requestsOfViewer,
   reviewRequest,
   teamRequestHold,
@@ -166,8 +168,9 @@ function requester(ctx: PrContext): string | null {
   return requests[requests.length - 1]?.actor ?? null;
 }
 
+/** The slug of the team the pending request is for ("team-devex"), home or routing. */
 function ownTeamSlug(ctx: PrContext): string {
-  const team = ctx.pr.reviewerTeams.find((slug) => isOwnTeam(slug, ctx.viewer.teams)) ?? 'your team';
+  const team = requestedTeam(ctx.pr, ctx.viewer) ?? 'your team';
   return team.split('/').pop() ?? team;
 }
 
@@ -192,7 +195,7 @@ function reviewText(ctx: PrContext, ask: ReviewRequest, verb: 'Review' | 'Re-rev
     return `${verb} for ${ownTeamSlug(ctx)}`;
   }
   if (ask === 'team_for_you') {
-    return `${verb} for ${ownTeamSlug(ctx)}: ${ctx.pr.author}'s PR`;
+    return `${verb} for ${ownTeamSlug(ctx)}: ${prOwner(ctx.pr)}'s PR`;
   }
   const by = requester(ctx);
   return by && !isViewer(ctx, by) ? `${verb}, ${by} asked` : verb;
@@ -247,7 +250,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   const ask = reviewRequest(ctx.pr, ctx.viewer);
   // An approval on any commit stands; a push after it is not the viewer's move.
   if (isApprovedByViewer(pr, ctx.userState, ctx.viewer.login)) {
-    return them(ctx, pr.author, 'to merge');
+    return them(ctx, prOwner(pr), 'to merge');
   }
   const reviewed = viewerHeadReview(ctx.pr, ctx.viewer);
   const hold = reviewed === null ? teamRequestHold(pr, ctx.viewer, ctx.notYours) : null;
@@ -257,7 +260,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   const changes = hold?.kind === 'changes' ? standingChanges(pr, ctx.viewer.login) : null;
   if (changes) {
     // The author moves first, until they pushed and asked every requester again.
-    return changes.kind === 're_review' ? them(ctx, changes.by, RE_REVIEW) : them(ctx, pr.author, `to address ${changes.by}'s changes`);
+    return changes.kind === 're_review' ? them(ctx, changes.by, RE_REVIEW) : them(ctx, prOwner(pr), `to address ${changes.by}'s changes`);
   }
   if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
     // Asked again while the viewer's changes request stands (the author
@@ -276,18 +279,18 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
   }
   if (reviewed?.state === 'APPROVED') {
-    return them(ctx, pr.author, 'to merge');
+    return them(ctx, prOwner(pr), 'to merge');
   }
   if (reviewed) {
     const opened = threadsViewerOpened(ctx);
     if (opened > 0) {
-      return them(ctx, pr.author, `to address ${plural(opened, 'thread')}`);
+      return them(ctx, prOwner(pr), `to address ${plural(opened, 'thread')}`);
     }
-    return them(ctx, pr.author, reviewed.state === 'CHANGES_REQUESTED' ? 'to address your changes' : 'to reply');
+    return them(ctx, prOwner(pr), reviewed.state === 'CHANGES_REQUESTED' ? 'to address your changes' : 'to reply');
   }
   if (ask === 'team_taken') {
     if (pr.reviewDecision === 'APPROVED') {
-      return them(ctx, pr.author, 'to merge');
+      return them(ctx, prOwner(pr), 'to merge');
     }
     const changes = standingChanges(pr);
     if (changes?.kind === 're_review') {
@@ -309,7 +312,7 @@ function draftTurn(ctx: PrContext): WhoseTurn {
   if (ask) {
     return you(ctx, 'reply', `${askText(ask, false)} on draft`);
   }
-  if (!sameLogin(ctx.pr.author, ctx.viewer.login)) {
+  if (!isPrOwner(ctx.pr, ctx.viewer.login)) {
     return NO_TURN;
   }
   const threads = threadsWaitingOnViewer(ctx);
@@ -339,16 +342,16 @@ function prTurn(ctx: PrContext): WhoseTurn {
   // The author's thread replies are asks too; the answer to the changes
   // request says more. An ask from anyone else still goes first.
   const answer = changesAnswered(ctx.pr, ctx.viewer);
-  if (answer && (ask === null || sameLogin(ask.actor, ctx.pr.author))) {
-    return you(ctx, 're_review', changesAnsweredText(ctx.pr.author, answer));
+  if (answer && (ask === null || isPrOwner(ctx.pr, ask.actor))) {
+    return you(ctx, 're_review', changesAnsweredText(prOwner(ctx.pr), answer));
   }
   if (ask) {
-    const reviewToo = sameLogin(ctx.pr.author, ctx.viewer.login)
+    const reviewToo = isPrOwner(ctx.pr, ctx.viewer.login)
       ? false
       : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && viewerHeadReview(ctx.pr, ctx.viewer) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
     return you(ctx, 'reply', askText(ask, reviewToo));
   }
-  return sameLogin(ctx.pr.author, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
+  return isPrOwner(ctx.pr, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
 }
 
 /** Whose move it is on one PR, as a single-PR tile would say it (tracked or not). */

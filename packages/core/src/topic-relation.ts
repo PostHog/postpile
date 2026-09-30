@@ -2,6 +2,8 @@
 // decide the clear cases; the dossier update decides the rest.
 
 import { sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
+import { homeTeamsOf } from './team-roles.ts';
 import type { DossierRelation, TopicRelation } from './memory.ts';
 import type { TopicPlacement } from './views.ts';
 import type { NotificationReason, NotificationThread, Pr, Viewer } from './types.ts';
@@ -58,9 +60,9 @@ function mainArea(prs: Pr[]): string | null {
 export function relationSignals(input: RelationInput): RelationSignals {
   const { viewer } = input;
   const notes: string[] = [];
-  const authored = input.prs.some((pr) => sameLogin(pr.author, viewer.login));
+  const authored = input.prs.some((pr) => isPrOwner(pr, viewer.login));
   const drives = input.driver !== null && sameLogin(input.driver, viewer.login);
-  const ownTeam = viewer.teams[0] ?? null;
+  const ownTeam = homeTeamsOf(viewer)[0] ?? null;
   if (authored || drives) {
     notes.push(drives ? 'the user drives this topic' : 'the user authored PRs here');
     return { relation: 'team', ownerTeam: ownTeam, whyYou: drives ? 'you drive it' : 'you author PRs here', notes };

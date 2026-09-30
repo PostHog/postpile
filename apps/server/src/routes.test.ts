@@ -18,8 +18,10 @@ import type {
   FinishedTopic,
   RepoOverview,
   SearchResult,
+  TeamRolesView,
   TopicDetail,
   TopicListItem,
+  ViewerView,
 } from '@postpile/core';
 import { createApp, TOKEN_HEADER } from './app.ts';
 import { FakeEngine } from './fake/fake-engine.ts';
@@ -96,9 +98,9 @@ describe('server routes over the fake engine', () => {
     expect(repos.scope).toBeNull();
     expect(repos.repos.map((entry) => [entry.repo, entry.topics])).toEqual([
       ['acme/app', 6],
+      ['acme/python-sdk', 2],
       ['acme/desktop', 1],
       ['acme/infra', 1],
-      ['acme/python-sdk', 1],
     ]);
 
     // All repos: the Depot topic labels its tile outside its main repo.
@@ -444,5 +446,29 @@ describe('server routes over the fake engine', () => {
     expect(decided.json.ok).toBe(true);
     const topic = (await (await app.request('/api/topics/topic-dev-env')).json()) as TopicDetail;
     expect(topic.topic.name).toBe('Dev env and devbox');
+  });
+
+  it('lists team roles and flips one, which empties the teammates', async () => {
+    const app = appWithFake();
+    const roles = (await (await app.request('/api/team-roles')).json()) as TeamRolesView;
+    expect(roles.teams.map((team) => [team.slug, team.role, team.reason])).toEqual([
+      ['team-platform', 'home', '57% of your reviews'],
+      ['client-approvers', 'routing', '4% of your reviews'],
+    ]);
+
+    const flipped = await post<TeamRolesView>(app, '/api/team-roles', { team: 'acme/team-platform', role: 'routing' });
+    expect(flipped.json.teams[0]).toMatchObject({ role: 'routing', source: 'user', reason: 'set by you' });
+    const viewer = (await (await app.request('/api/viewer')).json()) as ViewerView;
+    expect(viewer.teamMembers).toEqual([]);
+
+    expect((await post(app, '/api/team-roles', { team: 'acme/other', role: 'home' })).status).toBe(400);
+    expect((await post(app, '/api/team-roles', { team: 'acme/team-platform', role: 'owner' })).status).toBe(400);
+  });
+
+  it('shows a routing team request with the routing chip, and a home team request with the team chip', async () => {
+    const rows = await allRows(appWithFake());
+    expect(rows.find((row) => row.key === 'acme/python-sdk#1966')?.forWhom).toEqual({ kind: 'routing', team: 'client-approvers' });
+    expect(rows.find((row) => row.key === 'acme/python-sdk#1967')?.forWhom).toEqual({ kind: 'routing', team: 'client-approvers' });
+    expect(rows.find((row) => row.key === 'acme/app#1932')?.forWhom).toEqual({ kind: 'team', team: 'team-platform' });
   });
 });

@@ -23,6 +23,7 @@ import {
   type SetupStatus,
   type SetupSweepLine,
   type SetupSweepView,
+  type TeamRolesView,
   type Viewer,
 } from '@postpile/core';
 import type { FakeInstructions } from './fake-instructions.ts';
@@ -119,7 +120,18 @@ interface FakeLine {
 }
 
 const SWEEP_SCRIPT: FakeLine[] = [
-  { step: 'viewer', running: 'Reading your GitHub profile and teams…', done: 'Signed in as @you · teams acme/team-platform · 4 teammates', state: 'done' },
+  {
+    step: 'viewer',
+    running: 'Reading your GitHub profile and teams…',
+    done: 'Signed in as @you · teams acme/team-platform, acme/client-approvers · 4 teammates',
+    state: 'done',
+  },
+  {
+    step: 'teams',
+    running: 'Reading how your reviews of the last 90 days reached you…',
+    done: 'Home team: team-platform (57% of your reviews came through it) · Routing only: client-approvers (4% of your reviews came through it)',
+    state: 'done',
+  },
   {
     step: 'activity',
     running: 'Searching your PRs of the last 30 days…',
@@ -137,11 +149,13 @@ const SWEEP_SCRIPT: FakeLine[] = [
 ];
 
 /** How long each sweep line "works", relative to the step delay: the draft takes longest. */
-const STEP_WEIGHTS = [1, 2, 1.5, 0.5, 4];
+const STEP_WEIGHTS = [1, 1.5, 2, 1.5, 0.5, 4];
 
 export interface FakeSetupDeps {
   instructions: FakeInstructions;
   viewer: () => Viewer;
+  /** The sample's team roles, shown with a flip per team under the sweep. */
+  teamRoles: () => TeamRolesView;
   setQuiet: (repo: string) => void;
   setScope: (repo: string | null) => void;
   now: () => Date;
@@ -187,7 +201,7 @@ export class FakeSetup {
     return {
       checks: [
         { id: 'gh', label: 'GitHub CLI (gh) installed', state: 'ok', detail: 'gh version 2.60.0 (sample data)', fix: null },
-        { id: 'gh_auth', label: 'Logged in to GitHub', state: 'ok', detail: 'Logged in as @you · 1 team', fix: null },
+        { id: 'gh_auth', label: 'Logged in to GitHub', state: 'ok', detail: 'Logged in as @you · 2 teams', fix: null },
         { id: 'notifications', label: 'GitHub notifications readable', state: 'ok', detail: 'The token can read your notifications inbox.', fix: null },
         { id: 'claude', label: 'Claude Code CLI (claude) found', state: 'ok', detail: '2.1.0 (Claude Code) (sample data)', fix: null },
       ],
@@ -238,6 +252,7 @@ export class FakeSetup {
       draft: this.sweep.draft,
       error: null,
       current: { text: current.text, version: current.version },
+      teamRoles: this.deps.teamRoles(),
     };
   }
 

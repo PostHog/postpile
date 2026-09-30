@@ -441,7 +441,7 @@ export const offersFollowTheSpec: Invariant = {
       ensure(offers.footer === footer && offers.markLabel === expectedMarkLabel(footer), `${view.tile.id}: footer ${offers.footer} (${offers.markLabel}), expected ${footer}`);
       ensure(offers.snooze === (view.state.kind !== 'done'), `${view.tile.id}: Snooze ${offers.snooze} on a ${view.state.kind} tile`);
       ensure(offers.leadPrKey === expectedLeadPr(view), `${view.tile.id}: lead ${offers.leadPrKey}, expected ${expectedLeadPr(view)}`);
-      const link = footer === 'snooze' ? expectedGitHubLink(view, board.viewer) : null;
+      const link = footer === 'snooze' ? expectedGitHubLink(view, board.viewer, board.prs) : null;
       ensure(JSON.stringify(offers.github) === JSON.stringify(link), `${view.tile.id}: GitHub link ${JSON.stringify(offers.github)}, expected ${JSON.stringify(link)}`);
       for (const row of view.prs) {
         const pr = prOf(board, row.key);

@@ -5,6 +5,7 @@ describe('why helpers', () => {
   it('puts for whom into words', () => {
     expect(forWhomLabel({ kind: 'you' })).toBe('For you');
     expect(forWhomLabel({ kind: 'team', team: 'team-platform' })).toBe('For team-platform');
+    expect(forWhomLabel({ kind: 'routing', team: 'client-approvers' })).toBe('For client-approvers');
     expect(forWhomLabel({ kind: 'own' })).toBe('Your PR');
     expect(forWhomLabel({ kind: 'none' })).toBe('');
   });

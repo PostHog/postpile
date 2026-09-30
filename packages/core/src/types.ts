@@ -122,6 +122,12 @@ export interface Pr {
   url: string;
   body: string;
   author: string;
+  /**
+   * Assigned users' logins. An agent PR a GitHub App opens for a person
+   * names that person here; `prOwners` reads it. Missing on snapshots
+   * stored before it was fetched: read as none.
+   */
+  assignees?: string[];
   state: PrState;
   isDraft: boolean;
   baseRef: string;
@@ -210,12 +216,23 @@ export interface NotificationThread {
 
 export interface Viewer {
   login: string;
-  /** "org/team-slug" for every team the viewer belongs to. */
+  /**
+   * "org/team-slug" for every team the viewer belongs to, home and routing
+   * alike: review requests to any of them are found and shown.
+   */
   teams: string[];
   /**
-   * Every other login on those teams, fetched at most daily. Missing until
-   * the first fetch (or in a viewer stored before it existed); rules then
-   * fall back to treating any other reviewer as a teammate.
+   * The home teams among `teams` (`team-roles.ts`, 2026-09-30): their
+   * members are the viewer's teammates. The other teams only route review
+   * requests and mentions. Empty is valid (no home team: no teammates).
+   * Missing until the roles are first decided; every team then counts as
+   * home, like before roles existed.
+   */
+  homeTeams?: string[];
+  /**
+   * Every other login on the home teams, fetched at most daily. Missing
+   * until the first fetch (or in a viewer stored before it existed); rules
+   * then fall back to treating any other reviewer as a teammate.
    */
   teamMembers?: string[];
   /**
@@ -304,11 +321,13 @@ export type PingReason = NotificationReason;
 
 /**
  * How the full sync found a PR that is not in the inbox:
- * own_open: the viewer's own open PR; review_requested: a review is asked of
- * the viewer; team_review_requested: of one of their teams; involved_merged:
- * involves the viewer and merged in the last days.
+ * own_open: the viewer's own open PR; assigned: an open PR assigned to the
+ * viewer, whoever opened it (a bot's is theirs, see `prOwners`);
+ * review_requested: a review is asked of the viewer; team_review_requested:
+ * of one of their teams; involved_merged: involves the viewer and merged in
+ * the last days.
  */
-export type FoundVia = 'own_open' | 'review_requested' | 'team_review_requested' | 'involved_merged';
+export type FoundVia = 'own_open' | 'assigned' | 'review_requested' | 'team_review_requested' | 'involved_merged';
 
 /**
  * Why a PR is inside a tile.

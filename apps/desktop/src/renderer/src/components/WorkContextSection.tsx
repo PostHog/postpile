@@ -127,7 +127,7 @@ export function WorkContextSection(props: { onOpenTopic: (topicId: string) => vo
   const current = view?.current ?? null;
   const running = (view?.running ?? false) || actions.isBusy('workContext:refresh');
   return (
-    <section className="flex max-w-[680px] flex-col gap-2 rounded-tile border border-dashed border-hairline-strong bg-surface p-3.5 shadow-tile">
+    <section className="flex max-w-[680px] flex-col gap-2 rounded-tile border border-dashed border-hairline-strong bg-surface p-3.5 shadow-tile-lift">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[12.5px] font-semibold text-ink">What you're working on</h2>
         <span className="font-mono text-[10.5px] text-hint">agent-written{current ? ` · ${current.model}` : ''}</span>

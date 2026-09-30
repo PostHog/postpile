@@ -240,7 +240,7 @@ export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
     approve,
     // Where Mark read is the PR's own primary (your PR or a merged one, tile unread), Open waits until nothing is left to mark.
     open: lead === 'open_on_github' || (!approve && pr.primaryAction !== 'mark_read'),
-    ask: !finished && !pr.facts.authorIsAutomation && pr.authorRelation !== 'you',
+    ask: !finished && !pr.facts.ownerIsAutomation && pr.authorRelation !== 'you',
     markLabel: markLabelOf(mark),
     snooze: scope === 'tile' && view.state.kind !== 'done',
     removeTeams: finished ? [] : pr.ownTeamRequests,

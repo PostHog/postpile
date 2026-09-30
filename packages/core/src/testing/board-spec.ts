@@ -3,7 +3,8 @@
 // the same core functions the store and the engine use, so every generated
 // board is shaped like real data. Names and repos are invented (acme/app,
 // alice, ada, lyra, rowan; renovate is the one automation account without
-// the [bot] suffix).
+// the [bot] suffix, acme-agent[bot] the coding agent that opens PRs for
+// people).
 import fc from 'fast-check';
 import type { NotificationReason, Verdict } from '../types.ts';
 
@@ -11,18 +12,33 @@ import type { NotificationReason, Verdict } from '../types.ts';
  * Who does something: the viewer, a teammate (lyra), someone outside the
  * team (ada, and alice as a second outsider), a GitHub App (dependabot[bot])
  * or automation on a user account without the [bot] suffix (renovate).
+ * Only PR authors: a coding agent's GitHub App (acme-agent[bot]) and a
+ * deleted account (ghost, read as '').
  */
-export type Person = 'viewer' | 'teammate' | 'other' | 'outsider' | 'bot' | 'app';
+export type Person = 'viewer' | 'teammate' | 'other' | 'outsider' | 'bot' | 'app' | 'agent' | 'ghost';
+
+/** Who a PR is assigned to: the viewer, a teammate (lyra) or ada. A bot's PR belongs to its assignees (DESIGN "PR ownership"). */
+export type Assignee = 'viewer' | 'teammate' | 'other';
 
 /**
- * Whom a review request names: the viewer, the viewer's team, another team,
- * a teammate (rowan), or ada (so the reviewer who asked for changes gets
- * asked again).
+ * Whom a review request names: the viewer, the viewer's team
+ * (team-platform), another team (team-infra), the approvers team (the
+ * viewer's routing team on most boards that have it), a teammate (rowan),
+ * or ada (so the reviewer who asked for changes gets asked again).
  */
-export type RequestTarget = 'viewer' | 'team' | 'other_team' | 'teammate' | 'other';
+export type RequestTarget = 'viewer' | 'team' | 'other_team' | 'routing_team' | 'teammate' | 'other';
 
-/** What a comment says, as far as the rules care. */
-export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'bot_marker' | 'deploy';
+/** What a comment says, as far as the rules care. routing_mention names approvers, teams_mention approvers and team-platform. */
+export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'routing_mention' | 'teams_mention' | 'bot_marker' | 'deploy';
+
+/**
+ * The viewer's teams and their roles (DESIGN "Team roles"). one_home:
+ * team-platform, a home team. home_and_routing: team-platform home,
+ * approvers routing only. no_home: both routing only, so no teammates.
+ * undecided: both teams, roles not decided yet (`homeTeams` missing), so
+ * both count as home.
+ */
+export type TeamSetup = 'one_home' | 'home_and_routing' | 'no_home' | 'undecided';
 
 /** PENDING: an unsent review, which says nothing yet. */
 export type ReviewVerdict = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
@@ -72,6 +88,8 @@ export interface OverrideSpec {
 
 export interface PrSpec {
   author: Person;
+  /** In this order; the first names the owner in sentences when a bot opened the PR. */
+  assignees: Assignee[];
   /** Opened as a draft. */
   draft: boolean;
   steps: StepSpec[];
@@ -107,6 +125,7 @@ export interface PrSpec {
 /** A scenario's starting point: ada's open PR, pinged for a review request, with nothing else going on. */
 export const QUIET_PR: PrSpec = {
   author: 'other',
+  assignees: [],
   draft: false,
   steps: [],
   end: { kind: 'open' },
@@ -147,6 +166,7 @@ export interface GroupSpec {
 
 export interface BoardSpec {
   groups: GroupSpec[];
+  teams: TeamSetup;
   /** GitHub writes are locked, so mark-reads wait as pending writes. */
   writesLocked: boolean;
   /** The team member list was never fetched, so rules fall back to "any other reviewer is a teammate". */
@@ -174,17 +194,26 @@ const person: fc.Arbitrary<Person> = fc.oneof(
   { weight: 2, arbitrary: fc.constant<Person>('bot') },
   { weight: 1, arbitrary: fc.constant<Person>('app') },
 );
+/** Mostly people and dependabot; now and then a coding agent's PR or a deleted author, which the assignees own. */
 const author: fc.Arbitrary<Person> = fc.oneof(
   { weight: 8, arbitrary: fc.constantFrom<Person>('other', 'viewer', 'teammate', 'bot') },
   { weight: 1, arbitrary: fc.constant<Person>('app') },
+  { weight: 2, arbitrary: fc.constant<Person>('agent') },
+  { weight: 1, arbitrary: fc.constant<Person>('ghost') },
+);
+/** Half the PRs have nobody assigned; the rest one person, or two with the viewer or a teammate second. */
+const assignees: fc.Arbitrary<Assignee[]> = fc.oneof(
+  { weight: 4, arbitrary: fc.constant<Assignee[]>([]) },
+  { weight: 3, arbitrary: fc.constantFrom<Assignee[]>(['viewer'], ['teammate'], ['other']) },
+  { weight: 1, arbitrary: fc.constantFrom<Assignee[]>(['teammate', 'viewer'], ['other', 'teammate']) },
 );
 const nonViewer = fc.constantFrom<Person>('other', 'teammate', 'bot');
 /** The viewer and their team most: those requests are what the rules act on. */
 const target: fc.Arbitrary<RequestTarget> = fc.oneof(
-  { weight: 2, arbitrary: fc.constantFrom<RequestTarget>('viewer', 'team') },
+  { weight: 2, arbitrary: fc.constantFrom<RequestTarget>('viewer', 'team', 'routing_team') },
   { weight: 1, arbitrary: fc.constantFrom<RequestTarget>('other_team', 'teammate', 'other') },
 );
-const commentText = fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'bot_marker', 'deploy');
+const commentText = fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'routing_mention', 'teams_mention', 'bot_marker', 'deploy');
 const stepIndex = fc.nat({ max: 8 });
 
 const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
@@ -247,6 +276,7 @@ const snoozeArb: fc.Arbitrary<SnoozeSpec> = fc.record({
 /** One PR with a short, valid history. Small numbers and short lists, so shrinking ends on a readable case. */
 export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
   author,
+  assignees,
   draft: sometimes(1, 4),
   steps: fc.array(stepArb, { maxLength: 8 }),
   end: endArb,
@@ -284,6 +314,7 @@ const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
 /** A board: one topic with one to three tiles, 1-4 PRs each. */
 export const boardSpecArb: fc.Arbitrary<BoardSpec> = fc.record({
   groups: fc.array(anyGroupArb, { minLength: 1, maxLength: 3 }),
+  teams: fc.constantFrom<TeamSetup>('one_home', 'home_and_routing', 'no_home', 'undecided'),
   writesLocked: fc.boolean(),
   teamMembersUnknown: sometimes(1, 9),
   nowGap: fc.constantFrom(5000, 60, 3),

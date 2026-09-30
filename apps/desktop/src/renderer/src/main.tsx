@@ -4,7 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './styles/tokens.css';
 import './styles/app.css';
 import { ActionsProvider } from './api/actions.tsx';
+import { errorReporter } from './api/telemetry.ts';
 import { App } from './App.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { watchWindowErrors } from './lib/error-report.ts';
+
+// First, so an error while the app starts is reported too.
+watchWindowErrors(window, errorReporter);
 
 // Reads are local and cheap, but the data only changes on sync, an action or
 // a live poll cycle with news, and all three invalidate what they touch. No
@@ -23,10 +29,12 @@ if (!root) {
 }
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ActionsProvider>
-        <App />
-      </ActionsProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ActionsProvider>
+          <App />
+        </ActionsProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );
