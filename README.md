@@ -32,44 +32,42 @@ The first sync then takes a few minutes while the agent sorts your pull requests
 
 ## What it does
 
-<table>
-  <tr>
-    <td valign="top">Groups pull requests into topics and keeps a short dossier per topic. The agent proposes renames and merges, and you decide. A topic row shows its people, its unread count and whose move it is.</td>
-    <td valign="top"><img src="docs/images/topic-row.png" width="320" alt="A topic in the sidebar"></td>
-  </tr>
-  <tr>
-    <td valign="top">Sorts topics into queues: Needs reply, Changes you requested, My PRs, Team's PRs, To review, Team mentioned. A queue holds topics, not a flat list of pull requests, and each topic shows once, in its most urgent queue.</td>
-    <td valign="top"><img src="docs/images/queues.png" width="320" alt="The queue filters, with counts"></td>
-  </tr>
-  <tr>
-    <td valign="top">Shows whose move it is on every pull request. Deterministic rules (reviews, pushes, replies, stack order) decide first, and the agent judges only what the rules can't.</td>
-    <td valign="top"><img src="docs/images/tile.png" width="400" alt="A tile: for whom, verdict, summary, whose move"></td>
-  </tr>
-  <tr>
-    <td valign="top">Keeps a stack of pull requests together as one unit, with each layer and its state.</td>
-    <td valign="top"><img src="docs/images/stack.png" width="400" alt="A stack tile with its layers"></td>
-  </tr>
-  <tr>
-    <td valign="top">Gives each pull request a short agent glance (verdict and risk) with sources you can check, recheck, or forget.</td>
-    <td valign="top"><img src="docs/images/glance.png" width="400" alt="The glance in the detail pane"></td>
-  </tr>
-  <tr>
-    <td valign="top">Shows what happened since you last looked.</td>
-    <td valign="top"><img src="docs/images/new-since.png" width="400" alt="The new-since box"></td>
-  </tr>
-  <tr>
-    <td valign="top">Keeps the topic's status and goal next to its people and timeline.</td>
-    <td valign="top"><img src="docs/images/dossier.png" width="400" alt="The topic's status and goal"></td>
-  </tr>
-  <tr>
-    <td valign="top">Approves, asks, or marks read from the detail pane. Writes (approve, comment, mark read) stay locked until you open the lock in the status bar.</td>
-    <td valign="top"><img src="docs/images/approve.png" width="400" alt="The action bar with Approve"></td>
-  </tr>
-  <tr>
-    <td valign="top">Uses GitHub as the source of truth for read and unread, and shows the unread count and the writes lock in the status bar. It sends Mac notifications only for the pings that an agent judged worth it, from a poll every minute, and right away when you switch to the app.</td>
-    <td valign="top"><img src="docs/images/status-bar.png" width="400" alt="The status bar"></td>
-  </tr>
-</table>
+Groups pull requests into topics and keeps a short dossier per topic. The agent proposes renames and merges, and you decide. A topic row shows its people, its unread count and whose move it is.
+
+<img src="docs/images/topic-row.png" width="320" alt="A topic in the sidebar">
+
+Sorts topics into queues: Needs reply, Changes you requested, My PRs, Team's PRs, To review, Team mentioned. A queue holds topics, not a flat list of pull requests, and each topic shows once, in its most urgent queue.
+
+<img src="docs/images/queues.png" width="320" alt="The queue filters, with counts">
+
+Shows whose move it is on every pull request. Deterministic rules (reviews, pushes, replies, stack order) decide first, and the agent judges only what the rules can't.
+
+<img src="docs/images/tile.png" width="533" alt="A tile: for whom, verdict, summary, whose move">
+
+Keeps a stack of pull requests together as one unit, with each layer and its state.
+
+<img src="docs/images/stack.png" width="531" alt="A stack tile with its layers">
+
+Gives each pull request a short agent glance (verdict and risk) with sources you can check, recheck, or forget.
+
+<img src="docs/images/glance.png" width="541" alt="The glance in the detail pane">
+
+Shows what happened since you last looked.
+
+<img src="docs/images/new-since.png" width="541" alt="The new-since box">
+
+Keeps the topic's status and goal next to its people and timeline.
+
+<img src="docs/images/dossier.png" width="533" alt="The topic's status and goal">
+
+Approves, asks, or marks read from the detail pane. Writes (approve, comment, mark read) stay locked until you open the lock in the status bar.
+
+<img src="docs/images/approve.png" width="541" alt="The action bar with Approve">
+
+Uses GitHub as the source of truth for read and unread, and shows the unread count and the writes lock in the status bar. It sends Mac notifications only for the pings that an agent judged worth it, from a poll every minute, and right away when you switch to the app.
+
+<img src="docs/images/status-bar.png" width="538" alt="The status bar">
+
 
 All screenshots use sample data (see [docs/development.md](docs/development.md#screenshots)).
 
