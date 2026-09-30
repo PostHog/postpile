@@ -3979,6 +3979,26 @@ in meta (`app_version`), and every MCP answer compares it with its own.
 Tier "To review" and whose move "Review" agree for the dismissed-review case
 (a dismissed review no longer counts as reviewed for the tier either).
 
+**Decided from the property tests (2026-09-30).** The generated boards found
+four cases where the rules had no answer yet; Julian decided each:
+
+- Re-request after your changes: you asked for changes, the author asked you
+  again, and you then only commented. The PR stays under "Changes you
+  requested" and the move says "Re-review" (it said "Review, ada asked").
+- Loud news on a pulled-in stack layer makes the tile unread and gives that
+  layer a "Not done yet" dot. Julian: "PostPile found it could be interesting
+  to me? that's a nice side effect". Before, the tile went unread with no dot
+  anywhere. (Confirms "loud events on pulled-in PRs also make a tile unread"
+  from the open questions.)
+- Every snooze ends when its PR is merged or closed, not only push and CI
+  snoozes: a "someone replies" or "until" snooze on a finished PR kept its
+  topic from retiring.
+- An automation event the agent raised to loud wakes a snooze, like a human's
+  loud event, so the tile turns unread and pings. The human-only rule still
+  holds for rule loudness: a bot event the agent left alone never wakes a
+  snooze, and the app's own Look-closer event never does. A snoozed tile
+  itself still never pings.
+
 **Decision tables for loudness and pings.** Plain TypeScript arrays, first
 match wins. Pings keep choosing the newest qualifying event within the
 winning class. Freshness, dedup, agent veto and delivery stay outside the
@@ -4256,13 +4276,14 @@ preflight and does not know the token, so CORS stays open.
   - a poll whose PR fetch failed leaves those PRs to the full sync; the next poll gets a 304
     and does not retry them [yes, keeps the 304 path free]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
-  snooze started ends it, so a mention is never hidden. Confirm.
+  snooze started ends it, so a mention is never hidden; since 2026-09-30 also an automation event
+  the agent raised to loud (see "Decided from the property tests"). Confirm.
 - **A broken snooze comes back**: a snooze broken by a mention comes back once the mention is
   read (`packages/core/src/snooze.test.ts` asserts it). Keep, or end the snooze for good when it
   breaks? (From the codebase review, 2026-09-29.)
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
-  spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread. Commits after
+  spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread (confirmed 2026-09-30, the layer gets a "Not done yet" dot). Commits after
   the user's approval are quiet unless the agent raises one (decided 2026-09-28).
 - **Repo name**: decided 2026-09-28, the app is PostPile (formerly the working title
   `code-manager`). Renaming the repo folder is still open.
