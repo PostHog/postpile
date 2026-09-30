@@ -13,6 +13,9 @@ import {
   SETUP_CODEOWNERS_REPOS,
   SETUP_PR_CAP,
   setupSources,
+  TEAM_ROLE_WINDOW_DAYS,
+  teamRolesLine,
+  withHomeTeams,
   type ActivityPr,
   type CodeownersExcerpt,
   type IsoTime,
@@ -24,6 +27,7 @@ import {
   type SetupSweepLine,
   type SetupSweepStep,
   type SetupSweepView,
+  type TeamRoles,
   type Viewer,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
@@ -31,7 +35,8 @@ import type { Store } from '@postpile/store';
 import { errorText } from '../errors.ts';
 import type { InstructionsHistory } from '../instructions/history.ts';
 import type { TeamMembers } from '../team-members.ts';
-import { saveViewer } from '../viewer-meta.ts';
+import type { TeamRoleKeeper } from '../team-roles.ts';
+import { loadViewer, saveViewer } from '../viewer-meta.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -40,6 +45,7 @@ export interface SetupSweepDeps {
   reader: GitHubReader;
   agent: AgentService;
   teamMembers: TeamMembers;
+  teamRoles: TeamRoleKeeper;
   history: InstructionsHistory;
   /** The newest work context digest as prompt text, null when there is none. */
   digest: () => SetupMaterial['digest'];
@@ -106,6 +112,7 @@ export class SetupSweep {
       return null;
     }
     const current = this.deps.history.current();
+    const viewer = loadViewer(this.deps.store);
     return {
       running: this.running !== null,
       startedAt: job.startedAt,
@@ -114,6 +121,7 @@ export class SetupSweep {
       draft: job.result?.draft ?? null,
       error: job.error,
       current: { text: current.text, version: current.version?.version ?? null },
+      teamRoles: viewer ? this.deps.teamRoles.view(viewer) : null,
     };
   }
 
@@ -146,10 +154,32 @@ export class SetupSweep {
     line.text = text;
   }
 
+  /**
+   * Home or routing per team, from the last 90 days of reviews. Every team
+   * again; the user's flips stay. A failure keeps the stored roles (none:
+   * every team counts as home) and the sweep goes on.
+   */
+  private async teamRoles(job: SweepJob, viewer: Viewer): Promise<TeamRoles | null> {
+    if (viewer.teams.length === 0) {
+      return this.deps.teamRoles.load();
+    }
+    const line = this.line(job, 'teams', `Reading how your reviews of the last ${TEAM_ROLE_WINDOW_DAYS} days reached you…`);
+    try {
+      const roles = await this.deps.teamRoles.reclassify(viewer);
+      SetupSweep.finish(line, 'done', teamRolesLine(roles, viewer.teams));
+      return roles;
+    } catch (error) {
+      SetupSweep.finish(line, 'failed', `Could not read your reviews to tell your home team: ${errorText(error)}`);
+      return this.deps.teamRoles.load();
+    }
+  }
+
   private async viewer(job: SweepJob): Promise<Viewer | null> {
     const line = this.line(job, 'viewer', 'Reading your GitHub profile and teams…');
     try {
-      const viewer = await this.deps.teamMembers.attach(await this.deps.reader.viewer());
+      const fromGitHub = await this.deps.reader.viewer();
+      const roles = await this.teamRoles(job, fromGitHub);
+      const viewer = await this.deps.teamMembers.attach(withHomeTeams(fromGitHub, roles));
       saveViewer(this.deps.store, viewer);
       const teams = viewer.teams.length > 0 ? `teams ${viewer.teams.join(', ')}` : 'no teams visible';
       SetupSweep.finish(line, 'done', `Signed in as @${viewer.login} · ${teams} · ${plural(viewer.teamMembers?.length ?? 0, 'teammate')}`);

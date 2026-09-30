@@ -54,6 +54,8 @@ import type {
   SnoozeCondition,
   SyncOptions,
   SyncReport,
+  TeamRole,
+  TeamRolesView,
   ToolsView,
   TopicDetail,
   TopicListItem,
@@ -76,6 +78,7 @@ import {
   rateLimitSourceFromErrors,
   snoozeTelemetryBucket,
   systemTimers,
+  withHomeTeams,
   withQuietRepo,
 } from '@postpile/core';
 import { loadAppVersion, saveAppVersion } from './app-version-meta.ts';
@@ -83,7 +86,7 @@ import type { AutoSyncOptions } from './auto-sync.ts';
 import { isPostHogMember } from '@postpile/core/telemetry-identity';
 import { PingSummary } from './telemetry/ping-summary.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
-import { loadViewer } from './viewer-meta.ts';
+import { loadViewer, saveViewer } from './viewer-meta.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -133,6 +136,7 @@ import { SetupFlow } from './setup/setup-flow.ts';
 import { SetupSweep } from './setup/setup-sweep.ts';
 import { SyncRun } from './sync-run.ts';
 import { TeamMembers } from './team-members.ts';
+import { TeamRoleKeeper } from './team-roles.ts';
 import { ToolHealth } from './tools/tool-health.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
@@ -272,6 +276,8 @@ export class Engine implements EngineService {
   private focus: PollFocus = NO_FOCUS;
   private readonly agentRefresher: AgentRefresher;
   private readonly outsideProposals: OutsideProposals;
+  private readonly teamMembers: TeamMembers;
+  private readonly teamRoles: TeamRoleKeeper;
   private agentRequests: AgentRequestInbox | null = null;
 
   constructor(private readonly deps: EngineDeps) {
@@ -351,11 +357,14 @@ export class Engine implements EngineService {
     );
     this.pollRun = new PollRun(runDeps, github, decider, (topicIds) => this.requestCatchUps(topicIds));
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
+    this.teamMembers = new TeamMembers(store, deps.reader, now);
+    this.teamRoles = new TeamRoleKeeper(store, deps.reader, now);
     const setupSweep = new SetupSweep({
       store,
       reader: deps.reader,
       agent: deps.agent,
-      teamMembers: new TeamMembers(store, deps.reader, now),
+      teamMembers: this.teamMembers,
+      teamRoles: this.teamRoles,
       history,
       digest: () => this.workContextDigest(),
       now,
@@ -799,6 +808,21 @@ export class Engine implements EngineService {
 
   async getViewer(): Promise<ViewerView> {
     return this.reads.viewer();
+  }
+
+  async getTeamRoles(): Promise<TeamRolesView> {
+    return this.teamRoles.view(loadViewer(this.deps.store));
+  }
+
+  async setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {
+    const { store } = this.deps;
+    const viewer = loadViewer(store);
+    if (!viewer?.teams.includes(team)) {
+      throw new Error(`not one of your teams: ${team}`);
+    }
+    const roles = this.teamRoles.setRole(team, role);
+    saveViewer(store, await this.teamMembers.attach(withHomeTeams(viewer, roles)));
+    return this.teamRoles.view(viewer);
   }
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {

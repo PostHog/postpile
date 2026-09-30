@@ -3,6 +3,7 @@
 // the work context digest. The user reviews and accepts; nothing is written
 // before that. These are the wire types; the rules live in setup-draft.ts.
 
+import type { TeamRolesView } from './team-roles.ts';
 import type { IsoTime, PrKey, PrState, Viewer } from './types.ts';
 import type { ActionResult } from './views.ts';
 
@@ -135,7 +136,7 @@ export interface SetupDraft {
   model: string | null;
 }
 
-export type SetupSweepStep = 'viewer' | 'activity' | 'codeowners' | 'digest' | 'draft';
+export type SetupSweepStep = 'viewer' | 'teams' | 'activity' | 'codeowners' | 'digest' | 'draft';
 export type SetupLineState = 'running' | 'done' | 'failed' | 'skipped';
 
 /** One live progress line of the sweep. */
@@ -162,6 +163,8 @@ export interface SetupSweepView {
   /** Why there is no agent draft, when there is none. */
   error: string | null;
   current: SetupCurrentInstructions;
+  /** The viewer's teams and their roles, with a flip per team (2026-09-30). Null before the viewer is known. */
+  teamRoles: TeamRolesView | null;
 }
 
 /** A section as the user left it in the review step. */

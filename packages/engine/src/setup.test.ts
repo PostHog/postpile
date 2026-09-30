@@ -40,6 +40,7 @@ beforeEach(() => {
   file = join(dir, 'instructions.md');
   h = makeHarness({ instructionsFile: file, firstRun: true });
   h.reader.teams.set('acme/team-platform', ['viewer', 'bob']);
+  h.reader.teamSizeCounts.set('acme/team-platform', 2);
   h.reader.activity = [activity('acme/app', 1, 'authored'), activity('acme/app', 2, 'reviewed'), activity('acme/docs', 3, 'reviewed')];
   h.reader.files.set('acme/app:.github/CODEOWNERS', '* @acme/all\n/.github/ @acme/team-platform\n');
 });
@@ -121,13 +122,15 @@ describe('setup sweep', () => {
 
     expect(view.lines.map((line) => [line.step, line.state])).toEqual([
       ['viewer', 'done'],
+      ['teams', 'done'],
       ['activity', 'done'],
       ['codeowners', 'done'],
       ['digest', 'skipped'],
       ['draft', 'done'],
     ]);
-    expect(view.lines[1]?.text).toBe('Found 3 PRs in 30 days: 1 you wrote, 2 you reviewed, 0 waiting on your review · 2 repos');
-    expect(view.lines[2]?.text).toBe('Ownership files: 1 rule names you or your teams (acme/app .github/CODEOWNERS)');
+    expect(view.lines[1]?.text).toBe('Home team: team-platform (2 members)');
+    expect(view.lines[2]?.text).toBe('Found 3 PRs in 30 days: 1 you wrote, 2 you reviewed, 0 waiting on your review · 2 repos');
+    expect(view.lines[3]?.text).toBe('Ownership files: 1 rule names you or your teams (acme/app .github/CODEOWNERS)');
     expect(h.reader.activityCalls).toEqual(['2026-08-03']);
     expect(h.reader.fileCalls).toContain('acme/docs:docs/CODEOWNERS');
     expect(loadViewer(h.store)?.teamMembers).toEqual(['bob']);
@@ -147,7 +150,7 @@ describe('setup sweep', () => {
     h.reader.files.set('acme/app:.github/owners.yaml', "rules:\n  - match: ['/workflows/', '/actions/']\n    owners: [team-platform, team-security]\n");
     const view = await sweepToEnd();
 
-    expect(view.lines[2]?.text).toBe(
+    expect(view.lines[3]?.text).toBe(
       'Ownership files: 3 rules name you or your teams (acme/app .github/CODEOWNERS, acme/app owners.yaml, acme/app .github/owners.yaml)',
     );
     expect(h.reader.fileCalls).not.toContain('acme/docs:.github/owners.yaml');
@@ -164,6 +167,75 @@ describe('setup sweep', () => {
     expect(view.draft?.model).toBeNull();
     expect(view.draft?.sections.every((section) => section.body === '')).toBe(true);
     expect(view.draft?.mainRepo?.repo).toBe('acme/app');
+  });
+});
+
+describe('setup sweep: team roles', () => {
+  /** `count` reviewed PRs where only `requested` was asked. */
+  function reviewed(count: number, requested: string[], start = 0) {
+    return Array.from({ length: count }, (_, index) => ({ key: `acme/app#${start + index}`, requested }));
+  }
+
+  beforeEach(() => {
+    h.runner.answer('setup_draft', DRAFT_ANSWER);
+    h.reader.who = { login: 'viewer', teams: ['acme/team-platform', 'acme/client-approvers'] };
+    h.reader.teams.set('acme/client-approvers', ['viewer', 'ada', 'mira']);
+    h.reader.teamSizeCounts.set('acme/client-approvers', 17);
+  });
+
+  it('tells the home team from a routing team, and only home members are teammates', async () => {
+    h.reader.reviewed = [...reviewed(57, ['acme/team-platform']), ...reviewed(4, ['acme/client-approvers'], 100), ...reviewed(39, ['viewer'], 200)];
+    const view = await sweepToEnd();
+
+    expect(view.lines[1]).toEqual({
+      step: 'teams',
+      state: 'done',
+      text: 'Home team: team-platform (57% of your reviews came through it) · Routing only: client-approvers (4% of your reviews came through it)',
+    });
+    expect(h.reader.reviewedCalls).toEqual([['viewer', ['acme'], '2026-06-04', 200]]);
+    expect(loadViewer(h.store)).toMatchObject({ homeTeams: ['acme/team-platform'], teamMembers: ['bob'] });
+    expect(h.reader.teamCalls.map(([team]) => team)).toEqual(['acme/team-platform']);
+    expect(view.teamRoles?.teams.map((team) => [team.slug, team.role, team.reason])).toEqual([
+      ['team-platform', 'home', '57% of your reviews'],
+      ['client-approvers', 'routing', '4% of your reviews'],
+    ]);
+  });
+
+  it('says so when no team is a home team, and leaves no teammates', async () => {
+    h.reader.reviewed = [...reviewed(4, ['acme/client-approvers']), ...reviewed(96, ['viewer'], 100)];
+    const view = await sweepToEnd();
+
+    expect(view.lines[1]?.text).toBe(
+      'No home team: your teams only route reviews to you · Routing only: team-platform (0% of your reviews came through it), client-approvers (4% of your reviews came through it)',
+    );
+    expect(loadViewer(h.store)).toMatchObject({ homeTeams: [], teamMembers: [] });
+  });
+
+  it('keeps a flip over a later sweep', async () => {
+    h.reader.reviewed = [...reviewed(4, ['acme/client-approvers']), ...reviewed(96, ['viewer'], 100)];
+    await sweepToEnd();
+    const flipped = await h.engine.setTeamRole('acme/team-platform', 'home');
+    expect(flipped.teams[0]).toMatchObject({ role: 'home', source: 'user', reason: 'set by you' });
+    expect(loadViewer(h.store)).toMatchObject({ homeTeams: ['acme/team-platform'], teamMembers: ['bob'] });
+
+    const again = await sweepToEnd();
+    expect(again.lines[1]?.text).toContain('Home team: team-platform (set by you)');
+    expect(loadViewer(h.store)?.homeTeams).toEqual(['acme/team-platform']);
+  });
+
+  it('goes on when the reviews cannot be read, every team home', async () => {
+    h.reader.teamRolesError = new Error('search timed out');
+    const view = await sweepToEnd();
+    expect(view.lines[1]).toMatchObject({ step: 'teams', state: 'failed' });
+    expect(view.lines[1]?.text).toContain('search timed out');
+    expect(view.draft?.model).not.toBeNull();
+    expect(loadViewer(h.store)?.homeTeams).toBeUndefined();
+    expect(loadViewer(h.store)?.teamMembers).toEqual(['ada', 'bob', 'mira']);
+  });
+
+  it('refuses a team the viewer is not on', async () => {
+    await sweepToEnd();
+    await expect(h.engine.setTeamRole('acme/other', 'home')).rejects.toThrow('not one of your teams');
   });
 });
 

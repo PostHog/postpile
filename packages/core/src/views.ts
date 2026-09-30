@@ -121,8 +121,14 @@ export interface FinishedTopic {
 export interface ViewerView {
   /** Null before the first sync stored the viewer. */
   login: string | null;
-  /** Everyone else on the viewer's teams; empty until fetched. */
+  /** Everyone else on the viewer's home teams; empty until fetched, and without a home team. */
   teamMembers: string[];
+  /**
+   * The home teams (DESIGN.md "Team roles"). Empty: no home team, so no
+   * teammates and no Team filter. Null before roles are decided (every team
+   * counts as home).
+   */
+  homeTeams: string[] | null;
 }
 
 export interface PrSummary {

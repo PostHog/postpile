@@ -361,7 +361,7 @@ export class ReadModels {
   /** The stored viewer for the sidebar's filter buttons. */
   viewer(): ViewerView {
     const viewer = loadViewer(this.store);
-    return { login: viewer?.login ?? null, teamMembers: viewer?.teamMembers ?? [] };
+    return { login: viewer?.login ?? null, teamMembers: viewer?.teamMembers ?? [], homeTeams: viewer?.homeTeams ?? null };
   }
 
   /** Decided or expired in the last OUTSIDE_PROPOSAL_DAYS days, newest first; merges into this topic included. */

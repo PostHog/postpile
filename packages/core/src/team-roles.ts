@@ -209,3 +209,38 @@ export function teamRolesLine(roles: TeamRoles, teams: string[]): string {
   }
   return parts.join(' · ');
 }
+
+/** One of the viewer's teams as the setup sweep and the instructions pane show it. */
+export interface TeamRoleView {
+  /** "acme/team-devex": what a flip sends back. */
+  team: string;
+  /** "team-devex". */
+  slug: string;
+  role: TeamRole;
+  source: 'auto' | 'user';
+  /** Why, in words: "57% of your reviews", "4 members", "set by you", "not decided yet". */
+  reason: string;
+}
+
+export interface TeamRolesView {
+  teams: TeamRoleView[];
+  /** Null before the first classification. */
+  classifiedAt: IsoTime | null;
+  /** The reviews the last classification read; null before the first. */
+  reviewCount: number | null;
+}
+
+/** The viewer's teams in their order, each with its role. A team without a role yet shows as home. */
+export function teamRolesView(teams: string[], roles: TeamRoles | null): TeamRolesView {
+  return {
+    teams: teams.map((team): TeamRoleView => {
+      const entry = roles?.teams[team];
+      if (!entry) {
+        return { team, slug: slugOf(team), role: 'home', source: 'auto', reason: 'not decided yet' };
+      }
+      return { team, slug: slugOf(team), role: entry.role, source: entry.source, reason: teamRoleReason(entry) };
+    }),
+    classifiedAt: roles?.classifiedAt ?? null,
+    reviewCount: roles?.reviewCount ?? null,
+  };
+}

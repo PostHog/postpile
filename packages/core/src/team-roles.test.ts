@@ -9,6 +9,7 @@ import {
   setTeamRole,
   teamRoleReason,
   teamRolesLine,
+  teamRolesView,
   teamsWithoutRole,
   withHomeTeams,
   type ReviewedPr,
@@ -169,5 +170,18 @@ describe('wording', () => {
     expect(teamRolesLine(none, [DEVEX, APPROVERS])).toBe(
       'No home team: your teams only route reviews to you · Routing only: team-devex (set by you), client-approvers (4% of your reviews came through it)',
     );
+  });
+});
+
+describe('teamRolesView', () => {
+  it('lists every team with its role and reason, undecided ones as home', () => {
+    const view = teamRolesView([DEVEX, APPROVERS, 'acme/infra'], setTeamRole(stored, APPROVERS, 'home'));
+    expect(view.teams).toEqual([
+      { team: DEVEX, slug: 'team-devex', role: 'home', source: 'auto', reason: '57% of your reviews' },
+      { team: APPROVERS, slug: 'client-approvers', role: 'home', source: 'user', reason: 'set by you' },
+      { team: 'acme/infra', slug: 'infra', role: 'home', source: 'auto', reason: 'not decided yet' },
+    ]);
+    expect(view.reviewCount).toBe(100);
+    expect(teamRolesView([DEVEX], null)).toMatchObject({ classifiedAt: null, reviewCount: null });
   });
 });

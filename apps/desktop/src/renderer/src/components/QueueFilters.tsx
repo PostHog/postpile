@@ -1,5 +1,5 @@
 import type { ViewerView } from '@postpile/core';
-import { QUEUE_FILTERS, type QueueFilter } from '../lib/queues.ts';
+import { visibleQueueFilters, type QueueFilter } from '../lib/queues.ts';
 import { Avatar } from './Avatar.tsx';
 
 const LABELS: Record<QueueFilter, string> = { mine: 'Mine', team: 'Team', reply: 'Reply', review: 'Review' };
@@ -42,7 +42,7 @@ interface QueueFiltersProps {
 export function QueueFilters(props: QueueFiltersProps) {
   return (
     <div className="grid grid-cols-2 gap-1 @min-[290px]:flex @min-[290px]:flex-wrap" role="group" aria-label="Filter topics">
-      {QUEUE_FILTERS.map((filter) => {
+      {visibleQueueFilters(props.viewer?.homeTeams, props.active).map((filter) => {
         const on = props.active === filter;
         const count = props.counts[filter];
         const blocked = on ? null : disabledReason(filter, count, props.viewer);

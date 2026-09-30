@@ -405,7 +405,7 @@ describe('FakeEngine queues', () => {
     const depot = topics.find((item) => item.topic.id === 'topic-depot');
     expect(tiers.filter((tier) => (depot?.queues.tiers[tier] ?? 0) > 0)).toEqual(['needs_reply', 'team', 'to_review']);
     expect(depot?.people.map((person) => person.relation)).toEqual(['team', 'team', 'other']);
-    expect(await new FakeEngine().getViewer()).toEqual({ login: 'you', teamMembers: ['lyra', 'nell', 'rowan', 'sol'] });
+    expect(await new FakeEngine().getViewer()).toEqual({ login: 'you', teamMembers: ['lyra', 'nell', 'rowan', 'sol'], homeTeams: ['acme/team-platform'] });
   });
 
   it('keeps a topic whose only unread tile is merged calm and ranks it below the urgent ones', async () => {

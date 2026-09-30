@@ -34,6 +34,8 @@ export const SAMPLE_AGENT = 'acme-agent[bot]';
 const OTHER_REPOS: Record<number, string> = {
   1915: 'acme/infra',
   1925: 'acme/python-sdk',
+  1966: 'acme/python-sdk',
+  1967: 'acme/python-sdk',
   1940: 'acme/desktop',
 };
 

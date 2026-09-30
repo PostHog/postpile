@@ -44,6 +44,8 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     unreadPrKeys: notImplemented,
     listFinishedTopics: notImplemented,
     getViewer: notImplemented,
+    getTeamRoles: notImplemented,
+    setTeamRole: notImplemented,
     listRepos: notImplemented,
     setRepoScope: notImplemented,
     setRepoQuiet: notImplemented,
