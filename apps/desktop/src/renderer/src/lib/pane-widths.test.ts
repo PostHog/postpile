@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { clampPaneWidth, paneColumns, paneWidthsKey, parsePaneWidths, resolvedColumnWidths } from './pane-widths.ts';
 
 describe('pane widths', () => {
-  it('uses the default clamps until a pane is dragged', () => {
-    expect(paneColumns({ sidebar: null, tiles: null }).template).toBe('clamp(248px,22vw,330px) clamp(420px,33vw,480px) minmax(0,1fr)');
-    expect(paneColumns({ sidebar: 300, tiles: null }).template).toBe('300px clamp(420px,33vw,480px) minmax(0,1fr)');
+  it('splits what the sidebar leaves evenly between tiles and detail until a pane is dragged', () => {
+    expect(paneColumns({ sidebar: null, tiles: null })).toEqual({
+      sidebar: 'clamp(248px,22vw,330px)',
+      tiles: 'calc((100% - clamp(248px,22vw,330px)) / 2)',
+      template: 'clamp(248px,22vw,330px) calc((100% - clamp(248px,22vw,330px)) / 2) minmax(0,1fr)',
+    });
+    expect(paneColumns({ sidebar: 300, tiles: null }).template).toBe('300px calc((100% - 300px) / 2) minmax(0,1fr)');
+  });
+
+  it('keeps a dragged tile width', () => {
+    expect(paneColumns({ sidebar: null, tiles: 520 }).template).toBe('clamp(248px,22vw,330px) 520px minmax(0,1fr)');
   });
 
   it('clamps a drag to the pane limits and the room left', () => {
@@ -14,6 +22,8 @@ describe('pane widths', () => {
     expect(clampPaneWidth('tiles', 700, 500)).toBe(500);
     // No room at all still keeps the minimum.
     expect(clampPaneWidth('tiles', 700, 100)).toBe(340);
+    // The tile column is no longer capped at 720; the room decides.
+    expect(clampPaneWidth('tiles', 900, 1000)).toBe(900);
   });
 
   it('reads stored widths defensively', () => {
@@ -21,6 +31,7 @@ describe('pane widths', () => {
     expect(parsePaneWidths('not json')).toEqual({ sidebar: null, tiles: null });
     expect(parsePaneWidths('{"sidebar":280,"tiles":"wide"}')).toEqual({ sidebar: 280, tiles: null });
     expect(parsePaneWidths('{"sidebar":5000,"tiles":10}')).toEqual({ sidebar: 440, tiles: 340 });
+    expect(parsePaneWidths('{"sidebar":null,"tiles":800}')).toEqual({ sidebar: null, tiles: 800 });
   });
 
   it('keys the widths per viewer', () => {

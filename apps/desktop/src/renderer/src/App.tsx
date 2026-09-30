@@ -319,8 +319,9 @@ export function App() {
           search={<SearchField value={query} onChange={setQuery} />}
           repoScope={<RepoScopeMenu />}
         />
-        {/* Sidebar | tiles | detail. The tile column stays one tile wide and the detail
-            pane takes the rest; widths hold from the 1100px minimum window up. The two
+        {/* Sidebar | tiles | detail. The tile column stays one tile wide; by default it and
+            the detail pane split what the sidebar leaves evenly, from the 1100px minimum
+            window up. The two
             dividers resize the sidebar and the tile column (kept per viewer), so the
             columns are an inline style: they are render-time values. */}
         <div ref={gridRef} className="relative grid min-h-0 flex-1" style={{ gridTemplateColumns: columns.template }}>
