@@ -472,7 +472,8 @@ now".
   "why now" strip with the actor's avatar and an ink event glyph, a segment
   status pill per PR with open threads, a whose-turn footer (you / them /
   none, rules in core `whoseTurn`), people stack in the header. Same
-  badges, pills and glyphs in the detail pane. Primary buttons are ink.
+  badges, pills and glyphs in the detail pane. Primary buttons are ink
+  (Approve green since 2026-09-30, see Decided).
 - Live poll and Mac pings (DESIGN.md "Live poll and Mac pings"): the desktop
   app polls `GET /notifications` every 60s or GitHub's X-Poll-Interval, and
   once when the window gets focus (ETag, 304 = free), backs off on
@@ -1027,6 +1028,11 @@ the app meanwhile.
 
 ## Decided
 
+- **Green Approve** (2026-09-30, interface polish pass): Approve, the one
+  irreversible-and-positive action, leads in `--safe` green with
+  `--elev-safe`, the same color as the "Approved" state it produces. Every
+  other lead (Snooze, Mark read, Mark done) stays ink; accent blue stays for
+  selection and focus only. Replaces "Ink primary buttons" for Approve.
 - **From the property tests** (2026-09-30): a re-request after your changes
   request says "Re-review, ada asked" (move `re_review`), with or without a
   push; the PR stays under Changes you requested, and the order inside that

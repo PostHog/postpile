@@ -2058,11 +2058,15 @@ any review ask; on top of that:
   tile is unread, else Open on GitHub. "Ask <author>" is hidden on your own PR.
 - The pane leads with what it acts on (2026-09-29,
   core `paneOffers` in `offers.ts`, on top of the
-  tile's `tileFooterAction`): the one ink button, placed first, is Approve
+  tile's `tileFooterAction`): the one filled button, placed first, is Approve
   while it is due (someone else's open PR, not approved, not a draft), else
   on a single-PR tile the tile footer's Mark read / Mark done / Snooze, or
   Open on GitHub on a done tile; on a stack or set the selected PR's Mark
   read / Mark done, else Open on GitHub (see "After a mark-read"). "Approve again" and "Approve draft" stay outlined next to it.
+  The filled button is ink, except Approve (2026-09-30): it leads in `--safe`
+  green, the same color as the "Approved" state it produces, because it is
+  the one action that is both final and positive. Accent blue stays for
+  selection and focus.
   Before, a PR the viewer had approved got no primary at all while its tile
   led with Mark read. The topic header's role chip is a noun: "Driver",
   "Reviewer", "Stakeholder", "Watcher" (was "You review" and friends).
@@ -2074,7 +2078,7 @@ any review ask; on top of that:
   once you approved (app record or an approving review, any commit; core's
   `viewerApproval`, shipped as `PrDetail.viewerApproval`, so the button and
   the turn rules agree) the button stays usable but calm, an outlined "Approve again" whose tooltip
-  says you already approved and whether commits came after; no ink, no nag.
+  says you already approved and whether commits came after; not filled, no nag.
   It wins over draft. Else "Approve as well" when others approved and you
   never did. Drafts get an outlined "Approve draft"; draft wins over "as
   well", since not-ready is the bigger caveat and the review glyph already
