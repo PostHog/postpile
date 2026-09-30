@@ -14,6 +14,8 @@ pnpm test
 pnpm dist
 ```
 
+`pnpm test` includes property tests over generated boards (DESIGN.md › Tests across rules). `POSTPILE_PROPERTY_RUNS=10000 pnpm test` checks more boards per invariant than the default 2000.
+
 `pnpm dist` builds with electron-vite, then electron-builder makes an ad-hoc signed app:
 
 - `apps/desktop/dist/mac-arm64/PostPile.app`

@@ -116,8 +116,11 @@ export class PingDecider {
       if (events.length === 0) {
         continue;
       }
-      const rule = pingRule(events, pr, viewer, isPrInQuietRepo(key, settings));
-      result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, ...this.locate(board, key) });
+      const located = this.locate(board, key);
+      // New human news wakes a snooze before the board is read, so a tile still snoozed here has nothing that should ping yet. An event the agent raises to loud later comes back through decideRaised.
+      const snoozed = located.tile !== null && board.stateOf(located.tile).kind === 'snoozed';
+      const rule = pingRule(events, pr, viewer, isPrInQuietRepo(key, settings), snoozed);
+      result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, ...located });
     }
     return result;
   }
@@ -194,10 +197,8 @@ export class PingDecider {
     return store.events.listForPr(candidate.pr.key).some((event) => ids.has(event.id) && event.seenAt === null);
   }
 
-  async decide(prKeys: PrKey[], newEventIds: string[], viewer: Viewer): Promise<PingDecisions> {
-    const { store, now } = this.deps;
-    const board = Board.load(store, now().toISOString());
-    const candidates = this.candidates(board, prKeys, new Set(newEventIds), viewer);
+  private async decideCandidates(board: Board, candidates: Candidate[], viewer: Viewer): Promise<PingDecisions> {
+    const { store } = this.deps;
     const errors: string[] = [];
     const addressed = candidates.filter((c) => c.rule.class === 'addressed');
     const quiet = candidates
@@ -215,5 +216,42 @@ export class PingDecider {
       .filter((d) => d.ping && this.stillNews(byThread.get(d.threadId)!))
       .map((d): Ping => ({ title: d.title, body: d.body, target: byThread.get(d.threadId)!.target }));
     return { decisions, pings, errors };
+  }
+
+  async decide(prKeys: PrKey[], newEventIds: string[], viewer: Viewer): Promise<PingDecisions> {
+    const board = Board.load(this.deps.store, this.deps.now().toISOString());
+    return this.decideCandidates(board, this.candidates(board, prKeys, new Set(newEventIds), viewer), viewer);
+  }
+
+  /** The thread pinged at or after `at`: the user already heard about this PR since then. */
+  private pingedSince(board: Board, key: PrKey, at: string): boolean {
+    const thread = board.threads.get(key);
+    if (!thread) {
+      return false;
+    }
+    return this.deps.store.pingDecisions.listForThreads([thread.id]).some((decision) => decision.ping && decision.at >= at);
+  }
+
+  /**
+   * The poll decided these events while they were still quiet; the events
+   * agent raised them to loud since (a catch-up run or the next full sync),
+   * which may wake a snooze or make them addressed. Their PRs are decided
+   * again, with all their fresh unseen events, like in the poll. Only a
+   * raised event that is still fresh and unseen counts, and a thread that
+   * pinged since the raised event does not ping again.
+   */
+  async decideRaised(raised: PrEvent[], viewer: Viewer): Promise<PingDecisions> {
+    const { store, now } = this.deps;
+    const board = Board.load(store, now().toISOString());
+    const cutoff = new Date(now().getTime() - PING_FRESH_MS).toISOString();
+    const prKeys = new Set<PrKey>();
+    for (const event of raised) {
+      const stored = (board.events.get(event.prKey) ?? []).find((e) => e.id === event.id);
+      if (stored && stored.seenAt === null && stored.at >= cutoff && !this.pingedSince(board, event.prKey, stored.at)) {
+        prKeys.add(event.prKey);
+      }
+    }
+    const eventIds = [...prKeys].flatMap((key) => (board.events.get(key) ?? []).map((event) => event.id));
+    return this.decideCandidates(board, this.candidates(board, [...prKeys], new Set(eventIds), viewer), viewer);
   }
 }

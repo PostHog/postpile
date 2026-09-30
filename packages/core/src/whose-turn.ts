@@ -16,6 +16,7 @@ import {
   teamRequestHold,
   teamRequestTakenBy,
   viewerHeadReview,
+  viewerRequestedChanges,
   type ReviewRequest,
 } from './review-request.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Tile, UserPrState, Viewer } from './types.ts';
@@ -25,9 +26,10 @@ export type WhoseTurnKind = 'you' | 'them' | 'none';
 /**
  * The kind of move a `you` turn asks for, so the sidebar row can name it.
  * reply: an ask (question, mention, reply, team mention), also on a draft.
- * re_review: the author addressed your changes. review: a review request,
- * personal or for your team. address_changes: threads or a change request
- * on your own PR or draft. merge: your PR is approved. CI is never a move
+ * re_review: the author addressed your changes, or asked you again while
+ * they stand. review: a review request, personal or for your team.
+ * address_changes: threads or a change request on your own PR or draft.
+ * merge: your PR is approved. CI is never a move
  * (DESIGN.md "CI is not a signal").
  */
 export type YourMove = 'reply' | 're_review' | 'review' | 'address_changes' | 'merge';
@@ -184,15 +186,16 @@ function askText(ask: PrEvent, reviewToo: boolean): string {
   return reviewToo ? `Review, ${ask.actor} ${verbs.withReview}` : verbs.alone(ask.actor);
 }
 
-function reviewText(ctx: PrContext, ask: ReviewRequest): string {
+/** "Review, ada asked"; `verb` is "Re-review" when the viewer's changes request stands. */
+function reviewText(ctx: PrContext, ask: ReviewRequest, verb: 'Review' | 'Re-review'): string {
   if (ask === 'team') {
-    return `Review for ${ownTeamSlug(ctx)}`;
+    return `${verb} for ${ownTeamSlug(ctx)}`;
   }
   if (ask === 'team_for_you') {
-    return `Review for ${ownTeamSlug(ctx)}: ${ctx.pr.author}'s PR`;
+    return `${verb} for ${ownTeamSlug(ctx)}: ${ctx.pr.author}'s PR`;
   }
   const by = requester(ctx);
-  return by && !isViewer(ctx, by) ? `Review, ${by} asked` : 'Review';
+  return by && !isViewer(ctx, by) ? `${verb}, ${by} asked` : verb;
 }
 
 /** Unresolved threads whose last word is someone else's (not the viewer's, not a bot's). */
@@ -257,7 +260,20 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return changes.kind === 're_review' ? them(ctx, changes.by, RE_REVIEW) : them(ctx, pr.author, `to address ${changes.by}'s changes`);
   }
   if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
-    return you(ctx, 'review', reviewText(ctx, ask));
+    // Asked again while the viewer's changes request stands (the author
+    // re-requested, the viewer only commented since): a re-review, like the
+    // PR's tier, Changes you requested (2026-09-30).
+    if (viewerRequestedChanges(pr, ctx.viewer)) {
+      return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
+    }
+    return you(ctx, 'review', reviewText(ctx, ask, 'Review'));
+  }
+  if (reviewed !== null && ask === 'you' && viewerRequestedChanges(pr, ctx.viewer)) {
+    // Asked again without a push: GitHub drops a reviewer from the requested
+    // list once they review, so a pending personal request after the
+    // viewer's review is the author's re-request. An explicit re-request
+    // means "look again", push or not (2026-09-30).
+    return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
   }
   if (reviewed?.state === 'APPROVED') {
     return them(ctx, pr.author, 'to merge');
@@ -349,6 +365,15 @@ function newestUnseenLoudAt(events: PrEvent[]): string {
     }
   }
   return newest;
+}
+
+/**
+ * Your move is a re-review: the author answered your changes, or asked you
+ * again while they stand. The sidebar lists these first under Changes you
+ * requested, so the order follows the move.
+ */
+export function isReReviewMove(turn: WhoseTurn): boolean {
+  return turn.kind === 'you' && turn.move === 're_review';
 }
 
 /** Your move, and it is only merging your own approved PR (multi-PR tiles add " on #n"). */

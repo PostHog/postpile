@@ -123,7 +123,8 @@ import {
   personRelation,
   pingedPrKeys,
   prTier,
-  changesAnswered,
+  prWhoseTurn,
+  isReReviewMove,
   searchTopics,
   setIdFromTileId,
   threadPrKey,
@@ -485,6 +486,13 @@ export class FakeEngine implements EngineService {
     return prTier({ pr, events: this.eventsOf(pr.key), viewer: this.viewer(), userState, reason });
   }
 
+  /** Same as the engine: the PR's move is a re-review, which sorts it first under Changes you requested. */
+  private isReReview(pr: Pr): boolean {
+    const userState = this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null;
+    const turn = prWhoseTurn({ pr, events: this.eventsOf(pr.key), userState, viewer: this.viewer(), notYours: this.notYours().has(pr.key) });
+    return isReReviewMove(turn);
+  }
+
   /**
    * Gathers the sample's inputs for core's buildPrSummary / buildTileView,
    * the same rules as the engine. The sample has no threads, so a pinged
@@ -744,7 +752,7 @@ export class FakeEngine implements EngineService {
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
             quiet: isPrInQuietRepo(pr.key, this.repoSettings),
-            changesAddressed: changesAnswered(pr, viewer) !== null,
+            changesAddressed: this.isReReview(pr),
           })),
         ),
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),

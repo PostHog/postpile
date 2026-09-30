@@ -2,6 +2,7 @@ import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import type { AgentCallLog } from './agent-call-log.ts';
 import type { GlancePings } from './live/glance-pings.ts';
+import type { RaisedPings } from './live/raised-pings.ts';
 import type { FactWriter } from './memory/fact-writer.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
@@ -20,6 +21,8 @@ export interface RunDeps {
   telemetry?: Telemetry;
   /** Look closer pings on routed reviews, told after glances are stored; the poll hands them to the Mac. */
   glancePings?: GlancePings;
+  /** Pings for events the events agent raised to loud after the poll decided them; the poll hands them to the Mac. */
+  raisedPings?: RaisedPings;
 }
 
 /** RunDeps.telemetry defaults to a no-op, so SyncRun and ConsolidationRun never have to branch on whether it is set. */

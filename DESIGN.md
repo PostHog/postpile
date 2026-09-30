@@ -142,8 +142,8 @@ team-devex" instead of the bot's name.
 
 - `unread`: a member has an unseen loud event. The tile says which PR and which event.
 - `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
-  yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); a push or CI snooze also
-  ends when its PR is merged or closed.
+  yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); every snooze also ends
+  when its PR is merged or closed.
 - `done`: every pinged member is done and nothing loud is unseen. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
   without their review they have not seen yet, see "Merged without your review"), or approved by
@@ -1570,7 +1570,8 @@ unread and open tiles alike, in the tile's rows and the detail pane's PR
 list (aria-label "Not done yet"). No dots on done or snoozed tiles. Not on
 single-PR tiles either (a tile with one tracked PR, decided the same day):
 the dot says which PR of a stack or set holds the tile; on one PR it would
-only repeat the tile's own state. The
+only repeat the tile's own state. A pulled-in stack layer with unseen loud
+news gets one too (2026-09-30, see "Decided from the property tests"). The
 dots and the detail-pane buttons work together: mark a dotted PR done and its
 dot goes; no dots left, the tile is done. The tile's own unread styling (strip,
 bold title) stays as decided on 28 Sept.
@@ -1713,7 +1714,9 @@ updates it while I'm looking at it."
   `EngineService.markPrRead` (origin `detail`, own batch and undo, handled
   unless pulled in). A mark-read of an unread PR that leaves it your move
   says so in the toast, without the tile Snooze offer.
-- The dot: `notDonePrKeys` in `lib/tiles.ts`, `NotDoneDot` in `pills.tsx`.
+- The dot: `notDonePrKeys` in core `tile-view.ts`, shipped as
+  `TileView.notDonePrKeys` (moved out of the renderer's `lib/tiles.ts`
+  2026-09-30), `NotDoneDot` in `pills.tsx`.
   A done PR that still has unseen news keeps the tile unread, so it keeps
   its dot until it is read.
 - Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
@@ -1826,17 +1829,18 @@ title out (2026-09-29: the tile's heading already is the title; the row's
 tooltip keeps it); a stack or set's rows sit in one tinted rounded box, the
 selected row highlighted, drafts and closed layers on a grey row.
 
-**The not-done dot** (2026-09-29, `notDonePrKeys` in the renderer's
-`lib/tiles.ts`; replaced "the new dot" of the same morning, which only
+**The not-done dot** (2026-09-29, core `notDonePrKeys`, shipped as
+`TileView.notDonePrKeys` since 2026-09-30; replaced "the new dot" of the same morning, which only
 showed on unread tiles for PRs with unseen news, see "Actions act on what
 you look at"): on an unread or open tile every tracked PR that keeps the
 tile from being done gets a small coral dot before its number, in the
 tile's rows and the detail pane's PR list (aria-label "Not done yet"):
 `PrSummary.done` false (core `isPrDone`, shipped per row), or an unseen
-loud event left (that keeps the tile unread, so not done either). Pulled-in
-stack layers never get one; done and snoozed tiles show none, and neither
-does a tile with one tracked PR (the dot would only repeat the tile's
-state). Mark a
+loud event left (that keeps the tile unread, so not done either). A
+pulled-in stack layer gets one while it has unseen loud news, which makes
+the tile unread too (2026-09-30; before, such a tile was unread with no dot
+anywhere). Done and snoozed tiles show none, and neither does a tile where
+only one PR can hold it (the dot would only repeat the tile's state). Mark a
 dotted PR done in the detail pane and its dot goes; no dots left, the tile
 is done. It is the one coral mark that is not "new since you looked"; there
 is no second, read-only dot. History: a six-PR set once stayed unread
@@ -1860,8 +1864,8 @@ authors.
 **Whose turn** (`whoseTurn` in `whose-turn.ts`): `{ kind: 'you' | 'them' |
 'none', who, what, prKey }`. A `you` turn also carries `move` (2026-09-29),
 the kind of move for the sidebar row's chip: `reply` (rule 2, drafts too),
-`re_review` (addressed your changes), `review` (review request, personal or
-team), `address_changes` (threads or a change request on your own PR or
+`re_review` (addressed your changes, or asked again while your changes
+request stands, push or not), `review` (review request, personal or team), `address_changes` (threads or a change request on your own PR or
 draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
 2026-09-29 ("CI is not a signal"). Rules per pinged PR, first match wins:
 
@@ -1944,7 +1948,15 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      or requests changes; a teammate's comment alone does not cover it
      (2026-09-28). A team request on a PR from outside the team (routed)
      is yours only while no teammate reviewed at all, and while it is not
-     on hold (`teamRequestHold`, 2026-09-29).
+     on hold (`teamRequestHold`, 2026-09-29). While your own changes request
+     stands (you were asked again after it and only commented since) the
+     same request is a re-review: "Re-review, ada asked", move `re_review`,
+     matching the tier Changes you requested (2026-09-30,
+     `viewerRequestedChanges`). That holds with or without a push: without
+     one your review of the head still stands, but GitHub drops a reviewer
+     from the requested list once they review, so a pending personal
+     request after it is the author's re-request, and an explicit
+     re-request means "look again" (2026-09-30).
    - them: a routed team request while someone else's changes request
      stands: the author "to address ada's changes" (the author moves
      first). Once the author pushed after it and requested ada again (she
@@ -2169,8 +2181,9 @@ Addressed your changes (see whose turn) is `changes_requested` (was
 `to_review` until 2026-09-29), like a change request still waiting on the
 author: a re-review is owed even to a teammate, and the author's own
 thread replies do not push it into needs_reply; an ask from anyone else
-does. `TopicQueues.changesAddressed` counts the addressed ones, for the
-order inside the section.
+does. `TopicQueues.changesAddressed` counts the ones whose move is a
+re-review (`isReReviewMove`: addressed, or asked again with or without a
+push), for the order inside the section (2026-09-30).
 Pure and tested; the sidebar's queue sections are built on it.
 
 ### Three-pane balance
@@ -2311,10 +2324,10 @@ avatars and filters", QueuesB2).
   where the viewer's newest verdict review asks for changes, whoever wrote
   them. Directly under Needs reply because a standing change request is the
   viewer's own open loop: Julian, "this should surface very high up, maybe
-  directly below needs reply". Rows whose author addressed the changes
-  ("addressed your changes: re-review", the viewer's move, unread) sort
-  first (`TopicQueues.changesAddressed`); rows still waiting on the author
-  follow, quiet. The topic column does the same with the section's tiles
+  directly below needs reply". Rows whose move is a re-review ("addressed
+  your changes: re-review", or "Re-review, ada asked" after a re-request)
+  sort first (`TopicQueues.changesAddressed`, which follows the move since
+  2026-09-30); rows still waiting on the author follow, quiet. The topic column does the same with the section's tiles
   (your move first, `tilesInTierOrder`). Before, only the
   addressed case had a section (To review), and a change request the author
   had not touched fell to Team's PRs or Other topics.
@@ -3040,6 +3053,19 @@ beyond what the full sync already does for threads that left the inbox).
   PR from outside the team (not theirs, not a teammate's), made by a person
   or a bot. It never pings from the poll and never reaches the agent; it
   pings when the glance says Look closer (below).
+- `snoozed` (2026-09-29): the tile holding the PR is still snoozed with the
+  new events in (the decider reads the tile state off the board), so nothing
+  pings. Human news wakes a snooze first, and since 2026-09-30 so does
+  automation the agent raised to loud (it used to stay behind the snooze and
+  still ping, found by the property tests, see "Tests across rules"); what
+  stays behind a snooze is quiet.
+- Raised after the decision (2026-09-30): the events agent judges new events
+  only after the poll decided them (catch-up run or next full sync), so when it
+  raises one to loud (a push after approval starts quiet) the PR's fresh unseen
+  events are decided again (`PingDecider.decideRaised`, told through
+  `DigestDeps.onEventsRaised`), only while that event is within 30 minutes and
+  unseen and the thread has not pinged since it, and the ping waits in
+  `RaisedPings` for the next poll cycle like a Look closer ping.
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
   instructions, topic tailoring, dossier brief, glance, the new events (fenced
@@ -3957,10 +3983,11 @@ tile. Existing snoozes are carried over by migration 019 (`pr_snooze`; the
 old `snooze` table stays until 019 has shipped). A CI snooze on a multi-PR
 tile is now checked per PR, so the tile shows once any tracked PR is green
 (open question whether it should wait for all). Events on pulled-in,
-untracked stack layers no longer touch a snooze. A snooze waiting for
-a push or for green CI ends when the PR is merged or closed; it could never
-finish before and kept the topic from retiring. The human-only wake rule is
-unchanged: the app's own Look-closer event does not break a snooze (its
+untracked stack layers no longer touch a snooze. Every snooze ends when
+its PR is merged or closed (push and CI snoozes first, every kind since
+2026-09-30); it could never finish before and kept the topic from retiring. The wake rule
+stays human news only, plus automation the agent raised to loud (since
+2026-09-30): the app's own Look-closer event does not break a snooze (its
 ping already skips snoozed tiles).
 
 **Topic status has one writer.** All status changes (retire, revive,
@@ -3994,6 +4021,50 @@ in meta (`app_version`), and every MCP answer compares it with its own.
 Tier "To review" and whose move "Review" agree for the dismissed-review case
 (a dismissed review no longer counts as reviewed for the tier either).
 
+**Decided from the property tests (2026-09-30).** The generated boards found
+four cases where the rules had no answer yet; Julian decided each:
+
+- Re-request after your changes: you asked for changes, the author asked you
+  again, and you then only commented. The PR stays under "Changes you
+  requested" and the move says "Re-review" (it said "Review, ada asked").
+  The same without a push says "Re-review, ada asked" too (move
+  `re_review`, your move; it said "ada to address your changes"): an
+  explicit re-request means "look again", push or not.
+- Loud news on a pulled-in stack layer makes the tile unread and gives that
+  layer a "Not done yet" dot. Julian: "PostPile found it could be interesting
+  to me? that's a nice side effect". Before, the tile went unread with no dot
+  anywhere. (Confirms "loud events on pulled-in PRs also make a tile unread"
+  from the open questions.)
+- Every snooze ends when its PR is merged or closed, not only push and CI
+  snoozes: a "someone replies" or "until" snooze on a finished PR kept its
+  topic from retiring.
+- An automation event the agent raised to loud wakes a snooze, like a human's
+  loud event, so the tile turns unread and pings. The human-only rule still
+  holds for rule loudness: a bot event the agent left alone never wakes a
+  snooze, and the app's own Look-closer event never does. A snoozed tile
+  itself still never pings.
+
+Later the same day, from the next runs:
+
+- The order inside "Changes you requested" follows the move: a topic whose
+  PR says Re-review sorts first, also after a re-request (with or without a
+  push), where `changesAnswered` has no answer. `TopicQueues.changesAddressed`
+  counts re-review moves (`isReReviewMove`).
+- An override to loud wakes a snooze whether the events agent or the user
+  set it (`raisedToLoud` reads the override, not who made it). Julian: keep
+  both.
+- A stack with one tracked PR plus a pulled-in layer with news dots both
+  rows while the tracked PR is not done: the layer for its news, the
+  tracked PR for itself. Julian: keep.
+- The quiet-read grace counts from the newest activity, human or bot (the
+  touch, the bots after it, the thread's update). Kept as built.
+- The ping side of the raised-automation rule: the "only automation" row
+  of the ping table counts automation at its rule's loudness only. A bot
+  event raised to loud (agent or user) goes on like a person's loud event:
+  addressed or not by its kind, then freshness, dedup, throttle and the
+  agent's veto as usual. Before, a bot-only raised event woke the tile but
+  never pinged.
+
 **Decision tables for loudness and pings.** Plain TypeScript arrays, first
 match wins. Pings keep choosing the newest qualifying event within the
 winning class. Freshness, dedup, agent veto and delivery stay outside the
@@ -4010,6 +4081,69 @@ PR on a live or snoozed tile, routed team requests),
 `apps/server/src/fake/rules-invariants.test.ts` (every sample tile) and
 `mcp/move-agreement.test.ts` (pr_context against the pane for every sample
 PR).
+
+Property tests (2026-09-29, fast-check) run the same kind of invariants over
+generated boards instead of a handful of fixed ones. `@postpile/core/testing`
+holds the board recipe (`boardSpecArb`: one topic, 1-3 tiles, 1-4 PRs each as
+single, stack or set, pinged, found or pulled in; authors viewer, teammate,
+other or bot; a short history of review requests, comments and mentions,
+reviews, pushes, readiness, merge or close, CI; thread read state, handled,
+in-app approval, per-PR and whole-tile snoozes, glance verdicts, Look closer,
+agent overrides, truncated or stale snapshots, pending writes), `buildBoard`
+(snapshots from the steps, events from `deriveEvents` made seen the way the
+sync and `planRead` do it, tiles from `buildTopicTiles`, a tile snooze from
+`snoozeWrites`) and the invariant catalogue by level
+(`invariants-tile.ts`, `-pr.ts`, `-read.ts`, `-topic.ts`), run in
+`core/src/properties/` (the "Not done yet" dots too, since the dot moved to
+core). Where rules differ on purpose the invariant names the exception
+(routed NOT_YOURS, changes held, team taken, an ask first). The four open
+cases the first runs found were decided 2026-09-30 (above) and their
+exceptions removed, each with a scenario next to its property. `properties/coverage.test.ts` fails when a
+branch-relevant label (PR state x author, request target, review state
+including dismissed, CI, thread and seen state, snooze kind and phase,
+truncated, and the shapes past bugs needed) shows on under 1% of boards.
+Each invariant checks 2000 boards by default (the property files take about
+4s, `pnpm test` about 7s); `POSTPILE_PROPERTY_RUNS=10000 pnpm test` checks
+more (about 20s for the property files). A failure prints the shrunk board recipe; a bug fixed
+from one gets a named scenario next to its property (`properties/pr.test.ts`).
+
+Spec oracles (2026-09-30). A one-off Stryker run found the invariants
+killed only about a quarter of the mutants in the rule files: they used the
+rule under test as their own reference (`isPrDone`, `snoozePhase`,
+`pingRule`, `prTier` and others), so a mutation moved both sides, and the
+board builder builds with the same rules. The invariants now compare
+against oracles in `@postpile/core/testing` (`spec-facts.ts`,
+`spec-events.ts`, `spec-rules.ts`, `spec-offers.ts`, `spec-layout.ts`):
+the rules restated from the raw snapshot, the board's events and the
+recipe, importing no rule module (types only). `invariants-board.ts`
+checks the board against the recipe (each step's event with kind, rule
+loudness and reason; seen and handled from the reads, touches and clicks;
+tile layout and provenance; snoozes; the Look closer event).
+`invariants-rules.ts` checks each PR's facts, move and the footer's words
+for it, tier, done, unseen count, ping class and text, quiet reads and
+Look closer ping; the tile, read and topic catalogues use the oracles too
+(tile state, offers, the read plan, a board without a viewer). An exact oracle covers liveness as
+well as safety: an addressed ask on an open unsnoozed tile pings, bot-only
+activity past the grace gets a quiet read, nothing unseen stays in a
+read's scope. Answering is a metamorphic check: a comment by the viewer
+clears Reply, the answered-changes Re-review and Needs reply (a re-review
+a pending request asks for stays). The generator also makes re-requests
+after a changes request, a second outsider (alice), automation without the
+[bot] suffix (renovate), pending reviews, review bodies, merge queue and
+deploy items, sets that hold a stack and dissolved sets. The property
+invariants alone now kill 83% of the rule-file mutants (28% before, at the
+same rule code; 300 boards per invariant).
+
+Measuring with Stryker (one-off, not a dependency): in a throwaway
+worktree add `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`,
+use perTest coverage, a fixed fast-check seed with `endOnFailure` in a
+setup file, and `POSTPILE_PROPERTY_RUNS=300`. The vitest-runner (10.0)
+filters each mutant's tests as "suite test" while vitest 5 names them
+"suite > test", so it runs no tests at all and every mutant survives; put
+`testNamePattern` in the vitest config the runner uses (`'^[a-z]+
+invariants '` for the invariants, `'.*'` for the whole core suite) and the
+results are right, only slower. Keep concurrency below the core count and
+raise `timeoutMS`, or slow passing runs count as timeout kills.
 
 ## Architecture
 
@@ -4246,13 +4380,15 @@ preflight and does not know the token, so CORS stays open.
   - a poll whose PR fetch failed leaves those PRs to the full sync; the next poll gets a 304
     and does not retry them [yes, keeps the 304 path free]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
-  snooze started ends it, so a mention is never hidden. Confirm.
+  snooze started ends it, so a mention is never hidden; since 2026-09-30 also an automation event
+  the agent or the user raised to loud (both kept 2026-09-30, see "Decided from the property
+  tests"). Confirm.
 - **A broken snooze comes back**: a snooze broken by a mention comes back once the mention is
   read (`packages/core/src/snooze.test.ts` asserts it). Keep, or end the snooze for good when it
   breaks? (From the codebase review, 2026-09-29.)
 - **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
-  spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread. Commits after
+  spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread (confirmed 2026-09-30, the layer gets a "Not done yet" dot). Commits after
   the user's approval are quiet unless the agent raises one (decided 2026-09-28).
 - **Repo name**: decided 2026-09-28, the app is PostPile (formerly the working title
   `code-manager`). Renaming the repo folder is still open.

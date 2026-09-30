@@ -18,6 +18,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./fixtures": "./src/fixtures.ts",
+    "./testing": "./src/testing/index.ts",
     "./telemetry-identity": "./src/telemetry-identity.ts"
   },
   "scripts": {

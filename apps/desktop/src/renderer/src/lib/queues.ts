@@ -91,8 +91,9 @@ export function topicSectionTier(item: TopicListItem): PrTier | null {
 }
 
 /**
- * Inside Changes you requested: topics where an author addressed the changes
- * (the viewer's move again) before topics still waiting on the author.
+ * Inside Changes you requested: topics where the move is a re-review (the
+ * author addressed the changes or asked again) before topics still waiting
+ * on the author.
  */
 function changesRequestedRows(rows: QueueRow[]): QueueRow[] {
   const addressed = rows.filter((row) => row.item.queues.changesAddressed > 0);

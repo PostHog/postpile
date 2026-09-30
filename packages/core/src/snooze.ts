@@ -1,6 +1,6 @@
 import { isAutomation } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
-import { effectiveLoudness } from './loudness.ts';
+import { effectiveLoudness, raisedToLoud } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import { isTracked } from './provenance.ts';
 import { reviewRequestTarget } from './review-request.ts';
@@ -48,25 +48,24 @@ function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
   );
 }
 
-/** A merged or closed PR gets no push or CI run worth waiting for. */
-function isFinished(pr: Pr): boolean {
-  return pr.state !== 'OPEN';
-}
-
 function newPush(snooze: Snooze, context: SnoozeContext): boolean {
-  return isFinished(context.pr) || context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
+  return context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
 }
 
 function ciGreen(context: SnoozeContext): boolean {
-  return isFinished(context.pr) || context.pr.checks.rollup === 'SUCCESS';
+  return context.pr.checks.rollup === 'SUCCESS';
 }
 
 /**
  * True once the snooze condition is met: a human reply, a push, green CI, or
- * the time passed. A push or CI snooze also ends when the PR is merged or
- * closed; otherwise it could never end and kept the topic from retiring.
+ * the time passed. Every snooze also ends when the PR is merged or closed
+ * (decided 2026-09-30): nothing left to wait for, and a snooze that holds a
+ * finished PR keeps its topic from retiring.
  */
 export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
+  if (context.pr.state !== 'OPEN') {
+    return true;
+  }
   switch (snooze.condition.kind) {
     case 'someone_replies':
       return someoneReplied(snooze, context);
@@ -84,10 +83,15 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
  * condition, so a mention is never hidden behind a snooze. Open question in
  * DESIGN.md; this is the proposed default. Human means not automation
  * (`isAutomation`): a bot-made review request that asks the viewer wakes the
- * snooze, the app's own Look closer event does not.
+ * snooze, the app's own Look closer event does not. An automation event the
+ * agent raised to loud wakes it too (decided 2026-09-30); a bot event at its
+ * rule's loudness never does.
  */
 export function breaksSnooze(event: PrEvent, snooze: Snooze, context: SnoozeContext): boolean {
-  return event.at > snooze.since && event.seenAt === null && effectiveLoudness(event) === 'loud' && !isAutomationOn(event, context);
+  if (event.at <= snooze.since || event.seenAt !== null || effectiveLoudness(event) !== 'loud') {
+    return false;
+  }
+  return !isAutomationOn(event, context) || raisedToLoud(event);
 }
 
 /**

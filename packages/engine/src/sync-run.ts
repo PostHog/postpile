@@ -154,6 +154,7 @@ export class SyncRun {
         tally,
         now,
         onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
+        onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, fetched.viewer)) ?? [],
       }, phases);
       await digester.run(agentOff === null ? (options.agentJobs ?? ALL_AGENT_JOBS) : []);
       // After the digest classified the new events, so one the agent turned quiet brings no retired topic back.

@@ -11,14 +11,16 @@ now".
   review request asks, did you act after X, which events ask). Every read
   goes through one planner (`planRead` in `core/read-plan.ts`), waiting
   GitHub writes through `pendingWriteStep`. Snoozes are per PR (migration
-  019 `pr_snooze`); push and CI snoozes end on merge or close. Topic status
+  019 `pr_snooze`); every snooze ends on merge or close. Topic status
   has one writer (`nextTopicStatus` / `changeTopicStatus`, `retiredAt` in
   migration 020). Loudness and pings are decision tables. PR facts
   (`PrSummary.facts`) and button offers (`TileView.offers`) come from
   core; the renderer and the fake engine only read them. Invariant tests
   over real-shaped boards, every sample tile and MCP `pr_context` against
   the pane. A snoozed tile with nothing left to mark leads with Open in
-  footer and pane.
+  footer and pane. Property tests over generated boards check the rules
+  against spec oracles restated from the raw snapshot (2026-09-30,
+  DESIGN.md "Tests across rules").
 
 - Fixes from the codebase review (2026-09-29, DESIGN.md "Fixes from the
   codebase review"): a Codex CLI review of v0.11.0 found nine issues,
@@ -43,7 +45,7 @@ now".
 - Actions act on what you look at (2026-09-29, DESIGN.md "Actions act on
   what you look at"): PR-scoped mark read in the detail pane
   (`markPrRead`, per-PR label and undo), the not-done dot
-  (`notDonePrKeys` over the new `PrSummary.done`), opened-in-PostPile
+  (core `TileView.notDonePrKeys` over the new `PrSummary.done`), opened-in-PostPile
   handles the PR (checked per PR), the lead PR follows the turn (core
   `leadPrKey`, shipped in `TileView.offers`), "X to re-review"
   (`reReviewAsked`), own merged PRs clear quietly, and "Remove <team>"
@@ -1024,6 +1026,16 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **From the property tests** (2026-09-30): a re-request after your changes
+  request says "Re-review, ada asked" (move `re_review`), with or without a
+  push; the PR stays under Changes you requested, and the order inside that
+  section follows the move. Every snooze ends on merge or close. An override
+  to loud wakes a snooze whether the agent or the user set it. Loud news on
+  a pulled-in stack layer dots that layer, and a stack with one tracked PR
+  plus such a layer dots both rows while the tracked PR is not done. The
+  quiet-read grace counts from the newest activity, human or bot. DESIGN.md
+  "Decided from the property tests".
 
 - **Review requests by whom they ask; routed reviews ping on Look closer**
   (2026-09-29): a `review_requested` event aimed at the viewer or their team

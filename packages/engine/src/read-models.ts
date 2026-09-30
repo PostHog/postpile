@@ -26,7 +26,8 @@ import {
   personRelation,
   pingedPrKeys,
   prTier,
-  changesAnswered,
+  prWhoseTurn,
+  isReReviewMove,
   repoOverview,
   searchTopics,
   tileRepoLabels,
@@ -179,6 +180,15 @@ export class ReadModels {
     return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, userState: board.userStates.get(pr.key) ?? null, reason });
   }
 
+  /** The PR's move is a re-review, which sorts it first under Changes you requested. */
+  private isReReview(board: Board, pr: Pr, viewer: Viewer | null): boolean {
+    if (!viewer) {
+      return false;
+    }
+    const turn = prWhoseTurn({ pr, events: board.events.get(pr.key) ?? [], userState: board.userStates.get(pr.key) ?? null, viewer, notYours: board.notYours.has(pr.key) });
+    return isReReviewMove(turn);
+  }
+
   /** The tile's rows: gathers each member's inputs from the board and the store. */
   private prSummaries(
     board: Board,
@@ -311,7 +321,7 @@ export class ReadModels {
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
             quiet: isPrInQuietRepo(pr.key, settings),
-            changesAddressed: viewer !== null && changesAnswered(pr, viewer) !== null,
+            changesAddressed: this.isReReview(board, pr, viewer),
           })),
         ),
         people: topicFaces(topicPeople(prs, viewer)),

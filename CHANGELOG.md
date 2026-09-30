@@ -9,13 +9,18 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Approve, Mark read, Mark done and Snooze change the tile and buttons as soon as they're clicked instead of after a few seconds. A failed action puts things back and says why.
 - A snooze on a stack or set wakes when any of its tracked PRs meets the condition, for example the first PR to go green, instead of waiting for all of them.
 - Under the hood: each rule (automation, who a review request asks, whose move, loudness, pings, button offers) is worked out once in core and read by the app, pings, MCP and sample mode alike, so they can no longer disagree.
+- Loud news on a pulled-in stack layer gives that layer a "Not done yet" dot. It already made the tile unread, but no row said why.
+- A bot's event the agent raised to loud wakes a snooze like a person's loud news: the tile turns unread and pings. A bot's event the agent left alone, and PostPile's own "Look closer" event, still never wake one.
 
 ### Fixed
 
 - A review request a bot made for you counts as an ask everywhere: it pings, wakes a snooze, and keeps quiet reads from marking the thread read as bot activity.
 - A dismissed review no longer counts as reviewed for "To review" while whose move says "Review".
+- Asked again after you requested changes, without a new push, whose move says "Re-review, ada asked", like with a push. It said "ada to address your changes".
+- Inside "Changes you requested", a topic whose move says Re-review sorts first, also after a re-request. It sorted among the ones waiting on the author.
+- Asked again after you requested changes, with only a comment from you since, whose move says "Re-review, ada asked" to match "Changes you requested". It said "Review, ada asked".
 - Snoozes belong to PRs, not tiles, so they survive a PR joining a stack or set. A new unsnoozed PR in a snoozed tile makes the tile show again.
-- A snooze waiting for a push or green CI ends when the PR is merged or closed, so its topic can retire.
+- Every snooze ends when its PR is merged or closed, so its topic can retire. A "someone replies" or "until" snooze on a finished PR still held it.
 - A finished topic's retired time no longer moves when the topic is renamed.
 - A mention the agent turns quiet no longer brings back a finished topic when the full sync is first to see it.
 - A done PR in the detail pane offers only Open on GitHub, like a done tile, also on a snoozed tile. A handled PR by someone else with nothing asked still led with Approve.
@@ -23,6 +28,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - "Ask <author>" is hidden for every automation account PostPile knows, not only `[bot]` logins.
 - MCP `pr_context` and `search_prs` name the move of the PR itself, not of its tile, so they match the detail pane on stacks and sets.
 - The MCP server says so, and asks for a reconnect, when the app was updated while it kept running.
+- A snoozed tile no longer pings. A bot's event the agent raised to loud used to leave the snooze in place and still send a Mac notification for it.
+- An event the agent raises to loud after the poll saw it, like a push after your approval, now pings (and wakes a snooze) while it is fresh. The poll had already decided it while it was quiet, so no notification came.
 
 ## 0.11.1 (2026-09-29)
 

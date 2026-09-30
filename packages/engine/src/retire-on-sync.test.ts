@@ -117,7 +117,7 @@ describe('Engine.sync retires finished topics', () => {
     expect(h.store.topics.get('depot')?.status).toBe('active');
   });
 
-  it('keeps a topic with a snoozed tile', async () => {
+  it('retires a topic whose merged PR still has a snooze stored: the merge ended it', async () => {
     const h = makeHarness({ now: () => FOUR_DAYS_LATER });
     const pr = mergedPr(1);
     await syncedAndRead(h, [pr]);
@@ -125,7 +125,7 @@ describe('Engine.sync retires finished topics', () => {
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
-    expect(h.store.topics.get('depot')?.status).toBe('active');
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
   });
 
   it('keeps a topic that has been quiet for less than 3 days', async () => {

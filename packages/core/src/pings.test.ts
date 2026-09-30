@@ -14,6 +14,14 @@ describe('pingRule', () => {
     expect(pingRule([mention], pr, viewer, true)).toMatchObject({ class: 'quiet_repo', reason: 'quiet repo (let it go stale)' });
   });
 
+  it('never pings for a PR whose tile is still snoozed', () => {
+    // The raised event wakes a real snooze first (`breaksSnooze`); a tile still snoozed never pings.
+    const raised = makeEvent({ id: 'r', kind: 'review_requested', actor: 'github-actions[bot]', isBot: true, ruleLoudness: 'quiet', override: { loudness: 'loud', reason: 'worth a look', by: 'agent' } });
+    const comment = makeEvent({ id: 'c', kind: 'comment', actor: 'ada', ruleLoudness: 'quiet', at: at(11) });
+    expect(pingRule([raised, comment], pr, viewer, false)).toMatchObject({ class: 'addressed', event: { id: 'r' } });
+    expect(pingRule([raised, comment], pr, viewer, false, true)).toMatchObject({ class: 'snoozed', reason: 'tile snoozed' });
+  });
+
   it('lets a mention through as addressed', () => {
     const mention = makeEvent({ id: 'm', kind: 'mention', actor: 'bob', ruleLoudness: 'loud', ruleReason: 'mentions you' });
     expect(pingRule([mention], pr, viewer, false)).toMatchObject({ class: 'addressed', loudness: 'loud', reason: 'mentions you' });
@@ -65,6 +73,16 @@ describe('pingRule', () => {
     const bot = makeEvent({ kind: 'bot_comment', actor: 'github-actions', isBot: true, ruleLoudness: 'quiet' });
     const botPush = makeEvent({ id: 'p', kind: 'commits_pushed', isBot: true, ruleLoudness: 'muted' });
     expect(pingRule([bot, botPush], pr, viewer, false).class).toBe('bot');
+  });
+
+  it('treats bot-only news the agent raised to loud like a person\'s loud news', () => {
+    // Decided 2026-09-30: a raised automation event wakes a snooze and pings; at its rule's loudness it stays bot.
+    const botPush = makeEvent({ id: 'p', kind: 'commits_after_approval', actor: 'renovate[bot]', isBot: true, ruleLoudness: 'quiet', ruleReason: 'bot push' });
+    const raisedPush = makeEvent({ ...botPush, override: { loudness: 'loud', reason: 'changes the approved runner image', by: 'agent' } });
+    const raisedComment = makeEvent({ id: 'b', kind: 'bot_comment', actor: 'github-actions', isBot: true, ruleLoudness: 'quiet', override: { loudness: 'loud', reason: 'coverage dropped', by: 'user' } });
+    expect(pingRule([botPush], pr, viewer, false)).toMatchObject({ class: 'bot' });
+    expect(pingRule([raisedPush], pr, viewer, false)).toMatchObject({ class: 'addressed', loudness: 'loud', reason: 'changes the approved runner image' });
+    expect(pingRule([raisedComment], pr, viewer, false)).toMatchObject({ class: 'not_addressed', reason: 'coverage dropped' });
   });
 
   it('never pings for CI, not even a failure on the viewer own PR', () => {

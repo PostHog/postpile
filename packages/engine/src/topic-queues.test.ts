@@ -1,4 +1,4 @@
-import { at, makeComment, makePr, makeReview, viewer } from '@postpile/core/fixtures';
+import { at, makeComment, makePr, makeReview, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -82,6 +82,32 @@ describe('topic list queues', () => {
 
     const item = (await h.engine.listTopics()).find((entry) => entry.topic.id === 'moves');
     expect(item?.yourMoves.map((entry) => entry.move)).toEqual(['review', 'merge']);
+  });
+
+  it('counts a re-request without a push as addressed, so Changes you requested sorts it first', async () => {
+    const h = harnessWithTeam();
+    // You requested changes on the head; ada asked you again without pushing.
+    const changes = makeReview({ author: viewer.login, state: 'CHANGES_REQUESTED', submittedAt: at(10) });
+    const reRequested = makePr({
+      number: 12,
+      author: 'ada',
+      reviews: [changes],
+      reviewerUsers: [viewer.login],
+      timeline: [makeTimelineItem({ id: 'rr-12', actor: 'ada', at: at(20) })],
+      updatedAt: at(20),
+    });
+    const waiting = makePr({ number: 13, author: 'ada', reviews: [{ ...changes, id: 'r13' }], updatedAt: at(10) });
+    topicWithPrs(h, 'rerequested', [reRequested]);
+    topicWithPrs(h, 'waiting', [waiting]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const items = await h.engine.listTopics();
+    const queues = (id: string) => items.find((entry) => entry.topic.id === id)?.queues;
+    expect(queues('rerequested')).toMatchObject({ tiers: { changes_requested: 1 }, changesAddressed: 1 });
+    expect(queues('waiting')).toMatchObject({ tiers: { changes_requested: 1 }, changesAddressed: 0 });
+    const tile = (await h.engine.getTopic('rerequested'))?.tiles[0];
+    expect(tile?.turn).toMatchObject({ kind: 'you', move: 're_review', what: 'Re-review, ada asked' });
   });
 
   it('keeps pulled-in stack layers out of the queue counts and tiers', async () => {
