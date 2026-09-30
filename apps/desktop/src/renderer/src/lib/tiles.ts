@@ -11,7 +11,7 @@ export function prNumber(key: string): string {
  * chip when it differs from the tile's, so the usual case stays quiet.
  */
 export function sameForWhom(a: ForWhom, b: ForWhom): boolean {
-  if (a.kind === 'team' && b.kind === 'team') {
+  if ((a.kind === 'team' && b.kind === 'team') || (a.kind === 'routing' && b.kind === 'routing')) {
     return a.team === b.team;
   }
   return a.kind === b.kind;

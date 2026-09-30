@@ -1,4 +1,4 @@
-import { isBot, standingApprovals } from '@postpile/core';
+import { isBot, prOwners, standingApprovals } from '@postpile/core';
 import type { Pr } from '@postpile/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
@@ -51,7 +51,10 @@ function prGlanceSnapshot(pr: Pr): unknown {
     reviews: pr.reviews.filter((r) => !isBot(r.author)).map((r) => [r.id, r.state]),
     comments: humanComments(pr).map((c) => c.id),
   };
-  return agentApprovals.length > 0 ? { ...snapshot, agentApprovals } : snapshot;
+  // Owners change the prompt (own-PR note, "for @owner"). Only added when they differ from the author, so older hashes stay valid.
+  const owners = prOwners(pr);
+  const withOwners = owners.length === 1 && owners[0] === pr.author ? snapshot : { ...snapshot, owners };
+  return agentApprovals.length > 0 ? { ...withOwners, agentApprovals } : withOwners;
 }
 
 /**

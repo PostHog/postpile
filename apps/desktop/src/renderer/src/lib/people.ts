@@ -12,7 +12,7 @@ const BOT_TONE = 'bg-avatar-grey text-avatar-grey-ink';
  * A GitHub App account ("name[bot]"): grey initials, no public avatar URL.
  * Display only. Whether a login is automation in general is core's `isBot`
  * (also user accounts on its list); views carry that as data, e.g.
- * `PrFacts.authorIsAutomation`, which decides whether "Ask" shows.
+ * `PrFacts.ownerIsAutomation`, which decides whether "Ask" shows.
  */
 export function isBotLogin(login: string): boolean {
   return login.endsWith('[bot]');

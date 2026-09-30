@@ -24,6 +24,8 @@ import type {
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
+/** A coding agent's GitHub App: opens PRs for people and assigns them. */
+export const SAMPLE_AGENT = 'acme-agent[bot]';
 
 /**
  * Sample PRs outside the main repo, so the title bar's repo menu has more
@@ -32,6 +34,8 @@ export const SAMPLE_VIEWER = 'you';
 const OTHER_REPOS: Record<number, string> = {
   1915: 'acme/infra',
   1925: 'acme/python-sdk',
+  1966: 'acme/python-sdk',
+  1967: 'acme/python-sdk',
   1940: 'acme/desktop',
 };
 
@@ -76,6 +80,8 @@ export interface SamplePrInput {
   number: number;
   title: string;
   author: string;
+  /** Assigned users; an agent PR (a bot author) belongs to them. */
+  assignees?: string[];
   state: PrState;
   size: [additions: number, deletions: number, files: number];
   checks: CheckRollup;
@@ -126,6 +132,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     url: `https://github.com/${repo}/pull/${input.number}`,
     body: input.body ?? '',
     author: input.author,
+    assignees: input.assignees ?? [],
     state: input.state,
     isDraft: input.draft ?? false,
     baseRef: input.baseRef ?? 'master',

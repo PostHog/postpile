@@ -1,8 +1,12 @@
 import type { ReactNode } from 'react';
 import type { PrDetail, PrLifecycle, PrStatus, PrSummary, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useViewer } from '../api/viewer.ts';
+import { assigneeLine } from '../lib/assignees.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
+import { AssignedTo } from './AssignedTo.tsx';
+import { Avatar } from './Avatar.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { NewSinceBox } from './NewSinceBox.tsx';
@@ -76,6 +80,8 @@ export function PrBody(props: PrBodyProps) {
   const { syncing } = useActions();
   const { pr } = props.detail;
   const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
+  const viewerLogin = useViewer().data?.login ?? null;
+  const assigned = assigneeLine(pr.author, pr.assignees ?? [], viewerLogin);
   // A catch-up run on the PR's topic shows as its glance writing; facts get rewritten by it too.
   const updating = updatingNow({ syncing, writing: props.detail.glanceState === 'writing' });
   return (
@@ -92,6 +98,16 @@ export function PrBody(props: PrBodyProps) {
           <h2 className="min-w-0 text-lg leading-tight font-[650] tracking-[-0.018em] select-text">{pr.title}</h2>
         </div>
         <span className="font-mono text-[11px] text-muted select-text">{branchLine(props, place)}</span>
+        {assigned && (
+          // Only when someone other than the author is assigned: whose agent PR it is.
+          <span className="flex min-w-0 items-center gap-1 text-[11px] text-hint">
+            opened by
+            <Avatar login={pr.author} />
+            <span className="truncate">{pr.author}</span>
+            <span className="text-faint">·</span>
+            <AssignedTo line={assigned} />
+          </span>
+        )}
       </div>
       <NewSinceBox key={pr.key} detail={props.detail} />
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />

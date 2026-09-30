@@ -6,6 +6,7 @@ import {
   found,
   pinged,
   pulledIn,
+  SAMPLE_AGENT,
   SAMPLE_VIEWER,
   SampleClock,
   sampleEvents,
@@ -18,9 +19,11 @@ import {
 
 export interface SampleData {
   viewer: string;
-  /** The viewer's teams, as GitHub names them ("org/slug"). */
+  /** The viewer's teams, as GitHub names them ("org/slug"), home and routing. */
   viewerTeams: string[];
-  /** Everyone else on those teams, like the engine's daily team-member fetch. */
+  /** Their home teams (DESIGN.md "Team roles"); the others only route reviews to them. */
+  viewerHomeTeams: string[];
+  /** Everyone else on the home teams, like the engine's daily team-member fetch. */
   viewerTeamMembers: string[];
   topics: Topic[];
   prs: Pr[];
@@ -44,6 +47,7 @@ const TOPIC = {
   ingestion: 'topic-ingestion-runners',
   desktop: 'topic-desktop-release',
   warmer: 'topic-cache-warmer',
+  sdk: 'topic-sdk-uploads',
 };
 
 function buildTopics(clock: SampleClock): Topic[] {
@@ -119,6 +123,16 @@ function buildTopics(clock: SampleClock): Topic[] {
       tailoring: '',
       driver: 'mae',
       userRole: 'watcher',
+    }),
+    // Reaches the viewer only through client-approvers, a team that routes reviews to them (not their team).
+    sampleTopic(clock, {
+      id: TOPIC.sdk,
+      area: 'SDK',
+      name: 'Python SDK upload retries',
+      summary: 'The client team reworks how the Python SDK retries uploads. client-approvers is asked to sign off.',
+      tailoring: '',
+      driver: 'koa',
+      userRole: 'reviewer',
     }),
     // Every PR merged and quiet for 3 days: a sync retired it, so it only shows in the Finished drawer.
     {
@@ -335,6 +349,17 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       size: [220, 0, 6], checks: 'SUCCESS', openedHoursAgo: 10,
       comments: [{ id: 'issuecomment-5', author: 'ines', body: '@acme/team-platform do the runner labels clash with yours?', hoursAgo: 1.5 }],
     }),
+    // A routing team's request (client-approvers, added by an assigner bot) and a routing team's mention.
+    samplePr(clock, {
+      number: 1966, title: 'Retry uploads with jittered backoff', author: 'koa', state: 'OPEN',
+      size: [64, 18, 3], checks: 'SUCCESS', openedHoursAgo: 6, reviewerTeams: ['acme/client-approvers'],
+      body: 'Uploads retried at a fixed 1s interval and piled up after an outage. This adds jittered backoff capped at 30s.',
+    }),
+    samplePr(clock, {
+      number: 1967, title: 'Document the new retry settings', author: 'koa', state: 'OPEN',
+      size: [40, 4, 2], checks: 'SUCCESS', openedHoursAgo: 5,
+      comments: [{ id: 'issuecomment-7', author: 'koa', body: '@acme/client-approvers heads-up: the defaults change in the next release', hoursAgo: 4 }],
+    }),
     samplePr(clock, {
       number: 1925, title: 'Bump ruff to 0.7', author: 'renovate[bot]', state: 'OPEN',
       size: [2, 2, 1], checks: 'SUCCESS', openedHoursAgo: 12,
@@ -394,6 +419,20 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1955, title: 'Pin the Playwright browser version', author: 'nell', state: 'OPEN',
       size: [12, 4, 2], checks: 'SUCCESS', openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
+    }),
+    // Agent PRs: a coding agent's GitHub App opens them on someone's behalf
+    // and assigns that person, who owns the PR. #1970 is the viewer's own
+    // (Your PR, My PRs, waiting on lyra); #1972 belongs to three teammates,
+    // so the platform team request on it is the viewer's (For you).
+    samplePr(clock, {
+      number: 1970, title: 'Check that billing migrations stay state-only', author: SAMPLE_AGENT, assignees: [SAMPLE_VIEWER], state: 'OPEN',
+      size: [28, 6, 2], checks: 'SUCCESS', openedHoursAgo: 5, headRef: 'acme-agent/billing-migration-check', reviewerUsers: ['lyra'],
+      body: 'Opened by the coding agent for @you. Fails CI when a billing migration renames or drops a table.',
+    }),
+    samplePr(clock, {
+      number: 1972, title: 'Drop unused env vars from devbox start', author: SAMPLE_AGENT, assignees: ['rowan', 'sol', 'nell'], state: 'OPEN',
+      size: [4, 19, 3], checks: 'SUCCESS', openedHoursAgo: 4, headRef: 'acme-agent/devbox-env-cleanup', reviewerTeams: ['acme/team-platform'],
+      body: 'Opened by the coding agent for @rowan. Removes env vars no devbox service reads.',
     }),
   ];
 }
@@ -474,6 +513,12 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 1934, [
       { kind: 'team_mention', actor: 'ines', text: 'mentioned @team-platform: "do the runner labels clash?"', hoursAgo: 1.5, rule: 'loud' },
     ]),
+    ...sampleEvents(clock, 1966, [
+      { kind: 'review_requested', actor: 'pr-assigner[bot]', text: 'requested a review from acme/client-approvers', hoursAgo: 5.5, rule: 'loud', isBot: true },
+    ]),
+    ...sampleEvents(clock, 1967, [
+      { kind: 'team_mention', actor: 'koa', text: 'mentioned @client-approvers: "the defaults change in the next release"', hoursAgo: 4, rule: 'quiet' },
+    ]),
     ...sampleEvents(clock, 1925, [
       { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 12, rule: 'quiet', isBot: true },
     ]),
@@ -495,6 +540,9 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 1963, [
       { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 20, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 1972, [
+      { kind: 'review_requested', actor: 'rowan', text: 'requested @team-platform', hoursAgo: 3, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
@@ -591,6 +639,20 @@ function buildGlances(clock: SampleClock): Glance[] {
         { path: 'app/models/__init__.py', why: 'The re-export Ada flagged.' },
       ],
     }),
+    sampleGlance(clock, 1970, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Your agent PR; lyra has the review.',
+      does: 'Adds a CI check that fails when a billing migration renames or drops a table.',
+      risk: 'Low. A new check, nothing changes at runtime.',
+      othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 1972, {
+      verdict: 'LOOKS_SAFE',
+      forYou: "Rowan's agent PR asks platform for a review; nobody on the team picked it up yet.",
+      does: 'Removes three env vars no devbox service reads.',
+      risk: 'Low. A service that did read one would fall back to its default.',
+      othersSaid: 'No comments yet.',
+    }),
     sampleGlance(clock, 1870, {
       verdict: 'LOOK_CLOSER',
       forYou: 'Changes a devbox default, which you asked to see first.',
@@ -639,6 +701,10 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(1808)}`, 'Old billing re-exports are approved', [pinged(1808, 'author')]),
     sampleTile(TOPIC.ingestion, 'single', `pr:${sampleKey(1934)}`, 'Ingestion asks platform about runner labels', [pinged(1934, 'team_mention')]),
     sampleTile(TOPIC.deps, 'single', `pr:${sampleKey(1925)}`, 'Bump ruff to 0.7', [pinged(1925, 'subscribed')]),
+    sampleTile(TOPIC.sdk, 'single', `pr:${sampleKey(1966)}`, 'client-approvers is asked to sign off on upload retries', [
+      pinged(1966, 'review_requested'),
+    ]),
+    sampleTile(TOPIC.sdk, 'single', `pr:${sampleKey(1967)}`, 'Retry settings docs, client-approvers kept posted', [pinged(1967, 'team_mention')]),
     sampleTile(TOPIC.frontend, 'single', `pr:${sampleKey(1857)}`, 'Vite 7 landed; jude asks about snapshots', [pinged(1857, 'mention')]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1960)}`, 'pim addressed your toolbar bundle changes', [
       pinged(1960, 'comment'),
@@ -657,6 +723,10 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1950)}`, 'Your pnpm cache PR for the devbox image', [found(1950, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1955)}`, 'nell wants your review on the Playwright pin', [
       found(1955, 'review_requested', 'review requested from you'),
+    ]),
+    sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(1970)}`, 'Your agent PR guards the billing migrations', [pinged(1970, 'assign')]),
+    sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1972)}`, "Rowan's agent PR drops unused devbox env vars", [
+      pinged(1972, 'review_requested'),
     ]),
   ];
 }
@@ -768,7 +838,8 @@ export function buildSampleData(now: Date): SampleData {
   const tiles = buildTiles();
   return {
     viewer: SAMPLE_VIEWER,
-    viewerTeams: ['acme/team-platform'],
+    viewerTeams: ['acme/team-platform', 'acme/client-approvers'],
+    viewerHomeTeams: ['acme/team-platform'],
     viewerTeamMembers: ['lyra', 'nell', 'rowan', 'sol'],
     topics: buildTopics(clock),
     prs: buildPrs(clock),

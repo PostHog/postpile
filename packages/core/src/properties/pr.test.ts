@@ -32,6 +32,7 @@ describe('pings, scenarios the properties found', () => {
         },
       ],
       writesLocked: false,
+      teams: 'one_home',
       teamMembersUnknown: false,
       nowGap: 60,
     };
@@ -74,6 +75,7 @@ describe('whose move, scenarios the properties found', () => {
     return {
       groups: [{ kind: 'single', prs: [{ ...QUIET_PR, steps }], snooze: null }],
       writesLocked: false,
+      teams: 'one_home',
       teamMembersUnknown: false,
       nowGap: 60,
     };

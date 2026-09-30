@@ -24,6 +24,9 @@ import { writeReadPlan } from './actions/local-change.ts';
 import { errorText } from './errors.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
+import type { GitHubQuota } from './github-quota.ts';
+import { saveViewerFollowingRoles } from './team-role-events.ts';
+import { TeamRoleKeeper } from './team-roles.ts';
 import { loadViewer, saveViewer } from './viewer-meta.ts';
 import type { ActionLog } from './writes/action-log.ts';
 import { OBSERVED_PENDING_DETAIL, type PendingWrites } from './writes/pending-writes.ts';
@@ -119,6 +122,7 @@ interface Candidate {
 export class GitHubSync {
   private readonly layers: StackLayerFinder;
   private readonly teamMembers: TeamMembers;
+  private readonly teamRoles: TeamRoleKeeper;
   /** PRs reconciled with GitHub's read time or the viewer's last touch during the current run; taken by run() and poll(). */
   private readOnGitHub = new Set<PrKey>();
   /** The stored threads, loaded once per run and again after the run writes threads (`threads()`). */
@@ -134,10 +138,12 @@ export class GitHubSync {
     private readonly now: () => Date,
     private readonly log: ActionLog,
     private readonly pendingWrites: PendingWrites,
+    quota: GitHubQuota,
     private readonly textLog: (line: string) => void = () => {},
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.teamMembers = new TeamMembers(store, reader, now);
+    this.teamRoles = new TeamRoleKeeper(store, reader, now, quota, textLog);
   }
 
   /** The stored notification threads, from the per-run snapshot. */
@@ -547,10 +553,12 @@ export class GitHubSync {
     }
     const remote = await this.reader.prUpdatedAts(refs);
     const stored = this.store.prs.updatedAtByKey();
+    // Snapshots stored before assignees were read (2026-09-30) refetch once, or a bot PR's owners stay unknown until it moves.
+    const withoutAssignees = new Set(this.store.prs.listAll().filter((pr) => pr.assignees === undefined).map((pr) => pr.key));
     const moved = refs.filter((ref) => {
       const updatedAt = remote.get(prKey(ref));
       const was = stored.get(prKey(ref));
-      return updatedAt !== undefined && (was === undefined || updatedAt > was);
+      return updatedAt !== undefined && (was === undefined || updatedAt > was || withoutAssignees.has(prKey(ref)));
     });
     if (origin === 'sync' || moved.length > 0) {
       const which = moved.length > 0 ? `: ${moved.map(prKey).join(', ')}` : '';
@@ -653,8 +661,9 @@ export class GitHubSync {
 
   async run(maxPrs: number): Promise<GitHubSyncResult> {
     this.beginRun();
-    const viewer = await this.teamMembers.attach(await this.reader.viewer());
-    saveViewer(this.store, viewer);
+    // Roles first: only home teams' members are teammates.
+    const viewer = await this.teamMembers.attach(await this.teamRoles.attach(await this.reader.viewer()));
+    saveViewerFollowingRoles(this.store, viewer, this.now().toISOString());
     const notifications = await this.syncNotifications('sync');
 
     const candidates = this.candidates();

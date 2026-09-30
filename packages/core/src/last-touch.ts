@@ -7,6 +7,7 @@
 // with it".
 import { PUSH_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import type { IsoTime, Pr, PrEvent, Viewer } from './types.ts';
 
 /** GitHub's committer on commits made in the web UI (a suggestion, "Update branch"), as login or as name. */
@@ -63,7 +64,7 @@ function pushedByViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
  */
 export function touchKindOf(event: PrEvent, pr: Pr, viewer: Viewer): TouchKind | null {
   if (PUSH_KINDS.includes(event.kind)) {
-    return sameLogin(pr.author, viewer.login) && pushedByViewer(event, pr, viewer) ? 'push' : null;
+    return isPrOwner(pr, viewer.login) && pushedByViewer(event, pr, viewer) ? 'push' : null;
   }
   if (!isOwnEvent(event, viewer)) {
     return null;

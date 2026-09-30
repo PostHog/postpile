@@ -14,6 +14,16 @@ export type QueueFilter = 'mine' | 'team' | 'reply' | 'review';
 export const QUEUE_FILTERS: QueueFilter[] = ['mine', 'team', 'reply', 'review'];
 
 /**
+ * The filter buttons to show. Without a home team there are no teammates,
+ * so Team hides (2026-09-30), unless it is the active filter and needs its
+ * button to be cleared.
+ */
+export function visibleQueueFilters(homeTeams: string[] | null | undefined, active: QueueFilter | null): QueueFilter[] {
+  const noHomeTeam = homeTeams !== null && homeTeams !== undefined && homeTeams.length === 0;
+  return QUEUE_FILTERS.filter((filter) => filter !== 'team' || !noHomeTeam || active === 'team');
+}
+
+/**
  * Review covers To review and Changes you requested: an addressed change
  * request was To review before that section existed, and one still waiting
  * on the author is the viewer's review in progress.

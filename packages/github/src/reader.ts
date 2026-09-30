@@ -1,4 +1,4 @@
-import type { ActivityPr, IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, Viewer } from '@postpile/core';
+import type { ActivityPr, IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
 import type { FoundRef } from './found.ts';
 
 export interface PartialPrs {
@@ -122,6 +122,17 @@ export interface GitHubReader {
 
   /** One file's text from a repo's default branch. Null when it is missing or the repo is not visible. */
   readRepoFile(repo: string, path: string): Promise<string | null>;
+
+  /** Team roles: the viewer's teams ("org/slug") with member counts, one GraphQL request. */
+  teamSizes(login: string): Promise<ViewerTeamSize[]>;
+
+  /**
+   * Team roles: PRs by others the viewer reviewed, updated since `since`
+   * (YYYY-MM-DD), in `orgs`, each with every reviewer requested on it
+   * (users and "org/slug" teams, bot-made requests included). Pages of 50,
+   * at most `cap` PRs.
+   */
+  reviewedPrRequests(login: string, orgs: string[], since: string, cap: number): Promise<ReviewedPr[]>;
 
   /** Setup check: null when the token can read notifications, else why not. Marks nothing read. */
   probeNotifications(): Promise<string | null>;

@@ -1,6 +1,8 @@
+import { isBot } from './bots.ts';
 import { findDossierLine } from './dossier-lines.ts';
 import { PREDICATE_RULES } from './fact-rules.ts';
 import type { Dossier, DossierIssue, DossierQuestion, Fact, FactRef, StaleReason, VerifyOutcome } from './memory.ts';
+import { isPrOwner } from './pr-owners.ts';
 import type { IsoTime, Pr, PrKey } from './types.ts';
 
 /** What verification may look at. Only stored snapshots: no IO, no agent. */
@@ -78,7 +80,8 @@ function isInvolved(fact: Fact, pr: Pr): boolean {
       pr.reviews.some((review) => sameLogin(review.author, login))
     );
   }
-  return sameLogin(pr.author, login) || pr.commits.some((commit) => sameLogin(commit.author, login));
+  const assigned = (pr.assignees ?? []).some((assignee) => sameLogin(assignee, login));
+  return sameLogin(pr.author, login) || assigned || pr.commits.some((commit) => sameLogin(commit.author, login));
 }
 
 /** reviews / works_on a PR by a person who no longer shows up on it. */
@@ -201,6 +204,19 @@ function questionIssue(question: DossierQuestion, prs: Map<PrKey, Pr>): StaleRea
  * that are no longer members. Derived fields (PR state, author) are never
  * stored in the dossier, so they need no check.
  */
+/**
+ * A bot named as driver while a PR it opened in this topic now has other
+ * owners (its assignees, `prOwners`): the people behind the agent PR drive
+ * the work. Only the topic's members count; `world.prs` can hold the whole
+ * board. Catches dossiers written before assignees were read (2026-09-30).
+ */
+function botDriverReplaced(login: string, world: VerifyWorld): boolean {
+  if (!isBot(login)) {
+    return false;
+  }
+  return [...world.prs.values()].some((pr) => world.memberKeys.has(pr.key) && sameLogin(pr.author, login) && !isPrOwner(pr, login));
+}
+
 export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssue[] {
   const issues: DossierIssue[] = [];
   dossier.openQuestions.forEach((question, index) => {
@@ -212,6 +228,11 @@ export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssu
   dossier.timeline.forEach((entry, index) => {
     if (!world.memberKeys.has(entry.prKey)) {
       issues.push({ path: `timeline[${index}]`, reason: 'left_topic' });
+    }
+  });
+  dossier.people.forEach((person, index) => {
+    if (person.role === 'driver' && botDriverReplaced(person.login, world)) {
+      issues.push({ path: `people[${index}]`, reason: 'person_not_involved' });
     }
   });
   return issues;
@@ -254,5 +275,6 @@ export function withoutStaleClaims(dossier: Dossier, world: VerifyWorld): Dossie
     ...dossier,
     openQuestions: dossier.openQuestions.filter((question) => questionIssue(question, world.prs) === null),
     timeline: dossier.timeline.filter((entry) => world.memberKeys.has(entry.prKey)),
+    people: dossier.people.filter((person) => person.role !== 'driver' || !botDriverReplaced(person.login, world)),
   };
 }

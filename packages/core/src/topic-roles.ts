@@ -1,14 +1,15 @@
 import { sameLogin } from './mentions.ts';
+import { prOwners } from './pr-owners.ts';
 import type { NotificationReason, Pr, UserRole } from './types.ts';
 
-/** Whoever authored most of the topic's PRs. Ties go to the author seen first. */
+/** Whoever owns most of the topic's PRs (`prOwners`). Ties go to the owner seen first. */
 export function topicDriver(prs: Pr[]): string | null {
   const counts = new Map<string, number>();
-  for (const pr of prs) {
-    if (pr.author === '') {
+  for (const owner of prs.flatMap((pr) => prOwners(pr))) {
+    if (owner === '') {
       continue;
     }
-    counts.set(pr.author, (counts.get(pr.author) ?? 0) + 1);
+    counts.set(owner, (counts.get(owner) ?? 0) + 1);
   }
   let driver: string | null = null;
   let best = 0;

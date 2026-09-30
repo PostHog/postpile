@@ -27,6 +27,7 @@ describe('finished topics, scenarios the properties found', () => {
           },
         ],
         writesLocked: false,
+        teams: 'one_home',
         teamMembersUnknown: false,
         nowGap: 60,
       };

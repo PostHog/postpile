@@ -3,6 +3,7 @@
 // sources and repos. DESIGN.md "Setup flow".
 
 import { clipText } from './dossier.ts';
+import { isRoutingTeam } from './team-roles.ts';
 import type {
   ActivityPr,
   ActivityRole,
@@ -245,7 +246,9 @@ export function setupSources(material: SetupMaterial): SetupSource[] {
       id: `t${index + 1}`,
       kind: 'team',
       label: `Team ${team}`,
-      detail: `You are on ${team} (GitHub teams).`,
+      detail: isRoutingTeam(team, material.viewer)
+        ? `You are on ${team} (GitHub teams). It only routes review requests to you; its members are not your teammates.`
+        : `You are on ${team} (GitHub teams).`,
       url: null,
     }),
   );

@@ -3,12 +3,11 @@
 // the lead PR and the detail pane per PR, from the tile's state and the
 // rows' facts (done, unseen count, move, after-read), which the rule
 // invariants check on their own. Type imports only from the rule modules.
-import { sameLogin } from '../mentions.ts';
 import type { GitHubLinkOffer, MarkLabel, PaneLead, TileFooterAction } from '../offers.ts';
 import type { PrPrimaryAction } from '../primary-action.ts';
 import type { Pr, PrKey, UserPrState, Viewer } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
-import { isAutomationLogin, isViewerTeam, viewerApproved } from './spec-facts.ts';
+import { isAutomationLogin, isViewerTeam, specOwners, viewerApproved, viewerOwns } from './spec-facts.ts';
 
 function isTrackedRow(row: PrSummary): boolean {
   return row.provenance.kind !== 'pulled_in';
@@ -56,18 +55,19 @@ export function expectedLeadPr(view: TileView): PrKey | null {
   return view.prs.find((row) => isTrackedRow(row) && row.state === 'OPEN')?.key ?? keys[0] ?? null;
 }
 
-/** Next to Snooze: the move's PR (else the lead's), "Open on GitHub" for your own, "Review on GitHub" on the files tab otherwise. */
-export function expectedGitHubLink(view: TileView, viewer: Viewer): GitHubLinkOffer | null {
+/** Next to Snooze: the move's PR (else the lead's), "Open on GitHub" for one the viewer owns, "Review on GitHub" on the files tab otherwise. */
+export function expectedGitHubLink(view: TileView, viewer: Viewer, prs: ReadonlyMap<PrKey, Pr>): GitHubLinkOffer | null {
   const row = view.prs.find((candidate) => candidate.key === view.turn.prKey) ?? view.prs.find((candidate) => candidate.key === expectedLeadPr(view));
-  if (!row || row.url === '') {
+  const pr = row ? prs.get(row.key) : undefined;
+  if (!row || !pr || row.url === '') {
     return null;
   }
-  return sameLogin(row.author, viewer.login) ? { label: 'Open on GitHub', url: row.url, filesTab: false } : { label: 'Review on GitHub', url: row.url, filesTab: true };
+  return viewerOwns(pr, viewer) ? { label: 'Open on GitHub', url: row.url, filesTab: false } : { label: 'Review on GitHub', url: row.url, filesTab: true };
 }
 
-/** Approve on someone else's open PR (Approved once the viewer did), else Mark read while the tile is unread, else Open. */
+/** Approve on an open PR someone else owns (Approved once the viewer did), else Mark read while the tile is unread, else Open. */
 export function expectedPrimaryAction(pr: Pr, viewer: Viewer, userState: UserPrState | null, tileUnread: boolean): PrPrimaryAction {
-  if (pr.state === 'OPEN' && !sameLogin(pr.author, viewer.login)) {
+  if (pr.state === 'OPEN' && !viewerOwns(pr, viewer)) {
     return viewerApproved(pr, viewer, userState) ? 'approved' : 'approve';
   }
   return tileUnread ? 'mark_read' : 'open_on_github';
@@ -102,8 +102,9 @@ export interface ExpectedPane {
  * The detail pane for one PR: on a single-PR tile the buttons act on the
  * tile, on a stack or set on that PR. A done PR (or any PR of a done tile)
  * offers no Approve, Ask or Remove team; with its news seen nothing to
- * mark either. Approve leads on someone else's open, not yet approved,
- * non-draft PR; else the mark button; else Open on GitHub.
+ * mark either. Ask needs an owner who is a person and not the viewer.
+ * Approve leads on someone else's open, not yet approved, non-draft PR;
+ * else the mark button; else Open on GitHub.
  */
 export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Viewer): ExpectedPane {
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
@@ -127,7 +128,7 @@ export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Vie
     lead,
     approve,
     open: lead === 'open_on_github' || (!approve && primary !== 'mark_read'),
-    ask: !finished && !isAutomationLogin(pr.author) && !sameLogin(pr.author, viewer.login),
+    ask: !finished && !specOwners(pr).every(isAutomationLogin) && !viewerOwns(pr, viewer),
     markLabel: expectedMarkLabel(mark),
     snooze: scope === 'tile' && view.state.kind !== 'done',
     removeTeams: finished || pr.state !== 'OPEN' ? [] : pr.reviewerTeams.filter((team) => isViewerTeam(viewer, team)),

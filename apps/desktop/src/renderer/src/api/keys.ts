@@ -11,6 +11,7 @@ export const queryKeys = {
   topics: ['topics'] as const,
   finishedTopics: ['finished-topics'] as const,
   viewer: ['viewer'] as const,
+  teamRoles: ['team-roles'] as const,
   repos: ['repos'] as const,
   inboxCleanup: ['inbox-cleanup'] as const,
   topic: (topicId: string) => ['topic', topicId] as const,

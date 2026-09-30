@@ -1,7 +1,7 @@
 // Topic-level invariants: the sidebar row's counts come from its tiles, and a
 // finished topic can retire (DESIGN.md "Queue sections", "Snoozes belong to
 // PRs", engine `RetireGate`). Plus determinism over the whole board.
-import { topicQueues, emptyTierCounts, pingedPrKeys, personRelation } from '../topic-queues.ts';
+import { topicQueues, emptyTierCounts, pingedPrKeys, ownerRelation } from '../topic-queues.ts';
 import { topicMove, topicUrgency } from '../topic-urgency.ts';
 import { prTier } from '../pr-tier.ts';
 import type { PrEvent } from '../types.ts';
@@ -62,7 +62,7 @@ export const queueCountsMatchRows: Invariant = {
         const turn = prWhoseTurn({ pr, events: eventsOf(board, key), userState, viewer: board.viewer, notYours: board.notYours.has(key) });
         return {
           tier: prTier({ pr, events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, reason: board.threads.get(key)?.reason ?? null }),
-          author: personRelation(pr.author, board.viewer),
+          author: ownerRelation(pr, board.viewer),
           state: pr.state,
           pulledIn: !pinged.has(key),
           quiet: false,
