@@ -12,11 +12,12 @@ export function TurnLine(props: { turn: WhoseTurn; greyed?: boolean }) {
   if (turn.kind === 'you') {
     return (
       <span title={turnTitle(turn)} className={`flex min-w-0 items-center gap-[7px] text-xs ${props.greyed ? 'text-muted' : 'text-ink-2'}`}>
-        <span className={`flex shrink-0 items-center gap-1.5 font-[650] ${props.greyed ? 'text-muted' : 'text-honey-ink'}`}>
-          <span aria-hidden="true" className={`size-1.5 rounded-full ${props.greyed ? 'bg-ghost' : 'bg-honey ring-2 ring-honey/22'}`} />
-          Your move
+        <span className={`flex min-w-0 items-center gap-1.5 font-[650] ${props.greyed ? 'text-muted' : 'text-honey-ink'}`}>
+          <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${props.greyed ? 'bg-ghost' : 'bg-honey ring-2 ring-honey/22'}`} />
+          <span className="truncate">Your move</span>
         </span>
-        <span className="truncate">{turn.what}</span>
+        {/* The move goes first when space runs out, then the label, down to the dot. */}
+        <span className="min-w-0 shrink-[100] truncate">{turn.what}</span>
       </span>
     );
   }
