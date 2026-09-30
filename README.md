@@ -40,6 +40,26 @@ The first sync then takes a few minutes while the agent sorts your pull requests
 - Sends Mac notifications only for the pings that an agent judged worth it, from a poll every minute, and right away when you switch to the app.
 - Uses GitHub as the source of truth for read and unread. Writes (approve, comment, mark read) stay locked until you open the lock in the status bar.
 
+The topic sidebar sorts topics into queues:
+
+![The topic sidebar on sample data, with queues and topics](docs/images/topics.png)
+
+A tile shows whose move it is and the agent's glance. Here a selected tile with a Look closer verdict:
+
+![A tile with a Look closer glance](docs/images/glance.png)
+
+The tiles of one topic, with the selected tile outlined:
+
+![The tile column of one topic on sample data](docs/images/tiles.png)
+
+The detail pane shows the selected pull request. Approve is green, and stays locked until you open the lock in the status bar:
+
+![The detail pane of a pull request with the agent glance and the action bar](docs/images/detail.png)
+
+![The action bar with Approve](docs/images/actions.png)
+
+All screenshots use sample data (see [docs/development.md](docs/development.md#screenshots)).
+
 **Status: alpha.** Its author uses it every day at PostHog. Expect rough edges, database migrations between versions, and features that fit that workflow first.
 
 ## When not to use it
