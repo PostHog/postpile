@@ -10,7 +10,7 @@ import { WorkContextSection } from './WorkContextSection.tsx';
 
 function Section(props: { title: string; meta?: string; children: ReactNode }) {
   return (
-    <section className="flex max-w-[680px] flex-col gap-2 rounded-tile border border-hairline bg-surface p-3.5 shadow-tile">
+    <section className="flex max-w-[680px] flex-col gap-2 rounded-tile bg-surface p-3.5 shadow-tile">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[12.5px] font-semibold text-ink">{props.title}</h2>
         {props.meta && <span className="font-mono text-[10.5px] text-faint">{props.meta}</span>}

@@ -66,7 +66,7 @@ export function DetailPane(props: DetailPaneProps) {
   }
 
   return (
-    <aside aria-label="Details" className={`${paneFrame} shadow-accent-top`}>
+    <aside aria-label="Details" className={paneFrame}>
       <DetailContext view={view} prKey={prKey} onSelectPr={props.onSelectPr} />
       {body}
     </aside>

@@ -74,7 +74,7 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
             <h2 className="text-[13px] font-semibold">Last 7 days</h2>
             <span className="font-mono text-[10.5px] text-faint">{items.length}</span>
           </div>
-          <ul className="flex shrink-0 flex-col overflow-hidden rounded-tile border border-hairline bg-surface shadow-tile">
+          <ul className="flex shrink-0 flex-col overflow-hidden rounded-tile bg-surface shadow-tile">
             <li
               aria-hidden="true"
               className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_52px] gap-3 border-b border-hairline bg-subtle px-3 py-1.5 text-[10.5px] font-medium text-faint"

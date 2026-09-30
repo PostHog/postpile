@@ -39,7 +39,7 @@ export function InboxCleanup(props: { place: 'line' | 'banner' }) {
   }
   return (
     <>
-      <div className="flex items-center gap-3 rounded-tile border border-hairline-strong bg-surface px-4 py-3 shadow-tile">
+      <div className="flex items-center gap-3 rounded-tile bg-surface px-4 py-3 shadow-tile">
         <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-[13px] font-semibold text-ink">{backlogText(view)} on GitHub</p>
           <p className="text-xs text-muted">Mark them read on GitHub, or start fresh here and leave GitHub alone.</p>

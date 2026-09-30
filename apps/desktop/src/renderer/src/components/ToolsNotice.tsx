@@ -47,7 +47,7 @@ function GhNote(props: { view: ToolsView; place: 'empty' | 'banner' }) {
   const claude = toolsNotice(props.view).claude;
   const frame = props.place === 'empty' ? 'm-auto w-full max-w-[560px] p-5' : 'px-4 py-3';
   return (
-    <section className={`flex flex-col gap-3 rounded-tile border border-hairline-strong bg-surface shadow-tile ${frame}`}>
+    <section className={`flex flex-col gap-3 rounded-tile bg-surface shadow-tile ${frame}`}>
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <SetupChip tone="bad" word="Fix this" />
