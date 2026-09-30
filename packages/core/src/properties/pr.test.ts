@@ -3,7 +3,7 @@
 // POSTPILE_PROPERTY_RUNS=10000 pnpm test runs more boards per invariant.
 import { describe, expect, it } from 'vitest';
 import { pingRule } from '../pings.ts';
-import { buildBoard, checkBoards, PR_INVARIANTS, PROPERTY_TIMEOUT_MS, QUIET_PR, tileStateOf, type BoardSpec } from '../testing/index.ts';
+import { buildBoard, checkBoards, PR_INVARIANTS, PROPERTY_TIMEOUT_MS, QUIET_PR, tileStateOf, tileViewsOf, type BoardSpec, type StepSpec } from '../testing/index.ts';
 
 describe('pr invariants', () => {
   for (const invariant of PR_INVARIANTS) {
@@ -58,4 +58,34 @@ describe('pings, scenarios the properties found', () => {
     const board = buildBoard(snoozedBotRequestBoard(false));
     expect(tileStateOf(board, board.tiles[0]!).kind).toBe('snoozed');
   });
+});
+
+describe('whose move, scenarios the properties found', () => {
+  /** ada's PR: you asked for changes, ada asked you again, `pusher` pushed, and you only commented since. */
+  function reRequestedBoard(pusher: 'other' | 'bot'): BoardSpec {
+    const steps: StepSpec[] = [
+      { kind: 'request', target: 'viewer', byBot: false },
+      { kind: 'review', by: 'viewer', state: 'CHANGES_REQUESTED' },
+      { kind: 'request', target: 'viewer', byBot: false },
+      { kind: 'push', by: pusher, force: false },
+      { kind: 'comment', by: 'viewer', text: 'plain', thread: null },
+    ];
+    return {
+      groups: [{ kind: 'single', prs: [{ ...QUIET_PR, steps }], snooze: null }],
+      writesLocked: false,
+      teamMembersUnknown: false,
+      nowGap: 60,
+    };
+  }
+
+  // Found 2026-09-29 by "tier To review and whose move Review agree": the
+  // PR sat under Changes you requested while the move said "Review, ada
+  // asked". Decided 2026-09-30: the move is a re-review, the tier stays.
+  for (const pusher of ['other', 'bot'] as const) {
+    it(`a re-request after your changes is a Re-review under Changes you requested (${pusher} pushed)`, () => {
+      const row = tileViewsOf(buildBoard(reRequestedBoard(pusher)))[0]!.prs[0]!;
+      expect(row.tier).toBe('changes_requested');
+      expect(row.turn).toMatchObject({ kind: 'you', move: 're_review', what: 'Re-review, ada asked' });
+    });
+  }
 });

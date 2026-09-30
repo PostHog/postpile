@@ -4,7 +4,7 @@
 import { changesAnswered } from './changes-answered.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
-import { isPersonalRequest, isTeammate, newestVerdictBy, reviewedHead, reviewRequest } from './review-request.ts';
+import { isPersonalRequest, isTeammate, reviewedHead, reviewRequest, viewerRequestedChanges } from './review-request.ts';
 import type { NotificationReason, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';
 
@@ -51,18 +51,6 @@ export interface PrTierInput {
  */
 function teamMentioned(input: PrTierInput): boolean {
   return input.reason === 'team_mention' || input.events.some((event) => event.kind === 'team_mention');
-}
-
-/**
- * The viewer's newest verdict on someone else's PR asks for changes: their
- * own open loop, drafts included. The viewer cannot review their own PR, and
- * it stays `mine` either way.
- */
-function viewerRequestedChanges(pr: Pr, viewer: Viewer): boolean {
-  if (sameLogin(pr.author, viewer.login)) {
-    return false;
-  }
-  return newestVerdictBy(pr.reviews, viewer.login)?.state === 'CHANGES_REQUESTED';
 }
 
 /** The one tier an open PR goes into; an unanswered ask wins over authorship, like in ghatchup. */

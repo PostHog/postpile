@@ -67,6 +67,18 @@ export function newestVerdictBy(reviews: Review[], login: string): Review | null
   return newest;
 }
 
+/**
+ * The viewer's newest verdict on someone else's PR asks for changes: their
+ * own open loop, drafts included. The viewer cannot review their own PR.
+ * The tier "Changes you requested" and whose move "Re-review" read it.
+ */
+export function viewerRequestedChanges(pr: Pr, viewer: Viewer): boolean {
+  if (sameLogin(pr.author, viewer.login)) {
+    return false;
+  }
+  return newestVerdictBy(pr.reviews, viewer.login)?.state === 'CHANGES_REQUESTED';
+}
+
 /** When the viewer approved and on which commit (null when unknown). */
 export interface ViewerApproval {
   at: IsoTime;

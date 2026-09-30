@@ -1839,8 +1839,8 @@ authors.
 **Whose turn** (`whoseTurn` in `whose-turn.ts`): `{ kind: 'you' | 'them' |
 'none', who, what, prKey }`. A `you` turn also carries `move` (2026-09-29),
 the kind of move for the sidebar row's chip: `reply` (rule 2, drafts too),
-`re_review` (addressed your changes), `review` (review request, personal or
-team), `address_changes` (threads or a change request on your own PR or
+`re_review` (addressed your changes, or asked again while your changes
+request stands), `review` (review request, personal or team), `address_changes` (threads or a change request on your own PR or
 draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
 2026-09-29 ("CI is not a signal"). Rules per pinged PR, first match wins:
 
@@ -1923,7 +1923,11 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      or requests changes; a teammate's comment alone does not cover it
      (2026-09-28). A team request on a PR from outside the team (routed)
      is yours only while no teammate reviewed at all, and while it is not
-     on hold (`teamRequestHold`, 2026-09-29).
+     on hold (`teamRequestHold`, 2026-09-29). While your own changes request
+     stands (you were asked again after it, the head moved, and you only
+     commented since) the same request is a re-review: "Re-review, ada
+     asked", move `re_review`, matching the tier Changes you requested
+     (2026-09-30, `viewerRequestedChanges`).
    - them: a routed team request while someone else's changes request
      stands: the author "to address ada's changes" (the author moves
      first). Once the author pushed after it and requested ada again (she
@@ -4032,8 +4036,7 @@ sync and `planRead` do it, tiles from `buildTopicTiles`, a tile snooze from
 `core/src/properties/` plus the "Not done yet" dots in the renderer's
 `lib/tiles.properties.test.ts`. Where rules differ on purpose the invariant
 names the exception (routed NOT_YOURS, changes held, team taken, an ask
-first; a re-requested review under your standing changes request; news only
-on a pulled-in layer has no dot). `properties/coverage.test.ts` fails when a
+first; news only on a pulled-in layer has no dot). `properties/coverage.test.ts` fails when a
 branch-relevant label (PR state x author, request target, review state
 including dismissed, CI, thread and seen state, snooze kind and phase,
 truncated, and the shapes past bugs needed) shows on under 1% of boards.

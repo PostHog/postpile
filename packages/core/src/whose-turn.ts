@@ -16,6 +16,7 @@ import {
   teamRequestHold,
   teamRequestTakenBy,
   viewerHeadReview,
+  viewerRequestedChanges,
   type ReviewRequest,
 } from './review-request.ts';
 import type { EventKind, Pr, PrEvent, PrKey, Tile, UserPrState, Viewer } from './types.ts';
@@ -184,15 +185,16 @@ function askText(ask: PrEvent, reviewToo: boolean): string {
   return reviewToo ? `Review, ${ask.actor} ${verbs.withReview}` : verbs.alone(ask.actor);
 }
 
-function reviewText(ctx: PrContext, ask: ReviewRequest): string {
+/** "Review, ada asked"; `verb` is "Re-review" when the viewer's changes request stands. */
+function reviewText(ctx: PrContext, ask: ReviewRequest, verb: 'Review' | 'Re-review'): string {
   if (ask === 'team') {
-    return `Review for ${ownTeamSlug(ctx)}`;
+    return `${verb} for ${ownTeamSlug(ctx)}`;
   }
   if (ask === 'team_for_you') {
-    return `Review for ${ownTeamSlug(ctx)}: ${ctx.pr.author}'s PR`;
+    return `${verb} for ${ownTeamSlug(ctx)}: ${ctx.pr.author}'s PR`;
   }
   const by = requester(ctx);
-  return by && !isViewer(ctx, by) ? `Review, ${by} asked` : 'Review';
+  return by && !isViewer(ctx, by) ? `${verb}, ${by} asked` : verb;
 }
 
 /** Unresolved threads whose last word is someone else's (not the viewer's, not a bot's). */
@@ -257,7 +259,13 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return changes.kind === 're_review' ? them(ctx, changes.by, RE_REVIEW) : them(ctx, pr.author, `to address ${changes.by}'s changes`);
   }
   if (reviewed === null && (isPersonalRequest(ask) || ask === 'team')) {
-    return you(ctx, 'review', reviewText(ctx, ask));
+    // Asked again while the viewer's changes request stands (the author
+    // re-requested, the viewer only commented since): a re-review, like the
+    // PR's tier, Changes you requested (2026-09-30).
+    if (viewerRequestedChanges(pr, ctx.viewer)) {
+      return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
+    }
+    return you(ctx, 'review', reviewText(ctx, ask, 'Review'));
   }
   if (reviewed?.state === 'APPROVED') {
     return them(ctx, pr.author, 'to merge');

@@ -14,6 +14,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - A review request a bot made for you counts as an ask everywhere: it pings, wakes a snooze, and keeps quiet reads from marking the thread read as bot activity.
 - A dismissed review no longer counts as reviewed for "To review" while whose move says "Review".
+- Asked again after you requested changes, with only a comment from you since, whose move says "Re-review, ada asked" to match "Changes you requested". It said "Review, ada asked".
 - Snoozes belong to PRs, not tiles, so they survive a PR joining a stack or set. A new unsnoozed PR in a snoozed tile makes the tile show again.
 - Every snooze ends when its PR is merged or closed, so its topic can retire. A "someone replies" or "until" snooze on a finished PR still held it.
 - A finished topic's retired time no longer moves when the topic is renamed.

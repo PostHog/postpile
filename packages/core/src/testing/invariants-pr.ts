@@ -43,11 +43,9 @@ export const toReviewMatchesReviewMove: Invariant = {
   check(board, views) {
     for (const row of views.flatMap(trackedRows)) {
       const review = row.turn.kind === 'you' && row.turn.move === 'review';
-      // Open question for Julian: after your changes request, a new request
-      // for your review (the author pushed, re-requested, and you commented
-      // since) makes the move Review, while the tier keeps the PR under
-      // Changes you requested, which comes first in the tier order.
-      if (review && row.tier !== 'changes_requested') {
+      // A request while your changes request stands is a Re-review, under
+      // Changes you requested (decided 2026-09-30), so Review is always To review.
+      if (review) {
         ensure(row.tier === 'to_review', `${row.key}: move Review, tier ${row.tier}`);
       }
       if (row.tier === 'to_review' && !review) {
