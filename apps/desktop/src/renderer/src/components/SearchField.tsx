@@ -24,7 +24,7 @@ export function SearchField(props: SearchFieldProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
-    <label className="flex h-7 w-full items-center gap-2 rounded-control border border-control bg-surface px-2.5 text-muted shadow-control focus-within:border-accent-line">
+    <label className="flex h-7 w-full items-center gap-[7px] rounded-control bg-surface px-2.5 text-faint shadow-control inset-ring inset-ring-edge-field focus-within:inset-ring-accent-line">
       <SearchIcon />
       <input
         ref={input}

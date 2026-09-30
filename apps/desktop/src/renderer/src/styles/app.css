@@ -57,6 +57,7 @@
   --color-edge-hairline: var(--ring-hairline);
   --color-edge-control: var(--ring-control);
   --color-edge-control-soft: var(--ring-control-soft);
+  --color-edge-field: var(--ring-field);
   --color-edge-honey: var(--ring-honey);
   --color-edge-honey-box: var(--ring-honey-box);
   --color-edge-risk-box: var(--ring-risk-box);
@@ -236,4 +237,24 @@ body {
 :where(button, a, summary, [role='button'], [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Scrollbars: a thin overlay-style thumb instead of Chromium's chunky pane
+   scrollbars. The 3px transparent border around a content-box background
+   leaves a 4px thumb inside the 10px gutter; the track stays transparent. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--thumb);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 99px;
 }

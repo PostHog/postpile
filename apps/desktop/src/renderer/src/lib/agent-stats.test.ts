@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentCallCount, AgentCallStats } from '@postpile/core';
-import { callStatsDetail, callStatsLabel, capNote } from './agent-stats.ts';
+import { callStatsDetail, callStatsLabel, callStatsWords, capNote } from './agent-stats.ts';
 
 function count(overrides: Partial<AgentCallCount>): AgentCallCount {
   return { calls: 1, failed: 0, retries: 0, skippedUnchanged: 0, skippedByBudget: 0, durationMs: 0, costUsd: null, ...overrides };
@@ -14,6 +14,7 @@ describe('callStatsLabel', () => {
 
   it('says call for one', () => {
     expect(callStatsLabel({ total: 1, byKind: { chat: count({}) } })).toBe('1 agent call');
+    expect(callStatsWords({ total: 1, byKind: { chat: count({}) } })).toBe('agent call');
   });
 });
 

@@ -12,11 +12,31 @@ import logoUrl from '../assets/logo-64.png';
 import { BackIcon, ForwardIcon, SyncIcon } from './icons.tsx';
 import { UpdatePill } from './UpdatePill.tsx';
 
-function StatusText(props: { dot: string; text: string; detail: string }) {
+/** The status dot with a halo at 16% of its own color. */
+const DOTS = {
+  accent: 'bg-accent ring-accent/16',
+  closer: 'bg-closer ring-closer/16',
+  quiet: 'bg-dot-quiet ring-dot-quiet/16',
+  unread: 'bg-unread ring-unread/16',
+  open: 'bg-open ring-open/16',
+};
+
+type DotTone = keyof typeof DOTS;
+
+/** Numbers in the status line are mono and ink; the words around them stay quiet. */
+function Num(props: { children: ReactNode }) {
+  return <span className="font-mono text-[10.5px] font-semibold text-ink-2 tabular-nums">{props.children}</span>;
+}
+
+function Sep() {
+  return <span className="text-ghost">·</span>;
+}
+
+function StatusText(props: { dot: DotTone; detail: string; children: ReactNode }) {
   return (
-    <span className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted" title={props.detail}>
-      <span className={`size-1.5 shrink-0 rounded-full ${props.dot}`} />
-      <span className="truncate">{props.text}</span>
+    <span className="flex min-w-0 items-center gap-1.5 text-[11px] whitespace-nowrap text-hint" title={props.detail}>
+      <span className={`size-1.5 shrink-0 rounded-full ring-2 ${DOTS[props.dot]}`} />
+      <span className="flex min-w-0 items-center gap-1.5 truncate">{props.children}</span>
     </span>
   );
 }
@@ -24,7 +44,11 @@ function StatusText(props: { dot: string; text: string; detail: string }) {
 /** "syncing · agent 34/82 · 2m". Its own component so only it ticks every second, and only while a sync runs. */
 function SyncProgressStatus(props: { progress: SyncProgress | null | undefined }) {
   const now = useNow(1000);
-  return <StatusText dot="bg-accent" text={syncProgressText(props.progress, now)} detail={syncProgressDetail(props.progress)} />;
+  return (
+    <StatusText dot="accent" detail={syncProgressDetail(props.progress)}>
+      <span className="font-mono text-[10.5px]">{syncProgressText(props.progress, now)}</span>
+    </StatusText>
+  );
 }
 
 function SyncStatus() {
@@ -36,25 +60,53 @@ function SyncStatus() {
     return <SyncProgressStatus progress={progress} />;
   }
   if (tools && !tools.canSync) {
-    return <StatusText dot="bg-closer" text="sync off · gh needs a fix" detail={`${tools.gh.headline}. The note in the middle column has the fix.`} />;
+    return (
+      <StatusText dot="closer" detail={`${tools.gh.headline}. The note in the middle column has the fix.`}>
+        sync off <Sep /> gh needs a fix
+      </StatusText>
+    );
   }
   const report = actions.lastSync;
-  let dot = 'bg-dot-quiet';
-  let text = 'not synced yet';
-  let detail: string | null = null;
-  if (report) {
-    dot = report.errors.length > 0 ? 'bg-unread' : 'bg-open';
-    const age = ageLabel(report.finishedAt, now);
-    const when = age === 'now' ? 'just now' : `${age} ago`;
-    text = `synced ${when} · ${report.prsFetched} PRs fetched · ${report.newEvents} new events`;
-    detail = syncReportDetail(report);
-    const capped = capNote(report.agentCallStats, actions.config?.autoSyncMinutes ?? 0);
-    if (capped) {
-      dot = 'bg-closer';
-      text = `${text} · ${capped}`;
-    }
+  if (!report) {
+    return (
+      <StatusText dot="quiet" detail="not synced yet">
+        not synced yet
+      </StatusText>
+    );
   }
-  return <StatusText dot={dot} text={text} detail={detail ?? text} />;
+  const age = ageLabel(report.finishedAt, now);
+  const capped = capNote(report.agentCallStats, actions.config?.autoSyncMinutes ?? 0);
+  let dot: DotTone = report.errors.length > 0 ? 'unread' : 'open';
+  if (capped) {
+    dot = 'closer';
+  }
+  return (
+    <StatusText dot={dot} detail={syncReportDetail(report)}>
+      <span>
+        {age === 'now' ? (
+          'synced just now'
+        ) : (
+          <>
+            synced <Num>{age}</Num> ago
+          </>
+        )}
+      </span>
+      <Sep />
+      <span>
+        <Num>{report.prsFetched}</Num> PRs fetched
+      </span>
+      <Sep />
+      <span>
+        <Num>{report.newEvents}</Num> new events
+      </span>
+      {capped && (
+        <>
+          <Sep />
+          <span>{capped}</span>
+        </>
+      )}
+    </StatusText>
+  );
 }
 
 function NavButton(props: { label: string; shortcut: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
@@ -100,7 +152,7 @@ function SyncButton() {
       title={ghOff ? `Sync is off: ${ghOff}` : 'Sync now'}
       disabled={actions.syncing || ghOff !== null}
       onClick={() => void actions.sync()}
-      className="flex h-7 w-[30px] shrink-0 items-center justify-center rounded-control border border-control bg-surface text-ink-2 shadow-control hover:bg-subtle disabled:opacity-60 disabled:hover:bg-surface"
+      className="flex h-7 w-[30px] shrink-0 items-center justify-center rounded-control bg-surface text-ink-2 shadow-control inset-ring inset-ring-edge-control-soft hover:bg-subtle disabled:opacity-60 disabled:hover:bg-surface"
     >
       <SyncIcon className={actions.syncing ? 'animate-spin' : ''} />
     </button>
@@ -110,12 +162,12 @@ function SyncButton() {
 export function TitleBar(props: TitleBarProps) {
   const actions = useActions();
   return (
-    <header className="drag-region grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(220px,380px)_minmax(0,1fr)] items-center gap-4 border-b border-hairline-strong bg-titlebar px-4">
+    <header className="drag-region grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(220px,380px)_minmax(0,1fr)] items-center gap-4 bg-titlebar px-4 shadow-[inset_0_-1px_0_var(--hairline)]">
       <div className="flex min-w-0 items-center gap-3.5 overflow-hidden pl-[72px] whitespace-nowrap">
         <span className="flex items-center gap-2">
-          <img src={logoUrl} alt="" width={20} height={20} className="shrink-0" draggable={false} />
+          <img src={logoUrl} alt="" width={20} height={20} className="shrink-0 rounded-[5px]" draggable={false} />
           {/* The name gives way below 1280px so the centered search keeps its width. */}
-          <span className="text-[13.5px] font-semibold tracking-[-0.01em] max-xl:hidden">PostPile</span>
+          <span className="text-[13.5px] font-[650] tracking-[-0.012em] max-xl:hidden">PostPile</span>
         </span>
         {actions.config?.profile === 'dev' && (
           <span
