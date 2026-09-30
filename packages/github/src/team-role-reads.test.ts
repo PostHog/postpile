@@ -60,7 +60,7 @@ describe('team role reads', () => {
     const prs = await client.reviewedPrRequests('alice', ['acme'], '2026-07-02', 80);
     expect(prs).toHaveLength(80);
     expect(fetch.requests).toHaveLength(2);
-    expect((fetch.requests[1]?.body as { variables: { after: string } }).variables.after).toBe('c1');
+    expect((fetch.requests[1]!.body as { variables: { after: string } }).variables.after).toBe('c1');
   });
 
   it('stops at the last page', async () => {

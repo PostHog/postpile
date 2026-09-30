@@ -108,7 +108,7 @@ export interface TeamRoles {
  * takes the new answer. Teams not classified this time keep their entry.
  */
 export function mergeTeamRoles(previous: TeamRoles | null, classified: TeamClassification[], reviewCount: number, at: IsoTime): TeamRoles {
-  const teams: Record<string, TeamRoleEntry> = { ...(previous?.teams ?? {}) };
+  const teams: Record<string, TeamRoleEntry> = { ...previous?.teams };
   for (const entry of classified) {
     const kept = teams[entry.team];
     const numbers = { reviews: entry.reviews, share: entry.share, members: entry.members };
