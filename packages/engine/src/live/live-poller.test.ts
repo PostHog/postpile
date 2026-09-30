@@ -19,6 +19,7 @@ class ScriptedPoll {
   calls = 0;
   private readonly script: (() => Promise<PollCycle>)[] = [];
 
+  // oxlint-disable-next-line unicorn/no-thenable -- fluent script API: poll.then(a).then(b)
   then(answer: () => Promise<PollCycle>): this {
     this.script.push(answer);
     return this;

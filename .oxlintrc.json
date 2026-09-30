@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import", "oxc", "unicorn"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    // React Compiler style rules. The app does not use the compiler, and its
+    // hits are deliberate patterns: state synced from a prop in an effect,
+    // and a "latest callback" ref assigned during render.
+    "react/set-state-in-effect": "off",
+    "react/refs": "off"
+  },
+  "ignorePatterns": ["node_modules", "out", "dist", "apps/desktop/out"]
+}

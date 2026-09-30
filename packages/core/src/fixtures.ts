@@ -238,6 +238,7 @@ export class FakeTimers implements Timers {
 
   advance(ms: number): void {
     this.time += ms;
+    // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: a fired callback may schedule more timers
     for (const [id, timer] of [...this.scheduled.entries()]) {
       if (timer.dueAt <= this.time) {
         this.scheduled.delete(id);

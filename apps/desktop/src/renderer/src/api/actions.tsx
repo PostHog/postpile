@@ -251,6 +251,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       Math.max(first.until - Date.now(), 0) + UNDO_SETTLE_MS,
     );
     return () => clearTimeout(timer);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- refreshAll is new every render; the timer must not restart for it
   }, [pendingUndos]);
 
   function show(tone: NoticeTone, message: string, undoToken: string | null = null, snoozeTileId: string | null = null): void {

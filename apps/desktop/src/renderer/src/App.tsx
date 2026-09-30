@@ -140,6 +140,7 @@ export function App() {
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
   const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown, selected.auto && selected.view ? { tileFilter, state: selected.view.state.kind } : null);
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose; setKept is guarded by the comparison
   useEffect(() => {
     if (keptAfter !== kept) {
       setKept(keptAfter);
@@ -164,6 +165,7 @@ export function App() {
       replaceEntry(pin);
     }
     // pinKey stands for pin, whose object is new on every render.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- pinKey stands for pin, replaceEntry changes every render
   }, [pinKey]);
   const pickTile = (tileId: string, prKey: string) => {
     const view = topic.data?.tiles.find((candidate) => candidate.tile.id === tileId);

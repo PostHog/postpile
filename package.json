@@ -19,6 +19,7 @@
   },
   "scripts": {
     "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "oxlint",
     "test": "vitest run",
     "build": "pnpm --filter @postpile/desktop build",
     "cli": "POSTPILE_PROFILE=${POSTPILE_PROFILE:-dev} tsx apps/cli/src/main.ts",
@@ -27,11 +28,12 @@
     "dist": "pnpm build && pnpm --filter @postpile/desktop dist"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.0.0",
     "fast-check": "^4.10.2",
+    "oxlint": "~1.84.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.1"
   },
   "packageManager": "pnpm@12.6.0"
 }
