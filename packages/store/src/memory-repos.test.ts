@@ -174,6 +174,13 @@ describe('FactRepo', () => {
     expect(store.facts.getMany([]).size).toBe(0);
   });
 
+  it('lists facts for far more entities than SQLite allows in one OR chain', () => {
+    store.facts.add(makeFact({ id: 'works' }));
+    const entities = Array.from({ length: 1500 }, (_, i) => ({ kind: 'person' as const, key: `user-${i}` }));
+    entities.push(alice);
+    expect(store.facts.listActiveForEntities(entities).map((f) => f.id)).toEqual(['works']);
+  });
+
   it('finds active facts by entity, topic and touched PR', () => {
     store.facts.add(makeFact({ id: 'works' }));
     store.facts.add(makeFact({ id: 'drives', predicate: 'drives', object: initiative, text: 'alice drives it', recordedAt: at(12), refs: [makeFactRef({ prKey: pr2 })] }));

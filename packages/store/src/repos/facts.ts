@@ -100,15 +100,26 @@ function toFact(row: FactRow, refs: FactRef[]): Fact {
   };
 }
 
-/** "(subject_kind = ? AND subject_key = ?) OR (object_kind = ? AND object_key = ?) OR ..." plus its params. */
+/** Entities per query: 4 params each stays far below SQLite's host parameter limit. */
+const ENTITY_CHUNK = 1000;
+
+/**
+ * "(subject_kind, subject_key) IN (VALUES (?, ?), ...) OR (object_kind, object_key) IN (VALUES ...)"
+ * plus its params. One VALUES list instead of an OR per entity, because SQLite
+ * rejects expression trees deeper than 1000.
+ */
 function entityFilter(entities: EntityRef[]): { sql: string; params: SqlValue[] } {
-  const parts: string[] = [];
+  const pairs = entities.map(() => '(?, ?)').join(', ');
   const params: SqlValue[] = [];
-  for (const entity of entities) {
-    parts.push('(subject_kind = ? AND subject_key = ?)', '(object_kind = ? AND object_key = ?)');
-    params.push(entity.kind, entity.key, entity.kind, entity.key);
+  for (let pass = 0; pass < 2; pass++) {
+    for (const entity of entities) {
+      params.push(entity.kind, entity.key);
+    }
   }
-  return { sql: `(${parts.join(' OR ')})`, params };
+  return {
+    sql: `((subject_kind, subject_key) IN (VALUES ${pairs}) OR (object_kind, object_key) IN (VALUES ${pairs}))`,
+    params,
+  };
 }
 
 /**
@@ -216,8 +227,20 @@ export class FactRepo {
     if (entities.length === 0) {
       return [];
     }
-    const filter = entityFilter(entities);
-    return this.select(`${ACTIVE} AND ${filter.sql}`, filter.params);
+    const byId = new Map<string, Fact>();
+    for (let start = 0; start < entities.length; start += ENTITY_CHUNK) {
+      const filter = entityFilter(entities.slice(start, start + ENTITY_CHUNK));
+      for (const fact of this.select(`${ACTIVE} AND ${filter.sql}`, filter.params)) {
+        byId.set(fact.id, fact);
+      }
+    }
+    // Same order as select(): oldest recorded first, then id.
+    return [...byId.values()].sort((a, b) => {
+      if (a.recordedAt !== b.recordedAt) {
+        return a.recordedAt < b.recordedAt ? -1 : 1;
+      }
+      return a.id < b.id ? -1 : 1;
+    });
   }
 
   /** Active facts a topic's dossier update produced. */
