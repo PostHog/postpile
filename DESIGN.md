@@ -1770,7 +1770,8 @@ became "Your PR", never landed in My PRs, and a teammate's agent PR never
 counted as a teammate's.
 
 - **The rule** (`prOwners` in `pr-owners.ts`): a PR's owners are its author,
-  except when the author is a bot (`isBot`) and the PR has assignees; then
+  except when the author is a bot (`isBotAuthor`: `isBot`, but a deleted
+  author '' is a person) and the PR has assignees; then
   the owners are the assignees. A person's PR does not become the viewer's
   because the viewer is assigned, and a bot PR without assignees stays the
   bot's (automation, as before). `isPrOwner(pr, login)` and `prOwner(pr)`
@@ -1794,8 +1795,11 @@ counted as a teammate's.
   snapshots and read as none). The full sync's finder asks
   `is:pr is:open assignee:@me` next to the viewer's own open PRs: it finds
   every PR assigned to the viewer, and only bot PRs become theirs. A hit a
-  bot opened (the search reads the author's `__typename`) is found as
-  `own_open`, "agent PR assigned to you" (AU, "Your PR", My PRs). A hit a
+  bot opened is found as `own_open`: the search reads the author's
+  `__typename` and login, normalizes it like the PR fetch (`actorLogin`)
+  and asks `isBotAuthor`, the same rule `prOwners` uses, so automation on a
+  user account (renovate) counts and a deleted author does not. Its reason
+  reads "agent PR assigned to you" (AU, "Your PR", My PRs). A hit a
   person opened is found as `assigned`, "assigned to you": code AS, so
   "For you" like an `assign` notification, but the author still owns it
   (tier by author and requests: team for a teammate's PR, To review with a

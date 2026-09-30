@@ -1,4 +1,6 @@
-import type { FoundVia, IsoTime, PrRef } from '@postpile/core';
+import { isBotAuthor, type FoundVia, type IsoTime, type PrRef } from '@postpile/core';
+import { actorLogin } from './normalize.ts';
+import type { RawActor } from './raw.ts';
 
 /** How many PRs one search alias asks for; the viewer's own PRs take 100. */
 export const FOUND_SEARCH_SIZE = 50;
@@ -57,8 +59,8 @@ export function buildFoundQuery(teams: string[], mergedSince: string): FoundQuer
       nodes { ${PR_FIELDS} }
     }
   }`,
-    // The author's type tells an agent PR (a bot's, the viewer's own) from one a person assigned them.
-    searchAlias('assigned', 'is:pr is:open assignee:@me', `${PR_FIELDS} author { __typename }`),
+    // The author tells an agent PR (a bot's, the viewer's own) from one a person assigned them.
+    searchAlias('assigned', 'is:pr is:open assignee:@me', `${PR_FIELDS} author { __typename login }`),
     searchAlias('review', 'is:pr is:open user-review-requested:@me'),
     ...teams.map((team, index) => searchAlias(`team${index}`, `is:pr is:open team-review-requested:${team}`)),
     searchAlias('merged', `is:pr involves:@me is:merged merged:>=${mergedSince}`),
@@ -72,8 +74,8 @@ export interface RawFoundNode {
   updatedAt?: string;
   mergedAt?: string | null;
   repository?: { nameWithOwner: string };
-  /** Only asked for on the assigned alias. */
-  author?: { __typename?: string } | null;
+  /** Only asked for on the assigned alias. Null for a deleted author. */
+  author?: RawActor | null;
 }
 
 export type RawFoundResponse = Record<string, { nodes: (RawFoundNode | null)[] } | { pullRequests: { nodes: (RawFoundNode | null)[] } } | null>;
@@ -81,10 +83,13 @@ export type RawFoundResponse = Record<string, { nodes: (RawFoundNode | null)[] }
 /**
  * An assigned PR a bot opened is the viewer's own (`prOwners`): found like
  * their own open PRs. One a person opened stays `assigned`: the author
- * still owns it.
+ * still owns it. The login is read the way the PR fetch reads it
+ * (`actorLogin`) and judged by the same rule as `prOwners`
+ * (`isBotAuthor`), so automation without a [bot] suffix counts and a
+ * deleted author does not.
  */
 function viaFor(alias: FoundAlias, node: RawFoundNode): FoundVia {
-  if (alias.via === 'assigned' && node.author?.__typename === 'Bot') {
+  if (alias.via === 'assigned' && isBotAuthor(actorLogin(node.author))) {
     return 'own_open';
   }
   return alias.via;

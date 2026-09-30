@@ -9,15 +9,25 @@ import type { Pr } from './types.ts';
 type OwnedPr = Pick<Pr, 'author' | 'assignees'>;
 
 /**
- * The PR's owners: its author, except when the author is a bot and the PR
- * has assignees; then the assignees. A human author stays the only owner
- * even with assignees, and a bot PR without assignees stays the bot's.
- * A deleted author comes back as '' and counts as a person here, although
- * `isBot('')` is true for actor-less events.
+ * An author whose PR belongs to its assignees, if it has any: a bot
+ * (`isBot`, so automation on user accounts too). A deleted author comes
+ * back as '' and counts as a person here, although `isBot('')` is true for
+ * actor-less events. The PR finder asks this too, so a PR it files as the
+ * viewer's own is one `prOwners` gives them.
+ */
+export function isBotAuthor(author: string): boolean {
+  return author !== '' && isBot(author);
+}
+
+/**
+ * The PR's owners: its author, except when the author is a bot
+ * (`isBotAuthor`) and the PR has assignees; then the assignees. A human
+ * author stays the only owner even with assignees, and a bot PR without
+ * assignees stays the bot's.
  */
 export function prOwners(pr: OwnedPr): string[] {
   const assignees = pr.assignees ?? [];
-  if (pr.author !== '' && isBot(pr.author) && assignees.length > 0) {
+  if (isBotAuthor(pr.author) && assignees.length > 0) {
     return assignees;
   }
   return [pr.author];

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { changesAnswered } from './changes-answered.ts';
 import { at, makeComment, makePr, makeReview, singleTile, viewer } from './fixtures.ts';
 import { forWhom } from './for-whom.ts';
-import { isPrOwner, prOwner, prOwners } from './pr-owners.ts';
+import { isBotAuthor, isPrOwner, prOwner, prOwners } from './pr-owners.ts';
 import { prTier } from './pr-tier.ts';
 import { reviewPending, reviewRequest } from './review-request.ts';
 import { tilePeople } from './tile-people.ts';
@@ -28,6 +28,15 @@ function tierOf(pr: Pr, who: Viewer = withTeam): string {
 function turnOf(pr: Pr, who: Viewer = withTeam) {
   return whoseTurn({ tile: singleTile(pr), prs: new Map([[pr.key, pr]]), events: new Map(), userStates: new Map(), viewer: who });
 }
+
+describe('isBotAuthor', () => {
+  it('is true for app accounts and automation on user accounts, never for a deleted author', () => {
+    expect(isBotAuthor(BOT)).toBe(true);
+    expect(isBotAuthor('renovate')).toBe(true);
+    expect(isBotAuthor('alice')).toBe(false);
+    expect(isBotAuthor('')).toBe(false);
+  });
+});
 
 describe('prOwners', () => {
   it('is the author for a person’s PR, assignees or not', () => {
