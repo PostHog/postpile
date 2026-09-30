@@ -10,7 +10,7 @@ import {
   layoutFromBuckets,
   queueLayout,
   queueRowId,
-  firstGridTile,
+  gridGroups,
   tilesInTierOrder,
   unreadLook,
   visibleQueueFilters,
@@ -212,19 +212,31 @@ describe('tilesInTierOrder', () => {
   });
 });
 
-describe('firstGridTile', () => {
-  it('picks the first live tile in tier order, not the first in API order', () => {
-    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [], unreadOnGitHub: false, loud: false } };
-    const views = [tile('rest', 'rest'), done, tile('team', 'team')];
-    expect(firstGridTile(views)?.tile.id).toBe('team');
+describe('gridGroups', () => {
+  const state = (kind: 'unread' | 'open' | 'snoozed' | 'done', unreadOnGitHub = false) => ({ kind, unreadBecause: [], unreadOnGitHub, loud: false });
+  const grouped = (views: TileView[]) => gridGroups(views).map((bucket) => [bucket.key, bucket.items.map((view) => view.tile.id)]);
+
+  it('groups by core\'s group in the order Unread, Open, Dealt with, tier order inside', () => {
+    const views = [
+      withOffers({ ...tile('done', 'needs_reply'), state: state('done') }),
+      withOffers({ ...tile('rest-unread', 'rest'), state: state('unread', true) }),
+      tile('open', 'rest'),
+      withOffers({ ...tile('team-unread', 'team'), state: state('unread', true) }),
+    ];
+    expect(grouped(views)).toEqual([
+      ['unread', ['team-unread', 'rest-unread']],
+      ['open', ['open']],
+      ['dealt_with', ['done']],
+    ]);
   });
 
-  it('falls back to snoozed, then done, then nothing', () => {
-    const snoozed = { ...tile('snoozed', 'rest'), state: { kind: 'snoozed' as const, unreadBecause: [], unreadOnGitHub: false, loud: false } };
-    const done = { ...tile('done', 'needs_reply'), state: { kind: 'done' as const, unreadBecause: [], unreadOnGitHub: false, loud: false } };
-    expect(firstGridTile([done, snoozed])?.tile.id).toBe('snoozed');
-    expect(firstGridTile([done])?.tile.id).toBe('done');
-    expect(firstGridTile([])).toBeNull();
+  it('keeps empty groups for the held place and puts snoozed tiles last in their group', () => {
+    const views = [withOffers({ ...tile('snoozed', 'needs_reply'), state: state('snoozed') }), tile('open', 'rest')];
+    expect(grouped(views)).toEqual([
+      ['unread', []],
+      ['open', ['open', 'snoozed']],
+      ['dealt_with', []],
+    ]);
   });
 });
 

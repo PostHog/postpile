@@ -119,4 +119,26 @@ describe('rules agree on the sample boards', () => {
       }
     }
   });
+
+  // DESIGN.md "Groups inside a topic": the sample tiles land in the groups
+  // core gives them, and the sidebar counts and the footer total (the counts
+  // added up) are the tiles in the Unread group.
+  it('groups every tile once and counts the Unread group, per topic and in total', async () => {
+    const engine = new FakeEngine({ now: () => NOW });
+    const items = await engine.listTopics();
+    let total = 0;
+    for (const item of items) {
+      const tiles = (await engine.getTopic(item.topic.id))?.tiles ?? [];
+      for (const view of tiles) {
+        const expected = view.unreadPrKeys.length > 0 ? 'unread' : view.state.kind === 'done' ? 'dealt_with' : 'open';
+        expect(view.group, view.tile.id).toBe(expected);
+      }
+      const unread = tiles.filter((view) => view.group === 'unread').length;
+      expect(item.unreadTiles, item.topic.id).toBe(unread);
+      total += unread;
+    }
+    expect(items.reduce((sum, item) => sum + item.unreadTiles, 0)).toBe(total);
+    const views = await sampleTiles(engine);
+    expect(new Set(views.map((view) => view.group))).toEqual(new Set(['unread', 'open', 'dealt_with']));
+  });
 });

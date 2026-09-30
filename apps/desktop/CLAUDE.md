@@ -85,7 +85,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   rows) are pure functions in `lib/`, unit tested. Components stay dumb.
   Rules are not display: facts (whose move, done, automation) and offers
   (which buttons, which leads, the lead PR) come from core as view fields,
-  and tier order is typed with core's `PrTierOrder`.
+  and tier order is typed with core's `PrTierOrder`. A tile's group
+  (`TileView.group`: unread, open, dealt_with) and the NEW pill
+  (`TileView.newBadge`) come from core too; never compare `state.kind`
+  with `unread` / `done` or read `unreadOnGitHub` / `automation` here.
+  `src/main/renderer-rules.test.ts` greps for that and fails.
 
 ## Mutations: one guarded ActionsProvider
 
@@ -371,13 +375,13 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   no band, sea means your team); PR rows get the small chip, no band. The tooltip keeps the
   long why-here reason (`whyTitle`). Grey on done tiles.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
-  badge (`Glyph`), a coral "NEW" pill, age. On a revisit (`PrSummary.whatsNew`
+  badge (`Glyph`), a coral "NEW" pill (only while `TileView.newBadge`), age. On a revisit (`PrSummary.whatsNew`
   of the strip's PR, `stripNews`) the text, avatar, badge, "+N" and age
   come from core's `whatsNew`, worded by `whatsNewText` in
-  `lib/whats-new.ts`; never add a second line or change the strip's size. Only unread tiles have the
+  `lib/whats-new.ts`; never add a second line or change the strip's size. Only tiles in the Unread group have the
   warm strip; an open tile with an unseen merge without the user's review
   (`TileState.unseenMerges`) gets the same-sized grey `UnseenMergeStrip`,
-  no NEW pill; read tiles get a quieter (ink-2) title, done and draft tiles a
+  no NEW pill; read tiles get a quieter (ink-2) title, Dealt with and draft tiles a
   muted one. Drafts (`isDraftTile`): grey "Draft" chip and a dashed frame
   or dashed left band.
 - PR status (design 3a, 2026-09-29): `PrStateIcon` at the start of the row,
@@ -455,14 +459,20 @@ or a queue filter narrows; a finished topic is not in `useTopics`, so
 Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
 not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set
-(`RelationLine`), local only. `TileGrid` shows tiles in tier order, folds
-snoozed / done ones. Queue filters pick topics; tiles inside a topic are never faded by them.
+(`RelationLine`), local only. `TileGrid` shows three groups by
+`TileView.group`, always Unread, Open, Dealt with (`gridGroups` in
+`lib/queues.ts`, order typed with core's `TileGroupOrder`), tier order
+inside, snoozed last; empty groups don't render. Dealt with is folded
+until opened, then as the user last clicked it (`dealtWithOpen` in `App`,
+kept for the session; search or a selection never changes it), and opens
+while the search filters or one of its tiles is selected. No All / Unread
+toggle (removed 2026-09-30). Queue filters pick topics; tiles inside a topic are never faded by them.
 A click anywhere on a tile selects it (`onTileClick` in `Tile.tsx`), except
 on a control inside it (button, link, menu: `clickedControl`), which keeps
 its own action; a PR row selects that PR. The keyboard path is the title,
 a `<button>`. A click on the already selected tile keeps the open PR.
 Tiles stay in one column (DESIGN.md "Three-pane balance"). The selected
-tile keeps the place it had when it was selected (`useHeldPlace` over
+tile keeps the place it had when it was selected, in its group (`useHeldPlace` over
 `holdPlace`, `lib/hold-place.ts`), and the open topic's sidebar row too,
 until the selection moves; its look still changes right away.
 

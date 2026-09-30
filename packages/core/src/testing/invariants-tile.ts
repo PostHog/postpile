@@ -15,7 +15,7 @@ import { expectedDone, expectedSnoozePhase, isUnseenMergeWithoutViewer } from '.
 
 const TURN_RANK: Record<WhoseTurnKind, number> = { you: 0, them: 1, none: 2 };
 
-function isSnoozedByRule(board: PropertyBoard, view: TileView): boolean {
+export function isSnoozedByRule(board: PropertyBoard, view: TileView): boolean {
   const tracked = trackedMembers(view);
   return (
     tracked.length > 0 &&
@@ -30,7 +30,7 @@ function isSnoozedByRule(board: PropertyBoard, view: TileView): boolean {
 }
 
 /** Done by the spec (spec-rules.ts `expectedDone`), not by `isPrDone`. */
-function prDone(board: PropertyBoard, key: string): boolean {
+export function prDone(board: PropertyBoard, key: string): boolean {
   return expectedDone({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key), lastReadAt: board.threads.get(key)?.lastReadAt ?? null });
 }
 
@@ -46,12 +46,12 @@ export const snoozedWhileEveryTrackedPrSnoozed: Invariant = {
 };
 
 /** The members whose notification thread is unread on GitHub. */
-function unreadThreadKeys(board: PropertyBoard, view: TileView): string[] {
+export function unreadThreadKeys(board: PropertyBoard, view: TileView): string[] {
   return view.tile.members.filter((member) => board.threads.get(member.prKey)?.unread === true).map((member) => member.prKey);
 }
 
 /** Unseen loud news on a pinged or pulled-in PR (a found PR's news never counts for the tile). */
-function tileNews(board: PropertyBoard, view: TileView) {
+export function tileNews(board: PropertyBoard, view: TileView) {
   return view.tile.members.filter((member) => member.provenance.kind !== 'found').flatMap((member) => eventsOf(board, member.prKey).filter(isNews));
 }
 
@@ -119,7 +119,7 @@ function expectedReasonIds(board: PropertyBoard, key: string): string[] {
  * unseen loud news (decided 2026-09-30), or a pinged PR with an unseen Look
  * closer event.
  */
-function loudWithoutThreadKeys(board: PropertyBoard, view: TileView): string[] {
+export function loudWithoutThreadKeys(board: PropertyBoard, view: TileView): string[] {
   return view.tile.members
     .filter((member) => {
       const news = eventsOf(board, member.prKey).filter(isNews);
@@ -167,7 +167,7 @@ export const unreadWhileAThreadIsUnread: Invariant = {
   },
 };
 
-/** `unreadOnGitHub` says whether a thread of the tile is unread, on every state (a snoozed tile counts in the Unread filter); `loud` whether a non-found PR has unseen loud news. */
+/** `unreadOnGitHub` says whether a thread of the tile is unread, on every state (a snoozed tile with one sits in the Unread group); `loud` whether a non-found PR has unseen loud news. */
 export const unreadOnGitHubAndLoudFollowTheBoard: Invariant = {
   name: 'unreadOnGitHub follows the threads and loud follows the loud news, in every state, and each row says whether its thread is unread',
   check(board, views) {

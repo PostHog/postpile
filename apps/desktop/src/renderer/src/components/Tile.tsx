@@ -42,7 +42,7 @@ function frameClasses(props: TileProps, draft: boolean): string {
   if (props.selected) {
     return 'border border-accent shadow-selected';
   }
-  if (props.view.state.kind === 'done') {
+  if (props.view.group === 'dealt_with') {
     return `border border-hairline-done ${dashed}`;
   }
   return draft ? 'border border-dashed border-frame' : 'border border-edge-hairline bg-clip-padding shadow-tile-lift';
@@ -149,14 +149,15 @@ function PrRows(props: TileProps & { done: boolean }) {
   );
 }
 
-/** One unit of attention: a single PR, a stack or a set. Done tiles go flat and grey. */
+/** One unit of attention: a single PR, a stack or a set. Tiles in Dealt with go flat and grey. */
 export function Tile(props: TileProps) {
   const actions = useActions();
   const now = useNow();
   const { view } = props;
   const { tile, state } = view;
-  const done = state.kind === 'done';
-  const unread = state.kind === 'unread';
+  // Core's group decides the look: Dealt with goes grey, Unread gets the strip and a bold title.
+  const done = view.group === 'dealt_with';
+  const unread = view.group === 'unread';
   const draft = isDraftTile(view);
   // Unread: bold, full ink. Read: regular weight, a notch quieter (the your-move footer stays the reminder). Done and drafts: muted.
   let titleLook = unread ? 'font-semibold text-ink' : 'font-normal text-ink-2';

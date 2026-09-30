@@ -582,7 +582,7 @@ export interface TileState {
   /**
    * A tracked thread of the tile is unread on GitHub. True on every unread
    * tile, and on a snoozed tile whose thread is unread: it keeps its snooze
-   * but counts in the Unread filter and the unread counts.
+   * but sits in the Unread group and counts in the unread counts.
    */
   unreadOnGitHub: boolean;
   /**

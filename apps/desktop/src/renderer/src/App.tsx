@@ -32,7 +32,7 @@ import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
 import type { SetupStepKey } from './lib/setup.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
-import { filterKey, keptFor, listedTopics, nextKept, noSelectionText, resolveSelection, withSelectedTile, type KeptView, type TileFilter } from './lib/selection.ts';
+import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { toolsNotice } from './lib/tools.ts';
@@ -40,10 +40,6 @@ import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
-
-function entryKey(entry: NavEntry): string {
-  return `${entry.pane}|${entry.topicId}|${entry.tileId}|${entry.prKey}`;
-}
 
 function MainPane(props: { children: ReactNode }) {
   return <main className="flex min-w-0 flex-col gap-4 overflow-auto px-[26px] pt-5 pb-[22px]">{props.children}</main>;
@@ -72,11 +68,9 @@ export function App() {
 
   const [query, setQuery] = useState('');
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
-  const [tileFilter, setTileFilter] = useState<TileFilter>('all');
-  // Switching the grid to Unread clears the selection in the open topic (until the next pick or topic change).
-  // Kept apart from the nav entry, so a shown fallback topic never rewrites the user's hidden pick.
-  const [deselected, setDeselected] = useState<{ topicId: string; entryKey: string } | null>(null);
   const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
+  // The grid's Dealt with group: the user's last click on it (open or closed), kept for the session in every topic. Starts folded.
+  const [dealtWithOpen, setDealtWithOpen] = useState(false);
   const changeQueueFilter = (filter: QueueFilter | null): void => {
     setQueueFilter(filter);
     sendTelemetry('queue_filter_changed', { filter: filter ?? 'none' });
@@ -143,11 +137,10 @@ export function App() {
   const allTiles = topic.data?.tiles ?? [];
   const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
   const keptTile = keptNow && keptNow.topicId === activeTopicId ? keptNow : null;
-  const noTile = deselected !== null && deselected.topicId === activeTopicId && deselected.entryKey === entryKey(nav.current);
-  const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile, tileFilter, noTile);
+  const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
-  const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown, selected.auto && selected.view ? { tileFilter, state: selected.view.state.kind } : null);
+  const keptAfter = nextKept(kept, currentFilterKey, nav.current, shown, selected.auto && selected.view ? { group: selected.view.group } : null);
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose; setKept is guarded by the comparison
   useEffect(() => {
     if (keptAfter !== kept) {
@@ -175,15 +168,6 @@ export function App() {
     // pinKey stands for pin, whose object is new on every render.
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- pinKey stands for pin, replaceEntry changes every render
   }, [pinKey]);
-  const changeTileFilter = (next: TileFilter): void => {
-    setTileFilter(next);
-    if (next === 'unread' && tileFilter !== 'unread' && activeTopicId !== null) {
-      setDeselected({ topicId: activeTopicId, entryKey: entryKey(nav.current) });
-    }
-  };
-  useEffect(() => {
-    setDeselected(null);
-  }, [activeTopicId]);
   const pickTile = (tileId: string, prKey: string) => {
     const view = topic.data?.tiles.find((candidate) => candidate.tile.id === tileId);
     if (view) {
@@ -289,9 +273,8 @@ export function App() {
           selectedTileId={selected.view?.tile.id ?? null}
           selectedPrKey={selected.prKey}
           onSelect={pickTile}
-          selectedIsAuto={selected.auto}
-          filter={tileFilter}
-          onFilter={changeTileFilter}
+          dealtWithOpen={dealtWithOpen}
+          onDealtWithOpen={setDealtWithOpen}
           matchingTileIds={withSelectedTile(matchingTileIds, selected.auto ? null : (selected.view?.tile.id ?? null))}
         />
       </MainPane>
@@ -404,7 +387,7 @@ export function App() {
                 prKey={selected.prKey}
                 onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
                 chatRequest={chatRequest}
-                noSelectionText={noSelectionText(tileFilter)}
+                noSelectionText="Pick a tile to see it."
               />
             )}
             <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />

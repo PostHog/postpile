@@ -68,6 +68,7 @@ describe('markedReadTile', () => {
     expect(marked.unreadPrKeys).toEqual([]);
 
     expect(marked.state).toEqual({ kind: 'done', unreadBecause: [], unreadOnGitHub: false, loud: false });
+    expect([marked.group, marked.newBadge]).toEqual(['dealt_with', false]);
     expect(marked.turn).toEqual(NONE);
     expect(marked.prs.map((pr) => [pr.unseenLoudEvents, pr.done])).toEqual([
       [0, true],
@@ -78,7 +79,21 @@ describe('markedReadTile', () => {
   it('leaves a tile that stays your move open, and a snoozed tile snoozed', () => {
     const stillYours = { ...unreadTile([summary(1)]), afterRead: { done: false, turn: REVIEW } };
     expect(markedReadTile(stillYours).state.kind).toBe('open');
+    expect(markedReadTile(stillYours).group).toBe('open');
     expect(markedReadTile(snoozedTile(stillYours)).state.kind).toBe('snoozed');
+    // A snoozed tile marked read leaves Unread for Open, even when a mark-read would leave it done.
+    expect(markedReadTile(snoozedTile(unreadTile([summary(1)]))).group).toBe('open');
+  });
+});
+
+describe('snoozedTile', () => {
+  it('keeps a tile with an unread thread in Unread and moves one unread only by other news to Open', () => {
+    const threadUnread = unreadTile([summary(1)]);
+    expect([snoozedTile(threadUnread).group, snoozedTile(threadUnread).newBadge]).toEqual(['unread', false]);
+    // Unread only through a pulled-in layer's loud news or a Look closer event: no thread unread on GitHub.
+    const newsOnly = withOffers({ ...threadUnread, state: { ...threadUnread.state, unreadOnGitHub: false } });
+    expect(newsOnly.group).toBe('unread');
+    expect(snoozedTile(newsOnly).group).toBe('open');
   });
 });
 

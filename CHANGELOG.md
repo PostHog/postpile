@@ -6,6 +6,9 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- A topic shows its tiles in three groups, always in this order: Unread, Open and Dealt with. The All / Unread toggle is gone. Dealt with starts folded and stays open or closed as you last left it for the session; empty groups don't show.
+- Tiles that used to be labelled "Done" say "Dealt with", in the app and in MCP answers. Topics that are over stay "Finished".
+- Snoozed tiles sit in Open, or in Unread while a thread is unread on GitHub, instead of their own folded row.
 - The detail pane's activity list puts the unread dot on every event you have not seen yet, not only loud ones. When a PR is unread because GitHub changed the notification and no event explains it, the list starts with one dotted line saying so.
 - The "Mark done" button is now "Done for now".
 - The automatic mark when you open a PR and move on is visible: the button fills over the 1.5s dwell, then says "Marks read when you leave" (or "done"), and a small X ("Keep unread") cancels it for that PR.

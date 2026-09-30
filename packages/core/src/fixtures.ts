@@ -5,7 +5,8 @@ import type { Timers } from './deferred-queue.ts';
 import { emptyDossier } from './dossier.ts';
 import { prKey } from './keys.ts';
 import { tileOffers } from './offers.ts';
-import { tileUnreadPrKeys } from './tile-view.ts';
+import { tileGroup } from './tile-groups.ts';
+import { tileNewBadge, tileUnreadPrKeys } from './tile-view.ts';
 import type { PrFacts, TileView } from './views.ts';
 import type { DossierVersion, Fact, FactCandidate, FactRef } from './memory.ts';
 import type {
@@ -253,7 +254,7 @@ export class FakeTimers implements Timers {
 /** PR facts with nothing aimed at anyone, for hand-built `PrSummary` rows. */
 export const NO_PR_FACTS: PrFacts = { owners: ['alice'], ownerIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
 
-/** A hand-built tile view with the offers and dots core would give it (`tileOffers`, `tileUnreadPrKeys`). */
-export function withOffers(view: Omit<TileView, 'offers' | 'unreadPrKeys'>): TileView {
-  return { ...view, offers: tileOffers(view), unreadPrKeys: tileUnreadPrKeys(view.state, view.prs) };
+/** A hand-built tile view with the offers, dots, group and NEW pill core would give it (`tileOffers`, `tileUnreadPrKeys`, `tileGroup`, `tileNewBadge`). */
+export function withOffers(view: Omit<TileView, 'offers' | 'unreadPrKeys' | 'group' | 'newBadge'>): TileView {
+  return { ...view, offers: tileOffers(view), unreadPrKeys: tileUnreadPrKeys(view.state, view.prs), group: tileGroup(view.state), newBadge: tileNewBadge(view.state) };
 }

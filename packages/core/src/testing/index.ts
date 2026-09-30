@@ -11,6 +11,7 @@ export * from './invariants-tile.ts';
 export * from './invariants-pr.ts';
 export * from './invariants-read.ts';
 export * from './invariants-topic.ts';
+export * from './invariants-screen.ts';
 export * from './spec-facts.ts';
 export * from './spec-events.ts';
 export * from './spec-rules.ts';
