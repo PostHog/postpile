@@ -348,6 +348,11 @@ export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer
 /** Kinds that end a "someone replies" snooze: any person's comment or review. */
 const REPLY_KINDS: readonly EventKind[] = [...SPEC_ADDRESSED_KINDS, 'comment', 'review_approved', 'review_changes_requested', 'review_commented'];
 
+/** Made loud by an override, the agent's or the user's. The app's Look closer event is never raised. */
+function isRaisedToLoud(event: PrEvent): boolean {
+  return event.override?.loudness === 'loud' && event.kind !== 'look_closer';
+}
+
 /**
  * broken: unseen loud news after the start, from a person, or automation
  * the agent raised to loud (2026-09-30; the app's Look closer event never).
@@ -357,10 +362,8 @@ const REPLY_KINDS: readonly EventKind[] = [...SPEC_ADDRESSED_KINDS, 'comment', '
 export function expectedSnoozePhase(input: { pr: Pr; events: PrEvent[]; viewer: Viewer; snooze: Snooze; now: IsoTime }): 'active' | 'broken' | 'over' {
   const { pr, events, viewer, snooze } = input;
   const after = events.filter((event) => event.at > snooze.since);
-  const wakes = (event: PrEvent) => {
-    const raised = event.override?.loudness === 'loud' && event.kind !== 'look_closer';
-    return event.seenAt === null && effectiveLoudnessOf(event) === 'loud' && (!isAutomationEvent(pr, viewer, event) || raised);
-  };
+  const wakes = (event: PrEvent) =>
+    event.seenAt === null && effectiveLoudnessOf(event) === 'loud' && (!isAutomationEvent(pr, viewer, event) || isRaisedToLoud(event));
   if (after.some(wakes)) {
     return 'broken';
   }
@@ -431,7 +434,7 @@ export interface ExpectedPing {
 /**
  * The ping class of a PR's new events, most aimed first (DESIGN "Live poll
  * and Mac pings"): nothing new, a quiet repo, a snoozed tile, only
- * automation, aimed at the viewer (routed team requests wait for Look
+ * automation at its rule's loudness, aimed at the viewer (routed team requests wait for Look
  * closer), loud, quiet, muted. Within a class the newest event.
  */
 export function expectedPing(input: { pr: Pr; events: PrEvent[]; viewer: Viewer; quietRepo: boolean; snoozed: boolean }): ExpectedPing {
@@ -452,7 +455,8 @@ export function expectedPing(input: { pr: Pr; events: PrEvent[]; viewer: Viewer;
   if (input.snoozed) {
     return about('snoozed', newest, 'tile snoozed');
   }
-  if (newestFirst.every((event) => isAutomationEvent(pr, viewer, event))) {
+  // Automation raised to loud counts like a person's loud event (2026-09-30).
+  if (newestFirst.every((event) => isAutomationEvent(pr, viewer, event) && !isRaisedToLoud(event))) {
     return about('bot', newest);
   }
   const aimed = newestFirst.filter((event) => isAimedAtViewer(pr, viewer, event));

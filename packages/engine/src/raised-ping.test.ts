@@ -1,5 +1,5 @@
 import type { Pr } from '@postpile/core';
-import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
+import { at, makeCommit, makePr, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { topicWithPrs } from './testing/topics.ts';
@@ -18,12 +18,11 @@ function approvedPr(): Pr {
   });
 }
 
-/** A bot pushes after the viewer's approval (quiet by rule) and alice says so in a plain comment. */
+/** A bot pushes after the viewer's approval (quiet by rule), and no person says a word: the news is bot-only. */
 function botPushAfterApproval(h: Harness, pr: Pr): void {
   const next: Pr = {
     ...pr,
     commits: [...pr.commits, makeCommit({ oid: 'c2', author: 'renovate[bot]', headline: 'bump the runner image', committedAt: PUSHED })],
-    comments: [makeComment({ id: 'c-1', author: 'alice', body: 'rebased on master', createdAt: PUSHED })],
     updatedAt: THREAD_MOVED,
   };
   h.reader.addPr(next, makeThreadFor(next, { updatedAt: THREAD_MOVED }));

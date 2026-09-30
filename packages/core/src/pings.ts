@@ -7,7 +7,7 @@ import { clipText } from './dossier.ts';
 import type { GitHubQuotaView } from './github-quota.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isRoutedTeamRequestEvent } from './glance-pings.ts';
-import { effectiveLoudness } from './loudness.ts';
+import { effectiveLoudness, raisedToLoud } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import { reviewRequestTarget, teamSlug } from './review-request.ts';
 import type { Glance, IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
@@ -176,7 +176,8 @@ export interface PingContext {
   quietRepo: boolean;
   /** The tile holding the PR is still snoozed with the new events in. */
   snoozed: boolean;
-  allAutomation: boolean;
+  /** Every event is automation at its rule's loudness: an override to loud counts as a person's news. */
+  botOnly: boolean;
   addressed: PrEvent | undefined;
   routed: PrEvent | undefined;
   loud: PrEvent | undefined;
@@ -186,13 +187,14 @@ export interface PingContext {
 function buildPingContext(events: PrEvent[], pr: Pr, viewer: Viewer, quietRepo: boolean, snoozed: boolean): PingContext {
   const newestFirst = [...events].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
   // Bot-only: a review request aimed at the viewer or their team is no bot's, whoever clicked it (`isAutomation`).
-  const allAutomation = newestFirst.every((event) => isAutomation(event, reviewRequestTarget(event, pr), viewer));
+  // Automation the agent or the user raised to loud pings like a person's loud event (decided 2026-09-30).
+  const botOnly = newestFirst.every((event) => isAutomation(event, reviewRequestTarget(event, pr), viewer) && !raisedToLoud(event));
   const aimed = newestFirst.filter((event) => isAddressedToViewer(event, pr, viewer));
   return {
     newestFirst,
     quietRepo,
     snoozed,
-    allAutomation,
+    botOnly,
     addressed: aimed.find((event) => !isRoutedTeamRequestEvent(event, pr, viewer)),
     routed: aimed[0],
     loud: newestFirst.find((event) => effectiveLoudness(event) === 'loud'),
@@ -248,7 +250,7 @@ export const PING_TABLE: readonly PingRow[] = [
   },
   {
     name: 'only automation',
-    when: (context) => context.allAutomation,
+    when: (context) => context.botOnly,
     class: 'bot',
     event: newestEvent,
   },

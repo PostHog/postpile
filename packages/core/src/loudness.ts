@@ -225,6 +225,14 @@ export function effectiveLoudness(event: PrEvent): Loudness {
   return event.override ? event.override.loudness : event.ruleLoudness;
 }
 
+/**
+ * The events agent (or the user) made the event loud by an override. The
+ * app's own Look closer event is never raised: it is loud by its rule.
+ */
+export function raisedToLoud(event: PrEvent): boolean {
+  return event.override?.loudness === 'loud' && event.kind !== 'look_closer';
+}
+
 export function displayState(event: PrEvent): EventDisplayState {
   if (event.seenAt) {
     return 'seen';

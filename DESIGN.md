@@ -4037,6 +4037,12 @@ Later the same day, from the next runs:
   tracked PR for itself. Julian: keep.
 - The quiet-read grace counts from the newest activity, human or bot (the
   touch, the bots after it, the thread's update). Kept as built.
+- The ping side of the raised-automation rule: the "only automation" row
+  of the ping table counts automation at its rule's loudness only. A bot
+  event raised to loud (agent or user) goes on like a person's loud event:
+  addressed or not by its kind, then freshness, dedup, throttle and the
+  agent's veto as usual. Before, a bot-only raised event woke the tile but
+  never pinged.
 
 **Decision tables for loudness and pings.** Plain TypeScript arrays, first
 match wins. Pings keep choosing the newest qualifying event within the

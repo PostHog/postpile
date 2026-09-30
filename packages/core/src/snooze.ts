@@ -1,6 +1,6 @@
 import { isAutomation } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
-import { effectiveLoudness } from './loudness.ts';
+import { effectiveLoudness, raisedToLoud } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import { isTracked } from './provenance.ts';
 import { reviewRequestTarget } from './review-request.ts';
@@ -76,14 +76,6 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
     case 'until_time':
       return context.now >= snooze.condition.until;
   }
-}
-
-/**
- * The events agent (or the user) made the event loud by an override. The
- * app's own Look closer event is never raised: it is loud by its rule.
- */
-function raisedToLoud(event: PrEvent): boolean {
-  return event.override?.loudness === 'loud' && event.kind !== 'look_closer';
 }
 
 /**

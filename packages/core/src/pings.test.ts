@@ -75,6 +75,16 @@ describe('pingRule', () => {
     expect(pingRule([bot, botPush], pr, viewer, false).class).toBe('bot');
   });
 
+  it('treats bot-only news the agent raised to loud like a person\'s loud news', () => {
+    // Decided 2026-09-30: a raised automation event wakes a snooze and pings; at its rule's loudness it stays bot.
+    const botPush = makeEvent({ id: 'p', kind: 'commits_after_approval', actor: 'renovate[bot]', isBot: true, ruleLoudness: 'quiet', ruleReason: 'bot push' });
+    const raisedPush = makeEvent({ ...botPush, override: { loudness: 'loud', reason: 'changes the approved runner image', by: 'agent' } });
+    const raisedComment = makeEvent({ id: 'b', kind: 'bot_comment', actor: 'github-actions', isBot: true, ruleLoudness: 'quiet', override: { loudness: 'loud', reason: 'coverage dropped', by: 'user' } });
+    expect(pingRule([botPush], pr, viewer, false)).toMatchObject({ class: 'bot' });
+    expect(pingRule([raisedPush], pr, viewer, false)).toMatchObject({ class: 'addressed', loudness: 'loud', reason: 'changes the approved runner image' });
+    expect(pingRule([raisedComment], pr, viewer, false)).toMatchObject({ class: 'not_addressed', reason: 'coverage dropped' });
+  });
+
   it('never pings for CI, not even a failure on the viewer own PR', () => {
     const ci = makeEvent({ id: 'ci', kind: 'ci', actor: '', isBot: true, summary: 'CI failed: test', ruleLoudness: 'quiet', ruleReason: 'bot activity' });
     expect(pingRule([ci], ownPr, viewer, false)).toMatchObject({ class: 'bot', loudness: 'quiet' });
