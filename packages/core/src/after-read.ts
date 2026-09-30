@@ -1,5 +1,5 @@
 // What a tile turns into once it is marked read, so the tile can say what
-// its button really does (2026-09-29: "Mark done" on a tile that stays your
+// its button really does (2026-09-29: "Done for now" on a tile that stays your
 // move promised something it could not do). Same rules as the tile state and
 // whose turn, run over the data as a mark-read leaves it: the read planner's
 // success branch applied to a copy, so the button never promises more than
@@ -39,7 +39,7 @@ function tileAfterRead(input: AfterReadInput): { events: Map<PrKey, PrEvent[]>; 
 /**
  * The tile after a mark-read: done only when nothing is asked of the viewer
  * any more (`isPrDone` for every pinged PR), and whose move it would be.
- * "Mark done" is honest only when `done` is true.
+ * "Done for now" is honest only when `done` is true.
  */
 export function tileAfterMarkRead(input: AfterReadInput): TileAfterRead {
   const { events, userStates } = tileAfterRead(input);
@@ -69,9 +69,9 @@ export interface PrAfterReadInput {
 
 /**
  * One PR after a mark-read of that PR alone (the detail pane's Mark read /
- * Mark done, 2026-09-29): its events seen, handled when tracked. `done` is
+ * Done for now, 2026-09-29): its events seen, handled when tracked. `done` is
  * `isPrDone` over that, `turn` the PR's own whose turn. The detail pane says
- * "Mark done" only when `done` is true.
+ * "Done for now" only when `done` is true.
  */
 export function prAfterMarkRead(input: PrAfterReadInput): TileAfterRead {
   const key = input.pr.key;

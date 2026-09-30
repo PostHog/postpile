@@ -21,7 +21,7 @@ function settled(row: PrSummary): boolean {
 /**
  * Done: Open. Snoozed with every tracked PR done, seen and read on GitHub:
  * Open (the snooze can still be taken back). Unread: Mark read. Read and
- * your move: Snooze. Else Mark done when a mark-read leaves the tile done,
+ * your move: Snooze. Else Done for now when a mark-read leaves the tile done,
  * Mark read if not.
  */
 export function expectedFooter(view: TileView): TileFooterAction {
@@ -43,7 +43,7 @@ export function expectedFooter(view: TileView): TileFooterAction {
 
 export function expectedMarkLabel(action: string): MarkLabel | null {
   if (action === 'mark_done') {
-    return 'Mark done';
+    return 'Done for now';
   }
   return action === 'mark_read' ? 'Mark read' : null;
 }

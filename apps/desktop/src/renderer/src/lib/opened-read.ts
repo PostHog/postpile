@@ -35,6 +35,13 @@ export interface OpenedReadClock {
 }
 
 /**
+ * Where the open stands, for the mark button's fill: idle (not counting),
+ * filling (the dwell runs), ready (armed, marks when the user leaves),
+ * cancelled ("Keep unread"), done (the mark was sent).
+ */
+export type OpenedReadPhase = 'idle' | 'filling' | 'ready' | 'cancelled' | 'done';
+
+/**
  * One open of a PR in the detail pane (2026-09-29, "Marked when you move
  * on"). The PR has to stay OPENED_READ_DELAY_MS on screen while the document
  * is visible: that arms the open, the proof the user looked. The mark itself
@@ -50,24 +57,40 @@ export class OpenedReadTimer {
   private handle: number | null = null;
   private armed = false;
   private fired = false;
+  private cancelled = false;
   private wanted = false;
+  private current: OpenedReadPhase = 'idle';
 
   constructor(
     private readonly onOpened: () => void,
     private readonly clock: OpenedReadClock,
+    private readonly onPhase: (phase: OpenedReadPhase) => void = () => {},
   ) {}
+
+  private setPhase(phase: OpenedReadPhase): void {
+    if (phase !== this.current) {
+      this.current = phase;
+      this.onPhase(phase);
+    }
+  }
+
+  get phase(): OpenedReadPhase {
+    return this.current;
+  }
 
   private stopWait(): void {
     if (this.handle !== null) {
       this.clock.clearTimeout(this.handle);
       this.handle = null;
+      this.setPhase('idle');
     }
   }
 
   /** Fires once, when armed and wanted. */
   private fireIfArmed(): void {
-    if (this.armed && this.wanted && !this.fired) {
+    if (this.armed && this.wanted && !this.fired && !this.cancelled) {
       this.fired = true;
+      this.setPhase('done');
       this.onOpened();
     }
   }
@@ -79,13 +102,22 @@ export class OpenedReadTimer {
 
   /** The document is visible: start the wait, unless one runs or the open is armed already. */
   visible(): void {
-    if (this.fired || this.armed || this.handle !== null) {
+    if (this.fired || this.cancelled || this.armed || this.handle !== null) {
       return;
     }
+    this.setPhase('filling');
     this.handle = this.clock.setTimeout(() => {
       this.handle = null;
       this.armed = true;
+      this.setPhase('ready');
     }, OPENED_READ_DELAY_MS);
+  }
+
+  /** "Keep unread": leaving no longer marks this open. Final for this open. */
+  cancel(): void {
+    this.cancelled = true;
+    this.stopWait();
+    this.setPhase('cancelled');
   }
 
   /** The window was hidden or lost focus: an armed open fires, a running wait stops. */

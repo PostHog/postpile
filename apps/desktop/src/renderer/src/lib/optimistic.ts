@@ -18,7 +18,7 @@ function markedPrRow(pr: PrSummary): PrSummary {
 }
 
 /**
- * The tile after Mark read / Mark done: done (Dealt with) or open and whose
+ * The tile after Mark read / Done for now: done (Dealt with) or open and whose
  * move as its `afterRead` says, every row marked, its threads read. A
  * snoozed tile keeps its snooze (the snooze outlasts a mark-read) and goes
  * to Open; its rows still change. The one place the renderer names a group

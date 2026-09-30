@@ -14,14 +14,14 @@ import type { PrSummary, TilePendingWrite, TileView } from './views.ts';
  *   tracked PRs are all done with their news seen, like its detail pane;
  *   Snooze stays there so the snooze can be taken back.
  * - mark_read: "Mark read". The tile is unread, or a mark-read leaves something asked.
- * - mark_done: "Mark done". The tile is read and a mark-read makes it done.
+ * - mark_done: "Done for now". The tile is read and a mark-read makes it done.
  * - snooze: the tile is read and still your move. Marking read changes
  *   nothing you can see, so Snooze is the primary button and "Review on
  *   GitHub" sits next to it.
  */
 export type TileFooterAction = 'open' | 'mark_read' | 'mark_done' | 'snooze';
 
-export type MarkLabel = 'Mark read' | 'Mark done';
+export type MarkLabel = 'Mark read' | 'Done for now';
 
 /**
  * The detail pane's one ink button, placed first:
@@ -142,7 +142,7 @@ export function tileFooterAction(view: Pick<TileView, 'state' | 'turn' | 'afterR
 
 function markLabelOf(action: TileFooterAction | PrMarkAction): MarkLabel | null {
   if (action === 'mark_done') {
-    return 'Mark done';
+    return 'Done for now';
   }
   return action === 'mark_read' ? 'Mark read' : null;
 }

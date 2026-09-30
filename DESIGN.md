@@ -1731,6 +1731,34 @@ updates it while I'm looking at it."
 - The user's own button presses still change the tile's look right away
   (that is the feedback they asked for); only the position is held.
 
+**Unseen dots and a visible auto-mark** (decided 2026-09-30, detail pane).
+
+- Each line of the activity list wears the coral unread dot when the
+  event's own seen state is unseen (core `eventView` sets
+  `EventView.unseen`, `ActivityLine.unseen` is any of a burst's events;
+  muted counts as seen, like the merge rule). The renderer only draws it.
+  Before, only loud lines had one.
+- When the tile is unread only because GitHub changed the notification and
+  no event explains it (the "new activity on GitHub" thread reason, core
+  `threadChangedAt`, shipped as `ActivityList.threadChangedAt`), one dotted
+  line sits at the top: "GitHub changed the notification at <time>, nothing
+  PostPile can show".
+- The mark button says "Done for now" (was "Mark done"; "Mark read" stays).
+  The action is still `mark_done`; only the label changed.
+- The opened-in-PostPile mark shows itself: while the 1.5s dwell runs the
+  button fills left to right (a CSS width transition over
+  `OPENED_READ_DELAY_MS`); when full it reads "Marks read when you leave"
+  (or "Marks done when you leave", matching the label) with a check, and a
+  small round X ("Keep unread") next to it cancels the automatic mark for
+  that open (`OpenedReadTimer.cancel()`, phases in `OpenedReadPhase`).
+  After cancel the fill is gone and the normal button is back. When the mark
+  happens is unchanged.
+- Mark-read queue scenarios (`engine/src/mark-read-scenarios.test.ts`):
+  click, undo window, poll and sync seeing news, undo, a guarded skip and its
+  retry, and a read elsewhere, interleaved. They found no bug: the stored
+  thread is never unread mid-retry, an undo leaves a row GitHub has moved on,
+  and a stale undo token cannot touch a later click.
+
 **Built as** (2026-09-29):
 
 - Per-PR answers ship on the tile rows, since the renderer imports no
