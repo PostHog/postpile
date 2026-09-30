@@ -13,7 +13,7 @@ import type { IsoTime, PrEvent, PrKey, Tile, UserPrState } from './types.ts';
 
 /** Why a PR turns read. */
 export type ReadCause =
-  /** Mark read / Mark done on a tile or PR, Not mine, the debug view, Remove team: everything seen now, the scope's handle keys handled. */
+  /** Mark read / Done for now on a tile or PR, Not mine, the debug view, Remove team: everything seen now, the scope's handle keys handled. */
   | { kind: 'button' }
   /** Approve's follow-up mark-read: everything seen now, nothing handled (the approval answers the ask). */
   | { kind: 'approved' }

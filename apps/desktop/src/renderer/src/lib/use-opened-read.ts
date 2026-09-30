@@ -1,7 +1,25 @@
-import { useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { PrKey } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { opensMarkRead, OpenedReadTimer, type OpenedTileView } from './opened-read.ts';
+import { opensMarkRead, OpenedReadTimer, type OpenedReadPhase, type OpenedTileView } from './opened-read.ts';
+
+/**
+ * What the mark button shows of the automatic mark for the PR in the pane:
+ * `filling` while the dwell runs, `ready` once it will mark when the user
+ * leaves, null when nothing is coming (not wanted, cancelled, done).
+ * `cancel` is "Keep unread".
+ */
+export interface OpenedReadState {
+  prKey: PrKey | null;
+  pending: 'filling' | 'ready' | null;
+  cancel(): void;
+}
+
+export const OpenedReadContext = createContext<OpenedReadState>({ prKey: null, pending: null, cancel: () => {} });
+
+export function useOpenedReadState(): OpenedReadState {
+  return useContext(OpenedReadContext);
+}
 
 /**
  * Marks the PR in the detail pane read on GitHub (and handled in PostPile)
@@ -13,20 +31,22 @@ import { opensMarkRead, OpenedReadTimer, type OpenedTileView } from './opened-re
  * refetches of the same PR ask nothing more, and opening the PR again later
  * asks again (the server turns that into a no-op once it is done).
  */
-export function useOpenedRead(view: OpenedTileView | null, prKey: PrKey | null): void {
+export function useOpenedRead(view: OpenedTileView | null, prKey: PrKey | null): OpenedReadState {
   const actions = useActions();
   const wanted = opensMarkRead(view, prKey, actions.writes);
   // The provider hands out a new function on every render; the timer calls the latest one.
   const markOpenedRead = useRef(actions.markOpenedRead);
   markOpenedRead.current = actions.markOpenedRead;
   const timer = useRef<OpenedReadTimer | null>(null);
+  const [phase, setPhase] = useState<OpenedReadPhase>('idle');
 
   useEffect(() => {
     if (prKey === null) {
       return;
     }
-    const open = new OpenedReadTimer(() => void markOpenedRead.current(prKey), window);
+    const open = new OpenedReadTimer(() => void markOpenedRead.current(prKey), window, setPhase);
     timer.current = open;
+    setPhase('idle');
     const onVisibility = () => (document.visibilityState === 'visible' && document.hasFocus() ? open.visible() : open.hidden());
     onVisibility();
     document.addEventListener('visibilitychange', onVisibility);
@@ -47,4 +67,11 @@ export function useOpenedRead(view: OpenedTileView | null, prKey: PrKey | null):
   useEffect(() => {
     timer.current?.setWanted(wanted);
   }, [wanted, prKey]);
+
+  const showsFill = wanted && (phase === 'filling' || phase === 'ready');
+  return {
+    prKey,
+    pending: showsFill ? phase : null,
+    cancel: () => timer.current?.cancel(),
+  };
 }

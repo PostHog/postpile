@@ -368,17 +368,17 @@ export const snoozeLeadsOnlyWhileYourMove: Invariant = {
   },
 };
 
-/** "Mark done" only where a mark-read leaves nothing asked (DESIGN "Tile faces": the button never promises more than it does). */
+/** "Done for now" only where a mark-read leaves nothing asked (DESIGN "Tile faces": the button never promises more than it does). */
 export const markDoneNeverLeavesAMove: Invariant = {
-  name: 'a Mark done label never leaves a move',
+  name: 'a Done for now label never leaves a move',
   check(_board, views) {
     for (const view of views) {
-      if (view.offers.markLabel === 'Mark done') {
-        ensure(view.afterRead.done && view.afterRead.turn.kind !== 'you', `${view.tile.id}: Mark done, after read ${describeTurn(view.afterRead.turn)}`);
+      if (view.offers.markLabel === 'Done for now') {
+        ensure(view.afterRead.done && view.afterRead.turn.kind !== 'you', `${view.tile.id}: Done for now, after read ${describeTurn(view.afterRead.turn)}`);
       }
       for (const row of view.prs) {
-        if (view.offers.pane[row.key]!.markLabel === 'Mark done') {
-          ensure(row.afterRead.done && row.afterRead.turn.kind !== 'you', `${row.key}: pane Mark done, after read ${describeTurn(row.afterRead.turn)}`);
+        if (view.offers.pane[row.key]!.markLabel === 'Done for now') {
+          ensure(row.afterRead.done && row.afterRead.turn.kind !== 'you', `${row.key}: pane Done for now, after read ${describeTurn(row.afterRead.turn)}`);
         }
       }
     }

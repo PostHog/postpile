@@ -182,7 +182,7 @@ export function Tile(props: TileProps) {
   const yourMove = view.turn.kind === 'you' && !done;
   const footer = yourMove ? 'bg-move shadow-move-footer' : done ? 'shadow-[inset_0_1px_0_var(--hairline-done)]' : 'shadow-[inset_0_1px_0_var(--hairline-soft)]';
   const secondary = yourMove ? 'move' : 'secondary';
-  // From core (`tileOffers`): never "Mark done" where a mark-read leaves the tile your move; read and still your move, Snooze leads.
+  // From core (`tileOffers`): never "Done for now" where a mark-read leaves the tile your move; read and still your move, Snooze leads.
   const footerAction = view.offers.footer;
   const markLabel = view.offers.markLabel;
   const github = view.offers.github;

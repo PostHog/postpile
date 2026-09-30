@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileStateKind, WhoseTurn } from '@postpile/core';
-import { OPENED_READ_DELAY_MS, OpenedReadTimer, opensMarkRead, type OpenedReadClock, type OpenedTileView } from './opened-read.ts';
+import { OPENED_READ_DELAY_MS, OpenedReadTimer, opensMarkRead, type OpenedReadClock, type OpenedReadPhase, type OpenedTileView } from './opened-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const ON = { enabled: true, forcedOffReason: null, pending: [] };
@@ -155,5 +155,49 @@ describe('OpenedReadTimer', () => {
     late.timer.setWanted(true);
     late.timer.leave();
     expect(late.calls()).toBe(1);
+  });
+
+  it('reports the phases for the button fill: filling, ready, done', () => {
+    const clock = new FakeClock();
+    const phases: OpenedReadPhase[] = [];
+    const timer = new OpenedReadTimer(() => {}, clock, (phase) => phases.push(phase));
+    timer.setWanted(true);
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.leave();
+    expect(phases).toEqual(['filling', 'ready', 'done']);
+  });
+
+  it('drops back to idle when the window hides during the dwell', () => {
+    const clock = new FakeClock();
+    const phases: OpenedReadPhase[] = [];
+    const timer = new OpenedReadTimer(() => {}, clock, (phase) => phases.push(phase));
+    timer.visible();
+    clock.advance(500);
+    timer.hidden();
+    expect(phases).toEqual(['filling', 'idle']);
+  });
+
+  it('marks nothing on leaving once cancelled, also after the dwell, and stays cancelled when visible again', () => {
+    const { clock, timer, calls } = started();
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.cancel();
+    timer.leave();
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.hidden();
+    expect(calls()).toBe(0);
+    expect(timer.phase).toBe('cancelled');
+  });
+
+  it('cancels during the dwell without ever arming', () => {
+    const { clock, timer, calls } = started();
+    timer.visible();
+    clock.advance(500);
+    timer.cancel();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.leave();
+    expect(calls()).toBe(0);
   });
 });

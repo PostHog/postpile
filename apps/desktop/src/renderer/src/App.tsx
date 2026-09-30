@@ -39,7 +39,7 @@ import { toolsNotice } from './lib/tools.ts';
 import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
-import { useOpenedRead } from './lib/use-opened-read.ts';
+import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
 
 function entryKey(entry: NavEntry): string {
   return `${entry.pane}|${entry.topicId}|${entry.tileId}|${entry.prKey}`;
@@ -317,7 +317,7 @@ export function App() {
   const wideList = pane === 'notifications' || pane === 'quiet';
   // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
   const detailShown = !showSetup && !wideList;
-  useOpenedRead(detailShown ? selected.view : null, detailShown ? selected.prKey : null);
+  const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? selected.prKey : null);
 
   const tellAgent = {
     available: selected.view !== null,
@@ -326,93 +326,95 @@ export function App() {
 
   return (
     <TellAgentContext value={tellAgent}>
-      <div className="flex h-full flex-col">
-        <TitleBar
-          canBack={nav.canBack}
-          canForward={nav.canForward}
-          onBack={nav.back}
-          onForward={nav.forward}
-          search={<SearchField value={query} onChange={setQuery} />}
-          repoScope={<RepoScopeMenu />}
-        />
-        {/* Sidebar | tiles | detail. The tile column stays one tile wide; by default it and
-            the detail pane split what the sidebar leaves evenly, from the 1100px minimum
-            window up. The two
-            dividers resize the sidebar and the tile column (kept per viewer), so the
-            columns are an inline style: they are render-time values. */}
-        <div ref={gridRef} className="relative grid min-h-0 flex-1" style={{ gridTemplateColumns: columns.template }}>
-          {showSetup ? (
-            <SetupSidebar step={setupStep} />
-          ) : (
-          <TopicSidebar
-            topics={items}
-            activeTopicId={shownTopicId}
-            selectedTileId={pane === 'topic' ? (selected.view?.tile.id ?? null) : null}
-            onSelect={(topicId) => {
-              const item = items.find((candidate) => candidate.topic.id === topicId);
-              if (item) {
-                sendTelemetry('topic_opened', { section: topicTelemetrySection(item.queues) });
-              }
-              go({ pane: 'topic', topicId, tileId: null, prKey: null });
-            }}
-            inboxCount={inboxCount}
-            inboxOpen={pane === 'inbox'}
-            onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
-            instructionsOpen={pane === 'instructions'}
-            onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
-            notificationsOpen={pane === 'notifications'}
-            onOpenNotifications={() => go({ ...shown, pane: 'notifications' })}
-            quietOpen={pane === 'quiet'}
-            onOpenQuiet={() => go({ ...shown, pane: 'quiet' })}
-            loading={topics.isPending}
-            error={topics.error?.message ?? null}
-            filter={filter}
-            onClearFilter={() => setQuery('')}
-            shown={listedTopics(items, shownItems, activeTopicId)}
-            queueFilter={queueFilter}
-            onQueueFilter={changeQueueFilter}
-            filterCounts={filterCounts(items)}
-            viewer={viewer.data}
+      <OpenedReadContext value={openedRead}>
+        <div className="flex h-full flex-col">
+          <TitleBar
+            canBack={nav.canBack}
+            canForward={nav.canForward}
+            onBack={nav.back}
+            onForward={nav.forward}
+            search={<SearchField value={query} onChange={setQuery} />}
+            repoScope={<RepoScopeMenu />}
           />
-          )}
-          {showSetup && (
-            <SetupFlow
-              rerun={setupRerun}
-              step={setupStep}
-              onStep={setSetupStep}
-              onDone={() => {
-                closeSetup();
-                go({ pane: 'topic', topicId: null, tileId: null, prKey: null });
-              }}
-              onClose={closeSetup}
-              onSkipped={() => {
-                closeSetup();
-                // The start sync waited for setup; skipping it means sync now, as a normal start would.
-                if (syncOnStart) {
-                  void actions.sync();
+          {/* Sidebar | tiles | detail. The tile column stays one tile wide; by default it and
+              the detail pane split what the sidebar leaves evenly, from the 1100px minimum
+              window up. The two
+              dividers resize the sidebar and the tile column (kept per viewer), so the
+              columns are an inline style: they are render-time values. */}
+          <div ref={gridRef} className="relative grid min-h-0 flex-1" style={{ gridTemplateColumns: columns.template }}>
+            {showSetup ? (
+              <SetupSidebar step={setupStep} />
+            ) : (
+            <TopicSidebar
+              topics={items}
+              activeTopicId={shownTopicId}
+              selectedTileId={pane === 'topic' ? (selected.view?.tile.id ?? null) : null}
+              onSelect={(topicId) => {
+                const item = items.find((candidate) => candidate.topic.id === topicId);
+                if (item) {
+                  sendTelemetry('topic_opened', { section: topicTelemetrySection(item.queues) });
                 }
+                go({ pane: 'topic', topicId, tileId: null, prKey: null });
               }}
+              inboxCount={inboxCount}
+              inboxOpen={pane === 'inbox'}
+              onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
+              instructionsOpen={pane === 'instructions'}
+              onOpenInstructions={() => go({ ...shown, pane: 'instructions' })}
+              notificationsOpen={pane === 'notifications'}
+              onOpenNotifications={() => go({ ...shown, pane: 'notifications' })}
+              quietOpen={pane === 'quiet'}
+              onOpenQuiet={() => go({ ...shown, pane: 'quiet' })}
+              loading={topics.isPending}
+              error={topics.error?.message ?? null}
+              filter={filter}
+              onClearFilter={() => setQuery('')}
+              shown={listedTopics(items, shownItems, activeTopicId)}
+              queueFilter={queueFilter}
+              onQueueFilter={changeQueueFilter}
+              filterCounts={filterCounts(items)}
+              viewer={viewer.data}
             />
-          )}
-          {!showSetup && main}
-          {/* The notifications and Handled quietly lists are wide and have no tile of their own; they take the detail pane's column too. */}
-          {!showSetup && !wideList && (
-            <DetailPane
-              key={selected.view?.tile.id ?? 'none'}
-              view={selected.view}
-              prKey={selected.prKey}
-              onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
-              chatRequest={chatRequest}
-              noSelectionText={noSelectionText(tileFilter)}
-            />
-          )}
-          <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />
-          {/* The wide lists span both right columns, so there is no tile edge to drag. */}
-          {!showSetup && !wideList && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
+            )}
+            {showSetup && (
+              <SetupFlow
+                rerun={setupRerun}
+                step={setupStep}
+                onStep={setSetupStep}
+                onDone={() => {
+                  closeSetup();
+                  go({ pane: 'topic', topicId: null, tileId: null, prKey: null });
+                }}
+                onClose={closeSetup}
+                onSkipped={() => {
+                  closeSetup();
+                  // The start sync waited for setup; skipping it means sync now, as a normal start would.
+                  if (syncOnStart) {
+                    void actions.sync();
+                  }
+                }}
+              />
+            )}
+            {!showSetup && main}
+            {/* The notifications and Handled quietly lists are wide and have no tile of their own; they take the detail pane's column too. */}
+            {!showSetup && !wideList && (
+              <DetailPane
+                key={selected.view?.tile.id ?? 'none'}
+                view={selected.view}
+                prKey={selected.prKey}
+                onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
+                chatRequest={chatRequest}
+                noSelectionText={noSelectionText(tileFilter)}
+              />
+            )}
+            <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />
+            {/* The wide lists span both right columns, so there is no tile edge to drag. */}
+            {!showSetup && !wideList && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
+          </div>
+          <StatusFooter topics={items} detail={topic.data} live={live.data} />
+          <Toast />
         </div>
-        <StatusFooter topics={items} detail={topic.data} live={live.data} />
-        <Toast />
-      </div>
+      </OpenedReadContext>
     </TellAgentContext>
   );
 }
