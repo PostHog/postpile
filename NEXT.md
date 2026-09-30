@@ -18,7 +18,9 @@ now".
   core; the renderer and the fake engine only read them. Invariant tests
   over real-shaped boards, every sample tile and MCP `pr_context` against
   the pane. A snoozed tile with nothing left to mark leads with Open in
-  footer and pane.
+  footer and pane. Property tests over generated boards check the rules
+  against spec oracles restated from the raw snapshot (2026-09-30,
+  DESIGN.md "Tests across rules").
 
 - Fixes from the codebase review (2026-09-29, DESIGN.md "Fixes from the
   codebase review"): a Codex CLI review of v0.11.0 found nine issues,

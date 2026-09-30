@@ -4045,10 +4045,48 @@ exceptions removed, each with a scenario next to its property. `properties/cover
 branch-relevant label (PR state x author, request target, review state
 including dismissed, CI, thread and seen state, snooze kind and phase,
 truncated, and the shapes past bugs needed) shows on under 1% of boards.
-Each invariant checks 2000 boards by default; `POSTPILE_PROPERTY_RUNS=10000
-pnpm test` checks more (about 13s for the whole suite). A failure prints
-the shrunk board recipe; a bug fixed from one gets a named scenario next to
-its property (`properties/pr.test.ts`).
+Each invariant checks 2000 boards by default (the property files take about
+4s, `pnpm test` about 7s); `POSTPILE_PROPERTY_RUNS=10000 pnpm test` checks
+more (about 20s for the property files). A failure prints the shrunk board recipe; a bug fixed
+from one gets a named scenario next to its property (`properties/pr.test.ts`).
+
+Spec oracles (2026-09-30). A one-off Stryker run found the invariants
+killed only about a quarter of the mutants in the rule files: they used the
+rule under test as their own reference (`isPrDone`, `snoozePhase`,
+`pingRule`, `prTier` and others), so a mutation moved both sides, and the
+board builder builds with the same rules. The invariants now compare
+against oracles in `@postpile/core/testing` (`spec-facts.ts`,
+`spec-events.ts`, `spec-rules.ts`, `spec-offers.ts`, `spec-layout.ts`):
+the rules restated from the raw snapshot, the board's events and the
+recipe, importing no rule module (types only). `invariants-board.ts`
+checks the board against the recipe (each step's event with kind, rule
+loudness and reason; seen and handled from the reads, touches and clicks;
+tile layout and provenance; snoozes; the Look closer event).
+`invariants-rules.ts` checks each PR's facts, move and the footer's words
+for it, tier, done, unseen count, ping class and text, quiet reads and
+Look closer ping; the tile, read and topic catalogues use the oracles too
+(tile state, offers, the read plan, a board without a viewer). An exact oracle covers liveness as
+well as safety: an addressed ask on an open unsnoozed tile pings, bot-only
+activity past the grace gets a quiet read, nothing unseen stays in a
+read's scope. Answering is a metamorphic check: a comment by the viewer
+clears Reply, the answered-changes Re-review and Needs reply (a re-review
+a pending request asks for stays). The generator also makes re-requests
+after a changes request, a second outsider (alice), automation without the
+[bot] suffix (renovate), pending reviews, review bodies, merge queue and
+deploy items, sets that hold a stack and dissolved sets. The property
+invariants alone now kill 83% of the rule-file mutants (28% before, at the
+same rule code; 300 boards per invariant).
+
+Measuring with Stryker (one-off, not a dependency): in a throwaway
+worktree add `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`,
+use perTest coverage, a fixed fast-check seed with `endOnFailure` in a
+setup file, and `POSTPILE_PROPERTY_RUNS=300`. The vitest-runner (10.0)
+filters each mutant's tests as "suite test" while vitest 5 names them
+"suite > test", so it runs no tests at all and every mutant survives; put
+`testNamePattern` in the vitest config the runner uses (`'^[a-z]+
+invariants '` for the invariants, `'.*'` for the whole core suite) and the
+results are right, only slower. Keep concurrency below the core count and
+raise `timeoutMS`, or slow passing runs count as timeout kills.
 
 ## Architecture
 
