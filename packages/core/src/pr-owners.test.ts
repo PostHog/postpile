@@ -39,7 +39,7 @@ describe('prOwners', () => {
     expect(prOwners(agentPr([me, 'lyra']))).toEqual([me, 'lyra']);
     expect(prOwners(agentPr([]))).toEqual([BOT]);
     // Snapshots stored before assignees were fetched have none.
-    expect(prOwners(makePr({ author: BOT }))).toEqual([BOT]);
+    expect(prOwners(makePr({ author: BOT, assignees: undefined }))).toEqual([BOT]);
   });
 
   it('keeps a deleted author (empty login) as the owner, assignees or not', () => {

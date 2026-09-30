@@ -47,6 +47,8 @@ export function makePr(overrides: Partial<Pr> & { number?: number; repo?: string
     deletions: 2,
     changedFiles: 1,
     files: [],
+    // The GitHub reader always fills it; only snapshots stored before 2026-09-30 lack it.
+    assignees: [],
     labels: [],
     reviewDecision: 'REVIEW_REQUIRED',
     reviewerUsers: [],
