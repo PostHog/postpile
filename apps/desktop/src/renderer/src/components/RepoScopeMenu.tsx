@@ -82,7 +82,7 @@ export function RepoScopeMenu() {
   const busy = actions.isBusy('repos');
   const narrowed = (overview?.scope ?? null) !== null;
   const empty = !overview || overview.repos.length === 0;
-  const look = narrowed ? 'border-ink bg-ink text-on-ink' : 'border-control bg-surface text-ink-2 hover:bg-subtle';
+  const look = narrowed ? 'bg-ink text-on-ink shadow-primary' : 'bg-surface text-ink-2 shadow-control inset-ring inset-ring-edge-control-soft hover:bg-subtle';
   return (
     <div ref={root} className="relative">
       <button
@@ -92,7 +92,7 @@ export function RepoScopeMenu() {
         disabled={empty}
         title={empty ? 'No repos yet: sync first' : 'Show the topics of one repo, or let a repo go stale'}
         onClick={() => setOpen(!open)}
-        className={`flex h-7 max-w-40 shrink-0 items-center gap-1.5 rounded-control border px-2.5 text-xs shadow-control disabled:opacity-50 ${look}`}
+        className={`flex h-7 max-w-40 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-xs disabled:opacity-50 ${look}`}
       >
         <span className="truncate">{scopeLabel(overview)}</span>
         <ChevronIcon />

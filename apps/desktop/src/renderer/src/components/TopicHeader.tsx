@@ -22,15 +22,18 @@ const ROLE_LABELS: Record<UserRole, string> = {
   watcher: 'Watcher',
 };
 
-const STATUS_TONES: Record<DossierStatus, string> = {
-  starting: 'bg-accent-soft text-accent',
-  active: 'bg-safe-soft text-safe',
-  blocked: 'bg-unread-soft text-unread-ink',
-  winding_down: 'bg-closer-soft text-closer',
-  finished: 'bg-segment text-muted',
+const STATUS_TONES: Record<DossierStatus, { pill: string; dot: string }> = {
+  starting: { pill: 'bg-accent-soft text-accent', dot: 'bg-accent ring-accent/18' },
+  active: { pill: 'bg-safe-soft text-safe', dot: 'bg-open ring-open/18' },
+  blocked: { pill: 'bg-unread-soft text-unread-ink', dot: 'bg-unread-ink ring-unread-ink/18' },
+  winding_down: { pill: 'bg-closer-soft text-closer', dot: 'bg-closer ring-closer/18' },
+  finished: { pill: 'bg-segment text-muted', dot: 'bg-dot-quiet ring-dot-quiet/18' },
 };
 
-const chip = 'flex h-[22px] items-center rounded-full border border-hairline bg-surface text-[11.5px] text-ink-2';
+/** The quiet pills next to the topic name. */
+const pill = 'flex h-5 items-center gap-[5px] rounded-full bg-pill-quiet text-[11px] whitespace-nowrap text-ink-2';
+/** White people chips under the timeline. */
+const personChip = 'flex h-[22px] items-center gap-1.5 rounded-full bg-surface pr-[9px] pl-[3px] text-[11.5px] text-ink inset-ring inset-ring-edge-hairline';
 
 function ProposalRow(props: { proposal: TopicProposal; topics: TopicListItem[] }) {
   const actions = useActions();
@@ -39,7 +42,7 @@ function ProposalRow(props: { proposal: TopicProposal; topics: TopicListItem[] }
   const by = suggestedBy(proposal);
   const lead = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)} suggests` : 'Agent proposes';
   return (
-    <div className="flex max-w-[680px] items-center gap-3 rounded-row border border-accent-line bg-accent-soft px-3 py-2 text-xs">
+    <div className="mt-2.5 flex max-w-[680px] items-center gap-3 rounded-row border border-accent-line bg-accent-soft px-3 py-2 text-xs">
       <span className="min-w-0 flex-1">
         <span className="font-semibold">
           {lead}: {proposalText(proposal, topicName)}.
@@ -58,9 +61,12 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
   const { dossier: view, topicId } = props;
   const { dossier } = view;
   const statusText = dossier.statusNote ? `${statusLabel(dossier.status)}: ${dossier.statusNote}` : statusLabel(dossier.status);
+  const tone = STATUS_TONES[dossier.status];
   return (
     <>
-      <div className="flex max-w-[680px] flex-col gap-1">
+      {/* Labels in a 48px column, so the values start on the same line as the timeline text. */}
+      <div className="mt-3.5 grid grid-cols-[48px_minmax(0,600px)] gap-x-2.5 gap-y-1.5">
+        <span className="pt-px text-[11.5px] font-medium text-hint">Status</span>
         <MemoryLine
           correction={{ kind: 'wrong', factId: null, topicId, text: statusText }}
           stale={null}
@@ -69,12 +75,15 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
           fixedTo={fixedText(view, statusText)}
           canRecheck
           why={lineTarget(topicId, view, 'status')}
+          textClass="text-[13px] leading-normal"
         >
-          <span className={`mr-2 inline-flex h-[19px] items-center rounded-full px-2 text-[10.5px] font-semibold ${STATUS_TONES[dossier.status]}`}>
+          <span className={`mr-[7px] inline-flex h-[18px] items-center gap-[5px] rounded-full pr-[7px] pl-1.5 align-[1px] text-[10.5px] font-semibold ${tone.pill}`}>
+            <span aria-hidden="true" className={`size-[5px] rounded-full ring-2 ${tone.dot}`} />
             {statusLabel(dossier.status)}
           </span>
-          {dossier.statusNote}
+          <span className="text-ink">{dossier.statusNote}</span>
         </MemoryLine>
+        {dossier.goal && <span className="pt-px text-[11.5px] font-medium text-hint">Goal</span>}
         {dossier.goal && (
           <MemoryLine
             correction={{ kind: 'wrong', factId: null, topicId, text: dossier.goal }}
@@ -84,17 +93,20 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
             fixedTo={fixedText(view, dossier.goal)}
             canRecheck
             why={lineTarget(topicId, view, 'goal')}
+            textClass="text-[13px] leading-normal"
           >
-            <span className="text-muted">Goal:</span> {dossier.goal}
+            {dossier.goal}
           </MemoryLine>
         )}
       </div>
-      <SinceLastLooked dossier={view} topicId={topicId} updating={props.updating} />
-      <div className="flex max-w-[680px] flex-wrap items-center gap-1.5">
+      <div className="mt-[22px]">
+        <SinceLastLooked dossier={view} topicId={topicId} updating={props.updating} />
+      </div>
+      <div className="mt-[18px] flex flex-wrap items-center gap-[5px]">
         {dossier.people.map((person) => (
-          <span key={person.login} className={`${chip} gap-1.5 pr-2 pl-[3px]`} title={person.note}>
-            <Avatar login={person.login} size="sm" />
-            {person.login}
+          <span key={person.login} className={personChip} title={person.note}>
+            <Avatar login={person.login} size="xs" />
+            <span className="font-medium">{person.login}</span>
             <span className="text-hint">{person.role}</span>
           </span>
         ))}
@@ -102,15 +114,20 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
           type="button"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
-          className="ml-auto flex h-[22px] items-center gap-1 rounded-control px-2 text-[11.5px] text-accent hover:bg-accent-soft"
+          className="ml-auto flex h-[22px] items-center gap-[5px] rounded-control pr-1.5 pl-2 text-[11.5px] font-medium text-accent hover:bg-accent-soft"
         >
-          Dossier <span className="font-mono text-[10.5px] text-hint">v{view.version}</span>
+          Dossier
+          <span className="flex h-[15px] items-center rounded bg-accent-soft px-1 font-mono text-[10px] font-semibold text-stack-tag-ink">v{view.version}</span>
           <span className={open ? 'rotate-180' : ''}>
             <ChevronIcon />
           </span>
         </button>
       </div>
-      {open && <DossierPanel dossier={view} topicId={topicId} updating={props.updating} />}
+      {open && (
+        <div className="mt-2.5">
+          <DossierPanel dossier={view} topicId={topicId} updating={props.updating} />
+        </div>
+      )}
     </>
   );
 }
@@ -124,43 +141,52 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
   // A catch-up run on the topic updates the dossier too; a PR of the topic writing its glance says one is going.
   const writing = tiles.some((view) => view.prs.some((pr) => pr.glanceState === 'writing'));
   const updating = updatingNow({ syncing: actions.syncing, writing });
+  const crumbs = [topic.status === 'retired' ? 'Finished' : props.group === 'needs_you' ? 'Needs you' : 'Quiet'];
+  if (placement?.area) {
+    crumbs.push(placement.area);
+  }
   return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex items-center gap-1.5 text-[11.5px] text-faint">
+    <div className="flex flex-col">
+      <div className="flex items-center gap-[5px] text-[11px] text-hint">
         <span>Topics</span>
-        <span>›</span>
-        <span className="text-muted">{topic.status === 'retired' ? 'Finished' : props.group === 'needs_you' ? 'Needs you' : 'Quiet'}</span>
-        {placement?.area && (
-          <>
-            <span>›</span>
-            <span className="text-muted">{placement.area}</span>
-          </>
-        )}
+        {crumbs.map((crumb, index) => (
+          <span key={crumb} className="flex items-center gap-[5px]">
+            <span className="-rotate-90 text-ghost">
+              <ChevronIcon size={8} />
+            </span>
+            <span className={index === crumbs.length - 1 ? 'font-medium text-ink-2' : ''}>{crumb}</span>
+          </span>
+        ))}
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">{topic.name}</h1>
-        <span className="flex gap-1.5">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h1 className="text-[22px] leading-[1.2] font-[650] tracking-[-0.024em] text-balance">{topic.name}</h1>
+        <span className="flex gap-1">
           {topic.driver && topic.userRole !== 'driver' && (
-            <span className={`${chip} gap-1.5 pr-2 pl-[3px]`}>
-              <Avatar login={topic.driver} size="sm" />
-              {topic.driver} drives
+            <span className={`${pill} pr-2 pl-[3px]`}>
+              <Avatar login={topic.driver} size="xxs" />
+              <span>
+                <span className="font-[550] text-ink">{topic.driver}</span> drives
+              </span>
             </span>
           )}
-          <span className={`${chip} px-2`} title="Your role in this topic">
+          <span className={`${pill} px-2`} title="Your role in this topic">
             {ROLE_LABELS[topic.userRole]}
           </span>
-          <span className={`${chip} px-2 font-mono text-[10.5px] text-muted`}>
-            {prCount} {prCount === 1 ? 'PR' : 'PRs'}
+          <span className={`${pill} px-2`}>
+            <span className="font-mono text-[10px] font-semibold tabular-nums">{prCount}</span>
+            <span className="text-hint">{prCount === 1 ? 'PR' : 'PRs'}</span>
           </span>
         </span>
       </div>
       {placement && (
-        <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} updating={updating} />
+        <div className="mt-1.5">
+          <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} updating={updating} />
+        </div>
       )}
-      {topic.summary && <p className="max-w-[680px] text-[13.5px] leading-normal text-pretty text-ink-2">{topic.summary}</p>}
+      {topic.summary && <p className="mt-4 max-w-[600px] text-[13.5px] leading-[1.6] tracking-[-0.003em] text-pretty text-ink-2">{topic.summary}</p>}
       {dossier && <DossierSummary dossier={dossier} topicId={topic.id} updating={updating} />}
       {topic.tailoring && (
-        <div className="flex max-w-[680px] items-start gap-2 text-xs leading-normal text-muted">
+        <div className="mt-2.5 flex items-start gap-2 text-xs leading-normal text-muted">
           <span className="text-faint">
             <QuoteIcon />
           </span>

@@ -6,6 +6,7 @@
 // and loudness, never a rule's answer about it. Each function says what the
 // app should do; the invariants compare the app's answer with it. Type
 // imports only from the rule modules.
+import type { ForWhom } from '../for-whom.ts';
 import type { LookCloserPing } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
 import type { PingRuleClass } from '../pings.ts';
@@ -13,6 +14,7 @@ import type { PrTier } from '../pr-tier.ts';
 import type { OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
+import type { WhyCode } from '../why-here.ts';
 import type { YourMove } from '../whose-turn.ts';
 import { answersChanges, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS } from './spec-events.ts';
 import {
@@ -20,23 +22,30 @@ import {
   asksViewer,
   changesAnswer,
   isAutomationLogin,
-  isKnownTeammate,
+  isHomeTeam,
+  isOwner,
+  isRoutedTeam,
+  isRoutingTeam,
   isViewerLogin,
-  isViewerTeam,
+  namedOwner,
   newestTouch,
   pendingRequest,
+  pendingRequestTeam,
   READING_TOUCHES,
   requestSubjectOf,
   reviewStillOwed,
   routedRequestWaits,
   standingChangesBy,
+  teammateOwns,
   teamTakers,
   threadsViewerOpened,
   threadsWaitingOnViewer,
   viewerApproved,
   viewerAskedForChanges,
   viewerHeadReview,
+  viewerOwns,
   viewerReviewedHead,
+  viewerTeamsMentioned,
   type SpecRequest,
   type SpecTouchKind,
 } from './spec-facts.ts';
@@ -130,7 +139,7 @@ function draftTurn(input: TurnInput): ExpectedTurn {
   if (ask) {
     return you('reply', `${ASK_WORDS[ask.kind]!.alone(ask.actor)} on draft`);
   }
-  if (!sameLogin(pr.author, viewer.login)) {
+  if (!viewerOwns(pr, viewer)) {
     return NONE;
   }
   const threads = threadsWaitingOnViewer(pr, viewer);
@@ -170,24 +179,28 @@ function ownPrTurn(input: TurnInput): ExpectedTurn {
   return pr.reviewDecision === 'APPROVED' ? you('merge', 'Merge, it is approved') : NONE;
 }
 
-/** Where the changes requests (other than `except`'s) leave the author: re-review once every reviewer was asked again, else whose to address first. */
+/** Where the changes requests (other than `except`'s) leave the owner: re-review once every reviewer was asked again, else whose to address first. */
 function standingTurn(pr: Pr, except: string | null): ExpectedTurn | null {
   const standing = standingChangesBy(pr).filter((login) => except === null || !sameLogin(login, except));
   if (standing.length === 0) {
     return null;
   }
   const waiting = standing.find((reviewer) => !askedToReReview(pr, reviewer));
-  return waiting === undefined ? them(standing[0]!, 'to re-review') : them(pr.author, `to address ${waiting}'s changes`);
+  return waiting === undefined ? them(standing[0]!, 'to re-review') : them(namedOwner(pr), `to address ${waiting}'s changes`);
 }
 
-/** "Review, ada asked" (the newest person who asked the viewer or their team), "Review for team-platform", or with the author for a teammate's PR. */
+/**
+ * "Review, ada asked" (the newest person who asked the viewer or their
+ * team), "Review for team-platform" (the team whose request decides, home
+ * or routing), or with the owner for a teammate's PR.
+ */
 function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review' | 'Re-review'): string {
-  const team = pr.reviewerTeams.find((subject) => isViewerTeam(viewer, subject))?.split('/').pop();
+  const team = pendingRequestTeam(pr, viewer)?.split('/').pop();
   if (request === 'team') {
     return `${verb} for ${team}`;
   }
   if (request === 'team_for_you') {
-    return `${verb} for ${team}: ${pr.author}'s PR`;
+    return `${verb} for ${team}: ${namedOwner(pr)}'s PR`;
   }
   const requests = pr.timeline.filter((item) => item.kind === 'review_requested' && asksViewer(viewer, item.subject) && !isAutomationLogin(item.actor));
   const by = requests.toSorted((a, b) => a.at.localeCompare(b.at)).at(-1)?.actor;
@@ -204,7 +217,7 @@ function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review
 function othersPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
   if (viewerApproved(pr, viewer, input.userState)) {
-    return them(pr.author, 'to merge');
+    return them(namedOwner(pr), 'to merge');
   }
   const headReview = viewerHeadReview(pr, viewer);
   const waits = headReview === null ? routedRequestWaits(pr, viewer, input.notYours) : null;
@@ -225,16 +238,16 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
   if (headReview !== null) {
     const opened = threadsViewerOpened(pr, viewer);
     if (headReview.state === 'APPROVED') {
-      return them(pr.author, 'to merge');
+      return them(namedOwner(pr), 'to merge');
     }
     if (opened > 0) {
-      return them(pr.author, `to address ${plural(opened, 'thread')}`);
+      return them(namedOwner(pr), `to address ${plural(opened, 'thread')}`);
     }
-    return them(pr.author, headReview.state === 'CHANGES_REQUESTED' ? 'to address your changes' : 'to reply');
+    return them(namedOwner(pr), headReview.state === 'CHANGES_REQUESTED' ? 'to address your changes' : 'to reply');
   }
   if (request === 'team_taken') {
     if (pr.reviewDecision === 'APPROVED') {
-      return them(pr.author, 'to merge');
+      return them(namedOwner(pr), 'to merge');
     }
     const standing = standingChangesBy(pr);
     if (standing.length > 0 && standing.every((reviewer) => askedToReReview(pr, reviewer))) {
@@ -262,17 +275,18 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
   }
   const ask = openAsk(pr, input.events, viewer, SPEC_ADDRESSED_KINDS);
   const answer = changesAnswer(pr, viewer);
-  if (answer !== null && (ask === null || sameLogin(ask.actor, pr.author))) {
-    return you('re_review', answer.pushed ? `${pr.author} addressed your changes: re-review` : `${pr.author} replied to your review`);
+  if (answer !== null && (ask === null || isOwner(pr, ask.actor))) {
+    const owner = namedOwner(pr);
+    return you('re_review', answer.pushed ? `${owner} addressed your changes: re-review` : `${owner} replied to your review`);
   }
   if (ask !== null) {
-    const own = sameLogin(pr.author, viewer.login);
+    const own = viewerOwns(pr, viewer);
     const request = pendingRequest(pr, viewer);
     const reviewToo = !own && (request === 'you' || request === 'team_for_you') && !viewerReviewedHead(pr, viewer, input.userState);
     const words = ASK_WORDS[ask.kind]!;
     return you('reply', reviewToo ? `Review, ${ask.actor} ${words.withReview}` : words.alone(ask.actor));
   }
-  return sameLogin(pr.author, viewer.login) ? ownPrTurn(input) : othersPrTurn(input);
+  return viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,9 +294,12 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
 // ---------------------------------------------------------------------------
 
 /**
- * The PR's queue: an unanswered personal ask (not the author's reply once
+ * The PR's queue: an unanswered personal ask (not an owner's reply once
  * they answered your changes), your changes request, your PR, a personal
- * request, a teammate's PR, any other request, a team mention, the rest.
+ * request or an open routed one (on a teammate's PR only a routing team's
+ * can be), a teammate's PR, a taken request, a team mention, the rest.
+ * Your PR and a teammate's go by owners (DESIGN "PR ownership"), and only
+ * home teams have teammates (DESIGN "Team roles").
  * Only open PRs have a queue. Drafts and reviewed heads never sit in To review.
  */
 export function expectedTier(input: TurnInput & { reason: NotificationReason | null }): PrTier {
@@ -291,20 +308,20 @@ export function expectedTier(input: TurnInput & { reason: NotificationReason | n
     return 'rest';
   }
   const ask = openAsk(pr, input.events, viewer, SPEC_PERSONAL_ASK_KINDS);
-  if (ask !== null && !(changesAnswer(pr, viewer) !== null && sameLogin(ask.actor, pr.author))) {
+  if (ask !== null && !(changesAnswer(pr, viewer) !== null && isOwner(pr, ask.actor))) {
     return 'needs_reply';
   }
   if (viewerAskedForChanges(pr, viewer)) {
     return 'changes_requested';
   }
-  if (sameLogin(pr.author, viewer.login)) {
+  if (viewerOwns(pr, viewer)) {
     return 'mine';
   }
   const request = pr.isDraft || viewerReviewedHead(pr, viewer, input.userState) ? null : pendingRequest(pr, viewer);
-  if (request === 'you' || request === 'team_for_you') {
+  if (request === 'you' || request === 'team_for_you' || request === 'team') {
     return 'to_review';
   }
-  if (isKnownTeammate(viewer, pr.author)) {
+  if (teammateOwns(pr, viewer)) {
     return 'team';
   }
   if (request !== null) {
@@ -339,6 +356,72 @@ export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer
     return false;
   }
   return viewer === null || (!reviewStillOwed(pr, viewer, userState, input.notYours) && notYourMove());
+}
+
+// ---------------------------------------------------------------------------
+// For whom
+// ---------------------------------------------------------------------------
+
+/**
+ * Which of the viewer's teams a team chip names, home teams first at each
+ * step: the team whose pending request decides, a team asked in the
+ * timeline, a team mentioned, else their first team. Null without teams.
+ */
+function chipTeam(pr: Pr, viewer: Viewer): string | null {
+  const homeFirst = [...viewer.teams.filter((team) => isHomeTeam(viewer, team)), ...viewer.teams.filter((team) => isRoutingTeam(viewer, team))];
+  const pending = pendingRequestTeam(pr, viewer);
+  if (pending !== null) {
+    return pending;
+  }
+  const asked = pr.timeline.flatMap((item) => (item.kind === 'review_requested' && item.subject !== null ? [item.subject] : []));
+  const timelineTeam = homeFirst.find((team) => asked.some((subject) => sameLogin(subject, team)));
+  if (timelineTeam !== undefined) {
+    return timelineTeam;
+  }
+  const mentioned = [pr.body, ...pr.comments.map((comment) => comment.body)].flatMap((body) => viewerTeamsMentioned(body, viewer));
+  const mentionedTeam = homeFirst.find((team) => mentioned.some((subject) => sameLogin(subject, team)));
+  return mentionedTeam ?? homeFirst[0] ?? null;
+}
+
+/**
+ * The for-whom chip of one PR (DESIGN "Tile faces", "Team roles"): "Your
+ * PR" on one the viewer owns or was notified about as its author; "For
+ * you" when the owner answered their changes, a home team request on a
+ * teammate's PR is theirs, or the code aims at them (RV, @, AS); a team
+ * chip for RT and @T, sea for a home team and neutral for a routing team;
+ * else none.
+ */
+export function expectedForWhom(why: WhyCode, pr: Pr, viewer: Viewer): ForWhom {
+  if (why === 'AU' || viewerOwns(pr, viewer)) {
+    return { kind: 'own' };
+  }
+  if (changesAnswer(pr, viewer) !== null || pendingRequest(pr, viewer) === 'team_for_you') {
+    return { kind: 'you' };
+  }
+  if (why === 'RV' || why === '@' || why === 'AS') {
+    return { kind: 'you' };
+  }
+  if (why !== 'RT' && why !== '@T') {
+    return { kind: 'none' };
+  }
+  const team = chipTeam(pr, viewer);
+  if (team === null) {
+    return { kind: 'team', team: 'your team' };
+  }
+  const slug = team.split('/').pop()!;
+  return isRoutingTeam(viewer, team) ? { kind: 'routing', team: slug } : { kind: 'team', team: slug };
+}
+
+/** The tile's chip: the most aimed of its PRs' chips (you, a home team, a routing team, own), the first on a tie. */
+export function expectedTileForWhom(chips: ForWhom[]): ForWhom {
+  const order: ForWhom['kind'][] = ['you', 'team', 'routing', 'own'];
+  for (const kind of order) {
+    const chip = chips.find((candidate) => candidate.kind === kind);
+    if (chip) {
+      return chip;
+    }
+  }
+  return { kind: 'none' };
 }
 
 // ---------------------------------------------------------------------------
@@ -412,16 +495,16 @@ export function isAimedAtViewer(pr: Pr, viewer: Viewer, event: PrEvent): boolean
   if (event.kind === 'review_requested' || event.kind === 'commits_after_approval') {
     return true;
   }
-  return event.kind === 'review_changes_requested' && sameLogin(pr.author, viewer.login);
+  return event.kind === 'review_changes_requested' && viewerOwns(pr, viewer);
 }
 
-/** A request for one of the viewer's teams (not the viewer) on a PR from outside the team. */
+/** A request for one of the viewer's teams (not the viewer) that is routed: a routing team's, or a home team's on a PR from outside the team. */
 export function isRoutedRequest(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
-  if (event.kind !== 'review_requested' || sameLogin(pr.author, viewer.login) || isKnownTeammate(viewer, pr.author)) {
+  if (event.kind !== 'review_requested') {
     return false;
   }
   const subject = requestSubjectOf(pr, event);
-  return subject !== null && !sameLogin(subject, viewer.login) && isViewerTeam(viewer, subject);
+  return subject !== null && !sameLogin(subject, viewer.login) && isRoutedTeam(pr, viewer, subject);
 }
 
 export interface ExpectedPing {
@@ -525,8 +608,8 @@ function slug(team: string): string {
 
 /**
  * A routed team request pings once when the glance says Look closer: an
- * open non-draft PR from outside the team with one of the viewer's teams
- * pending, the head not reviewed, no snooze, and not for the same request
+ * open non-draft PR with a routed request pending (a routing team's on
+ * anyone else's PR, a home team's on a PR from outside the team), the head not reviewed, no snooze, and not for the same request
  * again (the newest timeline request for that team, else `pending:<team>`).
  */
 export function expectedLookCloser(input: {
@@ -541,8 +624,7 @@ export function expectedLookCloser(input: {
   if (input.verdict !== 'LOOK_CLOSER') {
     return { kind: 'skip', why: 'not_look_closer' };
   }
-  const outside = !sameLogin(pr.author, viewer.login) && !isKnownTeammate(viewer, pr.author);
-  const team = pr.state === 'OPEN' && !pr.isDraft && outside ? pr.reviewerTeams.find((subject) => isViewerTeam(viewer, subject)) : undefined;
+  const team = pr.state === 'OPEN' && !pr.isDraft ? pr.reviewerTeams.find((subject) => isRoutedTeam(pr, viewer, subject)) : undefined;
   if (team === undefined) {
     return { kind: 'skip', why: 'no_routed_request' };
   }
@@ -599,7 +681,7 @@ function othersEvents(input: QuietReadSpecInput): PrEvent[] {
 }
 
 function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
-  return pr.state === 'OPEN' && sameLogin(pr.author, viewer.login);
+  return pr.state === 'OPEN' && viewerOwns(pr, viewer);
 }
 
 /**

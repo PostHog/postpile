@@ -1,9 +1,10 @@
-import { topicDriver, userRoleFor, type DossierVersion, type NotificationReason, type Pr } from '@postpile/core';
+import { isBot, topicDriver, userRoleFor, type DossierVersion, type NotificationReason, type Pr } from '@postpile/core';
 import type { DigestDeps } from './deps.ts';
 
 /** The dossier knows who drives the initiative; without one, the most frequent author does. */
 function driverOf(dossier: DossierVersion | undefined, prs: Pr[]): string | null {
-  const fromDossier = dossier?.dossier.people.find((person) => person.role === 'driver')?.login;
+  // A bot never drives a topic over the people it opened PRs for (`prOwners` via topicDriver).
+  const fromDossier = dossier?.dossier.people.find((person) => person.role === 'driver' && !isBot(person.login))?.login;
   return fromDossier ?? topicDriver(prs);
 }
 

@@ -1,22 +1,45 @@
 import type { ReactNode } from 'react';
 import { useInstructions } from '../api/instructions.ts';
 import { useSetupStatus } from '../api/setup.ts';
+import { useTeamRoles } from '../api/team-roles.ts';
 import { Button } from './Button.tsx';
 import { InstructionsChat } from './InstructionsChat.tsx';
 import { InstructionsFileLine } from './InstructionsFileLine.tsx';
 import { InstructionsText } from './InstructionsText.tsx';
 import { InstructionsVersions } from './InstructionsVersions.tsx';
+import { TeamRolesList } from './TeamRolesList.tsx';
 import { WorkContextSection } from './WorkContextSection.tsx';
 
 function Section(props: { title: string; meta?: string; children: ReactNode }) {
   return (
-    <section className="flex max-w-[680px] flex-col gap-2 rounded-tile border border-hairline bg-surface p-3.5 shadow-tile">
+    <section className="flex max-w-[680px] flex-col gap-2 rounded-tile bg-surface p-3.5 shadow-tile">
       <div className="flex items-baseline gap-2">
         <h2 className="text-[12.5px] font-semibold text-ink">{props.title}</h2>
         {props.meta && <span className="font-mono text-[10.5px] text-faint">{props.meta}</span>}
       </div>
       {props.children}
     </section>
+  );
+}
+
+/**
+ * "Your teams": home or routing only per GitHub team, with a flip each
+ * (DESIGN.md "Team roles"). Here because it is the user's say about how the
+ * app reads their world, like the instructions; there is no settings screen.
+ */
+function TeamsSection() {
+  const roles = useTeamRoles();
+  const teams = roles.data?.teams ?? [];
+  return (
+    <Section title="Your teams">
+      <p className="text-[11.5px] text-muted">
+        A home team's members are your teammates: Team's PRs, the Team filter, "For you" on their PRs. A routing-only team just brings you its review requests
+        and mentions. Decided from how your reviews of the last 90 days reached you; a change here sticks.
+      </p>
+      {roles.error && <p className="text-xs text-unread-ink">Could not load your teams: {roles.error.message}</p>}
+      {roles.data && teams.length === 0 && <p className="text-xs text-faint">No teams visible to your GitHub token yet.</p>}
+      {teams.length > 0 && <TeamRolesList teams={teams} />}
+    </Section>
   );
 }
 
@@ -76,6 +99,7 @@ export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void
           <InstructionsVersions versions={data.versions} />
         </Section>
       )}
+      <TeamsSection />
       <WorkContextSection onOpenTopic={props.onOpenTopic} />
     </main>
   );

@@ -27,6 +27,7 @@ describe('Not done yet dots, scenarios the properties found', () => {
         },
       ],
       writesLocked: false,
+      teams: 'one_home',
       teamMembersUnknown: false,
       nowGap: 60,
     };

@@ -389,6 +389,7 @@ function buildRelations(): Map<string, DossierRelation> {
     ['topic-ingestion-runners', { kind: 'routed', ownerTeam: 'acme/team-ingestion', whyYou: 'team-platform review requested on .github/workflows' }],
     ['topic-dependency-bumps', { kind: 'fyi', ownerTeam: null, whyYou: 'subscribed to bot bumps' }],
     ['topic-desktop-release', { kind: 'fyi', ownerTeam: 'acme/team-desktop', whyYou: 'subscribed to the release thread' }],
+    ['topic-sdk-uploads', { kind: 'routed', ownerTeam: 'acme/team-clients', whyYou: 'client-approvers review requested' }],
   ]);
 }
 

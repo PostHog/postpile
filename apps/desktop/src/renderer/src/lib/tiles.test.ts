@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
 import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
-import { countPrs, isDraftTile, isFyiNews, kindLabel, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
+import { countPrs, isDraftTile, isFyiNews, kindParts, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -9,6 +9,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     title: `PR ${number}`,
     url: '',
     author: 'rowan',
+    assignees: [],
     state: 'OPEN',
     primaryAction: 'approve',
     isDraft: false,
@@ -93,11 +94,13 @@ describe('tile helpers', () => {
     expect(sameForWhom({ kind: 'team', team: 'a/x' }, { kind: 'team', team: 'a/x' })).toBe(true);
     expect(sameForWhom({ kind: 'team', team: 'a/x' }, { kind: 'team', team: 'a/y' })).toBe(false);
     expect(sameForWhom({ kind: 'you' }, { kind: 'own' })).toBe(false);
+    expect(sameForWhom({ kind: 'routing', team: 'a/x' }, { kind: 'routing', team: 'a/x' })).toBe(true);
+    expect(sameForWhom({ kind: 'routing', team: 'a/x' }, { kind: 'team', team: 'a/x' })).toBe(false);
   });
 
   it('labels kinds', () => {
     const view = setView([summary(1), summary(2, { provenance: pulled }), summary(3, { provenance: pulled })]);
-    expect(kindLabel(view)).toBe('Set · 3');
+    expect(kindParts(view)).toEqual({ word: 'Set', count: 3 });
   });
 
   it('uses the set take for set tiles and the lead for_you otherwise', () => {

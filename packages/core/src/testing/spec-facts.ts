@@ -1,14 +1,14 @@
 // PR facts restated from the raw snapshot, for the generated world only
 // (testing/build-board.ts): who is automation, who is on the team, what a
 // comment says, reviews and approvals, review requests, the viewer's
-// touches, and the author's answer to a changes request. The spec oracles
+// touches, and the owner's answer to a changes request. The spec oracles
 // build on these instead of calling the rule under test, so a mutated rule
 // can never move both sides of a check. Nothing here imports a rule module;
 // only `sameLogin` and the builder's names are shared.
 import { sameLogin } from '../mentions.ts';
 import type { Comment, IsoTime, Pr, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
 import type { CommentText } from './board-spec.ts';
-import { AUTOMATION_LOGINS, COMMENT_BODIES } from './build-board.ts';
+import { AUTOMATION_LOGINS, COMMENT_BODIES, MENTIONED_TEAMS } from './build-board.ts';
 
 // ---------------------------------------------------------------------------
 // People
@@ -19,13 +19,61 @@ export function isAutomationLogin(login: string): boolean {
   return login === '' || AUTOMATION_LOGINS.some((bot) => sameLogin(bot, login));
 }
 
+/**
+ * Whose PR it is (DESIGN "PR ownership"): the author, or the assignees of a
+ * PR a bot opened. A deleted author ('') stays the owner.
+ */
+export function specOwners(pr: Pr): string[] {
+  const assignees = pr.assignees ?? [];
+  return pr.author !== '' && isAutomationLogin(pr.author) && assignees.length > 0 ? assignees : [pr.author];
+}
+
 export function isViewerLogin(viewer: Viewer, login: string): boolean {
   return login !== '' && sameLogin(login, viewer.login);
 }
 
-/** On the viewer's team by the fetched member list; nobody is while the list is unknown. */
+/** `login` is one of the PR's owners (`specOwners`). */
+export function isOwner(pr: Pr, login: string): boolean {
+  return specOwners(pr).some((owner) => sameLogin(owner, login));
+}
+
+/** The owner a sentence names ("lyra to merge"): the first one. */
+export function namedOwner(pr: Pr): string {
+  return specOwners(pr)[0]!;
+}
+
+/** The viewer's own PR: they wrote it, or a bot opened it and assigned them. */
+export function viewerOwns(pr: Pr, viewer: Viewer): boolean {
+  return specOwners(pr).some((owner) => isViewerLogin(viewer, owner));
+}
+
+/**
+ * On one of the viewer's home teams by the fetched member list (the engine
+ * fetches only home teams' members); nobody is while the list is unknown.
+ */
 export function isKnownTeammate(viewer: Viewer, login: string): boolean {
   return (viewer.teamMembers ?? []).some((member) => sameLogin(member, login));
+}
+
+/** A teammate's PR: a known teammate is one of its owners. */
+export function teammateOwns(pr: Pr, viewer: Viewer): boolean {
+  return specOwners(pr).some((owner) => isKnownTeammate(viewer, owner));
+}
+
+/** How a person relates to the viewer: the viewer, a known teammate, anyone else. */
+export function specRelation(login: string, viewer: Viewer): 'you' | 'team' | 'other' {
+  if (isViewerLogin(viewer, login)) {
+    return 'you';
+  }
+  return isKnownTeammate(viewer, login) ? 'team' : 'other';
+}
+
+/** How the PR's owners relate to the viewer: theirs, else a teammate's, else someone else's. */
+export function specOwnerRelation(pr: Pr, viewer: Viewer): 'you' | 'team' | 'other' {
+  if (viewerOwns(pr, viewer)) {
+    return 'you';
+  }
+  return teammateOwns(pr, viewer) ? 'team' : 'other';
 }
 
 /** A review request subject that is the viewer or one of their teams. */
@@ -36,9 +84,20 @@ export function asksViewer(viewer: Viewer, subject: string | null): boolean {
   return sameLogin(subject, viewer.login) || viewer.teams.some((team) => sameLogin(team, subject));
 }
 
-/** A request subject that is one of the viewer's teams (not the viewer). */
+/** A request subject that is one of the viewer's teams (not the viewer), home or routing. */
 export function isViewerTeam(viewer: Viewer, subject: string | null): boolean {
   return subject !== null && viewer.teams.some((team) => sameLogin(team, subject));
+}
+
+/** One of the viewer's home teams (DESIGN "Team roles"): every team of theirs while `homeTeams` is missing. */
+export function isHomeTeam(viewer: Viewer, team: string): boolean {
+  const home = viewer.homeTeams ?? viewer.teams;
+  return home.some((candidate) => sameLogin(candidate, team));
+}
+
+/** One of the viewer's teams that only routes review requests and mentions to them. */
+export function isRoutingTeam(viewer: Viewer, team: string): boolean {
+  return isViewerTeam(viewer, team) && !isHomeTeam(viewer, team);
 }
 
 // ---------------------------------------------------------------------------
@@ -60,8 +119,20 @@ export function asksQuestion(body: string): boolean {
   return commentText(body) === 'question';
 }
 
-export function mentionsViewerTeam(body: string): boolean {
-  return commentText(body) === 'team_mention';
+/** The viewer's teams the body @-mentions, in the order the body names them. */
+export function viewerTeamsMentioned(body: string, viewer: Viewer): string[] {
+  const text = commentText(body);
+  return text === null ? [] : MENTIONED_TEAMS[text].filter((team) => isViewerTeam(viewer, team));
+}
+
+export function mentionsViewerTeam(body: string, viewer: Viewer): boolean {
+  return viewerTeamsMentioned(body, viewer).length > 0;
+}
+
+/** The mention names only teams that route reviews to the viewer, none of their home teams: FYI. */
+export function mentionsOnlyRoutingTeams(body: string, viewer: Viewer): boolean {
+  const teams = viewerTeamsMentioned(body, viewer);
+  return teams.length > 0 && teams.every((team) => isRoutingTeam(viewer, team));
 }
 
 /** Automation wrote it: a bot account, or a body that says it is automated. */
@@ -110,9 +181,9 @@ export function standingChangesBy(pr: Pr): string[] {
   return order.filter((who) => latest.get(who)!.state === 'CHANGES_REQUESTED').map((who) => latest.get(who)!.author);
 }
 
-/** The viewer's newest verdict on someone else's PR asks for changes. */
+/** The viewer's newest verdict on a PR someone else owns asks for changes (on their own bot PR a review of theirs is no open loop). */
 export function viewerAskedForChanges(pr: Pr, viewer: Viewer): boolean {
-  return !sameLogin(pr.author, viewer.login) && newestVerdict(pr, viewer.login)?.state === 'CHANGES_REQUESTED';
+  return !viewerOwns(pr, viewer) && newestVerdict(pr, viewer.login)?.state === 'CHANGES_REQUESTED';
 }
 
 /**
@@ -166,16 +237,17 @@ export function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
 }
 
 /**
- * Teammates who picked up a team request: a sent review by a human who is
- * not the viewer or the author and is on the team (anyone while the list
- * is unknown). On a teammate's PR only an approval or a changes request.
+ * Teammates who picked up a home team's request: a sent review by a human
+ * who is not the viewer or an owner and is on a home team (anyone while
+ * the list is unknown). On a teammate's PR only an approval or a changes
+ * request.
  */
-export function teamTakers(pr: Pr, viewer: Viewer): string[] {
-  const teammatesPr = isKnownTeammate(viewer, pr.author);
+function homeTeamTakers(pr: Pr, viewer: Viewer): string[] {
+  const teammatesPr = teammateOwns(pr, viewer);
   const takers: string[] = [];
   for (const review of pr.reviews) {
     const who = review.author;
-    if (review.state === 'PENDING' || sameLogin(who, viewer.login) || sameLogin(who, pr.author) || isAutomationLogin(who)) {
+    if (review.state === 'PENDING' || sameLogin(who, viewer.login) || isOwner(pr, who) || isAutomationLogin(who)) {
       continue;
     }
     if (viewer.teamMembers !== undefined && !isKnownTeammate(viewer, who)) {
@@ -191,20 +263,98 @@ export function teamTakers(pr: Pr, viewer: Viewer): string[] {
   return takers;
 }
 
+/**
+ * Who took a routing team's request: anyone who sent a review of the head
+ * (not dismissed) other than the viewer, the author, the owners and
+ * automation. Its members are not known, so anyone counts.
+ */
+function headReviewers(pr: Pr, viewer: Viewer): string[] {
+  const takers: string[] = [];
+  for (const review of pr.reviews) {
+    const who = review.author;
+    const sent = review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid;
+    const someoneElse = !sameLogin(who, viewer.login) && !sameLogin(who, pr.author) && !isOwner(pr, who) && !isAutomationLogin(who);
+    if (sent && someoneElse && !takers.some((login) => sameLogin(login, who))) {
+      takers.push(who);
+    }
+  }
+  return takers;
+}
+
+function homeTeamPending(pr: Pr, viewer: Viewer): boolean {
+  return pr.reviewerTeams.some((team) => isViewerTeam(viewer, team) && isHomeTeam(viewer, team));
+}
+
+function routingTeamPending(pr: Pr, viewer: Viewer): boolean {
+  return pr.reviewerTeams.some((team) => isRoutingTeam(viewer, team));
+}
+
+/** Who picked up the viewer's pending team requests: teammates for a home team, anyone who reviewed the head for a routing team. */
+export function teamTakers(pr: Pr, viewer: Viewer): string[] {
+  const takers = homeTeamPending(pr, viewer) ? homeTeamTakers(pr, viewer) : [];
+  for (const who of routingTeamPending(pr, viewer) ? headReviewers(pr, viewer) : []) {
+    if (!takers.some((login) => sameLogin(login, who))) {
+      takers.push(who);
+    }
+  }
+  return takers;
+}
+
 export type SpecRequest = 'you' | 'team_for_you' | 'team' | 'team_taken' | null;
 
-/** The pending request that concerns the viewer: personal, their team on a teammate's PR, routed, or taken. */
+/** A home team's pending request: for you on a teammate's PR, routed on anyone else's, taken once a teammate picked it up. */
+function homeTeamRequest(pr: Pr, viewer: Viewer): SpecRequest {
+  if (!homeTeamPending(pr, viewer)) {
+    return null;
+  }
+  if (homeTeamTakers(pr, viewer).length > 0) {
+    return 'team_taken';
+  }
+  return teammateOwns(pr, viewer) ? 'team_for_you' : 'team';
+}
+
+/** A routing team's pending request: routed on any PR, a teammate's too, taken once anyone else reviewed the head. */
+function routingTeamRequest(pr: Pr, viewer: Viewer): SpecRequest {
+  if (!routingTeamPending(pr, viewer)) {
+    return null;
+  }
+  return headReviewers(pr, viewer).length > 0 ? 'team_taken' : 'team';
+}
+
+/** How much a team request still asks: for you, then routed, then taken. */
+const OWED: readonly SpecRequest[] = ['team_for_you', 'team', 'team_taken'];
+
+/** Both kinds pending: the one that asks more decides, the home team's on a tie. */
+function routingDecides(pr: Pr, viewer: Viewer): boolean {
+  const home = homeTeamRequest(pr, viewer);
+  const routing = routingTeamRequest(pr, viewer);
+  return routing !== null && (home === null || OWED.indexOf(routing) < OWED.indexOf(home));
+}
+
+/** The pending request that concerns the viewer: personal, their home team on a teammate's PR, routed, or taken. */
 export function pendingRequest(pr: Pr, viewer: Viewer): SpecRequest {
   if (pr.reviewerUsers.some((login) => sameLogin(login, viewer.login))) {
     return 'you';
   }
-  if (!pr.reviewerTeams.some((team) => isViewerTeam(viewer, team))) {
-    return null;
+  return routingDecides(pr, viewer) ? routingTeamRequest(pr, viewer) : homeTeamRequest(pr, viewer);
+}
+
+/** The team the pending team request is for: the routing team when its request decides, else the home team. */
+export function pendingRequestTeam(pr: Pr, viewer: Viewer): string | null {
+  const routing = routingDecides(pr, viewer);
+  return pr.reviewerTeams.find((team) => isViewerTeam(viewer, team) && isRoutingTeam(viewer, team) === routing) ?? null;
+}
+
+/**
+ * A request for this team on this PR is routed (DESIGN "Team roles",
+ * "Live poll and Mac pings"): never on the viewer's own PR; a routing
+ * team's on anyone else's; a home team's on a PR from outside the team.
+ */
+export function isRoutedTeam(pr: Pr, viewer: Viewer, team: string): boolean {
+  if (!isViewerTeam(viewer, team) || viewerOwns(pr, viewer)) {
+    return false;
   }
-  if (teamTakers(pr, viewer).length > 0) {
-    return 'team_taken';
-  }
-  return isKnownTeammate(viewer, pr.author) ? 'team_for_you' : 'team';
+  return isRoutingTeam(viewer, team) || !teammateOwns(pr, viewer);
 }
 
 /** A routed team request waits: the glance says not yours, or someone else's changes request stands. */
@@ -218,9 +368,9 @@ export function routedRequestWaits(pr: Pr, viewer: Viewer, notYours: boolean): '
   return standingChangesBy(pr).some((login) => !sameLogin(login, viewer.login)) ? 'changes' : null;
 }
 
-/** A review is still owed: an open non-draft PR by someone else, a request that asks now, and no review of the head. */
+/** A review is still owed: an open non-draft PR someone else owns, a request that asks now, and no review of the head. */
 export function reviewStillOwed(pr: Pr, viewer: Viewer, userState: UserPrState | null, notYours: boolean): boolean {
-  if (pr.state !== 'OPEN' || pr.isDraft || sameLogin(pr.author, viewer.login)) {
+  if (pr.state !== 'OPEN' || pr.isDraft || viewerOwns(pr, viewer)) {
     return false;
   }
   const request = pendingRequest(pr, viewer);
@@ -261,9 +411,9 @@ export interface SpecChangesAnswer {
 }
 
 /**
- * The author answered the viewer's changes request: open, not a draft,
+ * The owner answered the viewer's changes request: open, not a draft,
  * someone else's PR, the viewer's newest verdict asks for changes, and
- * after the viewer's last word a human pushed or the author spoke.
+ * after the viewer's last word a human pushed or an owner spoke.
  */
 export function changesAnswer(pr: Pr, viewer: Viewer): SpecChangesAnswer | null {
   if (pr.state !== 'OPEN' || pr.isDraft || !viewerAskedForChanges(pr, viewer)) {
@@ -271,7 +421,7 @@ export function changesAnswer(pr: Pr, viewer: Viewer): SpecChangesAnswer | null 
   }
   const since = lastSpoke(pr, viewer.login)!;
   const pushed = someonePushedAfter(pr, viewer.login, since);
-  const replied = spokeAfter(pr, pr.author, since);
+  const replied = specOwners(pr).some((owner) => spokeAfter(pr, owner, since));
   return pushed || replied ? { since, pushed, replied } : null;
 }
 
@@ -329,7 +479,7 @@ function endTouch(pr: Pr, item: TimelineItem, viewer: Viewer): SpecTouch | null 
 /**
  * Everything the viewer did on the PR, from the snapshot: their sent
  * reviews (a dismissed one is no event), their comments that are not
- * automated, and on their own PR the commits they committed and their
+ * automated, and on a PR they own the commits they committed and their
  * force pushes, and merging or closing it.
  */
 export function viewerTouches(pr: Pr, viewer: Viewer): SpecTouch[] {
@@ -345,7 +495,7 @@ export function viewerTouches(pr: Pr, viewer: Viewer): SpecTouch[] {
       touches.push({ kind: 'comment', at: comment.createdAt, id: `${pr.key}:comment:${comment.id}` });
     }
   }
-  if (sameLogin(pr.author, viewer.login)) {
+  if (viewerOwns(pr, viewer)) {
     for (const commit of pr.commits) {
       if (commit.committer !== undefined && sameLogin(commit.committer, viewer.login)) {
         touches.push({ kind: 'push', at: commit.committedAt, id: `${pr.key}:commits_pushed:${commit.oid}` });

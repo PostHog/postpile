@@ -72,7 +72,7 @@ export function SetupSectionCard(props: { section: SetupDraftSection | undefined
   const rows = Math.max(3, props.body.split('\n').length + 1);
   const cited = props.section ? new Set(props.section.claims.flatMap((claim) => claim.sourceIds)).size : 0;
   return (
-    <section className="flex flex-col gap-1.5 rounded-tile border border-hairline bg-surface p-3 shadow-tile">
+    <section className="flex flex-col gap-1.5 rounded-tile bg-surface p-3 shadow-tile">
       <div className="flex items-baseline gap-2">
         <h3 className="text-[12.5px] font-semibold text-ink">{props.heading}</h3>
         {props.section && <span className="text-[11px] text-faint">{cited === 1 ? '1 source' : `${cited} sources`}</span>}

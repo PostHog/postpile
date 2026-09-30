@@ -74,6 +74,20 @@ describe('setupDraftPrompt', () => {
     expect(prompt).toContain('Leave out rules for coding agents or other');
   });
 
+  it('tells a known empty teammate list apart from an unknown one', () => {
+    function teammatesLine(viewer: SetupMaterial['viewer']): string | undefined {
+      const withViewer = { ...material, viewer };
+      const prompt = setupDraftPrompt({ ...input(), material: withViewer, sources: setupSources(withViewer) });
+      return prompt.split('\n').find((line) => line.startsWith('- Teammates on their home teams:'));
+    }
+    expect(teammatesLine(material.viewer)).toBe('- Teammates on their home teams: bob, carol');
+    expect(teammatesLine({ login: 'alice', teams: ['acme/approvers'], homeTeams: [], teamMembers: [] })).toBe(
+      '- Teammates on their home teams: (none; no home team)',
+    );
+    expect(teammatesLine({ login: 'alice', teams: ['acme/devex'], homeTeams: ['acme/devex'], teamMembers: [] })).toBe('- Teammates on their home teams: (none)');
+    expect(teammatesLine({ login: 'alice', teams: ['acme/devex'] })).toBe('- Teammates on their home teams: (unknown)');
+  });
+
   it('carries the current instructions on a re-run', () => {
     expect(setupDraftPrompt(input('# About me\n- DevEx.'))).toContain('This is a re-run');
   });

@@ -54,6 +54,8 @@ import type {
   SnoozeCondition,
   SyncOptions,
   SyncReport,
+  TeamRole,
+  TeamRolesView,
   ToolsView,
   TopicDetail,
   TopicListItem,
@@ -76,6 +78,7 @@ import {
   rateLimitSourceFromErrors,
   snoozeTelemetryBucket,
   systemTimers,
+  withHomeTeams,
   withQuietRepo,
 } from '@postpile/core';
 import { loadAppVersion, saveAppVersion } from './app-version-meta.ts';
@@ -133,6 +136,8 @@ import { SetupFlow } from './setup/setup-flow.ts';
 import { SetupSweep } from './setup/setup-sweep.ts';
 import { SyncRun } from './sync-run.ts';
 import { TeamMembers } from './team-members.ts';
+import { saveViewerFollowingRoles } from './team-role-events.ts';
+import { TeamRoleKeeper } from './team-roles.ts';
 import { ToolHealth } from './tools/tool-health.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
@@ -272,6 +277,10 @@ export class Engine implements EngineService {
   private focus: PollFocus = NO_FOCUS;
   private readonly agentRefresher: AgentRefresher;
   private readonly outsideProposals: OutsideProposals;
+  private readonly teamMembers: TeamMembers;
+  private readonly teamRoles: TeamRoleKeeper;
+  /** The last queued team role flip; `setTeamRole` chains on it. */
+  private teamRoleFlips: Promise<unknown> = Promise.resolve();
   private agentRequests: AgentRequestInbox | null = null;
 
   constructor(private readonly deps: EngineDeps) {
@@ -335,7 +344,7 @@ export class Engine implements EngineService {
       glancePings: new GlancePings(store, now),
       raisedPings: new RaisedPings(decider),
     };
-    const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
+    const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, this.quota, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog);
@@ -351,11 +360,14 @@ export class Engine implements EngineService {
     );
     this.pollRun = new PollRun(runDeps, github, decider, (topicIds) => this.requestCatchUps(topicIds));
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
+    this.teamMembers = new TeamMembers(store, deps.reader, now);
+    this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));
     const setupSweep = new SetupSweep({
       store,
       reader: deps.reader,
       agent: deps.agent,
-      teamMembers: new TeamMembers(store, deps.reader, now),
+      teamMembers: this.teamMembers,
+      teamRoles: this.teamRoles,
       history,
       digest: () => this.workContextDigest(),
       now,
@@ -799,6 +811,32 @@ export class Engine implements EngineService {
 
   async getViewer(): Promise<ViewerView> {
     return this.reads.viewer();
+  }
+
+  async getTeamRoles(): Promise<TeamRolesView> {
+    return this.teamRoles.view(loadViewer(this.deps.store));
+  }
+
+  private async applyTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {
+    const { store } = this.deps;
+    const viewer = loadViewer(store);
+    if (!viewer?.teams.includes(team)) {
+      throw new Error(`not one of your teams: ${team}`);
+    }
+    const roles = this.teamRoles.setRole(team, role);
+    saveViewerFollowingRoles(store, await this.teamMembers.attach(withHomeTeams(viewer, roles)), this.deps.now().toISOString());
+    return this.teamRoles.view(viewer);
+  }
+
+  /**
+   * Flips run one at a time: each reads the viewer and roles the previous
+   * one saved, so two quick flips cannot overwrite each other with a stale
+   * role map while the member fetch is awaited.
+   */
+  async setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {
+    const flip = this.teamRoleFlips.then(() => this.applyTeamRole(team, role));
+    this.teamRoleFlips = flip.catch(() => undefined);
+    return flip;
   }
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {

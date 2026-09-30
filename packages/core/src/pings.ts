@@ -9,6 +9,7 @@ import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isRoutedTeamRequestEvent } from './glance-pings.ts';
 import { effectiveLoudness, raisedToLoud } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import { reviewRequestTarget, teamSlug } from './review-request.ts';
 import type { Glance, IsoTime, Loudness, Pr, PrEvent, PrKey, Viewer } from './types.ts';
 
@@ -160,7 +161,7 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
     case 'commits_after_approval':
       return true;
     case 'review_changes_requested':
-      return sameLogin(pr.author, viewer.login);
+      return isPrOwner(pr, viewer.login);
     default:
       return false;
   }

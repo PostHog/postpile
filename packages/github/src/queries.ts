@@ -62,6 +62,7 @@ fragment prData on PullRequest {
   createdAt updatedAt mergedAt
   ${BASE_REF_CHANGES}
   author { ...actor }
+  assignees(first: 10) { nodes { login } }
   mergedBy { ...actor }
   labels(first: 20) { nodes { name } }
   files(first: 100) { nodes { path additions deletions } }

@@ -122,7 +122,7 @@ export function SetupReviewStep(props: {
           <Button onClick={props.onBack}>Back to the sweep</Button>
         </div>
       </div>
-      <aside className="sticky top-0 flex flex-col gap-4 rounded-tile border border-hairline bg-surface p-3.5 shadow-tile">
+      <aside className="sticky top-0 flex flex-col gap-4 rounded-tile bg-surface p-3.5 shadow-tile">
         <RefineBox edits={props.edits} onRefined={props.onRefined} />
         <div className="border-t border-hairline-soft pt-3">
           <SetupRepoChoices draft={props.draft} quiet={props.quiet} onQuiet={props.onQuiet} mainRepo={props.mainRepo} onMainRepo={props.onMainRepo} />

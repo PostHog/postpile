@@ -9,6 +9,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     title: 'PR 1',
     url: '',
     author: 'rowan',
+    assignees: [],
     state: 'OPEN',
     primaryAction: 'approve',
     isDraft: false,
@@ -68,6 +69,7 @@ describe('tileOpenedProps', () => {
 
   it('maps every ForWhom kind, "own" to "your_pr"', () => {
     expect(tileOpenedProps(view([summary()], { kind: 'team', team: 'acme/devex' })).for_whom).toBe('team');
+    expect(tileOpenedProps(view([summary()], { kind: 'routing', team: 'acme/approvers' })).for_whom).toBe('routing');
     expect(tileOpenedProps(view([summary()], { kind: 'own' })).for_whom).toBe('your_pr');
     expect(tileOpenedProps(view([summary()], { kind: 'none' })).for_whom).toBe('none');
   });

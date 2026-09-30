@@ -4,7 +4,8 @@ import { Button } from './Button.tsx';
 
 interface AskComposerProps {
   prKey: string;
-  author: string;
+  /** Who to ask first: the PR's owner (`PrFacts.owners`). */
+  person: string;
   onClose: () => void;
 }
 
@@ -13,7 +14,7 @@ const input = 'h-7 rounded-control border border-control bg-surface px-2 text-xs
 /** "Ask <person>": the agent drafts a PR comment, the user edits it and sends it. */
 export function AskComposer(props: AskComposerProps) {
   const actions = useActions();
-  const [person, setPerson] = useState(props.author);
+  const [person, setPerson] = useState(props.person);
   const [intent, setIntent] = useState('');
   const [body, setBody] = useState<string | null>(null);
   const drafting = actions.isBusy(`ask:${props.prKey}`);

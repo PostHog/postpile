@@ -86,7 +86,7 @@ export function SetupAcceptStep(props: {
   }
 
   return (
-    <section className="flex max-w-[760px] flex-col gap-3 rounded-tile border border-hairline bg-surface p-4 shadow-tile">
+    <section className="flex max-w-[760px] flex-col gap-3 rounded-tile bg-surface p-4 shadow-tile">
       <h2 className="text-[15px] font-semibold text-ink">Accept</h2>
       <ol className="flex list-decimal flex-col gap-1 pl-5 text-xs text-ink-2">
         {acceptPlan({ baseVersion: props.base.version, changed, quietRepos: props.quiet, mainRepo: props.mainRepo }).map((line) => (

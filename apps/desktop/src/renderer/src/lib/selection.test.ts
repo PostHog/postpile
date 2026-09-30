@@ -29,6 +29,7 @@ function pr(key: string): PrSummary {
     title: key,
     url: '',
     author: 'rowan',
+    assignees: [],
     state: 'OPEN',
     primaryAction: 'approve',
     isDraft: false,

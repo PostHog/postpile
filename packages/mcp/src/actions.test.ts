@@ -154,7 +154,7 @@ describe('propose_topic_change', () => {
     expect(outsideFence(same.text)).not.toContain('Move CI to Depot');
     expect(fencedPart(same.text)).toContain('The topic is already called "Move CI to Depot".');
 
-    const everything = await call(client, 'propose_topic_change', { topic: 'topic-dev-env', kind: 'split', prs: ['#1960', '#1870'], name: 'All of it', reason: 'r' });
+    const everything = await call(client, 'propose_topic_change', { topic: 'topic-dev-env', kind: 'split', prs: ['#1960', '#1870', '#1972'], name: 'All of it', reason: 'r' });
     expect(outsideFence(everything.text)).not.toMatch(/Dev env|acme\/app/);
     expect(fencedPart(everything.text)).toContain('would move every PR out of "Dev env"');
 

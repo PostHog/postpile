@@ -1,14 +1,18 @@
 import type { ReactNode } from 'react';
 import type { PrDetail, PrLifecycle, PrStatus, PrSummary, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useViewer } from '../api/viewer.ts';
+import { assigneeLine } from '../lib/assignees.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
+import { AssignedTo } from './AssignedTo.tsx';
+import { Avatar } from './Avatar.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { NewSinceBox } from './NewSinceBox.tsx';
 import { LIFECYCLE_WORDS, reviewWord } from '../lib/pr.ts';
 import { type StackPlace, stackPlaces } from '../lib/stacks.ts';
-import { ExternalIcon, PrStateIcon } from './icons.tsx';
+import { BranchArrowIcon, ExternalIcon, PrStateIcon } from './icons.tsx';
 import { StackMark, StateWordLabel } from './pills.tsx';
 import { PrDescription } from './PrDescription.tsx';
 import { PrFacts } from './PrFacts.tsx';
@@ -23,13 +27,31 @@ interface PrBodyProps {
 }
 
 /** "head → base", plus the layer for a stack layer, also inside a set (bottom layer is 1). */
-function branchLine(props: PrBodyProps, place: StackPlace | null): string {
-  const { pr } = props.detail;
-  const line = `${pr.headRef} → ${pr.baseRef}`;
-  if (!place) {
-    return line;
-  }
-  return `${line} · layer ${place.layer} of ${place.of}`;
+function BranchLine(props: { pr: PrDetail['pr']; place: StackPlace | null }) {
+  const { pr, place } = props;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10.5px] leading-[normal] text-hint select-text">
+      <span className="min-w-0 truncate">{pr.headRef}</span>
+      <BranchArrowIcon className="shrink-0 text-ghost" />
+      <span className="min-w-0 truncate">{pr.baseRef}</span>
+      {place && (
+        <span className="whitespace-nowrap">
+          <span className="text-ghost">·</span> layer {place.layer} of {place.of}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** "acme/app#1907": the repo faint, the number a notch darker. */
+function RepoRef(props: { prKey: string }) {
+  const [repo, number] = props.prKey.split('#');
+  return (
+    <span className="min-w-0 truncate font-mono text-[11px] text-faint select-text">
+      {repo}
+      {number !== undefined && <span className="text-hint">#{number}</span>}
+    </span>
+  );
 }
 
 const LIFECYCLE_TEXT_TONES: Record<PrLifecycle, string> = {
@@ -50,20 +72,20 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus | 
   const words = LIFECYCLE_WORDS[lifecycle];
   const review = status ? reviewWord(status) : null;
   return (
-    <div className="flex items-center gap-3.5">
-      <span title={words.title} className={`flex items-center gap-1.5 text-[13px] font-semibold ${LIFECYCLE_TEXT_TONES[lifecycle]}`}>
-        <PrStateIcon lifecycle={lifecycle} title={words.title} size={16} />
+    <div className="flex items-center gap-2.5">
+      <span title={words.title} className={`flex items-center gap-2 text-[12.5px] font-semibold ${LIFECYCLE_TEXT_TONES[lifecycle]}`}>
+        <PrStateIcon lifecycle={lifecycle} title={words.title} size={14} className="mx-[3px]" />
         {words.text}
       </span>
       {review && <StateWordLabel word={review} size="md" />}
-      <span className="min-w-0 truncate font-mono text-[11.5px] text-muted select-text">{pr.key}</span>
+      <RepoRef prKey={pr.key} />
       <a
         href={pr.url}
         target="_blank"
         rel="noreferrer"
         aria-label="Open on GitHub"
         title="Open on GitHub"
-        className="ml-auto flex size-[30px] shrink-0 items-center justify-center rounded-control border border-control text-ink-2 shadow-control hover:bg-subtle"
+        className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-control bg-surface text-ink-2 shadow-control inset-ring inset-ring-edge-control-soft hover:bg-subtle"
       >
         <ExternalIcon />
       </a>
@@ -76,22 +98,35 @@ export function PrBody(props: PrBodyProps) {
   const { syncing } = useActions();
   const { pr } = props.detail;
   const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
+  const viewerLogin = useViewer().data?.login ?? null;
+  const assigned = assigneeLine(pr.author, pr.assignees ?? [], viewerLogin);
   // A catch-up run on the PR's topic shows as its glance writing; facts get rewritten by it too.
   const updating = updatingNow({ syncing, writing: props.detail.glanceState === 'writing' });
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-[22px] py-[18px]">
-      <StateLine pr={pr} status={props.summary?.status ?? null} />
-      <div className="flex flex-col gap-1.5">
+    // 22px pane edge: boxes and rows run from here; lines of text start 12px in (px-3), at 34.
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-[22px] pt-[18px] pb-6">
+      <div className="flex flex-col gap-[5px] px-3">
+        <StateLine pr={pr} status={props.summary?.status ?? null} />
         <div className="flex items-start gap-2">
           {/* The mark sits on the title's first line: 18px tag, nudged to its center. */}
           {place && (
-            <span className="mt-[2px]">
+            <span className="mt-px">
               <StackMark place={place} />
             </span>
           )}
-          <h2 className="min-w-0 text-lg leading-tight font-[650] tracking-[-0.018em] select-text">{pr.title}</h2>
+          <h2 className="min-w-0 text-[16px] leading-[1.3] font-[650] tracking-[-0.016em] text-balance select-text">{pr.title}</h2>
         </div>
-        <span className="font-mono text-[11px] text-muted select-text">{branchLine(props, place)}</span>
+        <BranchLine pr={pr} place={place} />
+        {assigned && (
+          // Only when someone other than the author is assigned: whose agent PR it is.
+          <span className="flex min-w-0 items-center gap-1 text-[11px] text-hint">
+            opened by
+            <Avatar login={pr.author} />
+            <span className="truncate">{pr.author}</span>
+            <span className="text-faint">·</span>
+            <AssignedTo line={assigned} />
+          </span>
+        )}
       </div>
       <NewSinceBox key={pr.key} detail={props.detail} />
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />

@@ -38,6 +38,7 @@ const sweep: SetupSweepView = {
   },
   error: null,
   current: { text: '', version: null },
+  teamRoles: null,
 };
 
 describe('formatSetupDraft', () => {
