@@ -14,6 +14,8 @@ function item(id: string, toReview: number): TopicListItem {
     statusLine: null,
     group: 'quiet',
     unreadTiles: 0,
+    unreadPrs: 0,
+    unreadPrKeys: [],
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,

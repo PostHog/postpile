@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeEvent, makePr, makeUserState, NO_PR_FACTS, viewer } from './fixtures.ts';
-import { buildPrSummary, notDonePrKeys, type PrSummaryInput } from './tile-view.ts';
+import { buildPrSummary, tileUnreadPrKeys, type PrSummaryInput } from './tile-view.ts';
 import type { Pr, PrEvent, TileMember, TileState } from './types.ts';
 import type { PrSummary } from './views.ts';
 
@@ -102,54 +102,32 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   };
 }
 
-/** The tile's state and rows: unread when a row has unseen loud news, else open. */
-function dotsOf(prs: PrSummary[], kind?: TileState['kind']): string[] {
-  const unread = prs.some((pr) => pr.unseenLoudEvents > 0);
-  return notDonePrKeys({ state: { kind: kind ?? (unread ? 'unread' : 'open'), unreadBecause: [], unreadOnGitHub: unread, loud: unread }, prs });
+const reason = (prKey: string) => ({ prKey, eventId: 'e', kind: 'comment' as const, actor: 'ada', summary: 'x', at: at(1) });
+
+/** The dots of a tile in `kind`, whose unread reasons name `reasons`; rows with an unread thread count as thread keys. */
+function dotsOf(prs: PrSummary[], kind: TileState['kind'], reasons: string[] = []): string[] {
+  return tileUnreadPrKeys({ kind, unreadBecause: reasons.map(reason), unreadOnGitHub: prs.some((pr) => pr.unreadOnGitHub), loud: false }, prs);
 }
 
-describe('notDonePrKeys: the Not done yet dots', () => {
-  const done = { done: true };
+describe('tileUnreadPrKeys: the unread dots', () => {
   const pulled = { provenance: { kind: 'pulled_in', reason: 'stack layer below #2' } } as const;
 
-  it('dots every tracked PR that is not done, on an open tile too', () => {
-    expect(dotsOf([row(1), row(2, done), row(3)])).toEqual(['acme/app#1', 'acme/app#3']);
+  it('dots every PR whose thread is unread on GitHub, single-PR tiles too', () => {
+    expect(dotsOf([row(1, { unreadOnGitHub: true }), row(2), row(3, { unreadOnGitHub: true })], 'unread')).toEqual(['acme/app#1', 'acme/app#3']);
+    expect(dotsOf([row(1, { unreadOnGitHub: true })], 'unread')).toEqual(['acme/app#1']);
   });
 
-  it('dots a done PR that still has an unseen loud event: it keeps the tile unread', () => {
-    expect(dotsOf([row(1, done), row(2, { ...done, unseenLoudEvents: 2 })])).toEqual(['acme/app#2']);
+  it('dots a pulled-in layer or a Look closer PR the tile is unread by, read thread or not', () => {
+    expect(dotsOf([row(1), row(2, pulled)], 'unread', ['acme/app#2'])).toEqual(['acme/app#2']);
+    expect(dotsOf([row(1), row(2)], 'unread', ['acme/app#1', 'acme/app#1'])).toEqual(['acme/app#1']);
   });
 
-  it('dots a pulled-in stack layer only while it has unseen loud news', () => {
-    expect(dotsOf([row(1, done), row(2, done), row(3, pulled)])).toEqual([]);
-    // Decided 2026-09-30: the layer's news makes the tile unread, so the layer says it holds the tile.
-    expect(dotsOf([row(1, done), row(2, { ...pulled, unseenLoudEvents: 1 })])).toEqual(['acme/app#2']);
-    expect(dotsOf([row(1), row(2, { ...pulled, unseenLoudEvents: 1 })])).toEqual(['acme/app#1', 'acme/app#2']);
+  it('dots nothing that is only not done or only owed: that is the honey Your move', () => {
+    expect(dotsOf([row(1), row(2, { unseenLoudEvents: 1 })], 'open')).toEqual([]);
+    expect(dotsOf([row(1), row(2)], 'done')).toEqual([]);
   });
 
-  it('dots nothing where only one PR can hold the tile: it would only repeat the tile state', () => {
-    expect(dotsOf([row(1)])).toEqual([]);
-    expect(dotsOf([row(1, { unseenLoudEvents: 1 })])).toEqual([]);
-    // A stack with one pinged layer and quiet pulled-in context.
-    expect(dotsOf([row(1), row(2, pulled)])).toEqual([]);
-  });
-
-  it('dots nothing on a done or snoozed tile', () => {
-    for (const kind of ['done', 'snoozed'] as const) {
-      expect(dotsOf([row(1), row(2), row(3, { ...pulled, unseenLoudEvents: 1 })], kind)).toEqual([]);
-    }
-  });
-
-  it('follows the set as its PRs are marked done in the detail pane, one at a time', () => {
-    // A set of three: #1 was read (nothing asks, not handled yet), #2 asks for a review, #3 is merged.
-    const rows = [row(1), row(2), row(3, { ...done, state: 'MERGED' })];
-    expect(dotsOf(rows)).toEqual(['acme/app#1', 'acme/app#2']);
-    // #1 marked done in the detail pane: its dot goes, #2 still keeps the set open.
-    const afterFirst = rows.map((pr) => (pr.key === 'acme/app#1' ? { ...pr, done: true } : pr));
-    expect(dotsOf(afterFirst)).toEqual(['acme/app#2']);
-    // The last one done: no dots left, and a done tile shows none either.
-    const allDone = afterFirst.map((pr) => ({ ...pr, done: true }));
-    expect(dotsOf(allDone)).toEqual([]);
-    expect(dotsOf(allDone, 'done')).toEqual([]);
+  it('keeps the unread threads of a snoozed tile dotted', () => {
+    expect(dotsOf([row(1, { unreadOnGitHub: true }), row(2)], 'snoozed')).toEqual(['acme/app#1']);
   });
 });

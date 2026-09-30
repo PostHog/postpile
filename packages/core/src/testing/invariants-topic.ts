@@ -8,7 +8,7 @@ import type { PrEvent } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { isReReviewMove, prWhoseTurn, type YourMove } from '../whose-turn.ts';
 import { tileViewsOf, type PropertyBoard } from './build-board.ts';
-import { ensure, eventsOf, isNews, isTrackedHere, prOf, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, expectedUnreadRows, isNews, isTrackedHere, prOf, type Invariant } from './invariant.ts';
 import { expectedTurn, isUnseenMergeWithoutViewer } from './spec-rules.ts';
 
 /** Unseen loud news on a PR of the tile that is not found. */
@@ -26,6 +26,7 @@ function urgencyOf(views: TileView[]) {
       state: view.state.kind,
       unreadOnGitHub: view.state.unreadOnGitHub,
       loud: view.state.loud,
+      unreadPrKeys: view.unreadPrKeys,
       prStates: view.prs.map((row) => row.state),
       move: topicMove(view.turn),
       quiet: false,
@@ -45,6 +46,8 @@ export const topicCountsMatchTiles: Invariant = {
     const urgency = urgencyOf(views);
     const withUnreadThread = views.filter((view) => view.state.kind === 'unread' || view.tile.members.some((member) => board.threads.get(member.prKey)?.unread === true));
     ensure(urgency.unreadTiles === withUnreadThread.length, `unread tiles ${urgency.unreadTiles}, unread tiles and ones with an unread thread ${withUnreadThread.length}`);
+    const unreadRows = new Set(views.flatMap((view) => expectedUnreadRows(board, view))).size;
+    ensure(urgency.unreadPrs === unreadRows, `unread PRs ${urgency.unreadPrs}, unread threads and pulled-in or Look closer extras ${unreadRows}`);
     const unread = views.filter((view) => view.state.kind === 'unread');
     const loudUnread = unread.filter((view) => tileHasNews(board, view));
     const live = views.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');

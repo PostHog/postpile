@@ -10,7 +10,7 @@ describe('tile invariants', () => {
   }
 });
 
-describe('Not done yet dots, scenarios the properties found', () => {
+describe('Unread dots, scenarios the properties found', () => {
   // Found 2026-09-29 by "a live multi-PR tile dots at least one PR": ada
   // asked for changes on your pulled-in stack layer, the tile turned unread,
   // and no row had a dot. Decided 2026-09-30: the layer gets the dot, and
@@ -38,12 +38,12 @@ describe('Not done yet dots, scenarios the properties found', () => {
     expect(pinged!.done).toBe(true);
     expect(view.state).toMatchObject({ kind: 'unread', loud: true, unreadOnGitHub: false });
     expect(view.state.unreadBecause.map((reason) => reason.prKey)).toEqual([layer!.key]);
-    expect(view.notDonePrKeys).toEqual([layer!.key]);
+    expect(view.unreadPrKeys).toEqual([layer!.key]);
   });
 
   // "GitHub unread is PostPile unread": a done PR whose thread turned unread
   // again (a bot, a teammate) holds its set until the thread is read.
-  it('a done PR with an unread thread dots its row on a set', () => {
+  it('a done PR with an unread thread keeps its dot on a set', () => {
     const spec: BoardSpec = {
       groups: [
         {
@@ -65,6 +65,6 @@ describe('Not done yet dots, scenarios the properties found', () => {
     expect(merged!.done).toBe(true);
     expect(merged!.unreadOnGitHub).toBe(true);
     expect(view.state).toMatchObject({ kind: 'unread', loud: false });
-    expect(view.notDonePrKeys).toEqual([merged!.key]);
+    expect(view.unreadPrKeys).toEqual([merged!.key]);
   });
 });

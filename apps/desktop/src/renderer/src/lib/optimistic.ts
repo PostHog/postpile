@@ -27,7 +27,7 @@ export function markedReadTile(view: TileView): TileView {
     view.state.kind === 'snoozed'
       ? { ...view.state, unreadOnGitHub: false, loud: false }
       : { kind: view.afterRead.done ? 'done' : 'open', unreadBecause: [], unreadOnGitHub: false, loud: false };
-  return { ...view, state, turn: view.afterRead.turn, prs: view.prs.map(markedPrRow) };
+  return { ...view, state, turn: view.afterRead.turn, prs: view.prs.map(markedPrRow), unreadPrKeys: [] };
 }
 
 /**
@@ -36,7 +36,7 @@ export function markedReadTile(view: TileView): TileView {
  * server's call, so it waits for the refetch.
  */
 export function markedReadPr(view: TileView, prKey: PrKey): TileView {
-  return { ...view, prs: view.prs.map((pr) => (pr.key === prKey ? markedPrRow(pr) : pr)) };
+  return { ...view, prs: view.prs.map((pr) => (pr.key === prKey ? markedPrRow(pr) : pr)), unreadPrKeys: view.unreadPrKeys.filter((key) => key !== prKey) };
 }
 
 /** A snoozed tile: snoozed wins over unread, open and done while it holds; an unread thread still counts in the Unread filter. */

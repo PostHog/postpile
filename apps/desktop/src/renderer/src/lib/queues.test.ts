@@ -27,6 +27,8 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): Top
     statusLine: null,
     group: 'quiet',
     unreadTiles: 0,
+    unreadPrs: 0,
+    unreadPrKeys: [],
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,

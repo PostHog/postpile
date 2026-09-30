@@ -5,9 +5,9 @@ import type { WhoseTurn, WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
 import type { PrTier } from '../pr-tier.ts';
 import { tileListRank } from '../tile-view.ts';
-import type { PrSummary, TileView } from '../views.ts';
+import type { TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, isNews, isTrackedHere, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
+import { describeTurn, ensure, eventsOf, expectedUnreadRows, isNews, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
 import { expectedFooter, expectedGitHubLink, expectedLeadPr, expectedMarkLabel, expectedPane, expectedPrimaryAction } from './spec-offers.ts';
 import { expectedDone, expectedSnoozePhase, isUnseenMergeWithoutViewer } from './spec-rules.ts';
 
@@ -336,59 +336,29 @@ export const markDoneNeverLeavesAMove: Invariant = {
   },
 };
 
-/** Unseen loud news that keeps the tile from being done: a found PR's news never does. */
-function hasTileNews(board: PropertyBoard, row: PrSummary): boolean {
-  return row.provenance.kind !== 'found' && eventsOf(board, row.key).some(isNews);
-}
-
-/** The PR's thread is unread on GitHub, which keeps its tile unread (2026-09-30). */
-function hasUnreadThread(board: PropertyBoard, row: PrSummary): boolean {
-  return board.threads.get(row.key)?.unread === true;
-}
-
 /**
- * The PRs that can hold a tile, spelled out from the board: tracked PRs,
- * and pulled-in stack layers with unseen loud news (2026-09-30).
+ * The unread dot (2026-09-30, replaced "Not done yet"): a PR has it exactly
+ * when it is unread by the rule in `expectedUnreadRows`, single-PR tiles
+ * included. The dots of a tile are the tile's unread PRs, in tile order.
  */
-function rowsThatCanHold(board: PropertyBoard, view: TileView): PrSummary[] {
-  return view.prs.filter((row) => isTrackedHere(row.provenance) || hasTileNews(board, row));
-}
-
-/**
- * One "Not done yet" dot per PR that keeps a live tile from being done: not
- * done, with unseen loud news (a pulled-in layer counts by its news), or
- * with its thread unread on GitHub. Only on unread or open tiles where more
- * than one PR can hold the tile.
- */
-export const oneDotPerNotDonePr: Invariant = {
-  name: 'one Not done yet dot per PR that holds a live tile, only where more than one PR can hold it',
+export const dotIffPrUnread: Invariant = {
+  name: 'a PR has the unread dot exactly when it is unread on GitHub, pulled in with loud news or has an unseen Look closer event',
   check(board, views) {
     for (const view of views) {
-      const dots = [...view.notDonePrKeys].sort();
-      const holders = rowsThatCanHold(board, view);
-      const live = view.state.kind === 'unread' || view.state.kind === 'open';
-      if (!live || holders.length <= 1) {
-        ensure(dots.length === 0, `${view.tile.id}: dots on a ${view.state.kind} tile with ${holders.length} PRs that can hold it`);
-        continue;
-      }
-      const expected = holders.filter((row) => !row.done || hasTileNews(board, row) || hasUnreadThread(board, row)).map((row) => row.key).sort();
-      ensure(JSON.stringify(dots) === JSON.stringify(expected), `${view.tile.id}: dots ${dots.join(', ')}, not done ${expected.join(', ')}`);
+      const dots = [...view.unreadPrKeys].sort();
+      const expected = [...expectedUnreadRows(board, view)].sort();
+      ensure(JSON.stringify(dots) === JSON.stringify(expected), `${view.tile.id}: ${view.state.kind} tile dots ${dots.join(', ')}, unread ${expected.join(', ')}`);
     }
   },
 };
 
-/**
- * "No dots left, the tile is done": a live tile where more than one PR can
- * hold it always dots the one that does, also when only a pulled-in layer
- * has news (decided 2026-09-30; before, such a tile was unread with no dot).
- */
-export const liveTileShowsWhatHoldsIt: Invariant = {
-  name: 'a live tile with more than one PR that can hold it dots at least one',
+/** An unread tile always says which PR makes it unread: at least one dot. */
+export const unreadTileHasADot: Invariant = {
+  name: 'an unread tile dots at least one PR',
   check(board, views) {
     for (const view of views) {
-      const live = view.state.kind === 'unread' || view.state.kind === 'open';
-      if (live && rowsThatCanHold(board, view).length > 1) {
-        ensure(view.notDonePrKeys.length > 0, `${view.tile.id}: ${view.state.kind} tile without a dot`);
+      if (view.state.kind === 'unread') {
+        ensure(view.unreadPrKeys.length > 0, `${view.tile.id}: unread tile without a dot`);
       }
     }
   },
@@ -514,8 +484,8 @@ export const TILE_INVARIANTS: readonly Invariant[] = [
   snoozedAllDoneLeadsWithOpen,
   snoozeLeadsOnlyWhileYourMove,
   markDoneNeverLeavesAMove,
-  oneDotPerNotDonePr,
-  liveTileShowsWhatHoldsIt,
+  dotIffPrUnread,
+  unreadTileHasADot,
   pendingWritesChangeNoButton,
   tileTierIsMostUrgentRowTier,
   tileListOrderFollowsState,
