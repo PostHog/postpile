@@ -41,6 +41,10 @@ import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { useOpenedRead } from './lib/use-opened-read.ts';
 
+function entryKey(entry: NavEntry): string {
+  return `${entry.pane}|${entry.topicId}|${entry.tileId}|${entry.prKey}`;
+}
+
 function MainPane(props: { children: ReactNode }) {
   return <main className="flex min-w-0 flex-col gap-4 overflow-auto px-[26px] pt-5 pb-[22px]">{props.children}</main>;
 }
@@ -70,7 +74,8 @@ export function App() {
   // Mine / Team / Reply / Review in the sidebar. Plain UI state, not a history entry.
   const [tileFilter, setTileFilter] = useState<TileFilter>('all');
   // Switching the grid to Unread clears the selection in the open topic (until the next pick or topic change).
-  const [deselectedTopicId, setDeselectedTopicId] = useState<string | null>(null);
+  // Kept apart from the nav entry, so a shown fallback topic never rewrites the user's hidden pick.
+  const [deselected, setDeselected] = useState<{ topicId: string; entryKey: string } | null>(null);
   const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   const changeQueueFilter = (filter: QueueFilter | null): void => {
     setQueueFilter(filter);
@@ -138,7 +143,7 @@ export function App() {
   const allTiles = topic.data?.tiles ?? [];
   const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
   const keptTile = keptNow && keptNow.topicId === activeTopicId ? keptNow : null;
-  const noTile = deselectedTopicId !== null && deselectedTopicId === activeTopicId && nav.current.tileId === null;
+  const noTile = deselected !== null && deselected.topicId === activeTopicId && deselected.entryKey === entryKey(nav.current);
   const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile, tileFilter, noTile);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
@@ -173,12 +178,11 @@ export function App() {
   const changeTileFilter = (next: TileFilter): void => {
     setTileFilter(next);
     if (next === 'unread' && tileFilter !== 'unread' && activeTopicId !== null) {
-      setDeselectedTopicId(activeTopicId);
-      replaceEntry({ ...nav.current, tileId: null, prKey: null });
+      setDeselected({ topicId: activeTopicId, entryKey: entryKey(nav.current) });
     }
   };
   useEffect(() => {
-    setDeselectedTopicId(null);
+    setDeselected(null);
   }, [activeTopicId]);
   const pickTile = (tileId: string, prKey: string) => {
     const view = topic.data?.tiles.find((candidate) => candidate.tile.id === tileId);

@@ -2,6 +2,14 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- The sidebar topic bubble and the footer unread number count unread tiles again (0.12.0 counted PRs). The per-PR dots stay.
+- Queue filters (Mine, Team, Reply, Review) only pick topics; they no longer fade tiles inside a topic.
+- The grid's Unread filter lists unread tiles without fading them, and switching to it clears the tile selection.
+
 ## 0.12.0 (2026-09-30)
 
 ### Added
