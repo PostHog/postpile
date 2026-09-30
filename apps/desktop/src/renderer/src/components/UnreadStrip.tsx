@@ -9,7 +9,8 @@ import { Glyph } from './icons.tsx';
 
 /**
  * "Why now" on unread tiles: who did what, with an ink event badge on their
- * avatar, a coral dot for new since you looked, and how long ago. On a
+ * avatar, a coral NEW pill when core says so (`TileView.newBadge`: never on a
+ * quiet automation headline), and how long ago. On a
  * revisit (the viewer touched the PR before) the text says what changed
  * since that touch instead ("6 commits since your changes request").
  */
@@ -53,7 +54,7 @@ export function UnreadStrip(props: { view: TileView }) {
           +{more}
         </span>
       )}
-      {(!reason.automation || reason.loud) && (
+      {props.view.newBadge && (
         <span
           aria-label="New since you looked"
           className="ml-auto flex h-4 shrink-0 items-center rounded-full bg-unread px-1.5 text-[9.5px] font-bold tracking-[0.04em] text-on-ink"
@@ -61,7 +62,7 @@ export function UnreadStrip(props: { view: TileView }) {
           NEW
         </span>
       )}
-      <span className={`shrink-0 font-mono text-[10.5px] text-faint${reason.automation && !reason.loud ? ' ml-auto' : ''}`}>{ageLabel(news ? news.newestAt : reason.at, now)}</span>
+      <span className={`shrink-0 font-mono text-[10.5px] text-faint${props.view.newBadge ? '' : ' ml-auto'}`}>{ageLabel(news ? news.newestAt : reason.at, now)}</span>
     </div>
   );
 }

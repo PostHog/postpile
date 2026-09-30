@@ -1,7 +1,7 @@
 // What stays on screen. The user's pick holds until the user navigates or
 // changes a filter: an approve, a refetch, a poll or a sync never moves it,
 // even when the picked topic or tile no longer matches the filter.
-import type { PrSummary, TileView, TopicListItem } from '@postpile/core';
+import type { PrSummary, TileGroup, TileView, TopicListItem } from '@postpile/core';
 import type { NavEntry } from './history.ts';
 import { tilesInTierOrder } from './queues.ts';
 import { leadPr } from './tiles.ts';
@@ -18,38 +18,25 @@ export interface KeptView {
   prKey: string | null;
   /**
    * Set while the app picked this tile (`autoTile`), the user did not, with
-   * the grid filter and tile state it was picked under. An auto pick is
-   * re-run when the filter changes and turns into a user-like pick (kept
-   * visible in the grid) once its state changes while shown.
+   * the group it was picked in. An auto pick turns into a user-like pick
+   * (kept on screen) once its group changes while shown.
    */
   auto?: AutoPick | null;
 }
 
 export interface AutoPick {
-  tileFilter: TileFilter;
-  state: TileView['state']['kind'];
+  group: TileGroup;
 }
-
-/** The grid's own filter: every live tile, or only the unread ones. */
-export type TileFilter = 'all' | 'unread';
 
 /**
- * The tile the app selects when the user has not picked one (2026-09-29):
- * the first unread tile in tier order; under All also the first open one;
- * never a snoozed or done tile. Under Unread with nothing unread: none.
+ * The tile the app selects when the user has not picked one (2026-09-29,
+ * groups since 2026-09-30): the first tile of the Unread group in tier
+ * order, else the first of Open; never a snoozed tile, never one in Dealt
+ * with. Nothing when neither has one.
  */
-export function autoTile(views: TileView[], tileFilter: TileFilter): TileView | null {
-  const ordered = tilesInTierOrder(views);
-  const unread = ordered.find((view) => view.state.kind === 'unread');
-  if (unread || tileFilter === 'unread') {
-    return unread ?? null;
-  }
-  return ordered.find((view) => view.state.kind === 'open') ?? null;
-}
-
-/** The detail pane's line when no tile is selected. */
-export function noSelectionText(tileFilter: TileFilter): string {
-  return tileFilter === 'unread' ? 'Nothing unread in this topic. Pick a tile, or show All.' : 'Pick a tile to see it.';
+export function autoTile(views: TileView[]): TileView | null {
+  const ordered = tilesInTierOrder(views).filter((view) => view.state.kind !== 'snoozed');
+  return ordered.find((view) => view.group === 'unread') ?? ordered.find((view) => view.group === 'open') ?? null;
 }
 
 /**
@@ -74,7 +61,7 @@ export function keptFor(kept: KeptView | null, entry: NavEntry, key: string): Ke
 }
 
 function sameAuto(a: AutoPick | null, b: AutoPick | null): boolean {
-  return a === b || (a !== null && b !== null && a.tileFilter === b.tileFilter && a.state === b.state);
+  return a === b || (a !== null && b !== null && a.group === b.group);
 }
 
 /**
@@ -127,13 +114,13 @@ function prIn(view: TileView, prKey: string | null | undefined): PrSummary | und
 }
 
 /**
- * The tile and PR to show, in this order (`deselected` shows none):
+ * The tile and PR to show, in this order:
  * 1. the picked tile, among the tiles the search lets through;
  * 2. the tile that now holds the picked PR (a set regrouped, a PR left a stack);
  * 3. the kept tile (by id, else by its PR) among all the topic's tiles, so a
  *    tile that stops matching the search after a refetch stays;
- * 4. `autoTile` of the shown tiles (`auto` true; none under Unread with
- *    nothing unread).
+ * 4. `autoTile` of the shown tiles (`auto` true; none when nothing is
+ *    unread or open).
  * The PR: the picked one, else the kept one, else the first matching the
  * search, else the tile's lead PR. `kept` must belong to this topic.
  */
@@ -143,23 +130,15 @@ export function resolveSelection(
   allTiles: TileView[],
   matchingPrKeys: Set<string> | null,
   kept: KeptView | null,
-  tileFilter: TileFilter = 'all',
-  deselected = false,
 ): { view: TileView | null; prKey: string | null; auto: boolean } {
-  // Switching the grid to Unread clears the selection: nothing is picked, kept or auto-selected until the next pick.
-  if (deselected) {
-    return { view: null, prKey: null, auto: false };
-  }
   const picked = shownTiles.find((candidate) => candidate.tile.id === entry.tileId) ?? tileHolding(shownTiles, entry.prKey);
-  // An auto pick made under another grid filter is picked again.
-  const usableKept = kept?.auto && kept.auto.tileFilter !== tileFilter ? null : kept;
-  const keptView = picked ? undefined : keptTile(allTiles, usableKept);
-  const view = picked ?? keptView ?? autoTile(shownTiles, tileFilter);
+  const keptView = picked ? undefined : keptTile(allTiles, kept);
+  const view = picked ?? keptView ?? autoTile(shownTiles);
   if (!view) {
     return { view: null, prKey: null, auto: false };
   }
-  // Auto until its state changes while shown: then it counts as the user's, so pane and grid agree.
-  const auto = !picked && (keptView ? usableKept?.auto?.state === view.state.kind : true);
+  // Auto until its group changes while shown: then it counts as the user's, so pane and grid agree.
+  const auto = !picked && (keptView ? kept?.auto?.group === view.group : true);
   const matching = matchingPrKeys ? view.prs.find((pr) => matchingPrKeys.has(pr.key)) : undefined;
   const pr = prIn(view, entry.prKey) ?? prIn(view, kept?.prKey) ?? matching ?? leadPr(view);
   return { view, prKey: pr?.key ?? null, auto };
@@ -171,21 +150,4 @@ export function withSelectedTile(tileIds: Set<string> | null, selectedTileId: st
     return tileIds;
   }
   return new Set([...tileIds, selectedTileId]);
-}
-
-/**
- * A tile the Unread filter matches: core's `unread` state, or a snoozed tile
- * whose thread is unread on GitHub (it keeps its snooze). Nothing else.
- */
-export function isUnreadTile(view: TileView): boolean {
-  return view.state.kind === 'unread' || (view.state.kind === 'snoozed' && view.state.unreadOnGitHub);
-}
-
-/**
- * The grid's Unread list: every unread tile, and a snoozed one whose thread
- * is unread on GitHub (it keeps its snooze), plus the selected one while it
- * is selected (it just got read).
- */
-export function unreadTiles(views: TileView[], selectedTileId: string | null): TileView[] {
-  return views.filter((view) => isUnreadTile(view) || view.tile.id === selectedTileId);
 }

@@ -1,4 +1,4 @@
-import type { PrSummary, PrTier, PrTierOrder, TileView, TopicListItem } from '@postpile/core';
+import type { PrSummary, PrTier, PrTierOrder, TileGroupOrder, TileView, TopicListItem } from '@postpile/core';
 import type { Bucket } from './hold-place.ts';
 
 /**
@@ -175,14 +175,21 @@ export function tilesInTierOrder(views: TileView[]): TileView[] {
 }
 
 /**
- * The tile the grid shows first: the first unread or open tile in tier
- * order, else the first snoozed, else the first done (the folded rows).
+ * Core's TILE_GROUP_ORDER. The renderer imports types only, so this copy is
+ * typed with core's `TileGroupOrder` and fails to compile when the two differ.
  */
-export function firstGridTile(views: TileView[]): TileView | null {
+export const GROUP_ORDER: TileGroupOrder = ['unread', 'open', 'dealt_with'];
+
+/**
+ * The grid's groups (DESIGN.md "Groups inside a topic"): Unread, Open, Dealt
+ * with, by core's `TileView.group`, empty ones included (the held place needs
+ * them). Inside a group tiles go in tier order, snoozed ones last.
+ */
+export function gridGroups(views: TileView[]): Bucket<TileView>[] {
   const ordered = tilesInTierOrder(views);
-  const live = ordered.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
+  const awake = ordered.filter((view) => view.state.kind !== 'snoozed');
   const snoozed = ordered.filter((view) => view.state.kind === 'snoozed');
-  return live[0] ?? snoozed[0] ?? ordered[0] ?? null;
+  return GROUP_ORDER.map((group) => ({ key: group, items: [...awake, ...snoozed].filter((view) => view.group === group) }));
 }
 
 /**

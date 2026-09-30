@@ -18,16 +18,19 @@ function markedPrRow(pr: PrSummary): PrSummary {
 }
 
 /**
- * The tile after Mark read / Mark done: done or open and whose move as its
- * `afterRead` says, every row marked, its threads read. A snoozed tile keeps
- * its snooze (the snooze outlasts a mark-read); its rows still change.
+ * The tile after Mark read / Mark done: done (Dealt with) or open and whose
+ * move as its `afterRead` says, every row marked, its threads read. A
+ * snoozed tile keeps its snooze (the snooze outlasts a mark-read) and goes
+ * to Open; its rows still change. The one place the renderer names a group
+ * itself: a guess from `afterRead` until the refetch brings core's.
  */
 export function markedReadTile(view: TileView): TileView {
-  const state: TileState =
-    view.state.kind === 'snoozed'
-      ? { ...view.state, unreadOnGitHub: false, loud: false }
-      : { kind: view.afterRead.done ? 'done' : 'open', unreadBecause: [], unreadOnGitHub: false, loud: false };
-  return { ...view, state, turn: view.afterRead.turn, prs: view.prs.map(markedPrRow), unreadPrKeys: [] };
+  const snoozed = view.state.kind === 'snoozed';
+  const done = !snoozed && view.afterRead.done;
+  const state: TileState = snoozed
+    ? { ...view.state, unreadOnGitHub: false, loud: false }
+    : { kind: done ? 'done' : 'open', unreadBecause: [], unreadOnGitHub: false, loud: false };
+  return { ...view, state, group: done ? 'dealt_with' : 'open', newBadge: false, turn: view.afterRead.turn, prs: view.prs.map(markedPrRow), unreadPrKeys: [] };
 }
 
 /**
@@ -39,9 +42,13 @@ export function markedReadPr(view: TileView, prKey: PrKey): TileView {
   return { ...view, prs: view.prs.map((pr) => (pr.key === prKey ? markedPrRow(pr) : pr)), unreadPrKeys: view.unreadPrKeys.filter((key) => key !== prKey) };
 }
 
-/** A snoozed tile: snoozed wins over unread, open and done while it holds; an unread thread still counts in the Unread filter. */
+/**
+ * A snoozed tile: snoozed wins over unread, open and done while it holds. It
+ * keeps its group (an unread thread keeps it in Unread; a done tile offers
+ * no snooze); only the strip and its NEW pill go.
+ */
 export function snoozedTile(view: TileView): TileView {
-  return { ...view, state: { kind: 'snoozed', unreadBecause: [], unreadOnGitHub: view.state.unreadOnGitHub, loud: view.state.loud } };
+  return { ...view, state: { ...view.state, kind: 'snoozed', unreadBecause: [], unseenMerges: undefined }, newBadge: false };
 }
 
 /** The PR after the viewer's approval of the commit on screen, so Approve turns into "Approved". */
