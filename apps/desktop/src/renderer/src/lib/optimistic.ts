@@ -97,3 +97,8 @@ export function approvedPrsTile(view: TileView, prKeys: PrKey[]): TileView {
 export function withApprovedPrs(detail: TopicDetail, prKeys: PrKey[]): TopicDetail {
   return { ...detail, tiles: detail.tiles.map((view) => approvedPrsTile(view, prKeys)) };
 }
+
+/** Applies `change` to several tiles of a topic in one pass, so one cache change (and one rollback snapshot) covers them all. */
+export function withTiles(detail: TopicDetail, tileIds: string[], change: (view: TileView) => TileView): TopicDetail {
+  return tileIds.reduce((current, tileId) => withTile(current, tileId, change), detail);
+}

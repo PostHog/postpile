@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileView, TopicDetail, WhoseTurn } from '@postpile/core';
 import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
-import { approvedPrsTile, markedReadPr, markedReadTile, snoozedTile, withTile } from './optimistic.ts';
+import { approvedPrsTile, markedReadPr, markedReadTile, snoozedTile, withTile, withTiles } from './optimistic.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REVIEW: WhoseTurn = { kind: 'you', move: 'review', who: 'rowan', what: 'Review, rowan asked', prKey: 'acme/app#1' };
@@ -135,5 +135,16 @@ describe('approvedPrsTile', () => {
     expect(approved.unreadPrKeys).toEqual(['acme/app#1']);
     expect(approved.state).toBe(view.state);
     expect(approvedPrsTile(view, ['acme/app#9'])).toBe(view);
+  });
+});
+
+describe('withTiles', () => {
+  it('changes every listed tile in one result and leaves the input untouched', () => {
+    const second = { ...unreadTile([summary(3)]), tile: { ...unreadTile([]).tile, id: 'set:s2' } };
+    const detail = { tiles: [unreadTile([summary(1)]), second] } as unknown as TopicDetail;
+    const changed = withTiles(detail, ['set:s1', 'set:s2'], snoozedTile);
+
+    expect(changed.tiles.map((view) => view.state.kind)).toEqual(['snoozed', 'snoozed']);
+    expect(detail.tiles.map((view) => view.state.kind)).toEqual(['unread', 'unread']);
   });
 });

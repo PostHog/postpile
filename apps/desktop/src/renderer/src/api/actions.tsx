@@ -52,7 +52,7 @@ import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
 import { markReadNotice } from '../lib/mark-read.ts';
-import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withApprovedPrs, withTile } from '../lib/optimistic.ts';
+import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
 import { useLiveStatus } from './live.ts';
@@ -375,6 +375,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
       } catch (error) {
         rollback?.();
         show('error', errorText(error));
+        // The cache is back to what it was; the refetch makes sure it is also what the server has.
+        await refreshAll();
         return false;
       }
     });
@@ -742,16 +744,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`markRead:${tileId}`, 'markRead', send, shape, optimistic);
     },
     markTilesRead: async (input) => {
+      // The engine re-checks each tile at click time and names the ones it skipped in its message: that wins over the offer's count.
       const shape: NoticeShape = (result) => ({
-        message: result.ok ? batchMarkReadMessage(input.tileIds.length, input.skipped, result.message, writes?.enabled ?? false) : result.message,
+        message: result.ok && !result.message.includes('; skipped') ? batchMarkReadMessage(input.tileIds.length, input.skipped, result.message, writes?.enabled ?? false) : result.message,
         snoozeTileId: null,
       });
-      const optimistic = writes?.enabled
-        ? async () => {
-            const rollbacks = await Promise.all(input.tileIds.map((tileId) => changeTile(tileId, markedReadTile)));
-            return () => rollbacks.forEach((rollback) => rollback());
-          }
-        : null;
+      // One cache change, so one snapshot: the rollback restores the topic as it was before any tile changed.
+      const optimistic = writes?.enabled ? () => changeCache<TopicDetail>(['topic'], (detail) => withTiles(detail, input.tileIds, markedReadTile)) : null;
       const body = { tileIds: input.tileIds, from: 'agent_topic' };
       await run(input.busyKey, 'markRead', () => request<ActionResult>('POST', '/api/agent-actions/mark-read', body), shape, optimistic);
     },
