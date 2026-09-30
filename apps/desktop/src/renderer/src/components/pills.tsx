@@ -11,9 +11,9 @@ import { forWhomLabel, whyTitle } from '../lib/why.ts';
 import { ClockIcon, DashIcon, Glyph, PencilIcon, RingDotIcon, SpinnerIcon, StackIcon } from './icons.tsx';
 
 const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }> = {
-  LOOKS_SAFE: { icon: <Glyph glyph="check" size={11} strokeWidth={2.2} />, label: 'Looks safe', tone: 'border-safe-line bg-safe-soft text-safe' },
-  LOOK_CLOSER: { icon: <RingDotIcon size={10} />, label: 'Look closer', tone: 'border-match-line bg-closer-soft text-closer' },
-  NOT_YOURS: { icon: <DashIcon size={11} />, label: 'Not yours', tone: 'border-hairline bg-segment text-muted' },
+  LOOKS_SAFE: { icon: <Glyph glyph="check" size={11} strokeWidth={2.2} />, label: 'Looks safe', tone: 'bg-safe-soft text-safe inset-ring-safe-line' },
+  LOOK_CLOSER: { icon: <RingDotIcon size={10} />, label: 'Look closer', tone: 'bg-closer-soft text-closer inset-ring-closer-line' },
+  NOT_YOURS: { icon: <DashIcon size={11} />, label: 'Not yours', tone: 'bg-segment text-muted inset-ring-hairline' },
 };
 
 /**
@@ -23,7 +23,7 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
  * you look at": no second, read-only dot).
  */
 export function NotDoneDot() {
-  return <span role="img" aria-label="Not done yet" title="Not done yet" className="size-1.5 shrink-0 rounded-full bg-unread" />;
+  return <span role="img" aria-label="Not done yet" title="Not done yet" className="size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft" />;
 }
 
 /** "pending: mark read on GitHub": a mark-read made while writes were locked. Neutral, not coral: nothing is new. */
@@ -55,7 +55,7 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; u
     return (
       <span
         title={text?.card}
-        className={`flex h-[22px] items-center gap-[5px] rounded-full border border-dashed px-2 text-[11px] font-medium whitespace-nowrap ${tone}`}
+        className={`flex h-5 items-center gap-[5px] rounded-full border border-dashed px-2 text-[11px] font-medium whitespace-nowrap ${tone}`}
       >
         {text?.spinner && <SpinnerIcon />}
         {text?.pill ?? 'No glance yet'}
@@ -63,10 +63,10 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; u
     );
   }
   const verdict = VERDICTS[props.verdict];
-  const tone = props.greyed ? 'border-hairline bg-segment text-muted' : verdict.tone;
+  const tone = props.greyed ? 'bg-segment text-muted inset-ring-hairline' : verdict.tone;
   return (
     <span
-      className={`flex h-[22px] shrink-0 items-center gap-[5px] rounded-full border pr-2 pl-[7px] text-[11px] font-semibold whitespace-nowrap ${tone}`}
+      className={`flex h-5 shrink-0 items-center gap-[5px] rounded-full pr-2 pl-1.5 text-[11px] font-semibold whitespace-nowrap inset-ring ${tone}`}
       title={props.stale ? staleVerdictTitle(props.updating ?? false) : undefined}
     >
       {verdict.icon}
@@ -76,14 +76,15 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; u
   );
 }
 
+// Each chip carries an inset ring in its own ink at 10%.
 const FOR_WHOM_TONES: Record<Exclude<ForWhom['kind'], 'none'>, string> = {
-  you: 'bg-honey-soft text-honey-ink',
-  team: 'bg-sea-soft text-sea-ink',
-  own: 'bg-segment text-ink',
+  you: 'bg-honey-soft text-honey-ink inset-ring-honey-ink/10',
+  team: 'bg-sea-soft text-sea-ink inset-ring-sea-ink/10',
+  own: 'bg-segment text-ink inset-ring-ink/10',
 };
 
 const FOR_WHOM_SIZES = {
-  tile: 'h-[22px] px-[9px] text-[11.5px]',
+  tile: 'h-5 px-2 text-[11px]',
   row: 'h-[17px] px-1.5 text-[10px]',
 };
 
@@ -97,11 +98,11 @@ export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance
   if (forWhom.kind === 'none') {
     return null;
   }
-  const look = props.greyed ? 'bg-why-done text-muted' : FOR_WHOM_TONES[forWhom.kind];
+  const look = props.greyed ? 'bg-why-done text-muted inset-ring-muted/10' : FOR_WHOM_TONES[forWhom.kind];
   return (
     <span
       title={whyTitle(props.code, props.provenance)}
-      className={`flex shrink-0 items-center rounded-full font-bold whitespace-nowrap ${FOR_WHOM_SIZES[props.size ?? 'tile']} ${look}`}
+      className={`flex shrink-0 items-center rounded-full font-[650] whitespace-nowrap inset-ring ${FOR_WHOM_SIZES[props.size ?? 'tile']} ${look}`}
     >
       {forWhomLabel(forWhom)}
     </span>
@@ -109,9 +110,9 @@ export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance
 }
 
 const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { icon: ReactNode; tone: string }> = {
-  review: { icon: <Glyph glyph="eye" size={13} strokeWidth={1.6} />, tone: 'text-closer' },
-  approved: { icon: <Glyph glyph="check" size={13} strokeWidth={1.8} />, tone: 'text-status-good' },
-  changes: { icon: <Glyph glyph="changes" size={13} strokeWidth={1.6} />, tone: 'text-status-bad' },
+  review: { icon: <Glyph glyph="eye" size={12} strokeWidth={1.7} />, tone: 'text-closer' },
+  approved: { icon: <Glyph glyph="check" size={12} strokeWidth={1.9} />, tone: 'text-status-good' },
+  changes: { icon: <Glyph glyph="changes" size={12} strokeWidth={1.7} />, tone: 'text-status-bad' },
   merged: { icon: null, tone: 'text-merged-ink' },
   closed: { icon: null, tone: 'text-status-bad' },
 };
@@ -133,9 +134,9 @@ export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STA
     return (
       <span
         title={word.title}
-        className="flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] border border-frame bg-surface px-1.5 text-[10px] font-bold tracking-[0.06em] whitespace-nowrap text-muted"
+        className="flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] bg-surface px-1.5 text-[9.5px] font-bold tracking-[0.07em] whitespace-nowrap text-muted inset-ring inset-ring-frame"
       >
-        <PencilIcon size={10} />
+        <PencilIcon size={9} />
         DRAFT
       </span>
     );
@@ -172,7 +173,7 @@ export function RepoLabel(props: { label: string }) {
   return (
     <span
       title={`In ${props.label}, another repo than the rest of this topic or the one picked in the repo menu`}
-      className="shrink-0 rounded-[4px] border border-pill-line bg-subtle px-1 font-mono text-[10px] leading-[14px] text-muted"
+      className="flex h-4 shrink-0 items-center rounded-[4px] bg-subtle px-[5px] font-mono text-[9.75px] whitespace-nowrap text-hint inset-ring inset-ring-pill-line"
     >
       {props.label}
     </span>
@@ -187,11 +188,11 @@ export function RepoLabel(props: { label: string }) {
  */
 // Semibold, not bold: the bundled JetBrains Mono stops at 600, and 700 would be faux bold.
 export function StackMark(props: { place: StackPlace; greyed?: boolean }) {
-  const look = props.greyed ? 'border-hairline bg-segment text-muted' : 'border-stack-tag-line bg-stack-tag text-stack-tag-ink';
+  const look = props.greyed ? 'bg-segment text-muted inset-ring-hairline' : 'bg-stack-tag text-stack-tag-ink inset-ring-stack-tag-line';
   return (
     <span
       title={stackPlaceTitle(props.place)}
-      className={`flex h-[18px] shrink-0 items-center gap-[3px] rounded-[5px] border px-[5px] font-mono text-[10.5px] font-semibold whitespace-nowrap ${look}`}
+      className={`flex h-[18px] shrink-0 items-center gap-[3px] rounded-[5px] px-[5px] font-mono text-[10.5px] font-semibold whitespace-nowrap inset-ring ${look}`}
     >
       <StackIcon size={11} strokeWidth={1.6} />
       {stackPlaceLabel(props.place)}

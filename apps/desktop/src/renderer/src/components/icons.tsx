@@ -69,9 +69,10 @@ export function SyncIcon(props: IconProps) {
   );
 }
 
-export function ExternalIcon() {
+export function ExternalIcon(props: IconProps) {
+  const size = props.size ?? 12;
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={props.className} aria-hidden="true">
       <path d="M9 2.5h4.5V7M13.5 2.5L7 9M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" />
     </svg>
   );

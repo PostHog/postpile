@@ -25,7 +25,7 @@ export function UnreadStrip(props: { view: TileView }) {
   const text = news ? whatsNewText(news) : reason.summary;
   const split = splitActor(text, actor);
   return (
-    <div className="flex h-[38px] shrink-0 items-center gap-[9px] rounded-t-[11px] border-b border-warm-strip-line bg-warm-strip px-3.5 text-xs text-ink">
+    <div className="flex h-[38px] shrink-0 items-center gap-[9px] rounded-t-tile border-b border-warm-strip-line bg-warm-strip px-3.5 text-xs text-ink">
       <span className="relative shrink-0">
         <Avatar login={actor} size="lg" />
         <span className="absolute -right-1 -bottom-[3px] flex size-[15px] items-center justify-center rounded-full border-[1.5px] border-warm-strip bg-ink text-on-ink">
@@ -78,7 +78,7 @@ export function UnseenMergeStrip(props: { view: TileView }) {
   }
   const split = splitActor(merge.summary, merge.actor);
   return (
-    <div className="flex h-[38px] shrink-0 items-center gap-[9px] rounded-t-[11px] border-b border-hairline bg-subtle px-3.5 text-xs text-ink-2">
+    <div className="flex h-[38px] shrink-0 items-center gap-[9px] rounded-t-tile border-b border-hairline bg-subtle px-3.5 text-xs text-ink-2">
       <span className="relative shrink-0">
         <Avatar login={merge.actor} size="lg" />
         <span className="absolute -right-1 -bottom-[3px] flex size-[15px] items-center justify-center rounded-full border-[1.5px] border-subtle bg-ink-2 text-on-ink">

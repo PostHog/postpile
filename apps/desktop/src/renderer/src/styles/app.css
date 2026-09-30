@@ -102,6 +102,7 @@
   --color-warm-strip-line: var(--warm-strip-line);
   --color-move: var(--move);
   --color-move-line: var(--move-line);
+  --color-move-hover: var(--move-hover);
   --color-on-ink: var(--on-ink);
 
   /* PR status pill */
@@ -125,6 +126,7 @@
   --color-mark-risk: var(--mark-risk);
   --color-closer: var(--closer);
   --color-closer-soft: var(--closer-soft);
+  --color-closer-line: var(--closer-line);
 
   /* PR states */
   --color-open: var(--open);
@@ -172,6 +174,8 @@
   --shadow-selected: var(--elev-selected);
   --shadow-active-row: var(--elev-active-row);
   --shadow-segment: var(--elev-segment);
+  --shadow-face: var(--elev-face);
+  --shadow-move-footer: var(--elev-move-footer);
   --shadow-menu: var(--elev-menu);
   --shadow-picked: var(--elev-picked);
   --shadow-picked-in-tile: var(--elev-picked-in-tile);

@@ -66,6 +66,8 @@
   --line-detail-context: #e3e8f3;
   --bg-group-selected: #f1f5fe; /* PR group fill in the selected tile */
   --set-sep: #9fb3e6; /* the "·" in "Set · 2" */
+  /* The selected tile: a faint blue wash at the top that fades into white. */
+  --bg-tile-selected: linear-gradient(180deg, #f9fbff 0, #fff 72px);
 
   /* Stack mark: the light-blue "1/3" tag on a stack layer's PR row and title.
      A notch stronger than --accent-row so it still reads on a selected row. */
@@ -104,6 +106,7 @@
   --match-line: #e8c97a;
   --move: #fff6dd;
   --move-line: #f1e2b5;
+  --move-hover: #fffcf4; /* secondary buttons in the "Your move" footer */
 
   /* PR status pill: soft tints per segment. Neutral is --quiet-soft + --muted,
      merged is --merged-soft + --merged-ink. */
@@ -125,6 +128,7 @@
   --safe-edge: #0f5a2f;
   --closer: #8a5300;
   --closer-soft: #fbf1dc;
+  --closer-line: #edd08a;
 
   /* Assessment boxes in the detail pane: verdict box (honey for look closer,
      green for looks safe), risk box (red), and the small line marks in them. */
@@ -186,6 +190,9 @@
   --elev-tile: 0 0 0 1px var(--ring-hairline), var(--elev-tile-lift);
   --elev-selected: 0 0 0 4px rgba(33, 86, 217, 0.09), inset 0 1px 0 #fff, 0 1px 2px rgba(16, 24, 40, 0.06), 0 16px 32px -20px rgba(33, 56, 120, 0.38);
   --elev-active-row: 0 0 0 1px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.06);
+  /* Overlapping avatars: a white cut plus a faint outer edge. */
+  --elev-face: 0 0 0 1.5px #fff, 0 0 0 2px rgba(16, 24, 40, 0.06);
+  --elev-move-footer: inset 0 1px 0 var(--move-line), inset 0 2px 0 rgba(255, 255, 255, 0.5);
   --elev-segment: 0 1px 2px rgba(16, 24, 40, 0.1);
   --elev-menu: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 12px 28px -10px rgba(16, 24, 40, 0.3);
   --elev-picked: 0 0 0 1px rgba(33, 86, 217, 0.32), 0 1px 2px rgba(16, 24, 40, 0.06);

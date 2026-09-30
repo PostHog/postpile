@@ -3,7 +3,10 @@ import { useAppConfig } from '../api/config.ts';
 import { avatarTone, avatarUrl, initials, isTeam } from '../lib/people.ts';
 
 const SIZES = {
+  xxs: { box: 'size-3.5 text-[6px]', px: 28 },
+  xs: { box: 'size-4 text-[6.5px]', px: 32 },
   sm: { box: 'size-[18px] text-[7px]', px: 36 },
+  mid: { box: 'size-5 text-[7.5px]', px: 40 },
   md: { box: 'size-[22px] text-[8.5px]', px: 44 },
   lg: { box: 'size-6 text-[9px]', px: 48 },
 };

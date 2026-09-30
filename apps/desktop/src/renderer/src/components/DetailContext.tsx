@@ -1,7 +1,7 @@
 import type { TileView } from '@postpile/core';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindLabel, prNumber, sameForWhom } from '../lib/tiles.ts';
+import { kindParts, prNumber, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon, PrStateIcon } from './icons.tsx';
 import { ForWhomChip, NotDoneDot, StackMark, StateWordLabel } from './pills.tsx';
 
@@ -36,6 +36,7 @@ export function DetailContext(props: DetailContextProps) {
   const count = view.prs.length;
   const several = count > 1;
   const places = stackPlaces(view.tile.stacks);
+  const kind = kindParts(view);
   const index = Math.max(
     view.prs.findIndex((pr) => pr.key === props.prKey),
     0,
@@ -53,7 +54,7 @@ export function DetailContext(props: DetailContextProps) {
       <div className="flex items-center gap-2">
         <span className="flex shrink-0 items-center gap-[5px] text-[12.5px] font-semibold whitespace-nowrap text-accent">
           <KindIcon kind={view.tile.kind} size={14} />
-          {kindLabel(view)}
+          {kind.count === null ? kind.word : `${kind.word} · ${kind.count}`}
         </span>
         {several && (
           <>

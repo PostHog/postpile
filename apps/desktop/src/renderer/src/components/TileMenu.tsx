@@ -1,6 +1,7 @@
 import type { TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { prNumber } from '../lib/tiles.ts';
+import type { ButtonVariant } from './Button.tsx';
 import { Menu, type MenuItem } from './Menu.tsx';
 import { markReadNote } from '../lib/guard.ts';
 
@@ -9,6 +10,8 @@ interface TileMenuProps {
   topics: TopicListItem[];
   /** "Wrong topic" moves one PR: the selected one, else the tile's lead. */
   prKey: string | null;
+  /** Matches the footer's other secondary buttons (honey edge on "Your move"). */
+  variant?: ButtonVariant;
 }
 
 /** Feedback on a tile: not mine, wrong topic. */
@@ -34,6 +37,13 @@ export function TileMenu(props: TileMenuProps) {
       items.push({ label: `Move ${which}to ${item.topic.name}`, onSelect: () => wrongTopic(item.topic.id) });
     }
   }
-  // A glyph label keeps the tile footer room for the whose-turn line.
-  return <Menu label="⋯" title="More" items={items} align="right" />;
+  // Three dots keep the tile footer room for the whose-turn line.
+  const dots = (
+    <span aria-hidden="true" className="flex gap-[2.5px]">
+      <span className="size-[3px] rounded-full bg-muted" />
+      <span className="size-[3px] rounded-full bg-muted" />
+      <span className="size-[3px] rounded-full bg-muted" />
+    </span>
+  );
+  return <Menu label={dots} title="More" items={items} align="right" size="icon" variant={props.variant} />;
 }
