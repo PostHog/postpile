@@ -44,17 +44,17 @@ const SECTION_LOOK: Record<PrTier | 'other', { label: string; text: string; dot:
 };
 
 /**
- * The row's one number: unread PRs (the dots of its tiles), in a small bubble. Coral while an unread
+ * The row's one number: unread tiles, in a small bubble (the dots stay per PR). Coral while an unread
  * tile is still open (the urgency rule), grey when every unread tile is merged
  * or closed. Nothing when all is read.
  */
 function UnreadBubble(props: { item: TopicListItem }) {
   const look = unreadLook(props.item);
-  const count = props.item.unreadPrs;
+  const count = props.item.unreadTiles;
   if (look === null) {
     return null;
   }
-  const label = look === 'urgent' ? `${count} unread ${count === 1 ? 'PR' : 'PRs'}` : `${count} unread, merged or closed since you looked`;
+  const label = look === 'urgent' ? `${count} unread ${count === 1 ? 'tile' : 'tiles'}` : `${count} unread, merged or closed since you looked`;
   const tint = look === 'urgent' ? 'bg-unread text-on-ink' : 'bg-chip text-muted';
   return (
     <span

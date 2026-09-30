@@ -1945,8 +1945,9 @@ unseen loud news, or an unseen Look closer event. Single-PR tiles get it
 too (the multi-PR-only rule is gone), a snoozed tile keeps the dots of its
 unread threads, open and done tiles have none. Seen but still owed is not a
 dot: the honey "Your move" (tile footer, sidebar chip) says it. A topic with
-unread PRs shows the dot, and its bubble counts unread PRs instead of tiles
-(`TopicListItem.unreadPrs`, also the footer's unread number). The passages
+unread PRs shows the dot. Counts are tiles, dots are per PR (owner,
+2026-09-30): the sidebar bubble and the footer's unread number count unread
+tiles (`TopicListItem.unreadTiles`), not PRs. The passages
 above describe the "Not done yet" rule this replaced.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
@@ -2613,8 +2614,8 @@ avatars and filters", QueuesB2).
   click clears. A filter keeps topics with a matching PR (Mine: open PR you
   own; Team: open PR a teammate owns, see "PR ownership"; Reply / Review: that tier) and
   drops sections left empty. It narrows together with the title bar
-  search. In the open topic, matching tiles get the warm strip fill and a
-  honey line, the rest fade to 45% but stay. Plain UI state, not in the
+  search. Queue filters pick topics;
+  tiles inside a topic are never faded by them (owner, 2026-09-30). Plain UI state, not in the
   back / forward history. The avatars come from `GET /api/viewer`. Without
   a home team (`ViewerView.homeTeams` empty) the Team button hides, unless
   it is the active filter (2026-09-30, see "Team roles").

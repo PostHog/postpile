@@ -127,7 +127,7 @@ function prIn(view: TileView, prKey: string | null | undefined): PrSummary | und
 }
 
 /**
- * The tile and PR to show, in this order:
+ * The tile and PR to show, in this order (`deselected` shows none):
  * 1. the picked tile, among the tiles the search lets through;
  * 2. the tile that now holds the picked PR (a set regrouped, a PR left a stack);
  * 3. the kept tile (by id, else by its PR) among all the topic's tiles, so a
@@ -144,7 +144,12 @@ export function resolveSelection(
   matchingPrKeys: Set<string> | null,
   kept: KeptView | null,
   tileFilter: TileFilter = 'all',
+  deselected = false,
 ): { view: TileView | null; prKey: string | null; auto: boolean } {
+  // Switching the grid to Unread clears the selection: nothing is picked, kept or auto-selected until the next pick.
+  if (deselected) {
+    return { view: null, prKey: null, auto: false };
+  }
   const picked = shownTiles.find((candidate) => candidate.tile.id === entry.tileId) ?? tileHolding(shownTiles, entry.prKey);
   // An auto pick made under another grid filter is picked again.
   const usableKept = kept?.auto && kept.auto.tileFilter !== tileFilter ? null : kept;
@@ -169,10 +174,18 @@ export function withSelectedTile(tileIds: Set<string> | null, selectedTileId: st
 }
 
 /**
+ * A tile the Unread filter matches: core's `unread` state, or a snoozed tile
+ * whose thread is unread on GitHub (it keeps its snooze). Nothing else.
+ */
+export function isUnreadTile(view: TileView): boolean {
+  return view.state.kind === 'unread' || (view.state.kind === 'snoozed' && view.state.unreadOnGitHub);
+}
+
+/**
  * The grid's Unread list: every unread tile, and a snoozed one whose thread
  * is unread on GitHub (it keeps its snooze), plus the selected one while it
  * is selected (it just got read).
  */
 export function unreadTiles(views: TileView[], selectedTileId: string | null): TileView[] {
-  return views.filter((view) => view.state.kind === 'unread' || view.state.unreadOnGitHub || view.tile.id === selectedTileId);
+  return views.filter((view) => isUnreadTile(view) || view.tile.id === selectedTileId);
 }

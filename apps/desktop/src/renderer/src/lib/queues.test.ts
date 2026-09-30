@@ -10,7 +10,6 @@ import {
   layoutFromBuckets,
   queueLayout,
   queueRowId,
-  tileMatchesFilter,
   firstGridTile,
   tilesInTierOrder,
   unreadLook,
@@ -181,7 +180,6 @@ describe('queue filters', () => {
     expect(prMatchesFilter(pr({ authorRelation: 'you' }), 'team')).toBe(false);
     expect(prMatchesFilter(pr({ tier: 'needs_reply' }), 'reply')).toBe(true);
     expect(prMatchesFilter(pr({ tier: 'to_review' }), 'reply')).toBe(false);
-    expect(tileMatchesFilter(tile('t', 'rest', [pr({}), pr({ tier: 'to_review' })]), 'review')).toBe(true);
   });
 
   it('never matches a pulled-in stack layer', () => {
