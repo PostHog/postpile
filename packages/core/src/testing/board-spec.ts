@@ -89,6 +89,13 @@ export interface PrSpec {
   /** The Look closer ping fired for a routed team request (only kept when `lookCloserPingCheck` agrees). */
   lookCloser: boolean;
   overrides: OverrideSpec[];
+  /**
+   * The events agent judged the unseen quiet activity of people (not asks)
+   * and left it quiet, as it does for news on unread threads (DESIGN.md
+   * "GitHub unread is PostPile unread"): each such event gets a quiet
+   * override. `overrides` apply after it.
+   */
+  judged: boolean;
   /** The snapshot was cut off at the query's caps. */
   truncated: boolean;
   /** The snapshot is older than the thread's last update. */
@@ -112,6 +119,7 @@ export const QUIET_PR: PrSpec = {
   glance: null,
   lookCloser: false,
   overrides: [],
+  judged: false,
   truncated: false,
   staleSnapshot: false,
   pendingWrite: false,
@@ -251,6 +259,7 @@ export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
   glance: maybe(fc.constantFrom<Verdict>('LOOKS_SAFE', 'LOOK_CLOSER', 'NOT_YOURS'), 60),
   lookCloser: sometimes(3, 1),
   overrides: fc.array(fc.record({ pick: fc.nat({ max: 20 }), loudness: fc.constantFrom<OverrideSpec['loudness']>('quiet', 'loud', 'muted') }), { maxLength: 2 }),
+  judged: sometimes(1, 1),
   truncated: sometimes(1, 6),
   staleSnapshot: sometimes(1, 6),
   pendingWrite: fc.boolean(),

@@ -15,6 +15,7 @@ describe('Handled quietly helpers', () => {
     expect(quietReasonText({ reason: 'approved', bots: [] })).toBe('you approved after it');
     expect(quietReasonText({ reason: 'replied', bots: [] })).toBe('you replied after it');
     expect(quietReasonText({ reason: 'opened', bots: [] })).toBe('opened in PostPile');
+    expect(quietReasonText({ reason: 'judged', bots: ['lyra', 'CI'] })).toBe('nothing for you from lyra, CI');
   });
 
   it('names the PR as repo#number', () => {

@@ -8,6 +8,7 @@
 import { eventsSeenByTouch } from '../last-touch.ts';
 import { at, makePr } from '../fixtures.ts';
 import { deriveEvents } from '../events.ts';
+import { ADDRESSED_KINDS } from '../kinds.ts';
 import { ownEventsOnReadThread } from '../github-read.ts';
 import { lookCloserEvent, lookCloserPingCheck } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
@@ -439,6 +440,15 @@ export interface PropertyBoard {
   tiles: Tile[];
 }
 
+/** Kinds the events agent is never asked about for clearing: asks stay the viewer's to deal with. */
+const ASK_KINDS: readonly PrEvent['kind'][] = [...ADDRESSED_KINDS, 'review_requested', 'merged_without_review'];
+
+/** A person's unseen quiet event without an override: what the events agent now also judges on an unread thread. */
+function isJudgedByTheAgent(event: PrEvent, viewer: Viewer): boolean {
+  const person = !event.isBot && event.actor !== '' && !sameLogin(event.actor, viewer.login);
+  return person && event.seenAt === null && event.override === null && event.ruleLoudness === 'quiet' && !ASK_KINDS.includes(event.kind);
+}
+
 /**
  * GitHub's read time of the PR's thread: the recipe's read, and a Mark read
  * or Approve in the app, which reach GitHub at the click (the recipe's clicks
@@ -504,6 +514,10 @@ function storedPrState(input: {
     const after = applyPlan(pr.key, events, userState, { kind: 'pending_completion', clickedAt }, clickedAt, input.tracked);
     events = after.events;
     userState = after.userState;
+  }
+  // The events agent judged people's unseen quiet activity (not asks) and left it quiet.
+  if (spec.judged) {
+    events = events.map((event) => (isJudgedByTheAgent(event, viewer) ? { ...event, override: { loudness: 'quiet', reason: 'nothing here needs you', by: 'agent' } } : event));
   }
   // The events agent's overrides, on derived events only.
   const derived = events.filter((event) => event.kind !== 'look_closer');

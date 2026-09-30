@@ -2,22 +2,25 @@
 // only because of bots (CI, merge queue, review bots, deploys). PostPile marks
 // it read on GitHub by itself when nothing is asked of the user. A second
 // reason: the user acted on the PR after every unread event ("You already
-// dealt with it"), and a third, opening the PR in PostPile, is decided by the
-// engine from the tile. Notifications that are not PRs (releases, issues)
-// are marked read too. Rules only, no IO. DESIGN.md "Handled quietly", "You
-// already dealt with it" and "GitHub unread is PostPile unread" have the
-// reasons behind each rule.
+// dealt with it"); a third: everything since they last looked is automation
+// or a person's activity the events agent judged as not needing them ("GitHub
+// unread is PostPile unread"); a fourth, opening the PR in PostPile, is
+// decided by the engine from the tile. Notifications that are not PRs
+// (releases, issues) are marked read too. Rules only, no IO. DESIGN.md
+// "Handled quietly", "You already dealt with it" and "GitHub unread is
+// PostPile unread" have the reasons behind each rule.
 //
 // A thread unread on GitHub keeps its tile unread until one of these clears
-// it (DESIGN.md "GitHub unread is PostPile unread"), so none of them may look
-// at whether the tile is unread (it always is). The safety check that stands
-// in for that is `unseen_loud`: no unseen loud event on the PR.
+// it, so none of them may look at whether the tile is unread (it always is).
+// The safety check that stands in for that is `unseen_loud`: no unseen loud
+// event on the PR.
 
 import { isAutomation } from './bots.ts';
 import type { NotificationLanding } from './debug-views.ts';
+import { ADDRESSED_KINDS } from './kinds.ts';
 import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
-import { isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
-import { sameLogin } from './mentions.ts';
+import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
+import { isViewerSubject, sameLogin } from './mentions.ts';
 import { reviewRequestTarget } from './review-request.ts';
 import type { IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
@@ -172,10 +175,11 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
  * Why PostPile marked a thread read by itself:
  * - bots: only bot activity since the user's last read
  * - approved, changes_requested, reviewed, replied: the user acted on the PR after every unread event
+ * - judged: since the user last looked only automation and people's activity the events agent judged as not needing them
  * - opened: the user opened the PR in PostPile while nothing was asked of them
  * - not_pr: a notification that is not a PR (a release, an issue)
  */
-export type QuietReason = 'bots' | TouchReason | 'opened' | 'not_pr';
+export type QuietReason = 'bots' | TouchReason | 'judged' | 'opened' | 'not_pr';
 
 /** The "you acted after it" reasons, by the user's newest review or comment. */
 export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'replied';
@@ -259,6 +263,144 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
 }
 
 /**
+ * An ask of the viewer, never cleared by PostPile itself: a mention, team
+ * mention, question or reply to them, a review request of them or their
+ * team (whoever clicked it), a merge without their review they have not
+ * seen. The agent lowering it does not change that: only the viewer deals
+ * with an ask.
+ */
+export function isAskOfViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
+  if (ADDRESSED_KINDS.includes(event.kind)) {
+    return true;
+  }
+  if (event.kind === 'review_requested') {
+    return isViewerSubject(reviewRequestTarget(event, pr), viewer);
+  }
+  return isUnseenMergeWithoutReview(event);
+}
+
+/**
+ * A person's activity the events agent (or the user) looked at and left
+ * below loud: it needs nothing from the viewer. Without an override nobody
+ * judged it yet.
+ */
+export function isJudgedQuiet(event: PrEvent): boolean {
+  return event.override !== null && event.override.loudness !== 'loud';
+}
+
+/**
+ * A person's quiet event the judged rule waits on: someone else's, not
+ * automation, not an ask, still at its rule's loudness (no override) and
+ * unseen. On an unread thread the events agent gets it (DESIGN.md "GitHub
+ * unread is PostPile unread"): left quiet it becomes clearable, raised to
+ * loud it pings and keeps the thread unread.
+ */
+export function awaitsJudgement(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
+  if (event.override !== null || event.seenAt !== null || event.ruleLoudness !== 'quiet') {
+    return false;
+  }
+  return !isOwnEvent(event, viewer) && !isAutomationOn(event, pr, viewer) && !isAskOfViewer(event, pr, viewer);
+}
+
+/**
+ * Where "since you last looked" starts for the judged rule: the newer of
+ * GitHub's read time and the viewer's last review or comment. Null when they
+ * never read the thread and never reviewed or commented.
+ */
+export function lastLookedAt(thread: NotificationThread, pr: Pr, events: PrEvent[], viewer: Viewer): IsoTime | null {
+  const touch = lastTouch(pr, events, viewer, { kinds: READING_TOUCH_KINDS });
+  const times = [thread.lastReadAt, touch?.at ?? null].filter((time): time is IsoTime => time !== null);
+  return times.sort().at(-1) ?? null;
+}
+
+/**
+ * Why a thread is left alone by the judged rule:
+ * - not_unread: GitHub has it read already
+ * - stale_snapshot: the stored PR snapshot is older than the thread's last update, or cut off at the query's caps
+ * - never_looked: the user never read the thread and never reviewed or commented on the PR
+ * - nothing_known: nothing by someone else since the user last looked
+ * - asks_you: an ask of the user came since (`isAskOfViewer`)
+ * - unseen_loud: loud news since, or unseen loud news on the PR
+ * - no_people: only automation since: the bot-only and acted-after rules decide
+ * - not_judged: a person's activity since that the events agent has not judged yet
+ * - own_pr: automation acted since on the user's own open PR, which can mean work
+ * - unseen_merge: a merge without the user's review they have not seen
+ * - your_move: whose turn is the user's
+ * - grace: the newest activity is less than QUIET_GRACE_MS old
+ */
+export type JudgedSkip =
+  | 'not_unread'
+  | 'stale_snapshot'
+  | 'never_looked'
+  | 'nothing_known'
+  | 'asks_you'
+  | 'unseen_loud'
+  | 'no_people'
+  | 'not_judged'
+  | 'own_pr'
+  | 'unseen_merge'
+  | 'your_move'
+  | 'grace';
+
+/** `actors`: everyone since the user last looked, in order of first appearance, "CI" for actor-less events. */
+export type JudgedReadCheck = { kind: 'mark'; actors: string[] } | { kind: 'skip'; why: JudgedSkip };
+
+/**
+ * Whether PostPile may mark this PR thread read on GitHub because everything
+ * since the user last looked (`lastLookedAt`) is automation or a person's
+ * activity the events agent judged as not needing them, with no ask among it
+ * (DESIGN.md "GitHub unread is PostPile unread", 2026-09-30). The same
+ * safety checks as the bot-only rule: fresh complete snapshot, not bots on
+ * the user's own open PR, no unseen merge, not their move, the grace. Agent
+ * NOT_YOURS, age, merged or closed, an old handled mark or approval are not
+ * evidence here.
+ */
+export function judgedReadCheck(input: QuietReadInput): JudgedReadCheck {
+  const { thread, pr, events, viewer } = input;
+  if (!thread.unread) {
+    return { kind: 'skip', why: 'not_unread' };
+  }
+  if (!prCoversThread(input)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
+  }
+  const since = lastLookedAt(thread, pr, events, viewer);
+  if (since === null) {
+    return { kind: 'skip', why: 'never_looked' };
+  }
+  const after = events.filter((event) => !isOwnEvent(event, viewer) && event.at > since);
+  if (after.length === 0) {
+    return { kind: 'skip', why: 'nothing_known' };
+  }
+  if (after.some((event) => isAskOfViewer(event, pr, viewer))) {
+    return { kind: 'skip', why: 'asks_you' };
+  }
+  if (events.some(isUnseenLoud) || after.some((event) => effectiveLoudness(event) === 'loud')) {
+    return { kind: 'skip', why: 'unseen_loud' };
+  }
+  const people = after.filter((event) => !isAutomationOn(event, pr, viewer));
+  if (people.length === 0) {
+    return { kind: 'skip', why: 'no_people' };
+  }
+  if (!people.every(isJudgedQuiet)) {
+    return { kind: 'skip', why: 'not_judged' };
+  }
+  if (people.length < after.length && isOwnOpenPr(pr, viewer)) {
+    return { kind: 'skip', why: 'own_pr' };
+  }
+  if (events.some(isUnseenMergeWithoutReview)) {
+    return { kind: 'skip', why: 'unseen_merge' };
+  }
+  if (prWhoseTurn({ pr, events, userState: input.userState, viewer, notYours: input.notYours }).kind === 'you') {
+    return { kind: 'skip', why: 'your_move' };
+  }
+  const newest = [thread.updatedAt, since, ...after.map((event) => event.at)].sort().at(-1) ?? thread.updatedAt;
+  if (new Date(input.now).getTime() - new Date(newest).getTime() < QUIET_GRACE_MS) {
+    return { kind: 'skip', why: 'grace' };
+  }
+  return { kind: 'mark', actors: botNames(after) };
+}
+
+/**
  * A notification that is not a PR (a release, an issue, a discussion):
  * PostPile shows none of them, so it marks them read on GitHub by itself
  * (DESIGN.md "GitHub unread is PostPile unread": "People who use PostPile
@@ -336,9 +478,13 @@ export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
 }
 
 const QUIET_DETAIL_PREFIX = 'only bot activity since your last read: ';
+const JUDGED_DETAIL_PREFIX = 'nothing that needs you since you last looked: ';
 
-/** Action log details of the quiet mark-reads that are not about bots; the Handled quietly view reads the reason back. */
-const QUIET_REASON_DETAILS: Record<Exclude<QuietReason, 'bots'>, string> = {
+/** The quiet reasons whose log detail names who acted. */
+type NamedReason = 'bots' | 'judged';
+
+/** Action log details of the quiet mark-reads that name nobody; the Handled quietly view reads the reason back. */
+const QUIET_REASON_DETAILS: Record<Exclude<QuietReason, NamedReason>, string> = {
   approved: 'you approved after it',
   changes_requested: 'you requested changes after it',
   reviewed: 'you reviewed after it',
@@ -347,29 +493,43 @@ const QUIET_REASON_DETAILS: Record<Exclude<QuietReason, 'bots'>, string> = {
   not_pr: 'not a pull request',
 };
 
+function namesAfter(detail: string, prefix: string): string[] {
+  return detail
+    .slice(prefix.length)
+    .split(', ')
+    .filter((name) => name !== '');
+}
+
 /** Action log detail of a quiet mark-read, naming the bots. */
 export function quietReadDetail(bots: string[]): string {
   return `${QUIET_DETAIL_PREFIX}${bots.join(', ')}`;
 }
 
-/** The bots a quiet mark-read's log detail names; empty for any other detail. */
-export function botsFromQuietDetail(detail: string): string[] {
-  if (!detail.startsWith(QUIET_DETAIL_PREFIX)) {
-    return [];
-  }
-  return detail
-    .slice(QUIET_DETAIL_PREFIX.length)
-    .split(', ')
-    .filter((name) => name !== '');
+/** Action log detail of a judged quiet mark-read, naming everyone since the user last looked. */
+export function judgedReadDetail(actors: string[]): string {
+  return `${JUDGED_DETAIL_PREFIX}${actors.join(', ')}`;
 }
 
-/** Action log detail of a quiet mark-read for any reason but bots. */
-export function quietReasonDetail(reason: Exclude<QuietReason, 'bots'>): string {
+/** The bots a quiet mark-read's log detail names; empty for any other detail. */
+export function botsFromQuietDetail(detail: string): string[] {
+  return detail.startsWith(QUIET_DETAIL_PREFIX) ? namesAfter(detail, QUIET_DETAIL_PREFIX) : [];
+}
+
+/** Who a quiet mark-read's log detail names: the bots, or everyone since the user last looked; empty for any other detail. */
+export function actorsFromQuietDetail(detail: string): string[] {
+  return detail.startsWith(JUDGED_DETAIL_PREFIX) ? namesAfter(detail, JUDGED_DETAIL_PREFIX) : botsFromQuietDetail(detail);
+}
+
+/** Action log detail of a quiet mark-read for a reason that names nobody. */
+export function quietReasonDetail(reason: Exclude<QuietReason, NamedReason>): string {
   return QUIET_REASON_DETAILS[reason];
 }
 
 /** The reason behind a quiet mark-read's log detail. Anything else is a bot-only one, the first and once the only reason. */
 export function quietReasonFromDetail(detail: string): QuietReason {
+  if (detail.startsWith(JUDGED_DETAIL_PREFIX)) {
+    return 'judged';
+  }
   for (const [reason, text] of Object.entries(QUIET_REASON_DETAILS)) {
     if (detail === text) {
       return reason as QuietReason;
@@ -390,7 +550,7 @@ export interface QuietReadView {
   /** The PR's title, else the notification's, else the key. */
   title: string;
   reason: QuietReason;
-  /** The bots, for the reason `bots`; empty otherwise. */
+  /** Who acted: the bots for the reason `bots`, everyone since the user last looked for `judged`; empty otherwise. */
   bots: string[];
   /** Where the PR shows in the app now, so a click can open its tile. */
   landing: NotificationLanding;

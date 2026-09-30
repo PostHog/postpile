@@ -3,8 +3,11 @@ import { at, makeEvent, makePr, makeThreadFor, makeTimelineItem, viewer } from '
 import {
   botNames,
   botOnlySinceRead,
+  actorsFromQuietDetail,
   botsFromQuietDetail,
   isClearableNonPr,
+  judgedReadCheck,
+  judgedReadDetail,
   openedReadCheck,
   quietReadCheck,
   quietReadDetail,
@@ -239,6 +242,65 @@ describe('touchedReadCheck', () => {
   });
 });
 
+describe('judgedReadCheck', () => {
+  const judgedQuiet = { loudness: 'quiet' as const, reason: 'a thanks, nothing to do', by: 'agent' as const };
+  const teammate = (minute: number, overrides: Partial<PrEvent> = {}) =>
+    makeEvent({ id: `lyra-${minute}`, prKey: pr.key, kind: 'comment', actor: 'lyra', at: at(minute), summary: 'lyra commented', ...overrides });
+
+  // Read at 20; lyra commented at 30 and the agent judged it quiet; CI at 31. Now is 60.
+  function judged(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
+    return input({ events: [humanComment(5), teammate(30, { override: judgedQuiet }), ciResult(31)], ...overrides });
+  }
+
+  it('marks when everything since the read is automation or a person the agent judged as not needing you', () => {
+    expect(judgedReadCheck(judged())).toEqual({ kind: 'mark', actors: ['lyra', 'CI'] });
+    expect(judgedReadDetail(['lyra', 'CI'])).toBe('nothing that needs you since you last looked: lyra, CI');
+    expect(quietReasonFromDetail(judgedReadDetail(['lyra', 'CI']))).toBe('judged');
+    expect(actorsFromQuietDetail(judgedReadDetail(['lyra', 'CI']))).toEqual(['lyra', 'CI']);
+  });
+
+  it('counts from the newer of the read and the viewer review or comment', () => {
+    const neverRead = makeThreadFor(pr, { lastReadAt: null, updatedAt: at(31), unread: true });
+    expect(judgedReadCheck(judged({ thread: neverRead }))).toEqual({ kind: 'skip', why: 'never_looked' });
+    const ownComment = makeEvent({ id: 'own', prKey: pr.key, kind: 'comment', actor: viewer.login, at: at(25), seenAt: at(25) });
+    const events = [humanComment(5), ownComment, teammate(30, { override: judgedQuiet })];
+    expect(judgedReadCheck(judged({ thread: neverRead, events }))).toEqual({ kind: 'mark', actors: ['lyra'] });
+  });
+
+  it('waits for the agent: a person not judged yet, or judged as needing you, keeps it unread', () => {
+    expect(judgedReadCheck(judged({ events: [teammate(30), ciResult(31)] }))).toEqual({ kind: 'skip', why: 'not_judged' });
+    const raised = teammate(30, { override: { loudness: 'loud', reason: 'asks for a decision', by: 'agent' } });
+    expect(judgedReadCheck(judged({ events: [raised] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
+  });
+
+  it('never clears an ask, even one the agent lowered', () => {
+    const mention = teammate(30, { kind: 'mention', ruleLoudness: 'loud', override: judgedQuiet });
+    expect(judgedReadCheck(judged({ events: [mention] }))).toEqual({ kind: 'skip', why: 'asks_you' });
+    const request = makeEvent({ id: 'req', prKey: pr.key, kind: 'review_requested', actor: 'alice', at: at(30), sourceId: 'rr1', override: judgedQuiet });
+    const asked = { ...pr, timeline: [makeTimelineItem({ id: 'rr1', actor: 'alice', subject: 'acme/team-platform', at: at(30) })] };
+    const teamViewer = { ...viewer, teams: ['acme/team-platform'] };
+    expect(judgedReadCheck(judged({ pr: asked, events: [request], viewer: teamViewer }))).toEqual({ kind: 'skip', why: 'asks_you' });
+    const merged = { ...pr, state: 'MERGED' as const, mergedAt: at(30) };
+    const merge = makeEvent({ id: 'merge', prKey: pr.key, kind: 'merged_without_review', actor: 'lyra', at: at(30), override: judgedQuiet });
+    expect(judgedReadCheck(judged({ pr: merged, events: [merge] }))).toEqual({ kind: 'skip', why: 'asks_you' });
+  });
+
+  it('leaves bots-only threads to the other rules, and bots on your own open PR alone', () => {
+    expect(judgedReadCheck(judged({ events: [ciResult(31)] }))).toEqual({ kind: 'skip', why: 'no_people' });
+    const own = { ...pr, author: viewer.login };
+    expect(judgedReadCheck(judged({ pr: own }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(judgedReadCheck(judged({ pr: own, events: [teammate(30, { override: judgedQuiet })] })).kind).toBe('mark');
+  });
+
+  it('keeps the safety checks: snapshot, your move, grace', () => {
+    expect(judgedReadCheck(judged({ prFetchedAt: at(30) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    const asked = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [makeTimelineItem({ actor: 'alice', subject: viewer.login, at: at(1) })] });
+    expect(judgedReadCheck(judged({ pr: asked }))).toEqual({ kind: 'skip', why: 'your_move' });
+    expect(judgedReadCheck(judged({ now: at(40) }))).toEqual({ kind: 'skip', why: 'grace' });
+    expect(judgedReadCheck(judged({ events: [humanComment(5)] }))).toEqual({ kind: 'skip', why: 'nothing_known' });
+  });
+});
+
 describe('isClearableNonPr', () => {
   it('clears releases and issues past the grace, never PRs or read threads', () => {
     const release = { ...makeThreadFor(pr, { updatedAt: at(10) }), subjectType: 'Release', number: null };
@@ -263,7 +325,6 @@ describe('quiet read detail', () => {
     expect(quietReasonDetail('opened')).toBe('opened in PostPile');
     expect(quietReasonFromDetail(quietReasonDetail('changes_requested'))).toBe('changes_requested');
     expect(quietReasonFromDetail(quietReasonDetail('opened'))).toBe('opened');
-    expect(quietReasonFromDetail(quietReasonDetail('not_pr'))).toBe('not_pr');
     expect(quietReasonFromDetail(quietReadDetail(['CI']))).toBe('bots');
   });
 });

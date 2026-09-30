@@ -3,7 +3,7 @@
 // unread is PostPile unread", "Live poll and Mac pings", "Look closer pings").
 import { lookCloserEvent } from '../glance-pings.ts';
 import { pingRule } from '../pings.ts';
-import { quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
+import { judgedReadCheck, quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { snoozePhase } from '../snooze.ts';
 import type { NotificationThread, Pr, PrEvent, PrKey } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
@@ -11,7 +11,7 @@ import type { BoardSpec } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
 import { isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits } from './spec-facts.ts';
-import { expectedSnoozePhase, isAutomationEvent } from './spec-rules.ts';
+import { expectedSnoozePhase, isAskEvent, isAutomationEvent, lastLooked } from './spec-rules.ts';
 
 /**
  * Why a tracked open PR can sit in To review while its move is not Review,
@@ -104,11 +104,12 @@ function quietInput(board: PropertyBoard, key: PrKey, thread: NotificationThread
 /**
  * The quiet mark-reads never hide an ask: the bot-only rule never marks
  * while a person's loud news is unseen, the acted-after rule only when the
- * viewer reviewed or commented after every such news, and neither trusts a
- * truncated snapshot.
+ * viewer reviewed or commented after every such news, the judged rule never
+ * while a person's activity since the viewer last looked is loud or not
+ * judged by the agent, and none trusts a truncated snapshot.
  */
 export const quietReadsNeverHideAsks: Invariant = {
-  name: 'quiet reads never hide unseen human news the viewer did not act after, nor trust a truncated snapshot',
+  name: 'quiet reads never hide unseen human news the viewer did not act after or the agent did not judge, nor trust a truncated snapshot',
   check(board, views) {
     for (const [key, thread] of board.threads) {
       if (holdingViews(views, key).length === 0) {
@@ -119,6 +120,7 @@ export const quietReadsNeverHideAsks: Invariant = {
       const input = quietInput(board, key, thread);
       const quiet = quietReadCheck(input);
       const touched = touchedReadCheck(input);
+      const judged = judgedReadCheck(input);
       const humanNews = events.filter((event) => isNews(event) && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event));
       if (quiet.kind === 'mark') {
         ensure(!pr.truncated, `${key}: bot-only quiet read on a truncated snapshot`);
@@ -130,6 +132,49 @@ export const quietReadsNeverHideAsks: Invariant = {
         const after = humanNews.filter((event) => touch === null || event.at >= touch.at);
         ensure(after.length === 0, `${key}: acted-after quiet read with human news after the touch: ${after.map((event) => event.id).join(', ')}`);
       }
+      if (judged.kind === 'mark') {
+        ensure(!pr.truncated, `${key}: judged quiet read on a truncated snapshot`);
+        ensure(humanNews.length === 0, `${key}: judged quiet read with human news ${humanNews.map((event) => event.id).join(', ')}`);
+        const since = lastLooked(thread, pr, board.viewer)!;
+        const unjudged = events.filter(
+          (event) => event.at > since && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event) && (event.override === null || event.override.loudness === 'loud'),
+        );
+        ensure(unjudged.length === 0, `${key}: judged quiet read with activity the agent did not judge quiet: ${unjudged.map((event) => event.id).join(', ')}`);
+      }
+    }
+  },
+};
+
+/**
+ * Asks never auto-clear (DESIGN "GitHub unread is PostPile unread"): no
+ * quiet mark-read, whatever its reason, marks a thread while an ask of the
+ * viewer on it is unseen, nor while one came after the viewer last looked
+ * (a review request of them or their team, a mention, a team mention, a
+ * question or reply to them, an unseen merge without their review), also
+ * after the agent lowered it.
+ */
+export const asksNeverAutoClear: Invariant = {
+  name: 'no quiet read marks a thread while an ask of the viewer on it is unseen or came since they last looked',
+  check(board, views) {
+    for (const [key, thread] of board.threads) {
+      if (holdingViews(views, key).length === 0) {
+        continue;
+      }
+      const pr = prOf(board, key);
+      const input = quietInput(board, key, thread);
+      const reasons = [
+        quietReadCheck(input).kind === 'mark' ? 'bots' : null,
+        touchedReadCheck(input).kind === 'mark' ? 'acted after' : null,
+        judgedReadCheck(input).kind === 'mark' ? 'judged' : null,
+      ].filter((reason) => reason !== null);
+      if (reasons.length === 0) {
+        continue;
+      }
+      const since = lastLooked(thread, pr, board.viewer);
+      const asks = eventsOf(board, key).filter(
+        (event) => !isViewerLogin(board.viewer, event.actor) && isAskEvent(pr, board.viewer, event) && (event.seenAt === null || (since !== null && event.at > since)),
+      );
+      ensure(asks.length === 0, `${key}: quiet read (${reasons.join(', ')}) with asks ${asks.map((event) => event.id).join(', ')}`);
     }
   },
 };
@@ -207,6 +252,7 @@ export const PR_INVARIANTS: readonly Invariant[] = [
   toReviewMatchesReviewMove,
   snoozeLifecycle,
   quietReadsNeverHideAsks,
+  asksNeverAutoClear,
   pingsOnlyForLiveNews,
   botRequestWorksLikeHuman,
 ];

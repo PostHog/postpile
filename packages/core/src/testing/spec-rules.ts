@@ -10,7 +10,7 @@ import type { LookCloserPing } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
 import type { PingRuleClass } from '../pings.ts';
 import type { PrTier } from '../pr-tier.ts';
-import type { OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
+import type { JudgedReadCheck, OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
 import type { YourMove } from '../whose-turn.ts';
@@ -700,6 +700,82 @@ export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>)
     return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', reason: TOUCH_REASONS[touch.kind]! };
+}
+
+/**
+ * An ask of the viewer (DESIGN "GitHub unread is PostPile unread": never
+ * clearable by itself): a mention, team mention, question or reply to them,
+ * a review request naming them or their team (whoever made it), a merge
+ * without their review they have not seen. Whatever the agent made of it.
+ */
+export function isAskEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
+  if (SPEC_ADDRESSED_KINDS.includes(event.kind)) {
+    return true;
+  }
+  if (event.kind === 'review_requested') {
+    return asksViewer(viewer, requestSubjectOf(pr, event));
+  }
+  return isUnseenMergeWithoutViewer(event);
+}
+
+/** The newer of GitHub's read time and the viewer's last review or comment; null when neither exists. */
+export function lastLooked(thread: NotificationThread, pr: Pr, viewer: Viewer): IsoTime | null {
+  const touch = newestTouch(pr, viewer, READING_TOUCHES);
+  const times = [thread.lastReadAt, touch?.at ?? null].filter((time): time is IsoTime => time !== null);
+  return times.toSorted().at(-1) ?? null;
+}
+
+/**
+ * "GitHub unread is PostPile unread" (2026-09-30): everything by someone
+ * else since the viewer last looked is automation or a person's activity
+ * the events agent (or the user) left below loud, with no ask among it and
+ * no loud news; at least one person, else the bot-only and acted-after
+ * rules decide. Plus the safety checks: fresh complete snapshot, no bots on
+ * the viewer's own open PR, no unseen merge without their review, not their
+ * move, past the grace. Liveness too: all of that holds, so it marks.
+ */
+export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
+  const { thread, pr, viewer } = input;
+  if (!thread.unread) {
+    return { kind: 'skip', why: 'not_unread' };
+  }
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
+  }
+  const since = lastLooked(thread, pr, viewer);
+  if (since === null) {
+    return { kind: 'skip', why: 'never_looked' };
+  }
+  const after = othersEvents(input).filter((event) => event.at > since);
+  if (after.length === 0) {
+    return { kind: 'skip', why: 'nothing_known' };
+  }
+  if (after.some((event) => isAskEvent(pr, viewer, event))) {
+    return { kind: 'skip', why: 'asks_you' };
+  }
+  if (input.events.some(isUnseenLoudEvent) || after.some((event) => effectiveLoudnessOf(event) === 'loud')) {
+    return { kind: 'skip', why: 'unseen_loud' };
+  }
+  const people = after.filter((event) => !isAutomationEvent(pr, viewer, event));
+  if (people.length === 0) {
+    return { kind: 'skip', why: 'no_people' };
+  }
+  if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
+    return { kind: 'skip', why: 'not_judged' };
+  }
+  if (people.length < after.length && isOwnOpenPr(pr, viewer)) {
+    return { kind: 'skip', why: 'own_pr' };
+  }
+  if (input.events.some(isUnseenMergeWithoutViewer)) {
+    return { kind: 'skip', why: 'unseen_merge' };
+  }
+  if (input.yourMove) {
+    return { kind: 'skip', why: 'your_move' };
+  }
+  if (withinGrace(input.now, [thread.updatedAt, since, ...after.map((event) => event.at)])) {
+    return { kind: 'skip', why: 'grace' };
+  }
+  return { kind: 'mark', actors: actorNames(after) };
 }
 
 /**

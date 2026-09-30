@@ -5,7 +5,7 @@
 import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
-import { quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
+import { judgedReadCheck, quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
 import { snoozePhase } from '../snooze.ts';
 import { sameLogin } from '../mentions.ts';
@@ -151,6 +151,8 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
       now: board.now,
     };
     labels.push(`quiet-read:${quietReadCheck(input).kind}`, `touched-read:${touchedReadCheck(input).kind}`);
+    const judged = judgedReadCheck(input);
+    labels.push(judged.kind === 'mark' ? 'judged-read:mark' : `judged-read:${judged.why}`);
   }
   if (prWhoseTurn({ pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer }).kind === 'them') {
     labels.push('pr-turn:them');
@@ -245,6 +247,10 @@ export const REQUIRED_LABELS: readonly string[] = [
   'ping:quiet',
   'quiet-read:mark',
   'touched-read:mark',
+  'judged-read:mark',
+  'judged-read:asks_you',
+  'judged-read:not_judged',
+  'judged-read:never_looked',
   'shape:done PR with an unread thread',
   'shape:unread with only quiet news',
   'shape:loud news on a read tile',

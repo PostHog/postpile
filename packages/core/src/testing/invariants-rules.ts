@@ -7,8 +7,18 @@
 import { lookCloserPingCheck } from '../glance-pings.ts';
 import { displayState } from '../loudness.ts';
 import { lookCloserPingText, pingRule, pingTemplate } from '../pings.ts';
-import { botsFromQuietDetail, quietReadCheck, quietReadDetail, quietReasonDetail, quietReasonFromDetail, touchedReadCheck } from '../quiet-reads.ts';
-import type { QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
+import {
+  actorsFromQuietDetail,
+  botsFromQuietDetail,
+  judgedReadCheck,
+  judgedReadDetail,
+  quietReadCheck,
+  quietReadDetail,
+  quietReasonDetail,
+  quietReasonFromDetail,
+  touchedReadCheck,
+} from '../quiet-reads.ts';
+import type { JudgedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { PrEvent, PrKey, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
@@ -18,6 +28,7 @@ import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest } from './
 import {
   effectiveLoudnessOf,
   expectedDone,
+  expectedJudgedRead,
   expectedLookCloser,
   expectedLookCloserText,
   expectedPing,
@@ -171,15 +182,16 @@ function dayLater(now: string): string {
 }
 
 /**
- * Both quiet mark-reads follow the spec's skip list (DESIGN "Handled
- * quietly", "You already dealt with it"), and mark when nothing on it
- * holds: bot-only activity past the grace on someone else's PR gets read.
- * Checked now and a day later. Whether the tile is unread is no input any
- * more: a thread unread on GitHub always makes it so ("GitHub unread is
- * PostPile unread").
+ * The quiet mark-reads follow the spec's skip lists (DESIGN "Handled
+ * quietly", "You already dealt with it", "GitHub unread is PostPile
+ * unread"), and mark when nothing on them holds: bot-only activity past the
+ * grace on someone else's PR gets read, and so does a person's activity the
+ * agent judged as not needing the viewer. Checked now and a day later.
+ * Whether the tile is unread is no input any more: a thread unread on GitHub
+ * always makes it so.
  */
 export const quietReadsMatchTheSpec: Invariant = {
-  name: 'quiet reads skip for the spec reasons and mark when none holds (bots only past the grace, acted after)',
+  name: 'quiet reads skip for the spec reasons and mark when none holds (bots only past the grace, acted after, judged by the agent)',
   check(board, views) {
     for (const [key, thread] of board.threads) {
       const holding = holdingViews(views, key);
@@ -205,14 +217,17 @@ export const quietReadsMatchTheSpec: Invariant = {
         const touchedCheck = touchedReadCheck(input);
         const expectedTouched = JSON.stringify(expectedTouchedRead(input));
         ensure(JSON.stringify(touchedCheck) === expectedTouched, `${key}: acted-after read ${JSON.stringify(touchedCheck)}, expected ${expectedTouched}`);
-        quietDetailsReadBack(key, quietCheck, touchedCheck);
+        const judgedCheck = judgedReadCheck(input);
+        const expectedJudged = JSON.stringify(expectedJudgedRead({ ...input, yourMove }));
+        ensure(JSON.stringify(judgedCheck) === expectedJudged, `${key}: judged read ${JSON.stringify(judgedCheck)}, expected ${expectedJudged}`);
+        quietDetailsReadBack(key, quietCheck, touchedCheck, judgedCheck);
       }
     }
   },
 };
 
-/** The action log detail of a quiet read gives its reason (and bots) back, so the Handled quietly view can say why. */
-function quietDetailsReadBack(key: PrKey, quiet: QuietReadCheck, touched: TouchedReadCheck): void {
+/** The action log detail of a quiet read gives its reason (and who acted) back, so the Handled quietly view can say why. */
+function quietDetailsReadBack(key: PrKey, quiet: QuietReadCheck, touched: TouchedReadCheck, judged: JudgedReadCheck): void {
   if (quiet.kind === 'mark') {
     const detail = quietReadDetail(quiet.bots);
     ensure(JSON.stringify(botsFromQuietDetail(detail)) === JSON.stringify(quiet.bots) && quietReasonFromDetail(detail) === 'bots', `${key}: "${detail}" does not read back`);
@@ -220,6 +235,10 @@ function quietDetailsReadBack(key: PrKey, quiet: QuietReadCheck, touched: Touche
   if (touched.kind === 'mark') {
     const detail = quietReasonDetail(touched.reason);
     ensure(quietReasonFromDetail(detail) === touched.reason && botsFromQuietDetail(detail).length === 0, `${key}: "${detail}" does not read back`);
+  }
+  if (judged.kind === 'mark') {
+    const detail = judgedReadDetail(judged.actors);
+    ensure(quietReasonFromDetail(detail) === 'judged' && JSON.stringify(actorsFromQuietDetail(detail)) === JSON.stringify(judged.actors), `${key}: "${detail}" does not read back`);
   }
 }
 

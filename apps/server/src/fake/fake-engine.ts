@@ -138,7 +138,7 @@ import {
   type SearchableTopic,
   type SearchResult,
   type Viewer,
-  botsFromQuietDetail,
+  actorsFromQuietDetail,
   openedReadCheck,
   ownTeamRequests,
   teamSlug,
@@ -920,7 +920,7 @@ export class FakeEngine implements EngineService {
           number: ref.number,
           title: this.data.prs.find((pr) => pr.key === key)?.title ?? key,
           reason: quietReasonFromDetail(entry.detail),
-          bots: botsFromQuietDetail(entry.detail),
+          bots: actorsFromQuietDetail(entry.detail),
           landing: this.landingOf(key),
         };
       });

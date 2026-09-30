@@ -593,7 +593,7 @@ describe('pushes after the viewer approved', () => {
     });
   }
 
-  it('stay quiet, unread only while the thread is, unless the agent raises them', async () => {
+  it('stay quiet and the tile done unless the agent raises them', async () => {
     const h = makeHarness();
     topicWithPrs(h, 'depot', [pushedAfterApproval()]);
 
@@ -601,8 +601,7 @@ describe('pushes after the viewer approved', () => {
 
     const pushes = h.agent.eventInputs[0]?.items[0]?.events.map((event) => [event.kind, event.ruleLoudness]);
     expect(pushes).toContainEqual(['commits_after_approval', 'quiet']);
-    // The push's thread is unread on GitHub: unread, without loud news.
-    expect((await h.engine.getTopic('depot'))?.tiles[0]?.state).toMatchObject({ kind: 'unread', loud: false });
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.state.kind).toBe('done');
   });
 
   it('turn the tile unread with the agent reason when it raises one', async () => {

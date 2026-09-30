@@ -25,7 +25,8 @@ function prSection(pr: Pr, events: PrEvent[]): string {
 
 /**
  * Second opinion on rule loudness for every PR of one topic with new loud
- * events, in one call. Rules cannot tell "can you take a look?" from
+ * events, and on people's quiet activity on unread notifications (left
+ * quiet, PostPile marks the thread read on GitHub), in one call. Rules cannot tell "can you take a look?" from
  * "thanks!", or a meaningful bot comment from a rebase on a draft. The agent
  * only returns the events it disagrees with. A loud reply, mention or
  * question is also what makes it the user's move to answer (whose turn), so
@@ -57,6 +58,11 @@ commit. Plain follow-up pushes (review fixes, small tweaks, rebases, formatting)
 not worth their attention; leave those out of the list. Raise one to loud only when the push
 clearly changes what they signed off: a substantial change in CI, build or developer-experience
 areas they approved, or new files well beyond what was reviewed. The reason says what changed.
+
+Quiet activity by people (a teammate's comment, someone else's review, a push by the author) on a
+notification the user has not read yet starts quiet. Left quiet, it is marked read for them on
+GitHub, so leave it out of the list only when it needs nothing from them. Raise it to loud when it
+does: it asks for their input or decision, waits on them, or changes something they own or reviewed.
 
 Pull requests and their new events, with what simple rules decided:
 

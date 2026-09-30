@@ -1,6 +1,8 @@
 import {
   isClearableNonPr,
   isTracked,
+  judgedReadCheck,
+  judgedReadDetail,
   openedReadCheck,
   prAfterMarkRead,
   prReadScope,
@@ -40,7 +42,11 @@ export interface QuietReadsResult {
 
 const NOTHING_DONE: QuietReadsResult = { marked: [], otherMarked: [], errors: [] };
 
-/** The log detail when a thread may be marked read: only bots since the last read, else the user acted after it. */
+/**
+ * The log detail when a thread may be marked read: only bots since the last
+ * read, else the user acted after it, else everything since they last looked
+ * is automation or a person the events agent judged as not needing them.
+ */
 function quietDetail(input: QuietReadInput): string | null {
   const bots = quietReadCheck(input);
   if (bots.kind === 'mark') {
@@ -50,6 +56,10 @@ function quietDetail(input: QuietReadInput): string | null {
   if (touched.kind === 'mark') {
     return quietReasonDetail(touched.reason);
   }
+  const judged = judgedReadCheck(input);
+  if (judged.kind === 'mark') {
+    return judgedReadDetail(judged.actors);
+  }
   return null;
 }
 
@@ -58,8 +68,10 @@ function quietDetail(input: QuietReadInput): string | null {
  * read that turned unread only because of bots get marked read on GitHub,
  * when nothing is asked of the user (`quietReadCheck`), and so do threads
  * whose unread events all came before the user's own review or comment
- * (`touchedReadCheck`, "You already dealt with it"). Notifications that are
- * not PRs are
+ * (`touchedReadCheck`, "You already dealt with it"), and threads where
+ * everything since the user last looked is automation or a person's
+ * activity the events agent judged as not needing them (`judgedReadCheck`,
+ * "GitHub unread is PostPile unread"). Notifications that are not PRs are
  * marked read too (`isClearableNonPr`): PostPile shows none of them. Only
  * while GitHub writes are unlocked: locked, nothing happens and nothing
  * piles up as a pending write, and the thread stays unread in PostPile.

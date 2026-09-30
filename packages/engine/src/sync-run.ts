@@ -85,7 +85,7 @@ export class SyncRun {
     const quiet = await this.quietReads.run();
     errors.push(...quiet.errors);
     if (quiet.marked.length > 0) {
-      this.log(`sync: handled quietly: ${quiet.marked.length} threads marked read on GitHub (only bot activity since the last read, or you acted after it)`);
+      this.log(`sync: handled quietly: ${quiet.marked.length} threads marked read on GitHub (only bots, you acted after it, or nothing that needs you since you last looked)`);
     }
     if (quiet.otherMarked.length > 0) {
       this.log(`sync: handled quietly: ${quiet.otherMarked.length} notifications that are not PRs marked read on GitHub`);

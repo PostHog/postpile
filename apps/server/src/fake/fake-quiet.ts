@@ -1,4 +1,4 @@
-import { quietReadDetail, quietReasonDetail, type NewActionLogEntry, type PingDecision } from '@postpile/core';
+import { judgedReadDetail, quietReadDetail, quietReasonDetail, type NewActionLogEntry, type PingDecision } from '@postpile/core';
 import { SAMPLE_REPO } from './sample-builders.ts';
 
 function hoursBefore(now: Date, hours: number): string {
@@ -7,12 +7,14 @@ function hoursBefore(now: Date, hours: number): string {
 
 /**
  * Sample PRs PostPile marked read by itself, with the log detail: threads
- * that came back only because of bots (which bots), and threads the viewer
- * reviewed after everything unread. Invented.
+ * that came back only because of bots (which bots), threads the viewer
+ * reviewed after everything unread, and threads where a teammate's comment
+ * since the viewer last looked was judged as not needing them. Invented.
  */
 const QUIET_SAMPLES: { number: number; detail: string; hoursAgo: number }[] = [
   { number: 1904, detail: quietReadDetail(['trunk-io[bot]', 'CI']), hoursAgo: 2 },
   { number: 1911, detail: quietReasonDetail('approved'), hoursAgo: 3.5 },
+  { number: 1934, detail: judgedReadDetail(['lyra', 'CI']), hoursAgo: 4 },
   // After mergify queued it (1h ago) and the grace: the tile is done again.
   { number: 1899, detail: quietReadDetail(['renovate[bot]', 'mergify[bot]']), hoursAgo: 0.5 },
   { number: 1960, detail: quietReasonDetail('changes_requested'), hoursAgo: 29 },

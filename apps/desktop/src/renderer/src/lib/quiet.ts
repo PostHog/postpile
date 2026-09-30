@@ -15,8 +15,8 @@ export function quietRef(item: QuietReadView): string {
   return `${item.repo}#${item.number}`;
 }
 
-/** Why PostPile marked it read, for every reason but bots. */
-const REASON_TEXT: Record<Exclude<QuietReason, 'bots'>, string> = {
+/** Why PostPile marked it read, for every reason that names nobody. */
+const REASON_TEXT: Record<Exclude<QuietReason, 'bots' | 'judged'>, string> = {
   approved: 'you approved after it',
   changes_requested: 'you requested changes after it',
   reviewed: 'you reviewed after it',
@@ -25,7 +25,13 @@ const REASON_TEXT: Record<Exclude<QuietReason, 'bots'>, string> = {
   not_pr: 'not a pull request',
 };
 
-/** "only trunk-io, CI", "you approved after it", "opened in PostPile". */
+/** "only trunk-io, CI", "nothing for you from lyra, CI", "you approved after it", "opened in PostPile". */
 export function quietReasonText(item: Pick<QuietReadView, 'reason' | 'bots'>): string {
-  return item.reason === 'bots' ? `only ${botsText(item.bots)}` : REASON_TEXT[item.reason];
+  if (item.reason === 'bots') {
+    return `only ${botsText(item.bots)}`;
+  }
+  if (item.reason === 'judged') {
+    return item.bots.length === 0 ? 'nothing that needs you' : `nothing for you from ${botsText(item.bots)}`;
+  }
+  return REASON_TEXT[item.reason];
 }
