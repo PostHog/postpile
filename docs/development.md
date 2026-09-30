@@ -9,6 +9,7 @@ Requirements: Node 24 (for the built-in `node:sqlite`), pnpm (the version in `pa
 ```
 pnpm install
 pnpm typecheck
+pnpm lint
 pnpm test
 pnpm dist
 ```

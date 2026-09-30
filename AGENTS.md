@@ -53,7 +53,7 @@ The full dated list is under "Decided" in `NEXT.md`. Add to it when the user dec
   - Never mark anything read on GitHub from a dev session.
   - Real GitHub reads are fine.
 - **Stop what you start:** kill processes by PID, never with broad `pkill` patterns.
-- **Checks before every commit:** typecheck and tests green (commands in `docs/development.md`).
+- **Checks before every commit:** typecheck, lint and tests green (commands in `docs/development.md`).
 - **Git:**
   - Stage with explicit paths, never `git add -A` or `git add .`.
   - Never run `reset`, `stash`, `checkout` or `restore` on shared work, never amend, don't push without asking.

@@ -1,4 +1,4 @@
-# Typecheck, test and a renderer/main build on every PR and on main.
+# Typecheck, lint, test and a renderer/main build on every PR and on main.
 # Nothing here needs macOS: tests use node:sqlite and injected paths, and the
 # electron-vite build does not need the Electron binary. The macOS app bundle
 # is only built in release.yml.
@@ -41,6 +41,9 @@ jobs:
 
             - name: Typecheck
               run: pnpm typecheck
+
+            - name: Lint
+              run: pnpm lint
 
             - name: Test
               run: pnpm test
