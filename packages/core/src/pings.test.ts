@@ -212,6 +212,17 @@ describe('isPersonalPing', () => {
     expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-team' }), teamRequest, viewer)).toBe(false);
   });
 
+  it('skips a review request for a bare team slug, and one without a subject', () => {
+    const bare = makePr({ number: 32, author: 'alice', timeline: [makeTimelineItem({ id: 'rr-bare', subject: 'team-platform' })] });
+    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-bare' }), bare, viewer)).toBe(false);
+    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'gone' }), bare, viewer)).toBe(false);
+  });
+
+  it('matches the viewer login without regard to case', () => {
+    const shouting = makePr({ number: 33, author: 'alice', timeline: [makeTimelineItem({ id: 'rr-up', subject: viewer.login.toUpperCase() })] });
+    expect(isPersonalPing(makeEvent({ id: 'r', kind: 'review_requested', sourceId: 'rr-up' }), shouting, viewer)).toBe(true);
+  });
+
   it('skips team mentions and other kinds', () => {
     expect(isPersonalPing(makeEvent({ id: 't', kind: 'team_mention' }), pr, viewer)).toBe(false);
     expect(isPersonalPing(makeEvent({ id: 'c', kind: 'review_changes_requested' }), pr, viewer)).toBe(false);

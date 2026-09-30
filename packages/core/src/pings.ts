@@ -180,7 +180,7 @@ export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean 
     return false;
   }
   const subject = reviewRequestTarget(event, pr);
-  return subject === null || !subject.includes('/');
+  return subject !== null && sameLogin(subject, viewer.login);
 }
 
 function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {

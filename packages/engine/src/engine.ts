@@ -257,6 +257,8 @@ export class Engine implements EngineService {
   private writeRefresh: Promise<void> = Promise.resolve();
   /** Refreshes after a write that ended. Counted into the live status' changeCount, so the renderer refetches what they brought in. */
   private writeRefreshesDone = 0;
+  /** Full syncs that ended; counted into the live status' changeCount so a short sync between two looks is not missed. */
+  private syncsDone = 0;
   private livePoller: LivePoller | null = null;
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUpCap: CatchUpCap;
@@ -571,6 +573,7 @@ export class Engine implements EngineService {
         })
         .finally(() => {
           this.syncing = null;
+          this.syncsDone += 1;
           this.summarizePings();
           this.autoSync?.reschedule(backlog);
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
@@ -746,7 +749,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone,
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.syncsDone,
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),

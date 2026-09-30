@@ -3156,8 +3156,8 @@ main, `BoardWatcher`):
   topics in every repo, so it equals what the sidebar's "your moves" chips add
   up to. It is read from `listTopics({ allRepos: true })` (`yourMoves`), no
   rule is repeated in main. It is read at start, after each shown ping, when
-  the live status moves (`changeCount`, `catchUpChanges`, `syncRunning`;
-  checked every 5s) and after every non-read API request, which covers local
+  the live status moves (`changeCount`, which also counts every ended sync,
+  `catchUpChanges`, `syncRunning`; checked every 5s) and after every non-read API request, which covers local
   actions (mark read, done, snooze, approve). Fake mode shows it too.
 - A ping leaves Notification Center once its PR is not held by an unread tile
   anymore (read, done or snoozed in PostPile), through

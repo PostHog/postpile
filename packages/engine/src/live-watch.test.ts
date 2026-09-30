@@ -309,3 +309,14 @@ describe('refresh after a write and on focus', () => {
     expect(h.store.prs.get(pr.key)?.state).toBe('MERGED');
   });
 });
+
+describe('the live status counts finished syncs', () => {
+  it('moves changeCount when a sync ends, so a sync between two looks is not missed', async () => {
+    const h = makeHarness();
+    const before = (await h.engine.livePollStatus()).changeCount;
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const after = await h.engine.livePollStatus();
+    expect(after.syncRunning).toBe(false);
+    expect(after.changeCount).toBeGreaterThan(before);
+  });
+});
