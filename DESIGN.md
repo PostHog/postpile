@@ -3038,6 +3038,13 @@ beyond what the full sync already does for threads that left the inbox).
   automation the agent raised to loud (it used to stay behind the snooze and
   still ping, found by the property tests, see "Tests across rules"); what
   stays behind a snooze is quiet.
+- Raised after the decision (2026-09-30): the events agent judges new events
+  only after the poll decided them (catch-up run or next full sync), so when it
+  raises one to loud (a push after approval starts quiet) the PR's fresh unseen
+  events are decided again (`PingDecider.decideRaised`, told through
+  `DigestDeps.onEventsRaised`), only while that event is within 30 minutes and
+  unseen and the thread has not pinged since it, and the ping waits in
+  `RaisedPings` for the next poll cycle like a Look closer ping.
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
   instructions, topic tailoring, dossier brief, glance, the new events (fenced

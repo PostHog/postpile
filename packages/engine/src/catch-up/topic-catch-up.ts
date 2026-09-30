@@ -102,6 +102,7 @@ export class TopicCatchUp {
         tally: { dossiersUpdated: 0, facts: emptyFactCounts() },
         now,
         onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
+        onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, viewer)) ?? [],
       };
       const scope = { topicId };
       // Budget is taken in this order, like a sync: dossier, events, glances as the dossier lands, reconcile.

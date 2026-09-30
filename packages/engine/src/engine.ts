@@ -117,6 +117,7 @@ import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
 import { GlancePings } from './live/glance-pings.ts';
 import { PING_DECISIONS_PER_DAY, PingDecider } from './live/ping-decider.ts';
+import { RaisedPings } from './live/raised-pings.ts';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 import { PollRun } from './live/poll-run.ts';
 import { emptyFactCounts, FactWriter } from './memory/fact-writer.ts';
@@ -308,6 +309,14 @@ export class Engine implements EngineService {
     this.memorySources = new MemorySourcesReads(store, now);
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
+    const decider = new PingDecider({
+      store,
+      agent: deps.agent,
+      contexts,
+      now,
+      capPerDay: deps.pingDecisionsPerDay ?? PING_DECISIONS_PER_DAY,
+      agentOff,
+    });
     const runDeps = {
       store,
       agent: deps.agent,
@@ -318,20 +327,13 @@ export class Engine implements EngineService {
       agentOff,
       telemetry: this.telemetry,
       glancePings: new GlancePings(store, now),
+      raisedPings: new RaisedPings(decider),
     };
     const github = new GitHubSync(store, deps.reader, now, log, deps.pendingWrites, deps.syncLog ?? ((line) => console.log(line)));
     this.github = github;
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog);
     this.consolidationRun = new ConsolidationRun(runDeps);
-    const decider = new PingDecider({
-      store,
-      agent: deps.agent,
-      contexts,
-      now,
-      capPerDay: deps.pingDecisionsPerDay ?? PING_DECISIONS_PER_DAY,
-      agentOff,
-    });
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
     this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
     const topicCatchUp = new TopicCatchUp(runDeps, this.catchUpCap, lineLog);

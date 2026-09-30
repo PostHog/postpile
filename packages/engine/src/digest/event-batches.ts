@@ -1,4 +1,4 @@
-import type { EventBatchInput } from '@postpile/agent';
+import type { EventBatchInput, EventOverrideProposal } from '@postpile/agent';
 import { isUnansweredAsk, PERSONAL_ASK_KINDS, type PrEvent, type PrKey } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
@@ -127,14 +127,40 @@ export class EventBatchClassifier {
     });
   }
 
+  /**
+   * The poll decided these events while they were quiet (a push after
+   * approval starts quiet). Raised to loud they may wake a snooze or ask
+   * the viewer, so their ping decision runs again (`onEventsRaised`).
+   */
+  private async pingRaised(items: EventItem[], overrides: EventOverrideProposal[]): Promise<void> {
+    const onEventsRaised = this.deps.onEventsRaised;
+    if (!onEventsRaised) {
+      return;
+    }
+    const byId = new Map(items.flatMap((item) => item.events).map((event) => [event.id, event]));
+    const raised = overrides.flatMap((override) => {
+      const event = byId.get(override.eventId);
+      return event && override.loudness === 'loud' && event.ruleLoudness !== 'loud' ? [event] : [];
+    });
+    if (raised.length === 0) {
+      return;
+    }
+    try {
+      this.deps.errors.push(...(await onEventsRaised(raised)));
+    } catch (error) {
+      this.deps.errors.push(`raised pings: ${errorText(error)}`);
+    }
+  }
+
   /** False when the budget skipped the call or it failed, so the topic's cursor stays put. */
   private async classify(topicId: string | null, items: EventItem[]): Promise<boolean> {
     const { store } = this.deps;
     if (!this.deps.budget.take('event_classification')) {
       return false;
     }
+    let overrides: EventOverrideProposal[];
     try {
-      const overrides = await this.deps.agent.classifyEventBatch({
+      overrides = await this.deps.agent.classifyEventBatch({
         topic: topicId === null ? null : store.topics.get(topicId),
         items,
         viewer: this.deps.viewer,
@@ -145,11 +171,12 @@ export class EventBatchClassifier {
           store.events.setOverride(override.eventId, { loudness: override.loudness, reason: override.reason, by: 'agent' });
         }
       });
-      return true;
     } catch (error) {
       this.deps.errors.push(`events ${topicId ?? 'unsorted'}: ${errorText(error)}`);
       return false;
     }
+    await this.pingRaised(items, overrides);
+    return true;
   }
 
   /** When a batch was skipped or failed, the cursor (and the group's re-judge key) stays put. */

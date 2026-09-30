@@ -28,6 +28,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - MCP `pr_context` and `search_prs` name the move of the PR itself, not of its tile, so they match the detail pane on stacks and sets.
 - The MCP server says so, and asks for a reconnect, when the app was updated while it kept running.
 - A snoozed tile no longer pings. A bot's event the agent raised to loud used to leave the snooze in place and still send a Mac notification for it.
+- An event the agent raises to loud after the poll saw it, like a push after your approval, now pings (and wakes a snooze) while it is fresh. The poll had already decided it while it was quiet, so no notification came.
 
 ## 0.11.1 (2026-09-29)
 

@@ -62,11 +62,14 @@ export class PollRun {
     await assigner.run(fetchedPrKeys);
   }
 
-  /** One cycle, plus the Look closer pings glances wrote since the last one (they wait for the poll to reach the Mac). */
+  /**
+   * One cycle, plus the Look closer pings glances wrote and the pings for
+   * events the agent raised since the last one (they wait for the poll to reach the Mac).
+   */
   async run(focus: PollFocus = NO_FOCUS): Promise<PollCycle> {
     const cycle = await this.runCycle(focus);
-    const glancePings = this.deps.glancePings?.drain() ?? [];
-    return cycle.kind === 'done' && glancePings.length > 0 ? { ...cycle, pings: [...cycle.pings, ...glancePings] } : cycle;
+    const waiting = [...(this.deps.glancePings?.drain() ?? []), ...(this.deps.raisedPings?.drain() ?? [])];
+    return cycle.kind === 'done' && waiting.length > 0 ? { ...cycle, pings: [...cycle.pings, ...waiting] } : cycle;
   }
 
   private async runCycle(focus: PollFocus): Promise<PollCycle> {

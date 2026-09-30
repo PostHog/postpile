@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import type { FactChangeCounts, PrKey, Viewer } from '@postpile/core';
+import type { FactChangeCounts, PrEvent, PrKey, Viewer } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { AgentBudget } from '../budget.ts';
 import type { FactWriter } from '../memory/fact-writer.ts';
@@ -24,6 +24,8 @@ export interface DigestDeps {
   now: () => Date;
   /** Told the PRs whose glance was just stored (the Look closer ping on routed reviews). */
   onGlancesStored?: (prKeys: PrKey[]) => void;
+  /** Told the events the events agent just raised to loud (their ping decision runs again); answers the errors. */
+  onEventsRaised?: (events: PrEvent[]) => Promise<string[]>;
 }
 
 /** One topic for a glance catch-up run; topicId null is the virtual Unsorted topic. */
