@@ -143,7 +143,7 @@ export interface Actions {
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
   /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
-  markRead(tileId: string, afterRead?: TileAfterRead, from?: AgentActionFrom): Promise<void>;
+  markRead(tileId: string, afterRead?: TileAfterRead): Promise<void>;
   /** The topic's ✨ "Mark N read": the covered tiles as one batch with one Undo. `skipped` only words the toast. */
   markTilesRead(input: { busyKey: string; tileIds: string[]; skipped: SkippedTile[] }): Promise<void>;
   /**
@@ -728,7 +728,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       sendTelemetry('glance_retry_clicked', {});
       await run(`retryGlance:${prKey}`, null, () => request('POST', `${prPath(prKey)}/glance/retry`));
     },
-    markRead: async (tileId, afterRead, from) => {
+    markRead: async (tileId, afterRead) => {
       const shape: NoticeShape | null = afterRead
         ? (result) => {
             const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead });
@@ -737,11 +737,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
         : null;
       // Locked, a mark-read changes nothing in the app until it is a pending write: nothing to show early.
       const optimistic = afterRead && writes?.enabled ? () => changeTile(tileId, markedReadTile) : null;
-      // A tile whose Mark read carries the ✨ pill goes through the agent route, for the telemetry origin.
-      const send = from
-        ? () => request<ActionResult>('POST', '/api/agent-actions/mark-read', { tileIds: [tileId], from })
-        : () => request<ActionResult>('POST', `${tilePath(tileId)}/mark-read`);
-      await run(`markRead:${tileId}`, 'markRead', send, shape, optimistic);
+      await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`), shape, optimistic);
     },
     markTilesRead: async (input) => {
       // The engine re-checks each tile at click time and names the ones it skipped in its message: that wins over the offer's count.

@@ -9,7 +9,8 @@ import { stackPlaces } from '../lib/stacks.ts';
 import { isDraftTile, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
-import { AgentApproveButton, MarkReadPill } from './AgentActions.tsx';
+import { AgentApproveButton } from './AgentActions.tsx';
+import { tileApproveLabel } from '../lib/agent-actions.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button, buttonClasses } from './Button.tsx';
 import { ExternalIcon, KindIcon } from './icons.tsx';
@@ -188,8 +189,6 @@ export function Tile(props: TileProps) {
   const footerAction = view.offers.footer;
   const markLabel = view.offers.markLabel;
   const github = view.offers.github;
-  // The ✨ pill only when the agent backs the Mark read; it stays a plain one otherwise.
-  const agentBacked = view.agent.markRead?.state === 'active';
 
   function selectLead() {
     if (lead) {
@@ -288,12 +287,7 @@ export function Tile(props: TileProps) {
       <div className={`mt-auto flex min-h-[46px] items-center gap-2 rounded-b-tile pr-3 pl-[15px] ${footer}`}>
         <TurnLine turn={view.turn} greyed={done} />
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {footerAction === 'open' && (
-            <Button variant={secondary} onClick={selectLead}>
-              Open
-            </Button>
-          )}
-          <AgentApproveButton offer={view.agent.approve} label={tile.kind === 'stack' ? 'Approve stack' : 'Approve'} busyKey={`approveTile:${tile.id}`} from="agent_tile" />
+          <AgentApproveButton offer={view.agent.approve} label={view.agent.approve ? tileApproveLabel(view.agent.approve, tile.kind) : ''} busyKey={`approveTile:${tile.id}`} from="agent_tile" />
           {(footerAction === 'mark_read' || footerAction === 'mark_done') && (
             <Button
               variant="primary"
@@ -303,13 +297,17 @@ export function Tile(props: TileProps) {
                   : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks every PR here read; GitHub follows after 6s')
               }
               disabled={view.pendingWrite !== null || actions.isBusy(`markRead:${tile.id}`)}
-              onClick={() => void actions.markRead(tile.id, view.afterRead, agentBacked ? 'agent_tile' : undefined)}
+              onClick={() => void actions.markRead(tile.id, view.afterRead)}
             >
               {markLabel}
-              <MarkReadPill backing={view.agent.markRead} />
             </Button>
           )}
           {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : secondary} />}
+          {footerAction === 'open' && (
+            <Button variant={secondary} onClick={selectLead}>
+              Open
+            </Button>
+          )}
           {github && (
             <a href={github.filesTab ? filesTabUrl(github.url) : github.url} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={`${buttonClasses(secondary, 'sm')} gap-[5px]`}>
               {github.label}

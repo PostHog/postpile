@@ -3202,17 +3202,25 @@ Owner decisions (2026-09-30):
   qualifies is refused and named ("the agent now says look closer"), the
   rest are approved. Mark N read skips and names tiles no longer backed
   (`agentMarkReadRefusal`) and refuses unknown tile ids.
-- **Mark read skips asks.** On a tile, the existing Mark read button gains
-  a `✨ low` / `✨ medium` pill when the agent backs it. That means the
-  tile's unread news holds no ask for you (the "New moves only" asks), and
-  every unread PR in it has a current glance that is not `LOOK_CLOSER`, at
-  low or medium risk. Without that backing it stays a plain Mark read, as
-  today; a normal action gets no greyed ✨. On the topic, "Mark N read" covers
-  the unread, unsnoozed tiles whose Mark read is backed. Tiles with an ask
-  for you are skipped and stay unread. It is gone when no tile is unread,
-  greyed out (`✨ asks for you` or `✨ rechecking…`) when tiles are unread
-  but none qualify. It runs through the existing tile Mark read path and
-  keeps the 6s Undo for the whole batch.
+- **Mark read skips asks.** Only actions carry ✨, never text or lines. A
+  tile's Mark read is always on offer, so it stays plain: no ✨, no pill, the
+  old route. Core's tile backing (the unread news holds no ask for you, and
+  every unread PR has a current glance that is not `LOOK_CLOSER`, low or
+  medium risk) only feeds the topic's "Mark N read", which covers the
+  unread, unsnoozed tiles whose backing is active. Tiles with an ask for you
+  are skipped and stay unread. It is gone when no tile is unread; when tiles
+  are unread but none qualify it shows a plain "Mark read" greyed out, with
+  `✨ Needs you` or `✨ Rechecking…`. Active, it says `✨ No ask for you`.
+  It keeps the 6s Undo for the whole batch.
+- **Pill wording and placement.** Approve: `✨ Low risk` / `✨ Medium risk`
+  when active (tooltip "Agent verdict: Looks safe."), `✨ Look closer`,
+  `✨ High risk`, `✨ Rechecking…` when greyed. A greyed Approve is a plain
+  "Approve" plus the pill, never a count. The topic buttons sit in a compact
+  "For this topic" row under the "Tiles N · M unread" line, above the first
+  group, and the row is gone when both offers are. Tile footer order:
+  Approve (✨), Mark read, Snooze, Open. They are secondary buttons (green
+  outline for Approve, neutral for Mark read); filled green is only the
+  confirm dialog's "Approve N".
 - **Core decides, the renderer displays.** Core ships each offer on
   `TileView` and on the topic's view model: kind, state (active/greyed),
   counts, risk, reason, covered PRs or tiles, and left-out PRs with reasons.

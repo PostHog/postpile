@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { batchMarkReadMessage, pillWord } from './agent-actions.ts';
+import type { AgentApproveOffer } from '@postpile/core';
+import { approvePillWord, batchMarkReadMessage, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
 
-describe('pillWord', () => {
+function offer(overrides: Partial<AgentApproveOffer>): AgentApproveOffer {
+  return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, ...overrides };
+}
+
+describe('approve wording', () => {
   it('says the risk when active and the reason when greyed', () => {
-    expect(pillWord({ state: 'active', risk: 'medium', reason: null })).toBe('medium');
-    expect(pillWord({ state: 'greyed', risk: null, reason: 'rechecking' })).toBe('rechecking…');
-    expect(pillWord({ state: 'greyed', risk: null, reason: 'asks_for_you' })).toBe('asks for you');
+    expect(approvePillWord(offer({}))).toBe('Medium risk');
+    expect(approvePillWord(offer({ state: 'greyed', risk: null, reason: 'rechecking' }))).toBe('Rechecking…');
+  });
+
+  it('never counts PRs on a greyed button', () => {
+    expect(topicApproveLabel(offer({}))).toBe('Approve 3 of 5 PRs');
+    expect(topicApproveLabel(offer({ totalCount: 3 }))).toBe('Approve 3 PRs');
+    expect(topicApproveLabel(offer({ state: 'greyed', coveredCount: 0, totalCount: 1 }))).toBe('Approve');
+    expect(tileApproveLabel(offer({}), 'set')).toBe('Approve 3 PRs');
+    expect(tileApproveLabel(offer({ state: 'greyed' }), 'stack')).toBe('Approve stack');
   });
 });
 

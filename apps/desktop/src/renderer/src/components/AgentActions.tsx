@@ -1,34 +1,29 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { AgentApproveOffer, AgentActionFrom, TileMarkReadBacking, TopicMarkReadOffer } from '@postpile/core';
+import type { AgentApproveOffer, AgentActionFrom, TopicDetail, TopicMarkReadOffer } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { approveTitle, leftOutReason, pillWord, topicMarkReadLabel, topicMarkReadTitle } from '../lib/agent-actions.ts';
+import { approvePillWord, approveTitle, leftOutReason, markReadPillWord, topicApproveLabel, topicMarkReadLabel, topicMarkReadTitle } from '../lib/agent-actions.ts';
 import { markReadNote } from '../lib/guard.ts';
 import { Button } from './Button.tsx';
 import { VerdictPill } from './pills.tsx';
 
-/** The ✨ pill on a button: what the agent judged (`low`, `medium`) or why it cannot back the action. */
-export function AgentPill(props: { word: string; tone: 'solid' | 'soft' | 'off' }) {
-  const look = {
-    solid: 'bg-on-ink/20',
-    soft: 'bg-ink/10',
-    off: 'inset-ring inset-ring-edge-control',
-  }[props.tone];
+/**
+ * The ✨ pill on a button: what the agent judged, or why it cannot back the
+ * action. It sits inside the button's own height and never grows it.
+ */
+export function AgentPill(props: { word: string; off: boolean }) {
+  const look = props.off ? 'text-muted inset-ring inset-ring-edge-control' : 'bg-safe-soft text-safe';
   return (
-    <span className={`flex items-center gap-1 rounded-full px-1.5 text-[11px] leading-[17px] font-semibold ${look}`}>
+    <span className={`flex h-[18px] items-center gap-1 rounded-full px-1.5 text-[11px] font-semibold ${look}`}>
       <span aria-hidden="true">✨</span>
       {props.word}
     </span>
   );
 }
 
-/** Mark read's pill, only for a backed tile. */
-export function MarkReadPill(props: { backing: TileMarkReadBacking | null }) {
-  if (props.backing?.state !== 'active') {
-    return null;
-  }
-  return <AgentPill word={pillWord(props.backing)} tone="solid" />;
-}
+/** Secondary looks: green text and outline when active, muted and flat when greyed. The reason stays readable. */
+const APPROVE_ACTIVE = 'text-safe inset-ring-safe/40';
+const GREYED = 'text-muted disabled:opacity-100';
 
 /** The confirm list: each covered PR with its verdict and risk line, the ones left out, Cancel and "Approve N". */
 function ConfirmApprove(props: { offer: AgentApproveOffer; onCancel: () => void; onConfirm: () => void }) {
@@ -112,14 +107,13 @@ export function AgentApproveButton(props: { offer: AgentApproveOffer | null; lab
   return (
     <>
       <Button
-        variant={active ? 'safe' : 'secondary'}
-        size="md"
-        title={blocked ?? approveTitle(offer, props.from === 'agent_tile' ? 'tile' : 'topic')}
+        className={active ? APPROVE_ACTIVE : GREYED}
+        title={blocked ?? approveTitle(offer)}
         disabled={!active || actions.isBusy(props.busyKey)}
         onClick={() => (blocked ? confirm() : setAsking(true))}
       >
         {props.label}
-        <AgentPill word={pillWord(offer)} tone={active ? 'solid' : 'off'} />
+        <AgentPill word={approvePillWord(offer)} off={!active} />
       </Button>
       {asking && <ConfirmApprove offer={offer} onCancel={() => setAsking(false)} onConfirm={confirm} />}
     </>
@@ -137,14 +131,33 @@ export function TopicMarkReadButton(props: { offer: TopicMarkReadOffer | null; t
   const busyKey = `markTopic:${props.topicId}`;
   return (
     <Button
-      variant={active ? 'primary' : 'secondary'}
-      size="md"
+      className={active ? '' : GREYED}
       title={active ? (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? topicMarkReadTitle(offer)) : topicMarkReadTitle(offer)}
       disabled={!active || actions.isBusy(busyKey)}
       onClick={() => void actions.markTilesRead({ busyKey, tileIds: offer.coveredTileIds, skipped: offer.skipped })}
     >
       {topicMarkReadLabel(offer)}
-      <AgentPill word={pillWord(offer)} tone={active ? 'solid' : 'off'} />
+      <AgentPill word={markReadPillWord(offer)} off={!active} />
     </Button>
+  );
+}
+
+/** The compact "For this topic" row under the Tiles count. Gone when both offers are. */
+export function TopicActions(props: { detail: TopicDetail }) {
+  const { agent, topic } = props.detail;
+  if (!agent.approve && !agent.markRead) {
+    return null;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[11px] text-muted">For this topic</span>
+      <AgentApproveButton
+        offer={agent.approve}
+        label={agent.approve ? topicApproveLabel(agent.approve) : ''}
+        busyKey={`approveTopic:${topic.id}`}
+        from="agent_topic"
+      />
+      <TopicMarkReadButton offer={agent.markRead} topicId={topic.id} />
+    </div>
   );
 }

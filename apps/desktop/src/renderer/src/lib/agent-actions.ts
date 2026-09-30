@@ -1,11 +1,20 @@
 // Words for the ✨ agent-assisted buttons. Core decides every offer (state,
 // risk, reason, counts); this only spells them out.
-import type { AgentApproveOffer, MarkReadBlock, SkippedTile, TopicMarkReadOffer } from '@postpile/core';
+import type { AgentApproveOffer, MarkReadBlock, SkippedTile, TileKind, TopicMarkReadOffer } from '@postpile/core';
 
+/** Pill words for a greyed action: why the agent cannot back it. */
 const REASON_WORDS: Record<MarkReadBlock, string> = {
-  rechecking: 'rechecking…',
+  rechecking: 'Rechecking…',
+  look_closer: 'Look closer',
+  high: 'High risk',
+  asks_for_you: 'Needs you',
+};
+
+/** The same reasons inside the batch toast's sentence. */
+const SKIP_WORDS: Record<MarkReadBlock, string> = {
+  rechecking: 'rechecking',
   look_closer: 'look closer',
-  high: 'high',
+  high: 'high risk',
   asks_for_you: 'asks for you',
 };
 
@@ -16,38 +25,58 @@ const REASON_SENTENCES: Record<MarkReadBlock, string> = {
   asks_for_you: 'Something in the unread news asks for you.',
 };
 
-/** The words in the pill: the risk of an active offer, or why a greyed one is greyed. */
-export function pillWord(offer: { state: 'active' | 'greyed'; risk: 'low' | 'medium' | null; reason: MarkReadBlock | null }): string {
+const RISK_WORDS = { low: 'Low risk', medium: 'Medium risk' } as const;
+
+/** The words in the approve pill: the risk of an active offer, or why a greyed one is greyed. */
+export function approvePillWord(offer: AgentApproveOffer): string {
   if (offer.state === 'active' && offer.risk) {
-    return offer.risk;
+    return RISK_WORDS[offer.risk];
   }
   return offer.reason ? REASON_WORDS[offer.reason] : '';
 }
 
-/** "Approve 3 of 5 PRs", or "Approve 3 PRs" when every approvable PR qualifies. */
+/** The words in the topic Mark read pill: no ask for you when active, else why it is greyed. */
+export function markReadPillWord(offer: TopicMarkReadOffer): string {
+  if (offer.state === 'active') {
+    return 'No ask for you';
+  }
+  return offer.reason ? REASON_WORDS[offer.reason] : '';
+}
+
+/** The topic's label: "Approve 3 of 5 PRs", "Approve 3 PRs" when all qualify, plain "Approve" when greyed. */
 export function topicApproveLabel(offer: AgentApproveOffer): string {
+  if (offer.state === 'greyed') {
+    return 'Approve';
+  }
   const prs = offer.coveredCount === offer.totalCount ? `${offer.coveredCount}` : `${offer.coveredCount} of ${offer.totalCount}`;
   return `Approve ${prs} ${offer.totalCount === 1 ? 'PR' : 'PRs'}`;
 }
 
+/** The tile's label: "Approve", "Approve stack", "Approve 3 PRs" on a set. Greyed keeps the plain base. */
+export function tileApproveLabel(offer: AgentApproveOffer, kind: TileKind): string {
+  if (kind === 'stack') {
+    return 'Approve stack';
+  }
+  return kind === 'set' && offer.state === 'active' ? `Approve ${offer.coveredCount} PRs` : 'Approve';
+}
+
 export function topicMarkReadLabel(offer: TopicMarkReadOffer): string {
-  return offer.coveredCount === 0 ? 'Mark read' : `Mark ${offer.coveredCount} read`;
+  return offer.state === 'active' ? `Mark ${offer.coveredCount} read` : 'Mark read';
 }
 
 /** One sentence for the button's tooltip: what a click does, or why it is greyed. */
-export function approveTitle(offer: AgentApproveOffer, what: 'tile' | 'topic'): string {
+export function approveTitle(offer: AgentApproveOffer): string {
   if (offer.state === 'greyed' && offer.reason) {
     return `Greyed out: ${REASON_SENTENCES[offer.reason]} Open the PR to approve it yourself.`;
   }
-  const where = what === 'tile' ? 'in this tile' : 'in this topic';
-  return `Approves the ${offer.coveredCount === 1 ? 'PR' : 'PRs'} the agent judged safe ${where} on GitHub, after you confirm.`;
+  return 'Agent verdict: Looks safe.';
 }
 
 export function topicMarkReadTitle(offer: TopicMarkReadOffer): string {
   if (offer.state === 'greyed' && offer.reason) {
     return `Greyed out: ${REASON_SENTENCES[offer.reason]}`;
   }
-  return 'Marks the tiles the agent judged safe read; tiles that ask for you stay unread.';
+  return 'The agent found no ask for you in these unread tiles. Other tiles stay unread.';
 }
 
 /** "Marked 3 read · 1 skipped (asks for you)". */
@@ -56,7 +85,7 @@ export function batchMarkReadMessage(count: number, skipped: SkippedTile[], serv
   if (skipped.length === 0) {
     return base;
   }
-  const reasons = [...new Set(skipped.map((tile) => REASON_WORDS[tile.reason].replace('…', '')))];
+  const reasons = [...new Set(skipped.map((tile) => SKIP_WORDS[tile.reason]))];
   return `${base} · ${skipped.length} skipped (${reasons.join(', ')})`;
 }
 

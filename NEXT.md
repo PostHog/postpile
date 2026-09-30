@@ -1074,7 +1074,8 @@ the app meanwhile.
   agent judged (risk level, or why it cannot back it). Topic and tile
   Approve take only agent-safe PRs (Looks safe, low or medium risk, current
   glance) and ask first. Not backed means greyed out with the reason;
-  nothing to act on means no button. Mark read skips tiles with asks for you.
+  nothing to act on means no button. Mark read skips tiles with asks for you. Only actions carry ✨, never
+  text. Tile Mark read is always offered, so it stays plain.
 
 - **Groups inside a topic** (2026-09-30, DESIGN.md "Groups inside a topic"):
   the tile grid's All / Unread toggle is gone; a topic shows three groups,

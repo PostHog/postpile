@@ -1,3 +1,4 @@
+import { TopicActions } from './AgentActions.tsx';
 import type { TileGroup, TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { gridGroups } from '../lib/queues.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
@@ -126,6 +127,7 @@ export function TileGrid(props: TileGridProps) {
           )}
         </span>
       </div>
+      <TopicActions detail={props.detail} />
       {tiles.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">
           {matching !== null ? 'No tile here matches the filter.' : 'Nothing in this topic pinged you.'}

@@ -6,8 +6,6 @@ import { lineTarget } from '../lib/sources.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { proposalText, suggestedBy } from '../lib/proposals.ts';
 import { countPrs } from '../lib/tiles.ts';
-import { topicApproveLabel } from '../lib/agent-actions.ts';
-import { AgentApproveButton, TopicMarkReadButton } from './AgentActions.tsx';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
 import { DossierPanel } from './DossierPanel.tsx';
@@ -136,7 +134,7 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
 
 /** Breadcrumb, name, who drives, the dossier (or the plain summary before one exists) and what the user told the agent. */
 export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; topics: TopicListItem[] }) {
-  const { topic, tiles, pendingProposals, dossier, placement, agent } = props.detail;
+  const { topic, tiles, pendingProposals, dossier, placement } = props.detail;
   const actions = useActions();
   const counts = countPrs(tiles);
   const prCount = counts.pinged + counts.pulledIn;
@@ -180,12 +178,6 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
           </span>
         </span>
       </div>
-      {(agent.approve || agent.markRead) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <AgentApproveButton offer={agent.approve} label={agent.approve ? topicApproveLabel(agent.approve) : ''} busyKey={`approveTopic:${topic.id}`} from="agent_topic" />
-          <TopicMarkReadButton offer={agent.markRead} topicId={topic.id} />
-        </div>
-      )}
       {placement && (
         <div className="mt-1.5">
           <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} updating={updating} />
