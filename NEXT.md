@@ -1068,6 +1068,12 @@ the app meanwhile.
 
 ## Decided
 
+- **Tiles lead with the important news** (2026-09-30, DESIGN.md "Tile faces"
+  › Headline event): the strip's event is chosen by importance across the
+  tile (asks, merged or closed without review, verdicts, human comments,
+  other human events, automation), newest within a class, never by recency
+  alone. Bot events get no NEW badge unless loud. HTML comments are stripped
+  from summaries.
 - **GitHub unread is PostPile unread** (2026-09-30): every notification
   unread on GitHub is either cleared by PostPile because it is obviously
   clearable (bots only, you acted after it, or everything since you last

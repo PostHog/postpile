@@ -61,6 +61,7 @@ describe('Depot examples', () => {
         at: at(10),
         automation: false,
         loud: true,
+        importance: 0,
       },
     ]);
   });

@@ -46,7 +46,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     tile: { id: 'set:s1', topicId: 't1', kind: 'set', title: 'Cache PRs', members: [], stacks: [] },
     state: {
       kind: unreadKeys.length > 0 ? 'unread' : 'open',
-      unreadBecause: unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention', actor: 'lyra', summary: 'x', at: at(index), automation: false, loud: true })),
+      unreadBecause: unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention', actor: 'lyra', summary: 'x', at: at(index), automation: false, loud: true, importance: 0 })),
       unreadOnGitHub: unreadKeys.length > 0,
       loud: unreadKeys.length > 0,
     },

@@ -552,12 +552,14 @@ export interface UnreadReason {
   /** Made by automation (core `isAutomation`): the strip never shows NEW on it unless it is loud. */
   automation: boolean;
   loud: boolean;
+  /** Headline class, 0 (an ask of you) to 5 (automation): see `headline.ts`. */
+  importance: number;
 }
 
 /** Derived, never stored. */
 export interface TileState {
   kind: TileStateKind;
-  /** Non-empty only when kind is unread: which PR and which event. */
+  /** Non-empty only when kind is unread: which PR and which event, least important first, newest last within a class: the last one is the tile's headline. */
   unreadBecause: UnreadReason[];
   /**
    * Only when kind is open: merges without the user's review they have not

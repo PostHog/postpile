@@ -1,5 +1,5 @@
 import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
-import { isAutomationEvent, pickHeadlineEvent } from './headline.ts';
+import { headlineClass, isAutomationEvent, pickHeadlineEvent } from './headline.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
 import { isApprovedByViewer, reviewPending } from './review-request.ts';
 import { snoozePhase } from './snooze.ts';
@@ -121,12 +121,19 @@ export function isPrDone(pr: Pr, userState: UserPrState | null, viewer: Viewer |
 
 function reasonOf(input: TileStateInput, prKey: PrKey, event: PrEvent): UnreadReason {
   const pr = input.prs.get(prKey);
-  const automation = pr !== undefined && isAutomationEvent(event, pr, input.viewer ?? null);
-  return { prKey, eventId: event.id, kind: event.kind, actor: event.actor, summary: event.summary, at: event.at, automation, loud: effectiveLoudness(event) === 'loud' };
+  const viewer = input.viewer ?? null;
+  const automation = pr !== undefined && isAutomationEvent(event, pr, viewer);
+  const importance = pr === undefined ? 4 : headlineClass(event, pr, viewer);
+  return { prKey, eventId: event.id, kind: event.kind, actor: event.actor, summary: event.summary, at: event.at, automation, loud: effectiveLoudness(event) === 'loud', importance };
 }
 
 function byTime(a: UnreadReason, b: UnreadReason): number {
   return a.at < b.at ? -1 : a.at > b.at ? 1 : 0;
+}
+
+/** Least important first, oldest first within a class, so the last reason is the headline across the whole tile. */
+function byImportance(a: UnreadReason, b: UnreadReason): number {
+  return b.importance - a.importance || byTime(a, b);
 }
 
 function reasonsWhere(input: TileStateInput, members: TileMember[], wanted: (event: PrEvent) => boolean): UnreadReason[] {
@@ -212,6 +219,7 @@ function threadReasons(input: TileStateInput, member: TileMember): UnreadReason[
       at: thread.updatedAt,
       automation: false,
       loud: false,
+      importance: 4,
     },
   ];
 }
@@ -224,7 +232,7 @@ function loudReasonsOf(input: TileStateInput, member: TileMember): UnreadReason[
 function unreadReasons(input: TileStateInput, threadMembers: TileMember[], loudMembers: TileMember[]): UnreadReason[] {
   const byThread = new Set(threadMembers.map((member) => member.prKey));
   const loudOnly = loudMembers.filter((member) => !byThread.has(member.prKey));
-  return [...threadMembers.flatMap((member) => threadReasons(input, member)), ...loudOnly.flatMap((member) => loudReasonsOf(input, member))].sort(byTime);
+  return [...threadMembers.flatMap((member) => threadReasons(input, member)), ...loudOnly.flatMap((member) => loudReasonsOf(input, member))].sort(byImportance);
 }
 
 /** Merges without the user's review they have not seen, on PRs the glance did not call not theirs. */

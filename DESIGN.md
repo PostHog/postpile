@@ -1847,6 +1847,18 @@ and FakeEngine call the same functions.
 **Why it's here** (`whyHere`, `tileWhy` in `why-here.ts`): one code per PR,
 the tile shows the most aimed one (order RV, @, AS, RT, @T, AU, CM, FW, ST).
 
+**Headline event** (`pickHeadlineEvent`, `headline.ts`; 2026-09-30): the strip's
+event is the most important unseen one across the whole tile, not the newest.
+Order: asks of you or your home team (review request, mention, question, reply;
+a routing team's mention is FYI, not an ask), merged or closed without your
+review, verdicts (approvals, changes requested), human comments and reviews,
+other human events, then automation. Newest within a class. Automation leads
+only when nothing else is unseen, and the coral NEW badge never shows on it
+unless the event is loud. `TileState.unreadBecause` is ordered least important
+first, so its last entry is the headline. Event summaries drop HTML comments
+(`<!-- ... -->`, bot markers) and collapse whitespace; an empty one falls back
+to the kind label.
+
 **For whom** (`forWhom`, `tileForWhom` in `for-whom.ts`; 2026-09-28, mockup
 ForWhom2 part 1 variant B). The codes still decide; the UI shows words, not
 codes. RV, @, AS -> "For you" (honey chip, 4px honey band down the tile's

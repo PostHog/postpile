@@ -89,7 +89,7 @@ describe('tile footer', () => {
 describe('lead PR', () => {
   function unread(prs: OfferPr[], unreadKeys: string[], turn: WhoseTurn = NONE) {
     const base = view('unread', turn, doneAfter, prs);
-    const unreadBecause = unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention' as const, actor: 'lyra', summary: 'x', at: at(index), automation: false, loud: true }));
+    const unreadBecause = unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention' as const, actor: 'lyra', summary: 'x', at: at(index), automation: false, loud: true, importance: 0 }));
     return { ...base, state: { kind: 'unread' as const, unreadBecause, unreadOnGitHub: true, loud: true } };
   }
 
