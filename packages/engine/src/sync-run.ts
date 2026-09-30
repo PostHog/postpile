@@ -12,7 +12,7 @@ import {
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { retireFinishedTopics } from './consolidation/retire.ts';
-import { reviveRetiredTopics } from './consolidation/revive.ts';
+import { reviveRetiredTopics, reviveUnreadTopics } from './consolidation/revive.ts';
 import type { DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
 import { errorText } from './errors.ts';
@@ -58,8 +58,9 @@ interface LiveSync {
 }
 
 /**
- * One sync: fetch -> verify facts -> agent digest -> retire finished topics
- * -> mark threads read that only bots or the user's own later action left unread ("Handled quietly").
+ * One sync: fetch -> verify facts -> agent digest -> mark threads read that
+ * are obviously clearable ("Handled quietly") -> retire finished topics ->
+ * bring back retired topics with an unread thread.
  * Tiles are derived on read.
  */
 export class SyncRun {
@@ -77,9 +78,10 @@ export class SyncRun {
   ) {}
 
   /**
-   * Last, on fresh threads and snapshots, with every event and read time of
-   * this sync counted. The hourly auto sync is also what comes back after
-   * the grace period.
+   * After the digest (the events agent judged the new quiet activity), on
+   * fresh threads and snapshots, with every event and read time of this sync
+   * counted. The hourly auto sync is also what comes back after the grace
+   * period.
    */
   private async handleQuietly(errors: string[]): Promise<void> {
     const quiet = await this.quietReads.run();
@@ -164,9 +166,12 @@ export class SyncRun {
       reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
       // After the digest, so dossier changes about events already read on GitHub count as seen too.
       advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
-      // Last, so the new events and what was read on GitHub both count.
-      report.topicsRetired = retireFinishedTopics(store, now().toISOString());
+      // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
       await this.handleQuietly(errors);
+      // Last, so the new events, what was read on GitHub and the quiet reads all count.
+      report.topicsRetired = retireFinishedTopics(store, now().toISOString());
+      // A finished topic never holds a thread unread on GitHub.
+      reviveUnreadTopics(store, now().toISOString());
     } catch (error) {
       crashed = true;
       errors.push(`sync: ${errorText(error)}`);

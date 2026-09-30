@@ -5,11 +5,14 @@ export const RETIRE_QUIET_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
  * When a topic is over: every member PR merged or closed, no events for 3
- * days, and every tile done. "Done" rather than "nothing unread": a merge
- * without the user's review they have not seen keeps its tile open, and its
- * topic listed (DESIGN "Merged without your review"). Every full sync retires the
- * topics that pass (`retireFinishedTopics`); consolidation checks it too
- * before it follows the agent's "finished".
+ * days, every thread of the topic read on GitHub, and every tile done.
+ * "Done" rather than "nothing unread": a merge without the user's review
+ * they have not seen keeps its tile open, and its topic listed (DESIGN
+ * "Merged without your review"). Every thread read: a finished topic never
+ * holds an unread thread (DESIGN "GitHub unread is PostPile unread"); a
+ * retired one whose thread turns unread comes back (`reviveUnreadTopics`).
+ * Every full sync retires the topics that pass (`retireFinishedTopics`);
+ * consolidation checks it too before it follows the agent's "finished".
  */
 export class RetireGate {
   constructor(private readonly board: Board) {}
@@ -29,12 +32,18 @@ export class RetireGate {
     return this.board.tilesForTopic(topicId).every((tile) => this.board.stateOf(tile).kind === 'done');
   }
 
+  /** No member PR, and no PR of the topic's tiles, has a thread unread on GitHub. */
+  private everyThreadRead(topicId: string, memberKeys: string[]): boolean {
+    const tileKeys = this.board.tilesForTopic(topicId).flatMap((tile) => tile.members.map((member) => member.prKey));
+    return [...memberKeys, ...tileKeys].every((key) => this.board.threads.get(key)?.unread !== true);
+  }
+
   passes(topicId: string): boolean {
     const memberKeys = [...this.board.memberships.values()].filter((m) => m.topicId === topicId).map((m) => m.prKey);
     if (memberKeys.length === 0) {
       return false;
     }
     const cutoff = new Date(new Date(this.board.now).getTime() - RETIRE_QUIET_MS).toISOString();
-    return this.allPrsOver(memberKeys) && this.quietSince(memberKeys, cutoff) && this.everyTileDone(topicId);
+    return this.allPrsOver(memberKeys) && this.quietSince(memberKeys, cutoff) && this.everyThreadRead(topicId, memberKeys) && this.everyTileDone(topicId);
   }
 }

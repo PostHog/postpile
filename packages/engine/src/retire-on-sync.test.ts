@@ -161,7 +161,34 @@ describe('Engine.sync retires finished topics', () => {
     expect(await h.engine.listFinishedTopics()).toEqual([]);
   });
 
-  it('keeps a retired topic retired when the agent turns the new event quiet', async () => {
+  it('keeps a topic whose PRs are all merged and seen while a thread is unread on GitHub', async () => {
+    const h = makeHarness({ now: () => FOUR_DAYS_LATER, writesEnabled: false });
+    topicWithPrs(h, 'depot', [mergedPr(1)]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.events.markSeen(h.store.events.listForPr(mergedPr(1).key).map((e) => e.id), at(6));
+
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(report.topicsRetired).toBe(0);
+    expect((await h.engine.getTopic('depot'))?.tiles[0]?.state).toMatchObject({ kind: 'unread', loud: false });
+  });
+
+  it('brings back a retired topic whose thread is unread on GitHub, without a new event', async () => {
+    const h = makeHarness({ now: () => FOUR_DAYS_LATER, writesEnabled: false });
+    const pr = mergedPr(1);
+    await syncedAndRead(h, [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
+
+    // Retired by an older build while its thread was unread on GitHub.
+    h.reader.threads = h.reader.threads.map((thread) => ({ ...thread, unread: true }));
+    h.reader.etag = 'etag-2';
+    await h.engine.pollOnce();
+
+    expect(h.store.topics.get('depot')?.status).toBe('active');
+  });
+
+  it('brings a retired topic back while the thread of a new event is unread, also when the agent turns the event quiet', async () => {
     let now = FOUR_DAYS_LATER;
     const h = makeHarness({ now: () => now });
     const pr = mergedPr(1);
@@ -180,7 +207,15 @@ describe('Engine.sync retires finished topics', () => {
     await h.engine.sync({ agentJobs: ['events'] });
 
     expect(h.agent.eventInputs.map((input) => input.topic?.id)).toContain('depot');
+    // The agent's quiet brings nothing back by loudness, but the mention's thread is unread on GitHub.
+    expect(h.store.topics.get('depot')?.status).toBe('active');
+
+    // Read on GitHub, it retires again once the topic is quiet.
+    readThreadsOnGitHub(h, [mention]);
+    h.store.events.markSeen(h.store.events.listForPr(pr.key).map((e) => e.id), mentionAt);
+    now = new Date('2026-09-10T12:00:00Z');
+    h.reader.etag = 'etag-3';
+    await h.engine.sync({ maxAgentCalls: 0 });
     expect(h.store.topics.get('depot')?.status).toBe('retired');
-    expect(h.store.topics.get('depot')?.retiredAt).toBe(FOUR_DAYS_LATER.toISOString());
   });
 });

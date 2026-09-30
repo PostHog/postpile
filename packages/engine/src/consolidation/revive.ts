@@ -31,3 +31,30 @@ export function reviveRetiredTopics(store: Store, newEventIds: string[], at: str
   });
   return revived;
 }
+
+/**
+ * A finished topic never holds an unread thread (DESIGN.md "GitHub unread is
+ * PostPile unread"): every retired topic with a member PR whose thread is
+ * unread on GitHub becomes active again, whether the thread just turned
+ * unread or was unread when the topic retired (before 2026-09-30 the retire
+ * gate did not look at threads). Runs after the quiet reads in the full
+ * sync, so what PostPile clears by itself brings nothing back, and in every
+ * poll that moved the inbox. Returns how many topics came back.
+ */
+export function reviveUnreadTopics(store: Store, at: string): number {
+  const retired = store.topics.list().filter((topic) => topic.status === 'retired');
+  if (retired.length === 0) {
+    return 0;
+  }
+  let revived = 0;
+  store.transaction(() => {
+    for (const topic of retired) {
+      const keys = store.memberships.listForTopic(topic.id).map((membership) => membership.prKey);
+      const unread = [...store.notifications.getByPrKeys(keys).values()].some((thread) => thread.unread);
+      if (unread && changeTopicStatus(store, topic.id, 'revive', at)) {
+        revived += 1;
+      }
+    }
+  });
+  return revived;
+}
