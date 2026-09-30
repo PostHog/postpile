@@ -42,6 +42,7 @@
   --color-hint: var(--hint);
   --color-faint: var(--faint);
   --color-ghost: var(--ghost);
+  --color-ink-read: var(--ink-read);
 
   /* Lines */
   --color-hairline: var(--hairline);
@@ -97,11 +98,13 @@
   --color-honey: var(--honey);
   --color-sea: var(--sea);
   --color-sea-pale: var(--sea-pale);
+  --color-sea-ring: var(--sea-ring);
   --color-match-line: var(--match-line);
   --color-quiet-soft: var(--quiet-soft);
   --color-why-done: var(--why-done);
   --color-warm-strip: var(--warm-strip);
   --color-warm-strip-line: var(--warm-strip-line);
+  --color-warm-row: var(--warm-row);
   --color-move: var(--move);
   --color-move-line: var(--move-line);
   --color-move-hover: var(--move-hover);
@@ -177,6 +180,7 @@
   --shadow-active-row: var(--elev-active-row);
   --shadow-segment: var(--elev-segment);
   --shadow-face: var(--elev-face);
+  --shadow-bubble: var(--elev-bubble);
   --shadow-move-footer: var(--elev-move-footer);
   --shadow-menu: var(--elev-menu);
   --shadow-picked: var(--elev-picked);

@@ -38,16 +38,16 @@ interface QueueFiltersProps {
   onChange: (filter: QueueFilter | null) => void;
 }
 
-/** The pill buttons above the sections; one filter at a time. Two by two when the sidebar is narrow. */
+/** The pill buttons above the sections; one filter at a time, always two by two. */
 export function QueueFilters(props: QueueFiltersProps) {
   return (
-    <div className="grid grid-cols-2 gap-1 @min-[290px]:flex @min-[290px]:flex-wrap" role="group" aria-label="Filter topics">
+    <div className="grid grid-cols-2 gap-1" role="group" aria-label="Filter topics">
       {QUEUE_FILTERS.map((filter) => {
         const on = props.active === filter;
         const count = props.counts[filter];
         const blocked = on ? null : disabledReason(filter, count, props.viewer);
         const faces = facesFor(filter, props.viewer);
-        const look = on ? 'border-ink bg-ink text-on-ink' : 'border-frame bg-surface text-ink hover:border-control disabled:opacity-50';
+        const look = on ? 'bg-ink text-on-ink' : 'bg-surface text-ink shadow-control inset-ring inset-ring-edge-control-soft hover:bg-subtle disabled:opacity-50';
         return (
           <button
             key={filter}
@@ -56,19 +56,19 @@ export function QueueFilters(props: QueueFiltersProps) {
             disabled={blocked !== null}
             title={blocked ?? (on ? 'Click again to show everything' : TITLES[filter])}
             onClick={() => props.onChange(on ? null : filter)}
-            className={`flex h-[26px] items-center justify-center gap-1 rounded-full border text-[11px] font-semibold ${faces.length > 0 ? 'pr-2 pl-[3px]' : 'px-2'} ${look}`}
+            className={`flex h-6 min-w-0 items-center justify-center gap-1 rounded-full pr-2 text-[11px] font-semibold ${faces.length > 0 ? 'pl-[3px]' : 'pl-[9px]'} ${look}`}
           >
             {faces.length > 0 && (
-              <span className="flex pl-[7px]">
+              <span className="flex pl-1.5">
                 {faces.map((login) => (
-                  <span key={login} className="-ml-[7px] rounded-full">
-                    <Avatar login={login} className={`ring-2 ${on ? 'ring-ink' : 'ring-surface'}`} />
+                  <span key={login} className="-ml-1.5 rounded-full">
+                    <Avatar login={login} className={`ring-[1.5px] ${on ? 'ring-ink' : 'ring-surface'}`} />
                   </span>
                 ))}
               </span>
             )}
             {LABELS[filter]}
-            <span className="font-mono text-[10px] font-medium opacity-75">{count}</span>
+            <span className={`font-mono text-[10px] font-medium tabular-nums ${on ? 'opacity-75' : 'text-hint'}`}>{count}</span>
           </button>
         );
       })}
