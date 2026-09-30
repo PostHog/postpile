@@ -79,14 +79,27 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
 }
 
 /**
+ * The events agent (or the user) made the event loud by an override. The
+ * app's own Look closer event is never raised: it is loud by its rule.
+ */
+function raisedToLoud(event: PrEvent): boolean {
+  return event.override?.loudness === 'loud' && event.kind !== 'look_closer';
+}
+
+/**
  * A loud event from a human after the snooze started ends it whatever the
  * condition, so a mention is never hidden behind a snooze. Open question in
  * DESIGN.md; this is the proposed default. Human means not automation
  * (`isAutomation`): a bot-made review request that asks the viewer wakes the
- * snooze, the app's own Look closer event does not.
+ * snooze, the app's own Look closer event does not. An automation event the
+ * agent raised to loud wakes it too (decided 2026-09-30); a bot event at its
+ * rule's loudness never does.
  */
 export function breaksSnooze(event: PrEvent, snooze: Snooze, context: SnoozeContext): boolean {
-  return event.at > snooze.since && event.seenAt === null && effectiveLoudness(event) === 'loud' && !isAutomationOn(event, context);
+  if (event.at <= snooze.since || event.seenAt !== null || effectiveLoudness(event) !== 'loud') {
+    return false;
+  }
+  return !isAutomationOn(event, context) || raisedToLoud(event);
 }
 
 /**

@@ -237,9 +237,9 @@ export const PING_TABLE: readonly PingRow[] = [
     reason: 'quiet repo (let it go stale)',
   },
   {
-    // A snooze that no human news broke stays quiet: an event the agent
-    // raised to loud but a bot made (it never wakes a snooze) does not ping
-    // past it either.
+    // A tile that is still snoozed with the new events in never pings. Human
+    // news and automation the agent raised to loud wake the snooze first
+    // (`breaksSnooze`), so whatever is left behind a snooze stays quiet.
     name: 'snoozed tile',
     when: (context) => context.snoozed,
     class: 'snoozed',

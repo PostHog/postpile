@@ -15,7 +15,7 @@ describe('pingRule', () => {
   });
 
   it('never pings for a PR whose tile is still snoozed', () => {
-    // A bot's event the agent raised to loud never wakes a snooze, so it must not ping past one either.
+    // The raised event wakes a real snooze first (`breaksSnooze`); a tile still snoozed never pings.
     const raised = makeEvent({ id: 'r', kind: 'review_requested', actor: 'github-actions[bot]', isBot: true, ruleLoudness: 'quiet', override: { loudness: 'loud', reason: 'worth a look', by: 'agent' } });
     const comment = makeEvent({ id: 'c', kind: 'comment', actor: 'ada', ruleLoudness: 'quiet', at: at(11) });
     expect(pingRule([raised, comment], pr, viewer, false)).toMatchObject({ class: 'addressed', event: { id: 'r' } });

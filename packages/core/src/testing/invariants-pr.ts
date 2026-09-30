@@ -61,17 +61,31 @@ function snoozeContext(board: PropertyBoard, key: PrKey, events: PrEvent[] = eve
   return { pr: prOf(board, key), events, now: board.now, viewer: board.viewer };
 }
 
-/** A human's loud news after the start breaks a snooze; every snooze on a finished PR is over; the app's Look closer event never wakes one. */
+/**
+ * News that wakes a snooze (2026-09-30): loud from a human, or automation
+ * the agent raised to loud. A bot event at its rule's loudness never does.
+ */
+function wakesSnooze(event: PrEvent, pr: Pr, board: PropertyBoard): boolean {
+  if (!isNews(event)) {
+    return false;
+  }
+  return !isAutomation(event, reviewRequestTarget(event, pr), board.viewer) || event.override?.loudness === 'loud';
+}
+
+/** Human or raised news after the start breaks a snooze; every snooze on a finished PR is over; the app's Look closer event never wakes one. */
 export const snoozeLifecycle: Invariant = {
-  name: 'snoozes: human news breaks, a finished PR ends every snooze, Look closer never wakes',
+  name: 'snoozes: human or agent-raised news breaks, a finished PR ends every snooze, Look closer never wakes',
   check(board) {
     for (const [key, snooze] of board.snoozes) {
       const pr = prOf(board, key);
       const events = eventsOf(board, key);
       const phase = snoozePhase(snooze, snoozeContext(board, key));
       ensure(pr.state === 'OPEN' || phase !== 'active', `${key}: ${snooze.condition.kind} snooze still active on a ${pr.state} PR`);
-      const humanNews = events.filter((event) => event.at > snooze.since && isNews(event) && !isAutomation(event, reviewRequestTarget(event, pr), board.viewer));
-      ensure(humanNews.length === 0 || phase === 'broken', `${key}: human news after the snooze, phase ${phase}`);
+      const waking = events.filter((event) => event.at > snooze.since && wakesSnooze(event, pr, board));
+      ensure(waking.length === 0 || phase === 'broken', `${key}: human or raised news after the snooze, phase ${phase}`);
+      if (phase === 'broken') {
+        ensure(waking.length > 0, `${key}: snooze broken without human or raised news`);
+      }
       const withoutLookCloser = events.filter((event) => event.kind !== 'look_closer');
       const freshPing = lookCloserEvent(pr, 'acme/team-platform', 'fresh-request', board.now);
       for (const variant of [withoutLookCloser, [...events, freshPing]]) {

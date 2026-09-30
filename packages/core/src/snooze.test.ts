@@ -76,6 +76,17 @@ describe('breaksSnooze', () => {
     const lookCloser = lookCloserEvent(pr, 'acme/team-platform', 'rr', at(16));
     expect(breaksSnooze(lookCloser, s, context({ pr }))).toBe(false);
   });
+
+  it('wakes on an automation event the agent raised to loud, not on one at its rule loudness', () => {
+    const s = snooze({ kind: 'until_time', until: at(999) });
+    const bot = { kind: 'bot_comment' as const, actor: 'vercel', isBot: true, at: at(11) };
+    const raised = { loudness: 'loud' as const, reason: 'deploy failed', by: 'agent' as const };
+    expect(breaksSnooze(makeEvent({ ...bot, ruleLoudness: 'quiet', override: raised }), s, context())).toBe(true);
+    expect(breaksSnooze(makeEvent({ ...bot, ruleLoudness: 'loud' }), s, context())).toBe(false);
+    expect(breaksSnooze(makeEvent({ ...bot, ruleLoudness: 'quiet', override: raised, seenAt: at(12) }), s, context())).toBe(false);
+    const lookCloser = { ...lookCloserEvent(makePr(), 'acme/team-platform', 'rr', at(16)), override: raised };
+    expect(breaksSnooze(lookCloser, s, context())).toBe(false);
+  });
 });
 
 describe('snoozeTelemetryBucket', () => {

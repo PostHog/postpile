@@ -3021,10 +3021,10 @@ beyond what the full sync already does for threads that left the inbox).
   pings when the glance says Look closer (below).
 - `snoozed` (2026-09-29): the tile holding the PR is still snoozed with the
   new events in (the decider reads the tile state off the board), so nothing
-  pings. Human news wakes a snooze first; what stays behind a snooze is
-  automation, for example a bot's event the agent raised to loud, which
-  pinged for a snoozed tile before (found by the property tests, see "Tests
-  across rules").
+  pings. Human news wakes a snooze first, and since 2026-09-30 so does
+  automation the agent raised to loud (it used to stay behind the snooze and
+  still ping, found by the property tests, see "Tests across rules"); what
+  stays behind a snooze is quiet.
 - Everything but `addressed` is decided by the rules: no ping, no agent.
 - `addressed` items of one cycle go to Sonnet in one `ping_decision` call:
   instructions, topic tailoring, dossier brief, glance, the new events (fenced
@@ -3944,8 +3944,9 @@ tile is now checked per PR, so the tile shows once any tracked PR is green
 (open question whether it should wait for all). Events on pulled-in,
 untracked stack layers no longer touch a snooze. Every snooze ends when
 its PR is merged or closed (push and CI snoozes first, every kind since
-2026-09-30); it could never finish before and kept the topic from retiring. The human-only wake rule is
-unchanged: the app's own Look-closer event does not break a snooze (its
+2026-09-30); it could never finish before and kept the topic from retiring. The wake rule
+stays human news only, plus automation the agent raised to loud (since
+2026-09-30): the app's own Look-closer event does not break a snooze (its
 ping already skips snoozed tiles).
 
 **Topic status has one writer.** All status changes (retire, revive,

@@ -12,13 +12,9 @@ describe('pr invariants', () => {
 });
 
 describe('pings, scenarios the properties found', () => {
-  // Found 2026-09-29 by "a ping is about unseen loud news and never comes
-  // from a snoozed or done tile": a bot asked another team for a review, the
-  // events agent raised that request to loud, and ada commented. A bot's
-  // event never wakes a snooze, so the tile stayed snoozed, but the poll
-  // still pinged for the raised request.
-  it('a bot event the agent raised to loud does not ping from a snoozed tile', () => {
-    const spec: BoardSpec = {
+  /** A bot asked another team for a review and ada commented, on a snoozed tile; `raised`: the events agent made the request loud. */
+  function snoozedBotRequestBoard(raised: boolean): BoardSpec {
+    return {
       groups: [
         {
           kind: 'single',
@@ -29,7 +25,7 @@ describe('pings, scenarios the properties found', () => {
                 { kind: 'request', target: 'other_team', byBot: true },
                 { kind: 'comment', by: 'other', text: 'plain', thread: null },
               ],
-              overrides: [{ pick: 1, loudness: 'loud' }],
+              overrides: raised ? [{ pick: 1, loudness: 'loud' }] : [],
             },
           ],
           snooze: { condition: 'until_time', after: 2, untilPassed: false },
@@ -39,14 +35,27 @@ describe('pings, scenarios the properties found', () => {
       teamMembersUnknown: false,
       nowGap: 60,
     };
-    const board = buildBoard(spec);
+  }
+
+  // Found 2026-09-29 by "a ping is about unseen loud news and never comes
+  // from a snoozed or done tile": the events agent raised a bot's request to
+  // loud, the snooze (human news only) held, but the poll still pinged.
+  // First fixed by the `snoozed` ping row; decided 2026-09-30 that the
+  // raised event wakes the snooze, so the tile turns unread and pings. The
+  // row stays: a tile that is still snoozed never pings.
+  it('a bot event the agent raised to loud wakes the snooze and pings', () => {
+    const board = buildBoard(snoozedBotRequestBoard(true));
     const tile = board.tiles[0]!;
     const pr = board.prs.get(tile.members[0]!.prKey)!;
     const fresh = (board.events.get(pr.key) ?? []).filter((event) => event.seenAt === null);
     expect(fresh.find((event) => event.kind === 'review_requested')?.override?.loudness).toBe('loud');
-    expect(tileStateOf(board, tile).kind).toBe('snoozed');
-    expect(pingRule(fresh, pr, board.viewer, false, true)).toMatchObject({ class: 'snoozed', reason: 'tile snoozed' });
-    // Without the snooze the same events ping.
+    expect(tileStateOf(board, tile).kind).toBe('unread');
     expect(pingRule(fresh, pr, board.viewer, false, false).class).toBe('addressed');
+    expect(pingRule(fresh, pr, board.viewer, false, true)).toMatchObject({ class: 'snoozed', reason: 'tile snoozed' });
+  });
+
+  it('a bot event at its rule loudness leaves the snooze alone', () => {
+    const board = buildBoard(snoozedBotRequestBoard(false));
+    expect(tileStateOf(board, board.tiles[0]!).kind).toBe('snoozed');
   });
 });
