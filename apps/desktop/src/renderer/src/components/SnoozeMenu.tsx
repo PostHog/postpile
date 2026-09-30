@@ -25,9 +25,11 @@ const OPTIONS: { label: string; condition: () => SnoozeCondition }[] = [
  */
 export function SnoozeMenu(props: { tileId: string; snoozed: boolean; size?: ButtonSize; up?: boolean; variant?: ButtonVariant }) {
   const actions = useActions();
+  // Snooze and Unsnooze share the busy key: the tile shows snoozed on click, and Unsnooze waits until the server said so.
+  const busy = actions.isBusy(`snooze:${props.tileId}`);
   if (props.snoozed) {
     return (
-      <Button size={props.size} onClick={() => void actions.unsnooze(props.tileId)}>
+      <Button size={props.size} disabled={busy} onClick={() => void actions.unsnooze(props.tileId)}>
         Unsnooze
       </Button>
     );
@@ -36,5 +38,5 @@ export function SnoozeMenu(props: { tileId: string; snoozed: boolean; size?: But
     label: option.label,
     onSelect: () => void actions.snooze(props.tileId, option.condition()),
   }));
-  return <Menu label="Snooze" variant={props.variant} size={props.size} up={props.up} items={items} />;
+  return <Menu label="Snooze" variant={props.variant} size={props.size} up={props.up} items={items} disabled={busy} />;
 }

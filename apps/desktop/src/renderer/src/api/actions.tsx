@@ -2,7 +2,7 @@
 // nothing else may send a POST or DELETE to the API. Actions that end up as a
 // GitHub write go through the guard in lib/guard.ts first.
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type {
   ActionResult,
   AppConfig,
@@ -22,6 +22,7 @@ import type {
   MemoryRecheckResult,
   OpenedReadResult,
   PendingWritesResult,
+  PrDetail,
   PrKey,
   RepoOverview,
   SetupAcceptRequest,
@@ -34,13 +35,16 @@ import type {
   SnoozeCondition,
   SyncReport,
   TileAfterRead,
+  TileView,
   ToolsView,
+  TopicDetail,
   WorkContextSweepResult,
   WorkThreadForget,
 } from '@postpile/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { markReadNotice } from '../lib/mark-read.ts';
+import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withTile } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
@@ -79,6 +83,9 @@ export interface Notice {
 
 /** Reshapes the notice of a successful or failed action, e.g. the mark-read that leaves a tile your move. */
 type NoticeShape = (result: ActionResult) => { message: string; snoozeTileId: string | null };
+
+/** Changes the cache before the server answers (lib/optimistic.ts) and returns how to put the old data back. */
+type Optimistic = () => Promise<() => void>;
 
 interface PendingUndo {
   token: string;
@@ -281,26 +288,64 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function run(busyKey: string, write: GithubWrite | null, task: () => Promise<ActionResult>, shape: NoticeShape | null = null): Promise<boolean> {
+  /**
+   * Shows `change` on every cached copy of `queryKey` right away. A refetch
+   * in flight is cancelled first so it cannot paint the old data over it.
+   * Returns the rollback: the copies as they were.
+   */
+  async function changeCache<T>(queryKey: QueryKey, change: (data: T) => T): Promise<() => void> {
+    await queryClient.cancelQueries({ queryKey });
+    const snapshot = queryClient.getQueriesData<T>({ queryKey });
+    queryClient.setQueriesData<T>({ queryKey }, (data) => (data === undefined ? data : change(data)));
+    return () => snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data));
+  }
+
+  /** The tile as `change` makes it, in whichever cached topic holds it. */
+  function changeTile(tileId: string, change: (view: TileView) => TileView): Promise<() => void> {
+    return changeCache<TopicDetail>(['topic'], (detail) => withTile(detail, tileId, change));
+  }
+
+  /**
+   * With `optimistic`, the screen shows the result on click: the cache
+   * changes before the request, a failure puts the old data back (and says
+   * why in the toast), and the button stays busy until the refetch brought
+   * the server's answer, so it never offers the old action again meanwhile.
+   * Blocked writes change nothing.
+   */
+  async function run(
+    busyKey: string,
+    write: GithubWrite | null,
+    task: () => Promise<ActionResult>,
+    shape: NoticeShape | null = null,
+    optimistic: Optimistic | null = null,
+  ): Promise<boolean> {
     if (isBlocked(write)) {
       return false;
     }
-    try {
-      const result = await withBusy(busyKey, task);
-      const shaped = shape ? shape(result) : { message: result.message, snoozeTileId: null };
-      show(result.ok ? 'ok' : 'error', shaped.message, result.undoToken, shaped.snoozeTileId);
-      // A settle token has no Undo in the toast, but its mark-read is watched the same way: refetch once it settled.
-      const watched = result.undoToken ?? result.settleToken ?? null;
-      if (watched) {
-        const entry = { token: watched, until: Date.now() + UNDO_WINDOW_MS };
-        setPendingUndos((current) => [...current, entry]);
+    return withBusy(busyKey, async () => {
+      let rollback: (() => void) | null = null;
+      try {
+        rollback = optimistic ? await optimistic() : null;
+        const result = await task();
+        if (!result.ok) {
+          rollback?.();
+        }
+        const shaped = shape ? shape(result) : { message: result.message, snoozeTileId: null };
+        show(result.ok ? 'ok' : 'error', shaped.message, result.undoToken, shaped.snoozeTileId);
+        // A settle token has no Undo in the toast, but its mark-read is watched the same way: refetch once it settled.
+        const watched = result.undoToken ?? result.settleToken ?? null;
+        if (watched) {
+          const entry = { token: watched, until: Date.now() + UNDO_WINDOW_MS };
+          setPendingUndos((current) => [...current, entry]);
+        }
+        await refreshAll();
+        return result.ok;
+      } catch (error) {
+        rollback?.();
+        show('error', errorText(error));
+        return false;
       }
-      await refreshAll();
-      return result.ok;
-    } catch (error) {
-      show('error', errorText(error));
-      return false;
-    }
+    });
   }
 
   async function sync(): Promise<void> {
@@ -580,7 +625,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
     approve: async (prKey, headOid) => {
-      await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`, { headOid }));
+      const optimistic = () => changeCache<PrDetail>(queryKeys.pr(prKey), (detail) => approvedDetail(detail, new Date().toISOString()));
+      await run(`approve:${prKey}`, 'approve', () => request('POST', `${prPath(prKey)}/approve`, { headOid }), null, optimistic);
     },
     removeTeamRequest: async (prKey, team) => {
       await run(`removeTeam:${prKey}`, 'removeTeam', () => request('POST', `${prPath(prKey)}/remove-team-request`, { team }));
@@ -596,17 +642,20 @@ export function ActionsProvider(props: { children: ReactNode }) {
             return { message: notice.message, snoozeTileId: notice.offerSnooze ? tileId : null };
           }
         : null;
-      await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`), shape);
+      // Locked, a mark-read changes nothing in the app until it is a pending write: nothing to show early.
+      const optimistic = afterRead && writes?.enabled ? () => changeTile(tileId, markedReadTile) : null;
+      await run(`markRead:${tileId}`, 'markRead', () => request('POST', `${tilePath(tileId)}/mark-read`), shape, optimistic);
     },
     markPrRead: async (tileId, prKey, afterRead) => {
       const shape: NoticeShape = (result) => {
         const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead });
         return { message: notice.message, snoozeTileId: null };
       };
-      await run(`markPr:${tileId}:${prKey}`, 'markRead', () => request('POST', `${tilePrPath(tileId, prKey)}/mark-read`), shape);
+      const optimistic = writes?.enabled ? () => changeTile(tileId, (view) => markedReadPr(view, prKey)) : null;
+      await run(`markPr:${tileId}:${prKey}`, 'markRead', () => request('POST', `${tilePrPath(tileId, prKey)}/mark-read`), shape, optimistic);
     },
     snooze: async (tileId, condition) => {
-      await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }));
+      await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }), null, () => changeTile(tileId, snoozedTile));
     },
     unsnooze: async (tileId) => {
       await run(`snooze:${tileId}`, null, () => request('DELETE', `${tilePath(tileId)}/snooze`));
