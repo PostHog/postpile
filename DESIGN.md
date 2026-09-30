@@ -3358,8 +3358,10 @@ bot reopening an approved own PR is a new move. A re-review request after
 the read blocks. The real case that asked for this (the user's own agent
 PR, approved by them on Sep 15, read on Sep 18, then a teammate removed a
 team request, a stale-PR bot nudged and CI ran) still stays unread: on Sep
-18 the PR waited on the team, so "Merge, it is approved" is new. Whether
-only new moves that are asks should block is open for the owner.
+18 the PR waited on the team, so "Merge, it is approved" is new. Owner,
+2026-09-30: only new moves that ask something block (reply, review,
+re-review, address changes); merging an approved PR of theirs never does,
+so the real case clears.
 
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide

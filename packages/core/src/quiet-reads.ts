@@ -184,17 +184,17 @@ export function isAutomationFinding(event: PrEvent, pr: Pr): boolean {
 }
 
 /**
- * Whose turn is the user's, and it was not at `since` (the rule's
- * boundary: the last read, or the last look), worked out on the PR as it
- * stood then (`prAsOf`). A move someone made after it (a re-review request,
- * a changes request) keeps the thread unread; one that stood before it
- * ("Merge, it is approved" since an approval before the read) does not
- * (2026-09-30).
+ * Whose turn is the user's with a move that asks something of them (reply,
+ * review, re-review, address changes; merging their approved PR asks
+ * nothing), and it was not at `since` (the rule's boundary: the last read,
+ * or the last look), worked out on the PR as it stood then (`prAsOf`). A
+ * move someone made after it (a re-review request, a changes request)
+ * keeps the thread unread; one that stood before it does not (2026-09-30).
  */
 export function isNewYourMove(input: Pick<QuietReadInput, 'pr' | 'events' | 'userState' | 'viewer' | 'notYours'>, since: IsoTime): boolean {
   const { pr, events, viewer, notYours } = input;
   const now = prWhoseTurn({ pr, events, userState: input.userState, viewer, notYours });
-  if (now.kind !== 'you') {
+  if (now.kind !== 'you' || now.move === 'merge') {
     return false;
   }
   const before = prWhoseTurn({ pr: prAsOf(pr, since), events: eventsAsOf(events, since), userState: userStateAsOf(input.userState, since), viewer, notYours });

@@ -754,14 +754,15 @@ export interface QuietReadSpecInput {
 }
 
 /**
- * The viewer's move now, and it was not at `since`: no move then, or
+ * The viewer's move now, one that asks something (not merging their
+ * approved PR), and it was not at `since`: no move then, or
  * another kind of move, on the snapshot as it stood then
  * (`specSnapshotAt`, the events up to then). A move that stood before does
  * not keep a thread unread (2026-09-30).
  */
 export function expectedNewMove(input: Pick<QuietReadSpecInput, 'pr' | 'events' | 'viewer' | 'userState' | 'notYours'>, since: IsoTime): boolean {
   const now = expectedTurn({ pr: input.pr, events: input.events, viewer: input.viewer, userState: input.userState, notYours: input.notYours });
-  if (now.kind !== 'you') {
+  if (now.kind !== 'you' || now.move === 'merge') {
     return false;
   }
   const then = expectedTurn({
