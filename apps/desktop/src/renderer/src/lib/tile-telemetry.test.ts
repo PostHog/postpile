@@ -9,6 +9,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     title: 'PR 1',
     url: '',
     author: 'rowan',
+    assignees: [],
     state: 'OPEN',
     primaryAction: 'approve',
     isDraft: false,

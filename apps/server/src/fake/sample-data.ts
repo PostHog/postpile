@@ -6,6 +6,7 @@ import {
   found,
   pinged,
   pulledIn,
+  SAMPLE_AGENT,
   SAMPLE_VIEWER,
   SampleClock,
   sampleEvents,
@@ -395,6 +396,20 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1955, title: 'Pin the Playwright browser version', author: 'nell', state: 'OPEN',
       size: [12, 4, 2], checks: 'SUCCESS', openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
     }),
+    // Agent PRs: a coding agent's GitHub App opens them on someone's behalf
+    // and assigns that person, who owns the PR. #1970 is the viewer's own
+    // (Your PR, My PRs, waiting on lyra); #1972 belongs to three teammates,
+    // so the platform team request on it is the viewer's (For you).
+    samplePr(clock, {
+      number: 1970, title: 'Check that billing migrations stay state-only', author: SAMPLE_AGENT, assignees: [SAMPLE_VIEWER], state: 'OPEN',
+      size: [28, 6, 2], checks: 'SUCCESS', openedHoursAgo: 5, headRef: 'acme-agent/billing-migration-check', reviewerUsers: ['lyra'],
+      body: 'Opened by the coding agent for @you. Fails CI when a billing migration renames or drops a table.',
+    }),
+    samplePr(clock, {
+      number: 1972, title: 'Drop unused env vars from devbox start', author: SAMPLE_AGENT, assignees: ['rowan', 'sol', 'nell'], state: 'OPEN',
+      size: [4, 19, 3], checks: 'SUCCESS', openedHoursAgo: 4, headRef: 'acme-agent/devbox-env-cleanup', reviewerTeams: ['acme/team-platform'],
+      body: 'Opened by the coding agent for @rowan. Removes env vars no devbox service reads.',
+    }),
   ];
 }
 
@@ -496,6 +511,9 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 1963, [
       { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 20, rule: 'quiet', seen: true },
     ]),
+    ...sampleEvents(clock, 1972, [
+      { kind: 'review_requested', actor: 'rowan', text: 'requested @team-platform', hoursAgo: 3, rule: 'loud' },
+    ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
       { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 26, rule: 'loud' },
@@ -591,6 +609,20 @@ function buildGlances(clock: SampleClock): Glance[] {
         { path: 'app/models/__init__.py', why: 'The re-export Ada flagged.' },
       ],
     }),
+    sampleGlance(clock, 1970, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Your agent PR; lyra has the review.',
+      does: 'Adds a CI check that fails when a billing migration renames or drops a table.',
+      risk: 'Low. A new check, nothing changes at runtime.',
+      othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 1972, {
+      verdict: 'LOOKS_SAFE',
+      forYou: "Rowan's agent PR asks platform for a review; nobody on the team picked it up yet.",
+      does: 'Removes three env vars no devbox service reads.',
+      risk: 'Low. A service that did read one would fall back to its default.',
+      othersSaid: 'No comments yet.',
+    }),
     sampleGlance(clock, 1870, {
       verdict: 'LOOK_CLOSER',
       forYou: 'Changes a devbox default, which you asked to see first.',
@@ -657,6 +689,10 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1950)}`, 'Your pnpm cache PR for the devbox image', [found(1950, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1955)}`, 'nell wants your review on the Playwright pin', [
       found(1955, 'review_requested', 'review requested from you'),
+    ]),
+    sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(1970)}`, 'Your agent PR guards the billing migrations', [pinged(1970, 'assign')]),
+    sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1972)}`, "Rowan's agent PR drops unused devbox env vars", [
+      pinged(1972, 'review_requested'),
     ]),
   ];
 }

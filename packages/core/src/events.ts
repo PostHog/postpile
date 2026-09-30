@@ -3,6 +3,7 @@ import { ADDRESSED_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { ruleLoudness } from './loudness.ts';
 import { mentionsAnyTeam, mentionsUser, sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
@@ -199,7 +200,7 @@ function commitEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): Ra
 }
 
 function mergedWithoutViewerReview(pr: Pr, viewer: Viewer): boolean {
-  if (sameLogin(pr.author, viewer.login) || !viewerAskedToReview(pr, viewer)) {
+  if (isPrOwner(pr, viewer.login) || !viewerAskedToReview(pr, viewer)) {
     return false;
   }
   return lastSpokeAt(pr, viewer.login, { reviewsOnly: true }) === null;

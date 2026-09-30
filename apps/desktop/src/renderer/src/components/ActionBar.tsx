@@ -102,6 +102,8 @@ export function ActionBar(props: ActionBarProps) {
       markReadNote(actions.writes) ??
       (onePr ? `Marks only #${pr.ref.number} read; GitHub follows after 6s` : 'Marks the PR read; GitHub follows after 6s'));
   const row = props.view.prs.find((candidate) => candidate.key === pr.key);
+  // The PR's owner: its author, or the person a bot opened it for.
+  const askPerson = row?.facts.owners[0] ?? pr.author;
   const markRead = () => (onePr && row ? actions.markPrRead(tileId, pr.key, row.afterRead) : actions.markRead(tileId, props.view.afterRead));
   const slots: Record<Slot, ReactNode> = {
     approve: offers.approve && (
@@ -130,7 +132,7 @@ export function ActionBar(props: ActionBarProps) {
     ),
     ask: offers.ask && (
       <Button size="md" onClick={props.onAsk}>
-        Ask {pr.author}
+        Ask {askPerson}
       </Button>
     ),
     mark: offers.markLabel && (

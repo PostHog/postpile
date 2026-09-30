@@ -2,7 +2,8 @@
 // on the why-here codes (`whyHere`, `tileWhy`). Only the output changes: the
 // codes still decide, the UI shows words instead of RV / RT / @ / ...
 import { changesAnswered } from './changes-answered.ts';
-import { isOwnTeam, mentionsTeam, sameLogin } from './mentions.ts';
+import { isOwnTeam, mentionsTeam } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import { reviewRequest } from './review-request.ts';
 import type { Pr, Viewer } from './types.ts';
 import type { WhyCode } from './why-here.ts';
@@ -12,7 +13,7 @@ import type { WhyCode } from './why-here.ts';
  * team request on a teammate's PR nobody else on the team covered yet.
  * team: one of their teams is asked or mentioned and nothing is for the
  * viewer personally (RT, @T); `team` is the short slug ("team-platform").
- * own: the viewer wrote it (AU). none: everything else, no chip, no band.
+ * own: the viewer wrote it (AU) or owns it (`prOwners`: a bot's PR assigned to them). none: everything else, no chip, no band.
  */
 export type ForWhom = { kind: 'you' } | { kind: 'team'; team: string } | { kind: 'own' } | { kind: 'none' };
 
@@ -49,7 +50,7 @@ function teamOf(pr: Pr | null, viewer: Viewer | null): string {
  * team got a review request on it (CODEOWNERS): it is never "for" them.
  */
 export function forWhom(code: WhyCode, pr: Pr | null, viewer: Viewer | null): ForWhom {
-  if (code === 'AU' || (pr !== null && viewer !== null && sameLogin(pr.author, viewer.login))) {
+  if (code === 'AU' || (pr !== null && viewer !== null && isPrOwner(pr, viewer.login))) {
     return { kind: 'own' };
   }
   // The author addressed the viewer's changes request: a re-review for them, whatever the notification said.

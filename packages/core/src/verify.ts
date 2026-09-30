@@ -78,7 +78,8 @@ function isInvolved(fact: Fact, pr: Pr): boolean {
       pr.reviews.some((review) => sameLogin(review.author, login))
     );
   }
-  return sameLogin(pr.author, login) || pr.commits.some((commit) => sameLogin(commit.author, login));
+  const assigned = (pr.assignees ?? []).some((assignee) => sameLogin(assignee, login));
+  return sameLogin(pr.author, login) || assigned || pr.commits.some((commit) => sameLogin(commit.author, login));
 }
 
 /** reviews / works_on a PR by a person who no longer shows up on it. */

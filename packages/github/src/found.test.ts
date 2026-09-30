@@ -8,12 +8,15 @@ describe('buildFoundQuery', () => {
     const { query, aliases } = buildFoundQuery(['acme/team-platform', 'acme/team-infra'], '2026-09-21');
     expect(aliases.map((alias) => [alias.alias, alias.via, alias.team])).toEqual([
       ['own', 'own_open', null],
+      ['assigned', 'own_open', null],
       ['review', 'review_requested', null],
       ['team0', 'team_review_requested', 'acme/team-platform'],
       ['team1', 'team_review_requested', 'acme/team-infra'],
       ['merged', 'involved_merged', null],
     ]);
     expect(query).toContain('pullRequests(states: OPEN, first: 100, orderBy: { field: UPDATED_AT, direction: DESC })');
+    expect(query).toContain('"is:pr is:open assignee:@me"');
+    expect(query).toContain('author { __typename }');
     expect(query).toContain('"is:pr is:open user-review-requested:@me"');
     expect(query).toContain('"is:pr is:open team-review-requested:acme/team-infra"');
     expect(query).toContain('"is:pr involves:@me is:merged merged:>=2026-09-21"');
@@ -36,6 +39,18 @@ describe('foundRefs', () => {
       [1, 'own_open', 'your open PR'],
       [4, 'involved_merged', 'involves you, merged 2026-09-24'],
     ]);
+  });
+
+  it('keeps an assigned PR only when a bot opened it: then it is the viewer\'s own', () => {
+    const query = buildFoundQuery([], '2026-09-21');
+    const node = (number: number, author: string) => ({
+      number,
+      updatedAt: '2026-09-27T10:00:00Z',
+      repository: { nameWithOwner: 'o/r' },
+      author: { __typename: author },
+    });
+    const refs = foundRefs(query, { assigned: { nodes: [node(7, 'Bot'), node(8, 'User')] } });
+    expect(refs.map((ref) => [ref.ref.number, ref.via, ref.reason])).toEqual([[7, 'own_open', 'agent PR assigned to you']]);
   });
 });
 

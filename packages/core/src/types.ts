@@ -122,6 +122,12 @@ export interface Pr {
   url: string;
   body: string;
   author: string;
+  /**
+   * Assigned users' logins. An agent PR a GitHub App opens for a person
+   * names that person here; `prOwners` reads it. Missing on snapshots
+   * stored before it was fetched: read as none.
+   */
+  assignees?: string[];
   state: PrState;
   isDraft: boolean;
   baseRef: string;

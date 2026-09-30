@@ -120,7 +120,7 @@ import {
   topicMove,
   OFF_POLL_STATUS,
   systemTimers,
-  personRelation,
+  ownerRelation,
   pingedPrKeys,
   prTier,
   prWhoseTurn,
@@ -754,7 +754,7 @@ export class FakeEngine implements EngineService {
         queues: topicQueues(
           prs.map(({ pr, member }) => ({
             tier: this.tierOf(pr, member),
-            author: personRelation(pr.author, viewer),
+            author: ownerRelation(pr, viewer),
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
             quiet: isPrInQuietRepo(pr.key, this.repoSettings),

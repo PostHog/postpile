@@ -325,6 +325,7 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     url: raw.url,
     body: raw.body,
     author: actorLogin(raw.author),
+    assignees: (raw.assignees?.nodes ?? []).flatMap((node) => (node ? [node.login] : [])),
     state: toPrState(raw.state),
     isDraft: raw.isDraft,
     baseRef: raw.baseRefName,

@@ -44,6 +44,7 @@ export function whyTitle(code: WhyCode, provenance?: Provenance): string {
 
 const ROLE_LABELS: Record<TilePersonRole, string> = {
   author: 'author',
+  assignee: 'assigned',
   you: 'you',
   reviewer: 'reviewer',
 };

@@ -7,6 +7,7 @@ import { isBot } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { sameLogin } from './mentions.ts';
+import { isPrOwner, prOwners } from './pr-owners.ts';
 import { changesRequestedByAll, newestVerdictBy } from './review-request.ts';
 import type { EventKind, IsoTime, Pr, Viewer } from './types.ts';
 
@@ -49,13 +50,13 @@ function pushedAfter(pr: Pr, reviewer: string, since: IsoTime): boolean {
 
 /**
  * The author answered the viewer's changes request: the viewer's newest
- * verdict on an open PR someone else wrote asks for changes, and since the
- * viewer's last word (the request, or a later comment or re-review) the
- * author pushed or replied. Null otherwise, and always on a draft: nobody
+ * verdict on an open PR someone else owns (`prOwners`) asks for changes, and
+ * since the viewer's last word (the request, or a later comment or
+ * re-review) someone pushed or an owner replied. Null otherwise, and always on a draft: nobody
  * re-reviews a draft (its author's thread reply is a personal ask instead).
  */
 export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
-  if (pr.state !== 'OPEN' || pr.isDraft || sameLogin(pr.author, viewer.login)) {
+  if (pr.state !== 'OPEN' || pr.isDraft || isPrOwner(pr, viewer.login)) {
     return null;
   }
   const verdict = newestVerdictBy(pr.reviews, viewer.login);
@@ -65,7 +66,7 @@ export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
   // The verdict is a submitted review, so the viewer's last word is never older than it.
   const since = lastSpokeAt(pr, viewer.login) ?? verdict.submittedAt;
   const pushed = pushedAfter(pr, viewer.login, since);
-  const replied = spokeAfter(pr, pr.author, since);
+  const replied = prOwners(pr).some((owner) => spokeAfter(pr, owner, since));
   if (!pushed && !replied) {
     return null;
   }
@@ -74,7 +75,7 @@ export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
 
 /**
  * One event is part of the author's answer: a push by a human other than
- * the viewer, or a comment, review or reply by the author, after the
+ * the viewer, or a comment, review or reply by an owner, after the
  * viewer's last word, on a non-draft PR whose changes request was answered.
  */
 export function isChangesAnswerEvent(event: { kind: EventKind; actor: string; at: IsoTime }, pr: Pr, viewer: Viewer): boolean {
@@ -88,7 +89,7 @@ export function isChangesAnswerEvent(event: { kind: EventKind; actor: string; at
   if (PUSH_KINDS.includes(event.kind)) {
     return isPusher(event.actor, viewer.login);
   }
-  return sameLogin(event.actor, pr.author);
+  return isPrOwner(pr, event.actor);
 }
 
 /**

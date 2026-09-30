@@ -105,7 +105,17 @@ describe('FakeEngine tile faces', () => {
     expect(devEnv?.yourMoves).toEqual([
       { move: 're_review', text: 'pim addressed your changes: re-review' },
       { move: 'review', text: "Review for team-platform: sol's PR" },
+      // A bot opened #1972 for rowan: the team request names its owner, not the bot.
+      { move: 'review', text: "Review for team-platform: rowan's PR" },
     ]);
+  });
+
+  it('files a bot PR assigned to the viewer as their own, with the assignee next to the bot author', async () => {
+    const migrations = (await new FakeEngine().getTopic('topic-migrations'))?.tiles ?? [];
+    const agent = migrations.find((view) => view.tile.id === 'pr:acme/app#1970');
+    expect(agent?.forWhom).toEqual({ kind: 'own' });
+    expect(agent?.turn).toMatchObject({ kind: 'them', who: 'lyra', lead: 'Waiting on' });
+    expect(agent?.prs[0]).toMatchObject({ author: 'acme-agent[bot]', assignees: ['you'], authorRelation: 'you', tier: 'mine' });
   });
 
   it('shows all three turn kinds with the core rules', async () => {

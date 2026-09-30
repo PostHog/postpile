@@ -249,7 +249,7 @@ export class FakeTimers implements Timers {
 }
 
 /** PR facts with nothing aimed at anyone, for hand-built `PrSummary` rows. */
-export const NO_PR_FACTS: PrFacts = { authorIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
+export const NO_PR_FACTS: PrFacts = { owners: ['alice'], ownerIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
 
 /** A hand-built tile view with the offers and dots core would give it (`tileOffers`, `notDonePrKeys`). */
 export function withOffers(view: Omit<TileView, 'offers' | 'notDonePrKeys'>): TileView {

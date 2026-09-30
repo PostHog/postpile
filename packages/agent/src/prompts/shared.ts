@@ -1,4 +1,4 @@
-import { isBot, isMachineComment, sameLogin, standingApprovals } from '@postpile/core';
+import { isBot, isMachineComment, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
 import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, PrEvent, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
@@ -67,9 +67,18 @@ export function githubData(text: string): string {
   return `<github_data>\n${safe}\n</github_data>`;
 }
 
+/** ", for @alice" when a bot opened the PR for its assignees (`prOwners`), else empty. */
+function ownersNote(pr: Pr): string {
+  const owners = prOwners(pr);
+  if (owners.length === 1 && sameLogin(owners[0]!, pr.author)) {
+    return '';
+  }
+  return `, for ${owners.map((owner) => `@${owner}`).join(', ')}`;
+}
+
 export function prLine(pr: Pr): string {
   const state = pr.isDraft && pr.state === 'OPEN' ? 'draft' : pr.state.toLowerCase();
-  return `${pr.key} "${pr.title}" (${state}, by @${pr.author}, +${pr.additions}/-${pr.deletions} across ${pr.changedFiles} files)`;
+  return `${pr.key} "${pr.title}" (${state}, by @${pr.author}${ownersNote(pr)}, +${pr.additions}/-${pr.deletions} across ${pr.changedFiles} files)`;
 }
 
 const feedbackLabels: Record<FeedbackKind, string> = {
@@ -187,11 +196,13 @@ export const batchDetail: PrDetailLimits = { body: 1500, files: 15, comments: 8,
  * review (chat).
  */
 /**
- * Under the viewer's own PRs. GitHub never lets an author approve their own
- * PR, so advice must be about reviews, answers and merging, never "approve".
+ * Under the viewer's own PRs (`prOwners`, also a bot's PR assigned to them).
+ * GitHub never lets an author approve their own PR, and approving your own
+ * agent's PR is no review either, so advice must be about reviews, answers
+ * and merging, never "approve".
  */
 export const OWN_PR_NOTE =
-  'The user wrote this PR. They cannot approve or re-review it; for them it is about answering reviewers, getting reviews and merging.';
+  'The user owns this PR (wrote it, or an agent opened it for them). They do not approve or re-review it; for them it is about answering reviewers, getting reviews and merging.';
 
 /**
  * Who approved, each marked person or agent: "Approved by: @alice (person),
@@ -254,5 +265,5 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
   }
   const fenced = githubData(lines.join('\n'));
   // Outside the fence: this is the app speaking, not GitHub text.
-  return viewer && sameLogin(pr.author, viewer.login) ? `${fenced}\n${OWN_PR_NOTE}` : fenced;
+  return viewer && isPrOwner(pr, viewer.login) ? `${fenced}\n${OWN_PR_NOTE}` : fenced;
 }

@@ -279,4 +279,11 @@ describe('own PRs in prompts', () => {
     const others = oneGlancePrompt(makePr({ author: 'bob' }), { kind: 'pinged', reason: 'review_requested' });
     expect(others).not.toContain(OWN_PR_NOTE);
   });
+
+  it('treats a bot PR assigned to the user as theirs and names the assignee', () => {
+    const agentPr = makePr({ author: 'lyra-agent[bot]', assignees: [viewer.login] });
+    const prompt = oneGlancePrompt(agentPr, { kind: 'pinged', reason: 'assign' });
+    expect(prompt).toContain(OWN_PR_NOTE);
+    expect(prompt).toContain(`by @lyra-agent[bot], for @${viewer.login}`);
+  });
 });

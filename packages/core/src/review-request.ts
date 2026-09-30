@@ -6,6 +6,7 @@
 // all read the same answers.
 import { isBot } from './bots.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
+import { isPrOwner, prOwners } from './pr-owners.ts';
 import type { IsoTime, Pr, PrEvent, Review, TimelineItem, UserPrState, Viewer } from './types.ts';
 
 /**
@@ -73,7 +74,7 @@ export function newestVerdictBy(reviews: Review[], login: string): Review | null
  * The tier "Changes you requested" and whose move "Re-review" read it.
  */
 export function viewerRequestedChanges(pr: Pr, viewer: Viewer): boolean {
-  if (sameLogin(pr.author, viewer.login)) {
+  if (isPrOwner(pr, viewer.login)) {
     return false;
   }
   return newestVerdictBy(pr.reviews, viewer.login)?.state === 'CHANGES_REQUESTED';
@@ -120,15 +121,20 @@ export function isTeammate(login: string, viewer: Viewer): boolean {
   return (viewer.teamMembers ?? []).some((member) => sameLogin(member, login));
 }
 
+/** A teammate owns the PR (`prOwners`): wrote it, or a bot opened it and assigned them. */
+export function ownedByTeammate(pr: Pr, viewer: Viewer): boolean {
+  return prOwners(pr).some((owner) => isTeammate(owner, viewer));
+}
+
 /**
- * Humans other than the author and the viewer who submitted a review and
+ * Humans other than the owners and the viewer who submitted a review and
  * are on one of the viewer's teams. Until the member list has been fetched
  * (`teamMembers` missing) any other reviewer counts.
  */
 function teammateReviews(pr: Pr, viewer: Viewer): Review[] {
   const members = viewer.teamMembers;
   return pr.reviews.filter((review) => {
-    if (review.state === 'PENDING' || sameLogin(review.author, viewer.login) || sameLogin(review.author, pr.author) || isBot(review.author)) {
+    if (review.state === 'PENDING' || sameLogin(review.author, viewer.login) || isPrOwner(pr, review.author) || isBot(review.author)) {
       return false;
     }
     return members === undefined || members.some((member) => sameLogin(member, review.author));
@@ -141,7 +147,7 @@ function teammateReviews(pr: Pr, viewer: Viewer): Review[] {
  * alone does not cover it. On anyone else's PR any review counts.
  */
 export function teamRequestTakenBy(pr: Pr, viewer: Viewer): string[] {
-  const byTeammate = isTeammate(pr.author, viewer);
+  const byTeammate = ownedByTeammate(pr, viewer);
   const covering = teammateReviews(pr, viewer).filter(
     (review) => !byTeammate || review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED',
   );
@@ -165,7 +171,7 @@ export function reviewRequest(pr: Pr, viewer: Viewer): ReviewRequest {
   if (teamRequestTakenBy(pr, viewer).length > 0) {
     return 'team_taken';
   }
-  return isTeammate(pr.author, viewer) ? 'team_for_you' : 'team';
+  return ownedByTeammate(pr, viewer) ? 'team_for_you' : 'team';
 }
 
 /**
@@ -266,7 +272,7 @@ export function teamRequestHold(pr: Pr, viewer: Viewer, notYours: boolean): Team
  * already took asks nothing more of the viewer.
  */
 export function reviewPending(pr: Pr, viewer: Viewer, userState: UserPrState | null = null, notYours = false): boolean {
-  if (pr.state !== 'OPEN' || pr.isDraft || sameLogin(pr.author, viewer.login)) {
+  if (pr.state !== 'OPEN' || pr.isDraft || isPrOwner(pr, viewer.login)) {
     return false;
   }
   const request = reviewRequest(pr, viewer);

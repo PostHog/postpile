@@ -2,11 +2,12 @@
 // the notification reason (provenance) plus what the PR says about the
 // viewer and their teams. The UI shows it as a mono badge with a tooltip.
 import { isOwnTeam, sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import type { FoundVia, Pr, Provenance, Viewer } from './types.ts';
 
 /**
  * RV review asked of you, RT review asked of your team, @ mentioned you,
- * @T mentioned your team, AS assigned, AU you wrote it, CM you took part,
+ * @T mentioned your team, AS assigned, AU you wrote it (or own it, `prOwners`), CM you took part,
  * FW following, ST pulled in as stack context.
  */
 export type WhyCode = 'RV' | 'RT' | '@' | '@T' | 'AS' | 'AU' | 'CM' | 'FW' | 'ST';
@@ -58,7 +59,7 @@ export function whyHere(provenance: Provenance, pr: Pr | null, viewer: Viewer | 
   if (provenance.kind === 'pulled_in') {
     return 'ST';
   }
-  const authored = pr !== null && viewer !== null && sameLogin(pr.author, viewer.login);
+  const authored = pr !== null && viewer !== null && isPrOwner(pr, viewer.login);
   if (provenance.kind === 'found') {
     return foundCode(provenance.via, authored);
   }

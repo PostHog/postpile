@@ -23,7 +23,7 @@ import {
   isQuietTile,
   isTopicInScope,
   labelBaseRepo,
-  personRelation,
+  ownerRelation,
   pingedPrKeys,
   prTier,
   prWhoseTurn,
@@ -323,7 +323,7 @@ export class ReadModels {
         queues: topicQueues(
           prs.map((pr) => ({
             tier: this.tierOf(board, pr, viewer),
-            author: personRelation(pr.author, viewer),
+            author: ownerRelation(pr, viewer),
             state: pr.state,
             pulledIn: !pinged.has(pr.key),
             quiet: isPrInQuietRepo(pr.key, settings),

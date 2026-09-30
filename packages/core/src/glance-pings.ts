@@ -5,12 +5,13 @@
 // that ping marks the tile unread through an app-made `look_closer` event.
 // Rules only, no IO.
 import { isOwnTeam, sameLogin } from './mentions.ts';
-import { isTeammate, reviewedHead, reviewRequestTarget, teamSlug } from './review-request.ts';
+import { isPrOwner } from './pr-owners.ts';
+import { ownedByTeammate, reviewedHead, reviewRequestTarget, teamSlug } from './review-request.ts';
 import type { Glance, IsoTime, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
-/** The PR is from outside the viewer's team (not theirs, not a teammate's): a team request on it is routed. */
+/** The PR is from outside the viewer's team (not theirs, not a teammate's, see `prOwners`): a team request on it is routed. */
 function fromOutsideTeam(pr: Pr, viewer: Viewer): boolean {
-  return !sameLogin(pr.author, viewer.login) && !isTeammate(pr.author, viewer);
+  return !isPrOwner(pr, viewer.login) && !ownedByTeammate(pr, viewer);
 }
 
 /**

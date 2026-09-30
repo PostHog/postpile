@@ -2,6 +2,7 @@ import { isAutomation } from './bots.ts';
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isViewerSubject, sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import type { EventDisplayState, EventKind, IsoTime, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 
@@ -34,7 +35,7 @@ const machineKinds: EventKind[] = ['ci', 'deploy', 'merge_queue', 'bot_comment']
 const reviewKinds: EventKind[] = ['review_approved', 'review_changes_requested', 'review_commented'];
 
 function isViewersPr(input: LoudnessInput): boolean {
-  return sameLogin(input.pr.author, input.viewer.login);
+  return isPrOwner(input.pr, input.viewer.login);
 }
 
 function isOpenDraft(input: LoudnessInput): boolean {

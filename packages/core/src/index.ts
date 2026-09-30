@@ -5,6 +5,7 @@ export * from './debug-notifications.ts';
 export * from './github-writes.ts';
 export * from './keys.ts';
 export * from './bots.ts';
+export * from './pr-owners.ts';
 export * from './kinds.ts';
 export * from './mentions.ts';
 export * from './provenance.ts';

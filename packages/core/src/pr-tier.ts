@@ -3,8 +3,8 @@
 // are built on it (`topicQueues`).
 import { changesAnswered } from './changes-answered.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
-import { sameLogin } from './mentions.ts';
-import { isPersonalRequest, isTeammate, reviewedHead, reviewRequest, viewerRequestedChanges } from './review-request.ts';
+import { isPrOwner } from './pr-owners.ts';
+import { isPersonalRequest, ownedByTeammate, reviewedHead, reviewRequest, viewerRequestedChanges } from './review-request.ts';
 import type { NotificationReason, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 import { unansweredAsk } from './whose-turn.ts';
 
@@ -13,7 +13,8 @@ import { unansweredAsk } from './whose-turn.ts';
  * they have not answered. changes_requested: the viewer's newest verdict on
  * someone else's PR asks for changes, whether the author addressed them
  * (pushed or replied after it, no re-request needed) or not yet. mine: the
- * viewer wrote it. team: a teammate wrote it. to_review: a review is asked
+ * viewer owns it (`prOwners`: wrote it, or a bot opened it and assigned
+ * them). team: a teammate owns it. to_review: a review is asked
  * of the viewer or their team and they have not reviewed the head. A
  * personal request and a team request on a teammate's PR go before `team`;
  * a teammate's PR with only a taken team request stays `team`.
@@ -64,13 +65,13 @@ export function prTier(input: PrTierInput): PrTier {
   // Addressed your changes: the author's thread replies are part of it, so
   // they stay under Changes you requested; an ask from anyone else still wins.
   const answered = changesAnswered(pr, viewer) !== null;
-  if (ask !== null && !(answered && sameLogin(ask.actor, pr.author))) {
+  if (ask !== null && !(answered && isPrOwner(pr, ask.actor))) {
     return 'needs_reply';
   }
   if (viewerRequestedChanges(pr, viewer)) {
     return 'changes_requested';
   }
-  if (sameLogin(pr.author, viewer.login)) {
+  if (isPrOwner(pr, viewer.login)) {
     return 'mine';
   }
   // A draft is not up for review: it never lands in To review.
@@ -79,7 +80,7 @@ export function prTier(input: PrTierInput): PrTier {
   if (isPersonalRequest(request)) {
     return 'to_review';
   }
-  if (isTeammate(pr.author, viewer)) {
+  if (ownedByTeammate(pr, viewer)) {
     return 'team';
   }
   if (request !== null) {
