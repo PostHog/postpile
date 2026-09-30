@@ -1,18 +1,17 @@
 // PR-level invariants: tier and whose move, snoozes, quiet reads and pings
 // (DESIGN.md "Rules layer: one home per fact", "Handled quietly", "Live poll
 // and Mac pings", "Look closer pings").
-import { isAutomation } from '../bots.ts';
-import { lookCloserEvent, lookCloserPingCheck, routedTeamRequest } from '../glance-pings.ts';
-import { isOwnEvent, lastTouch, READING_TOUCH_KINDS } from '../last-touch.ts';
+import { lookCloserEvent } from '../glance-pings.ts';
 import { pingRule } from '../pings.ts';
 import { quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
-import { reviewedHead, reviewRequestTarget, teamRequestHold } from '../review-request.ts';
 import { snoozePhase } from '../snooze.ts';
 import type { Pr, PrEvent, PrKey } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { BoardSpec } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
+import { isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits } from './spec-facts.ts';
+import { expectedSnoozePhase, isAutomationEvent } from './spec-rules.ts';
 
 /**
  * Why a tracked open PR can sit in To review while its move is not Review,
@@ -26,7 +25,7 @@ export function toReviewException(board: PropertyBoard, pr: Pr, row: PrSummary):
   if (row.facts.reviewRequest === 'team' && notYours) {
     return 'routed, not yours';
   }
-  if (teamRequestHold(pr, board.viewer, notYours)?.kind === 'changes') {
+  if (routedRequestWaits(pr, board.viewer, notYours) === 'changes') {
     return 'routed, changes held';
   }
   if (row.facts.reviewRequest === 'team_taken') {
@@ -60,17 +59,12 @@ function snoozeContext(board: PropertyBoard, key: PrKey, events: PrEvent[] = eve
 }
 
 /**
- * News that wakes a snooze (2026-09-30): loud from a human, or automation
- * the agent raised to loud. A bot event at its rule's loudness never does.
+ * A snooze's phase is the spec's (spec-rules.ts `expectedSnoozePhase`):
+ * broken by unseen loud news from a person or automation the agent raised
+ * (2026-09-30), over once the PR is merged or closed (every kind,
+ * 2026-09-30) or its condition is met. The app's Look closer event never
+ * moves it.
  */
-function wakesSnooze(event: PrEvent, pr: Pr, board: PropertyBoard): boolean {
-  if (!isNews(event)) {
-    return false;
-  }
-  return !isAutomation(event, reviewRequestTarget(event, pr), board.viewer) || event.override?.loudness === 'loud';
-}
-
-/** Human or raised news after the start breaks a snooze; every snooze on a finished PR is over; the app's Look closer event never wakes one. */
 export const snoozeLifecycle: Invariant = {
   name: 'snoozes: human or agent-raised news breaks, a finished PR ends every snooze, Look closer never wakes',
   check(board) {
@@ -78,12 +72,8 @@ export const snoozeLifecycle: Invariant = {
       const pr = prOf(board, key);
       const events = eventsOf(board, key);
       const phase = snoozePhase(snooze, snoozeContext(board, key));
-      ensure(pr.state === 'OPEN' || phase !== 'active', `${key}: ${snooze.condition.kind} snooze still active on a ${pr.state} PR`);
-      const waking = events.filter((event) => event.at > snooze.since && wakesSnooze(event, pr, board));
-      ensure(waking.length === 0 || phase === 'broken', `${key}: human or raised news after the snooze, phase ${phase}`);
-      if (phase === 'broken') {
-        ensure(waking.length > 0, `${key}: snooze broken without human or raised news`);
-      }
+      const expected = expectedSnoozePhase({ pr, events, viewer: board.viewer, snooze, now: board.now });
+      ensure(phase === expected, `${key}: ${snooze.condition.kind} snooze ${phase}, expected ${expected}`);
       const withoutLookCloser = events.filter((event) => event.kind !== 'look_closer');
       const freshPing = lookCloserEvent(pr, 'acme/team-platform', 'fresh-request', board.now);
       for (const variant of [withoutLookCloser, [...events, freshPing]]) {
@@ -126,14 +116,14 @@ export const quietReadsNeverHideAsks: Invariant = {
       };
       const quiet = quietReadCheck(input);
       const touched = touchedReadCheck(input);
-      const humanNews = events.filter((event) => isNews(event) && !isOwnEvent(event, board.viewer) && !isAutomation(event, reviewRequestTarget(event, pr), board.viewer));
+      const humanNews = events.filter((event) => isNews(event) && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event));
       if (quiet.kind === 'mark') {
         ensure(!pr.truncated, `${key}: bot-only quiet read on a truncated snapshot`);
         ensure(humanNews.length === 0, `${key}: bot-only quiet read with human news ${humanNews.map((event) => event.id).join(', ')}`);
       }
       if (touched.kind === 'mark') {
         ensure(!pr.truncated, `${key}: acted-after quiet read on a truncated snapshot`);
-        const touch = lastTouch(pr, events, board.viewer, { kinds: READING_TOUCH_KINDS });
+        const touch = newestTouch(pr, board.viewer, READING_TOUCHES);
         const after = humanNews.filter((event) => touch === null || event.at >= touch.at);
         ensure(after.length === 0, `${key}: acted-after quiet read with human news after the touch: ${after.map((event) => event.id).join(', ')}`);
       }
@@ -167,21 +157,6 @@ export const pingsOnlyForLiveNews: Invariant = {
       ensure(rule.event !== null && fresh.includes(rule.event) && isNews(rule.event), `${key}: ping about ${rule.event?.id ?? 'nothing'}, not unseen loud news`);
       for (const view of holding) {
         ensure(view.state.kind !== 'snoozed' && view.state.kind !== 'done', `${key}: ping for ${rule.event!.id} from a ${view.state.kind} tile`);
-      }
-    }
-  },
-};
-
-/** The Look closer ping never fires on a snoozed tile, and only for a pending routed request the viewer has not reviewed. */
-export const lookCloserPingRules: Invariant = {
-  name: 'a Look closer ping needs a pending routed request, no review of the head, no snooze',
-  check(board) {
-    for (const [key, pr] of board.prs) {
-      const userState = board.userStates.get(key) ?? null;
-      const input = { pr, viewer: board.viewer, glance: { verdict: 'LOOK_CLOSER' as const }, userState, pingedRequestId: null };
-      ensure(lookCloserPingCheck({ ...input, snoozed: true }).kind === 'skip', `${key}: Look closer pings on a snoozed tile`);
-      if (lookCloserPingCheck({ ...input, snoozed: false }).kind === 'ping') {
-        ensure(routedTeamRequest(pr, board.viewer) !== null && !reviewedHead(pr, board.viewer, userState), `${key}: Look closer pings without a pending unreviewed routed request`);
       }
     }
   },
@@ -230,6 +205,5 @@ export const PR_INVARIANTS: readonly Invariant[] = [
   snoozeLifecycle,
   quietReadsNeverHideAsks,
   pingsOnlyForLiveNews,
-  lookCloserPingRules,
   botRequestWorksLikeHuman,
 ];

@@ -2,12 +2,13 @@
 // handled survives new activity (DESIGN.md "Reading a PR is one planner",
 // "Handled is not reset by new activity").
 import { deriveEvents } from '../events.ts';
-import { isTracked } from '../provenance.ts';
 import { openedReadCheck } from '../quiet-reads.ts';
 import { applyReadPlan, planRead, prReadScope, tileReadScope, type ReadCause, type ReadScope } from '../read-plan.ts';
-import type { IsoTime, Pr, PrEvent, Tile, UserPrState } from '../types.ts';
+import type { IsoTime, Pr, Tile, UserPrState } from '../types.ts';
 import { tileViewOf, tileStateOf, withReadState, type PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, prOf, sameMove, trackedRows, type Invariant } from './invariant.ts';
+import { describeTurn, ensure, eventsOf, isTrackedHere, prOf, sameMove, trackedRows, type Invariant } from './invariant.ts';
+import { pendingRequest } from './spec-facts.ts';
+import { expectedOpenedRead, expectedReadPlan } from './spec-rules.ts';
 
 /** The board after a read of `scope` by `cause`, through the planner, as the engine writes it. */
 export function afterRead(board: PropertyBoard, scope: ReadScope, cause: ReadCause, at: IsoTime = board.now): PropertyBoard {
@@ -34,34 +35,59 @@ function causesAt(time: IsoTime): ReadCause[] {
 }
 
 function scopesOf(tile: Tile): ReadScope[] {
-  return [tileReadScope(tile), ...tile.members.map((member) => prReadScope(member.prKey, isTracked(member.provenance)))];
+  return [tileReadScope(tile), ...tile.members.map((member) => prReadScope(member.prKey, isTrackedHere(member.provenance)))];
 }
 
-/** Only the button, opening and a completed pending read handle; seen stays inside the scope and before the cause's cutoff; an earlier handled time stays. */
+/** A tile read covers every PR of the tile and handles its pinged and found ones, never a pulled-in layer. */
+export const readScopesFollowTheTile: Invariant = {
+  name: 'a tile read covers every PR of the tile and handles only the tracked ones',
+  check(board) {
+    for (const tile of board.tiles) {
+      const scope = tileReadScope(tile);
+      const tracked = tile.members.filter((member) => isTrackedHere(member.provenance)).map((member) => member.prKey);
+      ensure(JSON.stringify(scope.prKeys) === JSON.stringify(tile.members.map((member) => member.prKey)), `${tile.id}: read covers ${scope.prKeys.join(', ')}`);
+      ensure(JSON.stringify(scope.handleKeys) === JSON.stringify(tracked), `${tile.id}: read handles ${scope.handleKeys.join(', ')}, tracked ${tracked.join(', ')}`);
+    }
+  },
+};
+
+/**
+ * The planner is the spec's (spec-rules.ts `expectedReadPlan`): which events
+ * turn seen, stamped when, which PRs turn handled. Liveness: after a read
+ * without a cutoff (the button, opening, Approve) nothing in its scope is
+ * unseen; with one, nothing at or before it. An earlier handled time stays,
+ * and a second read changes nothing.
+ */
 export const readPlannerCauses: Invariant = {
-  name: 'the read planner: who handles, what turns seen, what stays',
+  name: 'the read planner: who handles, what turns seen, what stays, nothing unseen left behind',
   check(board) {
     for (const tile of board.tiles) {
       for (const scope of scopesOf(tile)) {
         for (const time of readTimes(board)) {
           for (const cause of causesAt(time)) {
-            const plan = planRead({ scope, cause, events: board.events, userStates: board.userStates, at: board.now });
-            const handles = cause.kind === 'button' || cause.kind === 'opened' || cause.kind === 'pending_completion';
-            ensure(handles || plan.handleKeys.length === 0, `${cause.kind} handles ${plan.handleKeys.join(', ')}`);
-            ensure(plan.handleKeys.every((key) => scope.handleKeys.includes(key)), `${cause.kind}: handles a PR outside the scope's handle keys`);
+            const input = { scope, cause, events: board.events, userStates: board.userStates, at: board.now };
+            const plan = planRead(input);
+            const got = JSON.stringify({ seenAt: plan.seenAt, handledAt: plan.handledAt, handleKeys: plan.handleKeys, eventIds: plan.change.eventIds, handledKeys: plan.change.handledKeys });
+            const expected = JSON.stringify(expectedReadPlan(input));
+            ensure(got === expected, `${cause.kind}: plan ${got}, expected ${expected}`);
             const cutoff = cause.kind === 'pending_completion' ? cause.clickedAt : cause.kind === 'read_on_github' || cause.kind === 'quiet' ? cause.readAt : null;
-            const inScope = new Map<string, PrEvent>(scope.prKeys.flatMap((key) => eventsOf(board, key).map((event) => [event.id, event] as const)));
-            for (const id of plan.change.eventIds) {
-              const event = inScope.get(id);
-              ensure(event !== undefined, `${cause.kind}: marks ${id} of a PR outside its scope`);
-              ensure(event!.seenAt === null, `${cause.kind}: marks the seen event ${id} again`);
-              ensure(cutoff === null || event!.at <= cutoff, `${cause.kind}: marks ${id} after its cutoff`);
-            }
             const after = applyReadPlan(plan, board.events, board.userStates);
-            for (const [key, state] of board.userStates) {
-              if (state.handledAt !== null) {
-                ensure(after.userStates.get(key)?.handledAt === state.handledAt, `${cause.kind}: moves the handled time of ${key}`);
-              }
+            for (const key of scope.prKeys) {
+              const left = (after.events.get(key) ?? []).filter((event) => event.seenAt === null && (cutoff === null || event.at <= cutoff));
+              ensure(left.length === 0, `${cause.kind}: ${left.map((event) => event.id).join(', ')} still unseen after the read`);
+            }
+            const marked = new Set(plan.change.eventIds);
+            for (const [key, events] of board.events) {
+              events.forEach((event, index) => {
+                const next = after.events.get(key)![index]!;
+                const expectedSeen = marked.has(event.id) ? plan.seenAt : event.seenAt;
+                ensure(next.seenAt === expectedSeen, `${cause.kind}: ${event.id} seen at ${next.seenAt}, expected ${expectedSeen}`);
+              });
+            }
+            for (const key of new Set([...board.userStates.keys(), ...plan.change.handledKeys])) {
+              const before = board.userStates.get(key)?.handledAt ?? null;
+              const expectedHandled = plan.change.handledKeys.includes(key) ? plan.handledAt : before;
+              ensure((after.userStates.get(key)?.handledAt ?? null) === expectedHandled, `${cause.kind}: handled time of ${key} moved`);
             }
             const again = planRead({ scope, cause, events: after.events, userStates: after.userStates, at: board.now });
             ensure(again.change.eventIds.length === 0 && again.change.handledKeys.length === 0, `${cause.kind}: a second read changes more`);
@@ -110,13 +136,15 @@ export const openedReadLeavesDone: Invariant = {
       for (const row of trackedRows(view)) {
         const thread = board.threads.get(row.key) ?? null;
         const holding = board.tiles.filter((tile) => tile.members.some((member) => member.prKey === row.key));
-        const check = openedReadCheck({
-          thread,
-          prFetchedAt: board.prFetchedAt.get(row.key) ?? null,
-          prTruncated: prOf(board, row.key).truncated === true,
-          tiles: holding.map((tile) => ({ snoozed: tileStateOf(board, tile).kind === 'snoozed' })),
-          doneAfterRead: row.afterRead.done,
-        });
+        const tilesSnoozed = holding.map((tile) => tileStateOf(board, tile).kind === 'snoozed');
+        const input = { thread, prFetchedAt: board.prFetchedAt.get(row.key) ?? null, truncated: prOf(board, row.key).truncated === true, tilesSnoozed, doneAfterRead: row.afterRead.done };
+        const check = openedReadCheck({ ...input, prTruncated: input.truncated, tiles: tilesSnoozed.map((snoozed) => ({ snoozed })) });
+        // Also as if no tile held it, or it had no thread: nothing to mirror then.
+        for (const variant of [input, { ...input, tilesSnoozed: [] }, { ...input, thread: null }]) {
+          const got = JSON.stringify(openedReadCheck({ ...variant, prTruncated: variant.truncated, tiles: variant.tilesSnoozed.map((snoozed) => ({ snoozed })) }));
+          const expected = JSON.stringify(expectedOpenedRead(variant));
+          ensure(got === expected, `${row.key}: opened read ${got}, expected ${expected}`);
+        }
         if (check.kind === 'skip') {
           continue;
         }
@@ -171,5 +199,35 @@ export const handledSurvivesNewActivity: Invariant = {
   },
 };
 
-export const READ_INVARIANTS: readonly Invariant[] = [readPlannerCauses, tileAfterReadIsTheRealRead, prAfterReadIsTheRealRead, openedReadLeavesDone, handledSurvivesNewActivity];
+/** The viewer comments now, after everything else. */
+function withViewerComment(pr: Pr, now: IsoTime): Pr {
+  const comment = { id: `answer-${pr.ref.number}`, author: 'viewer', body: 'done, have a look', createdAt: now, kind: 'comment' as const, url: `${pr.url}#answer`, path: null, threadId: null };
+  return { ...pr, comments: [...pr.comments, comment], updatedAt: now };
+}
+
+/**
+ * Answering is a touch (metamorphic): once the viewer comments, no ask is
+ * open (no Reply move, not Needs reply) and the author's answer to their
+ * changes request is taken (no Re-review for it). A re-review asked for
+ * by a pending request, personal or for the viewer's team, stays (decided
+ * 2026-09-30: a comment does not answer a request).
+ */
+export const answeringClearsTheAsk: Invariant = {
+  name: 'a comment by the viewer clears every Reply and answered-changes Re-review, and Needs reply',
+  check(board, views) {
+    for (const view of views) {
+      for (const row of trackedRows(view)) {
+        const pr = withViewerComment(prOf(board, row.key), board.now);
+        const next = tileViewOf(resync(board, pr), view.tile).prs.find((candidate) => candidate.key === row.key)!;
+        const move = next.turn.kind === 'you' ? next.turn.move : null;
+        const request = pendingRequest(pr, board.viewer);
+        const reRequested = request === 'you' || request === 'team_for_you' || request === 'team';
+        ensure(move !== 'reply' && (move !== 're_review' || reRequested), `${row.key}: after the viewer's comment ${describeTurn(next.turn)}`);
+        ensure(next.tier !== 'needs_reply', `${row.key}: still Needs reply after the viewer's comment`);
+      }
+    }
+  },
+};
+
+export const READ_INVARIANTS: readonly Invariant[] = [readScopesFollowTheTile, readPlannerCauses, tileAfterReadIsTheRealRead, prAfterReadIsTheRealRead, openedReadLeavesDone, handledSurvivesNewActivity, answeringClearsTheAsk];
 

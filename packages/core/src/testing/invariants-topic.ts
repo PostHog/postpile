@@ -3,15 +3,17 @@
 // PRs", engine `RetireGate`). Plus determinism over the whole board.
 import { topicQueues, emptyTierCounts, pingedPrKeys, personRelation } from '../topic-queues.ts';
 import { topicMove, topicUrgency } from '../topic-urgency.ts';
-import { YOUR_MOVE_ORDER } from '../whose-turn.ts';
-import { isUnseenMergeWithoutReview } from '../loudness.ts';
 import { prTier } from '../pr-tier.ts';
 import { changesAnswered } from '../changes-answered.ts';
-import { isTracked } from '../provenance.ts';
 import type { PrEvent } from '../types.ts';
 import type { TileView } from '../views.ts';
+import type { YourMove } from '../whose-turn.ts';
 import { tileViewsOf } from './build-board.ts';
-import { ensure, eventsOf, isNews, prOf, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, isNews, isTrackedHere, prOf, type Invariant } from './invariant.ts';
+import { isUnseenMergeWithoutViewer } from './spec-rules.ts';
+
+/** Most urgent first, like the sidebar sections: spelled out here, not read from `YOUR_MOVE_ORDER`. */
+const MOVE_ORDER: readonly YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'merge'];
 
 /** The row's urgency as the read models build it, from the tiles. */
 function urgencyOf(views: TileView[]) {
@@ -35,7 +37,7 @@ export const topicCountsMatchTiles: Invariant = {
     const live = views.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
     const moves = live.flatMap((view) => (view.turn.kind === 'you' ? [view.turn.move] : []));
     ensure(urgency.yourMoves.length === moves.length, `your moves ${urgency.yourMoves.length}, live tiles your move ${moves.length}`);
-    const order = urgency.yourMoves.map((move) => YOUR_MOVE_ORDER.indexOf(move.move));
+    const order = urgency.yourMoves.map((move) => MOVE_ORDER.indexOf(move.move));
     ensure(order.every((rank, index) => index === 0 || order[index - 1]! <= rank), 'your moves out of order');
     const urgentUnread = unread.some((view) => view.prs.some((row) => row.state === 'OPEN'));
     const urgentMove = moves.some((move) => move !== 'merge');
@@ -65,7 +67,7 @@ export const queueCountsMatchRows: Invariant = {
     const expected = emptyTierCounts();
     const counted = new Set<string>();
     for (const row of views.flatMap((view) => view.prs)) {
-      if (isTracked(row.provenance) && !counted.has(row.key)) {
+      if (isTrackedHere(row.provenance) && !counted.has(row.key)) {
         counted.add(row.key);
         expected[row.tier] += 1;
       }
@@ -90,7 +92,7 @@ export const finishedTopicRetires: Invariant = {
         view.tile.members.every((member) => {
             const events = eventsOf(board, member.prKey);
             const news = member.provenance.kind !== 'found' && events.some(isNews);
-            const merge = isTracked(member.provenance) && !board.notYours.has(member.prKey) && events.some(isUnseenMergeWithoutReview);
+            const merge = isTrackedHere(member.provenance) && !board.notYours.has(member.prKey) && events.some(isUnseenMergeWithoutViewer);
             return !news && !merge;
           }),
       );

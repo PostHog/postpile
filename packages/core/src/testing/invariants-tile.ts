@@ -1,14 +1,15 @@
 // Tile-level invariants: state, whose turn, lead PR and the buttons
 // (DESIGN.md "Tile faces", "Actions act on what you look at", "Rules layer:
 // one home per fact").
-import { isTracked } from '../provenance.ts';
-import { snoozePhase } from '../snooze.ts';
-import { isPrDone } from '../tiles.ts';
 import type { WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
+import type { PrTier } from '../pr-tier.ts';
+import { tileListRank } from '../tile-view.ts';
 import type { PrSummary, TileView } from '../views.ts';
-import { tileViewsOf, type PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, isNews, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
+import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
+import { describeTurn, ensure, eventsOf, isNews, isTrackedHere, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
+import { expectedFooter, expectedGitHubLink, expectedLeadPr, expectedMarkLabel, expectedPane, expectedPrimaryAction } from './spec-offers.ts';
+import { expectedDone, expectedSnoozePhase, isUnseenMergeWithoutViewer } from './spec-rules.ts';
 
 const TURN_RANK: Record<WhoseTurnKind, number> = { you: 0, them: 1, none: 2 };
 
@@ -21,14 +22,14 @@ function isSnoozedByRule(board: PropertyBoard, view: TileView): boolean {
       if (!snooze) {
         return false;
       }
-      const context = { pr: prOf(board, member.prKey), events: eventsOf(board, member.prKey), now: board.now, viewer: board.viewer };
-      return snoozePhase(snooze, context) === 'active';
+      return expectedSnoozePhase({ pr: prOf(board, member.prKey), events: eventsOf(board, member.prKey), viewer: board.viewer, snooze, now: board.now }) === 'active';
     })
   );
 }
 
+/** Done by the spec (spec-rules.ts `expectedDone`), not by `isPrDone`. */
 function prDone(board: PropertyBoard, key: string): boolean {
-  return isPrDone(prOf(board, key), board.userStates.get(key) ?? null, board.viewer, eventsOf(board, key), board.notYours.has(key));
+  return expectedDone({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) });
 }
 
 /** A tile is snoozed exactly while every tracked PR in it has an active snooze (DESIGN "Snoozes belong to PRs"). */
@@ -51,21 +52,22 @@ export const unreadWhileLoudNews: Invariant = {
       const expected = view.state.kind !== 'snoozed' && news.length > 0;
       ensure((view.state.kind === 'unread') === expected, `${view.tile.id}: state ${view.state.kind}, ${news.length} loud news`);
       if (view.state.kind === 'unread') {
-        const reasons = view.state.unreadBecause.map((reason) => reason.eventId).sort();
-        ensure(JSON.stringify(reasons) === JSON.stringify(news.map((event) => event.id).sort()), `${view.tile.id}: unread reasons are not the loud news`);
+        const reasons = view.state.unreadBecause.map((reason) => reason.eventId);
+        const byTime = news.toSorted((a, b) => a.at.localeCompare(b.at)).map((event) => event.at);
+        ensure(JSON.stringify(reasons.toSorted()) === JSON.stringify(news.map((event) => event.id).sort()), `${view.tile.id}: unread reasons are not the loud news`);
+        ensure(JSON.stringify(view.state.unreadBecause.map((reason) => reason.at)) === JSON.stringify(byTime), `${view.tile.id}: unread reasons out of time order`);
+      } else {
+        ensure(view.state.unreadBecause.length === 0, `${view.tile.id}: ${view.state.kind} tile with unread reasons`);
       }
     }
   },
 };
 
-/** Done: not snoozed, not unread, and every tracked PR done by `isPrDone`; each row's done is that PR's. */
+/** Done: not snoozed, not unread, and every tracked PR done by the spec. */
 export const doneWhileEveryTrackedPrDone: Invariant = {
   name: 'a tile is done exactly while not snoozed, not unread and every tracked PR is done',
   check(board, views) {
     for (const view of views) {
-      for (const row of view.prs) {
-        ensure(row.done === prDone(board, row.key), `${row.key}: row done ${row.done}, isPrDone ${!row.done}`);
-      }
       const allDone = trackedMembers(view).every((member) => prDone(board, member.prKey));
       const expected = view.state.kind !== 'snoozed' && view.state.kind !== 'unread' && allDone;
       ensure((view.state.kind === 'done') === expected, `${view.tile.id}: state ${view.state.kind}, every tracked PR done: ${allDone}`);
@@ -73,16 +75,24 @@ export const doneWhileEveryTrackedPrDone: Invariant = {
   },
 };
 
-/** The grey "merged without you" strip only shows on an open tile, for tracked PRs the glance did not call not yours. */
+/**
+ * The grey "merged without you" strip shows on an open tile, for exactly
+ * the unseen merges without the viewer's review on tracked PRs the glance
+ * did not call not yours; no other state carries it.
+ */
 export const unseenMergesOnlyOnOpenTiles: Invariant = {
-  name: 'unseen merges without review show only on open tiles, for tracked PRs that are not NOT_YOURS',
+  name: 'unseen merges without review show exactly on open tiles, for tracked PRs that are not NOT_YOURS',
   check(board, views) {
     for (const view of views) {
-      for (const reason of view.state.unseenMerges ?? []) {
-        const member = view.tile.members.find((candidate) => candidate.prKey === reason.prKey);
-        ensure(view.state.kind === 'open', `${view.tile.id}: unseen merge on a ${view.state.kind} tile`);
-        ensure(member !== undefined && isTracked(member.provenance) && !board.notYours.has(reason.prKey), `${reason.prKey}: unseen merge from an untracked or NOT_YOURS PR`);
-      }
+      const merges = trackedMembers(view)
+        .filter((member) => !board.notYours.has(member.prKey))
+        .flatMap((member) => eventsOf(board, member.prKey).filter(isUnseenMergeWithoutViewer))
+        .map((event) => event.id)
+        .sort();
+      const shown = (view.state.unseenMerges ?? []).map((reason) => reason.eventId).sort();
+      const expected = view.state.kind === 'open' ? merges : [];
+      ensure(JSON.stringify(shown) === JSON.stringify(expected), `${view.tile.id}: ${view.state.kind} tile shows merges ${shown.join(', ')}, expected ${expected.join(', ')}`);
+      ensure(view.state.unseenMerges === undefined || shown.length > 0, `${view.tile.id}: an empty merge strip`);
     }
   },
 };
@@ -243,7 +253,7 @@ function hasTileNews(board: PropertyBoard, row: PrSummary): boolean {
  * and pulled-in stack layers with unseen loud news (2026-09-30).
  */
 function rowsThatCanHold(board: PropertyBoard, view: TileView): PrSummary[] {
-  return view.prs.filter((row) => isTracked(row.provenance) || hasTileNews(board, row));
+  return view.prs.filter((row) => isTrackedHere(row.provenance) || hasTileNews(board, row));
 }
 
 /**
@@ -304,6 +314,91 @@ export const pendingWritesChangeNoButton: Invariant = {
   },
 };
 
+/**
+ * The list order in a topic (2026-09-29): unread, open, snoozed, done, and
+ * a read tile that is still your move ranks with the unread ones.
+ */
+export const tileListOrderFollowsState: Invariant = {
+  name: 'a tile ranks by state, and an open tile that is your move ranks with the unread',
+  check(_board, views) {
+    const rank = { unread: 0, open: 1, snoozed: 2, done: 3 };
+    for (const view of views) {
+      const expected = view.state.kind === 'open' && view.turn.kind === 'you' ? rank.unread : rank[view.state.kind];
+      ensure(tileListRank(view) === expected, `${view.tile.id}: rank ${tileListRank(view)}, expected ${expected}`);
+    }
+  },
+};
+
+/** The queue order, spelled out here (not `PR_TIER_ORDER`). */
+const TIER_ORDER: readonly PrTier[] = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
+
+/** A tile sits in the queue of its most urgent PR; a pulled-in layer's tier is always the rest. */
+export const tileTierIsMostUrgentRowTier: Invariant = {
+  name: 'the tile tier is the most urgent tier of its rows',
+  check(_board, views) {
+    for (const view of views) {
+      const expected = TIER_ORDER.find((tier) => view.prs.some((row) => row.tier === tier)) ?? 'rest';
+      ensure(view.tier === expected, `${view.tile.id}: tier ${view.tier}, rows ${view.prs.map((row) => row.tier).join(', ')}`);
+    }
+  },
+};
+
+function paneLine(pane: Pick<PaneOffers, 'scope' | 'lead' | 'approve' | 'open' | 'ask' | 'markLabel' | 'snooze' | 'removeTeams'>): string {
+  return JSON.stringify([pane.scope, pane.lead, pane.approve, pane.open, pane.ask, pane.markLabel, pane.snooze, pane.removeTeams]);
+}
+
+/**
+ * Every button follows the spec (spec-offers.ts): the footer and its label,
+ * Snooze on every tile that is not done, the lead PR, the GitHub link next
+ * to Snooze, each PR's primary action and its pane.
+ */
+export const offersFollowTheSpec: Invariant = {
+  name: 'the footer, lead PR, GitHub link, primary actions and every pane follow the spec',
+  check(board, views) {
+    for (const view of views) {
+      const { offers } = view;
+      const footer = expectedFooter(view);
+      ensure(offers.footer === footer && offers.markLabel === expectedMarkLabel(footer), `${view.tile.id}: footer ${offers.footer} (${offers.markLabel}), expected ${footer}`);
+      ensure(offers.snooze === (view.state.kind !== 'done'), `${view.tile.id}: Snooze ${offers.snooze} on a ${view.state.kind} tile`);
+      ensure(offers.leadPrKey === expectedLeadPr(view), `${view.tile.id}: lead ${offers.leadPrKey}, expected ${expectedLeadPr(view)}`);
+      const link = footer === 'snooze' ? expectedGitHubLink(view, board.viewer) : null;
+      ensure(JSON.stringify(offers.github) === JSON.stringify(link), `${view.tile.id}: GitHub link ${JSON.stringify(offers.github)}, expected ${JSON.stringify(link)}`);
+      for (const row of view.prs) {
+        const pr = prOf(board, row.key);
+        const primary = expectedPrimaryAction(pr, board.viewer, board.userStates.get(row.key) ?? null, view.state.kind === 'unread');
+        ensure(row.primaryAction === primary, `${row.key}: primary ${row.primaryAction}, expected ${primary}`);
+        const pane = offers.pane[row.key]!;
+        const expected = paneLine(expectedPane(view, row, pr, board.viewer));
+        ensure(paneLine(pane) === expected, `${row.key}: pane ${paneLine(pane)}, expected ${expected}`);
+        const write = pane.scope === 'tile' ? view.pendingWrite : row.pendingWrite;
+        ensure(pane.pendingWrite === write, `${row.key}: pane waits on the wrong write`);
+      }
+    }
+  },
+};
+
+/**
+ * Before the first sync stored a viewer nothing is aimed at anyone: no
+ * move, every PR the rest, no request, touch, ask or team request, and done
+ * is an in-app approval or handled (or a finished PR seen).
+ */
+export const noViewerAsksNothing: Invariant = {
+  name: 'without a viewer nothing is anyone\'s move and done is approved in the app or handled',
+  check(board) {
+    for (const tile of board.tiles) {
+      const view = tileViewOf(board, tile, null);
+      ensure(view.turn.kind === 'none', `${tile.id}: tile turn ${describeTurn(view.turn)} without a viewer`);
+      for (const row of view.prs) {
+        ensure(row.turn.kind === 'none' && row.tier === 'rest', `${row.key}: ${describeTurn(row.turn)}, tier ${row.tier} without a viewer`);
+        const facts = row.facts;
+        ensure(facts.reviewRequest === null && facts.lastTouch === null && facts.openAsk === null && row.ownTeamRequests.length === 0, `${row.key}: facts without a viewer`);
+        const done = expectedDone({ pr: prOf(board, row.key), events: eventsOf(board, row.key), viewer: null, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key) });
+        ensure(row.done === done, `${row.key}: done ${row.done} without a viewer, expected ${done}`);
+      }
+    }
+  },
+};
+
 export const TILE_INVARIANTS: readonly Invariant[] = [
   snoozedWhileEveryTrackedPrSnoozed,
   unreadWhileLoudNews,
@@ -321,4 +416,8 @@ export const TILE_INVARIANTS: readonly Invariant[] = [
   oneDotPerNotDonePr,
   liveTileShowsWhatHoldsIt,
   pendingWritesChangeNoButton,
+  tileTierIsMostUrgentRowTier,
+  tileListOrderFollowsState,
+  offersFollowTheSpec,
+  noViewerAsksNothing,
 ];

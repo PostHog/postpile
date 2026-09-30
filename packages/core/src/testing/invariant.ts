@@ -3,8 +3,7 @@
 // it does not depend on vitest, so a differential or a stateful test can run
 // the same catalogue after each step.
 import fc from 'fast-check';
-import { isTracked } from '../provenance.ts';
-import type { Pr, PrEvent, PrKey, TileMember } from '../types.ts';
+import type { Pr, PrEvent, PrKey, Provenance, TileMember } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { WhoseTurn } from '../whose-turn.ts';
 import { boardSpecArb, type BoardSpec } from './board-spec.ts';
@@ -49,12 +48,17 @@ export function eventsOf(board: PropertyBoard, key: PrKey): PrEvent[] {
   return board.events.get(key) ?? [];
 }
 
+/** Pinged or found, not a pulled-in layer: spelled out here, not read from `isTracked`. */
+export function isTrackedHere(provenance: Provenance): boolean {
+  return provenance.kind !== 'pulled_in';
+}
+
 export function trackedMembers(view: TileView): TileMember[] {
-  return view.tile.members.filter((member) => isTracked(member.provenance));
+  return view.tile.members.filter((member) => isTrackedHere(member.provenance));
 }
 
 export function trackedRows(view: TileView): PrSummary[] {
-  return view.prs.filter((row) => isTracked(row.provenance));
+  return view.prs.filter((row) => isTrackedHere(row.provenance));
 }
 
 /** Loud as the agent or user left it, and not seen: spelled out here, not read from the rule under test. */
