@@ -1027,6 +1027,16 @@ the app meanwhile.
 
 ## Decided
 
+- **From the property tests** (2026-09-30): a re-request after your changes
+  request says "Re-review, ada asked" (move `re_review`), with or without a
+  push; the PR stays under Changes you requested, and the order inside that
+  section follows the move. Every snooze ends on merge or close. An override
+  to loud wakes a snooze whether the agent or the user set it. Loud news on
+  a pulled-in stack layer dots that layer, and a stack with one tracked PR
+  plus such a layer dots both rows while the tracked PR is not done. The
+  quiet-read grace counts from the newest activity, human or bot. DESIGN.md
+  "Decided from the property tests".
+
 - **Review requests by whom they ask; routed reviews ping on Look closer**
   (2026-09-29): a `review_requested` event aimed at the viewer or their team
   counts whoever made it, bot or person. A routed team request never pings

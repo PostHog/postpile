@@ -1844,7 +1844,7 @@ authors.
 'none', who, what, prKey }`. A `you` turn also carries `move` (2026-09-29),
 the kind of move for the sidebar row's chip: `reply` (rule 2, drafts too),
 `re_review` (addressed your changes, or asked again while your changes
-request stands), `review` (review request, personal or team), `address_changes` (threads or a change request on your own PR or
+request stands, push or not), `review` (review request, personal or team), `address_changes` (threads or a change request on your own PR or
 draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
 2026-09-29 ("CI is not a signal"). Rules per pinged PR, first match wins:
 
@@ -1928,10 +1928,14 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      (2026-09-28). A team request on a PR from outside the team (routed)
      is yours only while no teammate reviewed at all, and while it is not
      on hold (`teamRequestHold`, 2026-09-29). While your own changes request
-     stands (you were asked again after it, the head moved, and you only
-     commented since) the same request is a re-review: "Re-review, ada
-     asked", move `re_review`, matching the tier Changes you requested
-     (2026-09-30, `viewerRequestedChanges`).
+     stands (you were asked again after it and only commented since) the
+     same request is a re-review: "Re-review, ada asked", move `re_review`,
+     matching the tier Changes you requested (2026-09-30,
+     `viewerRequestedChanges`). That holds with or without a push: without
+     one your review of the head still stands, but GitHub drops a reviewer
+     from the requested list once they review, so a pending personal
+     request after it is the author's re-request, and an explicit
+     re-request means "look again" (2026-09-30).
    - them: a routed team request while someone else's changes request
      stands: the author "to address ada's changes" (the author moves
      first). Once the author pushed after it and requested ada again (she
@@ -2156,8 +2160,9 @@ Addressed your changes (see whose turn) is `changes_requested` (was
 `to_review` until 2026-09-29), like a change request still waiting on the
 author: a re-review is owed even to a teammate, and the author's own
 thread replies do not push it into needs_reply; an ask from anyone else
-does. `TopicQueues.changesAddressed` counts the addressed ones, for the
-order inside the section.
+does. `TopicQueues.changesAddressed` counts the ones whose move is a
+re-review (`isReReviewMove`: addressed, or asked again with or without a
+push), for the order inside the section (2026-09-30).
 Pure and tested; the sidebar's queue sections are built on it.
 
 ### Three-pane balance
@@ -2298,10 +2303,10 @@ avatars and filters", QueuesB2).
   where the viewer's newest verdict review asks for changes, whoever wrote
   them. Directly under Needs reply because a standing change request is the
   viewer's own open loop: Julian, "this should surface very high up, maybe
-  directly below needs reply". Rows whose author addressed the changes
-  ("addressed your changes: re-review", the viewer's move, unread) sort
-  first (`TopicQueues.changesAddressed`); rows still waiting on the author
-  follow, quiet. The topic column does the same with the section's tiles
+  directly below needs reply". Rows whose move is a re-review ("addressed
+  your changes: re-review", or "Re-review, ada asked" after a re-request)
+  sort first (`TopicQueues.changesAddressed`, which follows the move since
+  2026-09-30); rows still waiting on the author follow, quiet. The topic column does the same with the section's tiles
   (your move first, `tilesInTierOrder`). Before, only the
   addressed case had a section (To review), and a change request the author
   had not touched fell to Team's PRs or Other topics.
@@ -3994,6 +3999,9 @@ four cases where the rules had no answer yet; Julian decided each:
 - Re-request after your changes: you asked for changes, the author asked you
   again, and you then only commented. The PR stays under "Changes you
   requested" and the move says "Re-review" (it said "Review, ada asked").
+  The same without a push says "Re-review, ada asked" too (move
+  `re_review`, your move; it said "ada to address your changes"): an
+  explicit re-request means "look again", push or not.
 - Loud news on a pulled-in stack layer makes the tile unread and gives that
   layer a "Not done yet" dot. Julian: "PostPile found it could be interesting
   to me? that's a nice side effect". Before, the tile went unread with no dot
@@ -4007,6 +4015,21 @@ four cases where the rules had no answer yet; Julian decided each:
   holds for rule loudness: a bot event the agent left alone never wakes a
   snooze, and the app's own Look-closer event never does. A snoozed tile
   itself still never pings.
+
+Later the same day, from the next runs:
+
+- The order inside "Changes you requested" follows the move: a topic whose
+  PR says Re-review sorts first, also after a re-request (with or without a
+  push), where `changesAnswered` has no answer. `TopicQueues.changesAddressed`
+  counts re-review moves (`isReReviewMove`).
+- An override to loud wakes a snooze whether the events agent or the user
+  set it (`raisedToLoud` reads the override, not who made it). Julian: keep
+  both.
+- A stack with one tracked PR plus a pulled-in layer with news dots both
+  rows while the tracked PR is not done: the layer for its news, the
+  tracked PR for itself. Julian: keep.
+- The quiet-read grace counts from the newest activity, human or bot (the
+  touch, the bots after it, the thread's update). Kept as built.
 
 **Decision tables for loudness and pings.** Plain TypeScript arrays, first
 match wins. Pings keep choosing the newest qualifying event within the
@@ -4324,7 +4347,8 @@ preflight and does not know the token, so CORS stays open.
     and does not retry them [yes, keeps the 304 path free]
 - **Snooze wake-up**: implemented default (`breaksSnooze`): a loud event from a human after the
   snooze started ends it, so a mention is never hidden; since 2026-09-30 also an automation event
-  the agent raised to loud (see "Decided from the property tests"). Confirm.
+  the agent or the user raised to loud (both kept 2026-09-30, see "Decided from the property
+  tests"). Confirm.
 - **A broken snooze comes back**: a snooze broken by a mention comes back once the mention is
   read (`packages/core/src/snooze.test.ts` asserts it). Keep, or end the snooze for good when it
   breaks? (From the codebase review, 2026-09-29.)
