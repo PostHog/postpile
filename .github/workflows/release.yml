@@ -17,6 +17,11 @@
 # With them the app is signed, uses the hardened runtime and is notarized, like
 # PostHog/posthog's desktop-release.yml. Without the certificate the release
 # still goes out ad-hoc signed, with a warning. See RELEASING.md.
+#
+# Between the bundle build and packaging, posthog-cli injects chunk ids into
+# the bundle and uploads its source maps to PostHog Error Tracking, so error
+# stacks resolve to the TypeScript source and exceptions carry the release.
+# Skipped with a warning when POSTHOG_CLI_API_KEY is not set.
 
 name: Release
 
@@ -131,10 +136,55 @@ jobs:
                   fi
                   echo "signed=true" >> "$GITHUB_OUTPUT"
 
-            # electron-vite build, then electron-builder: app + zip, never published by electron-builder itself.
-            - name: Build the app (ad-hoc signed)
+            # electron-vite build with hidden source maps (.map files, no
+            # sourceMappingURL comment; electron-builder.yml leaves them out of the app).
+            - name: Build the app bundle
+              run: pnpm build
+
+            # A personal API key with "error tracking write" and "organization read"
+            # (RELEASING.md > Error tracking source maps). Not set means a release
+            # with unreadable, release-less error stacks, not a failed release.
+            - name: Check PostHog CLI secret
+              id: posthog
+              env:
+                  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "$POSTHOG_CLI_API_KEY" ]; then
+                      echo "::warning::POSTHOG_CLI_API_KEY is not set in the desktop-signing environment: no source maps uploaded, error stacks of this release stay bundled and have no release. See RELEASING.md > Error tracking source maps."
+                      echo "upload=false" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "upload=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+            # Before packaging, because the injected files are what must ship:
+            # inject prepends a snippet that records each file's chunk id and the
+            # release id (the "postpile" release at this version, created on first
+            # use), and upload sends the maps keyed by chunk id, then deletes them.
+            # main and renderer only: the preload has no error reporting, and the
+            # snippet in front of its "use strict" would turn that directive off.
+            # A failed upload fails the job, like a half-set signing setup.
+            - name: Upload source maps to PostHog
+              if: steps.posthog.outputs.upload == 'true'
+              env:
+                  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+                  # PostHog's own "PostPile" project (US cloud); not a secret, see packages/engine/src/telemetry/telemetry.ts.
+                  POSTHOG_CLI_PROJECT_ID: '635117'
+                  POSTHOG_CLI_HOST: https://us.posthog.com
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  npm install --global @posthog/cli@0.18.9
+                  for dir in apps/desktop/out/main apps/desktop/out/renderer; do
+                      posthog-cli sourcemap inject --directory "$dir" --release-name postpile --release-version "$VERSION"
+                      posthog-cli sourcemap upload --directory "$dir" --release-name postpile --release-version "$VERSION" --delete-after
+                  done
+                  grep -q '_posthogChunkIds' apps/desktop/out/main/index.js
+
+            # electron-builder only (the bundle is built above): app + zip, never published by electron-builder itself.
+            - name: Package the app (ad-hoc signed)
               if: steps.signing.outputs.signed != 'true'
-              run: pnpm dist
+              run: pnpm --filter @postpile/desktop dist
 
             # electron-builder.yml stays ad-hoc for local builds, which have no
             # certificate, and this step overrides the three signing keys. That keeps
@@ -149,7 +199,7 @@ jobs:
             # - notarize: notarytool with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and
             #   APPLE_TEAM_ID from the env, then staples the ticket to the app
             #   before the zip is made.
-            - name: Build the app (Developer ID signed and notarized)
+            - name: Package the app (Developer ID signed and notarized)
               if: steps.signing.outputs.signed == 'true'
               env:
                   CSC_LINK: ${{ secrets.APPLE_CODESIGN_CERT_BASE64 }}
@@ -159,7 +209,6 @@ jobs:
                   APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
               run: |
                   set -euo pipefail
-                  pnpm build
                   pnpm --filter @postpile/desktop exec electron-builder --mac --config electron-builder.yml --publish never \
                       "-c.mac.identity=${APPLE_TEAM_ID}" \
                       -c.mac.hardenedRuntime=true \
