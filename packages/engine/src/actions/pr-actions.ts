@@ -20,7 +20,7 @@ export class PrActions {
     private readonly contexts: PromptContextSource,
     private readonly readMarker: ReadMarker,
     private readonly now: () => Date,
-    /** Fetches the PR again right after a write, so the answer already shows GitHub's new state. */
+    /** Fetches the PR again right after a write. Comment and "Remove <team>" wait for it; approve does not. */
     private readonly refreshPr: (key: PrKey) => Promise<void> = async () => {},
   ) {}
 
@@ -56,7 +56,9 @@ export class PrActions {
     this.store.userPrStates.markApproved(key, pr.headOid, this.now().toISOString());
     // Mark read first: what the refresh brings in is news the user has not seen.
     const batch = this.readMarker.markRead(prReadScope(key, true), { kind: 'approved' }, { origin: 'tile', tileId: null });
-    await this.refreshPr(key);
+    // Not awaited: the approval and the mark-read are stored, so the answer
+    // does not wait for a poll cycle (seconds). The refresh never throws.
+    void this.refreshPr(key);
     return ok('Approved', batch.token);
   }
 

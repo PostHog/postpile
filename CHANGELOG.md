@@ -6,6 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- Approve, Mark read, Mark done and Snooze change the tile and buttons as soon as they're clicked instead of after a few seconds. A failed action puts things back and says why.
 - A snooze on a stack or set wakes when any of its tracked PRs meets the condition, for example the first PR to go green, instead of waiting for all of them.
 - Under the hood: each rule (automation, who a review request asks, whose move, loudness, pings, button offers) is worked out once in core and read by the app, pings, MCP and sample mode alike, so they can no longer disagree.
 - Loud news on a pulled-in stack layer gives that layer a "Not done yet" dot. It already made the tile unread, but no row said why.

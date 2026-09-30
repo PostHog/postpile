@@ -253,6 +253,10 @@ export class Engine implements EngineService {
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
   private polling: Promise<PollCycle> | null = null;
+  /** The refreshes after a write still running; an approve answers before its refresh ends (see PrActions.approve). */
+  private writeRefresh: Promise<void> = Promise.resolve();
+  /** Refreshes after a write that ended. Counted into the live status' changeCount, so the renderer refetches what they brought in. */
+  private writeRefreshesDone = 0;
   private livePoller: LivePoller | null = null;
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUpCap: CatchUpCap;
@@ -417,14 +421,24 @@ export class Engine implements EngineService {
   }
 
   /**
-   * Right after an approve or comment reached GitHub: one poll cycle that
-   * also fetches that PR, so the action's answer already carries GitHub's
-   * new review state. It runs as a normal cycle (serialized with sync and
+   * Right after an approve, comment or team removal reached GitHub: one poll
+   * cycle that also fetches that PR, so GitHub's new review state shows
+   * without a sync. It runs as a normal cycle (serialized with sync and
    * consolidation, new events get ping handling). A cycle already running
    * started before the write, so it is waited for first. A failure is
-   * logged; the write itself went through.
+   * logged; the write itself went through. An approve answers without
+   * waiting for it (a poll cycle takes seconds); the renderer hears about
+   * the result through the live status (`changeCount`).
    */
-  private async refreshAfterWrite(key: PrKey): Promise<void> {
+  private refreshAfterWrite(key: PrKey): Promise<void> {
+    const run = this.pollAfterWrite(key).finally(() => {
+      this.writeRefreshesDone += 1;
+    });
+    this.writeRefresh = Promise.all([this.writeRefresh, run]).then(() => {});
+    return run;
+  }
+
+  private async pollAfterWrite(key: PrKey): Promise<void> {
     if (this.syncing || this.consolidating) {
       return;
     }
@@ -732,6 +746,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
+      changeCount: poll.changeCount + this.writeRefreshesDone,
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),
@@ -1142,6 +1157,11 @@ export class Engine implements EngineService {
     return this.deps.markReadQueue.flush();
   }
 
+  /** Resolves once every refresh after a write has ended (an approve answers before its refresh does). */
+  writeRefreshSettled(): Promise<void> {
+    return this.writeRefresh;
+  }
+
   async close(): Promise<void> {
     this.stopAgentRequests();
     // Requests taken already finish and leave their answer before the store closes.
@@ -1151,6 +1171,7 @@ export class Engine implements EngineService {
     this.catchUps.dropQueued();
     // A running sweep is not awaited (it can take minutes); its late write fails quietly.
     this.stopWorkContextSchedule();
+    await this.writeRefresh;
     await this.polling?.catch(() => {});
     await this.syncing?.catch(() => {});
     await this.consolidating?.catch(() => {});

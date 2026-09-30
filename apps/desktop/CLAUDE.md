@@ -125,7 +125,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   engine's own quiet mark-reads of the last 7 days with their reason
   (`quietReasonText` in `lib/quiet.ts`), a click opens the tile.
   No actions, no coral.
-- After an action the provider invalidates every query except the config.
+- After an action the provider invalidates every query except the config;
+  the action's busy key lasts until that refetch lands. Approve, mark read
+  (tile and PR) and snooze change the cache on click first (`run`'s
+  `optimistic`, next state from `lib/optimistic.ts`, only from shipped
+  fields like `afterRead`) and roll back on failure; nothing early while
+  locked or blocked.
   Mark-read and memory correction results carry an undo token; the toast
   offers Undo for the 6s window and the footer counts mark-reads in the
   undo window (tokens starting with `memory:` are not mark-reads). When a

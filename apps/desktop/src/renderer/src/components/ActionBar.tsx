@@ -89,6 +89,8 @@ export function ActionBar(props: ActionBarProps) {
     headOid: pr.headOid,
   };
   const approve = approveButton(approveInput);
+  // The click shows the approval right away (lib/optimistic.ts); until the server confirmed, the button just says so.
+  const approving = actions.isBusy(`approve:${pr.key}`);
   const lead = leadSlot(offers.lead);
   const variantOf = (slot: Slot) => (lead === slot ? 'primary' : 'secondary');
   const glance = props.detail.glance;
@@ -106,7 +108,7 @@ export function ActionBar(props: ActionBarProps) {
       <Button
         variant={variantOf('approve')}
         size="md"
-        disabled={actions.isBusy(`approve:${pr.key}`)}
+        disabled={approving}
         title={approveTitle(approveInput, approve, actions.blockedReason('approve'), now)}
         onClick={() => void actions.approve(pr.key, pr.headOid)}
       >
@@ -118,7 +120,7 @@ export function ActionBar(props: ActionBarProps) {
             </span>
           ))}
         </span>
-        {approve.label}
+        {approving ? (approve.viewerApproved ? 'Approved' : 'Approving…') : approve.label}
       </Button>
     ),
     open: offers.open && (
