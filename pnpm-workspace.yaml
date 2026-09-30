@@ -8,3 +8,7 @@ packages:
 allowBuilds:
   esbuild: true
   electron-winstaller: false
+
+# Wait 7 days before installing a newly published version, so a
+# compromised or broken release has time to be caught and pulled.
+minimumReleaseAge: 10080

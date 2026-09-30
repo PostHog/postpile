@@ -149,7 +149,7 @@ export class AgentRequestInbox {
 
   /** Settles when every request taken so far is answered. */
   async settled(): Promise<void> {
-    await Promise.all([...this.running]);
+    await Promise.all(this.running);
   }
 
   private take(name: string): void {

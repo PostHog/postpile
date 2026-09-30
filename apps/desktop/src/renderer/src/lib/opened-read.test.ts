@@ -60,6 +60,7 @@ class FakeClock implements OpenedReadClock {
 
   advance(ms: number): void {
     this.now += ms;
+    // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: a fired callback may schedule more timers
     for (const [handle, timer] of [...this.timers]) {
       if (timer.at <= this.now) {
         this.timers.delete(handle);

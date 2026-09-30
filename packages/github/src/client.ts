@@ -36,7 +36,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 /** Runs fn over every batch, at most MAX_PARALLEL_BATCHES at a time. Results keep the batch order. */
 async function inParallel<T, R>(batches: T[], fn: (batch: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(batches.length);
+  const results = Array.from<R>({ length: batches.length });
   let next = 0;
   // A tiny worker pool: each worker takes the next batch until none are left.
   const worker = async (): Promise<void> => {
