@@ -492,6 +492,13 @@ export interface Tile {
 
 export type TileStateKind = 'unread' | 'open' | 'done' | 'snoozed';
 
+/**
+ * Why a tile is unread: one of its PRs' threads is unread on GitHub
+ * (DESIGN.md "GitHub unread is PostPile unread"). Each unseen loud event of
+ * that PR is a reason; with none, its newest unseen quiet event is; with
+ * none either, the thread itself ("new activity on GitHub", `eventId`
+ * `thread:<thread id>`, the newest event's kind and actor).
+ */
 export interface UnreadReason {
   prKey: PrKey;
   eventId: string;
@@ -513,6 +520,18 @@ export interface TileState {
    * seen, oldest first, for the tile's quiet grey strip. Absent means none.
    */
   unseenMerges?: UnreadReason[];
+  /**
+   * A tracked thread of the tile is unread on GitHub. True on every unread
+   * tile, and on a snoozed tile whose thread is unread: it keeps its snooze
+   * but counts in the Unread filter and the unread counts.
+   */
+  unreadOnGitHub: boolean;
+  /**
+   * A member (not a found PR) has an unseen loud event. Pings, the coral
+   * "new since you looked", urgency and sections follow loud news, not
+   * unread: a tile unread with only quiet news pings nothing.
+   */
+  loud: boolean;
 }
 
 // ---------------------------------------------------------------------------

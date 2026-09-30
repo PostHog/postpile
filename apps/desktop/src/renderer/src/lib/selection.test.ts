@@ -45,6 +45,7 @@ function pr(key: string): PrSummary {
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
+    unreadOnGitHub: false,
     done: false,
     ownTeamRequests: [],
     pendingWrite: null,
@@ -58,7 +59,7 @@ function pr(key: string): PrSummary {
   };
 }
 
-function tile(id: string, prKeys: string[], state: TileState = { kind: 'open', unreadBecause: [] }): TileView {
+function tile(id: string, prKeys: string[], state: TileState = { kind: 'open', unreadBecause: [], unreadOnGitHub: false, loud: false }): TileView {
   return withOffers({
     tile: { id, topicId: 't', kind: 'single', title: id, members: [], stacks: [] },
     state,
@@ -79,8 +80,8 @@ function entry(topicId: string | null, tileId: string | null = null, prKey: stri
   return { pane: 'topic', topicId, tileId, prKey };
 }
 
-const DONE: TileState = { kind: 'done', unreadBecause: [] };
-const UNREAD: TileState = { kind: 'unread', unreadBecause: [] };
+const DONE: TileState = { kind: 'done', unreadBecause: [], unreadOnGitHub: false, loud: false };
+const UNREAD: TileState = { kind: 'unread', unreadBecause: [], unreadOnGitHub: true, loud: true };
 
 describe('topic stickiness under a queue filter', () => {
   const review = filterKey('review', null);
@@ -179,11 +180,17 @@ describe('grid helpers', () => {
     expect(unreadTiles(tiles, 't2').map((view) => view.tile.id)).toEqual(['t1', 't2']);
     expect(unreadTiles(tiles, null).map((view) => view.tile.id)).toEqual(['t1']);
   });
+
+  it('keeps a snoozed tile whose thread is unread on GitHub in the Unread list', () => {
+    const snoozedUnread: TileState = { kind: 'snoozed', unreadBecause: [], unreadOnGitHub: true, loud: false };
+    const tiles = [tile('s1', ['o/r#1'], snoozedUnread), tile('d1', ['o/r#2'], DONE)];
+    expect(unreadTiles(tiles, null).map((view) => view.tile.id)).toEqual(['s1']);
+  });
 });
 
 describe('autoTile and the auto selection', () => {
-  const UNREAD: TileState = { kind: 'unread', unreadBecause: [] };
-  const SNOOZED = { kind: 'snoozed', unreadBecause: [] } as unknown as TileState;
+  const UNREAD: TileState = { kind: 'unread', unreadBecause: [], unreadOnGitHub: true, loud: true };
+  const SNOOZED = { kind: 'snoozed', unreadBecause: [], unreadOnGitHub: false, loud: false } as unknown as TileState;
 
   it('selects the first unread tile', () => {
     const tiles = [tile('open', ['o/r#1']), tile('unread', ['o/r#2'], UNREAD), tile('done', ['o/r#3'], DONE)];

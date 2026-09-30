@@ -28,6 +28,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 2,
+    unreadOnGitHub: false,
     done: false,
     ownTeamRequests: [],
     pendingWrite: null,
@@ -45,7 +46,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
 function unreadTile(prs: PrSummary[]): TileView {
   return withOffers({
     tile: { id: 'set:s1', topicId: 't1', kind: 'set', title: 'Cache PRs', members: [], stacks: [] },
-    state: { kind: 'unread', unreadBecause: [{ prKey: 'acme/app#1', eventId: 'e1', kind: 'mention', actor: 'lyra', summary: 'x', at: at(1) }] },
+    state: { kind: 'unread', unreadBecause: [{ prKey: 'acme/app#1', eventId: 'e1', kind: 'mention', actor: 'lyra', summary: 'x', at: at(1) }], unreadOnGitHub: true, loud: true },
     prs,
     why: '@',
     forWhom: { kind: 'you' },
@@ -64,7 +65,7 @@ describe('markedReadTile', () => {
     const layer = summary(2, { provenance: { kind: 'pulled_in', reason: 'stack' }, afterRead: { done: false, turn: NONE } });
     const marked = markedReadTile(unreadTile([summary(1), layer]));
 
-    expect(marked.state).toEqual({ kind: 'done', unreadBecause: [] });
+    expect(marked.state).toEqual({ kind: 'done', unreadBecause: [], unreadOnGitHub: false, loud: false });
     expect(marked.turn).toEqual(NONE);
     expect(marked.prs.map((pr) => [pr.unseenLoudEvents, pr.done])).toEqual([
       [0, true],

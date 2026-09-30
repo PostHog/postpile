@@ -1,4 +1,5 @@
-import { isUnseenLoud, type NotificationThread } from '@postpile/core';
+import { effectiveLoudness, type NotificationThread, type PrEvent } from '@postpile/core';
+import { sampleQuietReadTimes } from './fake-quiet.ts';
 import { SAMPLE_REPO } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 
@@ -7,12 +8,23 @@ function hoursBefore(now: Date, hours: number): string {
 }
 
 /**
- * Sample notification threads for the debug view: one per pinged sample PR
- * (reason from its provenance, unread while it has unseen loud events), plus
- * three that never become tiles so every landing kind shows up.
+ * GitHub flags a thread for any activity: unread while the PR has an unseen
+ * event that is not noise, after PostPile's own quiet mark-read of it if the
+ * sample has one.
+ */
+function hasUnseenActivity(events: PrEvent[], prKey: string, readAt: string | null): boolean {
+  return events.some((event) => event.prKey === prKey && event.seenAt === null && effectiveLoudness(event) !== 'muted' && (readAt === null || event.at > readAt));
+}
+
+/**
+ * Sample notification threads for the tiles and the debug view: one per
+ * pinged sample PR (reason from its provenance, unread while it has unseen
+ * activity: GitHub unread is PostPile unread), plus a few that never become
+ * tiles so every landing kind shows up.
  */
 export function sampleThreads(data: SampleData, now: Date): NotificationThread[] {
   const threads = new Map<string, NotificationThread>();
+  const quietReads = sampleQuietReadTimes(now);
   for (const tile of data.tiles) {
     for (const member of tile.members) {
       const pr = data.prs.find((candidate) => candidate.key === member.prKey);
@@ -22,9 +34,9 @@ export function sampleThreads(data: SampleData, now: Date): NotificationThread[]
       threads.set(pr.key, {
         id: `sample-thread-${pr.ref.number}`,
         reason: member.provenance.reason,
-        unread: data.events.some((event) => event.prKey === pr.key && isUnseenLoud(event)),
+        unread: hasUnseenActivity(data.events, pr.key, quietReads.get(pr.key) ?? null),
         updatedAt: pr.updatedAt,
-        lastReadAt: null,
+        lastReadAt: quietReads.get(pr.key) ?? null,
         subjectType: 'PullRequest',
         repo: pr.ref.repo,
         number: pr.ref.number,

@@ -174,7 +174,9 @@ function dayLater(now: string): string {
  * Both quiet mark-reads follow the spec's skip list (DESIGN "Handled
  * quietly", "You already dealt with it"), and mark when nothing on it
  * holds: bot-only activity past the grace on someone else's PR gets read.
- * Checked now and a day later, and as if the tile were not unread.
+ * Checked now and a day later. Whether the tile is unread is no input any
+ * more: a thread unread on GitHub always makes it so ("GitHub unread is
+ * PostPile unread").
  */
 export const quietReadsMatchTheSpec: Invariant = {
   name: 'quiet reads skip for the spec reasons and mark when none holds (bots only past the grace, acted after)',
@@ -186,29 +188,24 @@ export const quietReadsMatchTheSpec: Invariant = {
       }
       const pr = prOf(board, key);
       const yourMove = expectedTurn(turnInput(board, key)).kind === 'you';
-      const unread = holding.some((view) => view.state.kind === 'unread');
       for (const now of [board.now, dayLater(board.now)]) {
-        for (const tileUnread of new Set([unread, false])) {
-          const input = {
-            thread,
-            pr,
-            events: eventsOf(board, key),
-            userState: board.userStates.get(key) ?? null,
-            viewer: board.viewer,
-            tileUnread,
-            notYours: board.notYours.has(key),
-            prFetchedAt: board.prFetchedAt.get(key) ?? null,
-            now,
-          };
-          const quiet = JSON.stringify(quietReadCheck(input));
-          const expectedQuiet = JSON.stringify(expectedQuietRead({ ...input, yourMove }));
-          ensure(quiet === expectedQuiet, `${key}: bot-only read ${quiet}, expected ${expectedQuiet}`);
-          const touchedCheck = touchedReadCheck(input);
-          const touched = JSON.stringify(touchedCheck);
-          const expectedTouched = JSON.stringify(expectedTouchedRead(input));
-          ensure(touched === expectedTouched, `${key}: acted-after read ${touched}, expected ${expectedTouched}`);
-          quietDetailsReadBack(key, quietReadCheck(input), touchedCheck);
-        }
+        const input = {
+          thread,
+          pr,
+          events: eventsOf(board, key),
+          userState: board.userStates.get(key) ?? null,
+          viewer: board.viewer,
+          notYours: board.notYours.has(key),
+          prFetchedAt: board.prFetchedAt.get(key) ?? null,
+          now,
+        };
+        const quietCheck = quietReadCheck(input);
+        const expectedQuiet = JSON.stringify(expectedQuietRead({ ...input, yourMove }));
+        ensure(JSON.stringify(quietCheck) === expectedQuiet, `${key}: bot-only read ${JSON.stringify(quietCheck)}, expected ${expectedQuiet}`);
+        const touchedCheck = touchedReadCheck(input);
+        const expectedTouched = JSON.stringify(expectedTouchedRead(input));
+        ensure(JSON.stringify(touchedCheck) === expectedTouched, `${key}: acted-after read ${JSON.stringify(touchedCheck)}, expected ${expectedTouched}`);
+        quietDetailsReadBack(key, quietCheck, touchedCheck);
       }
     }
   },

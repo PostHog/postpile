@@ -1,11 +1,11 @@
 // PR-level invariants: tier and whose move, snoozes, quiet reads and pings
-// (DESIGN.md "Rules layer: one home per fact", "Handled quietly", "Live poll
-// and Mac pings", "Look closer pings").
+// (DESIGN.md "Rules layer: one home per fact", "Handled quietly", "GitHub
+// unread is PostPile unread", "Live poll and Mac pings", "Look closer pings").
 import { lookCloserEvent } from '../glance-pings.ts';
 import { pingRule } from '../pings.ts';
 import { quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { snoozePhase } from '../snooze.ts';
-import type { Pr, PrEvent, PrKey } from '../types.ts';
+import type { NotificationThread, Pr, PrEvent, PrKey } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { BoardSpec } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
@@ -87,6 +87,20 @@ function holdingViews(views: TileView[], key: PrKey): TileView[] {
   return views.filter((view) => view.tile.members.some((member) => member.prKey === key));
 }
 
+/** A quiet read's input for one thread of the board. */
+function quietInput(board: PropertyBoard, key: PrKey, thread: NotificationThread) {
+  return {
+    thread,
+    pr: prOf(board, key),
+    events: eventsOf(board, key),
+    userState: board.userStates.get(key) ?? null,
+    viewer: board.viewer,
+    notYours: board.notYours.has(key),
+    prFetchedAt: board.prFetchedAt.get(key) ?? null,
+    now: board.now,
+  };
+}
+
 /**
  * The quiet mark-reads never hide an ask: the bot-only rule never marks
  * while a person's loud news is unseen, the acted-after rule only when the
@@ -97,23 +111,12 @@ export const quietReadsNeverHideAsks: Invariant = {
   name: 'quiet reads never hide unseen human news the viewer did not act after, nor trust a truncated snapshot',
   check(board, views) {
     for (const [key, thread] of board.threads) {
-      const holding = holdingViews(views, key);
-      if (holding.length === 0) {
+      if (holdingViews(views, key).length === 0) {
         continue;
       }
       const pr = prOf(board, key);
       const events = eventsOf(board, key);
-      const input = {
-        thread,
-        pr,
-        events,
-        userState: board.userStates.get(key) ?? null,
-        viewer: board.viewer,
-        tileUnread: holding.some((view) => view.state.kind === 'unread'),
-        notYours: board.notYours.has(key),
-        prFetchedAt: board.prFetchedAt.get(key) ?? null,
-        now: board.now,
-      };
+      const input = quietInput(board, key, thread);
       const quiet = quietReadCheck(input);
       const touched = touchedReadCheck(input);
       const humanNews = events.filter((event) => isNews(event) && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event));

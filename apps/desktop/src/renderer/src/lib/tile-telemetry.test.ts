@@ -25,6 +25,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
+    unreadOnGitHub: false,
     done: false,
     ownTeamRequests: [],
     pendingWrite: null,
@@ -42,7 +43,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
 function view(prs: PrSummary[], forWhom: TileView['forWhom'] = { kind: 'you' }): TileView {
   return withOffers({
     tile: { id: 'pr:acme/app#1', topicId: 't1', kind: 'single', title: 'PR 1', members: [], stacks: [] },
-    state: { kind: 'open', unreadBecause: [] },
+    state: { kind: 'open', unreadBecause: [], unreadOnGitHub: false, loud: false },
     prs,
     why: 'RV',
     forWhom,

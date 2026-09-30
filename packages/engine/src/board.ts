@@ -224,6 +224,7 @@ export class Board {
       tile,
       prs: this.prs,
       events: this.events,
+      threads: this.threads,
       userStates: this.userStates,
       snoozes: this.snoozes,
       now: this.now,

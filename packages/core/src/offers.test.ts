@@ -25,6 +25,7 @@ function row(number: number, overrides: Partial<OfferPr> = {}): OfferPr {
     turn: NONE,
     afterRead: doneAfter,
     unseenLoudEvents: 0,
+    unreadOnGitHub: false,
     pendingWrite: null,
     ownTeamRequests: [],
     facts: NO_PR_FACTS,
@@ -36,7 +37,7 @@ function view(kind: TileStateKind, turn: WhoseTurn, afterRead: TileAfterRead, pr
   const members: TileMember[] = prs.map((pr) => ({ prKey: pr.key, provenance: pr.provenance }));
   return {
     tile: { id: 't1', topicId: 'topic', kind: prs.length > 1 ? 'set' : 'single', title: 'T', members, stacks: [] },
-    state: { kind, unreadBecause: [] },
+    state: { kind, unreadBecause: [], unreadOnGitHub: kind === 'unread', loud: kind === 'unread' },
     turn,
     afterRead,
     prs: prs as OfferView['prs'],
@@ -72,6 +73,16 @@ describe('tile footer', () => {
     expect(offers).toMatchObject({ footer: 'open', markLabel: null, snooze: true, github: null });
     const news = tileOffers(view('snoozed', NONE, doneAfter, [row(1, { done: true, unseenLoudEvents: 1 })]));
     expect(news).toMatchObject({ footer: 'mark_done', snooze: true });
+    const unreadThread = tileOffers(view('snoozed', NONE, doneAfter, [row(1, { done: true, unreadOnGitHub: true })]));
+    expect(unreadThread).toMatchObject({ footer: 'mark_done', snooze: true });
+  });
+
+  it('keeps Mark read for a done PR whose thread is unread on GitHub, on the tile and in the pane', () => {
+    const doneRow = row(1, { done: true, unreadOnGitHub: true, primaryAction: 'mark_read' });
+    expect(tileOffers(view('unread', NONE, doneAfter, [doneRow])).footer).toBe('mark_read');
+    const set = view('unread', NONE, doneAfter, [doneRow, row(2, { done: true })]);
+    expect(paneOffers(set, doneRow).markLabel).toBe('Mark read');
+    expect(paneOffers(set, row(2, { done: true })).lead).toBe('open_on_github');
   });
 });
 
@@ -79,7 +90,7 @@ describe('lead PR', () => {
   function unread(prs: OfferPr[], unreadKeys: string[], turn: WhoseTurn = NONE) {
     const base = view('unread', turn, doneAfter, prs);
     const unreadBecause = unreadKeys.map((prKey, index) => ({ prKey, eventId: `e${index}`, kind: 'mention' as const, actor: 'lyra', summary: 'x', at: at(index) }));
-    return { ...base, state: { kind: 'unread' as const, unreadBecause } };
+    return { ...base, state: { kind: 'unread' as const, unreadBecause, unreadOnGitHub: true, loud: true } };
   }
 
   it('is the PR of the turn, else the newest unread reason, else the first open tracked PR', () => {

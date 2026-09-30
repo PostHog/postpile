@@ -14,17 +14,23 @@ function isTrackedRow(row: PrSummary): boolean {
   return row.provenance.kind !== 'pulled_in';
 }
 
+/** Done, its news seen and its thread read on GitHub: a row with nothing left to mark. */
+function settled(row: PrSummary): boolean {
+  return row.done && row.unseenLoudEvents === 0 && !row.unreadOnGitHub;
+}
+
 /**
- * Done: Open. Snoozed with every tracked PR done and seen: Open (the snooze
- * can still be taken back). Unread: Mark read. Read and your move: Snooze.
- * Else Mark done when a mark-read leaves the tile done, Mark read if not.
+ * Done: Open. Snoozed with every tracked PR done, seen and read on GitHub:
+ * Open (the snooze can still be taken back). Unread: Mark read. Read and
+ * your move: Snooze. Else Mark done when a mark-read leaves the tile done,
+ * Mark read if not.
  */
 export function expectedFooter(view: TileView): TileFooterAction {
   if (view.state.kind === 'done') {
     return 'open';
   }
   const tracked = view.prs.filter(isTrackedRow);
-  if (view.state.kind === 'snoozed' && tracked.length > 0 && tracked.every((row) => row.done && row.unseenLoudEvents === 0)) {
+  if (view.state.kind === 'snoozed' && tracked.length > 0 && tracked.every(settled)) {
     return 'open';
   }
   if (view.state.kind === 'unread') {
@@ -73,7 +79,11 @@ export function expectedPrimaryAction(pr: Pr, viewer: Viewer, userState: UserPrS
   return tileUnread ? 'mark_read' : 'open_on_github';
 }
 
-/** One PR's mark button on a stack or set: news to mark, nothing on a done or pulled-in PR or while it is your move, else by the after-read. */
+/**
+ * One PR's mark button on a stack or set: news to mark; nothing on a
+ * pulled-in PR; on a done PR or while it is your move only Mark read for a
+ * thread unread on GitHub; else by the after-read.
+ */
 function prMark(view: TileView, row: PrSummary): 'mark_read' | 'mark_done' | 'none' {
   if (view.state.kind === 'done') {
     return 'none';
@@ -81,8 +91,11 @@ function prMark(view: TileView, row: PrSummary): 'mark_read' | 'mark_done' | 'no
   if (row.unseenLoudEvents > 0) {
     return 'mark_read';
   }
-  if (!isTrackedRow(row) || row.done || row.turn.kind === 'you') {
+  if (!isTrackedRow(row)) {
     return 'none';
+  }
+  if (row.done || row.turn.kind === 'you') {
+    return row.unreadOnGitHub ? 'mark_read' : 'none';
   }
   return row.afterRead.done ? 'mark_done' : 'mark_read';
 }
@@ -101,8 +114,8 @@ export interface ExpectedPane {
 /**
  * The detail pane for one PR: on a single-PR tile the buttons act on the
  * tile, on a stack or set on that PR. A done PR (or any PR of a done tile)
- * offers no Approve, Ask or Remove team; with its news seen nothing to
- * mark either. Approve leads on someone else's open, not yet approved,
+ * offers no Approve, Ask or Remove team; with its news seen and its thread
+ * read nothing to mark either. Approve leads on someone else's open, not yet approved,
  * non-draft PR; else the mark button; else Open on GitHub.
  */
 export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Viewer): ExpectedPane {
@@ -111,7 +124,7 @@ export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Vie
   const primary = row.primaryAction;
   const approve = !finished && (primary === 'approve' || primary === 'approved');
   let mark: TileFooterAction | 'none' = 'none';
-  if (!(row.done && row.unseenLoudEvents === 0)) {
+  if (!settled(row)) {
     mark = scope === 'tile' ? expectedFooter(view) : prMark(view, row);
   }
   let lead: PaneLead;

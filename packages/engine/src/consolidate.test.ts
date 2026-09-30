@@ -3,7 +3,7 @@ import { at, makeComment, makeFact, makeFactRef, makeThreadFor, viewer } from '@
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
-import { topicWithPrs } from './testing/topics.ts';
+import { readThreadsOnGitHub, topicWithPrs } from './testing/topics.ts';
 import { changeTopicStatus } from './topic-status.ts';
 
 /** Four weeks after the fixture PRs' activity, so the 3 quiet days have passed. */
@@ -23,6 +23,7 @@ async function finishedTopic(h: Harness, prs: Pr[]): Promise<void> {
   await h.engine.sync({ agentJobs: ['dossiers'] });
   const eventIds = prs.flatMap((pr) => h.store.events.listForPr(pr.key).map((e) => e.id));
   h.store.events.markSeen(eventIds, at(6));
+  readThreadsOnGitHub(h, prs);
 }
 
 describe('Engine.consolidate', () => {

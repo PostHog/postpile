@@ -13,6 +13,15 @@ function tileState(h: Harness, topicId: string) {
   return h.engine.getTopic(topicId).then((detail) => detail?.tiles[0]?.state.kind);
 }
 
+/**
+ * The tile has unseen loud news. The touch rule is about seen and loud;
+ * whether the tile is unread follows its GitHub thread (DESIGN.md "GitHub
+ * unread is PostPile unread"), and with writes locked the thread stays unread.
+ */
+function tileLoud(h: Harness, topicId: string) {
+  return h.engine.getTopic(topicId).then((detail) => detail?.tiles[0]?.state.loud);
+}
+
 /** alice marked her PR ready for review, then the viewer approved it from the gh CLI: GitHub keeps the thread unread. */
 function approvedFromTheCli(pr: Pr): Pr {
   return {
@@ -31,12 +40,13 @@ describe('You already dealt with it: events before the viewer last touch count a
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
-    expect(await tileState(h, 't')).not.toBe('unread');
+    expect(await tileLoud(h, 't')).toBe(false);
     const ready = h.store.events.listForPr(pr.key).find((event) => event.kind === 'ready_for_review');
     expect(ready?.ruleLoudness).toBe('loud');
     expect(ready?.seenAt).toBe(APPROVED_AT);
-    // The tile rule alone never writes to GitHub.
+    // The tile rule alone never writes to GitHub; locked, the thread and so the tile stay unread, without loud news.
     expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(true);
+    expect(await tileState(h, 't')).toBe('unread');
   });
 
   it('never pings for what came before the touch when the poll brings both', async () => {
@@ -54,7 +64,7 @@ describe('You already dealt with it: events before the viewer last touch count a
     const cycle = await h.engine.pollOnce();
 
     expect(cycle).toMatchObject({ kind: 'done', prsUpdated: 1, pings: [] });
-    expect(await tileState(h, 't')).not.toBe('unread');
+    expect(await tileLoud(h, 't')).toBe(false);
   });
 
   it('keeps a loud event after the touch unseen', async () => {
@@ -69,7 +79,7 @@ describe('You already dealt with it: events before the viewer last touch count a
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
-    expect(await tileState(h, 't')).toBe('unread');
+    expect(await tileLoud(h, 't')).toBe(true);
     const again = h.store.events.listForPr(pr.key).find((event) => event.sourceId === 'rr-again');
     expect(again?.seenAt).toBeNull();
   });
@@ -90,7 +100,7 @@ describe('You already dealt with it: events before the viewer last touch count a
 
     const review = h.store.events.listForPr(pr.key).find((event) => event.kind === 'review_changes_requested');
     expect(review?.seenAt).toBe(at(30));
-    expect(await tileState(h, 't')).not.toBe('unread');
+    expect(await tileLoud(h, 't')).toBe(false);
   });
 
   it('does not count the viewer commit that a collaborator cherry-picked onto their PR', async () => {
@@ -109,7 +119,7 @@ describe('You already dealt with it: events before the viewer last touch count a
 
     const review = h.store.events.listForPr(pr.key).find((event) => event.kind === 'review_changes_requested');
     expect(review?.seenAt).toBeNull();
-    expect(await tileState(h, 't')).toBe('unread');
+    expect(await tileLoud(h, 't')).toBe(true);
   });
 
   it('counts a force push by the viewer on their own PR', async () => {
@@ -136,7 +146,7 @@ describe('You already dealt with it: events before the viewer last touch count a
     // As an older build left it: the ready for review stored unseen.
     const ready = h.store.events.listForPr(pr.key).find((event) => event.kind === 'ready_for_review')!;
     h.store.events.clearSeen([ready.id]);
-    expect(await tileState(h, 't')).toBe('unread');
+    expect(await tileLoud(h, 't')).toBe(true);
 
     await h.engine.sync({ maxAgentCalls: 0 });
 

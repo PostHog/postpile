@@ -110,4 +110,9 @@ export class NotificationRepo {
   markRead(threadId: string, at: string): void {
     run(this.db, 'UPDATE notification_thread SET unread = 0, last_read_at = ? WHERE id = ?', at, threadId);
   }
+
+  /** Puts a thread back to unread with the read time it had: an undo, or a mark-read GitHub did not take. */
+  markUnread(threadId: string, lastReadAt: string | null): void {
+    run(this.db, 'UPDATE notification_thread SET unread = 1, last_read_at = ? WHERE id = ?', lastReadAt, threadId);
+  }
 }

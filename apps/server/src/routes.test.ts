@@ -180,9 +180,9 @@ describe('server routes over the fake engine', () => {
   it('lists the last 7 days of quiet mark-reads, newest first, and shows them and the ping decisions on debug rows', async () => {
     const app = appWithFake();
     const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
-    expect(quiet.map((item) => item.prKey)).toEqual(['acme/app#1904', 'acme/app#1911', 'acme/app#1899', 'acme/app#1960', 'acme/app#1921', 'acme/app#1963']);
-    expect(quiet[0]).toMatchObject({ repo: 'acme/app', number: 1904, title: 'Hash Turbo inputs by lockfile only', reason: 'bots', bots: ['trunk-io[bot]', 'CI'] });
-    expect(quiet[1]).toMatchObject({ number: 1911, reason: 'approved', bots: [] });
+    expect(quiet.map((item) => item.prKey)).toEqual(['acme/app#1899', 'acme/app#1904', 'acme/app#1911', 'acme/app#1960', 'acme/app#1921', 'acme/app#1963']);
+    expect(quiet[1]).toMatchObject({ repo: 'acme/app', number: 1904, title: 'Hash Turbo inputs by lockfile only', reason: 'bots', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quiet[2]).toMatchObject({ number: 1911, reason: 'approved', bots: [] });
 
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     expect(rows.find((row) => row.prKey === 'acme/app#1904')?.lastAction).toMatchObject({ origin: 'quiet', outcome: 'github' });
@@ -236,7 +236,8 @@ describe('server routes over the fake engine', () => {
     const detail = (await res.json()) as TopicDetail;
     const set = detail.tiles.find((view) => view.tile.id === 'set:turbo-cache');
     expect(set?.state.kind).toBe('unread');
-    expect(set?.state.unreadBecause[0]?.prKey).toBe('acme/app#1907');
+    expect(set?.state.loud).toBe(true);
+    expect(set?.state.unreadBecause.map((reason) => reason.prKey)).toContain('acme/app#1907');
     expect(detail.tiles.find((view) => view.tile.id === 'pr:acme/app#1899')?.state.kind).toBe('done');
     expect(detail.pendingProposals).toEqual([]);
   });

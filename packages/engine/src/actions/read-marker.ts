@@ -8,9 +8,9 @@ import {
   type ReadScope,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { NO_LOCAL_CHANGE, type BatchOrigin, type MarkReadQueue, type PendingBatch } from '../mark-read-queue.ts';
+import type { BatchOrigin, MarkReadQueue, PendingBatch } from '../mark-read-queue.ts';
 import type { ActionLog } from '../writes/action-log.ts';
-import { putBackLocalChange, writeReadPlan } from './local-change.ts';
+import { NO_LOCAL_CHANGE, putBackLocalChange, readThreadsLocally, writeReadPlan } from './local-change.ts';
 
 /** The causes that go through the undo queue: a button (tile, PR, Not mine, debug view, Remove team) or approve's follow-up. */
 export type QueuedReadCause = { kind: 'button' } | { kind: 'approved' };
@@ -22,8 +22,9 @@ export const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending
  * it; after the window GitHub has no way back, so undo reports nothing to undo.
  *
  * GitHub is the source of truth for read and unread:
- * - writes on: the app changes right away (events seen, pinged PRs handled)
- *   and GitHub follows after the undo window.
+ * - writes on: the app changes right away (events seen, pinged PRs handled,
+ *   the threads read, so the tile turns read with them) and GitHub follows
+ *   after the undo window.
  * - writes locked: the app does not change. When the window runs out the
  *   batch becomes a pending write (PendingWrites) that waits for the user to
  *   unlock and send it, or discard it.
@@ -83,7 +84,10 @@ export class ReadMarker {
         userStates: this.store.userPrStates.getMany(scope.prKeys),
         at,
       });
-      return { handleKeys: plan.handleKeys, local: changeHere ? writeReadPlan(this.store, plan) : NO_LOCAL_CHANGE };
+      if (!changeHere) {
+        return { handleKeys: plan.handleKeys, local: NO_LOCAL_CHANGE };
+      }
+      return { handleKeys: plan.handleKeys, local: { ...writeReadPlan(this.store, plan), threads: readThreadsLocally(this.store, threads) } };
     });
     const batch = this.queue.enqueue({ threads, prKeys: scope.prKeys, handleKeys, local }, origin);
     this.logQueued(batch, threads, scope.prKeys, changeHere);

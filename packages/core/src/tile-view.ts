@@ -39,6 +39,8 @@ export interface PrSummaryInput {
   repoLabel: string | null;
   /** The tile is unread, so the primary action may be Mark read. */
   tileUnread: boolean;
+  /** The PR's notification thread is unread on GitHub. */
+  unreadOnGitHub: boolean;
   /** Now, for what the PR would turn into once marked read (`afterRead`). */
   now: IsoTime;
   /** A mark-read of this PR waiting for the writes lock, or null. */
@@ -87,6 +89,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     glanceState: input.glanceState,
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
+    unreadOnGitHub: input.unreadOnGitHub,
     done: isPrDone(pr, userState, viewer, events, notYours),
     ownTeamRequests: viewer ? ownTeamRequests(pr, viewer) : [],
     pendingWrite: input.pendingWrite,
@@ -103,9 +106,9 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
 /**
  * The PRs that keep the tile from being done (2026-09-29, replaced "the new
  * dot"): every tracked PR that is not done (`PrSummary.done`, `isPrDone`),
- * or that still has an unseen loud event (that keeps the tile unread, so not
- * done either). A pulled-in stack layer counts once it has unseen loud news
- * (2026-09-30): that news makes the tile unread too. Their rows get the
+ * or that still has an unseen loud event or a thread unread on GitHub (both
+ * keep the tile from being done). A pulled-in stack layer counts once it has unseen loud news
+ * (2026-09-30): that news keeps the tile from being done. Their rows get the
  * coral dot ("Not done yet"), on unread and open tiles alike; a done or
  * snoozed tile has none. Mark a dotted PR done and its dot goes; no dots
  * left, the tile is done. Only where it says which PR holds the tile: with
@@ -119,7 +122,7 @@ export function notDonePrKeys(view: Pick<TileView, 'state' | 'prs'>): PrKey[] {
   if (counted.length <= 1) {
     return [];
   }
-  return counted.filter((pr) => !pr.done || pr.unseenLoudEvents > 0).map((pr) => pr.key);
+  return counted.filter((pr) => !pr.done || pr.unseenLoudEvents > 0 || pr.unreadOnGitHub).map((pr) => pr.key);
 }
 
 export interface TileViewInput {

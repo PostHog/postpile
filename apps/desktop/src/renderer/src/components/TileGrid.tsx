@@ -104,7 +104,7 @@ export function TileGrid(props: TileGridProps) {
   const matching = props.matchingTileIds;
   const ordered = tilesInTierOrder(props.detail.tiles);
   const tiles = matching ? ordered.filter((view) => matching.has(view.tile.id)) : ordered;
-  const unread = tiles.filter((view) => view.state.kind === 'unread');
+  const unread = tiles.filter((view) => view.state.unreadOnGitHub);
   const [live, snoozed, done] = useHeldPlace(
     props.selectedTileId,
     props.selectedTileId,

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { compareTopicUrgency, topicMove, topicUrgency, type RankedTopic, type TopicMove, type UrgencyTile } from './topic-urgency.ts';
 
+/** An unread tile is unread on GitHub with loud news unless the overrides say otherwise. */
 function tile(overrides: Partial<UrgencyTile>): UrgencyTile {
-  return { state: 'open', prStates: ['OPEN'], move: null, quiet: false, ...overrides };
+  const unread = overrides.state === 'unread';
+  return { state: 'open', unreadOnGitHub: unread, loud: unread, prStates: ['OPEN'], move: null, quiet: false, ...overrides };
 }
 
 const review: TopicMove = { move: 'review', text: 'Review, rowan asked' };
@@ -19,6 +21,11 @@ describe('topicUrgency', () => {
     expect(urgency.unreadTiles).toBe(2);
     expect(urgency.urgentUnreadTiles).toBe(0);
     expect(urgency.needsYou).toBe(false);
+  });
+
+  it('counts a tile unread with only quiet news, and a snoozed one with an unread thread, but neither lights the topic up', () => {
+    const urgency = topicUrgency([tile({ state: 'unread', loud: false }), tile({ state: 'snoozed', unreadOnGitHub: true, loud: true })]);
+    expect(urgency).toEqual({ unreadTiles: 2, urgentUnreadTiles: 0, yourMoves: [], needsYou: false });
   });
 
   it('counts a stack as open while one of its layers is', () => {

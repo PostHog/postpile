@@ -136,13 +136,13 @@ describe('tileListRank', () => {
   const you = { kind: 'you' as const, move: 'review' as const, who: null, what: 'Review', prKey: null };
 
   it('keeps a read tile that is still your move with the unread ones', () => {
-    const unread = tileListRank({ state: { kind: 'unread', unreadBecause: [] }, turn: you });
-    expect(tileListRank({ state: { kind: 'open', unreadBecause: [] }, turn: you })).toBe(unread);
+    const unread = tileListRank({ state: { kind: 'unread', unreadBecause: [], unreadOnGitHub: true, loud: true }, turn: you });
+    expect(tileListRank({ state: { kind: 'open', unreadBecause: [], unreadOnGitHub: false, loud: false }, turn: you })).toBe(unread);
   });
 
   it('puts other open tiles after, then snoozed, then done', () => {
-    const ranks = (['open', 'snoozed', 'done'] as const).map((kind) => tileListRank({ state: { kind, unreadBecause: [] }, turn: NO_TURN }));
+    const ranks = (['open', 'snoozed', 'done'] as const).map((kind) => tileListRank({ state: { kind, unreadBecause: [], unreadOnGitHub: false, loud: false }, turn: NO_TURN }));
     expect(ranks).toEqual([1, 2, 3]);
-    expect(tileListRank({ state: { kind: 'done', unreadBecause: [] }, turn: you })).toBe(3);
+    expect(tileListRank({ state: { kind: 'done', unreadBecause: [], unreadOnGitHub: false, loud: false }, turn: you })).toBe(3);
   });
 });

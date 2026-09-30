@@ -3,7 +3,7 @@ import { at, makeComment, makeThreadFor, makeTimelineItem, viewer } from '@postp
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
-import { topicWithPrs } from './testing/topics.ts';
+import { readThreadsOnGitHub, topicWithPrs } from './testing/topics.ts';
 
 /** Four days after the fixture PRs' activity: past the 3 quiet days. */
 const FOUR_DAYS_LATER = new Date('2026-09-05T12:00:00Z');
@@ -14,12 +14,13 @@ function mergedPr(number: number): Pr {
   return reviewRequestedPr(number, { state: 'MERGED', mergedAt: at(5), mergedBy: 'alice' });
 }
 
-/** Synced once, then every event marked seen: nothing left to read. */
+/** Synced once, then every event marked seen and every thread read on GitHub: nothing left to read. */
 async function syncedAndRead(h: Harness, prs: Pr[]): Promise<void> {
   topicWithPrs(h, 'depot', prs);
   await h.engine.sync({ maxAgentCalls: 0 });
   const eventIds = prs.flatMap((pr) => h.store.events.listForPr(pr.key).map((e) => e.id));
   h.store.events.markSeen(eventIds, at(6));
+  readThreadsOnGitHub(h, prs);
 }
 
 describe('Engine.sync retires finished topics', () => {
@@ -59,6 +60,7 @@ describe('Engine.sync retires finished topics', () => {
     const merge = events.find((e) => e.kind === 'merged_without_review');
     expect(merge?.ruleLoudness).toBe('quiet');
     h.store.events.markSeen(events.filter((e) => e !== merge).map((e) => e.id), at(6));
+    readThreadsOnGitHub(h, [pr]);
 
     const kept = await h.engine.sync({ maxAgentCalls: 0 });
     expect(kept.topicsRetired).toBe(0);
@@ -93,6 +95,7 @@ describe('Engine.sync retires finished topics', () => {
     expect(h.agent.glanceInputs.flatMap((input) => input.items.map((item) => item.pr.key))).toContain(pr.key);
     const events = h.store.events.listForPr(pr.key);
     h.store.events.markSeen(events.filter((e) => e.kind !== 'merged_without_review').map((e) => e.id), at(6));
+    readThreadsOnGitHub(h, [pr]);
     expect(h.store.glances.get(pr.key)?.verdict).toBe('NOT_YOURS');
     const tile = (await h.engine.getTopic('depot'))?.tiles[0];
     expect(tile?.state.kind).toBe('done');

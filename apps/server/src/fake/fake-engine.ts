@@ -459,12 +459,25 @@ export class FakeEngine implements EngineService {
     return new Set(this.data.glances.filter((glance) => glance.verdict === 'NOT_YOURS').map((glance) => glance.prKey));
   }
 
-  /** Core's tile state rule over the sample data, snoozes included. */
+  /** The sample PR threads by PR, with their GitHub unread flag as the fake queue left it. */
+  private prThreads(): Map<PrKey, NotificationThread> {
+    const threads = new Map<PrKey, NotificationThread>();
+    for (const thread of this.threadsOnGitHub()) {
+      const key = threadPrKey(thread);
+      if (key !== null && !threads.has(key)) {
+        threads.set(key, thread);
+      }
+    }
+    return threads;
+  }
+
+  /** Core's tile state rule over the sample data, snoozes and GitHub unread included. */
   private tileState(tile: Tile): TileState {
     return deriveTileState({
       tile,
       prs: this.prsByKey(),
       events: this.eventsByKey(tile.members.map((member) => member.prKey)),
+      threads: this.prThreads(),
       userStates: this.userStatesByKey(),
       snoozes: this.snoozes,
       now: this.timestamp(),
@@ -500,6 +513,7 @@ export class FakeEngine implements EngineService {
     const prsByKey = this.prsByKey();
     const events = this.eventsByKey(tile.members.map((member) => member.prKey));
     const userStates = this.userStatesByKey();
+    const threads = this.prThreads();
     const prs = tile.members.flatMap((member, index) => {
       const pr = prsByKey.get(member.prKey);
       if (!pr) {
@@ -520,6 +534,7 @@ export class FakeEngine implements EngineService {
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
+          unreadOnGitHub: threads.get(pr.key)?.unread === true,
           now: this.timestamp(),
           pendingWrite: pending.get(pr.key) ?? null,
         }),
@@ -727,6 +742,8 @@ export class FakeEngine implements EngineService {
       const urgency = topicUrgency(
         views.map((view) => ({
           state: view.state.kind,
+          unreadOnGitHub: view.state.unreadOnGitHub,
+          loud: view.state.loud,
           prStates: view.prs.filter((pr) => !pr.quietRepo).map((pr) => pr.state),
           move: topicMove(view.turn),
           quiet: view.quietRepo,

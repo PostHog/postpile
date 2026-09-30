@@ -5,11 +5,16 @@
 // dealt with it"), and a third, opening the PR in PostPile, is decided by the
 // engine from the tile. Rules only, no IO. DESIGN.md "Handled quietly" and
 // "You already dealt with it" have the reasons behind each rule.
+//
+// A thread unread on GitHub keeps its tile unread until one of these clears
+// it (DESIGN.md "GitHub unread is PostPile unread"), so none of them may look
+// at whether the tile is unread (it always is). The safety check that stands
+// in for that is `unseen_loud`: no unseen loud event on the PR.
 
 import { isAutomation } from './bots.ts';
 import type { NotificationLanding } from './debug-views.ts';
 import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
-import { isUnseenMergeWithoutReview } from './loudness.ts';
+import { isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import { reviewRequestTarget } from './review-request.ts';
 import type { IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
@@ -65,11 +70,11 @@ export function botNames(events: PrEvent[]): string[] {
  * - human_activity: someone else did something since the last read, or nothing known happened
  * - own_pr: bot reviews and CI on the user's own open PR can mean work for them (merged or closed: they can't)
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
- * - tile_unread: the tile shows something new for the user
+ * - unseen_loud: the PR has unseen loud news (an automation event the agent raised, the app's Look closer)
  * - your_move: whose turn is the user's
  * - grace: the newest activity is less than QUIET_GRACE_MS old
  */
-export type QuietSkip = 'not_unread' | 'never_read' | 'stale_snapshot' | 'human_activity' | 'own_pr' | 'unseen_merge' | 'tile_unread' | 'your_move' | 'grace';
+export type QuietSkip = 'not_unread' | 'never_read' | 'stale_snapshot' | 'human_activity' | 'own_pr' | 'unseen_merge' | 'unseen_loud' | 'your_move' | 'grace';
 
 export type QuietReadCheck = { kind: 'mark'; bots: string[] } | { kind: 'skip'; why: QuietSkip };
 
@@ -79,8 +84,6 @@ export interface QuietReadInput {
   events: PrEvent[];
   userState: UserPrState | null;
   viewer: Viewer;
-  /** The tile holding the PR is unread (an unseen loud event on any of its PRs). */
-  tileUnread: boolean;
   /** The PR's glance says NOT_YOURS; whose turn reads it the same way the tile does. */
   notYours: boolean;
   /** When the stored PR snapshot was fetched; null when unknown. */
@@ -149,8 +152,8 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (events.some(isUnseenMergeWithoutReview)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (input.tileUnread) {
-    return { kind: 'skip', why: 'tile_unread' };
+  if (events.some(isUnseenLoud)) {
+    return { kind: 'skip', why: 'unseen_loud' };
   }
   if (prWhoseTurn({ pr, events, userState: input.userState, viewer, notYours: input.notYours }).kind === 'you') {
     return { kind: 'skip', why: 'your_move' };
@@ -183,14 +186,14 @@ export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'repli
  * - activity_after: a person did something after the user's touch
  * - own_pr: bots acted after the touch on the user's own open PR, which can mean work
  * - unseen_merge: a merge without the user's review came after their touch
- * - tile_unread: the tile shows something new for the user
+ * - unseen_loud: the PR has unseen loud news
  * - grace: the touch or the newest activity is less than QUIET_GRACE_MS old
  */
-export type TouchedSkip = 'not_unread' | 'stale_snapshot' | 'no_touch' | 'nothing_known' | 'activity_after' | 'own_pr' | 'unseen_merge' | 'tile_unread' | 'grace';
+export type TouchedSkip = 'not_unread' | 'stale_snapshot' | 'no_touch' | 'nothing_known' | 'activity_after' | 'own_pr' | 'unseen_merge' | 'unseen_loud' | 'grace';
 
 export type TouchedReadCheck = { kind: 'mark'; reason: TouchReason } | { kind: 'skip'; why: TouchedSkip };
 
-export type TouchedReadInput = Pick<QuietReadInput, 'thread' | 'pr' | 'events' | 'viewer' | 'tileUnread' | 'prFetchedAt' | 'now'>;
+export type TouchedReadInput = Pick<QuietReadInput, 'thread' | 'pr' | 'events' | 'viewer' | 'prFetchedAt' | 'now'>;
 
 /** The reason a reading touch gives; READING_TOUCH_KINDS only, so anything else is a comment. */
 function touchReason(kind: TouchKind): TouchReason {
@@ -242,8 +245,8 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   if (events.some((event) => isUnseenMergeWithoutReview(event) && event.at > touch.at)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (input.tileUnread) {
-    return { kind: 'skip', why: 'tile_unread' };
+  if (events.some(isUnseenLoud)) {
+    return { kind: 'skip', why: 'unseen_loud' };
   }
   const newest = [thread.updatedAt, touch.at, ...late.map((event) => event.at)].sort().at(-1) ?? thread.updatedAt;
   if (new Date(input.now).getTime() - new Date(newest).getTime() < QUIET_GRACE_MS) {

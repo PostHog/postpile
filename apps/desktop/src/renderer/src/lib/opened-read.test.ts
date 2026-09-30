@@ -7,7 +7,7 @@ const ON = { enabled: true, forcedOffReason: null, pending: [] };
 const OFF = { enabled: false, forcedOffReason: null, pending: [] };
 
 function view(kind: TileStateKind, done: boolean): OpenedTileView {
-  return { state: { kind, unreadBecause: [] }, prs: [{ key: 'acme/app#3', afterRead: { done, turn: NONE } }] };
+  return { state: { kind, unreadBecause: [], unreadOnGitHub: kind === 'unread', loud: kind === 'unread' }, prs: [{ key: 'acme/app#3', afterRead: { done, turn: NONE } }] };
 }
 
 describe('opensMarkRead', () => {
@@ -18,7 +18,7 @@ describe('opensMarkRead', () => {
 
   it('checks the opened PR, not the rest of the set', () => {
     const set: OpenedTileView = {
-      state: { kind: 'open', unreadBecause: [] },
+      state: { kind: 'open', unreadBecause: [], unreadOnGitHub: false, loud: false },
       prs: [
         { key: 'acme/app#3', afterRead: { done: true, turn: NONE } },
         { key: 'acme/app#4', afterRead: { done: false, turn: { kind: 'you', move: 'review', who: null, what: 'Review', prKey: 'acme/app#4' } } },

@@ -59,7 +59,8 @@ function quietDetail(input: QuietReadInput): string | null {
  * writes are unlocked: locked, nothing happens and nothing piles up as a
  * pending write. Each thread is read again right before the write and left
  * alone when it moved since the sync. Every write goes through
- * GitHubWrites and is logged with origin `quiet`.
+ * GitHubWrites and is logged with origin `quiet`. Locked, the thread stays
+ * unread on GitHub and so in PostPile.
  */
 export class QuietReads {
   constructor(
@@ -69,25 +70,12 @@ export class QuietReads {
     private readonly now: () => Date,
   ) {}
 
-  /** PRs whose tile is unread right now, any PR of the tile counts. */
-  private unreadKeys(board: Board): Set<PrKey> {
-    const keys = new Set<PrKey>();
-    for (const tile of board.allTiles()) {
-      if (board.stateOf(tile).kind === 'unread') {
-        for (const member of tile.members) {
-          keys.add(member.prKey);
-        }
-      }
-    }
-    return keys;
-  }
-
+  /** Whether the tile is unread is no input: a thread unread on GitHub always makes it so (DESIGN.md "GitHub unread is PostPile unread"). */
   private candidates(board: Board): QuietCandidate[] {
     const viewer = board.viewer;
     if (viewer === null) {
       return [];
     }
-    const unread = this.unreadKeys(board);
     const fetchedAt = this.store.prs.fetchedAtByKey();
     const result: QuietCandidate[] = [];
     for (const [prKey, thread] of board.threads) {
@@ -101,7 +89,6 @@ export class QuietReads {
         events: board.events.get(prKey) ?? [],
         userState: board.userStates.get(prKey) ?? null,
         viewer,
-        tileUnread: unread.has(prKey),
         notYours: board.notYours.has(prKey),
         prFetchedAt: fetchedAt.get(prKey) ?? null,
         now: board.now,

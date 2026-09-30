@@ -13,13 +13,19 @@ function hoursBefore(now: Date, hours: number): string {
 const QUIET_SAMPLES: { number: number; detail: string; hoursAgo: number }[] = [
   { number: 1904, detail: quietReadDetail(['trunk-io[bot]', 'CI']), hoursAgo: 2 },
   { number: 1911, detail: quietReasonDetail('approved'), hoursAgo: 3.5 },
-  { number: 1899, detail: quietReadDetail(['github-actions[bot]']), hoursAgo: 26 },
+  // After mergify queued it (1h ago) and the grace: the tile is done again.
+  { number: 1899, detail: quietReadDetail(['renovate[bot]', 'mergify[bot]']), hoursAgo: 0.5 },
   { number: 1960, detail: quietReasonDetail('changes_requested'), hoursAgo: 29 },
   { number: 1921, detail: quietReadDetail(['renovate[bot]', 'CI']), hoursAgo: 50 },
   { number: 1963, detail: quietReadDetail(['chatgpt-codex-connector[bot]', 'coderabbitai[bot]']), hoursAgo: 75 },
   // Older than the view's 7 days: in the log, not in "Handled quietly".
   { number: 1855, detail: quietReadDetail(['vercel[bot]']), hoursAgo: 9 * 24 },
 ];
+
+/** When PostPile marked each sample PR's thread read by itself, by PR: its thread stays read unless something came after. */
+export function sampleQuietReadTimes(now: Date): Map<string, string> {
+  return new Map(QUIET_SAMPLES.map((sample) => [`${SAMPLE_REPO}#${sample.number}`, hoursBefore(now, sample.hoursAgo)]));
+}
 
 /**
  * Action log rows as the real sync writes them for "Handled quietly", on

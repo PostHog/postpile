@@ -2,7 +2,7 @@ import { at, makeComment, makePr, makeReview, makeTimelineItem, viewer } from '@
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
-import { topicWithPrs } from './testing/topics.ts';
+import { readThreadsOnGitHub, topicWithPrs } from './testing/topics.ts';
 
 function harnessWithTeam() {
   const h = makeHarness();
@@ -65,6 +65,7 @@ describe('topic list queues', () => {
 
     await h.engine.sync({ maxAgentCalls: 0 });
     h.store.events.markSeen(h.store.events.listForPr(approved.key).map((event) => event.id), at(6));
+    readThreadsOnGitHub(h, [approved]);
 
     const detail = await h.engine.getTopic('approved');
     expect(detail?.tiles[0]).toMatchObject({ state: { kind: 'open' }, turn: { kind: 'you', what: 'Merge, it is approved' } });

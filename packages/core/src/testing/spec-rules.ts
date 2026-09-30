@@ -587,15 +587,24 @@ export interface QuietReadSpecInput {
   pr: Pr;
   events: PrEvent[];
   viewer: Viewer;
-  tileUnread: boolean;
   /** Whose move on the PR is the viewer's. */
   yourMove: boolean;
   prFetchedAt: IsoTime | null;
   now: IsoTime;
 }
 
-function othersEvents(input: QuietReadSpecInput): PrEvent[] {
+function othersEvents(input: Pick<QuietReadSpecInput, 'events' | 'viewer'>): PrEvent[] {
   return input.events.filter((event) => !isViewerLogin(input.viewer, event.actor));
+}
+
+/** Loud as the agent or user left it, and not seen. */
+function isUnseenLoudEvent(event: PrEvent): boolean {
+  return event.seenAt === null && effectiveLoudnessOf(event) === 'loud';
+}
+
+/** Who acted, in order of first appearance, "CI" for actor-less events. */
+function actorNames(events: PrEvent[]): string[] {
+  return [...new Set(events.map((event) => (event.actor === '' ? 'CI' : event.actor)))];
 }
 
 function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
@@ -605,9 +614,10 @@ function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
 /**
  * "Handled quietly", bots only (DESIGN): a thread the viewer had read that
  * turned unread only because of automation, on a fresh complete snapshot,
- * not their own open PR, no unseen merge without their review, the tile not
- * unread, not their move, and past the grace. Liveness too: all of that
- * holds, so it marks.
+ * not their own open PR, no unseen merge without their review, no unseen
+ * loud news on the PR, not their move, and past the grace. Whether the tile
+ * is unread never matters: its thread is unread, so it always is. Liveness
+ * too: all of that holds, so it marks.
  */
 export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   const { thread, pr, viewer } = input;
@@ -631,8 +641,8 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (input.events.some(isUnseenMergeWithoutViewer)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (input.tileUnread) {
-    return { kind: 'skip', why: 'tile_unread' };
+  if (input.events.some(isUnseenLoudEvent)) {
+    return { kind: 'skip', why: 'unseen_loud' };
   }
   if (input.yourMove) {
     return { kind: 'skip', why: 'your_move' };
@@ -640,7 +650,7 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (withinGrace(input.now, [thread.updatedAt, ...since.map((event) => event.at)])) {
     return { kind: 'skip', why: 'grace' };
   }
-  return { kind: 'mark', bots: [...new Set(since.map((event) => (event.actor === '' ? 'CI' : event.actor)))] };
+  return { kind: 'mark', bots: actorNames(since) };
 }
 
 const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_requested' | 'reviewed' | 'replied'>> = {
@@ -654,7 +664,7 @@ const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_request
  * "You already dealt with it": the viewer reviewed or commented after every
  * unread event (bots after it are fine, except on their own open PR), on a
  * fresh complete snapshot, no unseen merge without their review after the
- * touch, the tile not unread, and past the grace.
+ * touch, no unseen loud news on the PR, and past the grace.
  */
 export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>): TouchedReadCheck {
   const { thread, pr, viewer } = input;
@@ -669,7 +679,7 @@ export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>)
     return { kind: 'skip', why: 'no_touch' };
   }
   const readAt = thread.lastReadAt;
-  const unread = othersEvents({ ...input, yourMove: false }).filter((event) => readAt === null || event.at > readAt);
+  const unread = othersEvents(input).filter((event) => readAt === null || event.at > readAt);
   if (unread.length === 0) {
     return { kind: 'skip', why: 'nothing_known' };
   }
@@ -683,8 +693,8 @@ export function expectedTouchedRead(input: Omit<QuietReadSpecInput, 'yourMove'>)
   if (input.events.some((event) => isUnseenMergeWithoutViewer(event) && event.at > touch.at)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
-  if (input.tileUnread) {
-    return { kind: 'skip', why: 'tile_unread' };
+  if (input.events.some(isUnseenLoudEvent)) {
+    return { kind: 'skip', why: 'unseen_loud' };
   }
   if (withinGrace(input.now, [thread.updatedAt, touch.at, ...late.map((event) => event.at)])) {
     return { kind: 'skip', why: 'grace' };

@@ -36,7 +36,6 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
     events: [humanComment(5), botComment(30), ciResult(31)],
     userState: null,
     viewer,
-    tileUnread: false,
     notYours: false,
     prFetchedAt: at(50),
     now: at(60),
@@ -134,8 +133,9 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ pr: merged, events: [merge] }))).toEqual({ kind: 'skip', why: 'unseen_merge' });
   });
 
-  it('leaves it while the tile is unread', () => {
-    expect(quietReadCheck(input({ tileUnread: true }))).toEqual({ kind: 'skip', why: 'tile_unread' });
+  it('marks although the tile is unread (its thread is), but leaves it while the PR has unseen loud news', () => {
+    const raised = { ...botComment(30), override: { loudness: 'loud' as const, reason: 'the finding needs a look', by: 'agent' as const } };
+    expect(quietReadCheck(input({ events: [humanComment(5), raised, ciResult(31)] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
   });
 
   it('leaves it while it is the user move', () => {
@@ -163,7 +163,6 @@ describe('touchedReadCheck', () => {
       pr,
       events: [humanComment(5), humanComment(25), humanComment(26), own('review_approved', 30)],
       viewer,
-      tileUnread: false,
       prFetchedAt: at(50),
       now: at(60),
       ...overrides,
@@ -230,11 +229,12 @@ describe('touchedReadCheck', () => {
     expect(touchedReadCheck(touched({ events: [humanComment(5), own('review_approved', 30)] }))).toEqual({ kind: 'skip', why: 'nothing_known' });
   });
 
-  it('leaves read threads, stale snapshots and unread tiles alone', () => {
+  it('leaves read threads, stale snapshots and unseen loud news alone', () => {
     expect(touchedReadCheck(touched({ thread: makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: false }) }))).toEqual({ kind: 'skip', why: 'not_unread' });
     expect(touchedReadCheck(touched({ prFetchedAt: at(29) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
     expect(touchedReadCheck(touched({ pr: { ...pr, truncated: true } }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
-    expect(touchedReadCheck(touched({ tileUnread: true }))).toEqual({ kind: 'skip', why: 'tile_unread' });
+    const raised = { ...botComment(35), override: { loudness: 'loud' as const, reason: 'the finding needs a look', by: 'agent' as const } };
+    expect(touchedReadCheck(touched({ events: [humanComment(25), own('review_approved', 30), raised] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
   });
 });
 

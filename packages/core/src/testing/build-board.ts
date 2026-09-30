@@ -439,6 +439,21 @@ export interface PropertyBoard {
   tiles: Tile[];
 }
 
+/**
+ * GitHub's read time of the PR's thread: the recipe's read, and a Mark read
+ * or Approve in the app, which reach GitHub at the click (the recipe's clicks
+ * model a completed mark-read). Null when none of them happened.
+ */
+function threadReadAt(spec: PrSpec, pr: Pr, viewer: Viewer, clock: PrClock): IsoTime | null {
+  const approved = spec.approvedAfter !== null && pr.state === 'OPEN' && !sameLogin(pr.author, viewer.login);
+  const times = [
+    spec.tracking.kind === 'thread' && spec.tracking.readAfter !== null ? clock.after(spec.tracking.readAfter) : null,
+    spec.markedReadAfter === null ? null : clock.after(spec.markedReadAfter),
+    approved ? clock.after(Math.min(spec.approvedAfter!, spec.steps.length)) : null,
+  ].filter((time): time is IsoTime => time !== null);
+  return times.toSorted().at(-1) ?? null;
+}
+
 /** One PR's stored events and user state, made the way the sync and the app make them. */
 function storedPrState(input: {
   spec: PrSpec;
@@ -585,7 +600,7 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     board.prSpecs.set(pr.key, entry.spec);
     let thread: NotificationThread | null = null;
     if (tracking.kind === 'thread') {
-      const lastReadAt = tracking.readAfter === null ? null : clockOf(entry).after(tracking.readAfter);
+      const lastReadAt = threadReadAt(entry.spec, pr, viewer, clockOf(entry));
       thread = {
         id: `thread-${pr.ref.number}`,
         reason: tracking.reason,
@@ -676,6 +691,7 @@ export function tileStateOf(board: PropertyBoard, tile: Tile, viewer: Viewer | n
     tile,
     prs: board.prs,
     events: board.events,
+    threads: board.threads,
     userStates: board.userStates,
     snoozes: board.snoozes,
     now: board.now,
@@ -706,6 +722,7 @@ function prRows(board: PropertyBoard, tile: Tile, state: TileState, viewer: View
         quietRepo: false,
         repoLabel: null,
         tileUnread: state.kind === 'unread',
+        unreadOnGitHub: board.threads.get(pr.key)?.unread === true,
         now: board.now,
         pendingWrite: board.pendingWrites.get(pr.key) ?? null,
       }),

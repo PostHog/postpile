@@ -21,6 +21,7 @@ function summaryInput(pr: Pr, events: PrEvent[], overrides: Partial<PrSummaryInp
     quietRepo: false,
     repoLabel: null,
     tileUnread: false,
+    unreadOnGitHub: false,
     now: at(100),
     pendingWrite: null,
     ...overrides,
@@ -85,6 +86,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
     glanceGap: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
+    unreadOnGitHub: false,
     done: false,
     ownTeamRequests: [],
     pendingWrite: null,
@@ -102,7 +104,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
 /** The tile's state and rows: unread when a row has unseen loud news, else open. */
 function dotsOf(prs: PrSummary[], kind?: TileState['kind']): string[] {
   const unread = prs.some((pr) => pr.unseenLoudEvents > 0);
-  return notDonePrKeys({ state: { kind: kind ?? (unread ? 'unread' : 'open'), unreadBecause: [] }, prs });
+  return notDonePrKeys({ state: { kind: kind ?? (unread ? 'unread' : 'open'), unreadBecause: [], unreadOnGitHub: unread, loud: unread }, prs });
 }
 
 describe('notDonePrKeys: the Not done yet dots', () => {
