@@ -1183,6 +1183,15 @@ current ink, next quiet) and word chips, never symbols alone:
    joins it). Progress lines, each Working / Done / Failed / Skipped:
    - viewer, teams (`Viewer.teams`) and team members, stored like a sync
      does (the only required step; failing it ends the sweep);
+   - team roles (2026-09-30, see "Team roles"): every team classified
+     again from the last 90 days of reviews, the user's flips kept. The
+     line says "Home team: team-devex (57% of your reviews came through
+     it) · Routing only: approvers (4% of your reviews came through it)",
+     or "No home team: your teams only route reviews to you · …". Under
+     the finished sweep each team gets a row with a flip ("team-devex ·
+     Home team (57% of your reviews) · Make routing only"). A failed read
+     is noted and the sweep goes on with the stored roles (none: every
+     team home). The team members above are only the home teams' members.
    - 30 days of activity in ONE GraphQL request (`recentActivity`): three
      search aliases, `author:@me updated:>=`, `is:open
      review-requested:@me`, `reviewed-by:@me -author:@me updated:>=` (40 /
@@ -1826,13 +1835,17 @@ codes. RV, @, AS -> "For you" (honey chip, 4px honey band down the tile's
 left edge). A team request on a PR a teammate wrote (`Viewer.teamMembers`)
 is "For you" too, whatever the code, while no other teammate approved or
 requested changes (a comment alone does not cover it; 2026-09-28,
-`reviewRequest` = `team_for_you` in `review-request.ts`). RT, @T -> "For <team slug>" ("For team-devex", sea chip and
+`reviewRequest` = `team_for_you` in `review-request.ts`). Only a home
+team's request does that (2026-09-30, see "Team roles"). RT, @T -> "For <team slug>" ("For team-devex", sea chip and
 band), the slug from the pending team request, else the timeline request,
-else a team mention. AU, and any PR the viewer wrote even with a CODEOWNERS
+else a team mention, home teams first at each step. For a routing team
+the chip says the same words in the neutral style and there is no band
+(`ForWhom` kind `routing`, 2026-09-30): sea means "your team", and a
+routing team is not. AU, and any PR the viewer wrote even with a CODEOWNERS
 team request on it -> "Your PR" (neutral chip, neutral grey band). CM, FW,
 ST -> no chip, no band. A PR whose author addressed your changes (see
 whose turn) is "For you" whatever its code. A tile takes the most aimed of
-its PRs (you, team, own). PR rows in multi-PR tiles (and the detail pane's PR list) show the
+its PRs (you, team, routing, own). PR rows in multi-PR tiles (and the detail pane's PR list) show the
 same words as a small chip without a band, only when the row's differs from the tile's
 (2026-09-29). The chip's tooltip keeps the
 long why-here reason. The table below is still the rule behind it.
@@ -1947,6 +1960,8 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    seen (mark-read in the app, read on GitHub, or any touch of yours after
    it, see "You already dealt with it") it no longer makes it your
    move, so it no longer keeps the tile off Done or the topic in needs-you.
+   A routing team's mention is quiet by the rules, so it never asks
+   (2026-09-30, see "Team roles").
    Personal asks (mention, question, reply) stay until answered.
    An ask the events agent lowered to quiet or muted (`effectiveLoudness`,
    override over rule) is no ask (2026-09-29): not your move, not Needs
@@ -2005,15 +2020,21 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      or requests changes; a teammate's comment alone does not cover it
      (2026-09-28). A team request on a PR from outside the team (routed)
      is yours only while no teammate reviewed at all, and while it is not
-     on hold (`teamRequestHold`, 2026-09-29). While your own changes request
-     stands (you were asked again after it and only commented since) the
-     same request is a re-review: "Re-review, ada asked", move `re_review`,
-     matching the tier Changes you requested (2026-09-30,
-     `viewerRequestedChanges`). That holds with or without a push: without
-     one your review of the head still stands, but GitHub drops a reviewer
-     from the requested list once they review, so a pending personal
-     request after it is the author's re-request, and an explicit
-     re-request means "look again" (2026-09-30).
+     on hold (`teamRequestHold`, 2026-09-29). Only home teams work this
+     way (2026-09-30, see "Team roles"): a routing team's request is
+     routed on any PR, a teammate's too, never "lyra's PR", and yours only
+     while nobody but the author (and bots) reviewed the head, since its
+     members are not known ("Review for approvers"; taken: "mira is
+     reviewing"). When both are pending, the more owed request names the
+     team (a tie goes to the home team, `requestedTeam`). While your own
+     changes request stands (you were asked again after it and only
+     commented since) the same request is a re-review: "Re-review, ada
+     asked", move `re_review`, matching the tier Changes you requested
+     (2026-09-30, `viewerRequestedChanges`). That holds with or without a
+     push: without one your review of the head still stands, but GitHub
+     drops a reviewer from the requested list once they review, so a
+     pending personal request after it is the author's re-request, and an
+     explicit re-request means "look again" (2026-09-30).
    - them: a routed team request while someone else's changes request
      stands: the author "to address ada's changes" (the author moves
      first). Once the author pushed after it and requested ada again (she
@@ -2212,12 +2233,82 @@ talk about the same PR, else tile order. Multi-PR tiles add " on #N".
 that list has been fetched once, any reviewer but the author counts.
 
 **Team members** (`TeamMembers` in the engine, ghatchup's
-`Meta.TeamMembers`): every other login on the viewer's teams, from REST
+`Meta.TeamMembers`): every other login on the viewer's home teams (see
+"Team roles"; routing teams are never fetched), from REST
 `GET /orgs/{org}/teams/{slug}/members` (all pages, ETag per team), kept in
 meta `team_members` and put on the stored viewer. Refreshed during sync at
-most once a day, or when the viewer's teams change. A team the token cannot
+most once a day, or when the home teams change. A team the token cannot
 read counts as empty; a failed refresh keeps the last list and never fails
-the sync.
+the sync. No home team means an empty list (no teammates), not the "any
+reviewer" fallback of a list never fetched.
+
+**Team roles** (decided 2026-09-30; `team-roles.ts` in core, `TeamRoleKeeper`
+in the engine). Every GitHub team used to count the same: all members were
+teammates, a team request on a member's PR was "For you", team mentions
+were loud. Real org data broke that: most teams are small, but some are
+approver or cross-cutting groups (17 people) or parent teams. One engineer
+on only a 17-person approvers team and a 4-person team got 4% of about 400
+reviews in 3 months through either team's request (33% personal, 62%
+unasked), yet PostPile treated all 20 people as teammates and filled
+Team's PRs with PRs from across the company. The user, on a 3-person team,
+got 57% of his reviews through the team's request. 46 of 236 org members
+are in no team. So each of the viewer's teams gets a role:
+
+- **home**: behaves as every team did before. Members are teammates
+  (`teamMembers`, Team's PRs, the Team filter, faces in the sea team pill).
+  A home team request on a teammate's PR is `team_for_you`; the sea "For
+  <slug>" chip and band; human mentions of it are loud.
+- **routing**: only its review requests and mentions matter. Members are
+  not teammates and are never fetched. Its requests are routed like a home
+  team's request on an outsider's PR (To review, below "For you" tiles,
+  hold rules, Look closer pings), on any PR, a teammate's too: never
+  `team_for_you`. Taken once anyone but the author and bots reviewed the
+  head. Neutral "For <slug>" chip, no band. Its mentions are FYI (quiet,
+  `ruleLoudness` row "routing team mention"), so they never ask.
+- **No home team is valid**: no teammates, nothing in Team's PRs, the Team
+  filter hides (`ViewerView.homeTeams` empty), no teammate faces. For
+  people like the engineer above that is "teams off".
+- **Bot-made review requests count like human ones** (as before, see "A
+  review request counts by whom it asks"): assigner bots route most team
+  requests and the user relies on them.
+
+`Viewer.teams` stays every team, so requests to routing teams are still
+found (`findPrs` aliases), coded RT and removable ("Remove <team>").
+`Viewer.homeTeams` lists the home teams; missing means roles are not
+decided yet and every team is home, so nothing changes until then.
+
+Classification, rules first, the user confirms (`classifyTeams`): a review
+"came through team T" when T was requested on the PR and the viewer was not
+requested personally (a personal request wins). A team is home when at
+least 20% of the viewer's reviews came through it (`HOME_TEAM_SHARE`).
+With fewer than 30 reviews in the window (`MIN_REVIEWS_FOR_SHARE`), size
+decides: 10 members or fewer is home, more is routing
+(`HOME_TEAM_MAX_MEMBERS`); an unknown size counts as home. Input, two
+read-only GitHub reads: member counts of the viewer's teams in one GraphQL
+request (`teamSizes`, `members { totalCount }`), and `is:pr
+reviewed-by:<login> -author:<login> updated:>=<90 days ago> org:<each of
+viewerOrgs>` with `timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT])`
+(requested User login or Team org/slug, bot-made ones included), pages of
+50, at most 200 PRs (`reviewedPrRequests`).
+
+Storage: meta `team_roles` = `{ classifiedAt, reviewCount, teams: {
+"org/slug": { role, source: 'auto' | 'user', basis: 'share' | 'size' |
+'user', share, reviews, members } } }`. When: the setup sweep classifies
+every team again (see Setup flow); a sync classifies when `team_roles` is
+missing (installs that finished setup before roles existed) and when
+`Viewer.teams` gains a team (only the new one). A role with `source:
+'user'` is never overwritten. A failed classification never fails a sync
+or the sweep; those teams stay home until the next try.
+
+The user flips a role under the setup sweep and in "Your teams" in the
+instructions pane ("team-devex · Home team (57% of your reviews) · Make
+routing only"; `GET/POST /api/team-roles`). A flip is `source: 'user'`,
+sticks, and updates the stored viewer at once (home teams, and the members
+of a new home team, a GitHub read). Events are classified when a PR is
+stored, so the loudness of team mentions already stored follows a flip on
+the PR's next fetch. Prompts name routing teams only when a team routes
+("Teams that only route review requests to them (not their team)"), so
+prompt hashes do not move for everyone else.
 
 **PR tiers** (`prTier` in `pr-tier.ts`, ported from ghatchup's
 `triage.Classify`): one tier per open PR, first match wins: `needs_reply`
@@ -2231,7 +2322,9 @@ A personal request and a team request on a teammate's PR (see whose turn)
 are `to_review` and checked before `team` (2026-09-28): a review owed to a
 teammate is a review, not "Team's PRs". A teammate's PR whose team request
 another teammate covered stays `team`; routed team requests stay
-`to_review` after the authorship checks. Inside To review the topic column
+`to_review` after the authorship checks. A routing team's open request on
+a teammate's PR is `to_review` too, before `team` (2026-09-30): a review
+owed, not Team's PRs. Without a home team nothing is `team`. Inside To review the topic column
 puts "For you" tiles (personal and teammate team requests) before routed
 team requests (`tilesInTierOrder` in the renderer).
 Addressed your changes (see whose turn) is `changes_requested` (was
@@ -2468,7 +2561,9 @@ avatars and filters", QueuesB2).
   drops sections left empty. It narrows together with the title bar
   search. In the open topic, matching tiles get the warm strip fill and a
   honey line, the rest fade to 45% but stay. Plain UI state, not in the
-  back / forward history. The avatars come from `GET /api/viewer`.
+  back / forward history. The avatars come from `GET /api/viewer`. Without
+  a home team (`ViewerView.homeTeams` empty) the Team button hides, unless
+  it is the active filter (2026-09-30, see "Team roles").
 - **Selection stays put**: what the user picked stays on screen until the
   user navigates. An approve, mark-read, refetch, live poll or sync never
   moves it, even when the open topic then leaves the queue filter or the
@@ -3109,7 +3204,8 @@ beyond what the full sync already does for threads that left the inbox).
   overrides count.
 - `routed` (2026-09-29): a review request routed to the viewer's team on a
   PR from outside the team (not theirs, not a teammate's), made by a person
-  or a bot. It never pings from the poll and never reaches the agent; it
+  or a bot. A routing team's request is routed on any PR but the viewer's
+  own, a teammate's too (2026-09-30, see "Team roles"). It never pings from the poll and never reaches the agent; it
   pings when the glance says Look closer (below).
 - `snoozed` (2026-09-29): the tile holding the PR is still snoozed with the
   new events in (the decider reads the tile state off the board), so nothing
@@ -3563,7 +3659,8 @@ message, are dropped.
    (tool, reason — once per state change, from `ToolHealth`).
 2. *Retention*: `app_active` (once per calendar day), `window_focused`
    (throttled to once per 30 minutes).
-3. *Core actions*: `tile_opened`, `pr_approved`, `marked_read` (origin
+3. *Core actions*: `tile_opened` (`for_whom` gained `routing` on
+   2026-09-30), `pr_approved`, `marked_read` (origin
    `tile`, `detail`, `debug` or `cleanup`), `team_request_removed` (no
    props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
@@ -4298,6 +4395,8 @@ preflight and does not know the token, so CORS stays open.
 | `GET /api/repos` | `listRepos()` (repo menu: counts, scope, quiet) |
 | `POST /api/repos/scope` `{repo}` | `setRepoScope()` (one repo, null = all) |
 | `POST /api/repos/quiet` `{repo, quiet}` | `setRepoQuiet()` |
+| `GET /api/team-roles` | `getTeamRoles()`: each team with role, source and why |
+| `POST /api/team-roles` `{team, role}` | `setTeamRole()` (local, sticks; 400 for a team the viewer is not on) |
 | `GET /api/debug/notifications?limit=` | `debugNotifications()` (default 200, max 1000) |
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
 | `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
@@ -4469,7 +4568,7 @@ preflight and does not know the token, so CORS stays open.
 - **A broken snooze comes back**: a snooze broken by a mention comes back once the mention is
   read (`packages/core/src/snooze.test.ts` asserts it). Keep, or end the snooze for good when it
   breaks? (From the codebase review, 2026-09-29.)
-- **Loudness rules beyond the spec**, to confirm: human team mentions are loud; human reviews and
+- **Loudness rules beyond the spec**, to confirm: human mentions of a home team are loud (a routing team's are quiet, decided 2026-09-30); human reviews and
   comments on the user's own PR are loud; a mention or question drops to quiet once the user
   spoke on the PR after it (and is seen anyway since "You already dealt with it"); loud events on pulled-in PRs also make a tile unread (confirmed 2026-09-30, the layer gets a "Not done yet" dot). Commits after
   the user's approval are quiet unless the agent raises one (decided 2026-09-28).

@@ -21,6 +21,18 @@ now".
   viewer's agent PR) and #1972 (three teammates' agent PR). Not changed:
   the setup sweep's activity search (still `author:@me`) and the title bar
   search (matches the author, not assignees).
+- Team roles (2026-09-30, DESIGN.md "Team roles"): each of the viewer's
+  teams is home or routing. Home teams behave as before; a routing team
+  only brings its review requests (routed on any PR, taken by anyone's
+  review of the head, neutral "For <slug>" chip without band) and quiet
+  mentions, and its members are not teammates. Rules decide from the last
+  90 days of reviews (`classifyTeams`: 20% of reviews through the team,
+  size fallback of 10 members under 30 reviews), in the setup sweep and on
+  the next sync of installs without roles or for a newly joined team; meta
+  `team_roles`. The user flips a role under the sweep and in "Your teams"
+  below the instructions (`GET/POST /api/team-roles`); a flip sticks.
+  `TeamMembers` fetches home teams only; no home team means no teammates
+  and no Team filter. Fake mode has client-approvers as a routing team.
 
 - Rules layer: one home per fact (2026-09-29, DESIGN.md "Rules layer: one
   home per fact"): one module per predicate family (automation, who a
@@ -1064,6 +1076,12 @@ the app meanwhile.
   except a bot author with assignees, then the assignees. A person's PR
   never becomes the viewer's through an assignment. DESIGN.md "PR
   ownership".
+- **Teams are home or routing** (2026-09-30): decided from review history
+  (20% of reviews via the team; size fallback ≤10 with under 30 reviews);
+  the user can flip; no home team is valid; bot-made review requests count
+  like human ones. A routing team's chip is neutral without band (sea
+  means your team), its mentions are FYI, and its request is never "For
+  you" on a teammate's PR. DESIGN.md "Team roles".
 
 - **Review requests by whom they ask; routed reviews ping on Look closer**
   (2026-09-29): a `review_requested` event aimed at the viewer or their team

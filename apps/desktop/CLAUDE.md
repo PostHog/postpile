@@ -31,7 +31,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,
   `useFinishedTopics` for the sidebar's Finished drawer),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
-  `viewer.ts` (`useViewer`, login and teammates for the filter buttons),
+  `viewer.ts` (`useViewer`, login, teammates and home teams for the filter
+  buttons; no home team hides Team, `visibleQueueFilters`),
+  `team-roles.ts` (`useTeamRoles`, home or routing only per team for "Your
+  teams"; flips go through `actions.setTeamRole`, rows are `TeamRolesList`,
+  shared with the setup sweep step),
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
@@ -340,10 +344,11 @@ Four spots per tile, all derived in core and shipped on `TileView` /
 `PrSummary` (DESIGN.md "Tile faces"); the renderer only picks labels and
 tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.ts`).
 
-- For whom: `ForWhomChip` ("For you" honey, "For team-devex" sea, "Your
-  PR" neutral, nothing else) from `TileView.forWhom` / `PrSummary.forWhom`,
-  plus a 4px left band on the tile in the same color (`BANDS` in
-  `Tile.tsx`); PR rows get the small chip, no band. The tooltip keeps the
+- For whom: `ForWhomChip` ("For you" honey, "For team-devex" sea, "For
+  approvers" neutral for a routing team, "Your PR" neutral, nothing else)
+  from `TileView.forWhom` / `PrSummary.forWhom`, plus a 4px left band on
+  the tile in the same color (`BANDS` in `Tile.tsx`; a routing team gets
+  no band, sea means your team); PR rows get the small chip, no band. The tooltip keeps the
   long why-here reason (`whyTitle`). Grey on done tiles.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), a coral "NEW" pill, age. On a revisit (`PrSummary.whatsNew`
