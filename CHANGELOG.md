@@ -7,9 +7,12 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Added
 
 - The Dock shows how many tiles are your move as a badge, pings leave Notification Center once their tile is read or done in PostPile, and the Dock bounces once for a personal ask (mention, question, reply, review requested from you) while the window is in the background.
+- Errors in the window are reported to PostHog Error Tracking like the app's other errors: scrubbed the same way, and off whenever usage analytics are off. A crash while drawing a screen shows a Reload button instead of a blank window.
+- Error reports carry the release they came from, and release builds upload their source maps to PostHog (never shipped in the app), so error stacks point at the source instead of bundled files. Needs a one-time `POSTHOG_CLI_API_KEY` secret, see RELEASING.md.
 
 ### Changed
 
+- Error messages sent to PostHog also drop repo names, PR numbers and quoted text, and stack frames from dependencies are always left out.
 - Approve, Mark read, Mark done and Snooze change the tile and buttons as soon as they're clicked instead of after a few seconds. A failed action puts things back and says why.
 - A snooze on a stack or set wakes when any of its tracked PRs meets the condition, for example the first PR to go green, instead of waiting for all of them.
 - Under the hood: each rule (automation, who a review request asks, whose move, loudness, pings, button offers) is worked out once in core and read by the app, pings, MCP and sample mode alike, so they can no longer disagree.

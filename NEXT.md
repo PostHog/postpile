@@ -224,6 +224,15 @@ now".
   names in any event — guarded in code, not just by convention. Verified
   once for real with `POSTPILE_TELEMETRY=1` against a scratch data dir (a
   single `telemetry_test` event, confirmed delivered).
+- Error tracking (2026-09-30, DESIGN.md "Usage analytics" › Errors):
+  renderer errors (window handlers plus a root `ErrorBoundary`) go through
+  `POST /api/telemetry` to the engine's scrubber like main process errors.
+  Frames carry posthog-cli chunk ids, the release workflow uploads hidden
+  source maps and creates the release, so stacks resolve and issues can be
+  resolved in a version. Waiting on the owner: the `POSTHOG_CLI_API_KEY`
+  secret (RELEASING.md "Error tracking source maps"); until then releases
+  warn and send bundled, release-less stacks. Not yet seen resolving in
+  PostHog: check the first issue after the first release with the secret.
 - Missing tools (2026-09-28, DESIGN.md "Missing tools"): gh and claude get
   a typed status (`GET /api/tools`) checked once and then on a backoff.
   Without gh the sync is skipped and the poll paused with a fix note as
