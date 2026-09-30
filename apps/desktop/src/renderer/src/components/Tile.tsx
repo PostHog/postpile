@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
@@ -33,8 +34,10 @@ interface TileProps {
 }
 
 /**
- * The resting tile has no border: its hairline is a ring inside `shadow-tile`.
- * Selection, filter matches, done tiles and drafts (dashed) keep a real border.
+ * Every frame is the same 1px border, only its color changes, so selecting a
+ * tile moves nothing. The resting edge is the hairline ring's color with the
+ * background clipped inside the border, so it blends with the column like the
+ * `shadow-tile` ring it replaces.
  */
 function frameClasses(props: TileProps, draft: boolean): string {
   const dashed = draft ? 'border-dashed' : '';
@@ -47,12 +50,17 @@ function frameClasses(props: TileProps, draft: boolean): string {
   if (props.view.state.kind === 'done') {
     return `border border-hairline-done ${dashed}`;
   }
-  return draft ? 'border border-dashed border-frame' : 'shadow-tile';
+  return draft ? 'border border-dashed border-frame' : 'border border-edge-hairline bg-clip-padding shadow-tile-lift';
 }
 
-/** Only the resting tile draws its edge as a ring; everything else has a 1px border. */
-function hasBorder(props: TileProps, draft: boolean): boolean {
-  return props.selected || props.filterMatch === true || props.view.state.kind === 'done' || draft;
+/**
+ * A click on the tile's own surface selects it; a click that started on a
+ * control inside it (PR row, footer button, link, a menu item even when the
+ * menu is portaled, since React bubbles through portals) is that control's.
+ */
+function clickedControl(event: MouseEvent<HTMLElement>): boolean {
+  const target = event.target;
+  return target instanceof Element && target.closest('button, a, input, textarea, select, [role="menu"], [role="menuitem"], [role="dialog"]') !== null;
 }
 
 /** The left band per "for whom": honey for you, sea for your home team, neutral for your own PR, none else (a routing team too). */
@@ -194,8 +202,25 @@ export function Tile(props: TileProps) {
     }
   }
 
+  // A selected tile keeps the PR that is open.
+  function selectTile() {
+    if (!props.selected) {
+      selectLead();
+    }
+  }
+
+  // Mouse: anywhere on the tile. Keyboard: the title button (one focusable element, Enter / Space).
+  function onTileClick(event: MouseEvent<HTMLElement>) {
+    if (!clickedControl(event)) {
+      selectTile();
+    }
+  }
+
   return (
-    <article className={`relative flex min-w-0 flex-col rounded-tile ${background} ${frameClasses(props, draft)} ${fade}`}>
+    <article
+      onClick={onTileClick}
+      className={`relative flex min-w-0 cursor-pointer flex-col rounded-tile ${background} ${frameClasses(props, draft)} ${fade}`}
+    >
       {props.selected && (
         // The notch points at the detail pane, which shows this tile.
         <span
@@ -207,8 +232,8 @@ export function Tile(props: TileProps) {
         // The "for whom" band down the left edge, in the chip's color; grey on
         // done tiles, striped on drafts. A 3px strip cannot follow the tile's
         // 12px corner by itself, so it sits in a full-size layer clipped to the
-        // tile's inner rounding (12px minus the frame, if any) and follows the curve.
-        <span aria-hidden="true" className={`pointer-events-none absolute inset-0 z-[1] overflow-hidden ${hasBorder(props, draft) ? 'rounded-[11px]' : 'rounded-tile'}`}>
+        // tile's inner rounding (12px minus the 1px frame) and follows the curve.
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[11px]">
           {draft ? (
             <span
               className="absolute inset-y-0 left-0 w-[3px]"
@@ -222,7 +247,7 @@ export function Tile(props: TileProps) {
       {unread && <UnreadStrip view={view} />}
       {!unread && <UnseenMergeStrip view={view} />}
       <div className="flex min-h-0 flex-1 flex-col gap-2 pt-3 pr-3.5 pb-[13px] pl-[15px]">
-        <div className="flex cursor-pointer flex-col gap-2" onClick={selectLead}>
+        <div className="flex flex-col gap-2">
           <div className="flex items-center gap-[7px]">
             <ForWhomChip forWhom={view.forWhom} code={view.why} greyed={done} />
             <KindLabel view={view} selected={props.selected} />
@@ -251,7 +276,11 @@ export function Tile(props: TileProps) {
               </>
             )}
           </div>
-          <h2 className={`text-[14.5px] leading-[1.375] tracking-[-0.012em] text-balance ${titleLook}`}>{tile.title}</h2>
+          <h2 className={`text-[14.5px] leading-[1.375] tracking-[-0.012em] text-balance ${titleLook}`}>
+            <button type="button" aria-pressed={props.selected} onClick={selectTile} className="rounded-[3px] text-left">
+              {tile.title}
+            </button>
+          </h2>
           {view.pendingWrite && (
             <div className="flex">
               <PendingWritePill pending={view.pendingWrite} />

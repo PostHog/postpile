@@ -258,7 +258,10 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   steps to px: `px-3` is 12px, `h-7` 28px, as the mockups read them.
 - Edges on white chips, secondary buttons, rows and boxes are inset rings
   (`inset-ring inset-ring-edge-*`, tokens `--ring-*`), not borders: no layout
-  shift, crisp on tints. `shadow-tile` carries the tile's hairline ring.
+  shift, crisp on tints. `shadow-tile` carries a card's hairline ring. The
+  tile is the exception: every tile frame is a 1px border (resting:
+  `border-edge-hairline bg-clip-padding shadow-tile-lift`, the ring's look),
+  so selection only changes colors and moves nothing.
 - One-line labels that the mockups size by their text get
   `leading-[normal]`; the inherited 1.5 from preflight makes them taller.
 - The detail pane keeps three keylines from its edge: boxes and rows at
@@ -448,6 +451,10 @@ not history entries; they narrow together with the search. Relation
 corrections go through `correctMemory` with `relation` set
 (`RelationLine`), local only. `TileGrid` shows tiles in tier order, fades
 the ones a queue filter does not match and folds snoozed / done ones.
+A click anywhere on a tile selects it (`onTileClick` in `Tile.tsx`), except
+on a control inside it (button, link, menu: `clickedControl`), which keeps
+its own action; a PR row selects that PR. The keyboard path is the title,
+a `<button>`. A click on the already selected tile keeps the open PR.
 Tiles stay in one column (DESIGN.md "Three-pane balance"). The selected
 tile keeps the place it had when it was selected (`useHeldPlace` over
 `holdPlace`, `lib/hold-place.ts`), and the open topic's sidebar row too,

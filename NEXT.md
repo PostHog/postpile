@@ -1059,6 +1059,11 @@ the app meanwhile.
 
 ## Decided
 
+- **Equal tiles and detail, whole-tile click** (2026-09-30, owner review of
+  the polish pass): the tile column and the detail pane split what the
+  sidebar leaves evenly by default (dragged widths stay); the 720px tile cap
+  is gone. Selecting a tile shifts nothing (every frame is a 1px border), and
+  a click anywhere on a tile selects it; controls inside keep their own action.
 - **Green Approve** (2026-09-30, interface polish pass): Approve, the one
   irreversible-and-positive action, leads in `--safe` green with
   `--elev-safe`, the same color as the "Approved" state it produces. Every
