@@ -130,6 +130,8 @@ describe('verifyDossier', () => {
     expect(withoutStaleClaims(dossier, world([assigned], [assigned.key])).people).toEqual([dossier.people[1]]);
     // No assignees yet: the bot still drives its own PR.
     expect(verifyDossier(dossier, world([unassigned], [unassigned.key]))).toEqual([]);
+    // An assigned PR of the same bot in another topic does not touch this one.
+    expect(verifyDossier(dossier, world([unassigned, assigned], [unassigned.key]))).toEqual([]);
   });
 
   it('flags timeline entries for PRs that left the topic', () => {

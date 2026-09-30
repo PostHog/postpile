@@ -205,15 +205,16 @@ function questionIssue(question: DossierQuestion, prs: Map<PrKey, Pr>): StaleRea
  * stored in the dossier, so they need no check.
  */
 /**
- * A bot named as driver while a PR it opened now has other owners (its
- * assignees, `prOwners`): the people behind the agent PR drive the work.
- * Catches dossiers written before assignees were read (2026-09-30).
+ * A bot named as driver while a PR it opened in this topic now has other
+ * owners (its assignees, `prOwners`): the people behind the agent PR drive
+ * the work. Only the topic's members count; `world.prs` can hold the whole
+ * board. Catches dossiers written before assignees were read (2026-09-30).
  */
-function botDriverReplaced(login: string, prs: Map<PrKey, Pr>): boolean {
+function botDriverReplaced(login: string, world: VerifyWorld): boolean {
   if (!isBot(login)) {
     return false;
   }
-  return [...prs.values()].some((pr) => sameLogin(pr.author, login) && !isPrOwner(pr, login));
+  return [...world.prs.values()].some((pr) => world.memberKeys.has(pr.key) && sameLogin(pr.author, login) && !isPrOwner(pr, login));
 }
 
 export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssue[] {
@@ -230,7 +231,7 @@ export function verifyDossier(dossier: Dossier, world: VerifyWorld): DossierIssu
     }
   });
   dossier.people.forEach((person, index) => {
-    if (person.role === 'driver' && botDriverReplaced(person.login, world.prs)) {
+    if (person.role === 'driver' && botDriverReplaced(person.login, world)) {
       issues.push({ path: `people[${index}]`, reason: 'person_not_involved' });
     }
   });
@@ -274,6 +275,6 @@ export function withoutStaleClaims(dossier: Dossier, world: VerifyWorld): Dossie
     ...dossier,
     openQuestions: dossier.openQuestions.filter((question) => questionIssue(question, world.prs) === null),
     timeline: dossier.timeline.filter((entry) => world.memberKeys.has(entry.prKey)),
-    people: dossier.people.filter((person) => person.role !== 'driver' || !botDriverReplaced(person.login, world.prs)),
+    people: dossier.people.filter((person) => person.role !== 'driver' || !botDriverReplaced(person.login, world)),
   };
 }
