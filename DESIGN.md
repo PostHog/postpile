@@ -3334,7 +3334,11 @@ finding). A person's edit is quiet news the events agent judges; it is loud
 and an ask when the edited body mentions the viewer or a home team (Codex
 review: a person editing in "@viewer" is a real ask). The old body is not
 fetched, so a mention already there counts too: the event is new and
-unseen only when the edit came after the viewer's last read. Headline: a
+unseen only when the edit came after the viewer's last read. It is also an
+unanswered ask for whose move and the tier (Codex review on PR #41, core
+`askKindOf`): a mention edit asks like a mention (Reply, Needs reply), a
+home-team one like a team mention (until seen), from the edit time, and a
+later comment or review of the viewer answers it. Headline: a
 person's edit ranks with comments (an ask when it mentions them), a bot's
 with automation. Known gap: an edit of a comment that fell off the query's
 comment cap is not seen.
@@ -3343,14 +3347,19 @@ comment cap is not seen.
 their last read no longer keeps a thread unread: the bots-only and judged
 reads block on whose turn only when the move is new since the rule's
 boundary (the read, or the last look). Core `isNewYourMove` works the move
-out on the PR as it stood then (`prAsOf`: reviews, comments, commits,
-timeline items, requests asked, a ready or draft switch and the in-app
-approval from after it taken out; a removed request or resolved thread is
-not put back) and blocks when the move is another kind or was not there.
-Real case: the user's own agent PR, approved by them on Sep 15, read on Sep
-18, then a teammate removed a team request (judged quiet), a stale-PR bot
-nudged and CI ran; the move was "Merge, it is approved" throughout and the
-thread stayed unread. A re-review request after the read still blocks.
+out on the PR as it stood then and blocks when the move is another kind or
+was not there. `prAsOf` is honest history (Codex review on PR #41, owner:
+no shortcuts): reviews, comments, commits and timeline items after the
+boundary are taken out, requests asked after it dropped and ones removed
+after it (by hand, or by the reviewer's review) put back, a ready or draft
+switch and a merge, close or reopen after it undone, the in-app approval
+after it dropped; only a resolved thread and CI stay as they are now. So a
+bot reopening an approved own PR is a new move. A re-review request after
+the read blocks. The real case that asked for this (the user's own agent
+PR, approved by them on Sep 15, read on Sep 18, then a teammate removed a
+team request, a stale-PR bot nudged and CI ran) still stays unread: on Sep
+18 the PR waited on the team, so "Merge, it is approved" is new. Whether
+only new moves that are asks should block is open for the owner.
 
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide

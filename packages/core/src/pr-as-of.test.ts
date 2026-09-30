@@ -36,9 +36,34 @@ describe('prAsOf', () => {
     expect(then.reviewerTeams).toEqual([]);
   });
 
-  it('does not put back what was taken away after the time: a removed request stays gone', () => {
-    const pr = makePr({ reviewerTeams: [], timeline: [makeTimelineItem({ id: 'rm', kind: 'review_request_removed', subject: 'acme/team-infra', at: at(30) })] });
-    expect(prAsOf(pr, at(20)).reviewerTeams).toEqual([]);
+  it('puts back a team request removed after the time', () => {
+    const pr = makePr({
+      reviewerTeams: [],
+      timeline: [
+        makeTimelineItem({ id: 'rq', subject: 'acme/team-infra', at: at(5) }),
+        makeTimelineItem({ id: 'rm', kind: 'review_request_removed', actor: 'rowan', subject: 'acme/team-infra', at: at(30) }),
+      ],
+    });
+    expect(prAsOf(pr, at(20)).reviewerTeams).toEqual(['acme/team-infra']);
+    expect(prAsOf(pr, at(40)).reviewerTeams).toEqual([]);
+  });
+
+  it('puts back a request the reviewer ended by reviewing after the time, not one they had answered before', () => {
+    const pr = makePr({
+      reviewerUsers: [],
+      timeline: [makeTimelineItem({ id: 'rq', subject: 'bob', at: at(5) }), makeTimelineItem({ id: 'rq2', subject: 'carol', at: at(5) })],
+      reviews: [makeReview({ id: 'r1', author: 'bob', submittedAt: at(30) }), makeReview({ id: 'r2', author: 'carol', submittedAt: at(10) })],
+    });
+    expect(prAsOf(pr, at(20)).reviewerUsers).toEqual(['bob']);
+  });
+
+  it('undoes a merge, close or reopen after the time', () => {
+    const reopened = makePr({ state: 'OPEN', timeline: [makeTimelineItem({ id: 'cl', kind: 'closed', actor: 'alice', subject: null, at: at(5) }), makeTimelineItem({ id: 'ro', kind: 'reopened', actor: 'stale-bot[bot]', subject: null, at: at(30) })] });
+    expect(prAsOf(reopened, at(20)).state).toBe('CLOSED');
+    expect(prAsOf(reopened, at(40)).state).toBe('OPEN');
+    const merged = makePr({ state: 'MERGED', mergedAt: at(30), mergedBy: 'trunk-io[bot]', timeline: [makeTimelineItem({ id: 'mg', kind: 'merged', actor: 'trunk-io[bot]', subject: null, at: at(30) })] });
+    expect(prAsOf(merged, at(20))).toMatchObject({ state: 'OPEN', mergedAt: null, mergedBy: null });
+    expect(prAsOf(merged, at(40)).state).toBe('MERGED');
   });
 
   it('reads the draft state from the first switch after the time', () => {

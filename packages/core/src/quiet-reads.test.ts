@@ -473,9 +473,10 @@ describe('clickedReadCheck', () => {
 // The real case of 2026-09-30 (names and repo invented): the viewer's own PR
 // (a coding agent opened it and assigned them), approved by the viewer on
 // Sep 15, read on GitHub on Sep 18. Then rowan removed a team review request
-// (the events agent judged it quiet), a stale-PR bot nudged and CI ran. The
-// move is "Merge, it is approved" the whole time, so nothing is new for the
-// viewer and the judged read clears it.
+// (the events agent judged it quiet), a stale-PR bot nudged and CI ran. On
+// Sep 18 the PR still waited on the team; the merge move came with the
+// removal, so it is new and keeps the thread unread (whether only new asks
+// should block is the owner's open decision).
 describe('scenario: own approved PR, only old moves and bot nudges since the read', () => {
   const day = (date: number, hour = 12) => new Date(Date.UTC(2026, 8, date, hour)).toISOString();
   const lastReadAt = day(18);
@@ -510,11 +511,35 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
     return { thread, pr: realPr, events, userState: null, viewer, notYours: false, prFetchedAt: day(30, 12), now: day(31) };
   }
 
-  it('clears it: the merge move stood before the read, and a stale nudge and CI are no finding', () => {
+  it('keeps it unread: the merge move is new since the read, the team request stood then', () => {
     const input = caseInput(agentPr());
     expect(prWhoseTurn({ pr: input.pr, events: input.events, userState: null, viewer })).toMatchObject({ kind: 'you', move: 'merge' });
+    expect(isNewYourMove(input, lastReadAt)).toBe(true);
+    expect(judgedReadCheck(input)).toEqual({ kind: 'skip', why: 'your_move' });
+  });
+
+  it('clears it when the merge move stood at the read: a stale nudge and CI are no finding', () => {
+    // The team request was removed before the read, so the PR was already waiting on the viewer to merge.
+    const base = agentPr();
+    const earlyRemoval = base.timeline.map((item) => (item.id === 'rm' ? { ...item, at: day(17) } : item));
+    const input = caseInput(agentPr({ timeline: earlyRemoval }));
     expect(isNewYourMove(input, lastReadAt)).toBe(false);
-    expect(judgedReadCheck(input)).toEqual({ kind: 'mark', actors: ['rowan', 'stale-nudge[bot]', 'CI'] });
+    // Only bots since the read now: the bots-only rule clears it.
+    expect(quietReadCheck(input)).toEqual({ kind: 'mark', bots: ['stale-nudge[bot]', 'CI'] });
+  });
+
+  it('keeps it unread after a bot reopens the approved PR: the move is new since the read', () => {
+    const closedThenReopened = agentPr({
+      timeline: [
+        makeTimelineItem({ id: 'rq', actor: 'acme-agent[bot]', subject: 'acme/team-infra', at: day(10) }),
+        makeTimelineItem({ id: 'rm', kind: 'review_request_removed', actor: 'rowan', subject: 'acme/team-infra', at: day(12) }),
+        makeTimelineItem({ id: 'cl', kind: 'closed', actor: 'stale-nudge[bot]', subject: null, at: day(16) }),
+        makeTimelineItem({ id: 'ro', kind: 'reopened', actor: 'stale-nudge[bot]', subject: null, at: day(30, 9) }),
+      ],
+    });
+    const input = caseInput(closedThenReopened);
+    expect(isNewYourMove(input, lastReadAt)).toBe(true);
+    expect(quietReadCheck(input)).toEqual({ kind: 'skip', why: 'your_move' });
   });
 
   it('still blocks after a bot review on the own open PR: that can be a finding', () => {
