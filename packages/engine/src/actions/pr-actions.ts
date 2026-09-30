@@ -59,7 +59,10 @@ export class PrActions {
     // Not awaited: the approval and the mark-read are stored, so the answer
     // does not wait for a poll cycle (seconds). The refresh never throws.
     void this.refreshPr(key);
-    return ok('Approved', batch.token);
+    // No undo: the token only covers the follow-up mark-read, and "Approved ·
+    // Undo" reads as taking back the approval. The settle token still lets the
+    // renderer refetch once the mark-read's window settled.
+    return { ...ok('Approved'), settleToken: batch.token };
   }
 
   /** Unsubscribes from the PR's thread; says what happened, never throws. */

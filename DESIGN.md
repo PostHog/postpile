@@ -3196,6 +3196,7 @@ Owner decisions (2026-09-30):
   out and why. Each PR goes through the existing approve path with its
   head guard (`approve(prKey, headOid)`), and the result is reported per PR.
   Optimistic like the pane's Approve.
+  No Undo after any approve, not even for the mark-read that follows.
 - **Mark read skips asks.** On a tile, the existing Mark read button gains
   a `✨ low` / `✨ medium` pill when the agent backs it. That means the
   tile's unread news holds no ask for you (the "New moves only" asks), and
