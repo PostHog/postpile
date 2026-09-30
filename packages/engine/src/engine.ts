@@ -483,18 +483,16 @@ export class Engine implements EngineService {
   /**
    * A clicked mark-read GitHub skipped for newer activity: the PR fetched
    * again before the click is decided again (ClickedReadRetry). The same
-   * refresh as after a write, or the running full sync. Nothing while the
-   * GitHub quota is nearly used: the snapshot then stays stale and the click
-   * stays unread.
+   * refresh as after a write; a running full sync is waited for first, then
+   * the PR is still fetched, since the sync may have left it alone (the held
+   * thread keeps its old updated_at). Nothing while the GitHub quota is
+   * nearly used: the snapshot then stays stale and the click stays unread.
    */
   private async refreshForRetry(key: PrKey): Promise<void> {
     if (this.quota.state().level === 'critical') {
       return;
     }
-    if (this.syncing) {
-      await this.syncing.catch(() => {});
-      return;
-    }
+    await this.syncing?.catch(() => {});
     await this.refreshAfterWrite(key);
   }
 

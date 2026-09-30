@@ -93,4 +93,42 @@ describe('a clicked mark-read skipped for newer activity', () => {
     const report = await h.engine.sync({ maxAgentCalls: 0 });
     expect(report.errors).toContain(`mark-read of ${ownPr.key}: GitHub didn't take it: new comment from bob; still unread`);
   });
+
+  it('mirrors a read elsewhere during the refresh onto the events the refresh stored', async () => {
+    const h = await synced();
+    await h.engine.markRead(tileId);
+    movesOn(h, { ...ownPr, comments: [makeComment({ id: 'c-bob', author: 'bob', createdAt: at(30) })], updatedAt: at(30) });
+    const fetchPrs = h.reader.fetchPrs.bind(h.reader);
+    h.reader.fetchPrs = async (refs) => {
+      h.reader.threads = [{ ...thread, unread: false, updatedAt: at(30), lastReadAt: at(31) }];
+      return fetchPrs(refs);
+    };
+
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+
+    expect(h.writer.calls).toEqual([]);
+    const comment = h.store.events.listForPr(ownPr.key).find((event) => event.sourceId === 'c-bob');
+    expect(comment?.seenAt).toBe(at(31));
+    expect(h.store.notifications.get(thread.id)).toMatchObject({ unread: false, lastReadAt: at(31) });
+    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({ outcome: 'observed', detail: 'already read on GitHub' });
+  });
+
+  it('still fetches the PR after joining a running full sync, which may have left it alone', async () => {
+    const h = await synced();
+    await h.engine.markRead(tileId);
+    // Only the thread moved: the PR's updated_at stays, so the sync has no reason to fetch it.
+    movesOn(h, { ...ownPr, commits: [...ownPr.commits, makeCommit({ oid: 'c2', author: viewer.login, committedAt: at(30) })] });
+    h.reader.threads = [{ ...thread, updatedAt: at(30) }];
+    h.reader.fetchedRefs = [];
+
+    const syncing = h.engine.sync({ maxAgentCalls: 0 });
+    h.timers.advance(UNDO_WINDOW_MS);
+    await syncing;
+    await settle();
+
+    expect(h.reader.fetchedRefs.at(-1)).toEqual([ownPr.ref]);
+    expect(h.store.events.listForPr(ownPr.key).some((event) => event.sourceId === 'c2')).toBe(true);
+    expect(h.writer.calls).toEqual([`markThreadRead ${thread.id}`]);
+  });
 });

@@ -97,7 +97,10 @@ export class ClickedReadRetry {
     await this.refresh(key);
     const current = await this.reader.getThread(thread.id);
     if (current === null || !current.unread) {
-      this.store.notifications.markRead(thread.id, current?.lastReadAt ?? thread.updatedAt);
+      // Read elsewhere meanwhile: GitHub's read time also covers what the refresh stored after the click.
+      const readAt = current?.lastReadAt ?? thread.updatedAt;
+      this.store.notifications.markRead(thread.id, readAt);
+      readLocally(this.store, prReadScope(key, false), { kind: 'read_on_github', readAt }, readAt);
       this.log(thread, context, 'observed', 'already read on GitHub');
       return { kind: 'observed' };
     }
