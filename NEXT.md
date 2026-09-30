@@ -6,6 +6,37 @@ now".
 
 ## Done
 
+- PR assignees and ownership (2026-09-30, DESIGN.md "PR ownership: bot PRs
+  belong to their assignees"): the PR query reads `assignees(first: 10)`,
+  kept in the PR JSON (`Pr.assignees`, no migration). Core `prOwners`
+  (author, or a bot author's assignees) drives tiers, whose turn, for whom,
+  queues and filters, team requests, changes answered, loudness, pings,
+  quiet reads, why-here, topic relation and driver, faces, "Ask <owner>"
+  and the own-PR prompt note; shown authorship stays `pr.author`. The
+  finder adds `is:pr is:open assignee:@me`: it finds every PR assigned to
+  you, and only bot PRs become yours (bot hits `own_open`, a person's PR
+  the new `FoundVia` `assigned`, code AS, "For you", still the author's). PR rows
+  and the detail pane show "assigned to" (faces, two then "+N") when
+  someone other than the author is assigned. Sample data: #1970 (the
+  viewer's agent PR) and #1972 (three teammates' agent PR). Not changed:
+  the setup sweep's activity search (still `author:@me`) and the title bar
+  search (matches the author, not assignees).
+- Team roles (2026-09-30, DESIGN.md "Team roles"): each of the viewer's
+  teams is home or routing. Home teams behave as before; a routing team
+  only brings its review requests (routed on any PR, taken by anyone's
+  review of the head, neutral "For <slug>" chip without band) and quiet
+  mentions, and its members are not teammates. Rules decide from the last
+  90 days of reviews (`classifyTeams`: 20% of reviews through the team and
+  at most 10 members; size alone under 30 reviews), in the setup sweep and on
+  the next sync of installs without roles or for a newly joined team (not
+  while the GitHub quota is low, and 2h after a failed try); meta
+  `team_roles`. The user flips a role under the sweep and in "Your teams"
+  below the instructions (`GET/POST /api/team-roles`); a flip sticks.
+  A role change derives stored events again from their snapshots, so team
+  mention loudness follows at once.
+  `TeamMembers` fetches home teams only; no home team means no teammates
+  and no Team filter. Fake mode has client-approvers as a routing team.
+
 - Rules layer: one home per fact (2026-09-29, DESIGN.md "Rules layer: one
   home per fact"): one module per predicate family (automation, who a
   review request asks, did you act after X, which events ask). Every read
@@ -1033,6 +1064,13 @@ the app meanwhile.
   `--elev-safe`, the same color as the "Approved" state it produces. Every
   other lead (Snooze, Mark read, Mark done) stays ink; accent blue stays for
   selection and focus only. Replaces "Ink primary buttons" for Approve.
+- **Dock badge, cleared pings, bounce** (2026-09-30): the Dock badge is the
+  number of tiles that are your move (live, not done, not snoozed), the same
+  count the sidebar chips add up to. A ping leaves Notification Center once
+  its tile is read, done or snoozed. The Dock bounces once for a personal ask
+  (mention, question, reply, review requested from you, answer to your
+  changes request) while the window is not focused. See DESIGN.md "Live poll
+  and Mac pings".
 - **From the property tests** (2026-09-30): a re-request after your changes
   request says "Re-review, ada asked" (move `re_review`), with or without a
   push; the PR stays under Changes you requested, and the order inside that
@@ -1042,6 +1080,19 @@ the app meanwhile.
   plus such a layer dots both rows while the tracked PR is not done. The
   quiet-read grace counts from the newest activity, human or bot. DESIGN.md
   "Decided from the property tests".
+- **Bot-authored PRs belong to their assignees; tiles show assignees that
+  differ from the author** (2026-09-30): a PR's owners are its author,
+  except a bot author with assignees, then the assignees. A person's PR
+  never becomes the viewer's through an assignment. DESIGN.md "PR
+  ownership".
+- **Teams are home or routing** (2026-09-30): decided from review history
+  (20% of reviews via the team and has at most 10 members, 2026-09-30:
+  share alone made a 40-person approver group home; size alone decides
+  with under 30 reviews);
+  the user can flip; no home team is valid; bot-made review requests count
+  like human ones. A routing team's chip is neutral without band (sea
+  means your team), its mentions are FYI, and its request is never "For
+  you" on a teammate's PR. DESIGN.md "Team roles".
 
 - **Review requests by whom they ask; routed reviews ping on Look closer**
   (2026-09-29): a `review_requested` event aimed at the viewer or their team

@@ -31,7 +31,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,
   `useFinishedTopics` for the sidebar's Finished drawer),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
-  `viewer.ts` (`useViewer`, login and teammates for the filter buttons),
+  `viewer.ts` (`useViewer`, login, teammates and home teams for the filter
+  buttons; no home team hides Team, `visibleQueueFilters`),
+  `team-roles.ts` (`useTeamRoles`, home or routing only per team for "Your
+  teams"; flips go through `actions.setTeamRole`, rows are `TeamRolesList`,
+  shared with the setup sweep step),
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `sources.ts`
@@ -287,7 +291,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 
 - One component per file in `components/`, named like the UI part:
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
-  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow`, `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
+  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow` (+ `AssignedTo`, also in `PrBody`), `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
   `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
   title; the activity list then shows only earlier events),
@@ -352,10 +356,11 @@ Four spots per tile, all derived in core and shipped on `TileView` /
 `PrSummary` (DESIGN.md "Tile faces"); the renderer only picks labels and
 tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.ts`).
 
-- For whom: `ForWhomChip` ("For you" honey, "For team-devex" sea, "Your
-  PR" neutral, nothing else) from `TileView.forWhom` / `PrSummary.forWhom`,
-  plus a 3px left band on the tile in the same color (`BANDS` in
-  `Tile.tsx`); PR rows get the small chip, no band. The tooltip keeps the
+- For whom: `ForWhomChip` ("For you" honey, "For team-devex" sea, "For
+  approvers" neutral for a routing team, "Your PR" neutral, nothing else)
+  from `TileView.forWhom` / `PrSummary.forWhom`, plus a 3px left band on
+  the tile in the same color (`BANDS` in `Tile.tsx`; a routing team gets
+  no band, sea means your team); PR rows get the small chip, no band. The tooltip keeps the
   long why-here reason (`whyTitle`). Grey on done tiles.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), a coral "NEW" pill, age. On a revisit (`PrSummary.whatsNew`
@@ -377,11 +382,17 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   state line, the RISK box or the your-move chip**: checks only show in
   `PrFacts` (DESIGN.md "CI is not a signal"; `PrStatus` has no checks).
 - PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
-  false; the heading is the title). Every PR in core's
-  `TileView.notDonePrKeys` (keeps an unread or open tile from being done:
-  `PrSummary.done` false or unseen news left; a pulled-in layer by its news)
-  gets `NotDoneDot` ("Not done yet") before its number, on the tile and in
-  `DetailContext`'s list. The renderer only reads the field. `DetailContext` shows kind, title, "PR x of n"
+  false; the heading is the title). The author's avatar is who opened it
+  (`PrSummary.author`, a bot for agent PRs); when someone else is assigned,
+  `AssignedTo` follows ("assigned to" + faces, two then "+N", from
+  `assigneeLine` in `lib/assignees.ts`), and `PrBody` says "opened by ·
+  assigned to" under the branch line. Whose PR it is for rules is core's
+  (`authorRelation`, `facts.owners`: "Ask <owner>"), never decided here.
+  Every PR in core's `TileView.notDonePrKeys` (keeps an unread or open tile
+  from being done: `PrSummary.done` false or unseen news left; a pulled-in
+  layer by its news) gets `NotDoneDot` ("Not done yet") before its number,
+  on the tile and in `DetailContext`'s list. The renderer only reads the
+  field. `DetailContext` shows kind, title, "PR x of n"
   and the arrows only for several PRs; one PR is just "PR".
 - Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):
   pass its result as `MemoryLine` `refs` in lists.

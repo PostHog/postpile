@@ -3,6 +3,7 @@
 // `prTier`; the engine and FakeEngine call the same functions.
 import { isBot } from './bots.ts';
 import { sameLogin } from './mentions.ts';
+import { prOwners } from './pr-owners.ts';
 import { PR_TIER_ORDER, type PrTier } from './pr-tier.ts';
 import type { Pr, PrKey, PrState, Provenance, Tile, Viewer } from './types.ts';
 
@@ -19,7 +20,20 @@ export function personRelation(login: string, viewer: Viewer | null): PersonRela
   return (viewer.teamMembers ?? []).some((member) => sameLogin(member, login)) ? 'team' : 'other';
 }
 
-/** A face in the sidebar row: a PR author of the topic. */
+/**
+ * How the PR's owners (`prOwners`) relate to the viewer: 'you' when the
+ * viewer is one of them, else 'team' when a teammate is, else 'other'.
+ * The Mine and Team filters and "Your PR" read this, not the author.
+ */
+export function ownerRelation(pr: Pick<Pr, 'author' | 'assignees'>, viewer: Viewer | null): PersonRelation {
+  const relations = prOwners(pr).map((owner) => personRelation(owner, viewer));
+  if (relations.includes('you')) {
+    return 'you';
+  }
+  return relations.includes('team') ? 'team' : 'other';
+}
+
+/** A face in the sidebar row: a PR owner of the topic (`prOwners`). */
 export interface TopicPerson {
   login: string;
   relation: PersonRelation;
@@ -28,23 +42,24 @@ export interface TopicPerson {
 const RELATION_ORDER: PersonRelation[] = ['you', 'team', 'other'];
 
 /**
- * The authors of the PRs, bots left out, each login once (2026-09-29:
- * authors only; reviewers and commenters show in the topic header and the
- * dossier's people line). Ordered you, your teammates, then everyone else;
+ * The owners of the PRs (`prOwners`: the author, or the assignees of a
+ * bot's PR), bots left out, each login once (2026-09-29: authors only;
+ * reviewers and commenters show in the topic header and the dossier's
+ * people line). Ordered you, your teammates, then everyone else;
  * inside each part by number of PRs, most first, ties in order of first
  * appearance.
  */
 export function topicPeople(prs: Pr[], viewer: Viewer | null): TopicPerson[] {
   const authors: { person: TopicPerson; prs: number }[] = [];
-  for (const pr of prs) {
-    if (isBot(pr.author)) {
+  for (const owner of prs.flatMap((pr) => prOwners(pr))) {
+    if (isBot(owner)) {
       continue;
     }
-    const known = authors.find((entry) => sameLogin(entry.person.login, pr.author));
+    const known = authors.find((entry) => sameLogin(entry.person.login, owner));
     if (known) {
       known.prs += 1;
     } else {
-      authors.push({ person: { login: pr.author, relation: personRelation(pr.author, viewer) }, prs: 1 });
+      authors.push({ person: { login: owner, relation: personRelation(owner, viewer) }, prs: 1 });
     }
   }
   // Array sort is stable, so equal counts keep the order of first appearance.
@@ -90,9 +105,9 @@ export interface QueuedPr {
  */
 export interface TopicQueues {
   tiers: Record<PrTier, number>;
-  /** Open PRs the viewer wrote. */
+  /** Open PRs the viewer owns (`ownerRelation`). */
   byYou: number;
-  /** Open PRs someone else on the viewer's teams wrote. */
+  /** Open PRs someone else on the viewer's teams owns. */
   byTeam: number;
   /** changes_requested PRs whose move is a re-review (addressed, or asked again): the viewer's move again. */
   changesAddressed: number;

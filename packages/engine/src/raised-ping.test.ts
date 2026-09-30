@@ -74,6 +74,7 @@ describe('pings for events the events agent raised after the poll', () => {
         title: 'New commits after your approval',
         body: 'The runner image changed.',
         target: { topicId: 'depot', tileId: `pr:${pr.key}`, prKey: pr.key },
+        personal: false,
       },
     ]);
     expect(h.store.pingDecisions.listRecent(1)[0]).toMatchObject({ ping: true, source: 'agent', prKey: pr.key });

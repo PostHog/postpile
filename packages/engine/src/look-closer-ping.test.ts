@@ -72,6 +72,7 @@ describe('routed team requests ping when the glance says Look closer', () => {
         title: 'Look closer: review for team-platform · app#31',
         body: `${pr.title}\nThe cache key change touches the runner image.`,
         target: { topicId: 'depot', tileId: `pr:${pr.key}`, prKey: pr.key },
+        personal: false,
       },
     ]);
     expect(pings.drain()).toEqual([]);

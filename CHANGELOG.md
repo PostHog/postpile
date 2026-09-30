@@ -4,6 +4,14 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Added
+
+- The Dock shows how many tiles are your move as a badge, pings leave Notification Center once their tile is read or done in PostPile, and the Dock bounces once for a personal ask (mention, question, reply, review requested from you) while the window is in the background.
+- Agent PRs a bot opens for someone count as that person's PR: one assigned to you shows as "Your PR" under My PRs, and one assigned to a teammate counts as your team's (a team review request on it is for you). Whose move names the assignee instead of the bot, and "Ask" asks them.
+- PR rows and the detail pane show "assigned to" with faces when someone other than the author is assigned.
+- The full sync also finds every open PR assigned to you. Only the ones a bot opened become yours; a PR a person assigned to you stays theirs and shows "assigned to you".
+- Team roles: each of your GitHub teams is a home team or routing only. A home team works as before: its members are your teammates. A routing-only team, such as a big approvers team, only brings you its review requests and mentions: its members are not your teammates, its requests never count as "For you" on a teammate's PR, its chip is neutral without the side band, and its mentions no longer make a tile unread. Setup decides the roles from how your reviews of the last 90 days reached you (existing installs on the next sync), and you can flip one under the setup sweep or in "Your teams" below your instructions. With no home team there is no Team filter and no Team's PRs.
+
 ### Changed
 
 - Interface polish pass: a lighter selected tile with a pointer to the detail pane, one text grid in the detail pane, a ruled "Since you last looked" timeline, quieter sidebar rows, ink numbers in the title bar and footer, thin scrollbars. Approve is green now, the color of the "Approved" state it produces.
@@ -15,6 +23,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Fixed
 
+- A sync touching many PRs no longer fails with "Expression tree is too large": the facts lookup built two SQL conditions per PR and SQLite gave up past about 500.
 - A review request a bot made for you counts as an ask everywhere: it pings, wakes a snooze, and keeps quiet reads from marking the thread read as bot activity.
 - A dismissed review no longer counts as reviewed for "To review" while whose move says "Review".
 - Asked again after you requested changes, without a new push, whose move says "Re-review, ada asked", like with a push. It said "ada to address your changes".

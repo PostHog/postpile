@@ -7,6 +7,7 @@ import { forWhom, tileForWhom } from './for-whom.ts';
 import { lastTouch } from './last-touch.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { tileOffers } from './offers.ts';
+import { prOwners } from './pr-owners.ts';
 import { prStatus, openThreadCount } from './pr-status.ts';
 import { prTier } from './pr-tier.ts';
 import { prPrimaryAction } from './primary-action.ts';
@@ -14,7 +15,7 @@ import { isApprovedByViewer, ownTeamRequests, reviewRequest } from './review-req
 import { tilePeople } from './tile-people.ts';
 import { isTracked } from './provenance.ts';
 import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
-import { memberTier, personRelation, tileTier } from './topic-queues.ts';
+import { memberTier, ownerRelation, tileTier } from './topic-queues.ts';
 import type { Glance, IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
 import type { GlanceState } from './glance-state.ts';
 import type { GlanceGap, PrFacts, PrSummary, TilePendingWrite, TileView } from './views.ts';
@@ -49,7 +50,8 @@ export interface PrSummaryInput {
 export function prFacts(pr: Pr, events: PrEvent[], viewer: Viewer | null): PrFacts {
   const ask = viewer ? unansweredAsk(pr, events, viewer) : null;
   return {
-    authorIsAutomation: isBot(pr.author),
+    owners: prOwners(pr),
+    ownerIsAutomation: prOwners(pr).every((owner) => isBot(owner)),
     reviewRequest: viewer ? reviewRequest(pr, viewer) : null,
     lastTouch: viewer ? lastTouch(pr, events, viewer) : null,
     openAsk: ask ? { id: ask.id, kind: ask.kind, actor: ask.actor, summary: ask.summary, at: ask.at } : null,
@@ -59,7 +61,7 @@ export function prFacts(pr: Pr, events: PrEvent[], viewer: Viewer | null): PrFac
 /** One PR row of a tile. */
 export function buildPrSummary(input: PrSummaryInput): PrSummary {
   const { pr, member, viewer, userState, events } = input;
-  const authorRelation = personRelation(pr.author, viewer);
+  const authorRelation = ownerRelation(pr, viewer);
   const approved = isApprovedByViewer(pr, userState, viewer?.login);
   const why = whyHere(member.provenance, pr, viewer);
   const tier = viewer ? prTier({ pr, events, viewer, userState, reason: input.reason }) : 'rest';
@@ -70,6 +72,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     title: pr.title,
     url: pr.url,
     author: pr.author,
+    assignees: pr.assignees ?? [],
     state: pr.state,
     isDraft: pr.isDraft,
     provenance: member.provenance,

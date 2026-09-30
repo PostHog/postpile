@@ -54,6 +54,8 @@ import type {
   SnoozeCondition,
   SyncOptions,
   SyncReport,
+  TeamRole,
+  TeamRolesView,
   ToolsView,
   TopicDetail,
   TopicListItem,
@@ -144,10 +146,23 @@ export interface EngineService {
 
   /** The sidebar's topics, in the chosen repo unless `scope.allRepos`. */
   listTopics(scope?: ListScope): Promise<TopicListItem[]>;
+  /**
+   * The PRs held by an unread tile, in every repo. The desktop app clears a
+   * ping from Notification Center once its PR is not in this list anymore.
+   */
+  unreadPrKeys(): Promise<PrKey[]>;
   /** Topics retired in the last 30 days, newest first, for the sidebar's Finished drawer. getTopic opens any of them. */
   listFinishedTopics(): Promise<FinishedTopic[]>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */
   getViewer(): Promise<ViewerView>;
+  /** The viewer's teams with their roles (home or routing only) and why. */
+  getTeamRoles(): Promise<TeamRolesView>;
+  /**
+   * The user flips one team's role. It sticks over later classifications.
+   * The stored viewer follows right away: its home teams, and the members
+   * of a new home team (a GitHub read). Local, never a GitHub write.
+   */
+  setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView>;
   /** Carries the topic dossier and what changed since the user last marked the topic seen. */
   getTopic(topicId: string): Promise<TopicDetail | null>;
   /** The title bar's repo menu: repos with topic and PR counts, the chosen repo and the quiet repos. */

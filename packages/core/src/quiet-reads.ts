@@ -10,7 +10,7 @@ import { isAutomation } from './bots.ts';
 import type { NotificationLanding } from './debug-views.ts';
 import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './last-touch.ts';
 import { isUnseenMergeWithoutReview } from './loudness.ts';
-import { sameLogin } from './mentions.ts';
+import { isPrOwner } from './pr-owners.ts';
 import { reviewRequestTarget } from './review-request.ts';
 import type { IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
@@ -124,7 +124,7 @@ function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetched
  * after the last comment (2026-09-29).
  */
 function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
-  return pr.state === 'OPEN' && sameLogin(pr.author, viewer.login);
+  return pr.state === 'OPEN' && isPrOwner(pr, viewer.login);
 }
 
 /** Whether PostPile may mark this PR thread read on GitHub by itself, and if not, the first reason why not. */

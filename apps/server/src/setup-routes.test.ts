@@ -38,7 +38,8 @@ describe('setup routes on sample data', () => {
     expect((await call<SetupSweepView | null>('/api/setup/sweep')).json).toBeNull();
 
     const sweep = await finishedSweep(call);
-    expect(sweep.lines.map((line) => line.state)).toEqual(['done', 'done', 'done', 'done', 'done']);
+    expect(sweep.lines.map((line) => line.state)).toEqual(['done', 'done', 'done', 'done', 'done', 'done']);
+    expect(sweep.teamRoles?.teams.map((team) => team.role)).toEqual(['home', 'routing']);
     expect(sweep.current).toEqual({ text: '', version: null });
     const draft = sweep.draft!;
     expect(draft.sections.map((section) => section.heading)).toEqual(['About me', 'What I own', 'What gets routed to me', 'What to ignore or keep quiet', 'Preferences']);

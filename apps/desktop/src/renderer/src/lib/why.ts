@@ -19,6 +19,7 @@ export function forWhomLabel(forWhom: ForWhom): string {
     case 'you':
       return 'For you';
     case 'team':
+    case 'routing':
       return `For ${forWhom.team}`;
     case 'own':
       return 'Your PR';
@@ -44,6 +45,7 @@ export function whyTitle(code: WhyCode, provenance?: Provenance): string {
 
 const ROLE_LABELS: Record<TilePersonRole, string> = {
   author: 'author',
+  assignee: 'assigned',
   you: 'you',
   reviewer: 'reviewer',
 };

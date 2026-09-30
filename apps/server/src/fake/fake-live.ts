@@ -87,7 +87,7 @@ export class FakeLivePoll {
       githubPollIntervalSeconds: 60,
       prsUpdated: 1,
       decisions: [decision],
-      pings: [{ ...text, target: { topicId: tile.topicId, tileId: tile.id, prKey: pr.key } }],
+      pings: [{ ...text, target: { topicId: tile.topicId, tileId: tile.id, prKey: pr.key }, personal: true }],
       errors: [],
     };
   }

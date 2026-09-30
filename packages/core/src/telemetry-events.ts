@@ -26,7 +26,7 @@ const toolMissingReason = z.enum(['missing', 'logged_out', 'rejected', 'offline'
 // -----------------------------------------------------------------------
 
 const tileKind = z.enum(['single', 'stack', 'set']);
-const forWhom = z.enum(['you', 'team', 'your_pr', 'none']);
+const forWhom = z.enum(['you', 'team', 'routing', 'your_pr', 'none']);
 // The glance's own verdict (packages/core/src/types.ts Verdict), lowercased; null when the tile has no glance yet.
 const verdict = z.enum(['looks_safe', 'look_closer', 'not_yours']).nullable();
 const approveFrom = z.enum(['detail', 'tile']);

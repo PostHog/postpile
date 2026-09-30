@@ -194,6 +194,22 @@ describe('freshness check', () => {
     expect(lines).toContain(`sync: freshness check, 1 PRs checked, 1 moved: ${pr.key}`);
   });
 
+  it('refetches once a snapshot stored before assignees were read', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1, { author: 'acme-agent[bot]', assignees: ['viewer'] });
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const { assignees: _dropped, ...old } = pr;
+    h.store.prs.upsert(old, NOW.toISOString());
+
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(report.prsFetched).toBe(1);
+    expect(h.store.prs.get(pr.key)?.assignees).toEqual(['viewer']);
+
+    const again = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(again.prsFetched).toBe(0);
+  });
+
   it('runs from the poll at most once a minute', async () => {
     let clock = NOW;
     const h = makeHarness({ now: () => clock });
@@ -307,5 +323,16 @@ describe('refresh after a write and on focus', () => {
     expect(lookups).toEqual(['thread-1']);
     expect(h.reader.fetchedRefs.slice(fetches)).toEqual([[pr.ref, found.ref]]);
     expect(h.store.prs.get(pr.key)?.state).toBe('MERGED');
+  });
+});
+
+describe('the live status counts finished syncs', () => {
+  it('moves changeCount when a sync ends, so a sync between two looks is not missed', async () => {
+    const h = makeHarness();
+    const before = (await h.engine.livePollStatus()).changeCount;
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const after = await h.engine.livePollStatus();
+    expect(after.syncRunning).toBe(false);
+    expect(after.changeCount).toBeGreaterThan(before);
   });
 });

@@ -187,6 +187,8 @@ export function createApp(
   config: AppConfig,
   updates: UpdateSource = new UpdatesOff(''),
   telemetry: Telemetry = new NoopTelemetry(),
+  /** Called after every request that is not a read (a local action may have changed the board). */
+  onWrite: () => void = () => {},
 ): Hono {
   if (token === '') {
     throw new Error('createApp needs a non-empty token');
@@ -199,6 +201,9 @@ export function createApp(
       return c.json({ error: 'bad token' }, 401);
     }
     await next();
+    if (c.req.method !== 'GET' && c.req.method !== 'OPTIONS') {
+      onWrite();
+    }
   });
 
   app.onError((error, c) => c.json({ error: error.message }, isClientError(error) ? 400 : 500));
@@ -243,6 +248,15 @@ export function createApp(
   // The sidebar's Finished drawer. Before /api/topics/:id, which would take "finished" as an id.
   app.get('/api/topics/finished', async (c) => c.json(await engine.listFinishedTopics()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
+  // Home or routing only per team (DESIGN.md "Team roles"). A flip is local and sticks; it may read the team's members from GitHub.
+  app.get('/api/team-roles', async (c) => c.json(await engine.getTeamRoles()));
+  app.post('/api/team-roles', async (c) => {
+    const body = z.object({ team: z.string().min(1), role: z.enum(['home', 'routing']) }).parse(await c.req.json());
+    if (!(await engine.getTeamRoles()).teams.some((entry) => entry.team === body.team)) {
+      throw new BadRequestError(`not one of your teams: ${body.team}`);
+    }
+    return c.json(await engine.setTeamRole(body.team, body.role));
+  });
   // The title bar's repo menu. Scope and quiet repos are kept in meta; local, never GitHub writes.
   app.get('/api/repos', async (c) => c.json(await engine.listRepos()));
   app.post('/api/repos/scope', async (c) => {

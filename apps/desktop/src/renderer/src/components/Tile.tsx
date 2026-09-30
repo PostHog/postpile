@@ -55,10 +55,11 @@ function hasBorder(props: TileProps, draft: boolean): boolean {
   return props.selected || props.filterMatch === true || props.view.state.kind === 'done' || draft;
 }
 
-/** The left band per "for whom": honey for you, sea for your team, neutral for your own PR, none else. */
+/** The left band per "for whom": honey for you, sea for your home team, neutral for your own PR, none else (a routing team too). */
 const BANDS: Record<ForWhom['kind'], string | null> = {
   you: 'bg-honey',
   team: 'bg-sea',
+  routing: null,
   own: 'bg-muted',
   none: null,
 };
@@ -71,6 +72,7 @@ const BANDS: Record<ForWhom['kind'], string | null> = {
 const DASHED_BANDS: Record<ForWhom['kind'], string | null> = {
   you: 'var(--color-honey)',
   team: 'var(--color-sea)',
+  routing: null,
   own: 'var(--color-muted)',
   none: null,
 };

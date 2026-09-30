@@ -121,15 +121,24 @@ export interface FinishedTopic {
 export interface ViewerView {
   /** Null before the first sync stored the viewer. */
   login: string | null;
-  /** Everyone else on the viewer's teams; empty until fetched. */
+  /** Everyone else on the viewer's home teams; empty until fetched, and without a home team. */
   teamMembers: string[];
+  /**
+   * The home teams (DESIGN.md "Team roles"). Empty: no home team, so no
+   * teammates and no Team filter. Null before roles are decided (every team
+   * counts as home).
+   */
+  homeTeams: string[] | null;
 }
 
 export interface PrSummary {
   key: PrKey;
   title: string;
   url: string;
+  /** Who opened it, as GitHub says; an agent PR's is the bot. */
   author: string;
+  /** Assigned users, for the "assigned to" line when they are not just the author. */
+  assignees: string[];
   state: PrState;
   isDraft: boolean;
   provenance: Provenance;
@@ -139,7 +148,7 @@ export interface PrSummary {
   forWhom: ForWhom;
   /** The PR queue it falls into (`prTier`); merged and closed PRs are rest. */
   tier: PrTier;
-  /** Whether you, a teammate or someone else wrote it. */
+  /** Whether you, a teammate or someone else owns it (`ownerRelation`: wrote it, or a bot opened it and assigned them). */
   authorRelation: PersonRelation;
   /** The detail pane's primary button (`prPrimaryAction`): never Approve on your own PR. */
   primaryAction: PrPrimaryAction;
@@ -203,8 +212,10 @@ export type OpenAsk = Pick<PrEvent, 'id' | 'kind' | 'actor' | 'summary' | 'at'>;
  * `PrSummary`.
  */
 export interface PrFacts {
-  /** The author is a bot or another automation account (`isBot`). */
-  authorIsAutomation: boolean;
+  /** Whose PR it is (`prOwners`): the author, or the assignees of a bot's PR. "Ask" names the first. */
+  owners: string[];
+  /** Every owner is a bot or another automation account (`isBot`): a bot's PR nobody is assigned to. */
+  ownerIsAutomation: boolean;
   /** Who a pending review request asks, seen from the viewer (`reviewRequest`); null without one or without a viewer. */
   reviewRequest: ReviewRequest;
   /** The viewer's newest touch (`lastTouch`): review, comment, push, merge or close. */

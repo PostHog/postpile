@@ -1,6 +1,7 @@
 import { EVENTS_PER_PING_ITEM, type AgentService, type PingDecisionAnswer, type PingDecisionItem } from '@postpile/agent';
 import {
   dossierBrief,
+  isPersonalPing,
   isPrInQuietRepo,
   pingRule,
   pingTemplate,
@@ -214,7 +215,10 @@ export class PingDecider {
     const byThread = new Map(candidates.map((c) => [c.threadId, c]));
     const pings = decided
       .filter((d) => d.ping && this.stillNews(byThread.get(d.threadId)!))
-      .map((d): Ping => ({ title: d.title, body: d.body, target: byThread.get(d.threadId)!.target }));
+      .map((d): Ping => {
+        const candidate = byThread.get(d.threadId)!;
+        return { title: d.title, body: d.body, target: candidate.target, personal: isPersonalPing(candidate.rule.event!, candidate.pr, viewer) };
+      });
     return { decisions, pings, errors };
   }
 

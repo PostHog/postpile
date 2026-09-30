@@ -1,4 +1,5 @@
 import type { Dossier, Pr } from '@postpile/core';
+import type { DossierUpdateInput } from '@postpile/agent';
 import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
@@ -95,6 +96,34 @@ describe('dossier updates', () => {
 
     expect(report.agentCalls).toBe(0);
     expect(h.agent.dossierInputs).toHaveLength(1);
+  });
+
+  it('refreshes a dossier once when the rules now decide another relation, without new events', async () => {
+    const h = makeHarness();
+    // Like the real answer: the rules' relation when they decide one, else the agent's (routed here).
+    const withRelation = (input: DossierUpdateInput) => ({
+      dossier: { ...depotDossier(), relation: { kind: input.relationSignals.relation ?? 'routed', ownerTeam: null, whyYou: 'review requested' } },
+    });
+    h.agent.answerDossier(withRelation).answerDossier(withRelation);
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(h.store.dossiers.latest('depot')?.dossier.relation?.kind).toBe('routed');
+
+    // The stored snapshot turns out to be an agent PR assigned to the viewer: no new event, but the viewer owns it now.
+    const agentPr = { ...pr, author: 'acme-agent[bot]', assignees: [viewer.login] };
+    h.store.prs.upsert(agentPr, NOW.toISOString());
+    h.reader.prs.set(pr.key, agentPr);
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(h.agent.dossierInputs).toHaveLength(2);
+    expect(h.agent.dossierInputs[1]?.relationSignals.relation).toBe('team');
+    expect(h.store.dossiers.latest('depot')?.dossier.relation?.kind).toBe('team');
+
+    h.reader.etag = 'etag-3';
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(h.agent.dossierInputs).toHaveLength(2);
   });
 
   it('makes no call for CI results alone, and stores the digest cursor past them', async () => {

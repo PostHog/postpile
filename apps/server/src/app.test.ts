@@ -41,8 +41,11 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     livePollStatus: notImplemented,
     refreshOnFocus: notImplemented,
     listTopics: notImplemented,
+    unreadPrKeys: notImplemented,
     listFinishedTopics: notImplemented,
     getViewer: notImplemented,
+    getTeamRoles: notImplemented,
+    setTeamRole: notImplemented,
     listRepos: notImplemented,
     setRepoScope: notImplemented,
     setRepoQuiet: notImplemented,
@@ -156,6 +159,19 @@ describe('server app', () => {
     const res = await app.request('/api/topics', { headers: { [TOKEN_HEADER]: 'secret' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([]);
+  });
+
+  it('tells the host about writes, not reads or refused requests', async () => {
+    let writes = 0;
+    const markRead = async () => ({ ok: true, message: 'Marked read', undoToken: null });
+    const engine = fakeEngine({ listTopics: async () => [], markRead });
+    const app = createApp(engine, 'secret', CONFIG, undefined, undefined, () => (writes += 1));
+    const headers = { [TOKEN_HEADER]: 'secret' };
+    await app.request('/api/topics', { headers });
+    await app.request('/api/tiles/t1/mark-read', { method: 'POST' });
+    expect(writes).toBe(0);
+    await app.request('/api/tiles/t1/mark-read', { method: 'POST', headers });
+    expect(writes).toBe(1);
   });
 
   it('refuses a bodyless cross-origin approve without the token', async () => {

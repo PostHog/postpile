@@ -1,4 +1,4 @@
-import type { IsoTime, Viewer } from '@postpile/core';
+import { homeTeamsOf, type IsoTime, type Viewer } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 
@@ -24,9 +24,10 @@ function sameTeams(stored: StoredTeamMembers, teams: string[]): boolean {
 }
 
 /**
- * Who else is on the viewer's teams (ghatchup's Meta.TeamMembers). Fetched
- * per team with ETags, at most once a day or when the viewer's teams change,
- * and kept in meta so reads and offline starts have it.
+ * Who else is on the viewer's home teams (ghatchup's Meta.TeamMembers).
+ * Routing teams are never fetched: their members are not teammates
+ * (2026-09-30). Fetched per team with ETags, at most once a day or when
+ * the home teams change, and kept in meta so reads and offline starts have it.
  */
 export class TeamMembers {
   constructor(
@@ -58,15 +59,17 @@ export class TeamMembers {
   }
 
   /**
-   * The viewer with `teamMembers` filled in: every login on their teams but
-   * their own. A failed refresh keeps the last list; with no list at all
-   * the viewer comes back unchanged and rules fall back to "any reviewer".
+   * The viewer with `teamMembers` filled in: every login on their home
+   * teams but their own. No home team means no teammates (an empty list).
+   * A failed refresh keeps the last list; with no list at all the viewer
+   * comes back unchanged and rules fall back to "any reviewer".
    */
   async attach(viewer: Viewer): Promise<Viewer> {
+    const teams = homeTeamsOf(viewer);
     let stored = this.load();
-    if (this.isDue(stored, viewer.teams)) {
+    if (this.isDue(stored, teams)) {
       try {
-        stored = await this.fetch(stored, viewer.teams);
+        stored = await this.fetch(stored, teams);
         this.store.meta.set(META_KEY, JSON.stringify(stored));
       } catch {
         // Team lists are a nicety; a sync must not fail over them. Next sync tries again.
@@ -76,7 +79,7 @@ export class TeamMembers {
       return viewer;
     }
     const own = viewer.login.toLowerCase();
-    const logins = viewer.teams.flatMap((team) => stored.teams[team]?.logins ?? []);
+    const logins = teams.flatMap((team) => stored.teams[team]?.logins ?? []);
     const members = [...new Set(logins)].filter((login) => login.toLowerCase() !== own).sort();
     return { ...viewer, teamMembers: members };
   }

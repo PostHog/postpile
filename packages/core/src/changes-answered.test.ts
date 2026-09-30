@@ -3,7 +3,7 @@ import { changesAnswered } from './changes-answered.ts';
 import { deriveEvents } from './events.ts';
 import { makeComment, makeCommit, makePr, makeReview, makeThread, singleTile, viewer } from './fixtures.ts';
 import { forWhom } from './for-whom.ts';
-import { pingRule, pingTemplate } from './pings.ts';
+import { isPersonalPing, pingRule, pingTemplate } from './pings.ts';
 import { prTier } from './pr-tier.ts';
 import type { Pr } from './types.ts';
 import { whoseTurn, type WhoseTurn } from './whose-turn.ts';
@@ -83,6 +83,15 @@ describe('addressed your changes: the #4521 timeline', () => {
   it('shows the tile as for you, whatever the notification reason', () => {
     expect(forWhom('CM', pr, viewer)).toEqual({ kind: 'you' });
     expect(forWhom('CM', untouched, viewer)).toEqual({ kind: 'none' });
+  });
+
+  it('counts the answer as a personal ping, so the Dock bounces', () => {
+    const events = deriveEvents(pr, viewer, null);
+    const answers = events.filter((event) => event.ruleReason === 'addressed your changes');
+    expect(answers.length).toBeGreaterThan(0);
+    for (const answer of answers) {
+      expect(isPersonalPing(answer, pr, viewer)).toBe(true);
+    }
   });
 
   it('makes the pushes and the comment loud, and pings for them', () => {
