@@ -20,7 +20,7 @@ interface PrRowProps {
   stackPlace: StackPlace | null;
   /** Off on a single-PR tile: the tile's heading already is the PR's title. */
   showTitle: boolean;
-  /** The PR keeps the tile from being done (`notDonePrKeys`): coral dot before the number. */
+  /** The PR keeps the tile from being done (core `TileView.notDonePrKeys`): coral dot before the number. */
   notDone: boolean;
   onClick: () => void;
 }

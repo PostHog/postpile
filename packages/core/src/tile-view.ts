@@ -100,6 +100,28 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
   };
 }
 
+/**
+ * The PRs that keep the tile from being done (2026-09-29, replaced "the new
+ * dot"): every tracked PR that is not done (`PrSummary.done`, `isPrDone`),
+ * or that still has an unseen loud event (that keeps the tile unread, so not
+ * done either). A pulled-in stack layer counts once it has unseen loud news
+ * (2026-09-30): that news makes the tile unread too. Their rows get the
+ * coral dot ("Not done yet"), on unread and open tiles alike; a done or
+ * snoozed tile has none. Mark a dotted PR done and its dot goes; no dots
+ * left, the tile is done. Only where it says which PR holds the tile: with
+ * a single PR that can hold it the dot would only repeat the tile's state.
+ */
+export function notDonePrKeys(view: Pick<TileView, 'state' | 'prs'>): PrKey[] {
+  if (view.state.kind !== 'unread' && view.state.kind !== 'open') {
+    return [];
+  }
+  const counted = view.prs.filter((pr) => isTracked(pr.provenance) || pr.unseenLoudEvents > 0);
+  if (counted.length <= 1) {
+    return [];
+  }
+  return counted.filter((pr) => !pr.done || pr.unseenLoudEvents > 0).map((pr) => pr.key);
+}
+
 export interface TileViewInput {
   tile: Tile;
   state: TileState;
@@ -145,6 +167,7 @@ export function buildTileView(input: TileViewInput): TileView {
     afterRead,
     pendingWrite: input.pendingWrite,
     offers: tileOffers({ tile, state: input.state, turn, afterRead, prs, pendingWrite: input.pendingWrite }),
+    notDonePrKeys: notDonePrKeys({ state: input.state, prs }),
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
   };

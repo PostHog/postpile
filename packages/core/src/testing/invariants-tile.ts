@@ -6,7 +6,7 @@ import { snoozePhase } from '../snooze.ts';
 import { isPrDone } from '../tiles.ts';
 import type { WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
-import type { TileView } from '../views.ts';
+import type { PrSummary, TileView } from '../views.ts';
 import { tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
 
@@ -233,6 +233,58 @@ export const markDoneNeverLeavesAMove: Invariant = {
   },
 };
 
+/** Unseen loud news that keeps the tile unread: a found PR's news never does. */
+function hasTileNews(board: PropertyBoard, row: PrSummary): boolean {
+  return row.provenance.kind !== 'found' && eventsOf(board, row.key).some(isNews);
+}
+
+/**
+ * The PRs that can hold a tile, spelled out from the board: tracked PRs,
+ * and pulled-in stack layers with unseen loud news (2026-09-30).
+ */
+function rowsThatCanHold(board: PropertyBoard, view: TileView): PrSummary[] {
+  return view.prs.filter((row) => isTracked(row.provenance) || hasTileNews(board, row));
+}
+
+/**
+ * One "Not done yet" dot per PR that keeps a live tile from being done: not
+ * done, or with unseen loud news (a pulled-in layer counts by its news).
+ * Only on unread or open tiles where more than one PR can hold the tile.
+ */
+export const oneDotPerNotDonePr: Invariant = {
+  name: 'one Not done yet dot per PR that holds a live tile, only where more than one PR can hold it',
+  check(board, views) {
+    for (const view of views) {
+      const dots = [...view.notDonePrKeys].sort();
+      const holders = rowsThatCanHold(board, view);
+      const live = view.state.kind === 'unread' || view.state.kind === 'open';
+      if (!live || holders.length <= 1) {
+        ensure(dots.length === 0, `${view.tile.id}: dots on a ${view.state.kind} tile with ${holders.length} PRs that can hold it`);
+        continue;
+      }
+      const expected = holders.filter((row) => !row.done || hasTileNews(board, row)).map((row) => row.key).sort();
+      ensure(JSON.stringify(dots) === JSON.stringify(expected), `${view.tile.id}: dots ${dots.join(', ')}, not done ${expected.join(', ')}`);
+    }
+  },
+};
+
+/**
+ * "No dots left, the tile is done": a live tile where more than one PR can
+ * hold it always dots the one that does, also when only a pulled-in layer
+ * has news (decided 2026-09-30; before, such a tile was unread with no dot).
+ */
+export const liveTileShowsWhatHoldsIt: Invariant = {
+  name: 'a live tile with more than one PR that can hold it dots at least one',
+  check(board, views) {
+    for (const view of views) {
+      const live = view.state.kind === 'unread' || view.state.kind === 'open';
+      if (live && rowsThatCanHold(board, view).length > 1) {
+        ensure(view.notDonePrKeys.length > 0, `${view.tile.id}: ${view.state.kind} tile without a dot`);
+      }
+    }
+  },
+};
+
 /** A waiting GitHub write changes no button: the pane only says it waits. */
 export const pendingWritesChangeNoButton: Invariant = {
   name: 'a pending write changes no button',
@@ -266,5 +318,7 @@ export const TILE_INVARIANTS: readonly Invariant[] = [
   snoozedAllDoneLeadsWithOpen,
   snoozeLeadsOnlyWhileYourMove,
   markDoneNeverLeavesAMove,
+  oneDotPerNotDonePr,
+  liveTileShowsWhatHoldsIt,
   pendingWritesChangeNoButton,
 ];

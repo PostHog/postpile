@@ -43,7 +43,7 @@ now".
 - Actions act on what you look at (2026-09-29, DESIGN.md "Actions act on
   what you look at"): PR-scoped mark read in the detail pane
   (`markPrRead`, per-PR label and undo), the not-done dot
-  (`notDonePrKeys` over the new `PrSummary.done`), opened-in-PostPile
+  (core `TileView.notDonePrKeys` over the new `PrSummary.done`), opened-in-PostPile
   handles the PR (checked per PR), the lead PR follows the turn (core
   `leadPrKey`, shipped in `TileView.offers`), "X to re-review"
   (`reReviewAsked`), own merged PRs clear quietly, and "Remove <team>"

@@ -17,29 +17,6 @@ export function sameForWhom(a: ForWhom, b: ForWhom): boolean {
   return a.kind === b.kind;
 }
 
-/**
- * The PRs that keep the tile from being done (2026-09-29, replaced "the new
- * dot"): every tracked PR (not a pulled-in stack layer) that is not done
- * (`PrSummary.done`, core `isPrDone`), or that still has an unseen loud
- * event (that keeps the tile unread, so not done either). Their rows get the
- * coral dot ("Not done yet"), on unread and open tiles alike; a done or
- * snoozed tile has none. Mark a dotted PR done and its dot goes; no dots
- * left, the tile is done. Only where it says which PR holds the tile: a
- * tile with one tracked PR gets none, the dot would only repeat the tile's
- * own state.
- */
-export function notDonePrKeys(view: Pick<TileView, 'state' | 'prs'>): Set<string> {
-  if (view.state.kind !== 'unread' && view.state.kind !== 'open') {
-    return new Set();
-  }
-  const tracked = view.prs.filter((pr) => pr.provenance.kind !== 'pulled_in');
-  if (tracked.length <= 1) {
-    return new Set();
-  }
-  const keeping = tracked.filter((pr) => !pr.done || pr.unseenLoudEvents > 0);
-  return new Set(keeping.map((pr) => pr.key));
-}
-
 /** "PR", "Stack · 3", "Set · 3". */
 export function kindLabel(view: TileView): string {
   if (view.tile.kind === 'stack') {

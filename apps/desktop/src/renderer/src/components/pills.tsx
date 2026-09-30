@@ -18,7 +18,7 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
 
 /**
  * The coral dot in front of a PR number on a PR that keeps its tile from
- * being done (`notDonePrKeys`), on unread and open tiles. The one coral
+ * being done (core `TileView.notDonePrKeys`), on unread and open tiles. The one coral
  * mark that is not "new since you looked" (DESIGN.md "Actions act on what
  * you look at": no second, read-only dot).
  */

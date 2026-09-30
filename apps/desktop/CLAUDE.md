@@ -288,7 +288,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
   optional box; secondary button there so Accept stays the one primary).
 - Shared kit: `Button`, `Menu`, `Avatar`, `pills.tsx` (verdict, `NotDoneDot`
-  (the coral dot before a PR number, `notDonePrKeys` in `lib/tiles.ts`), `ForWhomChip`,
+  (the coral dot before a PR number, core `TileView.notDonePrKeys`), `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
@@ -360,11 +360,11 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   state line, the RISK box or the your-move chip**: checks only show in
   `PrFacts` (DESIGN.md "CI is not a signal"; `PrStatus` has no checks).
 - PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
-  false; the heading is the title). Every tracked PR that keeps an unread
-  or open tile from being done (`notDonePrKeys`: `PrSummary.done` false, or
-  unseen news left) gets `NotDoneDot` ("Not done yet") before its number,
-  on the tile and in `DetailContext`'s list; none on done or snoozed tiles,
-  or on a tile with one tracked PR. `DetailContext` shows kind, title, "PR x of n"
+  false; the heading is the title). Every PR in core's
+  `TileView.notDonePrKeys` (keeps an unread or open tile from being done:
+  `PrSummary.done` false or unseen news left; a pulled-in layer by its news)
+  gets `NotDoneDot` ("Not done yet") before its number, on the tile and in
+  `DetailContext`'s list. The renderer only reads the field. `DetailContext` shows kind, title, "PR x of n"
   and the arrows only for several PRs; one PR is just "PR".
 - Source chips repeat once per block (`blockRefs` in `lib/memory.ts`):
   pass its result as `MemoryLine` `refs` in lists.

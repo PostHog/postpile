@@ -1,7 +1,7 @@
 import type { TileView } from '@postpile/core';
 import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindLabel, notDonePrKeys, prNumber, sameForWhom } from '../lib/tiles.ts';
+import { kindLabel, prNumber, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon, PrStateIcon } from './icons.tsx';
 import { ForWhomChip, NotDoneDot, StackMark, StateWordLabel } from './pills.tsx';
 
@@ -36,7 +36,6 @@ export function DetailContext(props: DetailContextProps) {
   const count = view.prs.length;
   const several = count > 1;
   const places = stackPlaces(view.tile.stacks);
-  const notDone = notDonePrKeys(view);
   const index = Math.max(
     view.prs.findIndex((pr) => pr.key === props.prKey),
     0,
@@ -92,7 +91,7 @@ export function DetailContext(props: DetailContextProps) {
                 className={`flex h-8 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-[12.5px] focus-visible:-outline-offset-2 ${look}`}
               >
                 <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
-                {notDone.has(pr.key) && <NotDoneDot />}
+                {view.notDonePrKeys.includes(pr.key) && <NotDoneDot />}
                 <span className={`shrink-0 font-mono text-[11px] ${quiet && !picked ? 'text-hint' : 'text-ink-2'}`}>#{prNumber(pr.key)}</span>
                 {place && <StackMark place={place} />}
                 <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>

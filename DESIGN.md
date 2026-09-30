@@ -1570,7 +1570,8 @@ unread and open tiles alike, in the tile's rows and the detail pane's PR
 list (aria-label "Not done yet"). No dots on done or snoozed tiles. Not on
 single-PR tiles either (a tile with one tracked PR, decided the same day):
 the dot says which PR of a stack or set holds the tile; on one PR it would
-only repeat the tile's own state. The
+only repeat the tile's own state. A pulled-in stack layer with unseen loud
+news gets one too (2026-09-30, see "Decided from the property tests"). The
 dots and the detail-pane buttons work together: mark a dotted PR done and its
 dot goes; no dots left, the tile is done. The tile's own unread styling (strip,
 bold title) stays as decided on 28 Sept.
@@ -1692,7 +1693,9 @@ updates it while I'm looking at it."
   `EngineService.markPrRead` (origin `detail`, own batch and undo, handled
   unless pulled in). A mark-read of an unread PR that leaves it your move
   says so in the toast, without the tile Snooze offer.
-- The dot: `notDonePrKeys` in `lib/tiles.ts`, `NotDoneDot` in `pills.tsx`.
+- The dot: `notDonePrKeys` in core `tile-view.ts`, shipped as
+  `TileView.notDonePrKeys` (moved out of the renderer's `lib/tiles.ts`
+  2026-09-30), `NotDoneDot` in `pills.tsx`.
   A done PR that still has unseen news keeps the tile unread, so it keeps
   its dot until it is read.
 - Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
@@ -1805,17 +1808,18 @@ title out (2026-09-29: the tile's heading already is the title; the row's
 tooltip keeps it); a stack or set's rows sit in one tinted rounded box, the
 selected row highlighted, drafts and closed layers on a grey row.
 
-**The not-done dot** (2026-09-29, `notDonePrKeys` in the renderer's
-`lib/tiles.ts`; replaced "the new dot" of the same morning, which only
+**The not-done dot** (2026-09-29, core `notDonePrKeys`, shipped as
+`TileView.notDonePrKeys` since 2026-09-30; replaced "the new dot" of the same morning, which only
 showed on unread tiles for PRs with unseen news, see "Actions act on what
 you look at"): on an unread or open tile every tracked PR that keeps the
 tile from being done gets a small coral dot before its number, in the
 tile's rows and the detail pane's PR list (aria-label "Not done yet"):
 `PrSummary.done` false (core `isPrDone`, shipped per row), or an unseen
-loud event left (that keeps the tile unread, so not done either). Pulled-in
-stack layers never get one; done and snoozed tiles show none, and neither
-does a tile with one tracked PR (the dot would only repeat the tile's
-state). Mark a
+loud event left (that keeps the tile unread, so not done either). A
+pulled-in stack layer gets one while it has unseen loud news, which makes
+the tile unread too (2026-09-30; before, such a tile was unread with no dot
+anywhere). Done and snoozed tiles show none, and neither does a tile where
+only one PR can hold it (the dot would only repeat the tile's state). Mark a
 dotted PR done in the detail pane and its dot goes; no dots left, the tile
 is done. It is the one coral mark that is not "new since you looked"; there
 is no second, read-only dot. History: a six-PR set once stayed unread
@@ -4033,10 +4037,11 @@ agent overrides, truncated or stale snapshots, pending writes), `buildBoard`
 sync and `planRead` do it, tiles from `buildTopicTiles`, a tile snooze from
 `snoozeWrites`) and the invariant catalogue by level
 (`invariants-tile.ts`, `-pr.ts`, `-read.ts`, `-topic.ts`), run in
-`core/src/properties/` plus the "Not done yet" dots in the renderer's
-`lib/tiles.properties.test.ts`. Where rules differ on purpose the invariant
-names the exception (routed NOT_YOURS, changes held, team taken, an ask
-first; news only on a pulled-in layer has no dot). `properties/coverage.test.ts` fails when a
+`core/src/properties/` (the "Not done yet" dots too, since the dot moved to
+core). Where rules differ on purpose the invariant names the exception
+(routed NOT_YOURS, changes held, team taken, an ask first). The four open
+cases the first runs found were decided 2026-09-30 (above) and their
+exceptions removed, each with a scenario next to its property. `properties/coverage.test.ts` fails when a
 branch-relevant label (PR state x author, request target, review state
 including dismissed, CI, thread and seen state, snooze kind and phase,
 truncated, and the shapes past bugs needed) shows on under 1% of boards.
