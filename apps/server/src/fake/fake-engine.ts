@@ -730,6 +730,8 @@ export class FakeEngine implements EngineService {
     return [...found.values()];
   }
 
+  onSyncCompleted(): void {}
+
   async boardShape(): Promise<BoardShapeEvent[]> {
     return [];
   }

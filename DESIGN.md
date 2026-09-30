@@ -4121,7 +4121,7 @@ topic names are never event props.
    both sent by the engine from the action itself.
 7. *Board shape*: `tile_shape` and `topic_shape`, a counts-only snapshot of
    how tiles and topics turn out on real boards. The desktop app sends it once
-   per local calendar day, right after a full sync ended (the board is fresh),
+   per local calendar day, right after a full sync ran to the end (the board is fresh; `Engine.onSyncCompleted`, called where `sync_completed` is sent),
    from the same day-marker mechanism as `app_active` (`ActiveDayReporter`,
    file `telemetry-board-shape-day` in the data folder, so a restart does not
    send twice). `Engine.boardShape()` builds it with the pure

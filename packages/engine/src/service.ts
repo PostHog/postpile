@@ -152,6 +152,8 @@ export interface EngineService {
    * ping from Notification Center once its PR is not in this list anymore.
    */
   unreadPrKeys(): Promise<PrKey[]>;
+  /** Runs `listener` after every full sync that ran to the end (the moment sync_completed is sent); one listener, a second call replaces it. */
+  onSyncCompleted(listener: () => void): void;
   /** The daily board snapshot's events over the topics the sidebar lists (all repos), counts only. */
   boardShape(): Promise<BoardShapeEvent[]>;
   /** Topics retired in the last 30 days, newest first, for the sidebar's Finished drawer. getTopic opens any of them. */

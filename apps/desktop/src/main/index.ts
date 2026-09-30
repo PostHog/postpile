@@ -152,9 +152,8 @@ const ACTIVE_DAY_CHECK_MS = 30 * 60_000;
 // How often the live status is checked for a board change (Dock badge, pings in Notification Center).
 const BOARD_CHECK_MS = 5_000;
 let activeDay: ActiveDayReporter | null = null;
-// The board shape snapshot (tile_shape, topic_shape): once per local day, after a full sync finished.
+// The board shape snapshot (tile_shape, topic_shape): once per local day, after a full sync ran to the end.
 let boardShapeDay: ActiveDayReporter | null = null;
-let syncWasRunning = false;
 
 function checkActiveDay(): void {
   activeDay?.check(new Date());
@@ -398,18 +397,9 @@ async function start(): Promise<void> {
       console.warn('board shape:', error);
     }
   }
-  setInterval(
-    () =>
-      void board.livePollStatus().then((status) => {
-        void watcher.checkStatus(status);
-        // A full sync just ended: the board is fresh, so take the daily snapshot (once per day).
-        if (syncWasRunning && !status.syncRunning) {
-          boardShapeDay?.check(new Date());
-        }
-        syncWasRunning = status.syncRunning;
-      }),
-    BOARD_CHECK_MS,
-  ).unref();
+  setInterval(() => void board.livePollStatus().then((status) => watcher.checkStatus(status)), BOARD_CHECK_MS).unref();
+  // A full sync ran to the end: the board is fresh, so take the daily snapshot (once per day).
+  board.onSyncCompleted(() => boardShapeDay?.check(new Date()));
   // "Send test notification" in the status footer.
   ipcMain.handle('postpile:test-notification', () => notifier.showTest());
   // First launch: one calm welcome notification, so macOS asks for the
