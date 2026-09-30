@@ -2,11 +2,15 @@
 // that thousands of runs are not all trivial boards. Every label names a
 // branch the rules take (PR state, author, request, review, CI, thread,
 // snooze, snapshot) or a board shape a past bug needed.
+import { reReviewAsked } from '../changes-answered.ts';
+import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
-import { reviewRequest, viewerHeadReview } from '../review-request.ts';
+import { quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
+import { reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
 import { snoozePhase } from '../snooze.ts';
 import { sameLogin } from '../mentions.ts';
 import { isUnseenLoud } from '../loudness.ts';
+import { prWhoseTurn } from '../whose-turn.ts';
 import type { Pr, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
@@ -100,6 +104,58 @@ function prLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   if (verdict === 'NOT_YOURS' && reviewRequest(pr, board.viewer) === 'team') {
     labels.push('shape:NOT_YOURS routed request');
   }
+  labels.push(...activityLabels(board, key, pr));
+  return labels;
+}
+
+/** Actors, timeline items and comment kinds the generator gaps of 2026-09-30 added, and what the poll and quiet reads make of the PR. */
+function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
+  const labels: string[] = [];
+  const events = board.events.get(key) ?? [];
+  if (events.some((event) => sameLogin(event.actor, LOGINS.app))) {
+    labels.push('shape:automation without [bot]');
+  }
+  if (events.some((event) => sameLogin(event.actor, LOGINS.outsider))) {
+    labels.push('shape:second outsider');
+  }
+  for (const item of pr.timeline) {
+    labels.push(`timeline:${item.kind}`);
+  }
+  if (pr.comments.some((comment) => comment.kind === 'review')) {
+    labels.push('shape:review body');
+  }
+  if (events.some((event) => event.kind === 'deploy')) {
+    labels.push('events:deploy');
+  }
+  if (events.some((event) => event.ruleLoudness === 'muted')) {
+    labels.push('events:muted');
+  }
+  if (pr.reviewerUsers.some((login) => reReviewAsked(pr, login))) {
+    labels.push('shape:re-review asked');
+  }
+  if (teamRequestHold(pr, board.viewer, board.notYours.has(key))?.kind === 'changes') {
+    labels.push('shape:routed request held by changes');
+  }
+  const fresh = events.filter((event) => event.seenAt === null);
+  labels.push(`ping:${pingRule(fresh, pr, board.viewer, false).class}`);
+  const thread = board.threads.get(key);
+  if (thread) {
+    const input = {
+      thread,
+      pr,
+      events,
+      userState: board.userStates.get(key) ?? null,
+      viewer: board.viewer,
+      tileUnread: false,
+      notYours: board.notYours.has(key),
+      prFetchedAt: board.prFetchedAt.get(key) ?? null,
+      now: board.now,
+    };
+    labels.push(`quiet-read:${quietReadCheck(input).kind}`, `touched-read:${touchedReadCheck(input).kind}`);
+  }
+  if (prWhoseTurn({ pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer }).kind === 'them') {
+    labels.push('pr-turn:them');
+  }
   return labels;
 }
 
@@ -110,12 +166,18 @@ function tileLabels(view: TileView): string[] {
   }
   for (const pr of view.prs) {
     labels.push(`provenance:${pr.provenance.kind}`, `tier:${pr.tier}`);
+    if (pr.turn.kind === 'you') {
+      labels.push(`move:${pr.turn.move}`);
+    }
     if (pr.done && isTracked(pr.provenance) && (view.state.kind === 'unread' || view.state.kind === 'open')) {
       labels.push('shape:done PR on a live tile');
     }
   }
   if (view.state.kind === 'snoozed' && view.tile.members.length > 1) {
     labels.push('shape:snoozed multi-PR tile');
+  }
+  if (view.tile.kind === 'set' && view.tile.stacks.length > 0) {
+    labels.push('shape:set with a stack');
   }
   return labels;
 }
@@ -131,6 +193,9 @@ export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsO
     }
   }
   views.flatMap(tileLabels).forEach((label) => labels.add(label));
+  if (board.spec.groups.some((group) => group.kind === 'dissolved_set')) {
+    labels.add('shape:dissolved set');
+  }
   return labels;
 }
 
@@ -148,6 +213,26 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:lock on with pending write',
   'shape:NOT_YOURS routed request',
   'shape:finished PR with snooze',
+  'shape:set with a stack',
+  'shape:dissolved set',
+  'shape:review body',
+  'shape:automation without [bot]',
+  'shape:second outsider',
+  'shape:re-review asked',
+  'shape:routed request held by changes',
+  'timeline:added_to_merge_queue',
+  'timeline:deployed',
+  'events:deploy',
+  'events:muted',
+  'ping:addressed',
+  'ping:routed',
+  'ping:bot',
+  'ping:not_addressed',
+  'ping:quiet',
+  'quiet-read:mark',
+  'touched-read:mark',
+  'request-to:ada',
+  'review:PENDING',
   ...['open', 'draft', 'merged', 'closed'].flatMap((state) => ['viewer', 'teammate', 'other', 'bot'].map((author) => `pr-author:${state}/${author}`)),
   'request:you',
   'request:team_for_you',

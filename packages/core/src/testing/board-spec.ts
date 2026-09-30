@@ -2,30 +2,47 @@
 // shrinks. `buildBoard` turns it into PR snapshots, events and tiles through
 // the same core functions the store and the engine use, so every generated
 // board is shaped like real data. Names and repos are invented (acme/app,
-// alice, ada, lyra, rowan).
+// alice, ada, lyra, rowan; renovate is the one automation account without
+// the [bot] suffix).
 import fc from 'fast-check';
 import type { NotificationReason, Verdict } from '../types.ts';
 
-/** Who does something: the viewer, a teammate (lyra), someone outside the team (ada) or a bot. */
-export type Person = 'viewer' | 'teammate' | 'other' | 'bot';
+/**
+ * Who does something: the viewer, a teammate (lyra), someone outside the
+ * team (ada, and alice as a second outsider), a GitHub App (dependabot[bot])
+ * or automation on a user account without the [bot] suffix (renovate).
+ */
+export type Person = 'viewer' | 'teammate' | 'other' | 'outsider' | 'bot' | 'app';
 
-/** Whom a review request names: the viewer, the viewer's team, another team, or a teammate (rowan). */
-export type RequestTarget = 'viewer' | 'team' | 'other_team' | 'teammate';
+/**
+ * Whom a review request names: the viewer, the viewer's team, another team,
+ * a teammate (rowan), or ada (so the reviewer who asked for changes gets
+ * asked again).
+ */
+export type RequestTarget = 'viewer' | 'team' | 'other_team' | 'teammate' | 'other';
 
 /** What a comment says, as far as the rules care. */
-export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'bot_marker';
+export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'bot_marker' | 'deploy';
 
-export type ReviewVerdict = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED';
+/** PENDING: an unsent review, which says nothing yet. */
+export type ReviewVerdict = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
+
+/** Automation on the timeline: the merge queue took the PR or dropped it, or a deploy ran. */
+export type AutomationItem = 'queued' | 'unqueued' | 'deployed';
 
 /** One thing that happened on the PR, in order. Steps GitHub would not allow are skipped when the PR is built. */
 export type StepSpec =
   | { kind: 'request'; target: RequestTarget; byBot: boolean }
   | { kind: 'unrequest'; target: RequestTarget }
+  /** GitHub's re-request button: ask every reviewer whose changes request stands again. */
+  | { kind: 'rerequest' }
   | { kind: 'comment'; by: Person; text: CommentText; thread: 0 | 1 | null }
-  | { kind: 'review'; by: Person; state: ReviewVerdict }
+  /** `body`: the review's text, shown as a comment of kind review (none when left out). */
+  | { kind: 'review'; by: Person; state: ReviewVerdict; body?: CommentText | null }
   | { kind: 'push'; by: Person; force: boolean }
   | { kind: 'ready' }
-  | { kind: 'to_draft' };
+  | { kind: 'to_draft' }
+  | { kind: 'automation'; item: AutomationItem };
 
 export type EndSpec = { kind: 'open' } | { kind: 'merged'; by: Person } | { kind: 'closed'; by: Person };
 
@@ -100,9 +117,16 @@ export const QUIET_PR: PrSpec = {
   pendingWrite: false,
 };
 
-export type GroupKind = 'single' | 'stack' | 'set';
+/**
+ * single, stack and set: a single PR, a real stack (by base and head
+ * branches) or an agent set. set_with_stack: a set whose first two PRs are
+ * a stack, and the set lists only the upper layer (the set brings the whole
+ * stack along). dissolved_set: a set the agent dissolved, so its PRs show
+ * on their own.
+ */
+export type GroupKind = 'single' | 'stack' | 'set' | 'set_with_stack' | 'dissolved_set';
 
-/** One tile to be: a single PR, a real stack (by base and head branches) or an agent set. */
+/** One tile to be (or, for a dissolved set, the PRs that were one). */
 export interface GroupSpec {
   kind: GroupKind;
   prs: PrSpec[];
@@ -135,24 +159,36 @@ function maybe<T>(arbitrary: fc.Arbitrary<T>, percent: number): fc.Arbitrary<T |
 
 /** Who acts: the viewer and ada most, since most rules turn on what the viewer did and what others asked. */
 const person: fc.Arbitrary<Person> = fc.oneof(
-  { weight: 3, arbitrary: fc.constant<Person>('other') },
-  { weight: 3, arbitrary: fc.constant<Person>('viewer') },
-  { weight: 1, arbitrary: fc.constant<Person>('teammate') },
-  { weight: 1, arbitrary: fc.constant<Person>('bot') },
+  { weight: 6, arbitrary: fc.constant<Person>('other') },
+  { weight: 6, arbitrary: fc.constant<Person>('viewer') },
+  { weight: 2, arbitrary: fc.constant<Person>('teammate') },
+  { weight: 1, arbitrary: fc.constant<Person>('outsider') },
+  { weight: 2, arbitrary: fc.constant<Person>('bot') },
+  { weight: 1, arbitrary: fc.constant<Person>('app') },
+);
+const author: fc.Arbitrary<Person> = fc.oneof(
+  { weight: 8, arbitrary: fc.constantFrom<Person>('other', 'viewer', 'teammate', 'bot') },
+  { weight: 1, arbitrary: fc.constant<Person>('app') },
 );
 const nonViewer = fc.constantFrom<Person>('other', 'teammate', 'bot');
-const target = fc.constantFrom<RequestTarget>('viewer', 'team', 'other_team', 'teammate');
+/** The viewer and their team most: those requests are what the rules act on. */
+const target: fc.Arbitrary<RequestTarget> = fc.oneof(
+  { weight: 2, arbitrary: fc.constantFrom<RequestTarget>('viewer', 'team') },
+  { weight: 1, arbitrary: fc.constantFrom<RequestTarget>('other_team', 'teammate', 'other') },
+);
+const commentText = fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'bot_marker', 'deploy');
 const stepIndex = fc.nat({ max: 8 });
 
 const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
   { weight: 3, arbitrary: fc.record({ kind: fc.constant('request' as const), target, byBot: fc.boolean() }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant('unrequest' as const), target }) },
+  { weight: 2, arbitrary: fc.constant({ kind: 'rerequest' as const }) },
   {
     weight: 4,
     arbitrary: fc.record({
       kind: fc.constant('comment' as const),
       by: person,
-      text: fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'bot_marker'),
+      text: commentText,
       thread: fc.constantFrom<0 | 1 | null>(null, 0, 1),
     }),
   },
@@ -161,12 +197,17 @@ const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
     arbitrary: fc.record({
       kind: fc.constant('review' as const),
       by: person,
-      state: fc.constantFrom<ReviewVerdict>('APPROVED', 'CHANGES_REQUESTED', 'COMMENTED', 'DISMISSED'),
+      state: fc.oneof(
+        { weight: 6, arbitrary: fc.constantFrom<ReviewVerdict>('APPROVED', 'CHANGES_REQUESTED', 'COMMENTED', 'DISMISSED') },
+        { weight: 1, arbitrary: fc.constant<ReviewVerdict>('PENDING') },
+      ),
+      body: maybe(commentText, 25),
     }),
   },
   { weight: 3, arbitrary: fc.record({ kind: fc.constant('push' as const), by: person, force: fc.boolean() }) },
   { weight: 1, arbitrary: fc.constant({ kind: 'ready' as const }) },
   { weight: 1, arbitrary: fc.constant({ kind: 'to_draft' as const }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant('automation' as const), item: fc.constantFrom<AutomationItem>('queued', 'unqueued', 'deployed') }) },
 );
 
 const endArb: fc.Arbitrary<EndSpec> = fc.oneof(
@@ -197,7 +238,7 @@ const snoozeArb: fc.Arbitrary<SnoozeSpec> = fc.record({
 
 /** One PR with a short, valid history. Small numbers and short lists, so shrinking ends on a readable case. */
 export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
-  author: fc.constantFrom<Person>('other', 'viewer', 'teammate', 'bot'),
+  author,
   draft: sometimes(1, 4),
   steps: fc.array(stepArb, { maxLength: 8 }),
   end: endArb,
@@ -207,7 +248,7 @@ export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
   approvedAfter: maybe(stepIndex, 20),
   markedReadAfter: maybe(stepIndex, 35),
   snooze: maybe(snoozeArb, 15),
-  glance: maybe(fc.constantFrom<Verdict>('LOOKS_SAFE', 'LOOK_CLOSER', 'NOT_YOURS'), 50),
+  glance: maybe(fc.constantFrom<Verdict>('LOOKS_SAFE', 'LOOK_CLOSER', 'NOT_YOURS'), 60),
   lookCloser: sometimes(3, 1),
   overrides: fc.array(fc.record({ pick: fc.nat({ max: 20 }), loudness: fc.constantFrom<OverrideSpec['loudness']>('quiet', 'loud', 'muted') }), { maxLength: 2 }),
   truncated: sometimes(1, 6),
@@ -224,9 +265,11 @@ function groupArb(kind: GroupKind, minLength: number, maxLength: number): fc.Arb
 }
 
 const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
-  { weight: 3, arbitrary: groupArb('single', 1, 1) },
-  { weight: 2, arbitrary: groupArb('stack', 2, 4) },
-  { weight: 2, arbitrary: groupArb('set', 2, 4) },
+  { weight: 6, arbitrary: groupArb('single', 1, 1) },
+  { weight: 4, arbitrary: groupArb('stack', 2, 4) },
+  { weight: 4, arbitrary: groupArb('set', 2, 4) },
+  { weight: 1, arbitrary: groupArb('set_with_stack', 2, 4) },
+  { weight: 1, arbitrary: groupArb('dissolved_set', 2, 3) },
 );
 
 /** A board: one topic with one to three tiles, 1-4 PRs each. */

@@ -41,7 +41,7 @@ import type {
   Viewer,
 } from '../types.ts';
 import type { PrSummary, TilePendingWrite, TileView } from '../views.ts';
-import type { BoardSpec, CommentText, Person, PrSpec, RequestTarget, SnoozeSpec, StepSpec } from './board-spec.ts';
+import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, SnoozeSpec, StepSpec } from './board-spec.ts';
 
 export const PROPERTY_REPO = 'acme/app';
 export const PROPERTY_TOPIC_ID = 'topic-1';
@@ -50,7 +50,10 @@ export const OTHER_TEAM = 'acme/team-infra';
 /** Who makes a bot's review request. */
 export const REQUEST_BOT = 'github-actions[bot]';
 
-export const LOGINS: Record<Person, string> = { viewer: 'viewer', teammate: 'lyra', other: 'ada', bot: 'dependabot[bot]' };
+export const LOGINS: Record<Person, string> = { viewer: 'viewer', teammate: 'lyra', other: 'ada', outsider: 'alice', bot: 'dependabot[bot]', app: 'renovate' };
+
+/** Every automation account on a board: what the spec oracles call automation, without asking `isBot`. */
+export const AUTOMATION_LOGINS: readonly string[] = [LOGINS.bot, LOGINS.app, REQUEST_BOT];
 
 /** The login or team a request target names; the teammate asked is rowan, so lyra can still be the author. */
 export function requestSubject(target: RequestTarget): string {
@@ -63,6 +66,8 @@ export function requestSubject(target: RequestTarget): string {
       return OTHER_TEAM;
     case 'teammate':
       return 'rowan';
+    case 'other':
+      return LOGINS.other;
   }
 }
 
@@ -71,13 +76,17 @@ export function propertyViewer(spec: Pick<BoardSpec, 'teamMembersUnknown'>): Vie
   return spec.teamMembersUnknown ? viewer : { ...viewer, teamMembers: ['lyra', 'rowan'] };
 }
 
-const COMMENT_BODIES: Record<CommentText, string> = {
+export const COMMENT_BODIES: Record<CommentText, string> = {
   plain: 'looks fine',
   mention: 'cc @viewer',
   question: '@viewer can you check the migration?',
   team_mention: 'cc @acme/team-platform',
   bot_marker: '<!-- bot --> automated comment: coverage went down',
+  deploy: 'Deployed the preview',
 };
+
+/** The timeline item an automation step adds. */
+const AUTOMATION_ITEMS = { queued: 'added_to_merge_queue', unqueued: 'removed_from_merge_queue', deployed: 'deployed' } as const;
 
 /** Minute of step `index` (0-based) of the PR at `prIndex`: ten minutes apart, never on the same minute as another PR's. */
 function stepMinute(prIndex: number, index: number): number {
@@ -104,6 +113,8 @@ class PrHistory {
   readonly reviewerUsers: string[] = [];
   readonly reviewerTeams: string[] = [];
   isDraft: boolean;
+  /** In the merge queue. */
+  queued = false;
   /** The head commit after each number of steps, so an in-app approval names what it approved. */
   readonly headAfter: string[] = [];
 
@@ -147,6 +158,25 @@ class PrHistory {
     this.timeline.push({ id: this.id('tl', index), kind: 'review_request_removed', actor: humanRequester(this.author), at: time, subject });
   }
 
+  /** Asks again every reviewer whose latest verdict asks for changes and who is not pending already, as the author. */
+  private rerequest(index: number, time: string): void {
+    const latest = new Map<string, Review>();
+    for (const review of this.reviews) {
+      if (review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED' || review.state === 'DISMISSED') {
+        latest.set(review.author, review);
+      }
+    }
+    let count = 0;
+    for (const [login, review] of latest) {
+      if (review.state !== 'CHANGES_REQUESTED' || this.reviewerUsers.includes(login)) {
+        continue;
+      }
+      this.reviewerUsers.push(login);
+      this.timeline.push({ id: this.id('tl', index) + (count > 0 ? `-${count}` : ''), kind: 'review_requested', actor: humanRequester(this.author), at: time, subject: login });
+      count += 1;
+    }
+  }
+
   private comment(step: Extract<StepSpec, { kind: 'comment' }>, index: number, time: string): void {
     const threadId = step.thread === null ? null : `rt${this.number}-${step.thread}`;
     const comment: Comment = {
@@ -167,13 +197,40 @@ class PrHistory {
 
   private review(step: Extract<StepSpec, { kind: 'review' }>, index: number, time: string): void {
     const login = LOGINS[step.by];
-    // GitHub lets an author only comment on their own PR.
-    const state = sameLogin(login, this.author) ? 'COMMENTED' : step.state;
-    this.reviews.push({ id: this.id('rv', index), author: login, state, body: '', submittedAt: time, commitOid: this.headOid });
+    const id = this.id('rv', index);
+    // GitHub lets an author only comment on their own PR (or keep a review unsent).
+    const state = step.state === 'PENDING' || !sameLogin(login, this.author) ? step.state : 'COMMENTED';
+    const body = step.body ? COMMENT_BODIES[step.body] : '';
+    this.reviews.push({ id, author: login, state, body, submittedAt: time, commitOid: this.headOid });
+    if (state === 'PENDING') {
+      // An unsent review answers no request, and GitHub shows its body to nobody else.
+      return;
+    }
+    if (body !== '') {
+      // Like the reader: a submitted review's body is also a comment of kind review, with the review's id.
+      this.comments.push({ id, author: login, body, createdAt: time, kind: 'review', url: `https://github.com/${PROPERTY_REPO}/pull/${this.number}#review-${index}`, path: null, threadId: null });
+    }
     const position = this.reviewerUsers.findIndex((user) => sameLogin(user, login));
     if (position >= 0) {
       this.reviewerUsers.splice(position, 1);
     }
+  }
+
+  /** Merge queue and deploys, by the request bot; a draft never enters the queue. */
+  private automation(step: Extract<StepSpec, { kind: 'automation' }>, index: number, time: string): void {
+    if (step.item === 'queued') {
+      if (this.isDraft || this.queued) {
+        return;
+      }
+      this.queued = true;
+    }
+    if (step.item === 'unqueued') {
+      if (!this.queued) {
+        return;
+      }
+      this.queued = false;
+    }
+    this.timeline.push({ id: this.id('tl', index), kind: AUTOMATION_ITEMS[step.item], actor: REQUEST_BOT, at: time, subject: null });
   }
 
   private push(step: Extract<StepSpec, { kind: 'push' }>, index: number, time: string): void {
@@ -195,6 +252,9 @@ class PrHistory {
       case 'unrequest':
         this.unrequest(step, index, time);
         break;
+      case 'rerequest':
+        this.rerequest(index, time);
+        break;
       case 'comment':
         this.comment(step, index, time);
         break;
@@ -210,8 +270,11 @@ class PrHistory {
           this.timeline.push({ id: this.id('tl', index), kind: 'ready_for_review', actor: this.author, at: time, subject: null });
         }
         break;
+      case 'automation':
+        this.automation(step, index, time);
+        break;
       case 'to_draft':
-        if (!this.isDraft) {
+        if (!this.isDraft && !this.queued) {
           this.isDraft = true;
           this.timeline.push({ id: this.id('tl', index), kind: 'converted_to_draft', actor: this.author, at: time, subject: null });
         }
@@ -369,6 +432,10 @@ export interface PropertyBoard {
   prFetchedAt: Map<PrKey, IsoTime>;
   /** The spec each PR came from. */
   prSpecs: Map<PrKey, PrSpec>;
+  /** Each group's PR keys, in group order (the recipe's shape, for the layout oracle). */
+  groupKeys: PrKey[][];
+  /** When Mark read was clicked in the app, by PR (the recipe's `markedReadAfter`). */
+  markedReadAt: Map<PrKey, IsoTime>;
   /** The topic's tiles, from `buildTopicTiles`. */
   tiles: Tile[];
 }
@@ -381,7 +448,7 @@ function storedPrState(input: {
   viewer: Viewer;
   thread: NotificationThread | null;
   tracked: boolean;
-}): { events: PrEvent[]; userState: UserPrState | null } {
+}): { events: PrEvent[]; userState: UserPrState | null; markedReadAt: IsoTime | null } {
   const { spec, compiled, clock, viewer, thread } = input;
   const pr = compiled.pr;
   let userState: UserPrState | null = null;
@@ -417,8 +484,9 @@ function storedPrState(input: {
     const approvedAt = userState.approvedAt;
     events = applyPlan(pr.key, events, userState, { kind: 'pending_completion', clickedAt: approvedAt }, approvedAt, false).events;
   }
-  if (spec.markedReadAfter !== null) {
-    const clickedAt = clock.after(spec.markedReadAfter);
+  const markedReadAt = spec.markedReadAfter === null ? null : clock.after(spec.markedReadAfter);
+  if (markedReadAt !== null) {
+    const clickedAt = markedReadAt;
     const after = applyPlan(pr.key, events, userState, { kind: 'pending_completion', clickedAt }, clickedAt, input.tracked);
     events = after.events;
     userState = after.userState;
@@ -433,7 +501,7 @@ function storedPrState(input: {
   }
   // In store order: the event repo lists by time, then id.
   const inStoreOrder = events.toSorted((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
-  return { events: inStoreOrder, userState };
+  return { events: inStoreOrder, userState, markedReadAt };
 }
 
 function snoozeCondition(spec: SnoozeSpec, now: string): SnoozeCondition {
@@ -444,10 +512,35 @@ function snoozeCondition(spec: SnoozeSpec, now: string): SnoozeCondition {
   return { kind: spec.condition };
 }
 
-function placeOf(groupIndex: number, index: number, kind: string, prIndex: number): PrPlace {
+/** The PR sits on the one before it in its group: every layer after the first of a stack, the second PR of a set with a stack. */
+function sitsOnPrevious(kind: GroupKind, index: number): boolean {
+  return (kind === 'stack' && index > 0) || (kind === 'set_with_stack' && index === 1);
+}
+
+function placeOf(groupIndex: number, index: number, kind: GroupKind, prIndex: number): PrPlace {
   const number = 10 * (groupIndex + 1) + index + 1;
-  const baseRef = kind === 'stack' && index > 0 ? `branch-${number - 1}` : 'master';
+  const baseRef = sitsOnPrevious(kind, index) ? `branch-${number - 1}` : 'master';
   return { prIndex, number, baseRef, headRef: `branch-${number}` };
+}
+
+/** The set a group makes, if any: a set with a stack lists only the stack's upper layer, a dissolved set keeps its members but is not active. */
+function setOf(group: GroupSpec, groupIndex: number, keys: PrKey[]): PrSet | null {
+  if (group.kind !== 'set' && group.kind !== 'set_with_stack' && group.kind !== 'dissolved_set') {
+    return null;
+  }
+  const listed = group.kind === 'set_with_stack' ? keys.slice(1) : keys;
+  return {
+    id: `s${groupIndex}`,
+    topicId: PROPERTY_TOPIC_ID,
+    title: `Set ${groupIndex}`,
+    take: '',
+    members: listed.map((key) => ({ prKey: key, reason: 'same change' })),
+    removedKeys: [],
+    status: group.kind === 'dissolved_set' ? 'dissolved' : 'active',
+    inputHash: '',
+    createdAt: at(0),
+    updatedAt: at(0),
+  };
 }
 
 /** The board a spec describes. */
@@ -481,6 +574,8 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     pendingWrites: new Map(),
     prFetchedAt: new Map(),
     prSpecs: new Map(),
+    groupKeys: spec.groups.map((_, groupIndex) => compiled.filter((entry) => entry.group === groupIndex).map((entry) => entry.compiled.pr.key)),
+    markedReadAt: new Map(),
     tiles: [],
   };
   const pullInReasons = new Map<PrKey, string>();
@@ -512,6 +607,9 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     }
     const stored = storedPrState({ spec: entry.spec, compiled: entry.compiled, clock: clockOf(entry), viewer, thread, tracked: tracking.kind !== 'pulled_in' });
     board.events.set(pr.key, stored.events);
+    if (stored.markedReadAt !== null) {
+      board.markedReadAt.set(pr.key, stored.markedReadAt);
+    }
     if (stored.userState) {
       board.userStates.set(pr.key, stored.userState);
     }
@@ -528,24 +626,8 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
   }
 
   const sets: PrSet[] = spec.groups.flatMap((group, groupIndex) => {
-    if (group.kind !== 'set') {
-      return [];
-    }
-    const keys = compiled.filter((entry) => entry.group === groupIndex).map((entry) => entry.compiled.pr.key);
-    return [
-      {
-        id: `s${groupIndex}`,
-        topicId: PROPERTY_TOPIC_ID,
-        title: `Set ${groupIndex}`,
-        take: '',
-        members: keys.map((key) => ({ prKey: key, reason: 'same change' })),
-        removedKeys: [],
-        status: 'active',
-        inputHash: '',
-        createdAt: at(0),
-        updatedAt: at(0),
-      },
-    ];
+    const set = setOf(group, groupIndex, compiled.filter((entry) => entry.group === groupIndex).map((entry) => entry.compiled.pr.key));
+    return set ? [set] : [];
   });
   const memberKeys = compiled.map((entry) => entry.compiled.pr.key).filter((key) => board.threads.has(key) || board.found.has(key));
   board.tiles = buildTopicTiles({
@@ -589,7 +671,8 @@ export function withReadState(board: PropertyBoard, events: Map<PrKey, PrEvent[]
   return { ...board, events, userStates };
 }
 
-export function tileStateOf(board: PropertyBoard, tile: Tile): TileState {
+/** `viewer`: the board's viewer, or null for a board before the first sync stored one. */
+export function tileStateOf(board: PropertyBoard, tile: Tile, viewer: Viewer | null = board.viewer): TileState {
   return deriveTileState({
     tile,
     prs: board.prs,
@@ -597,12 +680,12 @@ export function tileStateOf(board: PropertyBoard, tile: Tile): TileState {
     userStates: board.userStates,
     snoozes: board.snoozes,
     now: board.now,
-    viewer: board.viewer,
+    viewer,
     notYours: board.notYours,
   });
 }
 
-function prRows(board: PropertyBoard, tile: Tile, state: TileState): PrSummary[] {
+function prRows(board: PropertyBoard, tile: Tile, state: TileState, viewer: Viewer | null): PrSummary[] {
   return tile.members.flatMap((member) => {
     const pr = board.prs.get(member.prKey);
     if (!pr) {
@@ -613,7 +696,7 @@ function prRows(board: PropertyBoard, tile: Tile, state: TileState): PrSummary[]
       buildPrSummary({
         pr,
         member,
-        viewer: board.viewer,
+        viewer,
         userState: board.userStates.get(pr.key) ?? null,
         events: board.events.get(pr.key) ?? [],
         reason: board.threads.get(pr.key)?.reason ?? null,
@@ -632,16 +715,16 @@ function prRows(board: PropertyBoard, tile: Tile, state: TileState): PrSummary[]
 }
 
 /** One tile as the read models build it: state, rows, then the view with its offers. */
-export function tileViewOf(board: PropertyBoard, tile: Tile): TileView {
-  const state = tileStateOf(board, tile);
+export function tileViewOf(board: PropertyBoard, tile: Tile, viewer: Viewer | null = board.viewer): TileView {
+  const state = tileStateOf(board, tile, viewer);
   return buildTileView({
     tile,
     state,
-    prs: prRows(board, tile, state),
+    prs: prRows(board, tile, state, viewer),
     prsByKey: board.prs,
     events: board.events,
     userStates: board.userStates,
-    viewer: board.viewer,
+    viewer,
     notYours: board.notYours,
     pendingWrite: tile.members.map((member) => board.pendingWrites.get(member.prKey)).find((write) => write !== undefined) ?? null,
     quietRepo: false,
