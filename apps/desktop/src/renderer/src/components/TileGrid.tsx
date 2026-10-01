@@ -27,6 +27,23 @@ function TileCount(props: { count: number }) {
 }
 
 /**
+ * "· 2 your move" after the count, in the honey of the sidebar's chip; core
+ * counts it (`TopicDetail.groupYourMoves`). Nothing at 0, and nothing while
+ * the search filters the group: the count is for the whole group.
+ */
+function YourMoveCount(props: { count: number }) {
+  if (props.count === 0) {
+    return null;
+  }
+  return (
+    <span className="font-semibold text-honey-ink">
+      <span aria-hidden="true">· </span>
+      <span className="font-mono text-[10.5px] tabular-nums">{props.count}</span> your move
+    </span>
+  );
+}
+
+/**
  * Tiles in one column, never side by side: the selected tile's notch then
  * always points straight at the detail pane.
  */
@@ -73,6 +90,7 @@ function GroupSection(props: TileGridProps & { group: TileGroup; views: TileView
         )}
         {GROUP_LABELS[props.group]}
         <TileCount count={props.views.length} />
+        <YourMoveCount count={props.matchingTileIds === null ? props.detail.groupYourMoves[props.group] : 0} />
       </h3>
       <Grid {...props} />
     </section>

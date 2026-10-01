@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- The topic header shows the same honey "your move" chip as the sidebar row, and the group headings say how many of their tiles are your move: "Open 4 · 2 your move". Tiles waiting on others and snoozed tiles don't count.
+
 ## 0.13.2 (2026-10-01)
 
 ### Changed
