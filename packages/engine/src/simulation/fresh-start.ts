@@ -50,7 +50,8 @@ export const WIPED_TABLES: Record<string, string> = {
  */
 export const AGENT_META_PREFIXES: Record<string, string> = {
   'dossier_context_hash:': 'digest/dossiers.ts contextHashKey: instructions and context a dossier was written with',
-  'set_grouping_hash:': 'digest/set-grouping.ts: input hash of the last set grouping per topic',
+  'set_grouping_hash:': 'digest/set-grouping.ts before 2026-10-01: input hash of the last set grouping per topic',
+  'set_grouping_seen:': 'digest/set-grouping.ts setTriggersKey: the triggers the last regroup of a topic saw',
   'glance_gap:': 'digest/glance-batches.ts glanceGapKey: why a PR has no glance yet',
   events_rejudge_asks_v1: 'digest/event-batches.ts REJUDGE_ASKS_KEY (and its per-group keys): the one-time re-judge of stuck asks',
   'relation_override:': 'memory/placement.ts relationOverrideKey: user corrections of an old topic relation',

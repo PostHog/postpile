@@ -170,7 +170,7 @@ describe('digestStored', () => {
     expect(snapshot.topics.map((topic) => topic.id)).toEqual(['ci']);
     expect(snapshot.topics[0]!.tiles.map((tile) => tile.members)).toEqual(expect.arrayContaining([[PR1.key], [PR2.key]]));
     expect(Object.keys(snapshot.glances).sort()).toEqual([PR1.key, PR2.key].sort());
-    expect(snapshot.setChanges).toBeNull();
+    expect(snapshot.setChanges).toEqual([]);
     h.store.close();
   });
 });
