@@ -1082,6 +1082,12 @@ the app meanwhile.
 
 ## Decided
 
+- **Topics with: the sidebar filter** (2026-10-01, DESIGN.md "Topics with:
+  the sidebar filter"): one "Topics with any PR | my PRs | team PRs" switch
+  replaces Mine / Team / Reply / Review; sections stay while it narrows; a
+  mixed topic follows the work (your own PR never lifts it); "N topics
+  without your PRs are hidden · Show all"; opened topics always show all
+  tiles, your own first in each group; no new markers.
 - **✨ marks agent-backed actions** (2026-09-30, DESIGN.md "Agent-assisted
   actions"): a ✨ goes on a button or action only when it is on offer
   because an agent's verdict supports it, in a pill that says what the

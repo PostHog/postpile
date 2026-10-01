@@ -43,7 +43,7 @@ import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
 
 function MainPane(props: { children: ReactNode }) {
-  return <main className="flex min-w-0 flex-col gap-4 overflow-auto px-[26px] pt-5 pb-[22px]">{props.children}</main>;
+  return <main className="pane-scroll flex min-w-0 flex-col gap-4 overflow-auto pl-[26px] pr-[16px] pt-5 pb-[22px]">{props.children}</main>;
 }
 
 function EmptyMain(props: { text: string }) {
@@ -120,7 +120,8 @@ export function App() {
   // brings the picked topic back.
   // Search and queue filter both narrow the sidebar; the open topic follows.
   const narrowed = filter !== null || queueFilter !== null;
-  const shownItems = applyQueueFilter(filterTopics(items, filter), queueFilter);
+  const searched = filterTopics(items, filter);
+  const shownItems = applyQueueFilter(searched, queueFilter);
   // What was on screen for this pick and these filters. An approve, refetch,
   // poll or sync that drops it from the filter keeps it on screen; only a new
   // pick or a filter change lets the "first match" fallback move the view.
@@ -133,6 +134,9 @@ export function App() {
   const finishedId = narrowed ? null : pickedFinishedId;
   const activeItem = finishedId === null ? visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null, keptNow?.topicId ?? null) : null;
   const activeTopicId = finishedId ?? activeItem?.topic.id ?? null;
+  const sidebarTopics = listedTopics(items, shownItems, activeTopicId);
+  // A topic kept on screen after it stopped matching is listed, so it does not count as hidden.
+  const hiddenByQueueFilter = searched.filter((item) => !sidebarTopics.includes(item)).length;
   const topic = useTopic(activeTopicId);
   const matchingTileIds = activeItem && filter ? (filter.tilesByTopic.get(activeItem.topic.id) ?? new Set<string>()) : null;
   const allTiles = topic.data?.tiles ?? [];
@@ -259,7 +263,7 @@ export function App() {
   } else if (filter && !activeItem) {
     main = <EmptyMain text={`Nothing matches “${query.trim()}”. Esc clears the filter.`} />;
   } else if (queueFilter && !activeItem) {
-    main = <EmptyMain text="No topic has a PR that matches the filter. Click the filter again to clear it." />;
+    main = <EmptyMain text="No topic has a PR that matches the filter. Pick “any PR” to show all topics." />;
   } else if (topic.error) {
     main = <EmptyMain text={`Could not load the topic: ${topic.error.message}`} />;
   } else if (activeTopicId && topic.data) {
@@ -354,8 +358,9 @@ export function App() {
               error={topics.error?.message ?? null}
               filter={filter}
               onClearFilter={() => setQuery('')}
-              shown={listedTopics(items, shownItems, activeTopicId)}
+              shown={sidebarTopics}
               queueFilter={queueFilter}
+              hiddenByQueueFilter={hiddenByQueueFilter}
               onQueueFilter={changeQueueFilter}
               filterCounts={filterCounts(items)}
               viewer={viewer.data}

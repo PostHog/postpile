@@ -263,3 +263,11 @@ body {
   border: 3px solid transparent;
   border-radius: 99px;
 }
+
+/* These scrollbars take 10px of width while the content overflows, so a pane
+   whose content grows or shrinks past its height jumped sideways as the
+   scrollbar came and went (2026-10-01). Panes keep the gutter at all times;
+   the thumb still only shows when there is something to scroll. */
+.pane-scroll {
+  scrollbar-gutter: stable;
+}

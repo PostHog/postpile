@@ -2575,12 +2575,12 @@ avatars and filters", QueuesB2).
   Team's PRs, To review, Team mentioned (one per `prTier`), then Other
   topics. Each lists topics, not PRs, and **each topic once in the whole
   sidebar** (2026-09-29): in the highest section where it has a PR, with
-  that section's count on the row. Other topics holds topics with only
+  that section's count on the row; a mixed topic follows the work, so your
+  own PR never lifts it (since 2026-10-01, see "Topics with: the sidebar
+  filter"). Other topics holds topics with only
   `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
-  Routed, FYI; Routed and FYI folded). The queue filters (Mine, Team,
-  Reply, Review) still match a topic by any of its PRs; Review covers To
-  review and Changes you requested (the addressed case was To review
-  before). Section tint: honey
+  Routed, FYI; Routed and FYI folded). The "Topics with" switch (any PR,
+  my PRs, team PRs) matches a topic by any of its PRs. Section tint: honey
   for reply, changes and review, ink for mine, sea for team and team
   mentioned, grey for other.
   History: until 2026-09-29 a topic sat in every section where it had a PR
@@ -2732,8 +2732,7 @@ local; nothing goes to GitHub.
   least one PR (any tile, pulled-in layers included) in that repo
   (`isTopicInScope`), and the queue and filter counts and search cover
   those topics, each with all its tiles. That is why it combines with
-  search and the Mine / Team / Reply / Review filters without renderer
-  logic.
+  search and the "Topics with" switch without renderer logic.
 - **Opened topic**: always every tile across repos, never filtered or
   faded by repo. A tile whose PRs all sit in another repo than the chosen
   one (or, under "All repos", the topic's main repo: most PRs, first seen
@@ -3268,6 +3267,38 @@ Owner decisions (2026-09-30):
 - **Telemetry.** `pr_approved` with `from: agent_tile | agent_topic` and
   `was_agent_approved: true`. `marked_read` with `origin: agent_tile |
   agent_topic` and the tile count.
+
+## Topics with: the sidebar filter (2026-10-01)
+
+The four pills above the sections (Mine, Team, Reply, Review) answered
+questions the sections already answer, looked like tabs to another list,
+and left it unclear what was on: in usage data a filter was switched off
+again almost as often as it was switched on. One open PR of the viewer's
+also put a whole project-size topic under My PRs, above To review, where a
+teammate's PR in it that waits on the viewer's review was out of sight.
+Owner decisions (2026-10-01), after a UX pass (design "9c"):
+
+- **One switch, worded as a sentence: "Topics with any PR | my PRs | team
+  PRs".** It says it narrows which topics show, not which PRs. "any PR" is
+  the way back; a narrowing option on is drawn in the accent. Team hides
+  without a home team, as before. Reply and Review are gone: the Needs reply
+  and To review sections are those.
+- **The sections stay while it narrows**: the switch says which topics,
+  the sections still say what needs you. Under "team PRs" a topic can sit
+  under To review or Team's PRs, by what it asks of you.
+- **A mixed topic follows the work** (`topicSectionTier`): its section is the
+  highest any PR other than your own gives it; My PRs only when nothing else
+  in it asks for a section. Your PR next to a teammate's review request puts
+  the topic under To review; next to FYI PRs only, it stays under My PRs.
+- **What it hid is said**: "11 topics without your PRs are hidden · Show
+  all" under the sections. Other topics narrow with it; Finished steps
+  aside, as with search (finished topics have no open PRs).
+- **An opened topic always shows all its tiles**, filtered or not, and
+  **your own tiles come first in every group** (Unread, Open, Dealt with),
+  in every topic and view (`gridGroups`), then tier order. No new markers:
+  no row chips, no banners.
+- Usage telemetry keeps `queue_filter_changed`; its `filter` is now `mine`,
+  `team` or `none`.
 
 ## Tiles hold still (2026-10-01)
 

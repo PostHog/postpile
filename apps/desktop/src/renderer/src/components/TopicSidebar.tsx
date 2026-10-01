@@ -301,6 +301,8 @@ interface TopicSidebarProps {
   /** Topics left after the search and the queue filter, in API order. */
   shown: TopicListItem[];
   queueFilter: QueueFilter | null;
+  /** Topics the queue filter hides (after the search), for "11 topics without your PRs are hidden". */
+  hiddenByQueueFilter: number;
   onQueueFilter: (filter: QueueFilter | null) => void;
   filterCounts: Record<QueueFilter, number>;
   viewer: ViewerView | undefined;
@@ -315,6 +317,24 @@ type SectionKey = string;
  * "Needs you" whatever their relation. Finished starts folded too.
  */
 const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi', 'finished'];
+
+/**
+ * "11 topics without your PRs are hidden · Show all", under the sections
+ * while "Topics with" narrows: says what the switch did and how to undo it.
+ */
+function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll: () => void }) {
+  const whose = props.filter === 'mine' ? 'your PRs' : "your team's PRs";
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-1.5 px-2.5 text-[12px] text-muted">
+      <span>
+        <span className="font-semibold text-ink-2 tabular-nums">{props.hidden}</span> {props.hidden === 1 ? 'topic' : 'topics'} without {whose} {props.hidden === 1 ? 'is' : 'are'} hidden
+      </span>
+      <button type="button" onClick={props.onShowAll} className="text-accent hover:underline">
+        Show all
+      </button>
+    </p>
+  );
+}
 
 /** "Filtering: 2 topics, 5 tiles · Clear", above the topic list while the search bar filters. */
 function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
@@ -355,7 +375,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       </div>
     );
   return (
-    <nav aria-label="Topics" className="flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar px-2.5 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
+    <nav aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
@@ -374,6 +394,9 @@ export function TopicSidebar(props: TopicSidebarProps) {
           {section.rows.map((row) => topicItem(row.item))}
         </div>
       ))}
+      {props.queueFilter && props.hiddenByQueueFilter > 0 && (
+        <HiddenByFilter filter={props.queueFilter} hidden={props.hiddenByQueueFilter} onShowAll={() => props.onQueueFilter(null)} />
+      )}
       {layout.other.length > 0 && (
         <div className="flex flex-col gap-1">
           <SectionHeader tier="other" />
@@ -402,7 +425,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
         the bottom while the list scrolls; at the end of the list it slides under the footer, where
         a sidebar-colored fade on the sidebar color shows nothing.
       */}
-      <div aria-hidden="true" className="pointer-events-none sticky bottom-0 -mx-2.5 mt-auto -mb-[70px] h-14 shrink-0 bg-linear-to-b from-transparent to-sidebar" />
+      <div aria-hidden="true" className="pointer-events-none sticky bottom-0 -ml-2.5 mt-auto -mb-[70px] h-14 shrink-0 bg-linear-to-b from-transparent to-sidebar" />
       <div className="relative z-[1] flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
         <InboxCleanup place="line" />
         <button

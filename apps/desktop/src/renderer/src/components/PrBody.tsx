@@ -104,7 +104,7 @@ export function PrBody(props: PrBodyProps) {
   const updating = updatingNow({ syncing, writing: props.detail.glanceState === 'writing' });
   return (
     // 22px pane edge: boxes and rows run from here; lines of text start 12px in (px-3), at 34.
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-[22px] pt-[18px] pb-6">
+    <div className="pane-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto pl-[22px] pr-[12px] pt-[18px] pb-6">
       <div className="flex flex-col gap-[5px] px-3">
         <StateLine pr={pr} status={props.summary?.status ?? null} />
         <div className="flex items-start gap-2">

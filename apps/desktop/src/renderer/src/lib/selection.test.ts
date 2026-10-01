@@ -6,7 +6,8 @@ import { applyQueueFilter } from './queues.ts';
 import { visibleTopic } from './search.ts';
 import { autoTile, filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './selection.ts';
 
-function item(id: string, toReview: number): TopicListItem {
+/** A topic with `mine` open PRs of the viewer's. */
+function item(id: string, mine: number): TopicListItem {
   const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
   return {
     topic,
@@ -20,7 +21,7 @@ function item(id: string, toReview: number): TopicListItem {
     openTiles: 0,
     totalTiles: 1,
     yourMoves: [], unseenMergeTiles: 0,
-    queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: toReview, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0, changesAddressed: 0 },
+    queues: { tiers: { needs_reply: 0, changes_requested: 0, mine, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: mine, byTeam: 0, changesAddressed: 0 },
     people: [],
   };
 }
@@ -87,16 +88,16 @@ const DONE: TileState = { kind: 'done', unreadBecause: [], unreadOnGitHub: false
 const UNREAD: TileState = { kind: 'unread', unreadBecause: [], unreadOnGitHub: true, loud: true };
 
 describe('topic stickiness under a queue filter', () => {
-  const review = filterKey('review', null);
+  const review = filterKey('mine', null);
   const picked = entry('b');
 
   it('keeps the picked topic after a refetch drops it from the filter', () => {
     const before = [item('a', 1), item('b', 1)];
     const kept = nextKept(null, review, picked, { ...picked, topicId: 'b' });
-    // Approving b's only review: b leaves Review, the filter key stays.
+    // Merging b's only open PR of yours: b leaves "my PRs", the filter key stays.
     const after = [item('a', 1), item('b', 0)];
-    const shown = applyQueueFilter(after, 'review');
-    expect(visibleTopic(before, 'b', applyQueueFilter(before, 'review'))?.topic.id).toBe('b');
+    const shown = applyQueueFilter(after, 'mine');
+    expect(visibleTopic(before, 'b', applyQueueFilter(before, 'mine'))?.topic.id).toBe('b');
     expect(visibleTopic(after, 'b', shown, keptFor(kept, picked, review)?.topicId ?? null)?.topic.id).toBe('b');
     expect(listedTopics(after, shown, 'b').map((listed) => listed.topic.id)).toEqual(['a', 'b']);
   });
@@ -104,16 +105,16 @@ describe('topic stickiness under a queue filter', () => {
   it('falls back to the first match when the user changes the filter', () => {
     const kept = nextKept(null, review, picked, picked);
     const after = [item('a', 1), item('b', 0)];
-    const mine = filterKey('mine', null);
-    expect(keptFor(kept, picked, mine)).toBeNull();
-    expect(visibleTopic(after, 'b', applyQueueFilter(after, 'review'), keptFor(kept, picked, mine)?.topicId ?? null)?.topic.id).toBe('a');
+    const team = filterKey('team', null);
+    expect(keptFor(kept, picked, team)).toBeNull();
+    expect(visibleTopic(after, 'b', applyQueueFilter(after, 'mine'), keptFor(kept, picked, team)?.topicId ?? null)?.topic.id).toBe('a');
   });
 
   it('drops the kept view on a new pick or when the topic is gone', () => {
     const kept = nextKept(null, review, picked, picked);
     expect(keptFor(kept, entry('a'), review)).toBeNull();
     const gone = [item('a', 1)];
-    expect(visibleTopic(gone, 'b', applyQueueFilter(gone, 'review'), 'b')?.topic.id).toBe('a');
+    expect(visibleTopic(gone, 'b', applyQueueFilter(gone, 'mine'), 'b')?.topic.id).toBe('a');
   });
 
   it('keys the search by the query its results answer', () => {

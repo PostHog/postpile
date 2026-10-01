@@ -197,7 +197,7 @@ export function SetupFlow(props: {
   }
 
   return (
-    <main className="col-span-2 flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">
+    <main className="pane-scroll col-span-2 flex min-w-0 flex-col gap-[18px] overflow-auto pl-[26px] pr-[16px] py-[22px]">
       <div className="flex flex-col gap-2">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">{props.rerun ? 'Run setup again' : 'Welcome to PostPile'}</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">

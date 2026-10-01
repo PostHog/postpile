@@ -131,9 +131,21 @@ describe('queueLayout', () => {
     expect(layout.other.map((entry) => entry.topic.id)).toEqual(['docs']);
   });
 
+  it('lets a mixed topic follow the work: your PR never pulls it above what other PRs ask', () => {
+    const devbox = item('devbox', { mine: 2, to_review: 1 });
+    const runners = item('runners', { mine: 1, team: 1 });
+    const app = item('app', { mine: 3, rest: 2 });
+    const layout = queueLayout([devbox, runners, app]);
+    expect(layout.sections.map((section) => [section.tier, section.rows.map((row) => row.item.topic.id)])).toEqual([
+      ['mine', ['app']],
+      ['team', ['runners']],
+      ['to_review', ['devbox']],
+    ]);
+  });
+
   it('puts Changes you requested under Needs reply and above My PRs', () => {
     const cache = item('cache', { changes_requested: 1, mine: 2 });
-    const own = item('own', { mine: 1, to_review: 1 });
+    const own = item('own', { mine: 1 });
     const layout = queueLayout([own, cache]);
     expect(layout.sections.map((section) => [section.tier, section.rows.map((row) => [row.item.topic.id, row.count])])).toEqual([
       ['changes_requested', [['cache', 1]]],
@@ -154,32 +166,21 @@ describe('queue filters', () => {
   const mine = item('mine', { needs_reply: 1 }, { queues: { tiers: { needs_reply: 1, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: 1, byTeam: 0, changesAddressed: 0 } });
   const review = item('review', { to_review: 2 }, { queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 2, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 1, changesAddressed: 0 } });
 
-  it('counts matching PRs over all topics', () => {
-    expect(filterCounts([mine, review])).toEqual({ mine: 1, team: 1, reply: 1, review: 2 });
-  });
-
-  it('counts Changes you requested under Review, and matches a topic by any of its PRs', () => {
-    const changes = item('changes', { needs_reply: 1, changes_requested: 1, mine: 1 });
-    expect(filterCounts([changes])).toMatchObject({ reply: 1, review: 1 });
-    // Review finds the topic by its changes_requested PR, whatever section it shows under.
-    expect(applyQueueFilter([changes, mine], 'review')).toEqual([changes]);
-    expect(prMatchesFilter(pr({ tier: 'changes_requested' }), 'review')).toBe(true);
-    expect(prMatchesFilter(pr({ tier: 'changes_requested' }), 'reply')).toBe(false);
+  it('counts open PRs of yours and of your team over all topics', () => {
+    expect(filterCounts([mine, review])).toEqual({ mine: 1, team: 1 });
   });
 
   it('keeps topics with a matching PR, all without a filter', () => {
     expect(applyQueueFilter([mine, review], 'mine')).toEqual([mine]);
-    expect(applyQueueFilter([mine, review], 'review')).toEqual([review]);
+    expect(applyQueueFilter([mine, review], 'team')).toEqual([review]);
     expect(applyQueueFilter([mine, review], null)).toEqual([mine, review]);
   });
 
-  it('matches only open PRs for Mine and Team, and the tier for Reply and Review', () => {
+  it('matches only open PRs, yours for my PRs and a teammate\'s for team PRs', () => {
     expect(prMatchesFilter(pr({ authorRelation: 'you' }), 'mine')).toBe(true);
     expect(prMatchesFilter(pr({ authorRelation: 'you', state: 'MERGED' }), 'mine')).toBe(false);
     expect(prMatchesFilter(pr({ authorRelation: 'team' }), 'team')).toBe(true);
     expect(prMatchesFilter(pr({ authorRelation: 'you' }), 'team')).toBe(false);
-    expect(prMatchesFilter(pr({ tier: 'needs_reply' }), 'reply')).toBe(true);
-    expect(prMatchesFilter(pr({ tier: 'to_review' }), 'reply')).toBe(false);
   });
 
   it('never matches a pulled-in stack layer', () => {
@@ -230,6 +231,16 @@ describe('gridGroups', () => {
     ]);
   });
 
+  it('puts your own tiles first in every group, then tier order', () => {
+    const yours = pr({ authorRelation: 'you' });
+    const views = [tile('review', 'to_review'), tile('own', 'rest', [yours]), withOffers({ ...tile('own-unread', 'mine', [yours]), state: state('unread', true) }), withOffers({ ...tile('reply', 'needs_reply'), state: state('unread', true) })];
+    expect(grouped(views)).toEqual([
+      ['unread', ['own-unread', 'reply']],
+      ['open', ['own', 'review']],
+      ['dealt_with', []],
+    ]);
+  });
+
   it('keeps empty groups for the held place and puts snoozed tiles last in their group', () => {
     const views = [withOffers({ ...tile('snoozed', 'needs_reply'), state: state('snoozed') }), tile('open', 'rest')];
     expect(grouped(views)).toEqual([
@@ -250,9 +261,9 @@ describe('unreadLook', () => {
 
 describe('visibleQueueFilters', () => {
   it('hides Team without a home team, unless it is the active filter', () => {
-    expect(visibleQueueFilters(['acme/team-devex'], null)).toEqual(['mine', 'team', 'reply', 'review']);
-    expect(visibleQueueFilters(null, null)).toEqual(['mine', 'team', 'reply', 'review']);
-    expect(visibleQueueFilters([], null)).toEqual(['mine', 'reply', 'review']);
-    expect(visibleQueueFilters([], 'team')).toEqual(['mine', 'team', 'reply', 'review']);
+    expect(visibleQueueFilters(['acme/team-devex'], null)).toEqual(['mine', 'team']);
+    expect(visibleQueueFilters(null, null)).toEqual(['mine', 'team']);
+    expect(visibleQueueFilters([], null)).toEqual(['mine']);
+    expect(visibleQueueFilters([], 'team')).toEqual(['mine', 'team']);
   });
 });
