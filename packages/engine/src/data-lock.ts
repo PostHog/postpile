@@ -19,8 +19,12 @@ export interface LockInfo {
 /** An unreadable lock file may be one being written right now: read it this often, this far apart, before calling it stale. */
 const UNREADABLE_RETRIES = 5;
 const UNREADABLE_RETRY_MS = 20;
-/** ps reports start times to the second; a holder whose start time differs by more is another process on a reused pid. */
-const START_TIME_SLACK_MS = 2000;
+/**
+ * ps reports start times to the second, and locks written before 0.13.2 took the
+ * start from process.uptime(), which trails ps by seconds in Electron. A pid gets
+ * reused far later than that, so a few seconds of slack only guards against reuse.
+ */
+const START_TIME_SLACK_MS = 5000;
 /** A takeover folder this old was left by a process that died while taking over. */
 export const TAKEOVER_ABANDONED_MS = 30_000;
 /** How long to wait before trying again while another process takes the lock over. */
