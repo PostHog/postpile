@@ -31,6 +31,7 @@ import type {
   Tile,
   Topic,
   TopicDelta,
+  TopicKind,
   TopicProposal,
   Viewer,
   WhoseTurn,
@@ -65,7 +66,8 @@ export interface TopicChoice {
   id: string;
   name: string;
   summary: string;
-  /** dossierBrief() of the topic's latest dossier; '' when it has none yet. */
+  kind: TopicKind;
+  /** dossierBrief() of the topic's latest dossier; '' when it has none yet. In the Archive, says so first. */
   brief: string;
   /** PRs in the topic now. Small topics are where fragmentation shows. */
   memberCount: number;
@@ -121,7 +123,7 @@ export interface TopicTidyResult {
 export type TopicAssignment =
   | { prKey: PrKey; kind: 'existing'; topicId: string; reason: string }
   /** goal: one sentence, shown to later batches until the topic's first dossier. */
-  | { prKey: PrKey; kind: 'new'; name: string; goal: string; reason: string };
+  | { prKey: PrKey; kind: 'new'; name: string; goal: string; topicKind: TopicKind; reason: string };
 
 export interface SetGroupingInput {
   topic: Topic;

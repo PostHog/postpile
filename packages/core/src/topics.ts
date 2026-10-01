@@ -1,4 +1,4 @@
-import type { IsoTime, Topic, TopicProposal } from './types.ts';
+import type { IsoTime, Topic, TopicKind, TopicProposal } from './types.ts';
 
 /** A stored topic name is at most this many characters (code points). */
 export const STORED_TOPIC_NAME_MAX = 80;
@@ -43,7 +43,7 @@ export function hasEmptyTopicName(proposal: Pick<TopicProposal, 'kind' | 'name'>
 }
 
 /** A fresh active topic with no summary, tailoring or driver yet. The name is stored clean (`cleanTopicName`). */
-export function newTopic(id: string, name: string, at: IsoTime): Topic {
+export function newTopic(id: string, name: string, at: IsoTime, kind: TopicKind = 'project'): Topic {
   return {
     id,
     name: cleanTopicName(name),
@@ -53,6 +53,7 @@ export function newTopic(id: string, name: string, at: IsoTime): Topic {
     driver: null,
     userRole: 'watcher',
     status: 'active',
+    kind,
     retiredAt: null,
     area: null,
     createdAt: at,

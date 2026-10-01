@@ -104,7 +104,7 @@ import {
   planRead,
   prReadScope,
   deriveTileState,
-  isRetiredSince,
+  takesNewPrs,
   snoozeWrites,
   eventView,
   compareTopicUrgency,
@@ -130,7 +130,6 @@ import {
   withQuietRepo,
   debugEventLines,
   emptyAgentCallStats,
-  FINISHED_TOPICS_MS,
   fixedClaimNote,
   topicMove,
   OFF_POLL_STATUS,
@@ -934,12 +933,13 @@ export class FakeEngine implements EngineService {
     return ok(`Hidden for ${CLEANUP_SNOOZE_DAYS} days`);
   }
 
-  /** Retired sample topics from the last 30 days, newest first, like the engine. */
+  /** The Archive's sample topics that still take new PRs, newest first, like the engine. Samples keep no join times. */
   async listFinishedTopics(): Promise<FinishedTopic[]> {
-    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
+    const now = this.now();
     const memberTopicIds = [...this.data.membership.values()];
     return this.data.topics
-      .filter((topic) => isRetiredSince(topic, since))
+      .filter((topic) => takesNewPrs(topic, null, now))
+      .filter((topic) => topic.status === 'retired')
       .map((topic) => ({
         id: topic.id,
         name: topic.name,

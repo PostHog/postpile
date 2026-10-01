@@ -4,7 +4,7 @@ import { filterTopics, searchFilter, sidebarOrder, visibleTopic } from './search
 
 function item(id: string, unreadTiles: number): TopicListItem {
   const at = '2026-09-27T00:00:00.000Z';
-  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at, updatedAt: at };
+  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', kind: 'project', retiredAt: null, area: null, createdAt: at, updatedAt: at };
   return { topic, placement: null, statusLine: null, group: unreadTiles > 0 ? 'needs_you' : 'quiet', unreadTiles,
     unreadPrs: unreadTiles,
     unreadPrKeys: [],

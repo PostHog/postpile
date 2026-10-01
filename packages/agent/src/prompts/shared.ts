@@ -50,10 +50,12 @@ export const WORK_GLOSSARY = `How the developer's work is grouped:
   "posthog-cli", "Devbox"). Never the developer's own field or team ("Dev tooling", "DevEx"):
   everything they see fits it, so it says nothing. A label on topics, never a topic itself; one
   area holds a handful to about fifteen topics.
-- Topic: one goal someone is driving, with a finish line ("Cut chunkfs read latency", "Move CI to
-  Depot"). Test: one sentence states the goal, and every PR in the topic moves it forward or came
-  out of that work while it was going on (a fix found while doing it). Sharing a repo, an area or
-  a word like "CI", "security" or "release" is not enough.
+- Topic: one goal, of one of two kinds. A project has a finish line ("Cut chunkfs read latency",
+  "Move CI to Depot"). A standing topic keeps one standard up for months with no finish line
+  ("Migration safety", "Code ownership"); its PRs come in waves (docs, rules, guards, fixes). Test:
+  one sentence says what a PR must do to belong, and every PR in the topic does that or came out
+  of that work while it was going on (a fix found while doing it). Sharing a repo, an area or a
+  word like "CI", "security" or "release" is not enough.
 - Tile: what the developer handles in one go inside a topic: a single PR, a git stack, or a set.
 - Set: two or more PRs of one topic that one judgement covers (the same change or pattern, similar
   risk). Sets are lasting: they never change because of status, turn or review state.

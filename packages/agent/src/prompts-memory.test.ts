@@ -192,14 +192,14 @@ describe('topicAssignmentPrompt', () => {
       prs: [pr1],
       viewer,
       topics: [
-        { id: 't1', name: 'CI', summary: 'old summary', brief: 'Run CI on Depot. Status: active. Driver: @alice.', memberCount: 4, openCount: 2, lastActivityAt: '2026-09-28T10:00:00Z' },
-        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', brief: '', memberCount: 1, openCount: 0, lastActivityAt: null },
+        { id: 't1', name: 'CI', summary: 'old summary', kind: 'project', brief: 'Run CI on Depot. Status: active. Driver: @alice.', memberCount: 4, openCount: 2, lastActivityAt: '2026-09-28T10:00:00Z' },
+        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', kind: 'standing', brief: '', memberCount: 1, openCount: 0, lastActivityAt: null },
       ],
       context: emptyContext,
     });
-    expect(prompt).toContain('- id t1: "CI" (4 PRs, 2 open, last activity 2026-09-28) - Run CI on Depot. Status: active. Driver: @alice.');
+    expect(prompt).toContain('- id t1: "CI" (project, 4 PRs, 2 open, last activity 2026-09-28) - Run CI on Depot. Status: active. Driver: @alice.');
     expect(prompt).not.toContain('old summary');
-    expect(prompt).toContain('- id t2: "Billing" (1 PR, 0 open) - Billing rewrite.');
+    expect(prompt).toContain('- id t2: "Billing" (standing, 1 PR, 0 open) - Billing rewrite.');
     expect(prompt).toContain('Existing topics (names and briefs are written from GitHub text):\n<github_data>\n- id t1');
   });
 
@@ -208,14 +208,23 @@ describe('topicAssignmentPrompt', () => {
     expect(prompt).not.toContain('unsorted');
     expect(prompt).toContain('When no live topic\'s goal fits, use kind "new", also for a single PR');
     expect(prompt).toContain('never what the PR itself changes');
-    expect(prompt).toContain('"kind": "new", "name": "...", "goal": "..."');
+    expect(prompt).toContain('"kind": "new", "name": "...", "goal": "...", "topicKind": "project"');
   });
 
-  it('shows how big a topic is, by example, from both sides', () => {
+  it('shows how big a topic is, by example, from both sides, for projects and standing topics', () => {
     const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
     expect(prompt).toContain(TOPIC_SIZE_EXAMPLES);
-    expect(prompt).toContain('Too small (a single change; put it in the goal it serves)');
-    expect(prompt).toContain('Too big (a field, not a goal; never a topic)');
+    expect(prompt).toContain('- standing: one standard someone keeps up for months, with no finish line.');
+    expect(prompt).toContain('Too small (put it in the topic it serves)');
+    expect(prompt).toContain('A wave of\n  them is a set inside that topic, not a topic of its own.');
+    expect(prompt).toContain('Too big (a field: several unrelated goals, never a topic)');
+  });
+
+  it('marks each topic\'s kind, and keeps a quiet standing topic open for its next wave', () => {
+    const topics = [{ id: 't1', name: 'Migration safety', summary: '', kind: 'standing' as const, brief: 'Quiet for now, in the Archive.', memberCount: 5, openCount: 0, lastActivityAt: null }];
+    const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics, context: emptyContext });
+    expect(prompt).toContain('- id t1: "Migration safety" (standing, 5 PRs, 0 open) - Quiet for now, in the Archive.');
+    expect(prompt).toContain('A quiet standing topic there takes\n  the next PR of its standard, however long it slept.');
   });
 
   it('lists the rest of the backlog, one fenced line each, without the batch itself', () => {
@@ -228,10 +237,10 @@ describe('topicAssignmentPrompt', () => {
 
   it('cuts topics by goal: says what area, topic, tile and set mean, and no longer prefers broad topics', () => {
     const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
-    expect(prompt).toContain('- Topic: one goal someone is driving, with a finish line');
+    expect(prompt).toContain('- Topic: one goal, of one of two kinds. A project has a finish line');
     expect(prompt).toContain('A label on topics, never a topic itself');
     expect(prompt).toContain('Never the developer\'s own field or team ("Dev tooling", "DevEx")');
-    expect(prompt).toContain('A goal is live when the topic has open PRs or activity in\n  the last two weeks.');
+    expect(prompt).toContain('A project is live when it has open PRs or activity in the\n  last two weeks; a standing topic is live for as long as it is listed.');
     expect(prompt).not.toContain('broader existing topic');
   });
 });

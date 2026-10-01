@@ -8,7 +8,7 @@ import { autoTile, filterKey, keptFor, listedTopics, nextKept, resolveSelection,
 
 /** A topic with `mine` open PRs of the viewer's. */
 function item(id: string, mine: number): TopicListItem {
-  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
+  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', kind: 'project', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
   return {
     topic,
     placement: null,

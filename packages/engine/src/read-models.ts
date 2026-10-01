@@ -1,6 +1,7 @@
 import {
   isLiveProposal,
-  isRetiredSince,
+  lastJoinAt,
+  takesNewPrs,
   OUTSIDE_PROPOSAL_DAYS,
   proposalOutcome,
   proposalOutcomeAt,
@@ -20,7 +21,6 @@ import {
   topicAgentOffers,
   compareTopicUrgency,
   eventView,
-  FINISHED_TOPICS_MS,
   topicMove,
   isPrInQuietRepo,
   isQuietTile,
@@ -399,17 +399,23 @@ export class ReadModels {
     return items.sort(compareTopics);
   }
 
-  /** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. Ignores the repo scope. */
+  /**
+   * The sidebar's Archive drawer: retired topics that still take new PRs
+   * (`takesNewPrs`), newest first. Ignores the repo scope.
+   */
   listFinishedTopics(): FinishedTopic[] {
-    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
-    const finished = this.store.topics.list().filter((topic) => isRetiredSince(topic, since));
-    return finished
-      .map((topic) => ({
+    const now = this.now();
+    return this.store.topics
+      .list()
+      .filter((topic) => topic.status === 'retired')
+      .map((topic) => ({ topic, memberships: this.store.memberships.listForTopic(topic.id) }))
+      .filter(({ topic, memberships }) => takesNewPrs(topic, lastJoinAt(memberships), now))
+      .map(({ topic, memberships }) => ({
         id: topic.id,
         name: topic.name,
         area: topic.area,
         retiredAt: topic.retiredAt ?? topic.updatedAt,
-        prCount: this.store.memberships.listForTopic(topic.id).length,
+        prCount: memberships.length,
       }))
       .sort((a, b) => b.retiredAt.localeCompare(a.retiredAt));
   }

@@ -1,5 +1,5 @@
 import type { TopicAssignment, TopicChoice } from '@postpile/agent';
-import { buildStacks, cleanTopicName, dossierBrief, isRetiredSince, newTopic, stackByPrKey, stackTopicId, type Pr, type PrKey, type Topic } from '@postpile/core';
+import { buildStacks, cleanTopicName, dossierBrief, lastJoinAt, newTopic, stackByPrKey, stackTopicId, takesNewPrs, type Pr, type PrKey, type Topic, type TopicKind } from '@postpile/core';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
@@ -12,8 +12,6 @@ import type { DigestDeps } from './deps.ts';
  */
 export const ASSIGNMENT_BATCH_SIZE = 40;
 
-/** Retired topics stay on offer this long, so a late follow-up PR finds its old topic. */
-const RETIRED_OFFER_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** The newest updatedAt among the PRs, or null for none. ISO strings sort by time. */
 function newestUpdate(prs: Pr[]): string | null {
@@ -116,12 +114,15 @@ export class TopicAssigner {
     });
   }
 
-  /** Active topics plus topics retired in the last 30 days. */
+  /**
+   * Active topics plus the Archive's topics that still take new PRs: a
+   * project for 30 days, a standing topic until half a year without a new PR
+   * (`takesNewPrs`), so its next wave finds it.
+   */
   private offeredTopics(): Topic[] {
-    const retiredSince = new Date(this.deps.now().getTime() - RETIRED_OFFER_MS).toISOString();
-    return this.deps.store.topics
-      .list()
-      .filter((t) => t.status === 'active' || isRetiredSince(t, retiredSince));
+    const { store } = this.deps;
+    const now = this.deps.now();
+    return store.topics.list().filter((t) => takesNewPrs(t, lastJoinAt(store.memberships.listForTopic(t.id)), now));
   }
 
   private topicChoices(): TopicChoice[] {
@@ -135,7 +136,8 @@ export class TopicAssigner {
         id: t.id,
         name: t.name,
         summary: t.summary,
-        brief: t.status === 'retired' ? `Finished, retired. ${brief}`.trim() : brief,
+        kind: t.kind,
+        brief: t.status === 'retired' ? `${t.kind === 'standing' ? 'Quiet for now, in the Archive.' : 'Finished, in the Archive.'} ${brief}`.trim() : brief,
         memberCount: prs.length,
         openCount: prs.filter((pr) => pr.state === 'OPEN').length,
         lastActivityAt: newestUpdate(prs),
@@ -146,16 +148,17 @@ export class TopicAssigner {
   /**
    * An offered topic of that name (any case), else a new one. A new topic's
    * summary is the goal sentence until its first dossier replaces it, so the
-   * next batch sees what the topic is for, not only its name.
+   * next batch sees what the topic is for, not only its name. The kind is the
+   * agent's; a topic found by name keeps its own.
    */
-  private findOrCreateTopic(name: string, goal: string): Topic {
+  private findOrCreateTopic(name: string, goal: string, kind: TopicKind): Topic {
     const clean = cleanTopicName(name);
     const wanted = clean.toLowerCase();
     const existing = this.offeredTopics().find((t) => cleanTopicName(t.name).toLowerCase() === wanted);
     if (existing) {
       return existing;
     }
-    const topic = { ...newTopic(newTopicId(clean), clean, this.deps.now().toISOString()), summary: goal };
+    const topic = { ...newTopic(newTopicId(clean), clean, this.deps.now().toISOString(), kind), summary: goal };
     this.deps.store.topics.create(topic);
     return topic;
   }
@@ -164,7 +167,7 @@ export class TopicAssigner {
     if (assignment.kind === 'existing') {
       return assignment.topicId;
     }
-    return this.findOrCreateTopic(assignment.name, assignment.goal).id;
+    return this.findOrCreateTopic(assignment.name, assignment.goal, assignment.topicKind).id;
   }
 
   private apply(assignments: TopicAssignment[]): void {

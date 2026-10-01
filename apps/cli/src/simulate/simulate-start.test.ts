@@ -57,7 +57,7 @@ describe('simulateStart', () => {
       if (run.arm === 'old') {
         const store = Store.open(run.databaseFile);
         if (store.topics.get('ci') === null) {
-          store.topics.create({ id: 'ci', name: 'CI', summary: '', summaryInputHash: null, area: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', retiredAt: null, createdAt: run.startAt, updatedAt: run.startAt });
+          store.topics.create({ id: 'ci', name: 'CI', summary: '', summaryInputHash: null, area: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', kind: 'project', retiredAt: null, createdAt: run.startAt, updatedAt: run.startAt });
         }
         for (const key of run.prKeys) {
           store.memberships.assign({ prKey: key, topicId: 'ci', assignedBy: 'agent', reason: 'CI work', createdAt: run.startAt });

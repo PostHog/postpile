@@ -119,10 +119,7 @@ export interface TopicListItem {
   prStateCounts: TopicPrStateCounts;
 }
 
-/** The sidebar's Finished drawer lists topics retired this recently. */
-export const FINISHED_TOPICS_MS = 30 * 24 * 60 * 60 * 1000;
-
-/** A retired topic in the sidebar's Finished drawer. */
+/** A retired topic in the sidebar's Archive drawer (code says "finished" for the drawer's list). */
 export interface FinishedTopic {
   id: string;
   name: string;

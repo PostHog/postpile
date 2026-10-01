@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at } from './fixtures.ts';
-import { isRetiredSince, nextTopicStatus } from './topic-status.ts';
+import { lastJoinAt, nextTopicStatus, takesNewPrs } from './topic-status.ts';
 import type { TopicStatus } from './types.ts';
 
 const WHEN = at(30);
@@ -26,16 +26,37 @@ describe('nextTopicStatus', () => {
   });
 });
 
-describe('isRetiredSince', () => {
-  it('counts a topic retired at or after the time', () => {
-    expect(isRetiredSince({ status: 'retired', retiredAt: at(30) }, at(30))).toBe(true);
-    expect(isRetiredSince({ status: 'retired', retiredAt: at(31) }, at(30))).toBe(true);
-    expect(isRetiredSince({ status: 'retired', retiredAt: at(29) }, at(30))).toBe(false);
+const DAY = 24 * 60;
+
+/** `at` counts minutes; these tests count days. */
+function day(n: number): string {
+  return at(n * DAY);
+}
+
+describe('takesNewPrs', () => {
+  it('always for an active topic, never for one merged away', () => {
+    expect(takesNewPrs({ status: 'active', kind: 'project', retiredAt: null }, null, new Date(day(400)))).toBe(true);
+    expect(takesNewPrs({ status: 'archived', kind: 'standing', retiredAt: null }, day(1), new Date(day(2)))).toBe(false);
   });
 
-  it('never counts a topic that is not retired or has no retire time', () => {
-    expect(isRetiredSince({ status: 'active', retiredAt: at(31) }, at(30))).toBe(false);
-    expect(isRetiredSince({ status: 'archived', retiredAt: at(31) }, at(30))).toBe(false);
-    expect(isRetiredSince({ status: 'retired', retiredAt: null }, at(30))).toBe(false);
+  it('takes a late follow-up for a project in the Archive for 30 days', () => {
+    const project = { status: 'retired', kind: 'project', retiredAt: day(0) } as const;
+    expect(takesNewPrs(project, day(0), new Date(day(29)))).toBe(true);
+    expect(takesNewPrs(project, day(0), new Date(day(31)))).toBe(false);
+  });
+
+  it('keeps a standing topic until half a year passed without a PR joining', () => {
+    const standing = { status: 'retired', kind: 'standing', retiredAt: day(100) } as const;
+    expect(takesNewPrs(standing, day(90), new Date(day(260)))).toBe(true);
+    expect(takesNewPrs(standing, day(90), new Date(day(275)))).toBe(false);
+    // Without a join on record, the time it went to the Archive counts.
+    expect(takesNewPrs(standing, null, new Date(day(270)))).toBe(true);
+  });
+});
+
+describe('lastJoinAt', () => {
+  it('is the newest join, or null for an empty topic', () => {
+    expect(lastJoinAt([{ createdAt: day(3) }, { createdAt: day(9) }, { createdAt: day(5) }])).toBe(day(9));
+    expect(lastJoinAt([])).toBeNull();
   });
 });
