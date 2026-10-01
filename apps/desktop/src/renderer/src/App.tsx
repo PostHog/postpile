@@ -27,6 +27,7 @@ import { TitleBar } from './components/TitleBar.tsx';
 import { UpdateBar } from './components/UpdateBar.tsx';
 import { ToolsNotice } from './components/ToolsNotice.tsx';
 import { Toast } from './components/Toast.tsx';
+import { TidyOverlay } from './components/TidyOverlay.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar } from './components/TopicSidebar.tsx';
 import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
@@ -403,6 +404,7 @@ export function App() {
           </div>
           <StatusFooter topics={items} detail={topic.data} live={live.data} />
           <Toast />
+          <TidyOverlay />
         </div>
       </OpenedReadContext>
     </TellAgentContext>

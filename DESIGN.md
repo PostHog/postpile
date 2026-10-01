@@ -3420,6 +3420,11 @@ for the user to work through, and never in later syncs.
   `TopicTidy` once, inside the full sync's topics phase, before the topic
   assignment; the live poll never does. Raise the version with the next
   steering change that should reshape existing topics.
+- The call runs as its own sync phase, `tidy`, when there are topics to
+  tidy (a fresh install skips it). While that phase runs, the app covers the
+  window with "Tidying up your topics and tiles" and a spinner (0.13.1): the
+  call takes a minute or two (about 2 minutes for 117 topics), and a click
+  meanwhile could land on a topic about to merge or lose PRs.
 - One `topic_tidy` call (setup model, Opus) reads every active topic: name,
   goal (dossier goal, else summary) and one line per PR (date, author,
   state, title), with the glossary, `TOPIC_SIZE_EXAMPLES`, instructions and

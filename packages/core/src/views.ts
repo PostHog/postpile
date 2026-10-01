@@ -368,10 +368,10 @@ export interface SyncOptions {
  * (see DESIGN.md › Sync flow › Scheduling), so each timing is the wall time
  * from that step's start to its end, not a slice of the total.
  */
-export type SyncPhase = 'fetch' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
+export type SyncPhase = 'fetch' | 'tidy' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
 
 /** In the order a sync starts them. */
-export const SYNC_PHASES: SyncPhase[] = ['fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
+export const SYNC_PHASES: SyncPhase[] = ['fetch', 'tidy', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
 
 /** Milliseconds per phase that ran. */
 export type SyncPhaseTimings = Partial<Record<SyncPhase, number>>;

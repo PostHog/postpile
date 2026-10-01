@@ -45,6 +45,11 @@ export class TopicTidy {
     }
   }
 
+  /** Due, with topics to tidy: runOnce calls the agent (budget allowing) instead of returning at once. */
+  callsAgent(): boolean {
+    return this.due() && this.deps.store.topics.listActive().some((topic) => topic.id !== UNSORTED_TOPIC_ID);
+  }
+
   private topics(): TidyTopic[] {
     const { store } = this.deps;
     const active = store.topics.listActive().filter((topic) => topic.id !== UNSORTED_TOPIC_ID);

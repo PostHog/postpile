@@ -208,6 +208,8 @@ export interface FakeEngineOptions {
   catchUpStepMs?: number;
   /** POSTPILE_FAKE_QUOTA: a GitHub quota that is low or nearly used (see fake-quota.ts). */
   quota?: FakeQuotaLevel | null;
+  /** POSTPILE_FAKE_TIDY=1: the first sync runs the one-time topic tidy, so the overlay shows. */
+  tidyOnFirstSync?: boolean;
 }
 
 /** One step of the fake sync: what runs, calls it plans, calls that come back by its end. */
@@ -313,6 +315,7 @@ export class FakeEngine implements EngineService {
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
   private readonly recheckDelayMs: number;
   private readonly syncStepMs: number;
+  private tidyPending: boolean;
   private syncing: Promise<SyncReport> | null = null;
   private progress: SyncProgress | null = null;
   private recheckCount = 0;
@@ -332,6 +335,7 @@ export class FakeEngine implements EngineService {
     this.startedAt = this.now();
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
+    this.tidyPending = options.tidyOnFirstSync ?? false;
     this.data = buildSampleData(this.now());
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
@@ -703,6 +707,14 @@ export class FakeEngine implements EngineService {
     this.progress = progress;
     // Without claude only the fetch runs, like the engine skipping its agent jobs.
     const agentOff = this.toolStatus.agentOff();
+    if (agentOff === null && this.tidyPending) {
+      // The tidy is one long agent call; long enough here to look at the overlay.
+      this.tidyPending = false;
+      progress.running = ['tidy', 'topics'];
+      progress.agentCallsPlanned += 1;
+      await new Promise((resolve) => setTimeout(resolve, this.syncStepMs * 6));
+      progress.agentCallsDone += 1;
+    }
     for (const step of agentOff === null ? FAKE_SYNC_STEPS : FAKE_SYNC_STEPS.slice(0, 1)) {
       progress.running = step.running;
       progress.agentCallsPlanned += step.plan;
