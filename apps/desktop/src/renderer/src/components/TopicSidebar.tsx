@@ -203,14 +203,16 @@ function SectionHeader(props: { tier: PrTier | 'other' }) {
   );
 }
 
-/** A section title that folds its topics away. */
+/** A section title that folds its topics away. The chevron takes the topic rows' leading slot, so the label starts on the topic names' x. */
 function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; indent?: boolean }) {
   const size = props.small ? 'text-[10.5px] font-medium text-hint' : 'text-[11px] font-semibold tracking-[0.04em] text-hint';
   return (
-    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center gap-1.5 py-1 text-left ${props.indent ? 'px-4' : 'px-2'}`}>
-      <span className={`text-faint ${props.open ? '' : '-rotate-90'}`}>
-        <ChevronIcon />
-      </span>
+    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center py-1 text-left ${props.indent ? 'px-4' : 'px-2'}`}>
+      <LeadSlot>
+        <span className={`flex text-faint ${props.open ? '' : '-rotate-90'}`}>
+          <ChevronIcon />
+        </span>
+      </LeadSlot>
       <span className={size}>{props.label}</span>
     </button>
   );
@@ -306,6 +308,9 @@ interface TopicSidebarProps {
   viewer: ViewerView | undefined;
 }
 
+/** Plain lines in the list (filter, hidden topics, errors) start on the topic names' x: a row's 8px padding plus its 14px leading slot. */
+const TEXT_COLUMN = 'pr-2.5 pl-[22px]';
+
 /** Section keys for the fold state: "team", "routed", "fyi", "finished", or "area:<name>". */
 type SectionKey = string;
 
@@ -323,7 +328,7 @@ const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi', 'finished'];
 function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll: () => void }) {
   const whose = props.filter === 'mine' ? 'your PRs' : "your team's PRs";
   return (
-    <p className="flex flex-wrap items-baseline gap-x-1.5 px-2.5 text-[12px] text-muted">
+    <p className={`flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-muted ${TEXT_COLUMN}`}>
       <span>
         <span className="font-semibold text-ink-2 tabular-nums">{props.hidden}</span> {props.hidden === 1 ? 'topic' : 'topics'} without {whose} {props.hidden === 1 ? 'is' : 'are'} hidden
       </span>
@@ -338,7 +343,7 @@ function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll:
 function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
   return (
-    <p className="flex items-center gap-1.5 px-2.5 text-[11.5px] text-muted">
+    <p className={`flex items-center gap-1.5 text-[11.5px] text-muted ${TEXT_COLUMN}`}>
       <span>
         Filtering: {plural(props.topics, 'topic')}, {plural(props.tiles, 'tile')}
       </span>
@@ -377,12 +382,12 @@ export function TopicSidebar(props: TopicSidebarProps) {
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
-      {props.error && <p className="px-2.5 text-xs text-unread-ink">Could not load topics: {props.error}</p>}
+      {props.error && <p className={`text-xs text-unread-ink ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
       {narrowed && props.shown.length === 0 && props.topics.length > 0 && (
-        <p className="px-2.5 text-xs leading-relaxed text-muted">No topic has a PR that matches.</p>
+        <p className={`text-xs leading-relaxed text-muted ${TEXT_COLUMN}`}>No topic has a PR that matches.</p>
       )}
       {!props.error && !props.loading && props.topics.length === 0 && (
-        <p className="px-2.5 text-xs leading-relaxed text-muted">
+        <p className={`text-xs leading-relaxed text-muted ${TEXT_COLUMN}`}>
           {tools && !tools.canSync ? 'No topics yet. Sync starts once gh works.' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'}
         </p>
       )}

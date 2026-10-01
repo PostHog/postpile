@@ -7,10 +7,10 @@ import { Avatar } from './Avatar.tsx';
  * agent's bot opened the PR for. Quiet grey words, faces first; every name
  * is in the tooltip.
  */
-export function AssignedTo(props: { line: AssigneeLine }) {
+export function AssignedTo(props: { line: AssigneeLine; className?: string }) {
   const { line } = props;
   return (
-    <span title={line.title} className="flex min-w-0 items-center gap-1 text-[11px] whitespace-nowrap text-hint">
+    <span title={line.title} className={`flex min-w-0 items-center gap-1 text-[11px] whitespace-nowrap text-hint ${props.className ?? ''}`}>
       assigned to
       {line.shown.map((assignee) => (
         <span key={assignee.login} className="flex min-w-0 items-center gap-1">

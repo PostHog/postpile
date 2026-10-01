@@ -1979,6 +1979,15 @@ quiet grey with each assignee's avatar and login ("you" for the viewer), at most
 title out (2026-09-29: the tile's heading already is the title; the row's
 tooltip keeps it); a stack or set's rows sit in one tinted rounded box, the
 selected row highlighted, drafts and closed layers on a grey row.
+Row grid (2026-10-01): the tile and the detail pane's PR list draw the same
+`PrRow` with the same facts. The state icon sits in a 20px slot and the
+unread dot hangs in the row's left padding, so `#number` and title start at
+one x on read and unread rows; a lone row gets 2px more padding than a
+grouped one, so the icon lands at the same x on single and multi-PR tiles.
+The detail list is narrower, so its rows drop "assigned to" below 480px and
+the author's face below 400px (the body's "opened by" line keeps both). In a
+tile, the strips, body and footer share one text start (16px with the frame)
+and one right edge (15px).
 
 **The unread dot** (2026-09-30; the dot below, first the "not-done dot" of 2026-09-29, core `notDonePrKeys`, shipped as
 `TileView.notDonePrKeys` since 2026-09-30; replaced "the new dot" of the same morning, which only
@@ -2686,7 +2695,9 @@ avatars and filters", QueuesB2).
   the same icon and colour as a PR row (`PrStateIcon`). Every row has a
   fixed 14px leading slot inside the highlight: the unread dot on line one,
   the icon on line two, both centred, so the name and the summary start at
-  the same x on every row (and the section labels line up with them). The
+  the same x on every row (and the section labels line up with them; so do
+  the fold headers, whose chevron takes the slot, and the filter, hidden
+  topics and error lines). The
   tooltip ("5 open · 1 merged") is the only place the counts show. Chosen
   over counts per state (busier, steals summary width) and a progress bar.
 - **Topic header PR pill** (`TopicDetail.prRollup` = `topicPrRollup`,

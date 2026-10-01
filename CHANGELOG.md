@@ -11,6 +11,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The topic header's breadcrumb names the sidebar section the topic sits in (To review, My PRs, …) with its coloured dot, instead of "Needs you" or "Quiet".
 - A tile's Draft chip and the topic's draft icon follow one rule, so they can't disagree.
 - The topic header shows the same honey "your move" chip as the sidebar row, and the group headings say how many of their tiles are your move: "Open 4 · 2 your move". Tiles waiting on others and snoozed tiles don't count.
+- The detail pane's PR list now shows the same row as the tile, with open threads, the author and "assigned to" (the last two step aside when the pane is narrow). PR numbers and titles line up on read and unread rows, tile text and right edges line up, and the sidebar's FYI and Finished headers and filter lines start where topic names do.
 
 ## 0.13.2 (2026-10-01)
 
