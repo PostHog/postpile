@@ -91,6 +91,12 @@
   --color-unread-when: var(--unread-when);
   --color-unread-row: var(--unread-row);
 
+  /* Amber (the update bar) */
+  --color-amber-soft: var(--amber-soft);
+  --color-amber-line: var(--amber-line);
+  --color-amber-ink: var(--amber-ink);
+  --color-amber: var(--amber);
+
   /* Warm reach */
   --color-honey-soft: var(--honey-soft);
   --color-honey-ink: var(--honey-ink);

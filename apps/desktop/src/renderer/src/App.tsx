@@ -24,6 +24,7 @@ import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { TileGrid } from './components/TileGrid.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
+import { UpdateBar } from './components/UpdateBar.tsx';
 import { ToolsNotice } from './components/ToolsNotice.tsx';
 import { Toast } from './components/Toast.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
@@ -319,6 +320,7 @@ export function App() {
             search={<SearchField value={query} onChange={setQuery} />}
             repoScope={<RepoScopeMenu />}
           />
+          <UpdateBar />
           {/* Sidebar | tiles | detail. The tile column stays one tile wide; by default it and
               the detail pane split what the sidebar leaves evenly, from the 1100px minimum
               window up. The two

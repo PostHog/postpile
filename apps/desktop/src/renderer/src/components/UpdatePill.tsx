@@ -1,27 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
 import type { AvailableUpdate } from '@postpile/core';
 import { sendTelemetry } from '../api/telemetry.ts';
-import { useUpdate } from '../api/update.ts';
-import { laterKey, pillVersion, releaseDate, UPGRADE_COMMAND } from '../lib/update.ts';
+import { releaseDate, UPGRADE_COMMAND } from '../lib/update.ts';
+import { useUpdateReminder } from '../lib/use-update-reminder.ts';
 import { useDismiss } from '../lib/use-dismiss.ts';
 import { Button } from './Button.tsx';
 import { FixCommand } from './FixCommand.tsx';
-
-function isLater(version: string): boolean {
-  try {
-    return window.localStorage.getItem(laterKey(version)) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function rememberLater(version: string): void {
-  try {
-    window.localStorage.setItem(laterKey(version), '1');
-  } catch {
-    // Storage can be blocked; the pill then stays hidden until the window reloads.
-  }
-}
 
 function UpdatePopover(props: { update: AvailableUpdate; current: string; onLater: () => void }) {
   const date = releaseDate(props.update.publishedAt);
@@ -42,7 +26,7 @@ function UpdatePopover(props: { update: AvailableUpdate; current: string; onLate
         <span className="text-[11px] text-muted">Then quit and reopen PostPile.</span>
       </div>
       <div className="flex justify-end">
-        <Button title="Hide this reminder until a newer version is out" onClick={props.onLater}>
+        <Button title="Remind me again later" onClick={props.onLater}>
           Later
         </Button>
       </div>
@@ -53,25 +37,20 @@ function UpdatePopover(props: { update: AvailableUpdate; current: string; onLate
 /**
  * "Update available · 0.2.0" in the title bar when the server's last
  * check found a newer release. Neutral on purpose: coral means "new since you
- * looked". The popover has the release notes link and the brew command;
- * "Later" hides the pill for that version (kept in localStorage).
+ * looked". The popover has the release notes link and the brew command.
+ * Under 24h behind this is the whole reminder and "Later" hides it until the
+ * bar takes over; the bar's own "Later" drops back to this pill for 24h.
  * Self-contained so it can move when the title bar changes.
  */
 export function UpdatePill() {
-  const update = useUpdate().data;
+  const { view: update, urgency, later } = useUpdateReminder();
   const [open, setOpen] = useState(false);
-  const [laterNow, setLaterNow] = useState<string[]>([]);
   const root = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, root);
 
   const latest = update?.latest ?? null;
-  const later = new Set(laterNow);
-  if (latest && isLater(latest.version)) {
-    later.add(latest.version);
-  }
-  const version = pillVersion(update, later);
-  if (!update || !latest || version === null) {
+  if (!update || !latest || urgency !== 'pill') {
     return null;
   }
   function toggle() {
@@ -80,10 +59,9 @@ export function UpdatePill() {
     }
     setOpen(!open);
   }
-  function hideVersion(hidden: string) {
+  function snooze() {
     sendTelemetry('update_later_clicked', {});
-    rememberLater(hidden);
-    setLaterNow([...laterNow, hidden]);
+    later();
     setOpen(false);
   }
   return (
@@ -92,14 +70,14 @@ export function UpdatePill() {
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
-        title={`PostPile ${version} is out; you have ${update.current}`}
+        title={`PostPile ${latest.version} is out; you have ${update.current}`}
         onClick={toggle}
         className="flex h-[22px] items-center gap-1.5 rounded-full border border-frame bg-chip px-2 text-[11px] whitespace-nowrap text-ink-2 hover:bg-subtle hover:text-ink"
       >
         <span className="size-1.5 rounded-full bg-ink-2" />
-        Update available · <span className="font-mono text-[10.5px]">{version}</span>
+        Update available · <span className="font-mono text-[10.5px]">{latest.version}</span>
       </button>
-      {open && <UpdatePopover update={latest} current={update.current} onLater={() => hideVersion(version)} />}
+      {open && <UpdatePopover update={latest} current={update.current} onLater={snooze} />}
     </div>
   );
 }
