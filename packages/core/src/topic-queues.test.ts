@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
-import { memberTier, personRelation, pingedPrKeys, tileTier, topicFaces, topicPeople, topicQueues } from './topic-queues.ts';
+import { emptyTierCounts, memberTier, personRelation, pingedPrKeys, tileTier, topicFaces, topicPeople, topicQueues, topicSection } from './topic-queues.ts';
+import type { PrTier } from './pr-tier.ts';
 import type { Tile, Viewer } from './types.ts';
 
 const me = viewer.login;
@@ -121,6 +122,23 @@ describe('topicQueues', () => {
       { tier: 'team', author: 'team', state: 'OPEN', pulledIn: true, quiet: false, changesAddressed: false },
     ]);
     expect(queues).toEqual({ tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 1, team_mentioned: 0, rest: 0 }, byYou: 0, byTeam: 0, changesAddressed: 0 });
+  });
+});
+
+describe('topicSection', () => {
+  const section = (tiers: Partial<Record<PrTier, number>>) => topicSection({ tiers: { ...emptyTierCounts(), ...tiers } });
+
+  it('puts a topic in its highest section, rest-only topics under Other topics', () => {
+    expect(section({ needs_reply: 1, team: 2, rest: 3 })).toBe('needs_reply');
+    expect(section({ changes_requested: 1, to_review: 1 })).toBe('changes_requested');
+    expect(section({ rest: 2 })).toBeNull();
+    expect(section({})).toBeNull();
+  });
+
+  it('lets a mixed topic follow the work: your PR never pulls it above what other PRs ask', () => {
+    expect(section({ mine: 2, to_review: 1 })).toBe('to_review');
+    expect(section({ mine: 1, team: 1 })).toBe('team');
+    expect(section({ mine: 3, rest: 2 })).toBe('mine');
   });
 });
 

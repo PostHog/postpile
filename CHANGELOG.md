@@ -7,6 +7,9 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - Each topic in the sidebar shows one PR state icon in front of its summary: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").
+- The topic header's PR pill counts every PR in the topic, also the ones the sync found on its own (your open PRs, review requests, recent merges), so a topic of only found PRs no longer says "0 PRs". It shows the same state icon as the sidebar; hover it for the mix ("3 open · 1 draft · 1 merged; 2 need review, 1 approved").
+- The topic header's breadcrumb names the sidebar section the topic sits in (To review, My PRs, …) with its coloured dot, instead of "Needs you" or "Quiet".
+- A tile's Draft chip and the topic's draft icon follow one rule, so they can't disagree.
 - The topic header shows the same honey "your move" chip as the sidebar row, and the group headings say how many of their tiles are your move: "Open 4 · 2 your move". Tiles waiting on others and snoozed tiles don't count.
 
 ## 0.13.2 (2026-10-01)

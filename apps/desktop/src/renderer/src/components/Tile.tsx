@@ -6,7 +6,7 @@ import { glanceStateText } from '../lib/glance.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { isDraftTile, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { AgentApproveButton } from './AgentActions.tsx';
@@ -160,7 +160,8 @@ export function Tile(props: TileProps) {
   // Core's group decides the look: Dealt with goes grey, Unread gets the strip and a bold title.
   const done = view.group === 'dealt_with';
   const unread = view.group === 'unread';
-  const draft = isDraftTile(view);
+  // Core's Draft rule (`TileView.draft`), the same one the topic's draft icon uses.
+  const draft = view.draft;
   // Unread: bold, full ink. Read: regular weight, a notch quieter (the your-move footer stays the reminder). Done and drafts: muted.
   let titleLook = unread ? 'font-semibold text-ink' : 'font-normal text-ink-2';
   if (props.selected && !unread) {

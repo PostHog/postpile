@@ -78,6 +78,7 @@ import type {
   Topic,
   TopicDetail,
   TopicListItem,
+  TopicQueues,
   UserPrState,
   TeamRole,
   TeamRolesView,
@@ -143,7 +144,8 @@ import {
   threadPrKey,
   topicFaces,
   topicPeople,
-  topicPrState,
+  topicPrRollup,
+  topicSection,
   topicQueues,
   topicUrgency,
   topicYourMoves,
@@ -785,6 +787,22 @@ export class FakeEngine implements EngineService {
   }
 
   /** Each PR of the tiles once, with the tile member it came from (for the tier's reason). */
+  /** Same as the engine: the topic's PRs per tier and by author, for the list row and the opened topic alike. */
+  private topicQueuesOf(tiles: Tile[]): TopicQueues {
+    const viewer = this.viewer();
+    const pinged = pingedPrKeys(tiles);
+    return topicQueues(
+      this.topicPrs(tiles).map(({ pr, member }) => ({
+        tier: this.tierOf(pr, member),
+        author: ownerRelation(pr, viewer),
+        state: pr.state,
+        pulledIn: !pinged.has(pr.key),
+        quiet: isPrInQuietRepo(pr.key, this.repoSettings),
+        changesAddressed: this.isReReview(pr),
+      })),
+    );
+  }
+
   private topicPrs(tiles: Tile[]): { pr: Pr; member: TileMember }[] {
     const found = new Map<PrKey, { pr: Pr; member: TileMember }>();
     for (const member of tiles.flatMap((tile) => tile.members)) {
@@ -843,8 +861,8 @@ export class FakeEngine implements EngineService {
         })),
       );
       const prs = this.topicPrs(tiles);
-      const pinged = pingedPrKeys(tiles);
-      const prSummary = topicPrState(prs.map(({ pr }) => ({ state: pr.state, isDraft: pr.isDraft, pulledIn: !pinged.has(pr.key) })));
+      const queues = this.topicQueuesOf(tiles);
+      const prRollup = topicPrRollup(tiles, prs.map(({ pr }) => pr));
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
@@ -858,19 +876,11 @@ export class FakeEngine implements EngineService {
         totalTiles: views.length,
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
-        queues: topicQueues(
-          prs.map(({ pr, member }) => ({
-            tier: this.tierOf(pr, member),
-            author: ownerRelation(pr, viewer),
-            state: pr.state,
-            pulledIn: !pinged.has(pr.key),
-            quiet: isPrInQuietRepo(pr.key, this.repoSettings),
-            changesAddressed: this.isReReview(pr),
-          })),
-        ),
+        queues,
+        section: topicSection(queues),
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
-        prState: prSummary.state,
-        prStateCounts: prSummary.counts,
+        prState: prRollup.state,
+        prStateCounts: prRollup.counts,
       };
     });
     return items.sort(compareTopicUrgency);
@@ -957,6 +967,7 @@ export class FakeEngine implements EngineService {
       return null;
     }
     const tiles = this.topicTileViews(topicId);
+    const topicTiles = this.tilesOfTopic(topicId);
     return {
       topic,
       placement: this.memory.placement(topic),
@@ -969,6 +980,8 @@ export class FakeEngine implements EngineService {
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback),
       agent: topicAgentOffers(tiles),
+      prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
+      section: topicSection(this.topicQueuesOf(topicTiles)),
     };
   }
 
