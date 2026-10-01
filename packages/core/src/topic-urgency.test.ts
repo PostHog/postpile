@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { compareTopicUrgency, topicMove, topicUrgency, type RankedTopic, type TopicMove, type UrgencyTile } from './topic-urgency.ts';
+import type { TileGroup } from './tile-groups.ts';
+import {
+  compareTopicUrgency,
+  topicMove,
+  topicUrgency,
+  topicYourMoves,
+  yourMovesByGroup,
+  type RankedTopic,
+  type TopicMove,
+  type UrgencyTile,
+  type UrgencyView,
+} from './topic-urgency.ts';
 
 /** An unread tile is unread on GitHub with loud news and one unread PR unless the overrides say otherwise. */
 function tile(overrides: Partial<UrgencyTile>): UrgencyTile {
@@ -77,6 +88,39 @@ describe('topicUrgency: your moves', () => {
       text: 'pim addressed your changes: re-review',
     });
     expect(topicMove({ kind: 'them', who: 'pim', what: 'to merge', prKey: 'acme/app#1' })).toBeNull();
+  });
+});
+
+/** A built tile as far as the detail's your-move fields care; `move` null means it is somebody else's turn. */
+function view(group: TileGroup, state: UrgencyView['state']['kind'], move: TopicMove | null): UrgencyView & { group: TileGroup } {
+  const turn: UrgencyView['turn'] = move
+    ? { kind: 'you', move: move.move, who: null, what: move.text, prKey: 'acme/app#1' }
+    : { kind: 'them', who: 'pim', what: 'to merge', prKey: 'acme/app#1' };
+  const tileState = { kind: state, unreadOnGitHub: false, loud: false } as UrgencyView['state'];
+  return { group, state: tileState, unreadPrKeys: [], turn, quietRepo: false, prs: [{ state: 'OPEN', quietRepo: false }] };
+}
+
+describe('topic detail: your moves', () => {
+  const tiles = [
+    view('open', 'open', review),
+    view('open', 'open', null),
+    view('open', 'snoozed', review),
+    view('unread', 'unread', merge),
+    view('dealt_with', 'done', review),
+  ];
+
+  it('gives the header the sidebar rule: live tiles only, most urgent first', () => {
+    expect(topicYourMoves(tiles)).toEqual([review, merge]);
+    expect(topicYourMoves(tiles)).toEqual(topicUrgency(tiles.map((tile) => ({ ...tile, state: tile.state.kind, unreadOnGitHub: false, loud: false, prStates: ['OPEN'], move: topicMove(tile.turn), quiet: false }))).yourMoves);
+  });
+
+  it('counts the live moves per group, snoozed and done tiles left out', () => {
+    expect(yourMovesByGroup(tiles)).toEqual({ unread: 1, open: 1, dealt_with: 0 });
+  });
+
+  it('has every group at 0 when no tile waits on you', () => {
+    expect(yourMovesByGroup([view('open', 'open', null)])).toEqual({ unread: 0, open: 0, dealt_with: 0 });
+    expect(topicYourMoves([])).toEqual([]);
   });
 });
 

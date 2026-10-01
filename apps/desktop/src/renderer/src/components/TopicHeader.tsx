@@ -14,6 +14,7 @@ import { ChevronIcon, PrStateIcon, QuoteIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
 import { RelationLine } from './RelationLine.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
+import { YourMoveChip } from './YourMoveChip.tsx';
 
 /** Your role in the topic as a noun (2026-09-29): "You review" read like an order next to "lyra drives". */
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -208,6 +209,7 @@ export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[
           </span>
           <PrCountPill detail={props.detail} />
         </span>
+        <YourMoveChip moves={props.detail.yourMoves} />
       </div>
       {placement && (
         <div className="mt-1.5">
