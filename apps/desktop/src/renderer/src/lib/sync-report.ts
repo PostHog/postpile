@@ -21,7 +21,7 @@ export function durationLabel(report: SyncReport): string {
 }
 
 // Same order as SYNC_PHASES in core; the renderer imports types only.
-const PHASE_ORDER: SyncPhase[] = ['fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
+const PHASE_ORDER: SyncPhase[] = ['fetch', 'tidy', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
 
 /** "fetch 12.3s · topics 8.0s", in sync order. Empty for old reports without timings. */
 export function phaseTimingsLine(timings: SyncPhaseTimings | undefined): string {

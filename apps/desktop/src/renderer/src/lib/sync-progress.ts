@@ -15,6 +15,7 @@ export function elapsedLabel(startedAt: string, now: Date): string {
 
 const PHASE_WORDS: Record<SyncPhase, string> = {
   fetch: 'fetching GitHub',
+  tidy: 'tidying topics',
   topics: 'sorting topics',
   dossiers: 'dossiers',
   facts: 'facts',

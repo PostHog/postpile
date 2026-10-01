@@ -45,7 +45,13 @@ export class Digester {
   async run(jobs: AgentJob[]): Promise<void> {
     // Once after an upgrade that changed how topics are cut, before the assignment places the PRs it split out.
     await this.job(jobs, 'topics', 'topics', async () => {
-      await new TopicTidy(this.deps).runOnce();
+      // Its own phase when the agent call runs, so the app can cover the window while topics move under it.
+      const tidy = new TopicTidy(this.deps);
+      if (tidy.callsAgent()) {
+        await this.phases.time('tidy', () => tidy.runOnce());
+      } else {
+        await tidy.runOnce();
+      }
       await new TopicAssigner(this.deps).run();
     });
     const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps, { withGlances: jobs.includes('glances'), withSets: jobs.includes('sets') && jobs.includes('glances') }).start() : NO_DOSSIERS;

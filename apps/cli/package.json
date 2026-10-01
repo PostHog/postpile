@@ -1,6 +1,6 @@
 {
   "name": "@postpile/cli",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "PostPile dev CLI: sync, poll, sweep and read topics from the terminal",
   "private": true,
   "license": "MIT",

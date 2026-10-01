@@ -54,6 +54,17 @@ describe('topic tidy after an upgrade', () => {
     expect(report.agentCallStats.byKind.topic_tidy).toBeUndefined();
   });
 
+  it('times the tidy as its own sync phase, so the app can cover the window', async () => {
+    const { h } = tidyHarness();
+    h.runner.answer('topic_tidy', {});
+
+    const first = await h.engine.sync({ agentJobs: ['topics'] });
+    const second = await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(first.phaseMs?.tidy).toBeDefined();
+    expect(second.phaseMs?.tidy).toBeUndefined();
+  });
+
   it('moves split PRs where the answer says, a new topic or an existing one', async () => {
     const { h, prs } = tidyHarness();
     h.runner.answer('topic_tidy', {

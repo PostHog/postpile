@@ -56,6 +56,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       forceSetup: process.env.POSTPILE_FAKE_SETUP === '1',
       missingTools: fakeToolProblems(process.env.POSTPILE_FAKE_MISSING),
       quota: fakeQuotaLevel(process.env.POSTPILE_FAKE_QUOTA),
+      tidyOnFirstSync: process.env.POSTPILE_FAKE_TIDY === '1',
     });
   }
   if (options.migrateLegacy ?? true) {
