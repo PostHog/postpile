@@ -142,6 +142,8 @@ export class GitHubSync {
     private readonly textLog: (line: string) => void = () => {},
     /** Threads a clicked mark-read is deciding again (ClickedReadRetry): the inbox leaves their rows alone meanwhile. */
     private readonly heldThreads: ReadonlySet<string> = new Set(),
+    /** Threads of clicked mark-reads still in their undo window or being sent (MarkReadQueue): read here already, not yet on GitHub. */
+    private readonly queuedThreads: () => ReadonlySet<string> = () => new Set(),
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.teamMembers = new TeamMembers(store, reader, now);
@@ -268,6 +270,8 @@ export class GitHubSync {
    */
   private async syncNotifications(origin: 'sync' | 'poll', looked: NotificationThread[] = []): Promise<NotificationsSync> {
     const startedAt = this.now().toISOString();
+    // Taken before the request too: a send that lands while it runs leaves the queue, but the answer can still list its thread unread.
+    const queuedAtStart = this.queuedThreads();
     const result = await this.reader.listNotifications({
       etag: this.store.meta.get(ETAG_KEY),
       lastModified: this.store.meta.get(LAST_MODIFIED_KEY),
@@ -289,7 +293,13 @@ export class GitHubSync {
       .filter((stored) => inbox !== null || readById.get(stored.id)?.unread === false);
     const readAt = await this.readTimes(readElsewhere, readById);
     // A held thread keeps its row until the clicked mark-read's retry writes what GitHub says.
-    const notHeld = (threads: NotificationThread[]) => threads.filter((thread) => !this.heldThreads.has(thread.id));
+    // A queued one is read here while GitHub still lists it unread until the write lands: only
+    // newer activity or a read elsewhere replaces its row, never the same unread row again.
+    const queued = new Set([...queuedAtStart, ...this.queuedThreads()]);
+    const storedById = new Map(this.threads().map((stored) => [stored.id, stored]));
+    const staleUnread = (thread: NotificationThread) =>
+      queued.has(thread.id) && thread.unread && thread.updatedAt <= (storedById.get(thread.id)?.updatedAt ?? '');
+    const notHeld = (threads: NotificationThread[]) => threads.filter((thread) => !this.heldThreads.has(thread.id) && !staleUnread(thread));
     this.store.transaction(() => {
       this.store.notifications.upsertMany(notHeld([...readById.values()]));
       if (!result.notModified) {

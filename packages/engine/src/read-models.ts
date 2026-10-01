@@ -84,6 +84,7 @@ import type { PromptContextSource } from './prompt-context.ts';
 import { pingClickTargetOnBoard } from './live/ping-target.ts';
 import { loadRepoSettings } from './repo-settings.ts';
 import { loadViewer } from './viewer-meta.ts';
+import { OpenedReadInputs } from './writes/opened-read-inputs.ts';
 import type { PendingWrites } from './writes/pending-writes.ts';
 
 function isUnsortedTopic(topicId: string): boolean {
@@ -209,6 +210,7 @@ export class ReadModels {
     tileUnread: boolean,
     wanted: Set<PrKey>,
     pending: Map<PrKey, TilePendingWrite>,
+    opened: OpenedReadInputs,
   ): PrSummaryInput[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
     return tile.members.flatMap((member, index): PrSummaryInput[] => {
@@ -237,6 +239,7 @@ export class ReadModels {
           lastReadAt: board.threads.get(pr.key)?.lastReadAt ?? null,
           now: board.now,
           pendingWrite: pending.get(pr.key) ?? null,
+          opened: opened.of(pr.key),
         },
       ];
     });
@@ -252,10 +255,11 @@ export class ReadModels {
     const pending = this.pendingWrites.byPrKey();
     const baseRepo = labelBaseRepo(tiles.flatMap(memberKeys), settings);
     const orgs = viewerOrgs(viewer?.teams ?? []);
+    const opened = new OpenedReadInputs(board, this.store);
     const views = tiles.map((tile): TileView => {
       const labels = tileRepoLabels(memberKeys(tile), baseRepo, orgs);
       const state = board.stateOf(tile);
-      const rows = this.prSummaryInputs(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted, pending);
+      const rows = this.prSummaryInputs(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted, pending, opened);
       return buildTileView({
         tile,
         state,

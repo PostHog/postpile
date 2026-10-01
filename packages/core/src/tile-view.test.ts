@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeEvent, makePr, makeUserState, NO_PR_FACTS, viewer } from './fixtures.ts';
+import { at, makeEvent, makePr, makeUserState, NO_OPENED_READ, NO_OPENED_READ_INPUT, NO_PR_FACTS, viewer } from './fixtures.ts';
 import { buildPrSummary, tileUnreadPrKeys, type PrSummaryInput } from './tile-view.ts';
 import type { Pr, PrEvent, TileMember, TileState } from './types.ts';
 import type { PrSummary } from './views.ts';
@@ -25,6 +25,7 @@ function summaryInput(pr: Pr, events: PrEvent[], overrides: Partial<PrSummaryInp
     lastReadAt: null,
     now: at(100),
     pendingWrite: null,
+    opened: NO_OPENED_READ_INPUT,
     ...overrides,
   };
 }
@@ -95,6 +96,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
     turn: { kind: 'none', who: null, what: '', prKey: null },
     facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
+    openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(number),
     quietRepo: false,

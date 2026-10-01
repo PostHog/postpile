@@ -376,11 +376,12 @@ export class Engine implements EngineService {
       this.quota,
       deps.syncLog ?? ((line) => console.log(line)),
       this.heldThreads,
+      () => deps.markReadQueue.threadIds(),
     );
     this.github = github;
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
-    this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
+    this.quietReads = new QuietReads(store, deps.reader, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog, () => this.syncCompletedListener?.());
     this.consolidationRun = new ConsolidationRun(runDeps);
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
@@ -820,7 +821,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.syncsDone + this.clickedReadRetry.decided(),
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),

@@ -12,6 +12,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Fixed
 
 - Clicking a Mac notification opens the right tile again, even after topics were tidied or merged since the ping, and even while a filter, the search or the repo menu hides that topic. The filters stay as they were.
+- Approving a PR no longer flips it back to unread a moment later, and the sidebar's unread count and dot clear once the mark-read reaches GitHub.
+- Opening a PR that shows "Marks read when you leave" now really marks it read. It failed for about half of unread PRs, whose stored snapshot was cut off at the query's limits; the button now only shows when the mark will happen.
 
 ## 0.13.1 (2026-10-01)
 

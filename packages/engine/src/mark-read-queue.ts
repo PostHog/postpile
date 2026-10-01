@@ -125,6 +125,8 @@ export class MarkReadQueue {
   private flushing = false;
   /** Decides a thread skipped for newer activity again; set by the engine, which owns the refresh. */
   private retry: ClickedReadRetry | null = null;
+  /** How often a thread GitHub has read was mirrored locally (`onMarked`), so the renderer refetches. */
+  private mirrors = 0;
 
   constructor(
     private readonly writes: GitHubWrites,
@@ -147,6 +149,12 @@ export class MarkReadQueue {
     return this.writes.enabled();
   }
 
+  /** Mirrors a thread GitHub has read locally and counts it. */
+  private markedLocally(threadId: string, readAt: IsoTime): void {
+    this.onMarked(threadId, readAt);
+    this.mirrors += 1;
+  }
+
   /** Every batch comes from a user's click, so a skip for newer activity gets a refresh and a second decision. */
   retryWith(retry: ClickedReadRetry): void {
     this.retry = retry;
@@ -158,7 +166,7 @@ export class MarkReadQueue {
       this.writes.log.record({ action: 'mark_read', threadId: thread.id, ...logContext, outcome, detail });
     const result = await markThreadReadIfUnchanged(this.reader, this.writes, thread, logContext);
     if (result.kind === 'already_read') {
-      this.onMarked(thread.id, result.lastReadAt ?? thread.updatedAt);
+      this.markedLocally(thread.id, result.lastReadAt ?? thread.updatedAt);
       log('observed', 'already read on GitHub');
       return { kind: 'observed' };
     }
@@ -173,7 +181,7 @@ export class MarkReadQueue {
     if (result.kind === 'off') {
       return { kind: 'off' };
     }
-    this.onMarked(thread.id, result.readAt);
+    this.markedLocally(thread.id, result.readAt);
     return { kind: 'sent' };
   }
 
@@ -268,6 +276,20 @@ export class MarkReadQueue {
 
   pending(): PendingBatch[] {
     return this.queue.pending().map(toPending);
+  }
+
+  /**
+   * Threads of batches not finished yet: waiting out the undo window, or
+   * being sent. They are read locally already, so a sync must not put them
+   * back to unread from an inbox that still lists them.
+   */
+  threadIds(): Set<string> {
+    return new Set(this.queue.unfinished().flatMap((payload) => payload.threads.map((thread) => thread.id)));
+  }
+
+  /** Counts every local mirror of a thread GitHub has read; part of the poll's change count. */
+  mirrored(): number {
+    return this.mirrors;
   }
 
   /** Returns and forgets what happened to sent batches that the user should know about. */

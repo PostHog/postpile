@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { agentApproveRefusal, agentPrFacts, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
-import { at, makePr, makeReview, singleTile, viewer } from './fixtures.ts';
+import { at, makePr, makeReview, NO_OPENED_READ_INPUT, singleTile, viewer } from './fixtures.ts';
 import { buildPrSummary, buildTileView, type PrSummaryInput } from './tile-view.ts';
 import type { Glance, Pr, PrEvent, PrKey, Tile, TileState, UserPrState, Verdict } from './types.ts';
 import type { TileView } from './views.ts';
@@ -38,6 +38,7 @@ function rowInput(spec: RowSpec, state: TileState): PrSummaryInput {
     lastReadAt: null,
     now: at(100),
     pendingWrite: null,
+    opened: NO_OPENED_READ_INPUT,
   };
 }
 

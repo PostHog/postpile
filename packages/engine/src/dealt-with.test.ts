@@ -238,6 +238,52 @@ describe('You already dealt with it: opening a PR in PostPile marks its thread r
     expect(h.store.userPrStates.get(pr.key)?.handledAt ?? null).toBeNull();
   });
 
+  /** The opened-read verdict on the PR's row, as the detail pane reads it. */
+  async function rowVerdict(h: Harness, prKey: string) {
+    const detail = await h.engine.getTopic('t');
+    return detail?.tiles.flatMap((view) => view.prs).find((row) => row.key === prKey)?.openedRead;
+  }
+
+  it('marks a fresh truncated snapshot when no list hit our caps (only GitHub counted more)', async () => {
+    const pr = { ...followedPr(), truncated: true, capHits: [] };
+    const h = await syncedTopic(pr);
+    expect(await rowVerdict(h, pr.key)).toEqual({ kind: 'mark' });
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: true });
+
+    expect(h.writer.calls).toEqual(['markThreadRead thread-3']);
+  });
+
+  it('skips a fresh snapshot our caps cut inside the unread interval: the detail pane missed it too', async () => {
+    const pr = { ...followedPr(), truncated: true, capHits: [{ list: 'comments' as const, nodes: 100, oldestAt: at(10) }] };
+    const h = await syncedTopic(pr);
+    expect(await rowVerdict(h, pr.key)).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
+
+    expect(h.writer.calls).toEqual([]);
+  });
+
+  it('skips a stale snapshot, logs why, and the row says so before anyone asks', async () => {
+    const lines: string[] = [];
+    const pr = followedPr();
+    const h = makeHarness({ writesEnabled: false, syncLog: (line) => lines.push(line) });
+    topicWithPrs(h, 't', [pr]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    await h.engine.setGitHubWrites(true);
+    // The thread moved after the snapshot was fetched (NOW): the user has not seen the newest activity.
+    const thread = h.store.notifications.getByPrKeys([pr.key]).get(pr.key)!;
+    h.store.notifications.upsertMany([{ ...thread, updatedAt: '2026-09-02T12:30:00.000Z' }]);
+    expect(await rowVerdict(h, pr.key)).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
+
+    expect(h.writer.calls).toEqual([]);
+    expect(lines.filter((line) => line.startsWith('opened read of'))).toEqual([
+      `opened read of ${pr.key} skipped: stale_snapshot (snapshot fetched 2026-09-02T12:00:00.000Z, thread updated 2026-09-02T12:30:00.000Z)`,
+    ]);
+  });
+
   it('never marks a snoozed tile', async () => {
     const pr = followedPr();
     const h = await syncedTopic(pr);

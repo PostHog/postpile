@@ -2884,6 +2884,20 @@ review from alice"). While it decides the thread is held: the inbox leaves
 its row alone, so the tile never turns unread in between. Not on quit. The
 quiet reads keep their own rules.
 
+**A poll inside the undo window** (2026-10-01). Approve queues a mark-read
+and starts a refresh poll right away, inside the 6s window. GitHub still
+lists the thread unread until the queued write lands, and the poll stored
+that row, so the PR went back to unread; the later mirror of the write
+fixed the database but did not move the live status' `changeCount`, so a
+sidebar that was open kept its unread count and dot. Now a thread of a
+batch still queued or being sent (`MarkReadQueue.threadIds`) keeps its
+local read row against the same unread row from the inbox. The queued set
+is taken before the inbox request and again after it, so a send that lands
+while the request runs cannot let the stale unread answer through. Newer
+activity (a later `updated_at`) or a read elsewhere still replaces it, as
+above.
+Every mirror of a write that landed also counts into `changeCount`.
+
 **One door.** `GitHubWrites` is the only thing in the engine that calls the
 writer: approve, comment and the mark-read queue go through it. Every call
 asks the switch and writes an `action_log` row (reached GitHub, failed with
@@ -3590,6 +3604,19 @@ Merging or closing counts only when the viewer did it.
      have seen newer activity). A PR only in a finished topic has no tile
      and is left, and so is a PR without a thread (a found PR): nothing on
      GitHub to mirror.
+   - 2026-10-01: a truncated snapshot no longer blocks the open by
+     itself. When no list hit PostPile's own caps (empty `capHits`: only
+     GitHub's total counted more), the detail pane missed nothing and the
+     open marks. When our caps did cut something, it marks only if what
+     fell off is older than GitHub's read time (`cutSnapshotCovers`):
+     otherwise the pane the user looked at missed that activity too.
+     Before, any truncated snapshot counted as stale, and about half of
+     unread PRs (46 of 87, 43 with empty `capHits`) showed "Marks read when
+     you leave" and then marked nothing. Each row now
+     carries the server's verdict (`PrSummary.openedRead`, gathered by the
+     engine's `OpenedReadInputs`, the same inputs `markOpened` reads), and
+     the renderer asks only when it is not a skip and writes are on. A
+     skip on the server logs one line with the reason.
    - A thread GitHub has read already (an earlier open, a github.com visit)
      gets only the PostPile side: the PR is handled, a `local` action log
      row (origin `quiet`, detail "no unread GitHub thread") is written,
