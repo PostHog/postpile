@@ -282,7 +282,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - Numbers, PR numbers, ids and ages use `font-mono` (JetBrains Mono, bundled
   in `styles/fonts/`, no network). UI text uses the system font.
 - Plain CSS in `app.css` only for things Tailwind can't say well: the
-  `.drag-region` for the title bar, base `html/body` rules.
+  `.drag-region` for the title bar, base `html/body` rules, `.pane-scroll`.
+- Every pane-level scroll area (sidebar, tile column, detail pane, chat,
+  full-width panes) carries `pane-scroll`: it reserves the 10px scrollbar
+  gutter at all times, so a pane does not jump sideways when its content
+  starts or stops overflowing. Small inner lists (pickers, menus, diffs) do
+  not need it.
 
 ## Missing tools (gh, claude)
 

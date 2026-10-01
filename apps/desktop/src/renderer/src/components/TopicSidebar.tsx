@@ -375,7 +375,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       </div>
     );
   return (
-    <nav aria-label="Topics" className="flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar px-2.5 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
+    <nav aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar px-2.5 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}

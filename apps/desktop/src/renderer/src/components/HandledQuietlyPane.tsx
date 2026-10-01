@@ -50,7 +50,7 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
   const now = useNow();
   const items = quiet.data ?? [];
   return (
-    <main className="col-span-2 flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">
+    <main className="pane-scroll col-span-2 flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Handled quietly</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">

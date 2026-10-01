@@ -66,7 +66,7 @@ export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void
   const setup = useSetupStatus();
   const data = instructions.data;
   return (
-    <main className="flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">
+    <main className="pane-scroll flex min-w-0 flex-col gap-[18px] overflow-auto px-[26px] py-[22px]">
       <div className="flex flex-col gap-1.5">
         <div className="flex max-w-[680px] items-center gap-3">
           <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Your instructions</h1>
