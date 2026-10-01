@@ -17,6 +17,8 @@ interface TileGridProps {
   /** The user's last choice on the Dealt with group (open or closed), kept for the session; folded by default. */
   dealtWithOpen: boolean;
   onDealtWithOpen: (open: boolean) => void;
+  /** Core's per-group your-move counts match what the groups show: no search filter, no tile held outside its group. */
+  showYourMove: boolean;
 }
 
 /** Group names on screen. "Dealt with" is the tile state `done`; a finished topic stays "Finished". */
@@ -24,6 +26,24 @@ const GROUP_LABELS: Record<TileGroup, string> = { unread: 'Unread', open: 'Open'
 
 function TileCount(props: { count: number }) {
   return <span className="font-mono text-[10.5px] font-semibold text-hint tabular-nums">{props.count}</span>;
+}
+
+/**
+ * "· 2 your move" after the count, in the honey of the sidebar's chip; core
+ * counts it (`TopicDetail.groupYourMoves`). Nothing at 0, and nothing while
+ * the search filters the grid or a held tile sits outside its core group:
+ * the count is for the groups as core sees them.
+ */
+function YourMoveCount(props: { count: number }) {
+  if (props.count === 0) {
+    return null;
+  }
+  return (
+    <span className="font-semibold text-honey-ink">
+      <span aria-hidden="true">· </span>
+      <span className="font-mono text-[10.5px] tabular-nums">{props.count}</span> your move
+    </span>
+  );
 }
 
 /**
@@ -73,6 +93,7 @@ function GroupSection(props: TileGridProps & { group: TileGroup; views: TileView
         )}
         {GROUP_LABELS[props.group]}
         <TileCount count={props.views.length} />
+        <YourMoveCount count={props.showYourMove ? props.detail.groupYourMoves[props.group] : 0} />
       </h3>
       <Grid {...props} />
     </section>
@@ -134,10 +155,13 @@ function tileId(view: TileView): string {
  * the opened mark, a sync), until the selection moves ("Marked when you move
  * on", `useHeldPlace`); its look changes right away.
  */
-export function TileGrid(props: TileGridProps) {
+export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
   const matching = props.matchingTileIds;
   const tiles = matching ? props.detail.tiles.filter((view) => matching.has(view.tile.id)) : props.detail.tiles;
   const groups = useHeldPlace(props.selectedTileId, props.selectedTileId, gridGroups(tiles), tileId).filter((bucket) => bucket.items.length > 0);
+  // A held tile shows in a group other than its core one; core's counts would then disagree with the headings.
+  const held = groups.some((bucket) => bucket.items.some((view) => view.group !== bucket.key));
+  const showYourMove = matching === null && !held;
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 pt-[13px] shadow-[inset_0_1px_0_var(--hairline)]">
@@ -165,9 +189,9 @@ export function TileGrid(props: TileGridProps) {
       )}
       {groups.map((bucket) =>
         bucket.key === 'dealt_with' ? (
-          <DealtWithGroup key={bucket.key} {...props} views={bucket.items} />
+          <DealtWithGroup key={bucket.key} {...props} showYourMove={showYourMove} views={bucket.items} />
         ) : (
-          <GroupSection key={bucket.key} {...props} group={bucket.key as TileGroup} views={bucket.items} />
+          <GroupSection key={bucket.key} {...props} showYourMove={showYourMove} group={bucket.key as TileGroup} views={bucket.items} />
         ),
       )}
     </div>

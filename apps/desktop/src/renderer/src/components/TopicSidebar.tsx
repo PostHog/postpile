@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { PrTier, TopicListItem, TopicMove, TopicPerson, ViewerView } from '@postpile/core';
+import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
@@ -11,10 +11,10 @@ import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { teamPill } from '../lib/faces.ts';
 import { UnreadDot } from './pills.tsx';
-import { yourMoveChip } from '../lib/your-move.ts';
 import { Avatar } from './Avatar.tsx';
 import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon, PrStateIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
+import { YourMoveChip } from './YourMoveChip.tsx';
 import { InboxCleanup } from './InboxCleanup.tsx';
 
 /**
@@ -109,26 +109,6 @@ function FaceStack(props: { people: TopicPerson[]; tone: RowTone }) {
           ))}
         </span>
       )}
-    </span>
-  );
-}
-
-/**
- * "Reply +2" in the warm-reach honey: the most urgent of the user's moves on
- * live tiles, plus how many more; the tooltip lists them all. Each topic
- * shows once, so the chip is where the row hints at what else is inside.
- */
-function YourMoveChip(props: { moves: TopicMove[] }) {
-  const chip = yourMoveChip(props.moves);
-  if (chip === null) {
-    return null;
-  }
-  return (
-    <span
-      title={chip.title}
-      className="flex h-[15px] shrink-0 items-center rounded bg-honey-soft px-[5px] text-[9.5px] font-semibold whitespace-nowrap text-honey-ink inset-ring inset-ring-honey-ink/10"
-    >
-      {chip.label}
     </span>
   );
 }

@@ -1091,6 +1091,11 @@ the app meanwhile.
   faces" › "The verdict pill shows the tile's worst glance"): the worst
   glance among the tile's open tracked PRs, not the lead PR's. No row
   glyphs, no "N of M", no topic header roll-up.
+- **Your move in the topic header and group headings** (2026-10-01,
+  DESIGN.md "Your move in the header and the group headings"): the header
+  shows the sidebar's chip, group headings add "· N your move", both counted
+  by core. The headings drop the your-move part while search filters or a
+  tile is held outside its group.
 - **Topics with: the sidebar filter** (2026-10-01, DESIGN.md "Topics with:
   the sidebar filter"): one "Topics with any PR | my PRs | team PRs" switch
   replaces Mine / Team / Reply / Review; sections stay while it narrows; a

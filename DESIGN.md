@@ -2681,6 +2681,17 @@ avatars and filters", QueuesB2).
   move". Because each topic now shows once, the chip is where the row hints
   at what else is inside. The grey "merged without you" chip stays next to
   it.
+- **Your move in the header and the group headings** (2026-10-01): the
+  topic header ends its pills with the same `YourMoveChip` as the sidebar
+  row, and a group heading reads "Open 4 · 2 your move", the second part in
+  honey ink and only above 0. Core decides both: `TopicDetail.yourMoves`
+  (`topicYourMoves`, the `topicUrgency` rule on live tiles) and
+  `TopicDetail.groupYourMoves` (`yourMovesByGroup`, live tiles per group,
+  snoozed and done left out), so a snoozed tile adds to the group's count
+  but not to its your-move part. While the search filters the grid, or
+  a selected tile is held outside its core group (`useHeldPlace`), the
+  headings drop the your-move part: its numbers are for the groups as core
+  sees them, and the tile counts are not. The tile footer keeps its dot and "Your move" text.
 - **No counts on section headers** (2026-09-28, later the same day):
   Julian read the PR counts on headers and rows as unread counts, and how
   many PRs a queue holds does not matter. Section and group headers show
