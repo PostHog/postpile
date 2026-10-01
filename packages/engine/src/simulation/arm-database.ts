@@ -2,8 +2,19 @@
 // fresh-start copy with every PR snapshot hidden, then each round reveals
 // the next batch from the full fresh-start copy, as a capped sync would
 // fetch it.
-import type { SimulationRound } from '@postpile/core';
+import { newTopic, type IsoTime, type SimulationRound, type Topic, type TopicMembership } from '@postpile/core';
 import { Store } from '@postpile/store';
+import { changeTopicStatus } from '../topic-status.ts';
+
+/** The leader arm's topics and memberships, read without writing to its file. */
+function readTopicAssignment(path: string): { topics: Topic[]; memberships: TopicMembership[] } {
+  const leader = Store.openReadOnly(path);
+  try {
+    return { topics: leader.topics.list(), memberships: leader.memberships.listAll() };
+  } finally {
+    leader.close();
+  }
+}
 
 export class ArmDatabase {
   private constructor(
@@ -72,31 +83,37 @@ export class ArmDatabase {
   /**
    * Takes the leader arm's topic assignment, so every arm digests the same
    * topics: memberships are replaced to match, and a retired topic that got
-   * a PR comes back, as the assignment does in the leader. A topic new here
-   * gets the leader's id and name only, as the assignment creates it
-   * (`newTopic`): the leader's dossiers already wrote summary, area, driver
-   * and role into its row this round, and those are this arm's to write. An
-   * existing row stays as this arm's dossiers left it.
+   * a PR comes back, as the assignment does in the leader.
+   *
+   * A topic new here is one the leader's assignment created this round
+   * (every earlier one came over in an earlier round), so it is created the
+   * same way (`newTopic`), with the leader's id, name and time: active, as
+   * the leader's digest saw it. The leader's row is not copied: its dossiers
+   * already wrote summary, area, driver and role into it, and those are this
+   * arm's to write. Its status is the leader's after the round's retire step,
+   * which this arm runs for itself after its own digest. An existing row
+   * stays as this arm's dossiers left it.
    */
-  copyTopicsFrom(leaderPath: string): void {
-    this.withSource(leaderPath, () => {
-      const db = this.store.db;
-      db.exec(
-        `INSERT INTO main.topic
-           (id, name, summary, summary_input_hash, tailoring, driver, user_role, status, retired_at, area, created_at, updated_at)
-         SELECT id, name, '', NULL, '', NULL, 'watcher', 'active', NULL, NULL, created_at, created_at FROM source.topic
-         WHERE id NOT IN (SELECT id FROM main.topic)`,
-      );
-      db.exec(
-        `UPDATE main.topic SET status = 'active', retired_at = NULL
-         WHERE status = 'retired' AND id IN (
-           SELECT l.topic_id FROM source.topic_membership l
-           LEFT JOIN main.topic_membership m ON m.pr_key = l.pr_key
-           WHERE m.pr_key IS NULL OR m.topic_id != l.topic_id
-         )`,
-      );
-      db.exec('DELETE FROM main.topic_membership');
-      db.exec('INSERT INTO main.topic_membership SELECT * FROM source.topic_membership');
+  copyTopicsFrom(leaderPath: string, at: IsoTime): void {
+    const leader = readTopicAssignment(leaderPath);
+    const store = this.store;
+    store.transaction(() => {
+      for (const topic of leader.topics) {
+        if (store.topics.get(topic.id) === null) {
+          store.topics.create(newTopic(topic.id, topic.name, topic.createdAt));
+        }
+      }
+      for (const membership of leader.memberships) {
+        if (store.memberships.get(membership.prKey)?.topicId !== membership.topicId) {
+          changeTopicStatus(store, membership.topicId, 'revive', at);
+        }
+      }
+      for (const own of store.memberships.listAll()) {
+        store.memberships.remove(own.prKey);
+      }
+      for (const membership of leader.memberships) {
+        store.memberships.assign(membership);
+      }
     });
   }
 }

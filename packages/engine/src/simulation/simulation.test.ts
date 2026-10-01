@@ -1,7 +1,9 @@
-import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { newTopic } from '@postpile/core';
 import { makeThreadFor } from '@postpile/core/fixtures';
 import { Store } from '@postpile/store';
 import { contextHashKey } from '../digest/dossiers.ts';
@@ -14,7 +16,7 @@ import { makeHarness, type Harness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
 import { makeTopic, topicWithPrs } from '../testing/topics.ts';
 import { ArmDatabase } from './arm-database.ts';
-import { AGENT_META_PREFIXES, KEPT_TABLES, startFresh, WIPED_TABLES } from './fresh-start.ts';
+import { AGENT_META_PREFIXES, checkSimulationSource, KEPT_TABLES, startFresh, WIPED_TABLES } from './fresh-start.ts';
 import { readArmSnapshot } from './snapshot.ts';
 
 const PR1 = reviewRequestedPr(1);
@@ -23,6 +25,10 @@ const PR3 = reviewRequestedPr(3);
 
 function count(store: Store, table: string): number {
   return (store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+}
+
+function fileHash(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
 let dir: string;
@@ -131,22 +137,38 @@ describe('ArmDatabase', () => {
     copyFileSync(base, join(dir, 'follower.sqlite'));
     const leader = Store.open(join(dir, 'leader.sqlite'));
     leader.topics.create(makeTopic('ci', { summary: 'leader summary' }));
-    leader.topics.create(makeTopic('docs', { summary: 'leader dossier summary', area: 'Docs', driver: 'alice', userRole: 'reviewer' }));
+    leader.topics.create(makeTopic('docs', { summary: 'leader dossier summary', area: 'Docs', driver: 'alice', userRole: 'reviewer', createdAt: '2026-09-02T11:00:00.000Z' }));
+    // Created this round and retired by the leader's retire step after its digest.
+    leader.topics.create(makeTopic('release', { status: 'retired', retiredAt: '2026-09-02T12:00:00.000Z', createdAt: '2026-09-02T11:00:00.000Z' }));
     leader.memberships.assign({ prKey: PR1.key, topicId: 'ci', assignedBy: 'agent', reason: 'CI work', createdAt: '2026-09-02T12:00:00Z' });
     leader.memberships.assign({ prKey: PR3.key, topicId: 'docs', assignedBy: 'agent', reason: 'docs', createdAt: '2026-09-02T12:00:00Z' });
     leader.close();
+    const leaderBefore = fileHash(join(dir, 'leader.sqlite'));
     const follower = ArmDatabase.open(join(dir, 'follower.sqlite'));
     follower.store.topics.create(makeTopic('ci', { summary: 'own summary', status: 'retired', retiredAt: '2026-09-01T00:00:00Z' }));
 
-    follower.copyTopicsFrom(join(dir, 'leader.sqlite'));
+    follower.copyTopicsFrom(join(dir, 'leader.sqlite'), '2026-09-02T13:00:00.000Z');
 
     expect(follower.store.topics.get('ci')).toMatchObject({ summary: 'own summary', status: 'active', retiredAt: null });
-    expect(follower.store.topics.get('docs')).toMatchObject({ name: 'docs', summary: '', area: null, driver: null, userRole: 'watcher', status: 'active' });
+    expect(follower.store.topics.get('docs')).toEqual(newTopic('docs', 'docs', '2026-09-02T11:00:00.000Z'));
+    expect(follower.store.topics.get('release')).toEqual(newTopic('release', 'release', '2026-09-02T11:00:00.000Z'));
     expect(follower.store.memberships.listAll().map((m) => [m.prKey, m.topicId])).toEqual([
       [PR1.key, 'ci'],
       [PR3.key, 'docs'],
     ]);
     follower.close();
+    expect(fileHash(join(dir, 'leader.sqlite'))).toBe(leaderBefore);
+  });
+});
+
+describe('checkSimulationSource', () => {
+  it('refuses a database that never synced, takes one that did', async () => {
+    const empty = Store.open(join(dir, 'empty.sqlite'));
+    expect(() => checkSimulationSource(empty)).toThrow('synced at least once');
+    empty.close();
+    const h = await syncedHarness();
+    expect(() => checkSimulationSource(h.store)).not.toThrow();
+    h.store.close();
   });
 });
 
@@ -159,7 +181,7 @@ describe('digestStored', () => {
     const inboxReads = h.reader.notificationCalls;
     expect(count(h.store, 'pr_glance')).toBe(0);
 
-    const report = await h.engine.digestStored({ prKeys: [PR1.key, PR2.key], agentJobs: ['dossiers', 'glances'] });
+    const report = await h.engine.digestStored({ prKeys: [PR1.key, PR2.key], pingedKeys: [PR1.key, PR2.key], agentJobs: ['dossiers', 'glances'] });
 
     expect(report.agentCalls).toBeGreaterThan(0);
     expect(count(h.store, 'pr_glance')).toBe(2);
@@ -171,6 +193,46 @@ describe('digestStored', () => {
     expect(snapshot.topics[0]!.tiles.map((tile) => tile.members)).toEqual(expect.arrayContaining([[PR1.key], [PR2.key]]));
     expect(Object.keys(snapshot.glances).sort()).toEqual([PR1.key, PR2.key].sort());
     expect(snapshot.setChanges).toEqual([]);
+    h.store.close();
+  });
+
+  it('counts events as new only for the pinged PRs, as a sync does for found PRs and stack layers', async () => {
+    const h = makeHarness({ store: Store.open(join(dir, 'source.sqlite')) });
+    topicWithPrs(h, 'ci', [PR1, PR2]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const report = await h.engine.digestStored({ prKeys: [PR1.key, PR2.key], pingedKeys: [PR1.key], maxAgentCalls: 0 });
+
+    expect(report.prsFetched).toBe(2);
+    expect(report.newEvents).toBe(h.store.events.listForPr(PR1.key).length);
+    expect(report.newEvents).toBeGreaterThan(0);
+    h.store.close();
+  });
+
+  it('records a failure in the report instead of throwing', async () => {
+    const h = makeHarness({ store: Store.open(join(dir, 'source.sqlite')) });
+    topicWithPrs(h, 'ci', [PR1]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.meta.delete('viewer');
+
+    const report = await h.engine.digestStored({ prKeys: [PR1.key], pingedKeys: [PR1.key] });
+
+    expect(report.errors).toEqual(['digest: no viewer stored: digestStored needs a database that synced once']);
+    h.store.close();
+  });
+
+  it('folds agent-off errors into one agentOff line, as a sync does', async () => {
+    const h = makeHarness({ store: Store.open(join(dir, 'source.sqlite')) });
+    topicWithPrs(h, 'ci', [PR1]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.agent.answerDossier(() => {
+      throw new Error('Agent features are off: usage limit reached');
+    });
+
+    const report = await h.engine.digestStored({ prKeys: [PR1.key], pingedKeys: [PR1.key], agentJobs: ['dossiers'] });
+
+    expect(report.errors).toEqual([]);
+    expect(report.agentOff).toBe('Agent features are off');
     h.store.close();
   });
 });

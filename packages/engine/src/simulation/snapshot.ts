@@ -85,8 +85,16 @@ function readTopics(store: Store, now: IsoTime): SnapshotTopic[] {
 }
 
 function readGlances(store: Store): Record<PrKey, SnapshotGlance> {
-  const rows = store.db.prepare('SELECT pr_key, verdict, risk FROM pr_glance ORDER BY pr_key').all() as { pr_key: string; verdict: string; risk: string }[];
-  return Object.fromEntries(rows.map((row) => [row.pr_key, { verdict: row.verdict, risk: row.risk }]));
+  const keys = store.prs.listAll().map((pr) => pr.key).sort();
+  const glances = store.glances.getMany(keys);
+  const result: Record<PrKey, SnapshotGlance> = {};
+  for (const key of keys) {
+    const glance = glances.get(key);
+    if (glance) {
+      result[key] = { verdict: glance.verdict, risk: glance.risk };
+    }
+  }
+  return result;
 }
 
 function readDossiers(store: Store): Record<string, SnapshotDossier> {
@@ -99,6 +107,7 @@ function readDossiers(store: Store): Record<string, SnapshotDossier> {
 }
 
 function readCalls(store: Store, since: IsoTime): SnapshotCall[] {
+  // Raw SQL: the agent call repo has no list of rows, only counts and stats.
   const rows = store.db.prepare('SELECT kind, ok, duration_ms, cost_usd FROM agent_call WHERE at >= ? ORDER BY id').all(since) as unknown as CallRow[];
   return rows.map((row) => ({ kind: row.kind, ok: row.ok !== 0, durationMs: row.duration_ms, costUsd: row.cost_usd }));
 }
@@ -107,6 +116,7 @@ function readSetChanges(store: Store, since: IsoTime): SnapshotSetChange[] | nul
   if (!tableExists(store, 'pr_set_change')) {
     return null;
   }
+  // Raw SQL: the set repo lists changes per topic only, not across topics by time.
   const rows = store.db.prepare('SELECT set_id, topic_id, pr_key, change, reason, "by", at FROM pr_set_change WHERE at >= ? ORDER BY at').all(since) as unknown as SetChangeRow[];
   return rows.map((row) => ({ setId: row.set_id, topicId: row.topic_id, prKey: row.pr_key, change: row.change, reason: row.reason, by: row.by, at: row.at }));
 }

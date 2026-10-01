@@ -16,8 +16,13 @@ function input(overrides: Partial<SimulationInput>): SimulationInput {
 
 describe('simulationNow', () => {
   it('is the newest time, null for none', () => {
-    expect(simulationNow(['2026-09-20T00:00:00Z', '2026-09-28T00:00:00Z', '2026-09-21T00:00:00Z'])).toBe('2026-09-28T00:00:00Z');
+    expect(simulationNow(['2026-09-20T00:00:00Z', '2026-09-28T00:00:00Z', '2026-09-21T00:00:00Z'])).toBe('2026-09-28T00:00:00.000Z');
     expect(simulationNow([])).toBeNull();
+  });
+
+  it('compares times with and without milliseconds by when they are', () => {
+    // As plain strings "...00Z" sorts after "...00.500Z" ('Z' > '.'), though it is earlier.
+    expect(simulationNow(['2026-09-28T00:00:00Z', '2026-09-28T00:00:00.500Z'])).toBe('2026-09-28T00:00:00.500Z');
   });
 });
 

@@ -12,6 +12,7 @@ import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
 import { agentCwdFor, defaultPaths, seedDevInstructions, type AppPaths } from './paths.ts';
+import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
 import { PendingWrites } from './writes/pending-writes.ts';
@@ -71,11 +72,12 @@ export function catchUpCapFromEnv(value: string | undefined, maxAgentCalls: stri
 }
 
 /**
- * Wires the real dependencies. Tests build Engine directly with fakes
- * instead. Returns the Engine itself so the dev CLI reaches its dev-only
- * methods (digestStored); everything else uses it as EngineService.
+ * Wires the real dependencies and returns the Engine itself. Only the
+ * simulation (simulation/round.ts) needs its dev-only methods
+ * (digestStored); everything else goes through createEngine. Not exported
+ * from the package.
  */
-export function createEngine(options: CreateEngineOptions = {}): Engine {
+export function wireEngine(options: CreateEngineOptions = {}): Engine {
   if (!options.paths) {
     const seeded = seedDevInstructions();
     if (seeded) {
@@ -166,4 +168,9 @@ export function createEngine(options: CreateEngineOptions = {}): Engine {
     // Only the lock holder answers agent requests; read-only access never does.
     agentRequestsFolder: lock ? join(dirname(paths.databaseFile), AGENT_REQUESTS_FOLDER) : null,
   });
+}
+
+/** Wires the real dependencies. Tests build Engine directly with fakes instead. */
+export function createEngine(options: CreateEngineOptions = {}): EngineService {
+  return wireEngine(options);
 }

@@ -1,4 +1,4 @@
-import { ALL_AGENT_JOBS, SYNC_MAX_PRS, type AgentJob, type IsoTime } from '@postpile/core';
+import { ALL_AGENT_JOBS, SYNC_MAX_PRS, type AgentJob, type IsoTime, type PrKey } from '@postpile/core';
 
 /** old: the agent pipeline as it is (POSTPILE_TOPIC_DIGEST=0). combined: the per-topic digest call (POSTPILE_TOPIC_DIGEST=1). */
 export type ArmName = 'old' | 'combined';
@@ -26,10 +26,16 @@ export interface SimulateStartOptions {
   now: IsoTime | null;
 }
 
+/** What the keys file of a round holds: every PR the round reveals, and the ones picked from the inbox. */
+export interface RoundKeys {
+  prKeys: PrKey[];
+  pingedKeys: PrKey[];
+}
+
 /** The hidden child command: one round of one arm. The database and instructions come from POSTPILE_DB and POSTPILE_INSTRUCTIONS. */
 export interface SimulateRoundOptions {
   startAt: IsoTime;
-  /** JSON file with the round's PR keys. */
+  /** JSON file with the round's PR keys (RoundKeys). */
   keysFile: string;
   maxAgentCalls: number;
   agentJobs: AgentJob[];

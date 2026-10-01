@@ -38,12 +38,18 @@ export interface SimulationRound {
   pulledIn: PrKey[];
 }
 
-/** The newest of these times: "now" of a source database, so a simulation does not depend on when it runs. Null for none. */
+/**
+ * The newest of these times, written the way `toISOString` writes it: "now"
+ * of a source database, so a simulation does not depend on when it runs.
+ * GitHub times come without milliseconds and the app's own with them; they
+ * only compare as strings once both are written the same way. Null for none.
+ */
 export function simulationNow(times: IsoTime[]): IsoTime | null {
   let newest: IsoTime | null = null;
   for (const time of times) {
-    if (newest === null || time > newest) {
-      newest = time;
+    const normalized = new Date(time).toISOString();
+    if (newest === null || normalized > newest) {
+      newest = normalized;
     }
   }
   return newest;

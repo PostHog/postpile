@@ -1,15 +1,16 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { Pr } from '@postpile/core';
 import { makeThreadFor } from '@postpile/core/fixtures';
 import { runSimulatedRound } from '@postpile/engine';
 import { makeHarness } from '@postpile/engine/testing';
 import { reviewRequestedPr } from '@postpile/engine/testing/prs';
 import { Store } from '@postpile/store';
 import type { SimulateStartOptions } from './simulate-args.ts';
-import { simulateStart, type RoundRun } from './simulate-start.ts';
+import { refuseAppDataPath, simulateStart, type RoundRun } from './simulate-start.ts';
 import { roundEnv } from './spawn-round.ts';
 
 const PRS = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
@@ -29,10 +30,10 @@ function fileHash(path: string): string {
 }
 
 /** An invented database that synced once: three PRs with threads, glances and a topic from the fake agent. */
-async function sourceDatabase(): Promise<string> {
+async function sourceDatabase(prs: Pr[] = PRS): Promise<string> {
   const file = join(dir, 'source.sqlite');
   const h = makeHarness({ store: Store.open(file) });
-  for (const pr of PRS) {
+  for (const pr of prs) {
     h.reader.addPr(pr, makeThreadFor(pr));
   }
   await h.engine.sync({ agentJobs: ['glances'] });
@@ -98,6 +99,50 @@ describe('simulateStart', () => {
     await simulateStart({ ...options(from), rounds: 1 }, (run) => runSimulatedRound(run).then(() => {}), () => {});
     await expect(simulateStart(options(from), async () => {}, () => {})).rejects.toThrow('already holds a simulation');
   });
+
+  it('refuses a source without a viewer before copying anything', async () => {
+    const from = join(dir, 'never-synced.sqlite');
+    Store.open(from).close();
+
+    await expect(simulateStart(options(from), async () => {}, () => {})).rejects.toThrow('synced at least once');
+    expect(existsSync(join(dir, 'out'))).toBe(false);
+  });
+
+  it('counts agent calls from the first moment of a round, whatever format the source times have', async () => {
+    // GitHub's times come without milliseconds; the app's own, like a call's time, with them.
+    const from = await sourceDatabase(PRS.map((pr) => ({ ...pr, updatedAt: '2026-09-01T09:02:00Z' })));
+    const runRound = async (run: RoundRun): Promise<void> => {
+      const store = Store.open(run.databaseFile);
+      const at = new Date(new Date(run.startAt).getTime() + 5).toISOString();
+      store.agentCalls.add({ runId: 'round', kind: 'glance_batch', topicId: null, model: 'fake', ok: true, attempt: 1, durationMs: 5, costUsd: null, at });
+      store.close();
+    };
+
+    const { report } = await simulateStart({ ...options(from), arms: ['old'] }, runRound, () => {});
+
+    expect(report.meta.now).toMatch(/\.\d{3}Z$/);
+    expect(report.rounds.map((round) => round.arms.old?.calls.calls)).toEqual([1, 1]);
+  });
+});
+
+describe('refuseAppDataPath', () => {
+  it('refuses any folder under Application Support, case and symlinks aside, and allows others', () => {
+    const home = join(dir, 'home');
+    mkdirSync(join(home, 'Library', 'Application Support', 'code-manager'), { recursive: true });
+    symlinkSync(join(home, 'Library', 'Application Support'), join(dir, 'link'));
+
+    expect(() => refuseAppDataPath(join(home, 'Library', 'Application Support', 'code-manager', 'out'), {}, home)).toThrow('Application Support');
+    expect(() => refuseAppDataPath(join(home, 'library', 'application support', 'PostPile-dev', 'out'), {}, home)).toThrow('Application Support');
+    expect(() => refuseAppDataPath(join(dir, 'link', 'PostPile', 'out'), {}, home)).toThrow('Application Support');
+    expect(() => refuseAppDataPath(join(dir, 'simulations', 'out'), {}, home)).not.toThrow();
+  });
+
+  it('refuses the XDG data and config folders, from the env or their defaults', () => {
+    const home = join(dir, 'home');
+    expect(() => refuseAppDataPath(join(dir, 'xdg-data', 'postpile', 'out'), { XDG_DATA_HOME: join(dir, 'xdg-data') }, home)).toThrow('xdg-data');
+    expect(() => refuseAppDataPath(join(home, '.local', 'share', 'postpile'), {}, home)).toThrow('.local');
+    expect(() => refuseAppDataPath(join(home, '.config', 'code-manager', 'out'), {}, home)).toThrow('.config');
+  });
 });
 
 describe('roundEnv', () => {
@@ -110,6 +155,7 @@ describe('roundEnv', () => {
       instructionsFile: '/scratch/instructions.md',
       startAt: '2026-09-02T12:00:00.000Z',
       prKeys: [],
+      pingedKeys: [],
       maxAgentCalls: 0,
       agentJobs: [],
     };

@@ -10,10 +10,9 @@ import { formatSweep } from './format-work-context.ts';
 import { formatSetupDraft } from './format-setup.ts';
 import { formatTools } from './format-tools.ts';
 import { readFileSync } from 'node:fs';
-import type { PrKey } from '@postpile/core';
 import { applyLegacyEnv, runSimulatedRound, type EngineService } from '@postpile/engine';
 import { runMcpFromEnv } from '@postpile/mcp';
-import type { SimulateRoundOptions } from './simulate/simulate-args.ts';
+import type { RoundKeys, SimulateRoundOptions } from './simulate/simulate-args.ts';
 import { refuseAppDataPath, simulateStart } from './simulate/simulate-start.ts';
 import { spawnRound } from './simulate/spawn-round.ts';
 
@@ -43,8 +42,16 @@ async function simulateRound(options: SimulateRoundOptions): Promise<string> {
     throw new Error('simulate-round only runs as a child of simulate-start (POSTPILE_DB and POSTPILE_INSTRUCTIONS are not set)');
   }
   refuseAppDataPath(databaseFile);
-  const prKeys = JSON.parse(readFileSync(options.keysFile, 'utf8')) as PrKey[];
-  const report = await runSimulatedRound({ databaseFile, instructionsFile, startAt: options.startAt, prKeys, maxAgentCalls: options.maxAgentCalls, agentJobs: options.agentJobs });
+  const keys = JSON.parse(readFileSync(options.keysFile, 'utf8')) as RoundKeys;
+  const report = await runSimulatedRound({
+    databaseFile,
+    instructionsFile,
+    startAt: options.startAt,
+    prKeys: keys.prKeys,
+    pingedKeys: keys.pingedKeys,
+    maxAgentCalls: options.maxAgentCalls,
+    agentJobs: options.agentJobs,
+  });
   return formatSync(report);
 }
 

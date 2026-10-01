@@ -57,8 +57,14 @@ function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): S
  * a sync had just fetched `prKeys`. No GitHub call at all.
  */
 export interface DigestStoredOptions {
-  /** The PRs to treat as just fetched: facts about them are verified, events of the pinged ones count as new. */
+  /** The PRs to treat as just fetched: facts about them are verified and "since you last looked" moves for them. */
   prKeys: PrKey[];
+  /**
+   * The ones the sync picked from the inbox: their events count as new. A
+   * real sync reports new events only for those; found PRs and stack layers
+   * are stored without (GitHubSync.run).
+   */
+  pingedKeys: PrKey[];
   maxAgentCalls?: number;
   agentJobs?: AgentJob[];
 }
@@ -155,22 +161,31 @@ export class SyncRun {
   }
 
   /** The stored PRs as a fetch would have reported them: events of the pinged ones are new, read state is already stored. */
-  private storedAsFetched(prKeys: PrKey[]): FetchedForDigest {
+  private storedAsFetched(options: DigestStoredOptions): FetchedForDigest {
     const { store } = this.deps;
     const viewer = loadViewer(store);
     if (!viewer) {
       throw new Error('no viewer stored: digestStored needs a database that synced once');
     }
-    const pinged = prKeys.filter((key) => store.notifications.getByPrKey(key) !== null);
-    const newEventIds = [...store.events.listForPrs(pinged).values()].flatMap((events) => events.map((event) => event.id));
-    return { viewer, fetchedPrKeys: prKeys, newEventIds, readOnGitHub: prKeys };
+    const newEventIds = [...store.events.listForPrs(options.pingedKeys).values()].flatMap((events) => events.map((event) => event.id));
+    return { viewer, fetchedPrKeys: options.prKeys, newEventIds, readOnGitHub: options.prKeys };
+  }
+
+  /** The agent can turn off mid-run (a usage limit): one line in agentOff, not one error per call. */
+  private foldAgentOffErrors(report: SyncReport): void {
+    const split = splitAgentOffErrors(report.errors);
+    if (split.agentOff) {
+      report.errors.splice(0, report.errors.length, ...split.errors);
+      report.agentOff ??= this.deps.agentOff() ?? 'Agent features are off';
+    }
   }
 
   /**
    * Dev only (`pnpm cli simulate-start`): the agent digest and the retire
    * steps of a sync, on what is stored, as if a sync had just fetched
    * `prKeys`. Never asks GitHub: no fetch and no quiet reads (they write to
-   * GitHub). No telemetry and no stored sync report.
+   * GitHub). No telemetry and no stored sync report. Errors land in the
+   * report as in a sync, so one failed round does not end the simulation.
    */
   async digestStored(options: DigestStoredOptions): Promise<SyncReport> {
     const { store, now, callLog } = this.deps;
@@ -182,15 +197,19 @@ export class SyncRun {
     const phases = new PhaseClock(now);
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
     try {
-      const fetched = this.storedAsFetched(options.prKeys);
+      const fetched = this.storedAsFetched(options);
       report.prsFetched = options.prKeys.length;
       report.newEvents = fetched.newEventIds.length;
       await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report });
       report.topicsRetired = retireFinishedTopics(store, now().toISOString());
       reviveUnreadTopics(store, now().toISOString(), false);
+    } catch (error) {
+      errors.push(`digest: ${errorText(error)}`);
+      this.log(`digest: failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     } finally {
       callLog.end();
     }
+    this.foldAgentOffErrors(report);
     report.agentCalls = report.agentCallStats.total;
     report.dossiersUpdated = tally.dossiersUpdated;
     report.finishedAt = now().toISOString();
@@ -264,12 +283,7 @@ export class SyncRun {
     }
     // Mark-reads run in the background; the sync report is where the user hears about them.
     errors.push(...this.markReadQueue.takeNotes());
-    // The agent can turn off mid-sync (a usage limit): one line in agentOff, not one error per call.
-    const split = splitAgentOffErrors(errors);
-    if (split.agentOff) {
-      errors.splice(0, errors.length, ...split.errors);
-      report.agentOff ??= this.deps.agentOff() ?? 'Agent features are off';
-    }
+    this.foldAgentOffErrors(report);
     report.agentCalls = report.agentCallStats.total;
     report.dossiersUpdated = tally.dossiersUpdated;
     report.finishedAt = now().toISOString();

@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ArmName } from './simulate-args.ts';
+import type { ArmName, RoundKeys } from './simulate-args.ts';
 import type { RoundRun } from './simulate-start.ts';
 
 const MAIN_FILE = fileURLToPath(new URL('../main.ts', import.meta.url));
@@ -35,7 +35,8 @@ export function roundEnv(run: RoundRun, parent: NodeJS.ProcessEnv): NodeJS.Proce
 
 export async function spawnRound(run: RoundRun): Promise<void> {
   const keysFile = join(run.armDir, `round-${run.round}-keys.json`);
-  writeFileSync(keysFile, JSON.stringify(run.prKeys));
+  const keys: RoundKeys = { prKeys: run.prKeys, pingedKeys: run.pingedKeys };
+  writeFileSync(keysFile, JSON.stringify(keys));
   const args = [
     // tsx's loader flags, so the child runs the TypeScript source like this process does.
     ...process.execArgv,

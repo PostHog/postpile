@@ -1,6 +1,6 @@
 // The simulate-start report as data: per round and arm, then across arms at
 // the end. Pure: snapshots in, numbers and lists out.
-import type { IsoTime, PrKey, TileKind } from '@postpile/core';
+import { glanceRiskLevel, type IsoTime, type PrKey, type TileKind } from '@postpile/core';
 import type { ArmSnapshot, SnapshotCall, SnapshotDossier, SnapshotTile } from '@postpile/engine';
 import type { ArmName } from './simulate-args.ts';
 
@@ -43,17 +43,18 @@ export interface PrMove {
 }
 
 export interface TileChurn {
-  /** Tile ids in this round and the one before. */
+  /** Tiles with the same id in the same topics in this round and the one before. */
   kept: number;
   added: number;
   gone: number;
-  /** PRs that were in a tile before and are in another one now. */
+  /** PRs that were in a tile before and are in another one, or in another topic, now. From and to read "<tile id> in <topic ids>". */
   moved: PrMove[];
 }
 
 export interface ArmRound {
   calls: CallSummary;
   topics: number;
+  /** Each tile once, also a stack that shows in several topics. */
   tiles: number;
   /** Tiles with more than one PR, by kind. */
   multiPr: Partial<Record<TileKind, number>>;
@@ -126,29 +127,56 @@ function addCalls(total: CallSummary, more: CallSummary): CallSummary {
   };
 }
 
-function allTiles(snapshot: ArmSnapshot): SnapshotTile[] {
-  return snapshot.topics.flatMap((topic) => topic.tiles);
+/** A tile and the topics it shows in. */
+interface PlacedTile {
+  tile: SnapshotTile;
+  topicIds: string[];
 }
 
-function tileByPr(snapshot: ArmSnapshot): Map<PrKey, string> {
-  const result = new Map<PrKey, string>();
-  for (const tile of allTiles(snapshot)) {
-    for (const member of tile.members) {
-      result.set(member, tile.id);
+/** Every tile once, by id, with the topics it shows in: a stack can show in several topics under the same id. */
+function uniqueTiles(snapshot: ArmSnapshot): Map<string, PlacedTile> {
+  const result = new Map<string, PlacedTile>();
+  for (const topic of snapshot.topics) {
+    for (const tile of topic.tiles) {
+      const placed = result.get(tile.id) ?? { tile, topicIds: [] };
+      placed.topicIds.push(topic.id);
+      result.set(tile.id, placed);
     }
   }
   return result;
 }
 
-/** Tiles kept, added and gone since the previous round, and the PRs that changed tile, with set change reasons. */
+/** Where a tile shows: "pr:acme/app#1 in ci". A tile that changed topic is somewhere else, even with the same id. */
+function placement(placed: PlacedTile): string {
+  return `${placed.tile.id} in ${[...placed.topicIds].sort().join(', ')}`;
+}
+
+function placementByPr(tiles: Map<string, PlacedTile>): Map<PrKey, string> {
+  const result = new Map<PrKey, string>();
+  for (const placed of tiles.values()) {
+    for (const member of placed.tile.members) {
+      result.set(member, placement(placed));
+    }
+  }
+  return result;
+}
+
+/**
+ * Tiles kept, added and gone since the previous round, and the PRs that
+ * changed tile or topic, with set change reasons. A tile counts as kept
+ * only with the same id in the same topics; one that moved topic counts as
+ * gone and added.
+ */
 export function tileChurn(previous: ArmSnapshot | null, current: ArmSnapshot): TileChurn {
-  const before = new Set(previous ? allTiles(previous).map((tile) => tile.id) : []);
-  const now = new Set(allTiles(current).map((tile) => tile.id));
-  const kept = [...now].filter((id) => before.has(id)).length;
-  const oldTiles = previous ? tileByPr(previous) : new Map<PrKey, string>();
+  const beforeTiles = previous ? uniqueTiles(previous) : new Map<string, PlacedTile>();
+  const nowTiles = uniqueTiles(current);
+  const before = new Set([...beforeTiles.values()].map(placement));
+  const now = new Set([...nowTiles.values()].map(placement));
+  const kept = [...now].filter((where) => before.has(where)).length;
+  const oldPlaces = placementByPr(beforeTiles);
   const moved: PrMove[] = [];
-  for (const [prKey, to] of tileByPr(current)) {
-    const from = oldTiles.get(prKey);
+  for (const [prKey, to] of placementByPr(nowTiles)) {
+    const from = oldPlaces.get(prKey);
     if (from === undefined || from === to) {
       continue;
     }
@@ -160,10 +188,10 @@ export function tileChurn(previous: ArmSnapshot | null, current: ArmSnapshot): T
   return { kept, added: now.size - kept, gone: before.size - kept, moved };
 }
 
-/** Tiles with more than one PR, by kind. */
+/** Tiles with more than one PR, by kind, each tile once. */
 export function multiPrTiles(snapshot: ArmSnapshot): Partial<Record<TileKind, number>> {
   const result: Partial<Record<TileKind, number>> = {};
-  for (const tile of allTiles(snapshot)) {
+  for (const { tile } of uniqueTiles(snapshot).values()) {
     if (tile.members.length > 1) {
       result[tile.kind] = (result[tile.kind] ?? 0) + 1;
     }
@@ -171,17 +199,11 @@ export function multiPrTiles(snapshot: ArmSnapshot): Partial<Record<TileKind, nu
   return result;
 }
 
-/** The first word of a glance's risk line, lowercased, without punctuation: "High: touches auth" -> "high". */
-export function riskLevel(risk: string): string {
-  const first = risk.trim().split(/\s+/)[0] ?? '';
-  return first.replace(/[^\p{L}\p{N}-]/gu, '').toLowerCase();
-}
-
 function armRound(previous: ArmSnapshot | null, current: ArmSnapshot): ArmRound {
   return {
     calls: summarizeCalls(current.calls),
     topics: current.topics.length,
-    tiles: allTiles(current).length,
+    tiles: uniqueTiles(current).size,
     multiPr: multiPrTiles(current),
     churn: tileChurn(previous, current),
   };
@@ -199,7 +221,7 @@ export function glanceAgreement(snapshots: Partial<Record<ArmName, ArmSnapshot>>
     const byArm: Partial<Record<ArmName, GlanceView>> = {};
     for (const arm of arms) {
       const glance = snapshots[arm]!.glances[prKey]!;
-      byArm[arm] = { verdict: glance.verdict, riskLevel: riskLevel(glance.risk) };
+      byArm[arm] = { verdict: glance.verdict, riskLevel: glanceRiskLevel(glance.risk) };
     }
     const views = Object.values(byArm);
     const verdictSame = views.every((view) => view.verdict === views[0]!.verdict);

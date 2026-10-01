@@ -3,12 +3,12 @@
 // start runs through each agent pipeline (arm), round by round as the
 // backlog would drain, and the report compares them. Never asks GitHub,
 // never writes to the source database.
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { ALL_AGENT_JOBS, planRounds, roundPrKeys, simulationNow, type AgentJob, type IsoTime, type PrKey, type SimulationRound } from '@postpile/core';
-import { ArmDatabase, BACKLOG_SYNC_MINUTES, dataDirs, readArmSnapshot, realDataDirs, startFresh } from '@postpile/engine';
+import { ArmDatabase, BACKLOG_SYNC_MINUTES, checkSimulationSource, readArmSnapshot, startFresh } from '@postpile/engine';
 import { Store } from '@postpile/store';
 import { formatReportMarkdown } from './report-markdown.ts';
 import { buildReport, type ReportMeta, type RoundRecord, type SimulationReport } from './report.ts';
@@ -23,7 +23,10 @@ export interface RoundRun {
   databaseFile: string;
   instructionsFile: string;
   startAt: IsoTime;
+  /** Every PR the round reveals. */
   prKeys: PrKey[];
+  /** The ones picked from the inbox: only their events count as new, as in a real sync. */
+  pingedKeys: PrKey[];
   maxAgentCalls: number;
   agentJobs: AgentJob[];
 }
@@ -41,15 +44,47 @@ interface Plan {
   rounds: SimulationRound[];
 }
 
-/** Refuses a path inside the app's own data folders (real or dev): the simulation only ever writes to its out folder. */
-export function refuseAppDataPath(path: string): void {
-  const pathEnv = { env: { POSTPILE_PROFILE: 'dev' }, platform: process.platform, home: homedir() };
-  const folders = [realDataDirs().dataDir, dataDirs(pathEnv).dataDir];
-  const full = resolve(path);
+/** The absolute path with symlinks resolved, also for a path that does not exist yet: the nearest existing folder is resolved, the rest is appended. */
+function resolvedPath(path: string): string {
+  let existing = resolve(path);
+  const rest: string[] = [];
+  while (!existsSync(existing) && dirname(existing) !== existing) {
+    rest.unshift(basename(existing));
+    existing = dirname(existing);
+  }
+  return join(realpathSync(existing), ...rest);
+}
+
+/** Case-insensitive, as APFS compares names. Elsewhere it can only refuse more, never less. */
+function isInside(path: string, folder: string): boolean {
+  const lowerPath = path.toLowerCase();
+  const lowerFolder = folder.toLowerCase();
+  return lowerPath === lowerFolder || lowerPath.startsWith(lowerFolder.endsWith(sep) ? lowerFolder : lowerFolder + sep);
+}
+
+/**
+ * Refuses a path under any folder where apps keep their data or config:
+ * ~/Library/Application Support and the XDG data and config folders. That
+ * covers PostPile's real, dev and old code-manager folders without naming
+ * each one. The simulation only ever writes to its out folder.
+ */
+export function refuseAppDataPath(path: string, env: NodeJS.ProcessEnv = process.env, home: string = homedir()): void {
+  const folders = [join(home, 'Library', 'Application Support'), env.XDG_DATA_HOME || join(home, '.local', 'share'), env.XDG_CONFIG_HOME || join(home, '.config')];
+  const full = resolvedPath(path);
   for (const folder of folders) {
-    if (full === folder || full.startsWith(folder + sep)) {
-      throw new Error(`${path} is inside ${folder}; simulate-start only writes to its own out folder`);
+    if (isInside(full, resolvedPath(folder))) {
+      throw new Error(`${path} is inside ${folder}, where apps (PostPile too) keep their data; simulate-start only writes to its own out folder, pick one elsewhere`);
     }
+  }
+}
+
+/** Refuses a source database the rounds cannot digest, before anything is copied. */
+function checkSource(from: string): void {
+  const source = Store.openReadOnly(from);
+  try {
+    checkSimulationSource(source);
+  } finally {
+    source.close();
   }
 }
 
@@ -69,7 +104,9 @@ function planSimulation(store: Store, options: SimulateStartOptions): Plan {
     (row) => ({ key: row.pr_key, unread: row.unread !== 0, updatedAt: row.updated_at }),
   );
   const prs = store.db.prepare('SELECT key, updated_at FROM pr').all() as { key: string; updated_at: string }[];
-  const now = options.now ?? simulationNow([...threads.map((thread) => thread.updatedAt), ...prs.map((pr) => pr.updated_at)]) ?? new Date().toISOString();
+  const newest = options.now ?? simulationNow([...threads.map((thread) => thread.updatedAt), ...prs.map((pr) => pr.updated_at)]);
+  // Written as toISOString writes it: snapshots compare round times with agent_call.at and pr_set_change.at as strings.
+  const now = newest === null ? new Date().toISOString() : new Date(newest).toISOString();
   const rounds = planRounds({
     threads,
     found: [...store.foundPrs.listAll().keys()],
@@ -113,12 +150,12 @@ function jobsFor(armIndex: number): AgentJob[] {
 }
 
 /** Reveals the round in one arm's database (and takes the leader's topics for a follower). */
-function prepareArm(out: string, arms: ArmName[], armIndex: number, round: SimulationRound): void {
+function prepareArm(out: string, arms: ArmName[], armIndex: number, round: SimulationRound, startAt: IsoTime): void {
   const database = ArmDatabase.open(armFile(out, arms[armIndex]!));
   try {
     database.reveal(join(out, 'base.sqlite'), round);
     if (armIndex > 0) {
-      database.copyTopicsFrom(armFile(out, arms[0]!));
+      database.copyTopicsFrom(armFile(out, arms[0]!), startAt);
     }
   } finally {
     database.close();
@@ -168,6 +205,7 @@ async function prepare(options: SimulateStartOptions, out: string): Promise<Plan
 export async function simulateStart(options: SimulateStartOptions, runRound: RoundRunner, log: (line: string) => void = console.log): Promise<SimulationResult> {
   const out = resolve(options.out ?? mkdtempSync(join(tmpdir(), 'postpile-simulate-')));
   refuseAppDataPath(out);
+  checkSource(options.from);
   mkdirSync(out, { recursive: true });
   const plan = await prepare(options, out);
   const rounds = plan.rounds.slice(0, options.rounds ?? plan.rounds.length);
@@ -192,7 +230,7 @@ export async function simulateStart(options: SimulateStartOptions, runRound: Rou
     const startAt = clock;
     let slowestMs = 0;
     for (const [armIndex, arm] of options.arms.entries()) {
-      prepareArm(out, options.arms, armIndex, round);
+      prepareArm(out, options.arms, armIndex, round, startAt);
       log(`round ${i + 1}/${rounds.length}, ${arm}: ${roundPrKeys(round).length} PRs in`);
       const started = Date.now();
       await runRound({
@@ -203,6 +241,7 @@ export async function simulateStart(options: SimulateStartOptions, runRound: Rou
         instructionsFile: join(out, 'instructions.md'),
         startAt,
         prKeys: roundPrKeys(round),
+        pingedKeys: round.pinged,
         maxAgentCalls: options.dryRun ? 0 : options.maxAgentCalls,
         agentJobs: jobsFor(armIndex),
       });

@@ -65,11 +65,11 @@ pnpm cli simulate-start --from <db file> [--days 7] [--round-size 60] [--out <di
   [--arms old,combined] [--max-agent-calls 1000] [--rounds <n>] [--now <iso>] [--dry-run]
 ```
 
-- `--from` is opened read-only and copied (SQLite backup) into the out folder (default: a new folder under the system temp folder). Everything else happens on copies there.
+- `--from` is opened read-only and copied (SQLite backup) into the out folder (default: a new folder under the system temp folder). Everything else happens on copies there. The source must have synced at least once (it needs the stored viewer). An `--out` under `~/Library/Application Support` or the XDG data or config folders is refused.
 - Fresh start: topics, memberships, dossiers, facts, glances, sets, proposals, cursors, agent calls, chats, snoozes, agent event overrides and the agent's meta keys are wiped; GitHub data and the user's read state stay (`packages/engine/src/simulation/fresh-start.ts` lists every table with its reason).
 - Only threads of the last `--days` count, plus found PRs. "Now" is the newest activity in the source. The PRs come in rounds the way a backlog drains (unread first, newest first, `--round-size` per round, found PRs and stack layers ride along), and each round runs only the digest a sync runs after its fetch (`Engine.digestStored`), in a child process per arm with `POSTPILE_TOPIC_DIGEST=0` (old) or `1` (combined), `POSTPILE_READ_ONLY=1`, no GitHub calls at all.
 - The first arm assigns topics; the others get its topics each round and run every other job. Prompts use the instructions the source database last recorded (`instructions.md` in the out folder).
-- `report.md` and `report.json` in the out folder: agent calls, cost and time per round and arm, tiles per topic, tile churn, then glances, dossiers and tiles side by side. They hold real PR data: keep them out of the repo.
+- `report.md` and `report.json` in the out folder: agent calls, cost and time per round and arm, tiles per topic, tile churn (a tile that changed topic counts as moved, a stack in several topics once), then glances, dossiers and tiles side by side. They hold real PR data: keep them out of the repo.
 - `--dry-run` makes no agent calls (for checking the plumbing).
 
 ## Screenshots

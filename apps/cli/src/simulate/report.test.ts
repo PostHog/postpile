@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArmSnapshot, SnapshotTile } from '@postpile/engine';
 import { formatReportMarkdown } from './report-markdown.ts';
-import { buildReport, glanceAgreement, multiPrTiles, riskLevel, summarizeCalls, tileChurn, type ReportMeta } from './report.ts';
+import { buildReport, glanceAgreement, multiPrTiles, summarizeCalls, tileChurn, type ReportMeta } from './report.ts';
 
 function snapshot(tiles: SnapshotTile[], overrides: Partial<ArmSnapshot> = {}): ArmSnapshot {
   return { topics: [{ id: 'ci', name: 'CI | runners', tiles }], glances: {}, dossiers: {}, calls: [], setChanges: null, ...overrides };
@@ -43,13 +43,38 @@ describe('tileChurn', () => {
     const churn = tileChurn(before, after);
     expect(churn).toMatchObject({ kept: 1, added: 2, gone: 2 });
     expect(churn.moved).toEqual([
-      { prKey: 'acme/app#1', from: 'pr:acme/app#1', to: 'set:s1', reasons: ['added s1 by agent: same runner image'] },
-      { prKey: 'acme/app#2', from: 'pr:acme/app#2', to: 'set:s1', reasons: [] },
+      { prKey: 'acme/app#1', from: 'pr:acme/app#1 in ci', to: 'set:s1 in ci', reasons: ['added s1 by agent: same runner image'] },
+      { prKey: 'acme/app#2', from: 'pr:acme/app#2 in ci', to: 'set:s1 in ci', reasons: [] },
     ]);
   });
 
   it('counts every tile as new in the first round', () => {
     expect(tileChurn(null, snapshot([single('acme/app#1')]))).toEqual({ kept: 0, added: 1, gone: 0, moved: [] });
+  });
+
+  it('counts a PR that changed topic under the same tile id as moved, not kept', () => {
+    const before = snapshot([], { topics: [{ id: 'unsorted', name: 'Unsorted', tiles: [single('acme/app#1')] }] });
+    const after = snapshot([single('acme/app#1')]);
+    expect(tileChurn(before, after)).toEqual({
+      kept: 0,
+      added: 1,
+      gone: 1,
+      moved: [{ prKey: 'acme/app#1', from: 'pr:acme/app#1 in unsorted', to: 'pr:acme/app#1 in ci', reasons: [] }],
+    });
+  });
+
+  it('counts a stack that shows in two topics once', () => {
+    const stack: SnapshotTile = { id: 'stack:a', kind: 'stack', members: ['acme/app#1', 'acme/app#2'] };
+    const twoTopics = snapshot([], {
+      topics: [
+        { id: 'ci', name: 'CI', tiles: [stack] },
+        { id: 'docs', name: 'Docs', tiles: [stack] },
+      ],
+    });
+    expect(tileChurn(twoTopics, twoTopics)).toEqual({ kept: 1, added: 0, gone: 0, moved: [] });
+    expect(multiPrTiles(twoTopics)).toEqual({ stack: 1 });
+    const report = buildReport({ ...META, arms: ['old'] }, [{ index: 1, startAt: '2026-09-29T12:00:00.000Z', prs: { pinged: 2, found: 0, pulledIn: 0 }, arms: { old: twoTopics } }]);
+    expect(report.rounds[0]!.arms.old).toMatchObject({ topics: 2, tiles: 1, multiPr: { stack: 1 }, churn: { kept: 0, added: 1, gone: 0 } });
   });
 });
 
@@ -61,14 +86,6 @@ describe('multiPrTiles', () => {
       single('acme/app#5'),
     ];
     expect(multiPrTiles(snapshot(tiles))).toEqual({ stack: 1, set: 1 });
-  });
-});
-
-describe('riskLevel', () => {
-  it('is the first word, lowercased, without punctuation', () => {
-    expect(riskLevel('High: touches the auth middleware.')).toBe('high');
-    expect(riskLevel('  Low.')).toBe('low');
-    expect(riskLevel('')).toBe('');
   });
 });
 
