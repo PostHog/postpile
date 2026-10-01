@@ -19,7 +19,7 @@ function webRoot(): string {
 }
 
 function appServing(root: string) {
-  const app = createApp(new FakeEngine(), 'tok"en', { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60, install: 'brew-service' });
+  const app = createApp(new FakeEngine(), 'tok"en', { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60, install: 'app-browser' });
   serveWebUi(app, root, 'tok"en');
   return app;
 }
@@ -63,6 +63,8 @@ describe('the served web UI', () => {
     expect((await app.request('http://evil.example:4870/')).status).toBe(403);
     expect((await app.request('http://evil.example:4870/api/config', { headers: { [TOKEN_HEADER]: 'tok"en' } })).status).toBe(403);
     expect((await app.request('http://localhost:4870/')).status).toBe(200);
+    expect((await app.request('http://postpile.localhost:4870/')).status).toBe(200);
+    expect((await app.request('http://postpile.localhost.evil.example:4870/')).status).toBe(403);
   });
 
   it('puts the meta tag first in the head', () => {
@@ -73,13 +75,9 @@ describe('the served web UI', () => {
 describe('findWebRoot', () => {
   it('takes POSTPILE_WEB_ROOT, empty turns the UI off, else the first built folder', () => {
     const root = webRoot();
-    expect(findWebRoot({ POSTPILE_WEB_ROOT: '/somewhere' }, '/x/lib')).toBe('/somewhere');
-    expect(findWebRoot({ POSTPILE_WEB_ROOT: '' }, '/x/lib')).toBeNull();
-    expect(findWebRoot({}, join(root, '..', 'lib'))).toBeNull();
-    const bundle = mkdtempSync(join(tmpdir(), 'postpile-bundle-'));
-    dirs.push(bundle);
-    mkdirSync(join(bundle, 'web'));
-    writeFileSync(join(bundle, 'web', 'index.html'), '<html></html>');
-    expect(findWebRoot({}, join(bundle, 'lib'))).toBe(join(bundle, 'lib', '../web'));
+    expect(findWebRoot({ POSTPILE_WEB_ROOT: '/somewhere' }, [root])).toBe('/somewhere');
+    expect(findWebRoot({ POSTPILE_WEB_ROOT: '' }, [root])).toBeNull();
+    expect(findWebRoot({}, [join(root, 'missing'), root])).toBe(root);
+    expect(findWebRoot({}, [join(root, 'missing')])).toBeNull();
   });
 });

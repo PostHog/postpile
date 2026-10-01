@@ -8,8 +8,8 @@ export interface UpgradeSteps {
 /** What the reminder tells the user to run, for the way this copy was installed. */
 export function upgradeSteps(install: AppInstall): UpgradeSteps {
   switch (install) {
-    case 'brew-service':
-      return { command: 'brew upgrade postpile-server && brew services restart postpile-server', afterwards: 'Then reload this page.' };
+    case 'app-browser':
+      return { command: 'brew upgrade --cask postpile && postpile browser --restart', afterwards: 'Then reload this page.' };
     case 'source':
       return { command: 'git pull && pnpm install && pnpm build:web', afterwards: 'Then restart pnpm server and reload this page.' };
     case 'app':

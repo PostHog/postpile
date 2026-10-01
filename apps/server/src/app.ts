@@ -24,6 +24,10 @@ export const TOKEN_HEADER = 'x-postpile-token';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
+export function isLoopbackHost(hostname: string): boolean {
+  return LOOPBACK_HOSTS.has(hostname) || hostname.endsWith('.localhost');
+}
+
 const snoozeCondition = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('someone_replies') }),
   z.object({ kind: z.literal('new_push') }),
@@ -205,7 +209,7 @@ export function createApp(
   const app = new Hono();
 
   app.use('*', async (c, next) => {
-    if (!LOOPBACK_HOSTS.has(new URL(c.req.url).hostname)) {
+    if (!isLoopbackHost(new URL(c.req.url).hostname)) {
       return c.json({ error: 'unknown host' }, 403);
     }
     await next();

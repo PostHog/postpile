@@ -7,7 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Added
 
 - PostPile runs in a browser too. `pnpm web` starts the local API and a dev server for the UI; `pnpm build:web` writes the UI as static files (`apps/desktop/dist-web`) for any static host, used with `pnpm server`. See docs/development.md › Web.
-- `brew install posthog/tap/postpile-server`, then `brew services start postpile-server`, runs PostPile in the browser at `http://127.0.0.1:4870`, kept running at login and updated with `brew upgrade`. The update reminder names the brew command for this install. See README › In the browser instead of the app.
+- `postpile browser --at-login` (a new `postpile` command from the cask) runs PostPile in the background for the browser, at `http://postpile.localhost:4870`, now and at every login; `--stop` and `--restart` manage it. It is the app's own binary without a window, so it updates with `brew upgrade --cask postpile`. See README › In the browser instead of the app.
 - `pnpm server` serves the web UI itself at `/` (after `pnpm build:web`), with the token in the page, so no `?token=` link is needed, and keeps its token across restarts.
 - `pnpm server` runs the desktop app's background jobs: the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code.
 - In the browser, pings show as browser notifications while a PostPile tab is open. "pings: off · turn on" in the status bar asks for the permission; a click opens the tile, and opening a tile takes its pings back, like Mac notifications in the app.

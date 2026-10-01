@@ -355,7 +355,10 @@ async function start(): Promise<void> {
       dialog.showMessageBoxSync({
         type: 'warning',
         message: `PostPile is already running with this database (pid ${holder.pid}, ${holder.kind})`,
-        detail: `Started ${holder.startedAt}.\n${holder.databaseFile}\n\nQuit that one first, or wait until it is done.`,
+        detail:
+          holder.kind === 'server'
+            ? `PostPile for the browser has it (started ${holder.startedAt}).\n${holder.databaseFile}\n\nStop it first: postpile browser --stop in a terminal, or Ctrl-C where it runs.`
+            : `Started ${holder.startedAt}.\n${holder.databaseFile}\n\nQuit that one first, or wait until it is done.`,
         buttons: ['Quit'],
       });
       app.exit(1);

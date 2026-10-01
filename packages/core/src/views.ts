@@ -609,8 +609,8 @@ export interface AppConfig {
   install: AppInstall;
 }
 
-/** app: the desktop app (Homebrew cask). brew-service: the postpile-server formula. source: a repo checkout (`pnpm server`). */
-export type AppInstall = 'app' | 'brew-service' | 'source';
+/** app: the desktop app. app-browser: the same app's `postpile browser`. source: a repo checkout (`pnpm server`). */
+export type AppInstall = 'app' | 'app-browser' | 'source';
 
 /**
  * A lasting point in the user's message comes back for the user to place:

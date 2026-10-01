@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import type { AppConfig, AppInstall, McpLauncher } from '@postpile/core';
 import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind, type Telemetry } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
@@ -12,26 +12,13 @@ export function isFake(): boolean {
   return process.env.POSTPILE_FAKE === '1';
 }
 
-const SERVER_PACKAGE_NAMES = new Set(['@postpile/server', 'postpile-server']);
-
-/**
- * The version in the nearest server package.json above this file: apps/server
- * when run from source (tsx), the postpile-server bundle's root when bundled
- * (apps/service), wherever the bundler put this module.
- */
-export function readOwnVersion(fromDir: string = import.meta.dirname): string {
-  for (let dir = fromDir; ; dir = dirname(dir)) {
-    try {
-      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: string; version?: string };
-      if (pkg.name && SERVER_PACKAGE_NAMES.has(pkg.name)) {
-        return pkg.version ?? 'unknown';
-      }
-    } catch {
-      // no package.json here
-    }
-    if (dirname(dir) === dir) {
-      return 'unknown';
-    }
+/** Always run from source (tsx), never bundled, so reading this file at runtime is safe. */
+export function readOwnVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '../package.json'), 'utf8')) as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
   }
 }
 

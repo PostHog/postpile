@@ -72,6 +72,5 @@ The full dated list is under "Decided" in `NEXT.md`. Add to it when the user dec
 - `packages/engine`: sync, live poll, digest pipeline, actions, writes lock and action log, work-context sweep.
 - `packages/mcp`: MCP server: four reads (`pr_context`, `topic`, `search_prs`, `whats_on_me`) over the engine's read methods, and `refresh_from_github` / `propose_topic_change`, which ask the running app through a file outbox (`packages/engine/src/agent-requests`).
 - `apps/server`: Hono API, token-protected, bound to 127.0.0.1, with the fake engine in `src/fake/`. Standalone, it also runs the background jobs and serves the web UI.
-- `apps/desktop`: Electron main (poll, Mac notifications) and the React renderer.
-- `apps/service`: the `postpile-server` tarball for the Homebrew formula (bundled server, MCP server and web UI).
+- `apps/desktop`: Electron main (poll, Mac notifications), the React renderer, and `postpile browser` (`src/main/browser.ts`: the standalone server run on the app's own binary).
 - `apps/cli`: dev CLI (`sync`, `poll`, `sweep`, `topics`, `topic`, `pr`, `mcp`, …).

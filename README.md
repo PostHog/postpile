@@ -114,17 +114,16 @@ Then quit and reopen PostPile. When a new version is out, the app shows "Update 
 
 ### In the browser instead of the app
 
-The `postpile-server` formula runs PostPile without Electron: the same local API, background sync and live poll as the app, and the web UI, in one process on `127.0.0.1:4870`. `brew services` keeps it running and starts it at login.
+The cask also installs a `postpile` command. `postpile browser` runs the app's local API, background sync, live poll and web UI in one process, with no window, so you can use PostPile in a browser tab instead:
 
 ```
-brew install posthog/tap/postpile-server
-brew services start postpile-server
-open http://127.0.0.1:4870
+postpile browser --at-login    # runs in the background now and at every login
+open http://postpile.localhost:4870
 ```
 
-Update with `brew upgrade postpile-server && brew services restart postpile-server`, then reload the page. The page shows the same "Update available" reminder with this command.
+`postpile browser` alone runs it in the terminal until Ctrl-C. `postpile browser --stop` stops the background one and stops starting it at login. After `brew upgrade --cask postpile`, run `postpile browser --restart` and reload the page; the page's "Update available" reminder says so. Chrome, Edge and Firefox open `postpile.localhost` on their own; Safari needs the line `127.0.0.1 postpile.localhost` in `/etc/hosts`, or use `http://127.0.0.1:4870`.
 
-It uses the same data as the desktop app, and only one of them can open it at a time, so quit the app before starting the service. Pings show as browser notifications while a PostPile tab is open: click "pings: off · turn on" in the status bar once to allow them, and allow your browser in System Settings › Notifications. A click opens the tile. The tab title shows how many topics have something unread, like the app's Dock badge. The server only listens on 127.0.0.1 and answers only requests for `127.0.0.1` or `localhost`; the page gets the API token from the server. Logs go to `$(brew --prefix)/var/log/postpile-server.log`. For other agents, the caveats of `brew info postpile-server` show the `claude mcp add` command for this install.
+It uses the same data as the desktop app, and only one of them can open it at a time: quit the app first. If the app is open, `postpile browser` waits until it closes. Run `postpile browser --stop` before uninstalling the cask. Pings show as browser notifications while a PostPile tab is open: click "pings: off · turn on" in the status bar once to allow them, and allow your browser in System Settings › Notifications. A click opens the tile. The tab title shows how many topics have something unread, like the app's Dock badge. The server only listens on 127.0.0.1 and answers only requests for `127.0.0.1`, `localhost` or a `*.localhost` name; the page gets the API token from the server. Logs go to `~/Library/Logs/PostPile/browser.log`. `postpile-mcp` works with it like with the app.
 
 ## Ask PostPile from other agents
 

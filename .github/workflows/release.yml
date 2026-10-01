@@ -1,8 +1,7 @@
 # Release workflow
 #
 # Triggers:
-#   - Push of a v* tag (e.g. v0.1.0-alpha.0)  -> GitHub release with the zip, the server tarball and their
-#                                               sha256 files, then the Homebrew cask and formula
+#   - Push of a v* tag (e.g. v0.1.0-alpha.0)  -> GitHub release with the zip + sha256, then the Homebrew cask
 #   - Manual dispatch with an existing v* tag -> the same, from that tag
 #
 # The manual arm is a fallback: an org tag ruleset can let an admin push a tag
@@ -10,8 +9,7 @@
 #
 # The Homebrew job runs in the `homebrew-tap` environment, which holds the tap
 # token secrets and should only admit v* tags, so a branch can't publish the cask.
-# It renders homebrew/postpile.rb.tmpl into Casks/postpile.rb and
-# homebrew/postpile-server.rb.tmpl into Formula/postpile-server.rb in
+# It renders homebrew/postpile.rb.tmpl into Casks/postpile.rb in
 # PostHog/homebrew-tap, mirroring PostHog/posthog's build-phrocs.yml.
 #
 # The build job runs in the `desktop-signing` environment (also v* tags only),
@@ -60,7 +58,6 @@ jobs:
         outputs:
             version: ${{ steps.version.outputs.version }}
             sha256: ${{ steps.checksum.outputs.sha256 }}
-            server_sha256: ${{ steps.server.outputs.sha256 }}
             signed: ${{ steps.signing.outputs.signed }}
         env:
             TAG: ${{ inputs.tag || github.ref_name }}
@@ -143,21 +140,6 @@ jobs:
             # sourceMappingURL comment; electron-builder.yml leaves them out of the app).
             - name: Build the app bundle
               run: pnpm build
-
-            # The postpile-server formula's tarball: the standalone server and the MCP
-            # server bundled into lib/, the web UI in web/, run by Homebrew's node.
-            - name: Build the server tarball
-              id: server
-              env:
-                  VERSION: ${{ steps.version.outputs.version }}
-              run: |
-                  set -euo pipefail
-                  pnpm dist:server
-                  TARBALL="apps/service/dist/postpile-server-${VERSION}.tar.gz"
-                  test -f "$TARBALL"
-                  tar -tzf "$TARBALL" | grep -qx 'postpile-server/lib/server.js'
-                  tar -tzf "$TARBALL" | grep -qx 'postpile-server/web/index.html'
-                  echo "sha256=$(awk '{print $1}' "${TARBALL}.sha256")" >> "$GITHUB_OUTPUT"
 
             # A personal API key with "error tracking write" and "organization read"
             # (RELEASING.md > Error tracking source maps). Not set means a release
@@ -302,8 +284,7 @@ jobs:
                       *) PRERELEASE=false ;;
                   esac
                   ZIP="apps/desktop/dist/PostPile-${VERSION}-mac-arm64.zip"
-                  TARBALL="apps/service/dist/postpile-server-${VERSION}.tar.gz"
-                  gh release create "$TAG" "$ZIP" "${ZIP}.sha256" "$TARBALL" "${TARBALL}.sha256" \
+                  gh release create "$TAG" "$ZIP" "${ZIP}.sha256" \
                       --verify-tag \
                       --title "PostPile ${VERSION}" \
                       --notes-file /tmp/release-notes.md \
@@ -318,13 +299,11 @@ jobs:
         permissions:
             contents: read
         steps:
-            - name: Checkout cask and formula templates
+            - name: Checkout cask template
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   ref: ${{ inputs.tag || github.ref }}
-                  sparse-checkout: |
-                      homebrew/postpile.rb.tmpl
-                      homebrew/postpile-server.rb.tmpl
+                  sparse-checkout: homebrew/postpile.rb.tmpl
                   sparse-checkout-cone-mode: false
 
             # Render to /tmp before the tap checkout, which replaces the workspace.
@@ -354,23 +333,6 @@ jobs:
                   fi
                   cat /tmp/postpile.rb
 
-            - name: Render Homebrew formula
-              env:
-                  VERSION: ${{ needs.build.outputs.version }}
-                  SHA256: ${{ needs.build.outputs.server_sha256 }}
-              run: |
-                  set -euo pipefail
-                  [ -n "$VERSION" ] && [ -n "$SHA256" ] || { echo "::error::missing version or server sha256 from the build job"; exit 1; }
-                  sed \
-                      -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
-                      -e "s/SHA256_PLACEHOLDER/${SHA256}/g" \
-                      homebrew/postpile-server.rb.tmpl > /tmp/postpile-server.rb
-                  if grep -q 'PLACEHOLDER' /tmp/postpile-server.rb; then
-                      echo "::error::placeholder left in the rendered formula"
-                      exit 1
-                  fi
-                  cat /tmp/postpile-server.rb
-
             - name: Generate Homebrew tap token
               id: app-token
               uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
@@ -388,17 +350,16 @@ jobs:
 
             # Staged so ghcommit-action sees the file itself; an untracked new
             # Casks/ folder would show up in git status as the folder only.
-            - name: Stage rendered cask and formula
+            - name: Stage rendered cask
               run: |
-                  mkdir -p Casks Formula
+                  mkdir -p Casks
                   cp /tmp/postpile.rb Casks/postpile.rb
-                  cp /tmp/postpile-server.rb Formula/postpile-server.rb
-                  git add Casks/postpile.rb Formula/postpile-server.rb
+                  git add Casks/postpile.rb
 
             - name: Commit Homebrew cask update
               uses: planetscale/ghcommit-action@25309d8005ac7c3bcd61d3fe19b69e0fe47dbdde # v0.2.20
               with:
-                  commit_message: 'chore: update postpile cask and postpile-server formula to ${{ needs.build.outputs.version }}'
+                  commit_message: 'chore: update postpile cask to ${{ needs.build.outputs.version }}'
                   repo: PostHog/homebrew-tap
                   branch: main
               env:

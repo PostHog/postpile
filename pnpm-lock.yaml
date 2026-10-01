@@ -281,21 +281,6 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
 
-  apps/service:
-    devDependencies:
-      '@postpile/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
-      '@postpile/mcp':
-        specifier: workspace:*
-        version: link:../../packages/mcp
-      '@postpile/server':
-        specifier: workspace:*
-        version: link:../server
-      vite:
-        specifier: ^7.3.6
-        version: 7.3.6(@types/node@26.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
-
   packages/agent:
     dependencies:
       '@postpile/core':

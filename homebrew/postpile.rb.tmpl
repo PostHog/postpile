@@ -24,10 +24,13 @@ cask "postpile" do
   app "PostPile.app"
   # Read-only MCP server for other agents; the script follows this symlink back into the app.
   binary "#{appdir}/PostPile.app/Contents/Resources/postpile-mcp"
+  # `postpile` opens the app, `postpile browser` runs it for the browser instead.
+  binary "#{appdir}/PostPile.app/Contents/Resources/postpile"
 
   zap trash: [
     "~/.config/postpile",
     "~/Library/Application Support/PostPile",
+    "~/Library/LaunchAgents/com.posthog.postpile.browser.plist",
     "~/Library/Logs/PostPile",
     "~/Library/Preferences/com.posthog.postpile.plist",
     "~/Library/Saved Application State/com.posthog.postpile.savedState",
@@ -54,6 +57,12 @@ cask "postpile" do
 
       claude mcp add postpile -- postpile-mcp
 
+    Prefer a browser tab to the app window? Quit the app, then:
+
+      postpile browser --at-login
+      open http://postpile.localhost:4870
+
     Update later with: brew upgrade --cask postpile
+    (and postpile browser --restart when you use the browser version)
   EOS
 end

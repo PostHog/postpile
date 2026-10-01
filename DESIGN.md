@@ -5334,9 +5334,10 @@ preflight and does not know the token, so CORS stays open.
   or `POSTPILE_TOKEN`) so web pages and other local processes cannot drive
   approve/comment/mark-read. The standalone server also serves the web UI and writes the token
   into that page (`<meta name="postpile-token">`); only same-origin code can read it, so every
-  request whose host is not `127.0.0.1` or `localhost` is refused (DNS rebinding), and the page
-  sends `X-Frame-Options: DENY` (no clickjacking of Approve). Decided 2026-10-01 with the
-  `postpile-server` Homebrew formula (README › In the browser instead of the app).
+  request whose host is not `127.0.0.1`, `localhost` or a `*.localhost` name is refused (DNS
+  rebinding; no public DNS name can point at `.localhost`, browsers never look it up), and the
+  page sends `X-Frame-Options: DENY` (no clickjacking of Approve). Decided 2026-10-01 with
+  `postpile browser` (README › In the browser instead of the app).
 - **Paths**: `POSTPILE_CLAUDE_DIR` (default `~/.claude`) is what the work context sweep
   reads. Database at `~/Library/Application Support/PostPile/db.sqlite` on macOS
   (`$XDG_DATA_HOME/postpile/db.sqlite` elsewhere), instructions at

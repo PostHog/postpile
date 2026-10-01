@@ -21,7 +21,7 @@ describe('update reminder text', () => {
 
   it('names the upgrade steps for the way PostPile was installed', () => {
     expect(upgradeSteps('app')).toEqual({ command: 'brew upgrade --cask postpile', afterwards: 'Then quit and reopen PostPile.' });
-    expect(upgradeSteps('brew-service').command).toBe('brew upgrade postpile-server && brew services restart postpile-server');
+    expect(upgradeSteps('app-browser').command).toBe('brew upgrade --cask postpile && postpile browser --restart');
     expect(upgradeSteps('source').afterwards).toBe('Then restart pnpm server and reload this page.');
   });
 });

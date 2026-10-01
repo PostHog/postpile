@@ -61,7 +61,7 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `useActions().checkTools`),
   `update.ts` (`useUpdate`: the server's last update check, every minute;
   the upgrade command and the line after it come from `upgradeSteps(AppConfig.install)`
-  in `lib/update.ts`: cask, `postpile-server` formula or a source checkout;
+  in `lib/update.ts`: the app, the app's `postpile browser` or a source checkout;
   `lib/use-update-reminder.ts`: `useUpdateReminder` asks core's `updateUrgency`
   for none / pill / bar; "Later" is one shared snooze timestamp in
   localStorage, read by `UpdatePill` and `UpdateBar`),
@@ -561,7 +561,7 @@ stays on screen and listed (`KeptView`).
   notification-click listeners and `sendTestNotification` (the footer's
   "test ping", through `useActions().sendTestNotification`). The first
   launch shows a welcome notification (`main/welcome.ts`, flag in userData). As a page served by
-  `pnpm server` (or the `postpile-server` formula) it reads the token from
+  `pnpm server` (or the app's `postpile browser`, `main/browser.ts`) it reads the token from
   `<meta name="postpile-token">` and calls its own origin; on any other web host it
   takes `?api=…&token=…`. Never add an inline script to `index.html`: the CSP blocks it.
 - Packaging: `pnpm dist` (root) -> `apps/desktop/dist/mac-arm64/PostPile.app`,

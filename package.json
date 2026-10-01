@@ -27,7 +27,6 @@
     "desktop": "pnpm --filter @postpile/desktop dev",
     "web": "tsx scripts/web-dev.ts",
     "build:web": "pnpm --filter @postpile/desktop build:web",
-    "dist:server": "pnpm --filter @postpile/service dist",
     "dist": "pnpm build && pnpm --filter @postpile/desktop dist",
     "screenshots": "tsx scripts/screenshots.ts"
   },

@@ -26,9 +26,10 @@ export default defineConfig({
       sourcemap,
       externalizeDeps: { exclude: workspacePackages },
       // mcp.js is the read-only MCP server that Resources/postpile-mcp runs
-      // under ELECTRON_RUN_AS_NODE; it shares the engine code, not the process.
+      // under ELECTRON_RUN_AS_NODE, browser.js the server Resources/postpile
+      // runs for `postpile browser`; they share the engine code, not the process.
       rollupOptions: {
-        input: { index: 'src/main/index.ts', mcp: 'src/main/mcp.ts' },
+        input: { index: 'src/main/index.ts', mcp: 'src/main/mcp.ts', browser: 'src/main/browser.ts' },
       },
     },
   },

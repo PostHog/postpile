@@ -804,11 +804,12 @@ now".
   the desktop app's background jobs (`startBackgroundJobs`: live poll, auto
   sync, consolidation, work context schedule, MCP agent requests); only Mac
   notifications are desktop-only. The server also serves the built UI at
-  `/` with the token in the page, keeps its token across restarts, and
-  ships as the `postpile-server` Homebrew formula (`apps/service` tarball,
-  `homebrew/postpile-server.rb.tmpl`, `brew services`). Not tried for a full
-  day on real data yet, and the release plumbing runs for the first time
-  with the next tag. Pings show as browser notifications while a tab is
+  `/` with the token in the page and keeps its token across restarts. The
+  app ships it as `postpile browser` (cask binary, `ELECTRON_RUN_AS_NODE`,
+  LaunchAgent for `--at-login`), at `http://postpile.localhost:4870`; a
+  separate Homebrew formula was built and dropped for this (2026-10-01): one
+  install, one update, no Homebrew node. Not tried for a full day on real
+  data yet, and `--at-login` only through tests (launchctl stubbed). Pings show as browser notifications while a tab is
   open (server `PingFeed`, renderer `useWebPings`); with no tab open they
   only show as unread tiles. The tab title carries the Dock badge's count,
   "(9) PostPile" (`GET /api/badge`).
@@ -1094,6 +1095,15 @@ the app meanwhile.
 
 ## Decided
 
+- **PostPile in the browser ships with the app** (2026-10-01): `postpile
+  browser` from the cask runs the app's own binary as Node (like
+  `postpile-mcp`), not a separate `postpile-server` Homebrew formula (built,
+  then dropped): one install and one update, no Homebrew node. Start at login
+  is a LaunchAgent (`--at-login`, `--stop`, `--restart`), since casks get no
+  `brew services`. The address is `http://postpile.localhost:4870`: browsers
+  resolve `*.localhost` themselves and treat it as a secure context, so
+  notifications work over plain HTTP; `.dev` and other custom names would
+  need DNS and TLS.
 - **Your move in the topic header and group headings** (2026-10-01,
   DESIGN.md "Your move in the header and the group headings"): the header
   shows the sidebar's chip, group headings add "· N your move", both counted

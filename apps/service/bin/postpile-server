@@ -1,3 +1,0 @@
-#!/bin/sh
-root="$(cd "$(dirname "$0")/.." && pwd)"
-exec "${POSTPILE_NODE:-node}" "$root/lib/server.js" "$@"

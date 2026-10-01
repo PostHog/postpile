@@ -9,6 +9,7 @@ import { format } from 'node:util';
 // main.log, main.1.log, main.2.log.
 
 export const LOG_FILE_NAME = 'main.log';
+export const BROWSER_LOG_FILE_NAME = 'browser.log';
 const MAX_BYTES = 5 * 1024 * 1024;
 const FILES_KEPT = 3;
 
@@ -27,15 +28,16 @@ export class FileLog {
   constructor(
     readonly dir: string,
     private readonly maxBytes: number = MAX_BYTES,
+    private readonly baseName: string = 'main',
   ) {
-    this.file = join(dir, LOG_FILE_NAME);
+    this.file = join(dir, `${baseName}.log`);
     mkdirSync(dir, { recursive: true });
     this.bytes = existsSync(this.file) ? statSync(this.file).size : 0;
   }
 
   /** main.log -> main.1.log -> main.2.log; the oldest goes. */
   private rotate(): void {
-    const numbered = (index: number) => join(this.dir, `main.${index}.log`);
+    const numbered = (index: number) => join(this.dir, `${this.baseName}.${index}.log`);
     rmSync(numbered(FILES_KEPT - 1), { force: true });
     for (let index = FILES_KEPT - 2; index >= 1; index -= 1) {
       if (existsSync(numbered(index))) {

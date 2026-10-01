@@ -13,5 +13,5 @@
     "react/set-state-in-effect": "off",
     "react/refs": "off"
   },
-  "ignorePatterns": ["node_modules", "out", "dist", "apps/desktop/out", "apps/desktop/dist-web", "apps/service/dist"]
+  "ignorePatterns": ["node_modules", "out", "dist", "apps/desktop/out", "apps/desktop/dist-web"]
 }

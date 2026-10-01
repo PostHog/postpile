@@ -55,13 +55,9 @@ export function serveWebUi(app: Hono, root: string, token: string): void {
   });
 }
 
-export function webRootCandidates(serverDir: string): string[] {
-  return [join(serverDir, '../web'), join(serverDir, '../../desktop/dist-web')];
-}
-
-export function findWebRoot(env: NodeJS.ProcessEnv, serverDir: string): string | null {
+export function findWebRoot(env: NodeJS.ProcessEnv, candidates: string[]): string | null {
   if (env.POSTPILE_WEB_ROOT !== undefined) {
     return env.POSTPILE_WEB_ROOT === '' ? null : env.POSTPILE_WEB_ROOT;
   }
-  return webRootCandidates(serverDir).find((dir) => existsSync(join(dir, 'index.html'))) ?? null;
+  return candidates.find((dir) => existsSync(join(dir, 'index.html'))) ?? null;
 }

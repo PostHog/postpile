@@ -30,11 +30,14 @@ files:
   # workflow, never shipped inside the app.
   - "!**/*.map"
 asar: true
-# The MCP launcher (see the file). Lands in Contents/Resources, executable,
-# and is signed and notarized with the rest of the bundle.
+# The MCP launcher and the postpile command (see the files). They land in
+# Contents/Resources, executable, and are signed and notarized with the rest
+# of the bundle.
 extraResources:
   - from: build/postpile-mcp
     to: postpile-mcp
+  - from: build/postpile
+    to: postpile
 mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools
