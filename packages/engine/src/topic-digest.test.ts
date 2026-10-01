@@ -74,3 +74,38 @@ describe('topic digest', () => {
     expect(calls(report, 'glance_batch')).toBe(1);
   });
 });
+
+describe('topic digest with sets', () => {
+  it('carries the set changes when a regroup is due, and the set job does not ask again', async () => {
+    const h = makeHarness({ topicDigest: true });
+    const keys = depot(h, 3);
+    h.agent.answerDigestSets({ created: [{ title: 'Cache keys', take: 'Same key change.', members: [{ prKey: keys[0]!, reason: 'a' }, { prKey: keys[1]!, reason: 'b' }] }] });
+
+    const report = await h.engine.sync({ agentJobs: ['dossiers', 'glances', 'sets'] });
+
+    expect(h.agent.topicDigestInputs[0]?.sets).not.toBeNull();
+    expect(h.store.sets.listActiveForTopic('depot').map((set) => set.members.map((m) => m.prKey))).toEqual([[keys[0], keys[1]]]);
+    expect(calls(report, 'topic_digest')).toBe(1);
+    expect(calls(report, 'set_grouping')).toBe(0);
+  });
+
+  it('leaves the sets to the set job when the set part was unusable', async () => {
+    const h = makeHarness({ topicDigest: true });
+    depot(h, 3);
+    h.agent.answerDigestSets(null);
+    h.runner.answer('set_grouping', {});
+
+    const report = await h.engine.sync({ agentJobs: ['dossiers', 'glances', 'sets'] });
+
+    expect(calls(report, 'set_grouping')).toBe(1);
+  });
+
+  it('asks for no set part when the run has no set job', async () => {
+    const h = makeHarness({ topicDigest: true });
+    depot(h, 3);
+
+    await h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
+
+    expect(h.agent.topicDigestInputs[0]?.sets).toBeNull();
+  });
+});

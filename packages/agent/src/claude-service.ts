@@ -261,7 +261,8 @@ export class RunnerAgentService implements AgentService {
   /**
    * A broken dossier part fails the whole call (the glances depend on it).
    * Glances are checked one by one like a glance batch; the missing ones go
-   * to the topic's glance batches.
+   * to the topic's glance batches. A broken set part is null: the set job
+   * asks again on its own.
    */
   async topicDigest(input: TopicDigestInput): Promise<TopicDigestResult> {
     const refs = new DossierRefs(input.dossier);
@@ -272,7 +273,9 @@ export class RunnerAgentService implements AgentService {
     const dossier = { ...mapDossierAnswer(value, input.dossier, refs, this.now()), inputHash: dossierInputHash(input.dossier), model };
     const stamp = { model, createdAt: this.now(), inputHash: (item: GlanceBatchItem) => glanceItemInputHash(input.glances, item) };
     const glances = { ...mapGlanceAnswer({ glances: value.glances }, input.glances, stamp), model };
-    return { dossier, glances };
+    const setAnswer = input.sets ? setGroupingOutput.safeParse(value.sets ?? {}) : null;
+    const sets = input.sets && setAnswer?.success ? mapSetAnswer(setAnswer.data, input.sets) : null;
+    return { dossier, glances, sets };
   }
 
   async reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]> {

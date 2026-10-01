@@ -3337,9 +3337,16 @@ GLANCE_BATCH_SIZE:
   next sync retries, like a failed dossier update). Glances are checked one
   by one; missing ones, and PRs past the first batch, go to the topic's
   glance batches once the dossier settled.
+- **Sets as the third part**: when the run includes the set job and a
+  regroup is due for the topic (`SetGrouper.due`), the call also carries the
+  set prompt's sections and rules (`setGroupingSections`, `SET_RULES`) and
+  answers `sets` after the glances, told that the risk it just wrote counts.
+  The engine applies them after storing the glances, so the regroup's
+  triggers already hold the new risk and the set job skips the topic. A
+  broken set part is dropped alone (the set job then asks on its own); it
+  never costs the dossier.
 - Events stay their own calls for now (they drive pings, and a dossier-sized
-  call would delay them). The topic's set changes are the next part (see
-  "Tiles hold still").
+  call would delay them).
 - Budget: one `topic_digest` take replaces the dossier take; timeout 7
   minutes.
 - Compared with `pnpm cli simulate-start` (old vs combined from the same
@@ -5159,8 +5166,9 @@ preflight and does not know the token, so CORS stays open.
     [automatic on every full sync, reversible]
   - accepted global rules: kept in the database and added to every prompt, or appended to
     instructions.md [database; instructions.md stays the user's own file]
-  - fold set grouping into the dossier update to save one call per topic [not yet, sets stay a
-    separate job]
+  - fold set grouping into the dossier update to save one call per topic [behind
+    POSTPILE_TOPIC_DIGEST=1 since 2026-10-01, see "One call per topic"; the set job stays for
+    topics without a dossier update]
   - first dossier update of a big topic: 120 events max, 15 per PR, older ones only counted
     [yes]
   - one initiative per topic, or initiatives spanning topics [one per topic]

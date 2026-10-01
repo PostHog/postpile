@@ -13,8 +13,9 @@ now".
   `pr_set_change` (migration 022) and shown in the CLI and MCP topic views.
 - One call per topic, behind `POSTPILE_TOPIC_DIGEST=1` (2026-10-01, DESIGN.md
   "One call per topic"): dossier and the topic's first 18 glances in one
-  `topic_digest` call; the rest stays in glance batches. Off by default until
-  the side-by-side comparison.
+  `topic_digest` call, plus the topic's set changes when a regroup is due;
+  the rest stays in glance batches and the set job. Off by default until the
+  side-by-side comparison.
 - PR assignees and ownership (2026-09-30, DESIGN.md "PR ownership: bot PRs
   belong to their assignees"): the PR query reads `assignees(first: 10)`,
   kept in the PR JSON (`Pr.assignees`, no migration). Core `prOwners`

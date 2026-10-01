@@ -7,6 +7,7 @@ import {
   type AreaChoice,
   type DossierUpdateInput,
   type DossierUpdateResult,
+  type SetGroupingInput,
 } from '@postpile/agent';
 import {
   GLANCE_BATCH_SIZE,
@@ -32,6 +33,7 @@ import { verifyWorldFor } from '../memory/fact-world.ts';
 import { FEEDBACK_IN_PROMPTS } from '../prompt-context.ts';
 import type { DigestDeps, TopicScope } from './deps.ts';
 import { glanceGapKey } from './glance-batches.ts';
+import { SetGrouper } from './set-grouping.ts';
 
 /** Versions kept per topic; older ones are pruned on every save. */
 export const DOSSIER_VERSIONS_KEPT = 50;
@@ -72,12 +74,23 @@ export function contextHashKey(topicId: string): string {
  * those. Topics with unread tiles go first so a capped budget is spent where
  * the user looks first.
  */
+/** withSets: the run includes the set job, so a topic digest may carry the topic's set changes. */
+export interface DossierUpdaterOptions {
+  withSets: boolean;
+}
+
 export class DossierUpdater {
   private newAreas = 0;
   /** Per topic, the PRs that ride along with its dossier update (topic digest only), most urgent first. */
   private glanceTargets = new Map<string, GlanceTarget[]>();
+  private readonly sets: SetGrouper;
 
-  constructor(private readonly deps: DigestDeps) {}
+  constructor(
+    private readonly deps: DigestDeps,
+    private readonly options: DossierUpdaterOptions = { withSets: false },
+  ) {
+    this.sets = new SetGrouper(deps);
+  }
 
   /** Areas in use on other active topics, most used first. */
   private areasInUse(topicId: string): AreaChoice[] {
@@ -276,14 +289,22 @@ export class DossierUpdater {
     this.deps.onGlancesStored?.(stored);
   }
 
-  /** One call for the dossier and the topic's first glance batch (DESIGN.md "One call per topic"). */
-  private async digest(input: DossierUpdateInput, targets: GlanceTarget[], board: Board): Promise<DossierUpdateResult> {
+  /**
+   * One call for the dossier, the topic's first glance batch and, when a
+   * regroup is due, its set changes (DESIGN.md "One call per topic"). The
+   * sets are applied after the glances are stored, so the regroup's
+   * triggers already hold the new risk and the set job does not ask again.
+   */
+  private async digest(input: DossierUpdateInput, targets: GlanceTarget[], sets: SetGroupingInput | null, board: Board): Promise<DossierUpdateResult> {
     const { store, agent, viewer, contexts } = this.deps;
     const before = new GlanceInputs(store, board, viewer, contexts);
     const glances = before.batchInput(input.topic.id, targets.map((target) => target.item), 1);
-    const result = await agent.topicDigest({ dossier: input, glances });
+    const result = await agent.topicDigest({ dossier: input, glances, sets });
     this.save(input, result.dossier);
     this.saveGlances(targets, result.glances.glances, board);
+    if (sets && result.sets) {
+      this.sets.apply(input.topic, sets, result.sets);
+    }
     return result.dossier;
   }
 
@@ -295,6 +316,7 @@ export class DossierUpdater {
       return;
     }
     const targets = (this.glanceTargets.get(topic.id) ?? []).slice(0, GLANCE_BATCH_SIZE);
+    const sets = targets.length > 0 && this.options.withSets ? this.sets.due(topic) : null;
     if (!budget.take(targets.length > 0 ? 'topic_digest' : 'dossier_update')) {
       skippedByBudget.add(topic.id);
       return;
@@ -302,7 +324,7 @@ export class DossierUpdater {
     try {
       let result: DossierUpdateResult;
       if (targets.length > 0) {
-        result = await this.digest(input, targets, board);
+        result = await this.digest(input, targets, sets, board);
       } else {
         result = await agent.updateDossier(input);
         this.save(input, result);

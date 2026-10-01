@@ -43,7 +43,7 @@ export class Digester {
 
   async run(jobs: AgentJob[]): Promise<void> {
     await this.job(jobs, 'topics', 'topics', () => new TopicAssigner(this.deps).run());
-    const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps).start() : NO_DOSSIERS;
+    const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps, { withSets: jobs.includes('sets') }).start() : NO_DOSSIERS;
     const dossiersDone = this.job(jobs, 'dossiers', 'dossiers', async () => {
       await dossiers.done;
     });

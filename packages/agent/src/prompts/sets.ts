@@ -44,33 +44,29 @@ function unplacedBlock(input: SetGroupingInput, prs: Map<string, Pr>): string {
   return lines.length === 0 ? '(none)' : githubData(lines.join('\n\n'));
 }
 
-/**
- * Keeps the topic's sets: lasting tiles of PRs that one judgement covers
- * (DESIGN.md "Tiles hold still"). The agent answers only with changes:
- * place new PRs, move one out with evidence, merge two sets that became
- * one piece of work. Anything it leaves out stays. Status, turn and review
- * state change by the hour and never decide a set.
- */
-export function setGroupingPrompt(input: SetGroupingInput): string {
+/** The topic's current sets, the dissolved groupings and the open PRs in no set. */
+export function setGroupingSections(input: SetGroupingInput): string {
   const prs = new Map(input.prs.map((pr) => [pr.key, pr]));
   const active = activeSets(input);
   const current = active.length === 0 ? '(none yet)' : active.map((set) => setBlock(input, set, prs)).join('\n');
   const dissolved = input.existingSets.filter((set) => set.status === 'dissolved');
   const dissolvedText = dissolved.length === 0 ? '' : `\nGroupings the user dissolved. Never propose them again:\n${dissolved.map(dissolvedLine).join('\n')}\n`;
-  return `You keep the tiles of one topic for a developer. A tile is how the developer handles PRs in one go.
-Most PRs are a tile of their own. A set is a tile of two or more PRs.
-${WORK_GLOSSARY}
-The topic, as written from GitHub activity:
-${githubData(`${input.topic.name}\n${input.topic.summary}`)}
-${GITHUB_DATA_RULE}
-${contextBlock(input.context)}
-Current sets (lasting: they stay as they are unless you change them below):
+  return `Current sets (lasting: they stay as they are unless you change them below):
 ${current}
 ${dissolvedText}
 Open PRs in no set yet:
-${unplacedBlock(input, prs)}
+${unplacedBlock(input, prs)}`;
+}
 
-What a set is:
+/** The set answer's lists, for the answer shapes of the set prompt and the topic digest. */
+export const SET_ANSWER_FIELDS = `"joins": [{"setId": "...", "prKey": "owner/repo#1", "reason": "..."}],
+ "newSets": [{"title": "...", "take": "...", "members": [{"prKey": "owner/repo#2", "reason": "..."}]}],
+ "leaves": [{"setId": "...", "prKey": "owner/repo#3", "reason": "..."}],
+ "merges": [{"setId": "...", "intoSetId": "...", "reason": "..."}],
+ "updates": [{"setId": "...", "title": "...", "take": "..."}]`;
+
+/** What a set is and how to answer, the same in the set prompt and the topic digest. */
+export const SET_RULES = `What a set is:
 - Two or more PRs that one judgement covers: once the developer has read or approved one, they know
   what the others are. The same change or pattern in several places (the same fix in several
   repos, the same version bump, one codemod split up), or one small piece of the goal done in steps.
@@ -93,11 +89,26 @@ Sets are lasting. Answer only with what changes; anything you leave out stays as
 - title: 2 to 6 words naming the shared change. take: one sentence on what one approval covers,
   for example "Same one-line version cap in four repos". reason: one short sentence per PR.
 - A PR goes into one set at most. Copy set ids and PR keys exactly as above.
-- Changing nothing is the most common good answer.
+- Changing nothing is the most common good answer.`;
+
+/**
+ * Keeps the topic's sets: lasting tiles of PRs that one judgement covers
+ * (DESIGN.md "Tiles hold still"). The agent answers only with changes:
+ * place new PRs, move one out with evidence, merge two sets that became
+ * one piece of work. Anything it leaves out stays. Status, turn and review
+ * state change by the hour and never decide a set.
+ */
+export function setGroupingPrompt(input: SetGroupingInput): string {
+  return `You keep the tiles of one topic for a developer. A tile is how the developer handles PRs in one go.
+Most PRs are a tile of their own. A set is a tile of two or more PRs.
+${WORK_GLOSSARY}
+The topic, as written from GitHub activity:
+${githubData(`${input.topic.name}\n${input.topic.summary}`)}
+${GITHUB_DATA_RULE}
+${contextBlock(input.context)}
+${setGroupingSections(input)}
+
+${SET_RULES}
 ${NO_CI_RULE}
-${jsonOnly(`{"joins": [{"setId": "...", "prKey": "owner/repo#1", "reason": "..."}],
- "newSets": [{"title": "...", "take": "...", "members": [{"prKey": "owner/repo#2", "reason": "..."}]}],
- "leaves": [{"setId": "...", "prKey": "owner/repo#3", "reason": "..."}],
- "merges": [{"setId": "...", "intoSetId": "...", "reason": "..."}],
- "updates": [{"setId": "...", "title": "...", "take": "..."}]}`)}`;
+${jsonOnly(`{${SET_ANSWER_FIELDS}}`)}`;
 }

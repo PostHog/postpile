@@ -269,9 +269,14 @@ export const glanceBatchOutput = z.object({
   glances: z.array(z.unknown()),
 });
 
-/** The dossier answer plus the glances; each glance is checked on its own, like a glance batch. */
+/**
+ * The dossier answer plus the glances and the set changes. Each glance is
+ * checked on its own, like a glance batch; the set part is checked on its
+ * own too, so a broken one never costs the dossier.
+ */
 export const topicDigestOutput = dossierUpdateOutput.extend({
   glances: z.array(z.unknown()).default([]),
+  sets: z.unknown().optional(),
 });
 
 export const glanceBatchItemOutput = glanceOutput.extend({

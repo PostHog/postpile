@@ -2,14 +2,37 @@ import type { DossierRefs } from '../dossier-refs.ts';
 import type { TopicDigestInput } from '../service.ts';
 import { DOSSIER_ANSWER_FIELDS, dossierUpdateInstructions } from './dossier-update.ts';
 import { GLANCE_ENTRY_SHAPE, glanceRules, glanceSections } from './glance-batch.ts';
+import { SET_ANSWER_FIELDS, SET_RULES, setGroupingSections } from './sets.ts';
 import { jsonOnly } from './shared.ts';
+
+/** The third part, when a regroup is due: the topic's sets, read with the risk just written. */
+function setsPart(input: TopicDigestInput): string {
+  if (!input.sets) {
+    return '';
+  }
+  return `
+
+Third part of the job: keep the topic's sets. A tile is how the developer handles PRs in one go;
+most PRs are a tile of their own, a set is a tile of two or more PRs. Where you wrote a glance above,
+its risk counts instead of the risk shown here.
+
+${setGroupingSections(input.sets)}
+
+${SET_RULES}`;
+}
+
+function answerShape(input: TopicDigestInput): string {
+  const sets = input.sets ? `,\n  "sets": {${SET_ANSWER_FIELDS}}` : '';
+  return `{\n${DOSSIER_ANSWER_FIELDS},\n  "glances": [${GLANCE_ENTRY_SHAPE}]${sets}\n}`;
+}
 
 /**
  * One call per topic (DESIGN.md "One call per topic"): the dossier update
- * word for word, then the glances of the topic's most urgent PRs. Thinking is
- * off, so the order of the answer is the order of the work: the dossier comes
- * first and the glances read it. User memory, viewer and the GitHub data rule
- * are in the dossier part and are not repeated.
+ * word for word, then the glances of the topic's most urgent PRs, then the
+ * set changes when a regroup is due. Thinking is off, so the order of the
+ * answer is the order of the work: the glances read the dossier, the sets
+ * read the glances' risk. User memory, viewer, glossary and the GitHub data
+ * rule are in the dossier part and are not repeated.
  */
 export function topicDigestPrompt(input: TopicDigestInput, refs: DossierRefs): string {
   const count = input.glances.items.length;
@@ -23,8 +46,8 @@ The pull requests, each headed by its key:
 
 ${glanceSections(input.glances)}
 
-${glanceRules(input.glances)}
+${glanceRules(input.glances)}${setsPart(input)}
 
-Write the answer in this order: the dossier fields first, then "glances".
-${jsonOnly(`{\n${DOSSIER_ANSWER_FIELDS},\n  "glances": [${GLANCE_ENTRY_SHAPE}]\n}`)}`;
+Write the answer in this order: the dossier fields first, then "glances"${input.sets ? ', then "sets"' : ''}.
+${jsonOnly(answerShape(input))}`;
 }

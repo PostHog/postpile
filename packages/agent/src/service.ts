@@ -264,14 +264,17 @@ export interface GlanceBatchInput {
 }
 
 /**
- * The dossier update and the topic's first glance batch in one call
- * (POSTPILE_TOPIC_DIGEST=1, DESIGN.md "One call per topic"). The answer
- * writes the dossier first, so the glances read the dossier just written.
+ * The dossier update, the topic's first glance batch and, when a regroup is
+ * due, its set changes in one call (POSTPILE_TOPIC_DIGEST=1, DESIGN.md "One
+ * call per topic"). The answer follows that order, so the glances read the
+ * dossier and the sets read the glances' risk.
  */
 export interface TopicDigestInput {
   dossier: DossierUpdateInput;
   /** At most GLANCE_BATCH_SIZE PRs of the same topic, most urgent first. Carries the previous dossier. */
   glances: GlanceBatchInput;
+  /** The topic's sets when a regroup is due, else null. */
+  sets: SetGroupingInput | null;
 }
 
 export interface TopicDigestResult {
@@ -281,6 +284,8 @@ export interface TopicDigestResult {
    * the new version is stored. Missing ones go to the glance batches.
    */
   glances: GlanceBatchResult;
+  /** Null when no regroup was asked, or the set part was unusable (the set job then asks on its own). */
+  sets: SetChanges | null;
 }
 
 export interface GlanceBatchResult {

@@ -596,7 +596,7 @@ describe('RunnerAgentService.topicDigest', () => {
       ...dossierAnswer(),
       glances: [{ prKey: 'acme/app#1', ...glanceEntry }, { prKey: 'acme/app#3', ...glanceEntry, verdict: 'SHIP_IT' }],
     });
-    const input = { dossier: dossierInput(), glances: glanceInput() };
+    const input = { dossier: dossierInput(), glances: glanceInput(), sets: null };
 
     const result = await service.topicDigest(input);
 
@@ -611,10 +611,29 @@ describe('RunnerAgentService.topicDigest', () => {
     expect(prompt.lastIndexOf('"confirmedFactIds"')).toBeLessThan(prompt.lastIndexOf('"glances"'));
   });
 
+  it('adds the set part when a regroup is due, and drops it alone when it is broken', async () => {
+    const { runner, service } = setup();
+    const sets = { topic: makeTopic(), prs: [pr1, pr3], existingSets: [], risks: {}, context: fullContext };
+    const newSet = { title: 'Cache keys', take: 'Same key change.', members: [{ prKey: 'acme/app#1', reason: 'a' }, { prKey: 'acme/app#3', reason: 'b' }] };
+    runner.answer('topic_digest', { ...dossierAnswer(), glances: [], sets: { newSets: [newSet] } });
+    runner.answer('topic_digest', { ...dossierAnswer(), glances: [], sets: { leaves: 'not a list' } });
+
+    const result = await service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets });
+    const broken = await service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets });
+
+    expect(result.sets?.created).toEqual([newSet]);
+    expect(broken.sets).toBeNull();
+    expect(broken.dossier.dossier.goal).toBe('Run CI on Depot.');
+    const prompt = runner.promptsFor('topic_digest')[0]!;
+    expect(prompt).toContain('Third part of the job');
+    expect(prompt).toContain('Open PRs in no set yet:');
+    expect(prompt.lastIndexOf('"glances"')).toBeLessThan(prompt.lastIndexOf('"sets"'));
+  });
+
   it('fails the whole call when the dossier part is broken', async () => {
     const { runner, service } = setup();
     runner.answer('topic_digest', { glances: [{ prKey: 'acme/app#1', ...glanceEntry }] });
 
-    await expect(service.topicDigest({ dossier: dossierInput(), glances: glanceInput() })).rejects.toThrow();
+    await expect(service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets: null })).rejects.toThrow();
   });
 });
