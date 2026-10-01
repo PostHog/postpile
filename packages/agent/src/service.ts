@@ -88,15 +88,32 @@ export type TopicAssignment =
 
 export interface SetGroupingInput {
   topic: Topic;
+  /** The topic's open PRs and every member of its sets, merged ones included. */
   prs: Pr[];
+  /** Active and dissolved sets of the topic. */
   existingSets: PrSet[];
+  /** The glance's risk line per PR ("medium - touches the worker loop"), where a glance exists. */
+  risks: Record<PrKey, string>;
   context: PromptContext;
 }
 
+/** A new set: two or more PRs one judgement covers. */
 export interface SetProposal {
   title: string;
   take: string;
   members: PrSetMember[];
+}
+
+/**
+ * What the agent changes in a topic's sets. Anything it does not mention
+ * stays as it is: sets are lasting (DESIGN.md "Tiles hold still").
+ */
+export interface SetChanges {
+  created: SetProposal[];
+  joined: { setId: string; member: PrSetMember }[];
+  left: { setId: string; prKey: PrKey; reason: string }[];
+  merged: { setId: string; intoSetId: string; reason: string }[];
+  updated: { setId: string; title: string; take: string }[];
 }
 
 export interface EventOverrideProposal {
@@ -496,7 +513,8 @@ export interface SetupFitInput {
 export interface AgentService {
   /** v2: topics carry their dossier brief. */
   assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]>;
-  groupSets(input: SetGroupingInput): Promise<SetProposal[]>;
+  /** Changes to the topic's sets; empty when nothing should change. */
+  groupSets(input: SetGroupingInput): Promise<SetChanges>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;
   chat(input: ChatInput): Promise<AgentChatReply>;
   /** A proposed new instructions text from one of the user's own messages. Nothing is written here. */

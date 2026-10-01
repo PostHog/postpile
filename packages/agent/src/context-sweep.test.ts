@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { RunnerAgentService } from './claude-service.ts';
 import { DossierRefs } from './dossier-refs.ts';
 import { FakeRunner } from './fake-runner.ts';
-import { dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
+import { dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingTriggers } from './hashes.ts';
 import { modelFor } from './models.ts';
 import { chatPrompt } from './prompts/chat.ts';
 import { contextSweepPrompt } from './prompts/context-sweep.ts';
@@ -94,7 +94,7 @@ describe('work context in prompts', () => {
   }
 
   it('stays out of prompts that do not judge relevance', () => {
-    const sets = setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: withDigest });
+    const sets = setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], risks: {}, context: withDigest });
     const events = eventBatchPrompt({ topic, items: [{ pr, events: [makeEvent()] }], viewer, context: withDigest });
     expect(sets).not.toContain(HEADING);
     expect(events).not.toContain(HEADING);
@@ -106,8 +106,8 @@ describe('work context in prompts', () => {
     expect(glanceItemInputHash(glanceWith, glanceWith.items[0]!)).toBe(glanceItemInputHash(glance, glance.items[0]!));
     expect(dossierInputHash(dossierInput(withDigest))).toBe(dossierInputHash(dossierInput(fullContext)));
     expect(dossierContextHash(withDigest)).toBe(dossierContextHash(fullContext));
-    const sets = { topic, prs: [pr], existingSets: [] };
-    expect(setGroupingInputHash({ ...sets, context: withDigest })).toBe(setGroupingInputHash({ ...sets, context: fullContext }));
+    const sets = { topic, prs: [pr], existingSets: [], risks: {} };
+    expect(setGroupingTriggers({ ...sets, context: withDigest })).toEqual(setGroupingTriggers({ ...sets, context: fullContext }));
   });
 });
 

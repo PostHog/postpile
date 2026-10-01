@@ -42,7 +42,8 @@ export function withoutCi(events: PrEvent[]): PrEvent[] {
 /**
  * What area, topic, tile and set mean, said the same way to every agent that
  * sorts, groups or tidies PRs, so they cut work at the same grain (decided
- * 2026-09-29, DESIGN.md "Areas, topics, tiles and sets").
+ * 2026-09-29, DESIGN.md "Areas, topics, tiles and sets"; sets as one
+ * judgement, lasting, 2026-10-01, "Tiles hold still").
  */
 export const WORK_GLOSSARY = `How the developer's work is grouped:
 - Area: the part of the product or codebase the work touches ("Hogland", "Data warehouse",
@@ -53,8 +54,9 @@ export const WORK_GLOSSARY = `How the developer's work is grouped:
   Depot"). Test: one sentence states the goal, and every PR in the topic moves it forward or came
   out of that work while it was going on (a fix found while doing it). Sharing a repo, an area or
   a word like "CI", "security" or "release" is not enough.
-- Tile: what the developer acts on in one go: a single PR, a git stack, or a set.
-- Set: two or more PRs inside one topic that are best read together.
+- Tile: what the developer handles in one go inside a topic: a single PR, a git stack, or a set.
+- Set: two or more PRs of one topic that one judgement covers (the same change or pattern, similar
+  risk). Sets are lasting: they never change because of status, turn or review state.
 When the user's instructions say how finely they want topics cut, follow them.`;
 
 /**

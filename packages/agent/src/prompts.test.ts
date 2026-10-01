@@ -106,7 +106,7 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
     for (const name of ['glance', 'topics', 'chat', 'ping', 'recheck']) {
       expect(prompts[name], name).toContain(NO_CI_RULE);
     }
-    const sets = setGroupingPrompt({ topic, prs: [failing, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext });
+    const sets = setGroupingPrompt({ topic, prs: [failing, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], risks: {}, context: fullContext });
     expect(sets).toContain(NO_CI_RULE);
     expect(NO_CI_RULE).toContain('may still mention CI status: it is stale, ignore it');
   });
@@ -133,7 +133,7 @@ describe('every prompt carries the memory and asks for JSON', () => {
   const prompts: Record<string, string> = {
     glance: oneGlancePrompt(pr, { kind: 'pinged', reason: 'review_requested' }, fullContext),
     topics: topicAssignmentPrompt({ prs: [pr], viewer, topics: [{ id: 't1', name: 'CI', summary: '', brief: '', memberCount: 3, openCount: 0, lastActivityAt: null }], context: fullContext }),
-    sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext }),
+    sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], risks: {}, context: fullContext }),
     events: eventBatchPrompt({ topic, items: [{ pr, events: [makeEvent()] }], viewer, context: fullContext }),
     comment: draftCommentPrompt({ pr, viewer, person: 'bob', intent: 'is the cache key stable?', context: fullContext }),
     chat: chatPrompt({
@@ -266,9 +266,44 @@ describe('setGroupingPrompt', () => {
           updatedAt: '',
         },
       ],
+      risks: {},
       context: emptyContext,
     });
-    expect(prompt).toContain('- set of acme/app#1 (DISSOLVED by the user, do not propose it again)\n  its title:\n<github_data>\nOld grouping\n</github_data>');
+    expect(prompt).toContain('Groupings the user dissolved. Never propose them again:\n- acme/app#1');
+  });
+
+  it('shows current sets by id with the risk of each member, and asks for changes only', () => {
+    const prs = [1, 2, 3].map((number) => makePr({ ref: { repo: 'acme/app', number } }));
+    const prompt = setGroupingPrompt({
+      topic: makeTopic(),
+      prs,
+      existingSets: [
+        {
+          id: 's1',
+          topicId: 'topic-1',
+          title: 'Pin SDKs',
+          take: 'Same cap in two repos.',
+          members: [
+            { prKey: 'acme/app#1', reason: 'cap' },
+            { prKey: 'acme/app#2', reason: 'cap' },
+          ],
+          removedKeys: [],
+          status: 'active',
+          inputHash: '',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      risks: { 'acme/app#1': 'low - lockfile only', 'acme/app#3': 'high - touches migrations' },
+      context: emptyContext,
+    });
+    expect(prompt).toContain('- set id s1');
+    expect(prompt).toContain('risk: low - lockfile only; joined because: cap');
+    expect(prompt).toContain('risk: not judged yet');
+    expect(prompt).toContain('acme/app#3');
+    expect(prompt).toContain('risk: high - touches migrations');
+    expect(prompt).toContain('Answer only with what changes; anything you leave out stays as it is');
+    expect(prompt).toContain('Never group by status');
   });
 });
 

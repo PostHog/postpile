@@ -116,7 +116,7 @@ const prompts: Record<string, string> = {
     message: 'what is left here?',
     context: fullContext,
   }),
-  sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], context: fullContext }),
+  sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], risks: {}, context: fullContext }),
 };
 
 describe('topic and area names stay inside the data fence', () => {

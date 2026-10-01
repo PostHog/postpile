@@ -90,8 +90,14 @@ export class FeedbackActions {
           return failed('"Not related" needs a set tile and the PR to drop');
         }
         // A stack leaves a set whole, like it joined it.
+        const at = this.now().toISOString();
         for (const layer of board.stackKeysOf(key)) {
-          this.store.sets.removeMember(setId, layer, this.now().toISOString());
+          this.store.sets.removeMember(setId, layer, at);
+        }
+        const change = { setId, topicId: tile.topicId, by: 'user' as const, at };
+        this.store.sets.recordChange({ ...change, prKey: key, kind: 'left', reason: input.note.trim() || 'you said not related' });
+        if (this.store.sets.get(setId)?.status === 'dissolved') {
+          this.store.sets.recordChange({ ...change, prKey: null, kind: 'ended', reason: 'fewer than two PRs left' });
         }
         return ok('Removed from the set');
       }

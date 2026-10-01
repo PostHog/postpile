@@ -1076,7 +1076,13 @@ the app meanwhile.
   glance) and ask first. Not backed means greyed out with the reason;
   nothing to act on means no button. Mark read skips tiles with asks for you. Only actions carry ✨, never
   text. Tile Mark read is always offered, so it stays plain.
-
+- **Tiles hold still** (2026-10-01, DESIGN.md "Tiles hold still"): topics
+  stay the focus; a set is a lasting tile of PRs one judgement covers (same
+  change or pattern, similar risk by the glance's level, the same kind of
+  author preferred); status, turn, review, unread and CI never move a PR
+  between tiles; the agent changes sets without asking, with a recorded
+  reason; no separate risk class ("gears") and no rules per repo; no big UI
+  changes; batch approve is PR #48's.
 - **Groups inside a topic** (2026-09-30, DESIGN.md "Groups inside a topic"):
   the tile grid's All / Unread toggle is gone; a topic shows three groups,
   always Unread, Open, Dealt with (n), empty ones hidden, Dealt with folded

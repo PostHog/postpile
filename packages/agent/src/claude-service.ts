@@ -22,6 +22,7 @@ import { setGroupingPrompt } from './prompts/sets.ts';
 import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
+import { mapSetAnswer } from './set-answer.ts';
 import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
 import {
   chatOutput,
@@ -65,7 +66,7 @@ import type {
   PingDecisionAnswer,
   PingDecisionInput,
   SetGroupingInput,
-  SetProposal,
+  SetChanges,
   SetupDraftInput,
   SetupDraftResult,
   SetupFitInput,
@@ -207,25 +208,12 @@ export class RunnerAgentService implements AgentService {
     return result;
   }
 
-  async groupSets(input: SetGroupingInput): Promise<SetProposal[]> {
-    if (input.prs.length < 2) {
-      return [];
-    }
-    const { value } = await this.ask('set_grouping', setGroupingPrompt(input), setGroupingOutput);
-    const known = new Set(input.prs.map((pr) => pr.key));
-    const result: SetProposal[] = [];
-    for (const set of value.sets) {
-      const seen = new Set<string>();
-      const members = set.members.filter((m) => {
-        const keep = known.has(m.prKey) && !seen.has(m.prKey);
-        seen.add(m.prKey);
-        return keep;
-      });
-      if (members.length >= 2) {
-        result.push({ title: set.title, take: set.take, members });
-      }
-    }
-    return result;
+  async groupSets(input: SetGroupingInput): Promise<SetChanges> {
+    const { value } = await this.ask('set_grouping', setGroupingPrompt(input), setGroupingOutput, {
+      topicId: input.topic.id,
+      attempt: 1,
+    });
+    return mapSetAnswer(value, input);
   }
 
   async draftComment(input: DraftCommentInput): Promise<{ body: string }> {

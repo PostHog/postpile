@@ -3,6 +3,7 @@ import type { Pr } from '@postpile/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
 import { humanComments } from './prompts/shared.ts';
+import { activeSets, unplacedKeys } from './set-answer.ts';
 import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptContext, SetGroupingInput } from './service.ts';
 
 /**
@@ -58,27 +59,54 @@ function prGlanceSnapshot(pr: Pr): unknown {
 }
 
 /**
- * Sets regroup when membership, the user's set corrections (dissolved sets,
- * removed members) or any topic feedback changes. Active members are left
- * out on purpose: they are the agent's own last answer, and counting them
- * would make every regroup trigger the next one.
+ * Wording version of the set prompt alone, like DOSSIER_PROMPT_VERSION. s2:
+ * sets as lasting tiles one judgement covers, answered as changes only
+ * (2026-10-01). Part of the context trigger, so every topic regroups once.
  */
-export function setGroupingInputHash(input: SetGroupingInput): string {
-  const prs = [...input.prs].sort((a, b) => a.key.localeCompare(b.key)).map((pr) => [pr.key, pr.title, pr.baseRef, pr.headRef]);
-  const sets = input.existingSets
-    .filter((s) => s.status === 'dissolved' || s.removedKeys.length > 0)
-    .map((s) => [s.id, s.status === 'dissolved' ? s.members.map((m) => m.prKey) : [], s.removedKeys]);
-  return inputHash(
+export const SET_PROMPT_VERSION = 's2';
+
+/** The first word of a glance's risk line, lowercased: "Medium - touches the loop" -> "medium". */
+function riskWord(line: string | undefined): string {
+  return (line ?? '').trim().split(/[\s.,:-]/)[0]?.toLowerCase() ?? '';
+}
+
+/**
+ * What a set regroup reacts to, one string per fact. The engine runs a
+ * regroup only when a fact shows up that the last run did not see: an open
+ * PR to place, a PR whose risk level changed, a new correction, a dissolved
+ * set, changed instructions or prompt. A PR that merges or leaves only takes
+ * facts away, so it never triggers one: sets do not move on status.
+ */
+export function setGroupingTriggers(input: SetGroupingInput): string[] {
+  const context = inputHash(
     'set_grouping',
+    SET_PROMPT_VERSION,
     modelFor('set_grouping'),
-    input.topic.name,
-    prs,
-    sets,
     input.context.instructions,
     input.context.tailoring,
     input.context.standingRules,
-    input.context.recentFeedback.map((f) => f.id),
   );
+  const triggers = [`context:${context}`];
+  for (const key of unplacedKeys(input)) {
+    triggers.push(`open:${key}:${riskWord(input.risks[key])}`);
+  }
+  for (const set of activeSets(input)) {
+    for (const member of set.members) {
+      triggers.push(`member:${set.id}:${member.prKey}:${riskWord(input.risks[member.prKey])}`);
+    }
+  }
+  for (const set of input.existingSets) {
+    if (set.status === 'dissolved') {
+      triggers.push(`dissolved:${set.id}`);
+    }
+    for (const key of set.removedKeys) {
+      triggers.push(`removed:${set.id}:${key}`);
+    }
+  }
+  for (const feedback of input.context.recentFeedback) {
+    triggers.push(`feedback:${feedback.id}`);
+  }
+  return triggers;
 }
 
 /**

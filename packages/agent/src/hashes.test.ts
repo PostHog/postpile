@@ -1,6 +1,6 @@
 import type { PrSet } from '@postpile/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingInputHash } from './hashes.ts';
+import { dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingTriggers } from './hashes.ts';
 import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';
 import {
   emptyContext,
@@ -86,30 +86,46 @@ describe('glanceItemInputHash', () => {
   });
 });
 
-describe('setGroupingInputHash', () => {
-  it('reacts to new feedback in the topic', () => {
-    const input = { topic: makeTopic(), prs: [makePr()], existingSets: [], context: emptyContext };
-    const withFeedback = { ...input, context: { ...emptyContext, recentFeedback: [makeFeedback({ kind: 'not_related' })] } };
-    expect(setGroupingInputHash(withFeedback)).not.toBe(setGroupingInputHash(input));
+describe('setGroupingTriggers', () => {
+  const set: PrSet = {
+    id: 's1',
+    topicId: 't1',
+    title: 'Depot',
+    take: '',
+    members: [{ prKey: 'acme/app#1', reason: '' }, { prKey: 'acme/app#2', reason: '' }],
+    removedKeys: [],
+    status: 'active',
+    inputHash: 'h',
+    createdAt: '',
+    updatedAt: '',
+  };
+  const open = (number: number) => makePr({ ref: { repo: 'acme/app', number } });
+  const input = { topic: makeTopic(), prs: [open(1), open(2), open(3)], existingSets: [set], risks: { 'acme/app#3': 'low - docs' }, context: emptyContext };
+
+  it('names the open PRs to place and every member, with their risk level', () => {
+    const triggers = setGroupingTriggers(input);
+    expect(triggers).toContain('open:acme/app#3:low');
+    expect(triggers).toContain('member:s1:acme/app#1:');
+    expect(triggers).not.toContain('open:acme/app#1:');
   });
 
-  it('ignores active sets but reacts to dissolved ones', () => {
-    const input = { topic: makeTopic(), prs: [makePr()], existingSets: [] as PrSet[], context: emptyContext };
-    const set: PrSet = {
-      id: 's1',
-      topicId: 't1',
-      title: 'Depot',
-      take: '',
-      members: [{ prKey: 'o/r#1', reason: '' }, { prKey: 'o/r#2', reason: '' }],
-      removedKeys: [],
-      status: 'active',
-      inputHash: 'h',
-      createdAt: '',
-      updatedAt: '',
-    };
-    const hash = setGroupingInputHash(input);
-    expect(setGroupingInputHash({ ...input, existingSets: [set] })).toBe(hash);
-    expect(setGroupingInputHash({ ...input, existingSets: [{ ...set, status: 'dissolved' }] })).not.toBe(hash);
+  it('gets a new trigger when a risk level changes, not when the wording does', () => {
+    const reworded = setGroupingTriggers({ ...input, risks: { 'acme/app#3': 'Low. Only docs.' } });
+    expect(reworded).toEqual(setGroupingTriggers(input));
+    expect(setGroupingTriggers({ ...input, risks: { 'acme/app#3': 'high - migrations' } })).toContain('open:acme/app#3:high');
+  });
+
+  it('only loses triggers when a PR in no set merges', () => {
+    const merged = setGroupingTriggers({ ...input, prs: [open(1), open(2), makePr({ ref: { repo: 'acme/app', number: 3 }, state: 'MERGED' })] });
+    const before = new Set(setGroupingTriggers(input));
+    expect(merged.every((trigger) => before.has(trigger))).toBe(true);
+  });
+
+  it('reacts to new feedback, dissolved sets and removed members', () => {
+    const withFeedback = setGroupingTriggers({ ...input, context: { ...emptyContext, recentFeedback: [makeFeedback({ kind: 'not_related' })] } });
+    expect(withFeedback.some((trigger) => trigger.startsWith('feedback:'))).toBe(true);
+    expect(setGroupingTriggers({ ...input, existingSets: [{ ...set, status: 'dissolved' }] })).toContain('dissolved:s1');
+    expect(setGroupingTriggers({ ...input, existingSets: [{ ...set, removedKeys: ['acme/app#9'] }] })).toContain('removed:s1:acme/app#9');
   });
 });
 
@@ -117,8 +133,8 @@ describe('standing rules', () => {
   it('are part of every input hash', () => {
     const withRule = { ...emptyContext, standingRules: ['skip docs PRs'] };
     expect(glanceHash(item.pr, { context: withRule })).not.toBe(glanceHash());
-    const sets = { topic: makeTopic(), prs: [makePr()], existingSets: [], context: emptyContext };
-    expect(setGroupingInputHash({ ...sets, context: withRule })).not.toBe(setGroupingInputHash(sets));
+    const sets = { topic: makeTopic(), prs: [makePr()], existingSets: [], risks: {}, context: emptyContext };
+    expect(setGroupingTriggers({ ...sets, context: withRule })).not.toEqual(setGroupingTriggers(sets));
   });
 });
 

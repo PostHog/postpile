@@ -30,8 +30,11 @@ dossier update, consolidation), so all agents cut work at the same grain:
   sentence states the goal, and every PR moves it forward or came out of
   that work while it was going on (a fix found while doing it). Sharing a
   repo, an area or a word ("CI", "security") is not enough.
-- *Tile*: what the user acts on in one go: a PR, a stack or a set.
-- *Set*: two or more PRs inside one topic best read together.
+- *Tile*: what the user handles in one go inside a topic: a PR, a stack or
+  a set.
+- *Set*: two or more PRs of one topic that one judgement covers (the same
+  change or pattern, similar risk). Lasting: never cut by status, turn or
+  review state (since 2026-10-01, see "Tiles hold still").
 
 Topic assignment puts a PR into a live topic whose goal it serves or came
 out of (live: open PRs or activity in the last two weeks; each offered topic
@@ -462,11 +465,10 @@ author among the topic's PRs; role = driver if that is the user, else reviewer
 if any PR has a review-request ping, else stakeholder (mention, author, ...),
 else watcher.
 
-Sets (`set_grouping`) run per topic with 2+ open PRs; hash = PRs + dissolved
-sets + topic feedback, kept in `meta` (`set_grouping_hash:<topic>`). Active
-sets are not in the hash, they are the agent's own last answer. A set the
-agent keeps under the same title keeps its id (tile id and chat survive;
-snoozes are per PR and survive regrouping anyway); sets it drops are deleted; dissolved sets are never brought back.
+Sets (`set_grouping`) are lasting tiles; how they change is in "Tiles hold
+still". A regroup runs per topic when something new shows up (triggers in
+`meta`, `set_grouping_seen:<topic>`), after the glances, and the agent
+answers with changes only. Dissolved sets are never brought back.
 A set holds a stack whole or not at all (see "Stacks as one unit").
 The full job order is in the v2 sync flow below.
 
@@ -3251,6 +3253,57 @@ Owner decisions (2026-09-30):
 - **Telemetry.** `pr_approved` with `from: agent_tile | agent_topic` and
   `was_agent_approved: true`. `marked_read` with `origin: agent_tile |
   agent_topic` and the tile count.
+
+## Tiles hold still (2026-10-01)
+
+On real data (three days, 415 tiles) 397 tiles held one PR, 15 were stacks
+and 3 were sets; 90 set-grouping calls made those 3, and 2 of the 4 stored
+sets carried their topic's own name. The set prompt asked for PRs "best read
+together: a feature and its follow-up, a migration and its cleanup", which
+since topics became one goal each (2026-09-29) is almost the topic test.
+Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
+(products, review practice, bundling outside code review):
+
+- **Topics stay the focus.** Tiles live inside one topic; no cross-topic
+  sweeps or queues that bypass the topic.
+- **A set is a tile of PRs one judgement covers**: the same change or
+  pattern (one fix in several repos, the same bump, a codemod split up) or
+  one small piece of the goal done in steps, with similar risk; the same
+  kind of author (bot, coding agent, person) is a preference, not a wall.
+  Risk comes from the glance's existing risk level (`low` / `medium` /
+  `high`); no separate risk class and no rules per repo.
+- **Membership is lasting.** Snooze, chat, "dealt with" and where a tile
+  sits all hang off its id, and a tile that re-cuts itself on every poll
+  cannot be learned. So status, whose turn, review state, unread and CI
+  never move a PR between tiles; they stay tile state and order (the
+  Unread / Open / Dealt with groups). Merged members stay, so a finished
+  set goes to Dealt with whole.
+- **The agent re-sorts, without asking the user, never on a whim.** Its
+  answer holds only changes (`setGroupingOutput`): `joins` (an open PR in no
+  set into a set), `newSets`, `leaves` (with evidence: the PR's risk no longer
+  fits, or the user's correction), `merges` (two sets that became one piece of
+  work) and `updates` (title and take). Anything it leaves out stays. The
+  service keeps only what the input allows (`mapSetAnswer`); the engine still
+  enforces stacks and "not related".
+- **When it runs**: only when a trigger shows up the last regroup did not see
+  (`setGroupingTriggers`): an open PR in no set, a PR's risk level changing
+  (the first word of the risk line, so a reworded glance does not count), new
+  feedback, a dissolved set or removed member, changed instructions, model or
+  prompt (`SET_PROMPT_VERSION`). A PR merging only takes triggers away, so it
+  never costs a call. It runs after the glances, which write the risk. A
+  topic with no set and fewer than two open PRs in none is skipped.
+- **Every change is visible.** `pr_set_change` (migration 022) records each
+  created, joined, left, merged, updated and ended line with its reason and
+  who made it: `agent`, `user` ("not related"), or `rules` (the PR moved to
+  another topic, taken out on the next regroup). `TopicDetail.setChanges`
+  carries the newest 20; the CLI `topic` command and the MCP `topic` tool
+  (detail full) show them. The app shows each member's reason as before; no
+  new UI for now.
+- **A set ends** when fewer than two units are left (a set of one PR or one
+  stack is just that tile); its history stays.
+- Not part of this: batch approve (PR #48, agent-assisted actions), a
+  rolled-up verdict on the tile (the PR rows show each), shorter "same as
+  #N" glances for same-pattern sets.
 
 ## You already dealt with it
 

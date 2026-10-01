@@ -52,14 +52,21 @@ export const topicAssignmentOutput = z.object({
   ),
 });
 
+/** Only what changes: anything the answer leaves out stays as it is. */
 export const setGroupingOutput = z.object({
-  sets: z.array(
-    z.object({
-      title: text.min(1),
-      take: text,
-      members: z.array(z.object({ prKey: text, reason: text })),
-    }),
-  ),
+  newSets: z
+    .array(
+      z.object({
+        title: text.min(1),
+        take: text,
+        members: z.array(z.object({ prKey: text, reason: text })),
+      }),
+    )
+    .default([]),
+  joins: z.array(z.object({ setId: text, prKey: text, reason: text })).default([]),
+  leaves: z.array(z.object({ setId: text, prKey: text, reason: text.min(1) })).default([]),
+  merges: z.array(z.object({ setId: text, intoSetId: text, reason: text.min(1) })).default([]),
+  updates: z.array(z.object({ setId: text, title: text.min(1), take: text })).default([]),
 });
 
 export const draftCommentOutput = z.object({

@@ -128,7 +128,7 @@ describe('a stack is one unit in sets', () => {
     const { h, prs } = await depotWithStack();
     const { bottom, middle, top, lone } = prs;
     h.runner.answer('set_grouping', {
-      sets: [
+      newSets: [
         { title: 'Runner switch', take: 'Same rollout.', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] },
         { title: 'Just the stack', take: '', members: [{ prKey: bottom.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] },
       ],
@@ -147,7 +147,7 @@ describe('a stack is one unit in sets', () => {
     const { h, prs } = await depotWithStack();
     const { middle, lone, stackId } = prs;
     h.runner.answer('set_grouping', {
-      sets: [{ title: 'Runner switch', take: '', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] }],
+      newSets: [{ title: 'Runner switch', take: '', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] }],
     });
     await h.engine.sync({ agentJobs: ['sets'] });
     const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;

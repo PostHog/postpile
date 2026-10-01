@@ -10,6 +10,7 @@ import type {
   PrEvent,
   PrKey,
   PrSet,
+  PrSetChange,
   PrState,
   Provenance,
   LastingPointProposal,
@@ -284,6 +285,8 @@ export interface TopicDetail {
   placement: TopicPlacement | null;
   tiles: TileView[];
   sets: PrSet[];
+  /** The topic's set history, newest first (SET_CHANGES_SHOWN): why each tile holds what it holds. */
+  setChanges: PrSetChange[];
   /** Waiting for the user; an outside agent's expired ones are left out (`isLiveProposal`). */
   pendingProposals: TopicProposal[];
   /**
