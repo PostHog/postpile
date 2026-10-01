@@ -24,7 +24,7 @@ export function InstructionsChat() {
 
   return (
     <div className="flex flex-col gap-2">
-      {chat.error && <p className="text-xs text-unread-ink">Could not load the chat: {chat.error.message}</p>}
+      {chat.error && <p className="text-xs text-status-bad">Could not load the chat: {chat.error.message}</p>}
       {recent.map((message) => (
         <p
           key={message.id}

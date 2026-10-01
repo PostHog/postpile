@@ -36,7 +36,7 @@ export function SetupChecksStep(props: { onContinue: () => void; onSkip: () => v
         <h2 className="text-[15px] font-semibold text-ink">Check the basics</h2>
         <p className="text-xs text-ink-2">PostPile reads GitHub through the GitHub CLI and runs its agent through the Claude Code CLI. Nothing is changed here.</p>
       </div>
-      {checks.error && <p className="text-xs text-unread-ink">Could not run the checks: {checks.error.message}</p>}
+      {checks.error && <p className="text-xs text-status-bad">Could not run the checks: {checks.error.message}</p>}
       {!view && !checks.error && <p className="py-3 text-xs text-muted">Checking gh, your GitHub login and claude…</p>}
       {view && (
         <ul className="flex flex-col">
@@ -46,7 +46,7 @@ export function SetupChecksStep(props: { onContinue: () => void; onSkip: () => v
         </ul>
       )}
       {view && !view.agentAvailable && view.canContinue && (
-        <p className="rounded-row bg-status-queued-soft px-3 py-2 text-xs text-status-queued">
+        <p className="rounded-row bg-amber-soft px-3 py-2 text-xs text-amber-ink">
           Without claude there is no agent: no draft in the next steps, and no topics, dossiers or glances later. You can still continue and write your
           instructions yourself.
         </p>

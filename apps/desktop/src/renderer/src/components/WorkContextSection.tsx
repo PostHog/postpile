@@ -31,7 +31,7 @@ function ThreadRow(props: { thread: WorkContextThreadView; version: number; onOp
               disabled={busy}
               title="Tell the agent this is not something you work on. The next refresh leaves it out. Local only."
               onClick={() => void actions.forgetWorkThread({ version, index: thread.index })}
-              className="text-[11px] text-faint hover:text-unread-ink hover:underline disabled:opacity-50"
+              className="text-[11px] text-faint hover:text-status-bad hover:underline disabled:opacity-50"
             >
               Forget
             </button>
@@ -144,8 +144,8 @@ export function WorkContextSection(props: { onOpenTopic: (topicId: string) => vo
         Written by the agent once a day from your local Claude Code notes: CLAUDE.md, memory files and the first prompts of your recent sessions. Not part
         of your instructions above; other prompts get it as background that may be stale. Steer it with Forget.
       </p>
-      {workContext.error && <p className="text-xs text-unread-ink">Could not load it: {workContext.error.message}</p>}
-      {view?.lastError && <p className="text-xs text-unread-ink">{view.lastError.message}</p>}
+      {workContext.error && <p className="text-xs text-status-bad">Could not load it: {workContext.error.message}</p>}
+      {view?.lastError && <p className="text-xs text-status-bad">{view.lastError.message}</p>}
       {view && !current && !running && <p className="text-xs text-faint">Nothing yet. The first one is written in the morning, or press Refresh.</p>}
       {current && (
         <>

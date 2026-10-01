@@ -1668,6 +1668,9 @@ another one. The lead PR (core `leadPrKey`, shipped as
 `TileView.offers.leadPrKey`) now prefers the PR of the tile's turn when
 the turn is not `none`, then the newest unread reason, then the first open
 tracked PR.
+Since 2026-10-01 the pill shows the tile's worst glance instead of the
+lead PR's (see "Tile header" › "The verdict pill shows the tile's worst
+glance").
 
 **Whose turn names the re-reviewer.** "rowan to address ada's
 changes" stayed after rowan pushed and re-requested ada's
@@ -1888,6 +1891,33 @@ counted as a teammate's.
 - **Shown on the tile**: see "PR rows" under "Tile faces": when someone other
   than the author is assigned, the row and the detail pane say so.
 
+## Colour per meaning (2026-10-01)
+
+The same colour meant several things: amber was the agent's Look closer and
+also "Needs review" and "Queued", closed had its own red next to the red of
+"Changes requested", and approved had a second green beside Looks safe.
+Owner accepted one colour per meaning (tokens in the renderer's
+`styles/tokens.css`):
+
+- **Amber (`--closer`)**: only the agent's Look closer (verdict pill, the
+  detail pane's Look closer box, a ✨ pill greyed for Look closer).
+- **Neutral (`ink-2`)**: "Needs review" with its eye icon.
+- **Merged purple (`--merged`, `--merged-ink`)**: merged and queued (in the
+  merge queue, on its way to merged; queued keeps the open-PR outline icon).
+  `--status-queued` is gone.
+- **One red (`--status-bad`, #b8321f)**: closed (icon and word, `--closed`
+  points at it), changes requested, risk (the risk box reds stay in that
+  family), errors and failed states (was coral `--unread-ink` for errors).
+- **One green (`--safe`, #17733e)**: approved, Looks safe and the Approve
+  button. `--status-good` is gone. Open (`--open`, GitHub's open green)
+  stays as it is.
+- **Coral (`--unread`)**: only new / unread.
+- **Honey**: only aimed at you and your move.
+- App-health warnings (sync capped, read-only, setup hints, out-of-date
+  memory, a winding-down topic, a blocked action toast) use the calm
+  `--amber-*` warning tokens of the update bar, not `--closer`. The
+  "routed" topic tag is neutral, like the routing "for whom" chip.
+
 ## Tile faces: why it's here, status, whose turn
 
 Every tile answers four questions without opening it. All four are derived in
@@ -1950,13 +1980,14 @@ review threads.
 How it shows (2026-09-29, design 3a; `LIFECYCLE_WORDS`, `reviewWord`,
 `rowStateWord` in the renderer's `lib/pr.ts`): the lifecycle is a
 GitHub-style icon (open: green pull request, draft: dashed grey circle,
-merged: purple merge, closed: red closed pull request, queued: amber pull
+merged: purple merge, closed: red closed pull request, queued: purple pull
 request), words in its tooltip. The review state is an icon + word: "Needs
-review" (eye, honey), "Approved" (green check; "Approved by agent" when only
+review" (eye, neutral ink), "Approved" (green check; "Approved by agent" when only
 agents approved), "Changes requested" (red). On a PR row drafts show an
 outlined "DRAFT" chip with a pencil and merged / closed PRs show the colored
-word ("Merged" purple, "Closed" red) in place of the review. State colors
-stay on done tiles; only titles and counts go grey. **CI shows only in the
+word ("Merged" purple, "Closed" red) in place of the review. Colours
+follow "Colour per meaning" (2026-10-01; Needs review was honey, queued
+amber). State colors stay on done tiles; only titles and counts go grey. **CI shows only in the
 detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
 or the RISK box, and not in whose turn or any agent text (see "CI is not a
 signal").
@@ -2024,12 +2055,26 @@ above describe the "Not done yet" rule this replaced.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
 "Stack · 2"; dashed square + "Set · 3"; blue only while selected), the
-verdict pill with an icon ("Look closer" ring-dot on a honey ring, "Looks
+verdict pill with an icon ("Look closer" ring-dot on an amber ring, "Looks
 safe" check, "Not yours" dash, dashed "No glance yet"; a stale glance adds
 "· out of date", or "· updating" while a sync or catch-up runs, see
 "Out of date wording"), then avatars and age
 on the right. Then the title, the agent's one-to-three-line take, the PR
 rows and the footer.
+
+**The verdict pill shows the tile's worst glance (2026-10-01).** The pill
+used the lead PR's verdict, so a stack whose lead looked safe said "Looks
+safe" while its third layer needed a closer look. Owner: the Look closer on
+a tile is for the worst PR in it, so the whole tile may need a closer look,
+and the user should not have to pick that PR out. Core picks it
+(`tileVerdict`, shipped as `TileView.verdict` with the chosen PR's key,
+verdict and glance state): the worst glance among the tile's tracked
+(not pulled-in), open PRs, in the order Look closer (stale or not), no
+current glance (missing, stale or being written), Looks safe, Not yours.
+Ties go to the lead PR, then tile order. With no open tracked PR (all
+merged or closed) the pill keeps the lead PR's glance. The pill keeps its
+look and its stale and updating words, for the chosen PR. Rejected: a
+glyph per PR row, "N of M" counts, a roll-up in the topic header.
 
 **People** (`tilePeople`): authors, the viewer if they submitted a review,
 other reviewers (submitted, then requested), four at most, bots only as
@@ -2494,7 +2539,8 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   down the block. "Why?" still lists every source of a line.
 - **Detail pane assessment** (2026-09-28, mockup ForWhom2 part 2 variant
   1, "verdict as the box title"; `GlanceCard`, split in `lib/assessment.ts`).
-  Box 1 is titled with the verdict ("LOOK CLOSER · for you", honey; "LOOKS
+  Box 1 is titled with the verdict ("LOOK CLOSER · for you", amber since
+  2026-10-01, was honey; "LOOKS
   SAFE · for you", green; "NOT YOURS", grey; the tag follows the PR's for
   whom) and holds the glance's for-you text as short marked lines: "!" the
   main point, "?" a later sentence that asks for a check. Box 2 "RISK ·
@@ -3319,8 +3365,9 @@ Owner decisions (2026-09-30):
   how many are unread), with a muted "for this topic" trailing them, above
   the first group; the row is gone when both offers are. Active Approve is
   soft green (light green fill, green text and edge) with a green pill;
-  greyed buttons keep the dashed outline with a honey pill, like Look
-  closer. Filled green is only the confirm dialog's "Approve N".
+  greyed buttons keep the dashed outline with a pill in the colour of the
+  reason (2026-10-01, was always honey): amber for Look closer, red for
+  high risk, honey when it asks for you, neutral while rechecking. Filled green is only the confirm dialog's "Approve N".
 - **Tile footer (2026-10-01, design 4b/5e).** No ink button. Left: the turn
   line, then the tile's Approve (✨) right next to it; next to Approve the
   move text needs a wider footer before it shows. Right: Mark read, Snooze,
@@ -3430,9 +3477,10 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   the lines its own changes made; feedback or a risk change that arrived
   during the call still triggers the next regroup. A PR that moves topic
   leaves its set with its whole stack.
-- Not part of this: batch approve (PR #48, agent-assisted actions), a
-  rolled-up verdict on the tile (the PR rows show each), shorter "same as
-  #N" glances for same-pattern sets.
+- Not part of this: batch approve (PR #48, agent-assisted actions) and
+  shorter "same as #N" glances for same-pattern sets. The tile's verdict
+  pill rolls up since 2026-10-01: it shows the worst glance among the open
+  tracked PRs ("Tile header").
 
 ## One call per topic (2026-10-01, behind a switch)
 

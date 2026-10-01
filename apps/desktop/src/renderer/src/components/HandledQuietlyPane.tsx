@@ -64,7 +64,7 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
       {writes && !writes.enabled && (
         <p className="max-w-[720px] rounded-row bg-subtle px-3 py-2 text-[12px] text-ink-2">GitHub writes are locked, so nothing is handled quietly right now.</p>
       )}
-      {quiet.error && <p className="text-xs text-unread-ink">Could not load the list: {quiet.error.message}</p>}
+      {quiet.error && <p className="text-xs text-status-bad">Could not load the list: {quiet.error.message}</p>}
       {quiet.isPending && <p className="text-xs text-muted">Loading…</p>}
       {!quiet.isPending && !quiet.error && items.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">Nothing handled quietly in the last 7 days.</p>

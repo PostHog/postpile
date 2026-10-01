@@ -275,6 +275,8 @@ export interface TileView {
   agent: TileAgentOffers;
   /** The grey Draft chip, dashed frame and muted title (`isDraftTile`): same rule as the topic's draft icon. */
   draft: boolean;
+  /** The glance the tile's verdict pill shows (`tileVerdict`): the worst one among its open tracked PRs; null without rows. */
+  verdict: TileVerdict | null;
   /** The PRs whose rows get the unread dot (`unreadPrKeys`: what makes the tile unread), in tile order. */
   unreadPrKeys: PrKey[];
   /** Its group in the topic (`tileGroup`): Unread, Open or Dealt with. The renderer groups by it and never works it out itself. */
@@ -288,6 +290,15 @@ export interface TileView {
    * than the chosen one (or, under "All repos", the topic's main repo).
    */
   repoLabel: string | null;
+}
+
+/** One PR's glance, as its row has it, picked for the tile's verdict pill (`tileVerdict`). */
+export interface TileVerdict {
+  prKey: PrKey;
+  verdict: Verdict | null;
+  glanceStale: boolean;
+  glanceGap: GlanceGap | null;
+  glanceState: GlanceState;
 }
 
 /** "pending: mark read on GitHub" on a tile. */

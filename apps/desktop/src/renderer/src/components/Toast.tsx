@@ -3,8 +3,8 @@ import { LockIcon } from './icons.tsx';
 
 const TONES: Record<NoticeTone, string> = {
   ok: 'bg-ink text-on-accent',
-  error: 'border border-unread-border bg-unread-soft text-unread-ink',
-  blocked: 'border border-closer/30 bg-closer-soft text-closer',
+  error: 'border border-risk-line bg-status-bad-soft text-status-bad',
+  blocked: 'border border-amber-line bg-amber-soft text-amber-ink',
 };
 
 /**

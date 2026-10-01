@@ -1082,6 +1082,15 @@ the app meanwhile.
 
 ## Decided
 
+- **One colour per meaning** (2026-10-01, DESIGN.md "Colour per meaning"):
+  amber only for Look closer, Needs review neutral ink, queued merged
+  purple, one red for bad (closed, changes requested, risk), one green for
+  good (approved, Looks safe, Approve), coral only for unread, honey only
+  for your move.
+- **The tile pill shows the worst verdict** (2026-10-01, DESIGN.md "Tile
+  faces" › "The verdict pill shows the tile's worst glance"): the worst
+  glance among the tile's open tracked PRs, not the lead PR's. No row
+  glyphs, no "N of M", no topic header roll-up.
 - **Your move in the topic header and group headings** (2026-10-01,
   DESIGN.md "Your move in the header and the group headings"): the header
   shows the sidebar's chip, group headings add "· N your move", both counted

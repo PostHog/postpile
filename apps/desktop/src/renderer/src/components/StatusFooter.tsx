@@ -73,22 +73,22 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
     >
       test ping
     </button>,
-    <span key="live" className={`flex items-center gap-[5px] ${live.warn ? 'text-closer' : ''}`} title={live.title}>
-      {liveOn && <span className={`size-[5px] rounded-full ring-2 ${live.warn ? 'bg-closer ring-closer/16' : 'bg-open ring-open/16'}`} />}
+    <span key="live" className={`flex items-center gap-[5px] ${live.warn ? 'text-amber-ink' : ''}`} title={live.title}>
+      {liveOn && <span className={`size-[5px] rounded-full ring-2 ${live.warn ? 'bg-amber ring-amber/16' : 'bg-open ring-open/16'}`} />}
       {live.text}
     </span>,
     quota && (
-      <span key="quota" className="text-closer" title={quota.title}>
+      <span key="quota" className="text-amber-ink" title={quota.title}>
         {quota.text}
       </span>
     ),
     tools && (
-      <span key="tools" className="text-closer" title={tools.title}>
+      <span key="tools" className="text-amber-ink" title={tools.title}>
         {tools.text}
       </span>
     ),
     lastSync && (
-      <span key="sync" title={syncReportDetail(lastSync)} className={lastSync.errors.length > 0 ? 'text-unread-ink' : ''}>
+      <span key="sync" title={syncReportDetail(lastSync)} className={lastSync.errors.length > 0 ? 'text-status-bad' : ''}>
         last sync: <Num>{lastSync.agentCallStats.total}</Num> {callStatsWords(lastSync.agentCallStats)}
         {lastSync.errors.length > 0 && ` · ${lastSync.errors.length} ${lastSync.errors.length === 1 ? 'error' : 'errors'}`}
       </span>

@@ -73,7 +73,7 @@ export function InboxPane(props: { proposals: PendingProposals | undefined; topi
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Inbox</h1>
         <p className="max-w-[680px] text-[13px] text-ink-2">The agent proposes topic changes and standing rules. Nothing changes until you accept.</p>
       </div>
-      {props.error && <p className="text-xs text-unread-ink">Could not load proposals: {props.error}</p>}
+      {props.error && <p className="text-xs text-status-bad">Could not load proposals: {props.error}</p>}
       {!props.error && props.proposals && topics.length === 0 && rules.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">Nothing waiting for you.</p>
       )}

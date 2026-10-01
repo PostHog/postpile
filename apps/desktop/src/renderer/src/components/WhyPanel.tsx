@@ -7,7 +7,7 @@ import { MemorySourceRow } from './MemorySourceRow.tsx';
 
 const TONES: Record<CheckTone, string> = {
   ok: 'bg-safe-soft text-safe',
-  warn: 'bg-closer-soft text-closer',
+  warn: 'bg-amber-soft text-amber-ink',
   muted: 'bg-segment text-muted',
 };
 
@@ -35,7 +35,7 @@ export function WhyPanel(props: { target: MemoryTarget; updating: boolean; onClo
         </button>
       </div>
       {sources.isPending && <p className="text-xs text-muted">Looking up the sources…</p>}
-      {sources.error && <p className="text-xs text-unread-ink">Could not load the sources: {sources.error.message}</p>}
+      {sources.error && <p className="text-xs text-status-bad">Could not load the sources: {sources.error.message}</p>}
       {data && data.sources.length === 0 && <p className="text-xs text-hint">No source recorded for this line.</p>}
       {data?.sources.map((source, index) => (
         <MemorySourceRow key={`${source.kind}:${source.title}:${index}`} source={source} />

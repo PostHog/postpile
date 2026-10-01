@@ -27,8 +27,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
 const STATUS_TONES: Record<DossierStatus, { pill: string; dot: string }> = {
   starting: { pill: 'bg-accent-soft text-accent', dot: 'bg-accent ring-accent/18' },
   active: { pill: 'bg-safe-soft text-safe', dot: 'bg-open ring-open/18' },
-  blocked: { pill: 'bg-unread-soft text-unread-ink', dot: 'bg-unread-ink ring-unread-ink/18' },
-  winding_down: { pill: 'bg-closer-soft text-closer', dot: 'bg-closer ring-closer/18' },
+  blocked: { pill: 'bg-status-bad-soft text-status-bad', dot: 'bg-status-bad ring-status-bad/18' },
+  winding_down: { pill: 'bg-amber-soft text-amber-ink', dot: 'bg-amber ring-amber/18' },
   finished: { pill: 'bg-segment text-muted', dot: 'bg-dot-quiet ring-dot-quiet/18' },
 };
 

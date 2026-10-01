@@ -382,7 +382,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
-      {props.error && <p className={`text-xs text-unread-ink ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
+      {props.error && <p className={`text-xs text-status-bad ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
       {narrowed && props.shown.length === 0 && props.topics.length > 0 && (
         <p className={`text-xs leading-relaxed text-muted ${TEXT_COLUMN}`}>No topic has a PR that matches.</p>
       )}
