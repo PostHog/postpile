@@ -45,7 +45,7 @@ pnpm cli topic <id>
 pnpm cli pr owner/repo#123
 pnpm cli tools              # is gh and claude usable, and the fix if not
 
-pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
+pnpm server                 # HTTP API on 127.0.0.1:4870 with the background jobs, prints its token
 ```
 
 Dev runs use their own database: `pnpm desktop` (unpackaged Electron), `pnpm cli` and `pnpm server` run with `POSTPILE_PROFILE=dev`, which keeps data in `~/Library/Application Support/PostPile-dev` and instructions in `~/.config/postpile-dev` (seeded once with a copy of the real `instructions.md`). The title bar shows a DEV badge. To read the real database from the repo on purpose: `POSTPILE_PROFILE=default pnpm cli ...`.
@@ -64,7 +64,7 @@ pnpm build:web              # static HTML, JS and CSS in apps/desktop/dist-web
 
 `pnpm build:web` writes the renderer as static files with relative paths, so any static host or folder can serve `apps/desktop/dist-web`. The page needs a running API: start `pnpm server` and open the page with the `?token=` it prints (and `?api=http://127.0.0.1:<port>` when the port is not 4870). The API only listens on 127.0.0.1, so the page talks to the server on the viewer's own machine. It answers Chrome's private network preflight, so a page served from another origin can reach it.
 
-The standalone server does not run what the desktop main process runs: no live poll, no background syncs, no consolidation or work context schedule, no Mac notifications. The page syncs on load and on "Sync now".
+`pnpm server` runs the same background jobs as the desktop app (`startBackgroundJobs` in `apps/server`): the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code through the MCP server. Only Mac notifications stay desktop-only. Turn the jobs down the same way: `POSTPILE_POLL_SECONDS=0`, `POSTPILE_AUTO_SYNC_MINUTES=0` (or `POSTPILE_SYNC_ON_START=0`), `POSTPILE_MAX_AGENT_CALLS=0`.
 
 Only one process opens a database at a time (`postpile.lock` next to it). While the app runs, `pnpm cli topics --read-only` (also `topic`, `pr`) still reads; sync, poll and sweep refuse.
 

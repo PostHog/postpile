@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { arch, release } from 'node:os';
 import { applyLegacyEnv, telemetryFromEnv, defaultPaths, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, updateSourceFromEnv, readOwnVersion } from './engine-from-env.ts';
+import { startBackgroundJobs } from './background-jobs.ts';
 import { startServer } from './start.ts';
 
 applyLegacyEnv();
@@ -36,8 +37,10 @@ try {
 const server = await startServer({ engine, port, token, config, updates: updateSourceFromEnv(appVersion), telemetry });
 console.log(`PostPile API on ${server.url}`);
 console.log(`token: ${token}  (send it as x-postpile-token, or open the UI with ?token=${token})`);
+const backgroundJobs = startBackgroundJobs(engine, config);
 
 async function shutdown(): Promise<void> {
+  backgroundJobs.stop();
   await engine.flushPendingWrites().catch((error: unknown) => console.error(error));
   await server.close();
   // Flushes telemetry (the fake engine holds none of its own).

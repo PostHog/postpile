@@ -968,7 +968,8 @@ stored and before a dossier goes into a glance prompt
 
 `consolidate(options)` on EngineService, CLI `consolidate [--if-due]
 [--max-agent-calls n]`, and the desktop app asks every 30 minutes
-(`ConsolidationSchedule` in the main process) with `onlyIfDue` and the sync
+(`ConsolidationSchedule` in apps/server, started with the other background
+jobs by the desktop main process and the standalone server) with `onlyIfDue` and the sync
 call cap. The engine waits for a running sync or poll first, so they never
 overlap; a run or a failure is logged, never thrown. Placing PRs is not its
 job: topic assignment places every PR itself. Due = 24h since the last run
@@ -3830,10 +3831,10 @@ and sample ping decisions
 ## Live poll and Mac pings
 
 Near-real-time pings on the Mac, only when they matter. Runs while the desktop
-app runs (window open or hidden); the CLI has `poll` for one cycle, the
-standalone server never starts it.
+app runs (window open or hidden) and while the standalone server behind the
+web UI runs (no Mac pings there); the CLI has `poll` for one cycle.
 
-**Poll** (`LivePoller` in engine `live/`, started by the desktop main process):
+**Poll** (`LivePoller` in engine `live/`, started by the desktop main process and the standalone server through `startBackgroundJobs`; only the desktop shows Mac notifications):
 
 - `GET /notifications` every `POSTPILE_POLL_SECONDS` (default 60, 0 turns
   it off, window focus included) with the stored ETag / Last-Modified, shared
@@ -4760,10 +4761,12 @@ approve PRs, so it is never handed to other processes).
   the same way, so `pnpm cli mcp` with the fake server can try both tools.
 - Built (2026-09-29): `FileAgentRequests` (packages/mcp) and
   `AgentRequestInbox` (packages/engine/src/agent-requests, started by the
-  desktop main process through `startAgentRequests()`), the envelope and
+  desktop main process and the standalone server through
+  `startBackgroundJobs()`), the envelope and
   its zod check in core (`parseAgentRequest`). "Kind `app`" means the lock
-  kinds `packaged` and `dev` (`runningApp`): the CLI and the standalone
-  server never answer requests. The app claims a request by renaming it to
+  kinds `packaged`, `dev` and `server` (`runningApp`; the standalone server
+  behind the web UI runs the same background jobs since 2026-10-01): the
+  CLI never answers requests. The app claims a request by renaming it to
   `<uuid>.working`, so on its 20 s timeout the MCP process can withdraw a
   request nobody took ("nothing was done") or report one that is still
   running. Besides `fs.watch` the app rescans the folder every 5 s, since

@@ -576,5 +576,6 @@ stays on screen and listed (`KeptView`).
   true for any running sync (`LivePollStatus.syncRunning`), so the title bar
   shows background syncs too; `lastSync` is the newer of this window's and
   the stored report (`newerReport`). The main process
-  runs the live poll (`engine.startLivePoll`) and shows Mac notifications
+  starts the live poll and the other background jobs (`startBackgroundJobs`
+  from `@postpile/server`, which `pnpm server` runs too) and shows Mac notifications
   (`main/mac-notifier.ts`); closing the window hides it on macOS, Cmd+Q quits.

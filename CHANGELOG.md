@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Added
 
 - PostPile runs in a browser too. `pnpm web` starts the local API and a dev server for the UI; `pnpm build:web` writes the UI as static files (`apps/desktop/dist-web`) for any static host, used with `pnpm server`. See docs/development.md › Web.
+- `pnpm server` runs the desktop app's background jobs: the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code. Only Mac notifications stay in the desktop app.
 
 ### Changed
 

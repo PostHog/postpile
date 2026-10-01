@@ -800,10 +800,10 @@ now".
   thread can come back. Session refs use local time of the machine.
 - Web app: `pnpm web` (dev mode: API plus Vite) and `pnpm build:web`
   (static files in `apps/desktop/dist-web`) run the renderer in a browser
-  against `pnpm server`, found through `?api=...&token=...`. The standalone
-  server runs no live poll, background sync, consolidation or work context
-  schedule (the desktop main process starts those), so the web page only
-  updates on load and on "Sync now".
+  against `pnpm server`, found through `?api=...&token=...`. The server runs
+  the desktop app's background jobs (`startBackgroundJobs`: live poll, auto
+  sync, consolidation, work context schedule, MCP agent requests); only Mac
+  notifications are desktop-only. Not tried for a full day on real data yet.
 
 - Stack completion follows base/head branches only. PRs linked from bodies
   or comments are not pulled in, and `subscribed` threads still count as
@@ -1546,7 +1546,7 @@ Desktop and server:
 
 ```
 pnpm desktop       # Electron dev mode, server in-process on a random port + token
-pnpm server        # standalone API on 127.0.0.1:4870, prints its token
+pnpm server        # standalone API on 127.0.0.1:4870 with the background jobs, prints its token
 ```
 
 The desktop app syncs once on start, on "Sync now" and every 60 minutes in the

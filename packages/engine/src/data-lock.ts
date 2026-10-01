@@ -116,11 +116,12 @@ function holderAlive(holder: LockInfo): boolean {
 }
 
 /** Lock kinds of the desktop app: the only holder that runs the live poll and answers agent requests. */
-export const APP_LOCK_KINDS: readonly LockKind[] = ['packaged', 'dev'];
+export const APP_LOCK_KINDS: readonly LockKind[] = ['packaged', 'dev', 'server'];
 
 /**
- * The desktop app holding this database's folder right now, or null: no
- * lock, a stale one, or the CLI or the standalone server holds it. Reads
+ * The app holding this database's folder right now (desktop or the standalone
+ * server, which runs the same background jobs), or null: no lock, a stale one,
+ * or the CLI holds it. Reads
  * only, never takes or removes the lock (the MCP process asks this).
  */
 export function runningApp(databaseFile: string): LockInfo | null {
