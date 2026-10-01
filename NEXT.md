@@ -810,7 +810,8 @@ now".
   day on real data yet, and the release plumbing runs for the first time
   with the next tag. Pings show as browser notifications while a tab is
   open (server `PingFeed`, renderer `useWebPings`); with no tab open they
-  only show as unread tiles, and there is no title or Dock badge on the web.
+  only show as unread tiles. The tab title carries the Dock badge's count,
+  "(9) PostPile" (`GET /api/badge`).
 
 - Stack completion follows base/head branches only. PRs linked from bodies
   or comments are not pulled in, and `subscribed` threads still count as

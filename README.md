@@ -124,7 +124,7 @@ open http://127.0.0.1:4870
 
 Update with `brew upgrade postpile-server && brew services restart postpile-server`, then reload the page. The page shows the same "Update available" reminder with this command.
 
-It uses the same data as the desktop app, and only one of them can open it at a time, so quit the app before starting the service. Pings show as browser notifications while a PostPile tab is open: click "pings: off · turn on" in the status bar once to allow them, and allow your browser in System Settings › Notifications. A click opens the tile. The server only listens on 127.0.0.1 and answers only requests for `127.0.0.1` or `localhost`; the page gets the API token from the server. Logs go to `$(brew --prefix)/var/log/postpile-server.log`. For other agents, the caveats of `brew info postpile-server` show the `claude mcp add` command for this install.
+It uses the same data as the desktop app, and only one of them can open it at a time, so quit the app before starting the service. Pings show as browser notifications while a PostPile tab is open: click "pings: off · turn on" in the status bar once to allow them, and allow your browser in System Settings › Notifications. A click opens the tile. The tab title shows how many topics have something unread, like the app's Dock badge. The server only listens on 127.0.0.1 and answers only requests for `127.0.0.1` or `localhost`; the page gets the API token from the server. Logs go to `$(brew --prefix)/var/log/postpile-server.log`. For other agents, the caveats of `brew info postpile-server` show the `claude mcp add` command for this install.
 
 ## Ask PostPile from other agents
 

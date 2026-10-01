@@ -11,6 +11,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - `pnpm server` serves the web UI itself at `/` (after `pnpm build:web`), with the token in the page, so no `?token=` link is needed, and keeps its token across restarts.
 - `pnpm server` runs the desktop app's background jobs: the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code.
 - In the browser, pings show as browser notifications while a PostPile tab is open. "pings: off · turn on" in the status bar asks for the permission; a click opens the tile, and opening a tile takes its pings back, like Mac notifications in the app.
+- In the browser, the tab title shows how many topics have something unread, "(9) PostPile", the same number as the app's Dock badge.
 
 ### Changed
 

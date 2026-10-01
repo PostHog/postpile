@@ -6,6 +6,7 @@ export const queryKeys = {
   tools: ['tools'] as const,
   update: ['update'] as const,
   pings: ['pings'] as const,
+  badge: ['badge'] as const,
   mcpConnection: ['mcp-connection'] as const,
   lastSync: ['last-sync'] as const,
   syncProgress: ['sync-progress'] as const,

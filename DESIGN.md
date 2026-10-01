@@ -4094,8 +4094,10 @@ main, `BoardWatcher`):
   your-move tiles): "I see five topics with a dot, and that means these are
   open ... It's still my move, maybe, but I've looked at it. This clears the
   unread count in the app." Your move stays visible in the app, not on the
-  Dock. It is read from `listTopics({ allRepos: true })` (`unreadTiles`), no
-  rule is repeated in main. It is read at start, after each shown ping, when
+  Dock. It is read from `listTopics({ allRepos: true })` (`unreadTiles`,
+  counted by core's `unreadTopicCount`), no rule is repeated in main. The web
+  UI shows the same number in the tab title, "(9) PostPile" (`GET /api/badge`,
+  core's `tabTitle`, 2026-10-01), refetched whenever the other queries are. It is read at start, after each shown ping, when
   the live status moves (`changeCount`, which also counts every ended sync,
   `catchUpChanges`, `syncRunning`; checked every 5s) and after every non-read API request, which covers local
   actions (mark read, done, snooze, approve). Fake mode shows it too.

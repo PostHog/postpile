@@ -71,6 +71,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   core's `PingShelf`) and opens the tile a click asks `fetchPingTarget` for;
   the permission is only ever asked from a click (`sendTestNotification`,
   `WebPingsFooterItem`)),
+  `badge.ts` (`useBadge`: the Dock badge's number, topics with an unread tile
+  in every repo, web page only; `lib/use-tab-title.ts` puts it in the tab title
+  through core's `tabTitle`; no polling of its own, it refetches with the rest),
   `mcp.ts` (`useMcpConnection`: is PostPile's MCP server in Claude Code,
   refetched on window focus; the server runs `claude mcp get` at most every
   5 minutes),

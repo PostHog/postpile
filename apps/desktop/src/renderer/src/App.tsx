@@ -24,6 +24,7 @@ import { SetupSidebar } from './components/SetupSidebar.tsx';
 import { TellAgentContext, type ChatRequest } from './components/TellAgent.tsx';
 import { StatusFooter } from './components/StatusFooter.tsx';
 import { useWebPings } from './lib/use-web-pings.ts';
+import { useTabTitle } from './lib/use-tab-title.ts';
 import { TileGrid } from './components/TileGrid.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
 import { UpdateBar } from './components/UpdateBar.tsx';
@@ -257,6 +258,7 @@ export function App() {
     return window.postpile?.onOpenPing?.((target) => latestOpenPing.current(target));
   }, []);
   useWebPings(openPing);
+  useTabTitle();
 
   let main = <EmptyMain text="Loading…" />;
   if (pane === 'inbox') {

@@ -1,4 +1,4 @@
-import type { ListScope, LivePollStatus, PrKey, TopicListItem } from '@postpile/core';
+import { unreadTopicCount, type ListScope, type LivePollStatus, type PrKey, type TopicListItem } from '@postpile/core';
 
 /** The reads the watcher needs; the engine has both. */
 export interface BoardReader {
@@ -65,7 +65,7 @@ export class BoardWatcher {
     try {
       const topics = await this.reader.listTopics({ allRepos: true });
       const unreadPrKeys = await this.reader.unreadPrKeys();
-      const unreadTopics = topics.filter((topic) => topic.unreadTiles > 0).length;
+      const unreadTopics = unreadTopicCount(topics);
       this.onBoard({ unreadTopics, unreadPrKeys });
     } catch (error) {
       this.onError(error);

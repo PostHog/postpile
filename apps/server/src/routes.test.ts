@@ -58,6 +58,14 @@ async function allRows(app: TestApp): Promise<TopicDetail['tiles'][number]['prs'
 }
 
 describe('server routes over the fake engine', () => {
+  it('counts topics with an unread tile across all repos for the badge', async () => {
+    const engine = new FakeEngine({ syncStepMs: 0 });
+    const app = appWithFake(engine);
+    const expected = (await engine.listTopics({ allRepos: true })).filter((item) => item.unreadTiles > 0).length;
+    expect(expected).toBeGreaterThan(0);
+    expect(await (await app.request('/api/badge')).json()).toEqual({ unreadTopics: expected });
+  });
+
   it('retries a failed glance: queued, writing, then ready', async () => {
     const app = appWithFake(new FakeEngine({ syncStepMs: 0, catchUpStepMs: 5 }));
     // The sample catch-up starts once a UI reads the live status.
