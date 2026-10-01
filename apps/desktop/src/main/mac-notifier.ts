@@ -1,6 +1,6 @@
 import { app, Notification } from 'electron';
-import type { MacNotification, PingTarget, PrKey } from '@postpile/core';
-import { PingShelf } from './ping-shelf.ts';
+import type { MacNotification, PrKey } from '@postpile/core';
+import { PingShelf, type Closable } from './ping-shelf.ts';
 
 /**
  * Notifications keep their click handler only while referenced; a GC'd
@@ -12,7 +12,8 @@ const KEEP_NOTIFICATIONS = 30;
 export interface MacNotifierOptions {
   /** POSTPILE_MAC_NOTIFICATIONS=0 turns them off; the poll still updates tiles. */
   enabled: boolean;
-  onClick: (target: PingTarget | null) => void;
+  /** Gets the notification itself: where it goes is looked up at the click, its ids may be stale by then. */
+  onClick: (notification: MacNotification) => void;
   /** The Dock only bounces for a personal ask while the window is not focused. */
   isWindowFocused: () => boolean;
 }
@@ -37,8 +38,10 @@ export class MacNotifier {
     }
   }
 
-  private forget(notification: Notification): void {
-    const index = this.kept.indexOf(notification);
+  /** Clicked, closed or failed: no reference stays behind. */
+  private forget(notification: Closable): void {
+    this.shelf.remove(notification);
+    const index = this.kept.findIndex((candidate) => candidate === notification);
     if (index >= 0) {
       this.kept.splice(index, 1);
     }
@@ -46,7 +49,16 @@ export class MacNotifier {
 
   /** Takes the pings of PRs that are not unread anymore out of Notification Center. */
   closeRead(unreadPrKeys: PrKey[]): void {
-    this.shelf.closeRead(unreadPrKeys, Date.now());
+    for (const closed of this.shelf.closeRead(unreadPrKeys, Date.now())) {
+      this.forget(closed);
+    }
+  }
+
+  /** The user opened the tile holding these PRs in the app: takes their pings, and only theirs, out of Notification Center. */
+  closeVisited(prKeys: PrKey[]): void {
+    for (const closed of this.shelf.closeVisited(prKeys, Date.now())) {
+      this.forget(closed);
+    }
   }
 
   /** One bounce per batch, for a personal ask, while PostPile is in the background. */
@@ -73,16 +85,14 @@ export class MacNotifier {
       this.keep(notification);
       notification.on('click', () => {
         this.forget(notification);
-        this.options.onClick(item.target);
+        this.options.onClick(item);
       });
       notification.on('close', () => this.forget(notification));
       notification.on('failed', (_event, error) => {
         this.forget(notification);
         console.warn(`mac notifications: could not show "${item.title}": ${error}`);
       });
-      if (item.target) {
-        this.shelf.add(item.target.prKey, notification, Date.now());
-      }
+      this.shelf.add(item.prKeys, notification, Date.now());
       notification.show();
     }
     this.bounceForPersonal(items);
@@ -94,11 +104,11 @@ export class MacNotifier {
    * the permission now and not in the middle of a real ping.
    */
   showWelcome(): 'shown' | 'off' | 'unsupported' {
-    return this.show([{ title: 'PostPile', body: 'PostPile will ping you here when something needs you.', target: null, count: 1, personal: false }]);
+    return this.show([{ title: 'PostPile', body: 'PostPile will ping you here when something needs you.', target: null, prKeys: [], count: 1, personal: false }]);
   }
 
   /** "Send test notification" from the status footer. */
   showTest(): 'shown' | 'off' | 'unsupported' {
-    return this.show([{ title: 'PostPile test notification', body: 'This is how a ping looks. Clicking one opens its tile.', target: null, count: 1, personal: false }]);
+    return this.show([{ title: 'PostPile test notification', body: 'This is how a ping looks. Clicking one opens its tile.', target: null, prKeys: [], count: 1, personal: false }]);
   }
 }

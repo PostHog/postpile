@@ -68,11 +68,46 @@ export interface Ping {
 export interface MacNotification {
   title: string;
   body: string;
-  /** For a summary, the first ping's target. */
+  /** For a summary, the first ping's target. Where it pointed when it pinged: a click looks again (`pingClickTarget`). */
   target: PingTarget | null;
+  /** Every PR it is about, the target's first. Empty for the welcome and the test notification. */
+  prKeys: PrKey[];
   count: number;
   /** At least one of its pings is personal. */
   personal: boolean;
+}
+
+/** Where a PR sits on the board right now: its topic and the tile holding it (null when no tile does). */
+export interface PrPlace {
+  topicId: string;
+  tileId: string | null;
+}
+
+/**
+ * Where a click on a Mac notification goes, worked out when it is clicked
+ * (2026-10-01). Tiles and topics move between the ping and the click (a
+ * set regrouped, a topic tidied, merged or split), so the ids the ping
+ * carried are only a last resort. In order: the tile that holds the first
+ * of its PRs still on the board; else the topic it pinged in, while that
+ * one can still be opened (no tile, the renderer picks one); else null,
+ * and the click only brings the app to the front.
+ */
+export function pingClickTarget(
+  notification: Pick<MacNotification, 'target' | 'prKeys'>,
+  placeOf: (prKey: PrKey) => PrPlace | null,
+  topicOpenable: (topicId: string) => boolean,
+): PingTarget | null {
+  for (const prKey of notification.prKeys) {
+    const place = placeOf(prKey);
+    if (place) {
+      return { topicId: place.topicId, tileId: place.tileId, prKey };
+    }
+  }
+  const pinged = notification.target;
+  if (pinged && pinged.topicId !== null && topicOpenable(pinged.topicId)) {
+    return { topicId: pinged.topicId, tileId: null, prKey: pinged.prKey };
+  }
+  return null;
 }
 
 export type LivePollState = 'off' | 'waiting' | 'polling' | 'blocked' | 'backoff';

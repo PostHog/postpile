@@ -29,6 +29,7 @@ import type {
   InstructionsView,
   ListScope,
   LivePollStatus,
+  MacNotification,
   McpConnectFrom,
   McpConnectionView,
   SyncProgress,
@@ -41,6 +42,7 @@ import type {
   OpenedReadResult,
   QuietReadView,
   PendingProposals,
+  PingTarget,
   PrDetail,
   PrKey,
   RepoOverview,
@@ -155,6 +157,12 @@ export interface EngineService {
    * ping from Notification Center once its PR is not in this list anymore.
    */
   unreadPrKeys(): Promise<PrKey[]>;
+  /**
+   * Where a click on a Mac notification goes, looked up on the board as it
+   * is at the click (`pingClickTarget`): tiles and topics move after a ping.
+   * Null: its PRs and its topic are gone, the app only comes to the front.
+   */
+  pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): Promise<PingTarget | null>;
   /** Runs `listener` after every full sync that ran to the end (the moment sync_completed is sent); one listener, a second call replaces it. */
   onSyncCompleted(listener: () => void): void;
   /** The daily board snapshot's events over the topics the sidebar lists (all repos), counts only. */

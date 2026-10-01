@@ -42,6 +42,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     refreshOnFocus: notImplemented,
     listTopics: notImplemented,
     unreadPrKeys: notImplemented,
+    pingClickTarget: notImplemented,
     boardShape: notImplemented,
     onSyncCompleted: notImplemented,
     listFinishedTopics: notImplemented,
