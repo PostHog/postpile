@@ -13,7 +13,7 @@ import { teamPill } from '../lib/faces.ts';
 import { UnreadDot } from './pills.tsx';
 import { yourMoveChip } from '../lib/your-move.ts';
 import { Avatar } from './Avatar.tsx';
-import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon } from './icons.tsx';
+import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon, PrStateIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
 import { InboxCleanup } from './InboxCleanup.tsx';
 
@@ -146,6 +146,29 @@ function UnseenMergeChip(props: { count: number }) {
   );
 }
 
+const PR_STATE_WORDS = { open: 'open', draft: 'draft', merged: 'merged', closed: 'closed' } as const;
+
+/**
+ * The topic's PR state (core `prState`: open, else draft, else merged, else
+ * closed) in the left gutter of the summary line, so the name and summary
+ * keep their x. The only place the per-state counts show, as the tooltip.
+ */
+function PrStateMark(props: { item: TopicListItem }) {
+  const { prState, prStateCounts } = props.item;
+  if (prState === null) {
+    return null;
+  }
+  const title = (Object.keys(PR_STATE_WORDS) as (keyof typeof PR_STATE_WORDS)[])
+    .filter((state) => prStateCounts[state] > 0)
+    .map((state) => `${prStateCounts[state]} ${PR_STATE_WORDS[state]}`)
+    .join(' · ');
+  return (
+    <span className="absolute top-1/2 right-full mr-[3px] flex -translate-y-1/2">
+      <PrStateIcon lifecycle={prState} size={11} title={title} />
+    </span>
+  );
+}
+
 /** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
 function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
   const { item } = props;
@@ -169,7 +192,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
+      className={`relative flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
     >
       <span className="flex w-full min-w-0 items-center gap-[7px]">
         {item.unreadPrs > 0 && <UnreadDot />}
@@ -179,7 +202,8 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
         <UnreadBubble item={item} />
       </span>
       {/* The chip sits under the bubble; at 1100px row one has no room left, so the summary gives way first. */}
-      <span className="flex w-full min-w-0 items-center gap-1.5">
+      <span className="relative flex w-full min-w-0 items-center gap-1.5">
+        <PrStateMark item={item} />
         <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
           {topicSnippet(item)}
         </span>
