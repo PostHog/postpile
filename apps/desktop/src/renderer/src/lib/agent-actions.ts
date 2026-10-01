@@ -52,8 +52,15 @@ export function topicApproveLabel(offer: AgentApproveOffer): string {
   return `Approve ${prs} ${offer.totalCount === 1 ? 'PR' : 'PRs'}`;
 }
 
-/** The tile's label: "Approve", "Approve stack", "Approve 3 PRs" on a set. Greyed keeps the plain base. */
+/**
+ * The tile's label: "Approve 2 of 3 PRs" when it leaves some out, like the
+ * topic's; else "Approve", "Approve stack", "Approve 3 PRs" on a set.
+ * Greyed keeps the plain base.
+ */
 export function tileApproveLabel(offer: AgentApproveOffer, kind: TileKind): string {
+  if (offer.state === 'active' && offer.coveredCount < offer.totalCount) {
+    return `Approve ${offer.coveredCount} of ${offer.totalCount} PRs`;
+  }
   if (kind === 'stack') {
     return 'Approve stack';
   }

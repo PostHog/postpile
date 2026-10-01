@@ -314,8 +314,8 @@ function approveLabel(prefix: string, offer: AgentApproveOffer | null): string[]
 
 /**
  * The agent-assisted offers (DESIGN "Agent-assisted actions"): each tile's
- * and the topic's Approve state and greyed reason, a partial topic Approve
- * ("3 of 5"), the topic's Mark N read and one that skips an ask, and an
+ * and the topic's Approve state and greyed reason, a partial tile or topic
+ * Approve ("3 of 5"), the topic's Mark N read and one that skips an ask, and an
  * approvable PR someone else approved already.
  */
 function agentLabels(board: PropertyBoard, views: TileView[]): string[] {
@@ -475,6 +475,7 @@ export const REQUIRED_LABELS: readonly string[] = [
   'agent-approve-tile:active',
   'agent-approve-tile:active low',
   'agent-approve-tile:active medium',
+  'agent-approve-tile:partial',
   'agent-approve-tile:greyed:rechecking',
   'agent-approve-tile:greyed:look_closer',
   'agent-approve-tile:greyed:high',
