@@ -151,22 +151,27 @@ export class SyncRun {
    * the app's cover goes up as the sync starts instead of half a minute in,
    * while the old topics took clicks. The digest's own call stays for a
    * store without a viewer yet and for digestStored; once done it is a no-op.
+   * Returns true when it tried: the digest then leaves the tidy alone, so a
+   * failed call waits for the next full sync instead of a second Opus call
+   * in this one.
    */
-  private async tidyFirst(agentJobs: AgentJob[] | undefined, run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[] }): Promise<void> {
+  private async tidyFirst(agentJobs: AgentJob[] | undefined, run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[] }): Promise<boolean> {
     const viewer = loadViewer(this.deps.store);
     if (viewer === null || this.deps.agentOff() !== null || !(agentJobs ?? ALL_AGENT_JOBS).includes('topics')) {
-      return;
+      return false;
     }
     const tidy = new TopicTidy(this.digestDeps(viewer, run));
-    if (tidy.callsAgent()) {
-      await run.phases.time('tidy', () => tidy.runOnce());
+    if (!tidy.callsAgent()) {
+      return false;
     }
+    await run.phases.time('tidy', () => tidy.runOnce());
+    return true;
   }
 
   private async digest(
     fetched: FetchedForDigest,
     agentJobs: AgentJob[] | undefined,
-    run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[]; report: SyncReport },
+    run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[]; report: SyncReport; tidyTried: boolean },
   ): Promise<void> {
     const { store, now } = this.deps;
     new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, run.tally.facts);
@@ -176,7 +181,7 @@ export class SyncRun {
       run.report.agentOff = agentOff;
       this.log(`sync: agent jobs skipped: ${agentOff}`);
     }
-    const digester = new Digester(this.digestDeps(fetched.viewer, run), run.phases);
+    const digester = new Digester(this.digestDeps(fetched.viewer, run), run.phases, { tidy: !run.tidyTried });
     await digester.run(agentOff === null ? (agentJobs ?? ALL_AGENT_JOBS) : []);
     // After the digest classified the new events, so one the agent turned quiet brings no retired topic back.
     reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
@@ -224,7 +229,7 @@ export class SyncRun {
       const fetched = this.storedAsFetched(options);
       report.prsFetched = options.prKeys.length;
       report.newEvents = fetched.newEventIds.length;
-      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report });
+      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried: false });
       report.topicsRetired = retireFinishedTopics(store, now().toISOString());
       reviveUnreadTopics(store, now().toISOString(), false);
     } catch (error) {
@@ -278,7 +283,7 @@ export class SyncRun {
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
     this.live = { startedAt, phases, budget, stats: report.agentCallStats };
     try {
-      await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
+      const tidyTried = await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
       const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? SYNC_MAX_PRS));
       report.notificationsNotModified = fetched.notModified;
       report.threads = fetched.threads;
@@ -289,7 +294,7 @@ export class SyncRun {
       report.newEvents = fetched.newEventIds.length;
       errors.push(...fetched.errors);
 
-      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report });
+      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried });
       // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
       await this.handleQuietly(errors);
       // Last, so the new events, what was read on GitHub and the quiet reads all count.

@@ -49,13 +49,18 @@ export class TopicTidy {
     }
   }
 
-  /** Active topics and the Archive's topics that still take new PRs. */
+  /**
+   * Active topics and the Archive's topics that would still take new PRs as
+   * standing topics. Kinds are what the tidy decides: an upgrade gives every
+   * stored topic the project default, and a standing topic retired 30 days
+   * ago would otherwise be dropped before the tidy could say what it is.
+   */
   private liveTopics(): Topic[] {
     const { store } = this.deps;
     const now = this.deps.now();
     return store.topics
       .list()
-      .filter((topic) => topic.id !== UNSORTED_TOPIC_ID && takesNewPrs(topic, lastJoinAt(store.memberships.listForTopic(topic.id)), now));
+      .filter((topic) => topic.id !== UNSORTED_TOPIC_ID && takesNewPrs({ ...topic, kind: 'standing' }, lastJoinAt(store.memberships.listForTopic(topic.id)), now));
   }
 
   /** Due, with topics to tidy: runOnce calls the agent (budget allowing) instead of returning at once. */

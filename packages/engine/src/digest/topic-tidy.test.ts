@@ -222,4 +222,31 @@ describe('topic tidy after an upgrade', () => {
 
     expect(fetchesAtTidy).toEqual([0]);
   });
+
+  it('tries once per sync: a failed call before the fetch is not repeated by the digest', async () => {
+    const { h } = tidyHarness();
+    saveViewer(h.store, viewer);
+    h.runner.answer('topic_tidy', 'not json');
+
+    const report = await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.runner.promptsFor('topic_tidy')).toHaveLength(1);
+    expect(report.errors.some((line) => line.startsWith('topic tidy'))).toBe(true);
+    expect(h.store.meta.get(TOPIC_GRAIN_KEY)).toBeNull();
+  });
+
+  it('shows the agent a topic archived long ago that would still be on offer as a standing topic', async () => {
+    const day = 24 * 60;
+    const h = makeHarness({ topicTidyDue: true, now: () => new Date(at(70 * day)) });
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
+    placedByAgent(h, 'migration-safety', [prs[0]!]);
+    placedByAgent(h, 'other', [prs[1]!]);
+    changeTopicStatus(h.store, 'migration-safety', 'retire', at(10 * day));
+    h.runner.answer('topic_tidy', { kinds: [{ topicId: 'migration-safety', kind: 'standing' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.runner.promptsFor('topic_tidy')[0]).toContain('topic id migration-safety:');
+    expect(h.store.topics.get('migration-safety')?.kind).toBe('standing');
+  });
 });
