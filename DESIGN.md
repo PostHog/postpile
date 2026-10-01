@@ -3305,6 +3305,46 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   rolled-up verdict on the tile (the PR rows show each), shorter "same as
   #N" glances for same-pattern sets.
 
+## One call per topic (2026-10-01, behind a switch)
+
+Batches stayed inside one topic and rarely filled: on real data 1,485 dossier,
+glance, event and set calls over three days, about 800 distinct (sync, topic)
+pairs. Julian picked "one call per topic" as the direction. Research on
+multi-task prompts (MTI Bench, ACL 2024; batch prompting, EMNLP 2023; Multi-Instance
+Processing, ACL 2026) supports two or three related parts per call with up to
+about 20 items, and warns against one call for a whole sync.
+
+`POSTPILE_TOPIC_DIGEST=1` (engine option `topicDigest`, off by default while
+it is compared) turns a topic's dossier update into a `topic_digest` call that
+also writes the glances of the topic's most urgent PRs, at most
+GLANCE_BATCH_SIZE:
+
+- **Order inside the answer is the order of the work**: thinking is off, so
+  the dossier fields come first and the glances read the dossier just
+  written (`topicDigestPrompt` reuses the dossier instructions and the glance
+  rules word for word, `dossierUpdateInstructions`, `glanceRules`).
+- **Only when both are due.** A topic with no dossier delta keeps its plain
+  glance batches; a dossier update with no glance target stays a plain
+  `dossier_update`. A new dossier version re-glances every target of the
+  topic anyway (the version is in the glance hash), so "both due" is the
+  common case.
+- **Hashes stay as they are.** The engine stamps the glances again once the
+  new dossier version is stored (`DossierUpdater.saveGlances`), the way the
+  glance batches compute them, so the batches count them as current. Only
+  while glances and the digest use the same model, since a glance's hash
+  names its model.
+- **Partial answers**: a broken dossier part fails the call (error line, the
+  next sync retries, like a failed dossier update). Glances are checked one
+  by one; missing ones, and PRs past the first batch, go to the topic's
+  glance batches once the dossier settled.
+- Events stay their own calls for now (they drive pings, and a dossier-sized
+  call would delay them). The topic's set changes are the next part (see
+  "Tiles hold still").
+- Budget: one `topic_digest` take replaces the dossier take; timeout 7
+  minutes.
+- Compared with `pnpm cli simulate-start` (old vs combined from the same
+  fresh start); the switch becomes the default only after that.
+
 ## You already dealt with it
 
 Decided 2026-09-29 (evening), agreed before building. When the user acts on

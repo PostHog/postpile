@@ -412,6 +412,8 @@ export interface HarnessOptions {
   pingDecisionsPerDay?: number;
   /** Daily glance catch-up cap; 0 (the default here) keeps catch-up off, so poll tests see only the poll's calls. */
   catchUpCallsPerDay?: number;
+  /** One call per topic for dossier and first glances (POSTPILE_TOPIC_DIGEST=1). Off by default. */
+  topicDigest?: boolean;
   /** GitHub writes on (the default here, so action tests reach FakeWriter) or off, as on a first real run. */
   writesEnabled?: boolean;
   /** Build the switch with no real writer, like POSTPILE_READ_ONLY=1. */
@@ -483,6 +485,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     timers,
     pingDecisionsPerDay: options.pingDecisionsPerDay,
     catchUpCallsPerDay: options.catchUpCallsPerDay ?? 0,
+    topicDigest: options.topicDigest ?? false,
     claudeDir: options.claudeDir ?? '/nonexistent/claude',
     syncLog: options.syncLog ?? (() => {}),
     userConfig: options.userConfig ?? null,

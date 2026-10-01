@@ -588,3 +588,33 @@ describe('RunnerAgentService.consolidate', () => {
     expect(runner.requests).toHaveLength(0);
   });
 });
+
+describe('RunnerAgentService.topicDigest', () => {
+  it('maps the dossier like an update and checks each glance on its own', async () => {
+    const { runner, service, calls } = setup();
+    runner.answer('topic_digest', {
+      ...dossierAnswer(),
+      glances: [{ prKey: 'acme/app#1', ...glanceEntry }, { prKey: 'acme/app#3', ...glanceEntry, verdict: 'SHIP_IT' }],
+    });
+    const input = { dossier: dossierInput(), glances: glanceInput() };
+
+    const result = await service.topicDigest(input);
+
+    expect(result.dossier.dossier.goal).toBe('Run CI on Depot.');
+    expect(result.dossier.inputHash).toBe(dossierInputHash(input.dossier));
+    expect(result.glances.glances.map((glance) => glance.prKey)).toEqual(['acme/app#1']);
+    expect(result.glances.missing).toEqual(['acme/app#2', 'acme/app#3']);
+    expect(calls).toMatchObject([{ purpose: 'topic_digest', ok: true, topicId: 'topic-1', attempt: 1 }]);
+    const prompt = runner.promptsFor('topic_digest')[0]!;
+    expect(prompt).toContain('You keep a living dossier');
+    expect(prompt).toContain('=== acme/app#3');
+    expect(prompt.lastIndexOf('"confirmedFactIds"')).toBeLessThan(prompt.lastIndexOf('"glances"'));
+  });
+
+  it('fails the whole call when the dossier part is broken', async () => {
+    const { runner, service } = setup();
+    runner.answer('topic_digest', { glances: [{ prKey: 'acme/app#1', ...glanceEntry }] });
+
+    await expect(service.topicDigest({ dossier: dossierInput(), glances: glanceInput() })).rejects.toThrow();
+  });
+});

@@ -263,6 +263,26 @@ export interface GlanceBatchInput {
   attempt: 1 | 2;
 }
 
+/**
+ * The dossier update and the topic's first glance batch in one call
+ * (POSTPILE_TOPIC_DIGEST=1, DESIGN.md "One call per topic"). The answer
+ * writes the dossier first, so the glances read the dossier just written.
+ */
+export interface TopicDigestInput {
+  dossier: DossierUpdateInput;
+  /** At most GLANCE_BATCH_SIZE PRs of the same topic, most urgent first. Carries the previous dossier. */
+  glances: GlanceBatchInput;
+}
+
+export interface TopicDigestResult {
+  dossier: DossierUpdateResult;
+  /**
+   * Stamped against the previous dossier: the engine stamps them again once
+   * the new version is stored. Missing ones go to the glance batches.
+   */
+  glances: GlanceBatchResult;
+}
+
 export interface GlanceBatchResult {
   /** One per item the answer covered validly. dossierVersion and inputHash are filled in. */
   glances: Glance[];
@@ -521,6 +541,8 @@ export interface AgentService {
   proposeInstructionsChange(input: InstructionsChangeInput): Promise<InstructionsChangeReply>;
 
   updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult>;
+  /** Dossier update and first glance batch of one topic in one call. A broken dossier part fails the call. */
+  topicDigest(input: TopicDigestInput): Promise<TopicDigestResult>;
   /** At most one action per item; items the answer skipped are left out. */
   reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]>;
   /** Per PR, independent of the other PRs in the batch. Covers the dossier version. */

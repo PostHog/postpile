@@ -23,6 +23,8 @@ export interface RunDeps {
   glancePings?: GlancePings;
   /** Pings for events the events agent raised to loud after the poll decided them; the poll hands them to the Mac. */
   raisedPings?: RaisedPings;
+  /** One call per topic: dossier and first glance batch together (POSTPILE_TOPIC_DIGEST=1). Missing: off. */
+  topicDigest?: boolean;
 }
 
 /** RunDeps.telemetry defaults to a no-op, so SyncRun and ConsolidationRun never have to branch on whether it is set. */

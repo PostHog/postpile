@@ -21,26 +21,23 @@ function retryNote(input: GlanceBatchInput): string {
 missing, or the verdict was misspelled. Check each entry against the shape below before replying.`;
 }
 
-/**
- * The "approve at a glance" summary for up to GLANCE_BATCH_SIZE PRs of one
- * topic in one call. The dossier and the user's memory are sent once; each PR
- * is read against them. Same fields and word limits as the single glance.
- */
-export function glanceBatchPrompt(input: GlanceBatchInput): string {
-  const sections = input.items
+/** One glance entry, for the answer shapes of the glance batch and the topic digest. */
+export const GLANCE_ENTRY_SHAPE =
+  '{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "...", "keyFiles": [{"path": "src/app.ts", "why": "..."}]}';
+
+/** The pull requests, each headed by its key, with how it reached the user. */
+export function glanceSections(input: GlanceBatchInput): string {
+  return input.items
     .map((item) => `=== ${item.pr.key}\nHow it reached them: ${howItReached(item.provenance)}\n${prDetails(item.pr, input.viewer, batchDetail)}`)
     .join('\n\n');
-  return `You are helping a developer decide, at a glance, what to do about each of ${input.items.length} GitHub pull requests.
-${viewerLine(input.viewer)}
-${GITHUB_DATA_RULE}
-${contextBlock(input.context)}${workContextBlock(input.context)}
-${topicBlock(input)}
+}
 
-The pull requests, each headed by its key:
-
-${sections}
-
-For every pull request above give one entry, with its key as prKey. Fields, each read at a glance,
+/**
+ * The glance fields, word limits and rules, the same in the glance batch
+ * and the topic digest.
+ */
+export function glanceRules(input: GlanceBatchInput): string {
+  return `For every pull request above give one entry, with its key as prKey. Fields, each read at a glance,
 so stay under the word limits:
 - verdict: LOOKS_SAFE means a reasonable reviewer could approve from this summary alone.
   LOOK_CLOSER means something deserves a real read first: open concerns, risky changes, or a
@@ -70,6 +67,25 @@ Judge each PR on its own facts; do not copy one PR's verdict to the next. Be con
 skeptical; say "unclear" rather than invent.
 Give exactly ${input.items.length} ${input.items.length === 1 ? 'entry' : 'entries'}, one per pull request above, also for the user's own
 PRs and drafts. Copy each prKey exactly as it appears after "===", and spell the verdict exactly
-as one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS.${retryNote(input)}
-${jsonOnly('{"glances": [{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "...", "keyFiles": [{"path": "src/app.ts", "why": "..."}]}]}')}`;
+as one of LOOKS_SAFE, LOOK_CLOSER, NOT_YOURS.${retryNote(input)}`;
+}
+
+/**
+ * The "approve at a glance" summary for up to GLANCE_BATCH_SIZE PRs of one
+ * topic in one call. The dossier and the user's memory are sent once; each PR
+ * is read against them. Same fields and word limits as the single glance.
+ */
+export function glanceBatchPrompt(input: GlanceBatchInput): string {
+  return `You are helping a developer decide, at a glance, what to do about each of ${input.items.length} GitHub pull requests.
+${viewerLine(input.viewer)}
+${GITHUB_DATA_RULE}
+${contextBlock(input.context)}${workContextBlock(input.context)}
+${topicBlock(input)}
+
+The pull requests, each headed by its key:
+
+${glanceSections(input)}
+
+${glanceRules(input)}
+${jsonOnly(`{"glances": [${GLANCE_ENTRY_SHAPE}]}`)}`;
 }

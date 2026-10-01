@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- Lasting sets (2026-10-01, DESIGN.md "Tiles hold still"): the set prompt
+  asks for PRs one judgement covers and answers with changes only; a regroup
+  runs on new triggers only (open PR in no set, risk level change, feedback,
+  instructions), after the glances; merged members stay; every change is in
+  `pr_set_change` (migration 022) and shown in the CLI and MCP topic views.
+- One call per topic, behind `POSTPILE_TOPIC_DIGEST=1` (2026-10-01, DESIGN.md
+  "One call per topic"): dossier and the topic's first 18 glances in one
+  `topic_digest` call; the rest stays in glance batches. Off by default until
+  the side-by-side comparison.
 - PR assignees and ownership (2026-09-30, DESIGN.md "PR ownership: bot PRs
   belong to their assignees"): the PR query reads `assignees(first: 10)`,
   kept in the PR JSON (`Pr.assignees`, no migration). Core `prOwners`

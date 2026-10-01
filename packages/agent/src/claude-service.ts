@@ -19,6 +19,7 @@ import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
+import { topicDigestPrompt } from './prompts/topic-digest.ts';
 import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
@@ -41,6 +42,7 @@ import {
   setupFitOutput,
   setupRefineOutput,
   topicAssignmentOutput,
+  topicDigestOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -67,6 +69,8 @@ import type {
   PingDecisionInput,
   SetGroupingInput,
   SetChanges,
+  TopicDigestInput,
+  TopicDigestResult,
   SetupDraftInput,
   SetupDraftResult,
   SetupFitInput,
@@ -82,6 +86,8 @@ const timeouts: Record<AgentPurpose, number> = {
   topic_assignment: 240_000,
   set_grouping: 240_000,
   dossier_update: 240_000,
+  // A dossier and up to 18 glances in one answer: about the two calls it replaces, end to end.
+  topic_digest: 420_000,
   fact_reconcile: 180_000,
   event_classification: 120_000,
   consolidation: 300_000,
@@ -250,6 +256,23 @@ export class RunnerAgentService implements AgentService {
     });
     const mapped = mapDossierAnswer(value, input, refs, this.now());
     return { ...mapped, inputHash: dossierInputHash(input), model };
+  }
+
+  /**
+   * A broken dossier part fails the whole call (the glances depend on it).
+   * Glances are checked one by one like a glance batch; the missing ones go
+   * to the topic's glance batches.
+   */
+  async topicDigest(input: TopicDigestInput): Promise<TopicDigestResult> {
+    const refs = new DossierRefs(input.dossier);
+    const { value, model } = await this.ask('topic_digest', topicDigestPrompt(input, refs), topicDigestOutput, {
+      topicId: input.dossier.topic.id,
+      attempt: 1,
+    });
+    const dossier = { ...mapDossierAnswer(value, input.dossier, refs, this.now()), inputHash: dossierInputHash(input.dossier), model };
+    const stamp = { model, createdAt: this.now(), inputHash: (item: GlanceBatchItem) => glanceItemInputHash(input.glances, item) };
+    const glances = { ...mapGlanceAnswer({ glances: value.glances }, input.glances, stamp), model };
+    return { dossier, glances };
   }
 
   async reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]> {

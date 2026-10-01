@@ -17,6 +17,8 @@ import {
   type GlanceBatchInput,
   type GlanceBatchItem,
   type GlanceBatchResult,
+  type TopicDigestInput,
+  type TopicDigestResult,
 } from '@postpile/agent';
 import { emptyDossier, type Glance, type ReconcileAction } from '@postpile/core';
 
@@ -64,6 +66,7 @@ export class FakeAgent extends RunnerAgentService {
   readonly reconcileInputs: FactReconcileInput[] = [];
   readonly eventInputs: EventBatchInput[] = [];
   readonly consolidationInputs: ConsolidationInput[] = [];
+  readonly topicDigestInputs: TopicDigestInput[] = [];
 
   private readonly dossierAnswers: Answer<DossierUpdateInput, DossierUpdateResult>[] = [];
   private readonly glanceAnswers: Answer<GlanceBatchInput, GlanceBatchResult>[] = [];
@@ -175,6 +178,14 @@ export class FakeAgent extends RunnerAgentService {
     await hold;
     const result = this.answer('dossier_update', this.dossierAnswers, input, defaultDossier, { topicId: input.topic.id, attempt: 1 });
     return { ...result, inputHash: this.dossierHash(input) };
+  }
+
+  /** The dossier from the dossier queue, the glances from the glance queue (all of them by default); one topic_digest call. */
+  override async topicDigest(input: TopicDigestInput): Promise<TopicDigestResult> {
+    this.topicDigestInputs.push(input);
+    const dossier = this.answer('topic_digest', this.dossierAnswers, input.dossier, defaultDossier, { topicId: input.dossier.topic.id, attempt: 1 });
+    const glances = (this.glanceAnswers.shift() ?? ((i: GlanceBatchInput) => this.allGlances(i)))(input.glances);
+    return { dossier: { ...dossier, inputHash: this.dossierHash(input.dossier) }, glances };
   }
 
   override async reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]> {

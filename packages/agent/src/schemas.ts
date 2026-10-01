@@ -269,6 +269,11 @@ export const glanceBatchOutput = z.object({
   glances: z.array(z.unknown()),
 });
 
+/** The dossier answer plus the glances; each glance is checked on its own, like a glance batch. */
+export const topicDigestOutput = dossierUpdateOutput.extend({
+  glances: z.array(z.unknown()).default([]),
+});
+
 export const glanceBatchItemOutput = glanceOutput.extend({
   prKey: text,
 });
