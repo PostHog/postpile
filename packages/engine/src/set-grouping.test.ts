@@ -220,4 +220,33 @@ describe('lasting sets', () => {
 
     expect(changes(h).some((line) => line.startsWith('updated'))).toBe(false);
   });
+
+  it('drops only the PR the user took out, so its former partner can still group with others', async () => {
+    const h = makeHarness();
+    const [a, c, d] = [1, 3, 4].map((n) => reviewRequestedPr(n));
+    topicWithPrs(h, 'depot', [a!, c!, d!]);
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Pair', take: '', members: [member(a!), member(c!)] }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const pairId = h.store.sets.listActiveForTopic('depot')[0]!.id;
+    await h.engine.giveFeedback({ kind: 'not_related', tileId: `set:${pairId}`, prKey: c!.key, targetTopicId: null, note: '' });
+
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Runner switch', take: '', members: [member(a!), member(c!), member(d!)] }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    const created = h.store.sets.listActiveForTopic('depot');
+    expect(created.map((set) => set.members.map((m) => m.prKey))).toEqual([[a!.key, d!.key]]);
+  });
+
+  it('ends a set whose PRs became one stack, without asking the agent', async () => {
+    const x = reviewRequestedPr(1, { headRef: 'x1' });
+    const y = reviewRequestedPr(2, { baseRef: 'main', headRef: 'y1' });
+    const { h, setId } = await depotWithSet([x, y]);
+
+    h.reader.addPr({ ...y, baseRef: 'x1', updatedAt: at(5) }, makeThreadFor(y));
+    const report = await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(report.agentCalls).toBe(0);
+    expect(h.store.sets.get(setId)).toBeNull();
+    expect(changes(h)[0]).toBe('ended - (rules): fewer than two PRs left');
+  });
 });

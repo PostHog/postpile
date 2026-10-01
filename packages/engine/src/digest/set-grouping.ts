@@ -72,11 +72,15 @@ export function setUnitCount(members: PrSetMember[], stackOf: Map<PrKey, Stack>)
   return unitsOf(members, stackOf).length;
 }
 
-/** Drops every unit (a PR, or a whole stack) the user already said is not related to another unit of the proposal. */
+/**
+ * Drops every unit (a PR, or a whole stack) the user already said is not
+ * related to another unit of the proposal. One way only: "C is not related
+ * to A" drops C, never A, so A can still group with D.
+ */
 function withoutRejected(units: PrSetMember[][], rejected: Set<string>): PrSetMember[][] {
   return units.filter((unit, index) => {
     const others = units.filter((_, otherIndex) => otherIndex !== index).flat();
-    return !rejectedTogether(unit, others, rejected);
+    return !unit.some((member) => others.some((other) => rejected.has(pairKey(member.prKey, other.prKey))));
   });
 }
 
@@ -164,6 +168,24 @@ export class SetGrouper {
     }
   }
 
+  /**
+   * A set whose members became one stack (a PR retargeted onto another's
+   * branch) is just that stack's tile now. No trigger notices that, so it
+   * is checked on every pass, before the triggers.
+   */
+  private endSingleUnitSets(topic: Topic): void {
+    const sets = this.deps.store.sets.listActiveForTopic(topic.id);
+    if (sets.length === 0) {
+      return;
+    }
+    const stackOf = this.stacks();
+    for (const set of sets) {
+      if (setUnitCount(set.members, stackOf) < 2) {
+        this.deps.store.transaction(() => this.saveOrEnd(set, 'rules', stackOf));
+      }
+    }
+  }
+
   /** The topic's open PRs and every member of its sets, with their glance's risk line. */
   input(topic: Topic): SetGroupingInput {
     const { store } = this.deps;
@@ -184,6 +206,7 @@ export class SetGrouper {
    */
   due(topic: Topic): SetGroupingInput | null {
     this.dropMovedMembers(topic);
+    this.endSingleUnitSets(topic);
     const input = this.input(topic);
     if (activeSets(input).length === 0 && unplacedKeys(input).length < 2) {
       return null;
