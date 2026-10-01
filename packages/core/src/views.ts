@@ -292,6 +292,10 @@ export interface TopicDetail {
   topic: Topic;
   placement: TopicPlacement | null;
   tiles: TileView[];
+  /** The viewer's moves on live tiles, most urgent first (`topicYourMoves`): the header's chip, same as the sidebar row's. */
+  yourMoves: TopicMove[];
+  /** Live tiles that are the viewer's move, per group (`yourMovesByGroup`): the group headings' "2 your move". */
+  groupYourMoves: Record<TileGroup, number>;
   sets: PrSet[];
   /** The topic's set history, newest first (SET_CHANGES_SHOWN): why each tile holds what it holds. */
   setChanges: PrSetChange[];
