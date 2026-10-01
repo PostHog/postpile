@@ -1,8 +1,8 @@
-import type { TidyTopic, TopicTidyResult } from '@postpile/agent';
-import { cleanTopicName, type PrKey, type TopicProposal } from '@postpile/core';
+import type { TidyDestination, TidyTopic, TopicTidyResult } from '@postpile/agent';
+import { cleanTopicName, newTopic, type PrKey, type TopicProposal } from '@postpile/core';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { errorText } from '../errors.ts';
-import { newProposalId } from '../ids.ts';
+import { newProposalId, newTopicId } from '../ids.ts';
 import { changeTopicStatus } from '../topic-status.ts';
 import type { DigestDeps } from './deps.ts';
 
@@ -26,9 +26,8 @@ export const TOPIC_TIDY_RESULT_KEY = 'topic_tidy_result';
  * The user decided this is part of the upgrade, not a pile of proposals.
  * Merges move the PRs and archive the merged-away topics, the way an
  * accepted merge does, and are recorded as accepted proposals from the
- * upgrade. Split PRs lose their topic; the topic assignment that runs
- * right after places them under the current steering. Runs before topic
- * assignment, in the full sync only.
+ * upgrade. Split PRs move to the topic the answer names, or a new one.
+ * Runs before topic assignment, in the full sync only.
  */
 export class TopicTidy {
   constructor(private readonly deps: DigestDeps) {}
@@ -109,25 +108,57 @@ export class TopicTidy {
   }
 
   /**
-   * A stack leaves whole, like everywhere else. A PR the user placed
-   * ("Wrong topic") stays where they put it, and so does its whole stack:
-   * the tidy never sees who placed what. A topic whose splits, stacks
-   * expanded, would take every PR out keeps them all.
+   * Where split PRs go: the named topic while it is still active (a merge
+   * may have folded it away), else an active topic of that name, else a new
+   * one. Null when the destination is gone.
+   */
+  private destination(into: TidyDestination, at: string): string | null {
+    const { store } = this.deps;
+    if (into.kind === 'existing') {
+      return store.topics.get(into.topicId)?.status === 'active' ? into.topicId : null;
+    }
+    const name = cleanTopicName(into.name);
+    if (!name) {
+      return null;
+    }
+    const same = store.topics.listActive().find((topic) => cleanTopicName(topic.name).toLowerCase() === name.toLowerCase());
+    if (same) {
+      return same.id;
+    }
+    const topic = newTopic(newTopicId(name), name, at);
+    store.topics.create(topic);
+    return topic.id;
+  }
+
+  /**
+   * Moves split PRs where the answer says, in one step: handing them to the
+   * topic assignment instead could put them straight back. A stack moves
+   * whole, like everywhere else. A PR the user placed ("Wrong topic") stays
+   * where they put it, and so does its whole stack: the tidy never sees who
+   * placed what. A topic whose splits, stacks expanded, would take every PR
+   * out keeps them all.
    */
   private applySplits(result: TopicTidyResult, at: string): void {
     const { store } = this.deps;
     const board = Board.load(store, at);
     const placedByUser = (key: PrKey): boolean => store.memberships.get(key)?.assignedBy === 'user';
+    const leavingByTopic = new Map<string, Set<PrKey>>();
     for (const split of result.splits) {
       const units = split.prKeys.map((key) => board.movesWith(key)).filter((unit) => !unit.some(placedByUser));
-      const leaving = new Set<PrKey>(units.flat());
+      const leaving = leavingByTopic.get(split.topicId) ?? new Set<PrKey>();
       const members = store.memberships.listForTopic(split.topicId).map((m) => m.prKey);
-      if (members.every((key) => leaving.has(key))) {
+      if (members.every((key) => leaving.has(key) || units.flat().includes(key))) {
         continue;
       }
-      for (const key of leaving) {
-        store.memberships.remove(key);
+      const target = this.destination(split.into, at);
+      if (target === null || target === split.topicId) {
+        continue;
       }
+      for (const key of units.flat()) {
+        leaving.add(key);
+        store.memberships.assign({ prKey: key, topicId: target, assignedBy: 'agent', reason: split.reason, createdAt: at });
+      }
+      leavingByTopic.set(split.topicId, leaving);
     }
   }
 

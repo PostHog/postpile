@@ -56,7 +56,17 @@ export const topicTidyOutput = z.object({
   merges: z
     .array(z.object({ fromTopicIds: z.array(text), intoTopicId: text, name: text.nullable().default(null), reason: text.min(1) }))
     .default([]),
-  splits: z.array(z.object({ topicId: text, prKeys: z.array(text), reason: text.min(1) })).default([]),
+  splits: z
+    .array(
+      z.object({
+        topicId: text,
+        prKeys: z.array(text),
+        intoTopicId: text.nullable().default(null),
+        newName: text.nullable().default(null),
+        reason: text.min(1),
+      }),
+    )
+    .default([]),
 });
 
 /** Only what changes: anything the answer leaves out stays as it is. */

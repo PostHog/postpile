@@ -1,15 +1,26 @@
 import type { PrKey } from '@postpile/core';
 import type { z } from 'zod';
 import type { topicTidyOutput } from './schemas.ts';
-import type { TopicTidyInput, TopicTidyResult } from './service.ts';
+import type { TidyDestination, TopicTidyInput, TopicTidyResult } from './service.ts';
 
 type TidyAnswer = z.infer<typeof topicTidyOutput>;
+
+/** A known topic other than the one split, not folded away; else a new name; else none. */
+function destinationOf(split: TidyAnswer['splits'][number], known: Set<string>, folded: Set<string>): TidyDestination | null {
+  const into = split.intoTopicId?.trim();
+  if (into && into !== split.topicId && known.has(into) && !folded.has(into)) {
+    return { kind: 'existing', topicId: into };
+  }
+  const name = split.newName?.trim();
+  return name ? { kind: 'new', name } : null;
+}
 
 /**
  * Keeps what the input allows. A merge needs a known target and at least one
  * other known topic, each folded away once; a target is never folded away
- * itself. A split names member PRs of a topic that stays (not folded away),
- * and all splits of a topic together leave at least one PR behind.
+ * itself. A split names member PRs of a topic that stays (not folded away)
+ * and where they go (another known topic, or a new name), and all splits of
+ * a topic together leave at least one PR behind.
  */
 export function mapTidyAnswer(answer: TidyAnswer, input: TopicTidyInput): TopicTidyResult {
   const members = new Map(input.topics.map((topic) => [topic.id, new Set(topic.prs.map((pr) => pr.key))]));
@@ -35,7 +46,8 @@ export function mapTidyAnswer(answer: TidyAnswer, input: TopicTidyInput): TopicT
   const splits: TopicTidyResult['splits'] = [];
   for (const split of answer.splits) {
     const own = members.get(split.topicId);
-    if (!own || folded.has(split.topicId)) {
+    const into = destinationOf(split, new Set(members.keys()), folded);
+    if (!own || folded.has(split.topicId) || !into) {
       continue;
     }
     const already = leaving.get(split.topicId) ?? new Set<PrKey>();
@@ -43,7 +55,7 @@ export function mapTidyAnswer(answer: TidyAnswer, input: TopicTidyInput): TopicT
     if (prKeys.length > 0 && already.size + prKeys.length < own.size) {
       prKeys.forEach((key) => already.add(key));
       leaving.set(split.topicId, already);
-      splits.push({ topicId: split.topicId, prKeys, reason: split.reason });
+      splits.push({ topicId: split.topicId, prKeys, into, reason: split.reason });
     }
   }
   return { merges, splits };

@@ -3399,10 +3399,11 @@ for the user to work through, and never in later syncs.
 - Merges move the PRs the way an accepted merge does (new `created_at`, so
   the target's next dossier update introduces them) and archive the merged-away
   topics; each is recorded as an accepted `merge` proposal with source
-  `upgrade`, so the topic's decided changes show it (MCP `topic`). Split PRs
-  lose their topic, a stack whole; the assignment right after places them
-  under the current steering. What the tidy did is kept in
-  `meta.topic_tidy_result`.
+  `upgrade`, so the topic's decided changes show it (MCP `topic`). Each split
+  names where its PRs go, an existing topic or a new project name, and the
+  tidy moves them there itself, a stack whole: handing them to the topic
+  assignment could put them straight back into the topic they were split
+  from. What the tidy did is kept in `meta.topic_tidy_result`.
 - A store without active topics (a fresh install) is marked done without a
   call; a single topic still runs, it may be a catch-all to split. A failed
   call is an error line and the next full sync tries again.

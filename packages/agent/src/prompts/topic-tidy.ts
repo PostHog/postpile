@@ -18,8 +18,9 @@ function topicBlock(topic: TidyTopic): string {
  * tidy after an upgrade"): every active topic with its PRs, one line each,
  * and the size examples the topic assignment now uses. The agent answers
  * with merges (topics that are one project) and splits (PRs that do not
- * belong to their topic). The engine applies them without asking: the user
- * decided this tidy is part of the upgrade, not a pile of proposals.
+ * belong to their topic, and where they go). The engine applies them
+ * without asking: the user decided this tidy is part of the upgrade, not a
+ * pile of proposals.
  */
 export function topicTidyPrompt(input: TopicTidyInput): string {
   return `You are tidying the topics a developer's GitHub pull requests are sorted into. They were cut
@@ -41,11 +42,12 @@ What to answer:
   words, or null to keep its name. A project named in what the user is working on (above) is a
   strong sign; so is the same person on the same product in the same stretch of time.
 - splits: a topic that holds PRs of unrelated work (a catch-all, or a project with strays). List
-  the PRs that do not belong to its goal; they are sorted into topics again right after, so do not
-  say where they go. Leave the PRs that serve the goal.
+  the PRs that do not belong to its goal and say where they go: intoTopicId, a topic above whose
+  goal they serve, or newName, 2 to 6 words naming the project they serve. One entry per
+  destination; PRs of the same project go to the same place. Leave the PRs that serve the goal.
 - Never merge topics that only share a repo, an area or a word; never merge into a field ("Repo
   conventions", "CI fixes"). A topic of one PR that serves no bigger goal stays as it is.
 - Leave a topic alone when it is the right size; most are. Changing nothing is a fine answer.
 - reason: one short sentence each. Copy topic ids and PR keys exactly as above.
-${jsonOnly('{"merges": [{"fromTopicIds": ["<id>"], "intoTopicId": "<id>", "name": "..." | null, "reason": "..."}], "splits": [{"topicId": "<id>", "prKeys": ["owner/repo#1"], "reason": "..."}]}')}`;
+${jsonOnly('{"merges": [{"fromTopicIds": ["<id>"], "intoTopicId": "<id>", "name": "..." | null, "reason": "..."}], "splits": [{"topicId": "<id>", "prKeys": ["owner/repo#1"], "intoTopicId": "<id>" | null, "newName": "..." | null, "reason": "..."}]}')}`;
 }

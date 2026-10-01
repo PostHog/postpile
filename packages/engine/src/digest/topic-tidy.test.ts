@@ -54,16 +54,32 @@ describe('topic tidy after an upgrade', () => {
     expect(report.agentCallStats.byKind.topic_tidy).toBeUndefined();
   });
 
-  it('takes split PRs out, and the topic assignment places them in the same sync', async () => {
+  it('moves split PRs where the answer says, a new topic or an existing one', async () => {
     const { h, prs } = tidyHarness();
-    h.runner.answer('topic_tidy', { splits: [{ topicId: 'repo-conventions', prKeys: [prs[3]!.key], reason: 'not about conventions' }] });
-    h.runner.answer('topic_assignment', { assignments: [{ prKey: prs[3]!.key, kind: 'new', name: 'Billing rewrite', goal: 'Rewrite billing.', reason: 'billing work' }] });
+    h.runner.answer('topic_tidy', {
+      splits: [
+        { topicId: 'repo-conventions', prKeys: [prs[3]!.key], intoTopicId: null, newName: 'Billing rewrite', reason: 'not about conventions' },
+      ],
+    });
 
-    await h.engine.sync({ agentJobs: ['topics'] });
+    const report = await h.engine.sync({ agentJobs: ['topics'] });
 
     const topicId = h.store.memberships.get(prs[3]!.key)?.topicId;
     expect(h.store.topics.get(topicId!)?.name).toBe('Billing rewrite');
     expect(h.store.memberships.get(prs[2]!.key)?.topicId).toBe('repo-conventions');
+    // Placed by the tidy itself: the assignment has nothing left to place.
+    expect(report.agentCallStats.byKind.topic_assignment).toBeUndefined();
+  });
+
+  it('moves split PRs into an existing topic the answer names', async () => {
+    const { h, prs } = tidyHarness();
+    h.runner.answer('topic_tidy', {
+      splits: [{ topicId: 'repo-conventions', prKeys: [prs[3]!.key], intoTopicId: 'review-app-polling', newName: null, reason: 'part of the app' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(prs[3]!.key)?.topicId).toBe('review-app-polling');
   });
 
   it('tries again on the next sync when the call fails', async () => {
@@ -89,8 +105,7 @@ describe('topic tidy after an upgrade', () => {
     const h = makeHarness({ topicTidyDue: true });
     const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
     placedByAgent(h, 'everything', prs);
-    h.runner.answer('topic_tidy', { splits: [{ topicId: 'everything', prKeys: [prs[1]!.key], reason: 'unrelated' }] });
-    h.runner.answer('topic_assignment', { assignments: [{ prKey: prs[1]!.key, kind: 'new', name: 'Billing rewrite', goal: '', reason: 'billing' }] });
+    h.runner.answer('topic_tidy', { splits: [{ topicId: 'everything', prKeys: [prs[1]!.key], intoTopicId: null, newName: 'Billing rewrite', reason: 'unrelated' }] });
 
     await h.engine.sync({ agentJobs: ['topics'] });
 
@@ -113,7 +128,9 @@ describe('topic tidy after an upgrade', () => {
   it('leaves a PR the user placed where they put it', async () => {
     const { h, prs } = tidyHarness();
     h.store.memberships.assign({ prKey: prs[3]!.key, topicId: 'repo-conventions', assignedBy: 'user', reason: 'I put it here', createdAt: at(1) });
-    h.runner.answer('topic_tidy', { splits: [{ topicId: 'repo-conventions', prKeys: [prs[3]!.key], reason: 'not about conventions' }] });
+    h.runner.answer('topic_tidy', {
+      splits: [{ topicId: 'repo-conventions', prKeys: [prs[3]!.key], intoTopicId: null, newName: 'Billing rewrite', reason: 'not about conventions' }],
+    });
 
     await h.engine.sync({ agentJobs: ['topics'] });
 
@@ -126,7 +143,7 @@ describe('topic tidy after an upgrade', () => {
     const top = reviewRequestedPr(2, { baseRef: 's1', headRef: 's2' });
     placedByAgent(h, 'stack-topic', [bottom, top]);
     placedByAgent(h, 'other', [reviewRequestedPr(3)]);
-    h.runner.answer('topic_tidy', { splits: [{ topicId: 'stack-topic', prKeys: [top.key], reason: 'stray' }] });
+    h.runner.answer('topic_tidy', { splits: [{ topicId: 'stack-topic', prKeys: [top.key], intoTopicId: null, newName: 'Elsewhere', reason: 'stray' }] });
 
     await h.engine.sync({ agentJobs: ['topics'] });
 

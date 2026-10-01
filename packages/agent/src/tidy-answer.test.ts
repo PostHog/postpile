@@ -34,14 +34,14 @@ describe('mapTidyAnswer', () => {
       {
         merges: [{ fromTopicIds: ['b'], intoTopicId: 'a', name: null, reason: 'x' }],
         splits: [
-          { topicId: 'c', prKeys: ['acme/app#4', 'acme/app#9'], reason: 'stray' },
-          { topicId: 'c', prKeys: ['acme/app#3', 'acme/app#4'], reason: 'would empty it' },
-          { topicId: 'b', prKeys: ['acme/app#2'], reason: 'folded away' },
+          { topicId: 'c', prKeys: ['acme/app#4', 'acme/app#9'], intoTopicId: 'a', newName: null, reason: 'stray' },
+          { topicId: 'c', prKeys: ['acme/app#3', 'acme/app#4'], intoTopicId: 'a', newName: null, reason: 'would empty it' },
+          { topicId: 'b', prKeys: ['acme/app#2'], intoTopicId: null, newName: 'Billing', reason: 'folded away' },
         ],
       },
       input,
     );
-    expect(result.splits).toEqual([{ topicId: 'c', prKeys: ['acme/app#4'], reason: 'stray' }]);
+    expect(result.splits).toEqual([{ topicId: 'c', prKeys: ['acme/app#4'], into: { kind: 'existing', topicId: 'a' }, reason: 'stray' }]);
   });
 
   it('counts every split entry of a topic together, so they cannot empty it', () => {
@@ -49,12 +49,27 @@ describe('mapTidyAnswer', () => {
       {
         merges: [],
         splits: [
-          { topicId: 'c', prKeys: ['acme/app#3'], reason: 'first' },
-          { topicId: 'c', prKeys: ['acme/app#4'], reason: 'second would empty it' },
+          { topicId: 'c', prKeys: ['acme/app#3'], intoTopicId: null, newName: 'Billing rewrite', reason: 'first' },
+          { topicId: 'c', prKeys: ['acme/app#4'], intoTopicId: null, newName: 'Billing rewrite', reason: 'second would empty it' },
         ],
       },
       input,
     );
-    expect(result.splits).toEqual([{ topicId: 'c', prKeys: ['acme/app#3'], reason: 'first' }]);
+    expect(result.splits).toEqual([{ topicId: 'c', prKeys: ['acme/app#3'], into: { kind: 'new', name: 'Billing rewrite' }, reason: 'first' }]);
+  });
+
+  it('drops a split without a usable destination', () => {
+    const result = mapTidyAnswer(
+      {
+        merges: [],
+        splits: [
+          { topicId: 'c', prKeys: ['acme/app#3'], intoTopicId: 'c', newName: null, reason: 'into itself' },
+          { topicId: 'c', prKeys: ['acme/app#3'], intoTopicId: 'zz', newName: '  ', reason: 'unknown and blank' },
+          { topicId: 'c', prKeys: ['acme/app#3'], intoTopicId: 'zz', newName: 'Billing', reason: 'unknown id, a name' },
+        ],
+      },
+      input,
+    );
+    expect(result.splits).toEqual([{ topicId: 'c', prKeys: ['acme/app#3'], into: { kind: 'new', name: 'Billing' }, reason: 'unknown id, a name' }]);
   });
 });

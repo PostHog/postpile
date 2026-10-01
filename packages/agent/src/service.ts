@@ -88,6 +88,9 @@ export interface TopicAssignmentInput {
   context: PromptContext;
 }
 
+/** Where split PRs go: an existing topic, or a new one named after the project they serve. */
+export type TidyDestination = { kind: 'existing'; topicId: string } | { kind: 'new'; name: string };
+
 /** One active topic as the topic tidy sees it. */
 export interface TidyTopic {
   id: string;
@@ -111,8 +114,8 @@ export interface TopicTidyInput {
 export interface TopicTidyResult {
   /** Folds fromTopicIds into intoTopicId; name renames the merged topic when set. */
   merges: { fromTopicIds: string[]; intoTopicId: string; name: string | null; reason: string }[];
-  /** PRs that do not belong to topicId: they lose their topic and topic assignment places them again. */
-  splits: { topicId: string; prKeys: PrKey[]; reason: string }[];
+  /** PRs that do not belong to topicId, and where they go instead; the tidy places them itself. */
+  splits: { topicId: string; prKeys: PrKey[]; into: TidyDestination; reason: string }[];
 }
 
 export type TopicAssignment =
