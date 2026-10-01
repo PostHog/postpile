@@ -6,13 +6,14 @@ import type { TileView } from '@postpile/core';
  * Notification Center (2026-10-01). Main does the matching by PR key; this
  * only says what is open. The caller passes the user's pick (a click on the
  * tile or one of its PRs, a ping click), not a tile the app picked on its
- * own: that one can change while nobody looks.
+ * own: that one can change while nobody looks. `visits` grows with every
+ * explicit open, so opening the tile that is already open tells it again.
  */
-export function useTileVisit(view: TileView | null): void {
+export function useTileVisit(view: TileView | null, visits: number): void {
   const prKeys = view ? view.prs.map((pr) => pr.key).join(' ') : '';
   useEffect(() => {
     if (prKeys !== '') {
       window.postpile?.tileVisited?.(prKeys.split(' '));
     }
-  }, [prKeys]);
+  }, [prKeys, visits]);
 }

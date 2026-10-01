@@ -167,8 +167,13 @@ export function App() {
   const go = (next: NavEntry) => {
     if (!sameView(shown, next)) {
       nav.navigate(next);
+    } else if (selected.auto && next.pane === 'topic' && next.tileId !== null) {
+      // Picking the tile the app picked makes it the user's pick, without a new history entry.
+      nav.replace(next);
     }
   };
+  // Grows with every explicit open (a tile click, a ping click), so opening the tile already open counts as a visit again.
+  const [visits, setVisits] = useState(0);
   // Write the fallbacks into the current entry, so a reorder or refetch does
   // not move the selection (and remount the detail pane, losing a chat draft)
   // or mark a topic seen the user never left. Not while a search or queue
@@ -191,6 +196,7 @@ export function App() {
       sendTelemetry('tile_opened', tileOpenedProps(view));
     }
     go({ pane: 'topic', topicId: activeTopicId, tileId, prKey });
+    setVisits((count) => count + 1);
   };
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 
@@ -240,6 +246,7 @@ export function App() {
     const entry: NavEntry = { pane: 'topic', topicId: target.topicId, tileId: target.tileId, prKey: target.prKey };
     go(entry);
     setRevealed({ filterKey: currentFilterKey, entry, topicId: target.topicId, tileId: target.tileId, prKey: target.prKey });
+    setVisits((count) => count + 1);
   };
   const latestOpenPing = useRef(openPing);
   useEffect(() => {
@@ -277,9 +284,9 @@ export function App() {
         </p>
       </MainPane>
     );
-  } else if (filter && !activeItem) {
+  } else if (filter && !activeItem && revealedUnlistedId === null) {
     main = <EmptyMain text={`Nothing matches “${query.trim()}”. Esc clears the filter.`} />;
-  } else if (queueFilter && !activeItem) {
+  } else if (queueFilter && !activeItem && revealedUnlistedId === null) {
     main = <EmptyMain text="No topic has a PR that matches the filter. Pick “any PR” to show all topics." />;
   } else if (topic.error) {
     main = <EmptyMain text={`Could not load the topic: ${topic.error.message}`} />;
@@ -324,7 +331,7 @@ export function App() {
   const detailShown = !showSetup && !wideList;
   const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? selected.prKey : null);
   // The user's pick clears its Mac pings from Notification Center; a tile the app picked does not.
-  useTileVisit(detailShown && !selected.auto ? selected.view : null);
+  useTileVisit(detailShown && !selected.auto ? selected.view : null, visits);
 
   const tellAgent = {
     available: selected.view !== null,
