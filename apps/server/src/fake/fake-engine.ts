@@ -143,6 +143,7 @@ import {
   threadPrKey,
   topicFaces,
   topicPeople,
+  topicPrState,
   topicQueues,
   topicUrgency,
   topicYourMoves,
@@ -843,6 +844,7 @@ export class FakeEngine implements EngineService {
       );
       const prs = this.topicPrs(tiles);
       const pinged = pingedPrKeys(tiles);
+      const prSummary = topicPrState(prs.map(({ pr }) => ({ state: pr.state, isDraft: pr.isDraft, pulledIn: !pinged.has(pr.key) })));
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
@@ -867,6 +869,8 @@ export class FakeEngine implements EngineService {
           })),
         ),
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
+        prState: prSummary.state,
+        prStateCounts: prSummary.counts,
       };
     });
     return items.sort(compareTopicUrgency);

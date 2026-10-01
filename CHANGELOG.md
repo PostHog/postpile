@@ -6,6 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- Each topic in the sidebar shows one PR state icon in front of its summary: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").
 - The topic header shows the same honey "your move" chip as the sidebar row, and the group headings say how many of their tiles are your move: "Open 4 · 2 your move". Tiles waiting on others and snoozed tiles don't count.
 
 ## 0.13.2 (2026-10-01)

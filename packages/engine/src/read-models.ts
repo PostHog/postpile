@@ -68,6 +68,7 @@ import {
   type Tile,
   type TileView,
   type TopicDetail,
+  topicPrState,
   type TopicListItem,
   type Viewer,
   type ViewerView,
@@ -355,6 +356,7 @@ export class ReadModels {
       );
       const prs = this.topicPrs(board, tiles);
       const pinged = pingedPrKeys(tiles);
+      const prSummary = topicPrState(prs.map((pr) => ({ state: pr.state, isDraft: pr.isDraft, pulledIn: !pinged.has(pr.key) })));
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
       items.push({
@@ -381,6 +383,8 @@ export class ReadModels {
           })),
         ),
         people: topicFaces(topicPeople(prs, viewer)),
+        prState: prSummary.state,
+        prStateCounts: prSummary.counts,
       });
     }
     return items.sort(compareTopics);

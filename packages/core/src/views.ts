@@ -28,6 +28,7 @@ import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
+import type { TopicPrState, TopicPrStateCounts } from './topic-pr-state.ts';
 import type { OpenedReadCheck } from './quiet-reads.ts';
 import type { TileOffers } from './offers.ts';
 import type { TileAgentOffers, TopicAgentOffers } from './agent-actions.ts';
@@ -110,6 +111,10 @@ export interface TopicListItem {
    * three at most.
    */
   people: TopicPerson[];
+  /** The most alive PR state among the topic's tracked PRs (`topicPrState`), for the row's icon. Null when it tracks none. */
+  prState: TopicPrState | null;
+  /** Tracked PRs per state, for the icon's tooltip only. */
+  prStateCounts: TopicPrStateCounts;
 }
 
 /** The sidebar's Finished drawer lists topics retired this recently. */

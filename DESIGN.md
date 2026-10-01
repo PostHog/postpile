@@ -2642,9 +2642,10 @@ avatars and filters", QueuesB2).
   (`topicYourMoves`, the `topicUrgency` rule on live tiles) and
   `TopicDetail.groupYourMoves` (`yourMovesByGroup`, live tiles per group,
   snoozed and done left out), so a snoozed tile adds to the group's count
-  but not to its your-move part. While the search filters the grid the
-  heading drops the your-move part: its number is for the whole group, the
-  tile count is not. The tile footer keeps its dot and "Your move" text.
+  but not to its your-move part. While the search filters the grid, or
+  a selected tile is held outside its core group (`useHeldPlace`), the
+  headings drop the your-move part: its numbers are for the groups as core
+  sees them, and the tile counts are not. The tile footer keeps its dot and "Your move" text.
 - **No counts on section headers** (2026-09-28, later the same day):
   Julian read the PR counts on headers and rows as unread counts, and how
   many PRs a queue holds does not matter. Section and group headers show
@@ -2673,6 +2674,18 @@ avatars and filters", QueuesB2).
   onto the pill's edge). Replaced "only you and your team when involved,
   with a sea ring" (2026-09-28), which dropped the other authors and mixed
   in reviewers.
+- **PR state icon** (`TopicListItem.prState` and `prStateCounts` =
+  `topicPrState`, 2026-10-01): one icon per row, the most alive state among
+  the topic's tracked PRs by precedence open (a queued PR counts as open),
+  draft, merged, closed (closed without merging). One open PR among nine
+  merged shows open; merged shows only when nothing is open or draft; closed
+  only when everything is closed. Pulled-in stack layers do not count. It is
+  the same icon and colour as a PR row (`PrStateIcon`). Every row has a
+  fixed 14px leading slot inside the highlight: the unread dot on line one,
+  the icon on line two, both centred, so the name and the summary start at
+  the same x on every row (and the section labels line up with them). The
+  tooltip ("5 open · 1 merged") is the only place the counts show. Chosen
+  over counts per state (busier, steals summary width) and a progress bar.
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
   (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
