@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - Each topic in the sidebar shows one PR state icon in front of its summary: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").
+- The detail pane's PR list now shows the same row as the tile, with open threads, the author and "assigned to" (the last two step aside when the pane is narrow). PR numbers and titles line up on read and unread rows, tile text and right edges line up, and the sidebar's FYI and Finished headers and filter lines start where topic names do.
 
 ## 0.13.2 (2026-10-01)
 

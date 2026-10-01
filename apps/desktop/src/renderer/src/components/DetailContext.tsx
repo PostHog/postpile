@@ -1,9 +1,8 @@
 import type { TileView } from '@postpile/core';
-import { LIFECYCLE_WORDS, rowStateWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindParts, prNumber, sameForWhom } from '../lib/tiles.ts';
-import { BackIcon, ForwardIcon, KindIcon, PrStateIcon } from './icons.tsx';
-import { ForWhomChip, UnreadDot, StackMark, StateWordLabel } from './pills.tsx';
+import { kindParts, sameForWhom } from '../lib/tiles.ts';
+import { BackIcon, ForwardIcon, KindIcon } from './icons.tsx';
+import { PrRow } from './PrRow.tsx';
 
 interface DetailContextProps {
   view: TileView;
@@ -37,8 +36,8 @@ function PrCounter(props: { index: number; count: number }) {
 
 /**
  * Tinted header that repeats the selected tile. Several PRs: kind, title,
- * "PR x of n" with arrows, and the PR list (coral dot on the PRs that keep
- * the tile from being done). One PR: just the kind; the title is right below in the
+ * "PR x of n" with arrows, and the PR list: the tile's own `PrRow`s, so both
+ * show the same facts on the same grid. One PR: just the kind; the title is right below in the
  * body, and a counter or arrows would lead nowhere.
  */
 export function DetailContext(props: DetailContextProps) {
@@ -85,40 +84,23 @@ export function DetailContext(props: DetailContextProps) {
         )}
       </div>
       {several && (
-        <div className="flex flex-col gap-0.5">
-          {view.prs.map((pr) => {
-            const picked = pr.key === props.prKey;
-            const lifecycle = pr.status.lifecycle;
-            const quiet = lifecycle === 'draft' || lifecycle === 'closed';
-            const word = rowStateWord(pr.status);
-            const place = places.get(pr.key);
-            let look = 'hover:bg-surface/70';
-            let titleLook = 'font-medium text-ink';
-            if (picked) {
-              look = 'bg-surface shadow-picked';
-              titleLook = 'font-semibold text-ink';
-            } else if (quiet) {
-              look = 'bg-segment hover:bg-chip';
-              titleLook = 'font-medium text-muted';
-            }
-            return (
-              <button
-                key={pr.key}
-                type="button"
-                onClick={() => props.onSelectPr(pr.key)}
-                className={`relative flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-3 text-left text-[12.5px] focus-visible:-outline-offset-2 ${look}`}
-              >
-                <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} className="mx-[3px]" />
-                {/* Hangs in the row padding, so every row's #number starts at the same x. */}
-                {view.unreadPrKeys.includes(pr.key) && <UnreadDot className="absolute top-[13px] left-1" />}
-                <span className="shrink-0 font-mono text-[11px] text-hint">#{prNumber(pr.key)}</span>
-                {place && <StackMark place={place} />}
-                <span className={`min-w-0 truncate ${titleLook}`}>{pr.title}</span>
-                {!sameForWhom(pr.forWhom, view.forWhom) && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} size="row" />}
-                <span className="ml-auto flex shrink-0 items-center pl-1">{word && <StateWordLabel word={word} />}</span>
-              </button>
-            );
-          })}
+        // A container, so PrRow can drop its least needed facts when the pane is narrow.
+        <div className="@container flex flex-col gap-0.5">
+          {view.prs.map((pr) => (
+            <PrRow
+              key={pr.key}
+              pr={pr}
+              place="detail"
+              grouped
+              showForWhom={!sameForWhom(pr.forWhom, view.forWhom)}
+              stackPlace={places.get(pr.key) ?? null}
+              showTitle
+              unread={view.unreadPrKeys.includes(pr.key)}
+              selected={pr.key === props.prKey}
+              greyed={false}
+              onClick={() => props.onSelectPr(pr.key)}
+            />
+          ))}
         </div>
       )}
     </div>
