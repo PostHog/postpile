@@ -383,7 +383,7 @@ describe('openedReadCheck', () => {
   const unreadThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: true });
   const tile = { snoozed: false };
   const opened = (overrides: Partial<Parameters<typeof openedReadCheck>[0]> = {}) =>
-    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), tiles: [tile], doneAfterRead: true, ...overrides });
+    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), pr, tiles: [tile], doneAfterRead: true, ...overrides });
 
   it('marks an unread thread when a mark-read of that PR would leave it done', () => {
     expect(opened()).toEqual({ kind: 'mark' });
@@ -411,6 +411,18 @@ describe('openedReadCheck', () => {
     expect(opened({ tiles: [] })).toEqual({ kind: 'skip', why: 'no_tile' });
     expect(opened({ prFetchedAt: at(29) })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
     expect(opened({ prFetchedAt: null })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+  });
+
+  it('trusts a truncated snapshot only when our caps cut nothing from the unread interval', () => {
+    const commitsHit = { list: 'commits' as const, nodes: 100, oldestAt: at(25) };
+    // Only GitHub's total counted more: the detail pane missed nothing.
+    expect(opened({ pr: { ...pr, truncated: true, capHits: [] } })).toEqual({ kind: 'mark' });
+    // Our cap cut commits after GitHub's read time (20): the user cannot have seen them.
+    expect(opened({ pr: { ...pr, truncated: true, capHits: [commitsHit] } })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    // What the cap cut is older than the read: the unread interval is all there.
+    expect(opened({ pr: { ...pr, truncated: true, capHits: [{ ...commitsHit, oldestAt: at(15) }] } })).toEqual({ kind: 'mark' });
+    // Stored before cap hits were recorded: no proof either way.
+    expect(opened({ pr: { ...pr, truncated: true } })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
   });
 });
 

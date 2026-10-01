@@ -550,6 +550,7 @@ export class FakeEngine implements EngineService {
     return {
       thread,
       prFetchedAt: thread?.updatedAt ?? null,
+      pr: pr ?? null,
       tiles: tiles.map((tile) => ({ snoozed: this.tileState(tile).kind === 'snoozed' })),
       doneAfterRead,
     };

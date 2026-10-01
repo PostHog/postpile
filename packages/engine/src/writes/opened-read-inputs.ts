@@ -60,6 +60,7 @@ export class OpenedReadInputs {
     return {
       thread: this.board.threads.get(prKey) ?? null,
       prFetchedAt: this.prFetchedAt(prKey),
+      pr: this.board.prs.get(prKey) ?? null,
       tiles: tiles.map((tile) => ({ snoozed: this.board.stateOf(tile).kind === 'snoozed' })),
       doneAfterRead: this.doneAfterRead(prKey, tiles),
     };

@@ -324,6 +324,28 @@ describe('refresh after a write and on focus', () => {
     expect((await h.engine.livePollStatus()).changeCount).toBe(changesBefore + 1);
   });
 
+  it('keeps the thread read when its mark-read lands while the inbox request runs', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    const thread = makeThreadFor(pr);
+    h.reader.addPr(pr, thread);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    await h.engine.markRead(`pr:${pr.key}`);
+    // The answer was made before the write landed, so it still lists the thread unread.
+    h.reader.etag = 'etag-before-the-write';
+    const listNotifications = h.reader.listNotifications.bind(h.reader);
+    h.reader.listNotifications = async (conditions) => {
+      h.timers.advance(UNDO_WINDOW_MS);
+      await new Promise((resolve) => setImmediate(resolve));
+      return listNotifications(conditions);
+    };
+
+    await h.engine.pollOnce();
+
+    expect(h.writer.calls).toContain(`markThreadRead ${thread.id}`);
+    expect(h.store.notifications.get(thread.id)?.unread).toBe(false);
+  });
+
   it('looks up the thread of a PR opened on github.com, and fetches one without a thread', async () => {
     const h = makeHarness();
     const pr = await ownReadPr(h);

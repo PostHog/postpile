@@ -826,6 +826,7 @@ function openedInputOf(board: PropertyBoard, pr: Pr, viewer: Viewer | null): Ope
   return {
     thread: board.threads.get(pr.key) ?? null,
     prFetchedAt: board.prFetchedAt.get(pr.key) ?? null,
+    pr,
     tiles: holding.map((tile) => ({ snoozed: tileStateOf(board, tile, viewer).kind === 'snoozed' })),
     doneAfterRead: afterRead.done,
   };

@@ -244,14 +244,24 @@ describe('You already dealt with it: opening a PR in PostPile marks its thread r
     return detail?.tiles.flatMap((view) => view.prs).find((row) => row.key === prKey)?.openedRead;
   }
 
-  it('marks a snapshot cut off at the caps when it is fresh: the user looked at the PR', async () => {
-    const pr = { ...followedPr(), truncated: true };
+  it('marks a fresh truncated snapshot when no list hit our caps (only GitHub counted more)', async () => {
+    const pr = { ...followedPr(), truncated: true, capHits: [] };
     const h = await syncedTopic(pr);
     expect(await rowVerdict(h, pr.key)).toEqual({ kind: 'mark' });
 
     expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: true });
 
     expect(h.writer.calls).toEqual(['markThreadRead thread-3']);
+  });
+
+  it('skips a fresh snapshot our caps cut inside the unread interval: the detail pane missed it too', async () => {
+    const pr = { ...followedPr(), truncated: true, capHits: [{ list: 'comments' as const, nodes: 100, oldestAt: at(10) }] };
+    const h = await syncedTopic(pr);
+    expect(await rowVerdict(h, pr.key)).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+
+    expect(await h.engine.markOpenedRead(pr.key)).toEqual({ marked: false });
+
+    expect(h.writer.calls).toEqual([]);
   });
 
   it('skips a stale snapshot, logs why, and the row says so before anyone asks', async () => {

@@ -257,7 +257,7 @@ export class FakeTimers implements Timers {
 export const NO_PR_FACTS: PrFacts = { owners: ['alice'], ownerIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
 
 /** "Opened in PostPile" inputs of a PR without a thread, for hand-built `PrSummaryInput`s. */
-export const NO_OPENED_READ_INPUT: OpenedReadInput = { thread: null, prFetchedAt: null, tiles: [], doneAfterRead: false };
+export const NO_OPENED_READ_INPUT: OpenedReadInput = { thread: null, prFetchedAt: null, pr: null, tiles: [], doneAfterRead: false };
 
 /** The opened-read verdict of a PR without a thread, for hand-built `PrSummary` rows. */
 export const NO_OPENED_READ: OpenedReadCheck = { kind: 'skip', why: 'no_thread' };

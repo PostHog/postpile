@@ -270,6 +270,8 @@ export class GitHubSync {
    */
   private async syncNotifications(origin: 'sync' | 'poll', looked: NotificationThread[] = []): Promise<NotificationsSync> {
     const startedAt = this.now().toISOString();
+    // Taken before the request too: a send that lands while it runs leaves the queue, but the answer can still list its thread unread.
+    const queuedAtStart = this.queuedThreads();
     const result = await this.reader.listNotifications({
       etag: this.store.meta.get(ETAG_KEY),
       lastModified: this.store.meta.get(LAST_MODIFIED_KEY),
@@ -293,7 +295,7 @@ export class GitHubSync {
     // A held thread keeps its row until the clicked mark-read's retry writes what GitHub says.
     // A queued one is read here while GitHub still lists it unread until the write lands: only
     // newer activity or a read elsewhere replaces its row, never the same unread row again.
-    const queued = this.queuedThreads();
+    const queued = new Set([...queuedAtStart, ...this.queuedThreads()]);
     const storedById = new Map(this.threads().map((stored) => [stored.id, stored]));
     const staleUnread = (thread: NotificationThread) =>
       queued.has(thread.id) && thread.unread && thread.updatedAt <= (storedById.get(thread.id)?.updatedAt ?? '');

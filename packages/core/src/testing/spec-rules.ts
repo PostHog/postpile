@@ -989,9 +989,9 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
  * Opening a PR in PostPile reads it only where that hides nothing: it has
  * a thread and a tile, no tile holding it is snoozed, a mark-read leaves it
  * done; an unread thread also needs a snapshot fetched at or after its
- * last update, cut off at the caps or not (2026-10-01).
+ * last update that our caps cut nothing from since the read.
  */
-export function expectedOpenedRead(input: { thread: NotificationThread | null; prFetchedAt: IsoTime | null; tilesSnoozed: boolean[]; doneAfterRead: boolean }): OpenedReadCheck {
+export function expectedOpenedRead(input: { thread: NotificationThread | null; prFetchedAt: IsoTime | null; pr: Pr | null; tilesSnoozed: boolean[]; doneAfterRead: boolean }): OpenedReadCheck {
   if (input.thread === null) {
     return { kind: 'skip', why: 'no_thread' };
   }
@@ -1007,8 +1007,9 @@ export function expectedOpenedRead(input: { thread: NotificationThread | null; p
   if (!input.thread.unread) {
     return { kind: 'handle' };
   }
-  // The user looked at the PR: a snapshot cut off at the caps is fine, only its age counts.
-  return snapshotIsFresh(input.thread, input.prFetchedAt, false) ? { kind: 'mark' } : { kind: 'skip', why: 'stale_snapshot' };
+  // Cut by GitHub's count alone (no cap hit), the detail pane missed nothing; cut by our caps, only when what fell off is older than the read.
+  const cutByCaps = input.pr?.truncated === true && input.pr.capHits?.length !== 0;
+  return snapshotIsFresh(input.thread, input.prFetchedAt, cutByCaps, input.pr, input.thread.lastReadAt) ? { kind: 'mark' } : { kind: 'skip', why: 'stale_snapshot' };
 }
 
 // ---------------------------------------------------------------------------
