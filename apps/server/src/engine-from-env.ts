@@ -5,7 +5,7 @@ import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyDat
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeQuotaLevel } from './fake/fake-quota.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
-import { FakeUpdates } from './fake/fake-update.ts';
+import { FakeUpdates, type FakeUpdateMode } from './fake/fake-update.ts';
 import { UpdateChecker, UpdatesOff, type UpdateSource } from './update-check.ts';
 
 export function isFake(): boolean {
@@ -126,17 +126,25 @@ export function pollSecondsFromEnv(value: string | undefined): number {
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_POLL_SECONDS;
 }
 
+/** POSTPILE_FAKE_UPDATE: 0 for no sample update, pill for the small pill, anything else for the bar. */
+function fakeUpdateMode(value: string | undefined): FakeUpdateMode {
+  if (value === '0') {
+    return 'none';
+  }
+  return value === 'pill' ? 'pill' : 'bar';
+}
+
 /**
  * The update reminder's check for the app at `current`. POSTPILE_UPDATE_CHECK=0
- * turns it off. Sample data never asks GitHub: it shows a sample update,
- * unless POSTPILE_FAKE_UPDATE=0.
+ * turns it off. Sample data never asks GitHub: it shows a sample update
+ * (see fakeUpdateMode).
  */
 export function updateSourceFromEnv(current: string): UpdateSource {
   if (process.env.POSTPILE_UPDATE_CHECK === '0') {
     return new UpdatesOff(current);
   }
   if (isFake()) {
-    return new FakeUpdates(current, process.env.POSTPILE_FAKE_UPDATE !== '0');
+    return new FakeUpdates(current, fakeUpdateMode(process.env.POSTPILE_FAKE_UPDATE));
   }
   return new UpdateChecker({ current });
 }

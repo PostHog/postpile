@@ -16,6 +16,9 @@ export interface ReleaseInfo {
   draft: boolean;
 }
 
+/** How many releases the update check asks GitHub for. A full page may have older releases behind it. */
+export const RELEASES_PAGE_SIZE = 10;
+
 /** A release newer than the running app. */
 export interface AvailableUpdate {
   /** Without the "v", e.g. "0.2.0". */
@@ -24,6 +27,16 @@ export interface AvailableUpdate {
   url: string;
   publishedAt: IsoTime | null;
   notes: string;
+  /**
+   * When the user first fell behind: the publish time of the oldest release
+   * newer than the running app. Not the newest release's time, so a new
+   * release does not restart the clock. Null when GitHub gave no time.
+   */
+  behindSince: IsoTime | null;
+  /** Non-draft version releases newer than the running app, among those fetched. */
+  releasesBehind: number;
+  /** The fetched page was full and ends with a release still newer than the app: the user may be further behind than `releasesBehind` says. */
+  moreBehind: boolean;
 }
 
 /** GET /api/update. */
@@ -122,29 +135,87 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
- * The newest release newer than `current`, or null. Drafts and tags that are
- * not versions are skipped. Pre-releases (with a "-") count too, so a tag
- * like 0.3.0-beta.1 still shows; since 0.2.0 releases carry no suffix.
- * Null too when `current` itself is not a version.
+ * The newest release newer than `current`, or null, with how far behind the
+ * user is (see AvailableUpdate). Drafts and tags that are not versions are
+ * skipped. Pre-releases (with a "-") count too, so a tag like 0.3.0-beta.1
+ * still shows; since 0.2.0 releases carry no suffix. Null too when `current`
+ * itself is not a version.
  */
 export function pickUpdate(current: string, releases: ReleaseInfo[]): AvailableUpdate | null {
   if (!isVersion(current)) {
     return null;
   }
-  let best: ReleaseInfo | null = null;
-  for (const release of releases) {
-    if (release.draft || !isVersion(release.tag)) {
-      continue;
-    }
-    if (compareVersions(release.tag, current) <= 0) {
-      continue;
-    }
-    if (best === null || compareVersions(release.tag, best.tag) > 0) {
-      best = release;
-    }
-  }
-  if (!best) {
+  const versions = releases.filter((release) => !release.draft && isVersion(release.tag));
+  const newer = versions.filter((release) => compareVersions(release.tag, current) > 0);
+  if (newer.length === 0) {
     return null;
   }
-  return { version: versionFromTag(best.tag), url: best.url, publishedAt: best.publishedAt, notes: best.notes };
+  newer.sort((a, b) => compareVersions(b.tag, a.tag));
+  const newest = newer[0]!;
+  const oldestMissed = newer[newer.length - 1]!;
+  // Only a full page can be cut short: if even its last release is newer, older ones may exist.
+  const oldestFetched = versions.reduce((oldest, release) => (compareVersions(release.tag, oldest.tag) < 0 ? release : oldest));
+  return {
+    version: versionFromTag(newest.tag),
+    url: newest.url,
+    publishedAt: newest.publishedAt,
+    notes: newest.notes,
+    behindSince: oldestMissed.publishedAt,
+    releasesBehind: newer.length,
+    moreBehind: releases.length >= RELEASES_PAGE_SIZE && oldestFetched === oldestMissed,
+  };
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+/** How long the small pill is enough; after this the bar shows. */
+export const BAR_AFTER_MS = 24 * HOUR_MS;
+/** What "Later" on the bar buys. */
+export const BAR_LATER_MS = 24 * HOUR_MS;
+
+export type UpdateUrgency = 'none' | 'pill' | 'bar';
+
+function behindSinceMs(update: AvailableUpdate): number | null {
+  if (!update.behindSince) {
+    return null;
+  }
+  const time = Date.parse(update.behindSince);
+  return Number.isNaN(time) ? null : time;
+}
+
+/** Hours since the user missed their first release, or null when unknown (or nothing to update). */
+export function hoursBehind(view: UpdateView, now: number): number | null {
+  const since = view.latest ? behindSinceMs(view.latest) : null;
+  return since === null ? null : Math.max(0, (now - since) / HOUR_MS);
+}
+
+/**
+ * How loud the update reminder is. Under 24h behind it is the small pill; from
+ * 24h on it is the bar. `snoozedUntil` (epoch ms, from "Later") quiets it:
+ * under 24h the pill hides, and from 24h on the bar drops back to the pill.
+ * It never goes fully quiet once the user is 24h behind. Without a known
+ * time behind, the reminder stays a pill.
+ */
+export function updateUrgency(view: UpdateView, now: number, snoozedUntil: number | null): UpdateUrgency {
+  if (!view.latest) {
+    return 'none';
+  }
+  const snoozed = snoozedUntil !== null && snoozedUntil > now;
+  const since = behindSinceMs(view.latest);
+  const barDue = since !== null && now - since >= BAR_AFTER_MS;
+  if (barDue) {
+    return snoozed ? 'pill' : 'bar';
+  }
+  return snoozed ? 'none' : 'pill';
+}
+
+/**
+ * Where "Later" snoozes to (epoch ms). On the bar: 24h from now. On the pill:
+ * until the bar is due, so the pill hides only until the bar takes over.
+ */
+export function laterUntil(view: UpdateView, now: number): number {
+  const since = view.latest ? behindSinceMs(view.latest) : null;
+  if (updateUrgency(view, now, null) === 'pill' && since !== null) {
+    return since + BAR_AFTER_MS;
+  }
+  return now + BAR_LATER_MS;
 }

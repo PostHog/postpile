@@ -89,6 +89,14 @@
   --unread-when: #c46553;
   --unread-row: #fffaf8;
 
+  /* Amber: a calm warning, for the update bar. Never coral (--unread means
+     "new since you looked") and never the honey of "aimed at you". There is
+     no dark theme yet; when one lands, this block gets its dark values. */
+  --amber-soft: #fff4e0;
+  --amber-line: #f1d9a8;
+  --amber-ink: #7a4b00;
+  --amber: #d98a00;
+
   /* Warm reach: why-it's-here tints. Honey = aimed at you, sea = your team.
      Neutral (own PR) reuses --bg-segment with --ink. */
   --honey-soft: #fff1cc;

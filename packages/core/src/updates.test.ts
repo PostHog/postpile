@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, isVersion, pickUpdate, type ReleaseInfo } from './index.ts';
+import { compareVersions, hoursBehind, isVersion, laterUntil, pickUpdate, updateUrgency, type ReleaseInfo, type UpdateView } from './index.ts';
 
 function release(tag: string, overrides: Partial<ReleaseInfo> = {}): ReleaseInfo {
   return {
@@ -45,6 +45,9 @@ describe('pickUpdate', () => {
       url: 'https://github.com/acme/app/releases/tag/v0.1.0-alpha.2',
       publishedAt: '2026-09-28T10:00:00Z',
       notes: 'Fixes',
+      behindSince: '2026-09-28T10:00:00Z',
+      releasesBehind: 2,
+      moreBehind: false,
     });
   });
 
@@ -66,5 +69,72 @@ describe('pickUpdate', () => {
 
   it('is null when the current version is unknown', () => {
     expect(pickUpdate('', [release('v0.1.0-alpha.1')])).toBeNull();
+  });
+});
+
+describe('how far behind', () => {
+  const at = (day: number) => `2026-09-${day}T10:00:00Z`;
+
+  it('counts from the oldest missed release, not the newest', () => {
+    const update = pickUpdate('0.2.0', [
+      release('v0.2.3', { publishedAt: at(30) }),
+      release('v0.2.2', { publishedAt: at(29) }),
+      release('v0.2.1', { publishedAt: at(28) }),
+      release('v0.2.1-draft', { draft: true, publishedAt: at(27) }),
+      release('v0.2.0', { publishedAt: at(26) }),
+    ]);
+    expect(update).toMatchObject({ version: '0.2.3', behindSince: at(28), releasesBehind: 3, moreBehind: false });
+  });
+
+  it('a newer release leaves the clock where it was', () => {
+    const before = pickUpdate('0.2.0', [release('v0.2.1', { publishedAt: at(28) }), release('v0.2.0')]);
+    const after = pickUpdate('0.2.0', [release('v0.2.2', { publishedAt: at(30) }), release('v0.2.1', { publishedAt: at(28) }), release('v0.2.0')]);
+    expect(after?.behindSince).toBe(before?.behindSince);
+  });
+
+  it('says there may be more only when a full page is all newer', () => {
+    const page = (size: number) => Array.from({ length: size }, (_, index) => release(`v0.3.${size - index}`));
+    expect(pickUpdate('0.2.0', page(10))).toMatchObject({ releasesBehind: 10, moreBehind: true });
+    expect(pickUpdate('0.2.0', page(3))).toMatchObject({ releasesBehind: 3, moreBehind: false });
+    expect(pickUpdate('0.3.5', page(10))).toMatchObject({ releasesBehind: 5, moreBehind: false });
+  });
+});
+
+describe('updateUrgency', () => {
+  const hour = 60 * 60 * 1000;
+  const since = Date.parse('2026-09-28T10:00:00Z');
+  const view: UpdateView = {
+    current: '0.2.0',
+    latest: { ...pickUpdate('0.2.0', [release('v0.2.1', { publishedAt: '2026-09-28T10:00:00Z' })])! },
+    checkedAt: null,
+    error: null,
+  };
+
+  it('is a pill under 24h and a bar from 24h on', () => {
+    expect(updateUrgency({ ...view, latest: null }, since, null)).toBe('none');
+    expect(updateUrgency(view, since + 23 * hour, null)).toBe('pill');
+    expect(updateUrgency(view, since + 24 * hour, null)).toBe('bar');
+    expect(hoursBehind(view, since + 30 * hour)).toBe(30);
+  });
+
+  it('stays a pill without a known publish time', () => {
+    const unknown = { ...view, latest: { ...view.latest!, behindSince: null } };
+    expect(updateUrgency(unknown, since + 100 * hour, null)).toBe('pill');
+  });
+
+  it('Later hides the pill until the bar is due, then the bar returns', () => {
+    const now = since + 5 * hour;
+    const until = laterUntil(view, now);
+    expect(until).toBe(since + 24 * hour);
+    expect(updateUrgency(view, now, until)).toBe('none');
+    expect(updateUrgency(view, until, until)).toBe('bar');
+  });
+
+  it('Later on the bar drops to the pill for 24h, then the bar returns', () => {
+    const now = since + 40 * hour;
+    const until = laterUntil(view, now);
+    expect(until).toBe(now + 24 * hour);
+    expect(updateUrgency(view, now + hour, until)).toBe('pill');
+    expect(updateUrgency(view, until, until)).toBe('bar');
   });
 });

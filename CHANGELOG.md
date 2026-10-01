@@ -8,6 +8,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Agent-assisted Approve and Mark read on topics and tiles, marked ✨; Approve updates at once and no longer shows Undo.
 
+### Changed
+
+- Update reminder: after 24 hours behind, the small title bar pill becomes a bar under the title bar with how many releases you missed, the brew command and release notes. "Later" brings back the pill for a day, then the bar returns.
+
 ## 0.12.4 (2026-09-30)
 
 ### Changed
