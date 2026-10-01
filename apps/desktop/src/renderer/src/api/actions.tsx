@@ -62,6 +62,7 @@ import { useGitHubWrites } from './writes.ts';
 import { prPath, request, tilePath, tilePrPath } from './client.ts';
 import { queryKeys } from './keys.ts';
 import { sendTelemetry } from './telemetry.ts';
+import { webPinger } from '../lib/web-pings.ts';
 
 // Matches UNDO_WINDOW_MS in the engine. The renderer imports types only.
 const UNDO_WINDOW_MS = 6000;
@@ -186,7 +187,7 @@ export interface Actions {
   connectMcp(from: McpConnectFrom): Promise<boolean>;
   /** "Not now" on the footer's MCP offer. Local, kept by the server. */
   hideMcpConnect(): Promise<boolean>;
-  /** "Send test notification" (desktop app only, over the preload). Says in a toast what happened. */
+  /** "Send test notification": a Mac one over the preload, or a browser one (asking for the permission first) on the web. Says in a toast what happened. */
   sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
@@ -550,7 +551,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
   async function sendTestNotification(): Promise<void> {
     const send = window.postpile?.sendTestNotification;
     if (!send) {
-      show('blocked', 'Test notifications only work in the desktop app');
+      const result = await webPinger.showTest();
+      if (result === 'shown') {
+        show('ok', 'Test notification sent. Nothing showed up? Allow your browser in System Settings › Notifications.');
+      } else if (result === 'denied') {
+        show('blocked', "Notifications are blocked for this page. Allow them in the browser's site settings, then try again.");
+      } else {
+        show('error', 'This browser does not support notifications');
+      }
       return;
     }
     const result = await send();

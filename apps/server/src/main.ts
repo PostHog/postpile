@@ -9,6 +9,7 @@ import type { AppInstall, McpLauncher } from '@postpile/core';
 import { applyLegacyEnv, defaultPaths, launchToolPath, telemetryFromEnv, type EngineService } from '@postpile/engine';
 import { appConfigFromEnv, engineFromEnv, isFake, updateSourceFromEnv, readOwnVersion } from './engine-from-env.ts';
 import { startBackgroundJobs } from './background-jobs.ts';
+import { PingFeed } from './ping-feed.ts';
 import { SERVER_TOKEN_FILE_NAME, serverToken } from './server-token.ts';
 import { startServer } from './start.ts';
 import { findWebRoot } from './web-ui.ts';
@@ -41,14 +42,15 @@ try {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 }
-const server = await startServer({ engine, port, token, config, updates: updateSourceFromEnv(appVersion), telemetry, webRoot });
+const pings = new PingFeed();
+const server = await startServer({ engine, port, token, config, updates: updateSourceFromEnv(appVersion), telemetry, webRoot, pings });
 console.log(`PostPile ${appVersion} API on ${server.url}, profile ${config.profile}, PATH ${process.env.PATH}`);
 if (webRoot) {
   console.log(`web UI: ${server.url}/ (from ${webRoot})`);
 } else {
   console.log(`token: ${token}  (send it as x-postpile-token, or open the UI with ?token=${token}); no built web UI found, run pnpm build:web`);
 }
-const backgroundJobs = startBackgroundJobs(engine, config);
+const backgroundJobs = startBackgroundJobs(engine, config, { onNotify: (notifications) => pings.push(notifications) });
 
 async function shutdown(): Promise<void> {
   backgroundJobs.stop();

@@ -3834,7 +3834,7 @@ Near-real-time pings on the Mac, only when they matter. Runs while the desktop
 app runs (window open or hidden) and while the standalone server behind the
 web UI runs (no Mac pings there); the CLI has `poll` for one cycle.
 
-**Poll** (`LivePoller` in engine `live/`, started by the desktop main process and the standalone server through `startBackgroundJobs`; only the desktop shows Mac notifications):
+**Poll** (`LivePoller` in engine `live/`, started by the desktop main process and the standalone server through `startBackgroundJobs`. The desktop shows the pings as Mac notifications; the standalone server keeps them in `PingFeed` (newest 50, ids in order) for the web UI, which polls `GET /api/pings?after=<id>` every 5s, starts at the newest id (no replay of older pings on load), and shows each as a browser notification once the page has the permission, which it only asks for from a click ("pings: off · turn on", "test ping"). A click goes through `pingClickTarget` (`GET /api/pings/:id/target`) like a Mac one; opening a tile closes its pings through the same `PingShelf` (core). Decided 2026-10-01):
 
 - `GET /notifications` every `POSTPILE_POLL_SECONDS` (default 60, 0 turns
   it off, window focus included) with the stored ETag / Last-Modified, shared

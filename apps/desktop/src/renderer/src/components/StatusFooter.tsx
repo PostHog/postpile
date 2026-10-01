@@ -13,6 +13,9 @@ import { countPrs } from '../lib/tiles.ts';
 import { toolsFooter } from '../lib/tools.ts';
 import { McpFooterItem } from './McpFooterItem.tsx';
 import { WritesLock } from './WritesLock.tsx';
+import { WebPingsFooterItem } from './WebPingsFooterItem.tsx';
+import { useNotificationPermission } from '../lib/use-web-pings.ts';
+import { isWebPage } from '../lib/web-pings.ts';
 
 /** Numbers in the footer are ink and semibold; the words around them stay muted. */
 function Num(props: { children: ReactNode }) {
@@ -34,6 +37,13 @@ function withDividers(items: ReactNode[]): ReactNode[] {
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
   const serverVersion = useUpdate().data?.current;
+  const permission = useNotificationPermission();
+  const testPingOff = !window.postpile?.sendTestNotification && (!isWebPage() || permission === 'unsupported');
+  const testPingTitle = window.postpile?.sendTestNotification
+    ? 'Send a test Mac notification'
+    : testPingOff
+      ? 'This browser cannot show notifications'
+      : 'Send a test browser notification (asks for the permission first)';
   const version = window.postpile?.version || serverVersion;
   const now = useNow(1000);
   const live = liveLabel(props.live, now);
@@ -66,12 +76,13 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
       </span>
     ),
     <WritesLock key="lock" />,
+    isWebPage() && permission !== 'granted' && <WebPingsFooterItem key="web-pings" permission={permission} />,
     <button
       key="ping"
       type="button"
       onClick={() => void actions.sendTestNotification()}
-      disabled={!window.postpile?.sendTestNotification}
-      title={window.postpile?.sendTestNotification ? 'Send a test Mac notification' : 'Only in the desktop app'}
+      disabled={testPingOff}
+      title={testPingTitle}
       className="text-muted hover:text-ink disabled:opacity-50 disabled:hover:text-muted"
     >
       test ping

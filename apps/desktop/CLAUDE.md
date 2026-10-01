@@ -65,6 +65,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `lib/use-update-reminder.ts`: `useUpdateReminder` asks core's `updateUrgency`
   for none / pill / bar; "Later" is one shared snooze timestamp in
   localStorage, read by `UpdatePill` and `UpdateBar`),
+  `pings.ts` (`usePingFeed`: the standalone server's ping feed every 5s, also
+  in the background, only on the web page; `useWebPings` in `lib/use-web-pings.ts`
+  hands new pings to `webPinger` (`lib/web-pings.ts`, browser notifications over
+  core's `PingShelf`) and opens the tile a click asks `fetchPingTarget` for;
+  the permission is only ever asked from a click (`sendTestNotification`,
+  `WebPingsFooterItem`)),
   `mcp.ts` (`useMcpConnection`: is PostPile's MCP server in Claude Code,
   refetched on window focus; the server runs `claude mcp get` at most every
   5 minutes),
@@ -326,6 +332,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   neutral, never coral; under 24h behind) + `UpdateBar` (full-width bar under
   the title bar from 24h behind, amber `--amber-*` tokens, never coral; mounted
   in `App.tsx`; Later drops back to the pill for 24h; `update_bar_shown` once per run),
+  `WebPingsFooterItem` ("pings: off · turn on" / "pings: blocked" in the footer, web page only, while
+  the browser has not granted notifications),
   `McpFooterItem` ("agents: not connected" in the footer, only while
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s

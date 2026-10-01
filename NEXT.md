@@ -808,7 +808,9 @@ now".
   ships as the `postpile-server` Homebrew formula (`apps/service` tarball,
   `homebrew/postpile-server.rb.tmpl`, `brew services`). Not tried for a full
   day on real data yet, and the release plumbing runs for the first time
-  with the next tag. Mac notifications have no browser replacement yet.
+  with the next tag. Pings show as browser notifications while a tab is
+  open (server `PingFeed`, renderer `useWebPings`); with no tab open they
+  only show as unread tiles, and there is no title or Dock badge on the web.
 
 - Stack completion follows base/head branches only. PRs linked from bodies
   or comments are not pulled in, and `subscribed` threads still count as

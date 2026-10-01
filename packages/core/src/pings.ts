@@ -77,6 +77,16 @@ export interface MacNotification {
   personal: boolean;
 }
 
+export interface WebPing {
+  id: number;
+  notification: MacNotification;
+}
+
+export interface PingFeedView {
+  latestId: number;
+  pings: WebPing[];
+}
+
 /** Where a PR sits on the board right now: its topic and the tile holding it (null when no tile does). */
 export interface PrPlace {
   topicId: string;
