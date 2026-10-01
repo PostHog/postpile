@@ -98,13 +98,26 @@ export class TopicTidy {
     }
   }
 
-  /** A stack leaves whole, like everywhere else. */
+  /**
+   * A stack leaves whole, like everywhere else. A PR the user placed
+   * ("Wrong topic") stays where they put it, and so does its whole stack:
+   * the tidy never sees who placed what. A topic whose splits, stacks
+   * expanded, would take every PR out keeps them all.
+   */
   private applySplits(result: TopicTidyResult, at: string): void {
     const { store } = this.deps;
     const board = Board.load(store, at);
-    const leaving = new Set<PrKey>(result.splits.flatMap((split) => split.prKeys.flatMap((key) => board.movesWith(key))));
-    for (const key of leaving) {
-      store.memberships.remove(key);
+    const placedByUser = (key: PrKey): boolean => store.memberships.get(key)?.assignedBy === 'user';
+    for (const split of result.splits) {
+      const units = split.prKeys.map((key) => board.movesWith(key)).filter((unit) => !unit.some(placedByUser));
+      const leaving = new Set<PrKey>(units.flat());
+      const members = store.memberships.listForTopic(split.topicId).map((m) => m.prKey);
+      if (members.every((key) => leaving.has(key))) {
+        continue;
+      }
+      for (const key of leaving) {
+        store.memberships.remove(key);
+      }
     }
   }
 

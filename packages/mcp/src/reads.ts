@@ -392,10 +392,18 @@ function proposalWords(proposal: TopicProposal, topicId: string, name: (id: stri
   return `new topic "${proposal.name ?? ''}"`;
 }
 
+/** Who filed it: an outside agent, PostPile's consolidation, or the topic tidy that applied itself after an upgrade. */
+function proposalSourceWords(proposal: TopicProposal): string {
+  if (proposal.source === 'agent') {
+    return `suggested by ${proposal.client ?? 'an outside agent'}`;
+  }
+  return proposal.source === 'upgrade' ? 'applied by the topic tidy after an upgrade' : "from PostPile's consolidation";
+}
+
 function proposalLine(proposal: TopicProposal, topicId: string, name: (id: string | null) => string, now: string): string {
   const outcome = proposalOutcome(proposal, now);
   const when = outcome === 'pending' ? `pending since ${day(proposal.createdAt)}` : `${outcome} on ${day(proposalOutcomeAt(proposal, now) ?? proposal.createdAt)}`;
-  const who = proposal.source === 'agent' ? `suggested by ${proposal.client ?? 'an outside agent'}` : "from PostPile's consolidation";
+  const who = proposalSourceWords(proposal);
   return `  ${when}: ${proposalWords(proposal, topicId, name, outcome)}, ${who}. Reason: ${proposal.reason}`;
 }
 

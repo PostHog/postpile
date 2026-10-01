@@ -9,7 +9,7 @@ type TidyAnswer = z.infer<typeof topicTidyOutput>;
  * Keeps what the input allows. A merge needs a known target and at least one
  * other known topic, each folded away once; a target is never folded away
  * itself. A split names member PRs of a topic that stays (not folded away),
- * and leaves at least one PR behind.
+ * and all splits of a topic together leave at least one PR behind.
  */
 export function mapTidyAnswer(answer: TidyAnswer, input: TopicTidyInput): TopicTidyResult {
   const members = new Map(input.topics.map((topic) => [topic.id, new Set(topic.prs.map((pr) => pr.key))]));
@@ -29,14 +29,20 @@ export function mapTidyAnswer(answer: TidyAnswer, input: TopicTidyInput): TopicT
     merges.push({ fromTopicIds: from, intoTopicId: merge.intoTopicId, name: merge.name?.trim() || null, reason: merge.reason });
   }
 
+  // Counted per topic over every split entry, so several entries cannot empty a topic together.
+  // The engine checks again with stacks expanded, which this package does not see.
+  const leaving = new Map<string, Set<PrKey>>();
   const splits: TopicTidyResult['splits'] = [];
   for (const split of answer.splits) {
     const own = members.get(split.topicId);
     if (!own || folded.has(split.topicId)) {
       continue;
     }
-    const prKeys: PrKey[] = [...new Set(split.prKeys)].filter((key) => own.has(key));
-    if (prKeys.length > 0 && prKeys.length < own.size) {
+    const already = leaving.get(split.topicId) ?? new Set<PrKey>();
+    const prKeys: PrKey[] = [...new Set(split.prKeys)].filter((key) => own.has(key) && !already.has(key));
+    if (prKeys.length > 0 && already.size + prKeys.length < own.size) {
+      prKeys.forEach((key) => already.add(key));
+      leaving.set(split.topicId, already);
       splits.push({ topicId: split.topicId, prKeys, reason: split.reason });
     }
   }

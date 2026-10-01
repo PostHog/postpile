@@ -1,3 +1,5 @@
+import type { Pr } from '@postpile/core';
+import { at } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
@@ -8,12 +10,20 @@ import { TOPIC_GRAIN_KEY, TOPIC_GRAIN_VERSION } from './topic-tidy.ts';
 // (DESIGN.md "Topic tidy after an upgrade"): merges and splits applied
 // without asking, recorded as accepted proposals from the upgrade.
 
+/** topicWithPrs places PRs as the user would; a tidy mostly meets the agent's placements. */
+function placedByAgent(h: ReturnType<typeof makeHarness>, topicId: string, prs: Pr[]): void {
+  topicWithPrs(h, topicId, prs);
+  for (const pr of prs) {
+    h.store.memberships.assign({ prKey: pr.key, topicId, assignedBy: 'agent', reason: '', createdAt: at(0) });
+  }
+}
+
 function tidyHarness() {
   const h = makeHarness({ topicTidyDue: true });
   const prs = [1, 2, 3, 4].map((n) => reviewRequestedPr(n));
-  topicWithPrs(h, 'review-app-polling', [prs[0]!]);
-  topicWithPrs(h, 'review-app-packaging', [prs[1]!]);
-  topicWithPrs(h, 'repo-conventions', [prs[2]!, prs[3]!]);
+  placedByAgent(h, 'review-app-polling', [prs[0]!]);
+  placedByAgent(h, 'review-app-packaging', [prs[1]!]);
+  placedByAgent(h, 'repo-conventions', [prs[2]!, prs[3]!]);
   return { h, prs };
 }
 
@@ -74,5 +84,29 @@ describe('topic tidy after an upgrade', () => {
 
     expect(report.agentCallStats.byKind.topic_tidy).toBeUndefined();
     expect(h.store.meta.get(TOPIC_GRAIN_KEY)).toBe(String(TOPIC_GRAIN_VERSION));
+  });
+
+  it('leaves a PR the user placed where they put it', async () => {
+    const { h, prs } = tidyHarness();
+    h.store.memberships.assign({ prKey: prs[3]!.key, topicId: 'repo-conventions', assignedBy: 'user', reason: 'I put it here', createdAt: at(1) });
+    h.runner.answer('topic_tidy', { splits: [{ topicId: 'repo-conventions', prKeys: [prs[3]!.key], reason: 'not about conventions' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(prs[3]!.key)).toMatchObject({ topicId: 'repo-conventions', assignedBy: 'user' });
+  });
+
+  it('never empties a topic, also when a split layer brings its whole stack', async () => {
+    const h = makeHarness({ topicTidyDue: true });
+    const bottom = reviewRequestedPr(1, { baseRef: 'master', headRef: 's1' });
+    const top = reviewRequestedPr(2, { baseRef: 's1', headRef: 's2' });
+    placedByAgent(h, 'stack-topic', [bottom, top]);
+    placedByAgent(h, 'other', [reviewRequestedPr(3)]);
+    h.runner.answer('topic_tidy', { splits: [{ topicId: 'stack-topic', prKeys: [top.key], reason: 'stray' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(bottom.key)?.topicId).toBe('stack-topic');
+    expect(h.store.memberships.get(top.key)?.topicId).toBe('stack-topic');
   });
 });

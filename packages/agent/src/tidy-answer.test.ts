@@ -43,4 +43,18 @@ describe('mapTidyAnswer', () => {
     );
     expect(result.splits).toEqual([{ topicId: 'c', prKeys: ['acme/app#4'], reason: 'stray' }]);
   });
+
+  it('counts every split entry of a topic together, so they cannot empty it', () => {
+    const result = mapTidyAnswer(
+      {
+        merges: [],
+        splits: [
+          { topicId: 'c', prKeys: ['acme/app#3'], reason: 'first' },
+          { topicId: 'c', prKeys: ['acme/app#4'], reason: 'second would empty it' },
+        ],
+      },
+      input,
+    );
+    expect(result.splits).toEqual([{ topicId: 'c', prKeys: ['acme/app#3'], reason: 'first' }]);
+  });
 });
