@@ -161,7 +161,10 @@ import {
   HANDLED_QUIETLY_DAYS,
   parsePrKey,
   pingDecisionsByThread,
+  pingClickTarget,
+  type MacNotification,
   type PingDecision,
+  type PingTarget,
   type OpenedReadResult,
   type QuietReadView,
 } from '@postpile/core';
@@ -764,6 +767,18 @@ export class FakeEngine implements EngineService {
     this.writes.settle();
     const unread = this.data.tiles.filter((tile) => this.tileState(tile).kind === 'unread');
     return [...new Set(unread.flatMap((tile) => tile.members.map((member) => member.prKey)))];
+  }
+
+  /** Same lookup as the engine, over the sample tiles. */
+  async pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): Promise<PingTarget | null> {
+    return pingClickTarget(
+      notification,
+      (key) => {
+        const tile = this.data.tiles.find((candidate) => candidate.members.some((member) => member.prKey === key));
+        return tile ? { topicId: tile.topicId, tileId: tile.id } : null;
+      },
+      (topicId) => this.data.topics.some((topic) => topic.id === topicId && topic.status !== 'archived'),
+    );
   }
 
   /** Same urgency rule and order as the engine; ties keep the sample's order. */

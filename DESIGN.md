@@ -3950,10 +3950,13 @@ teammate even".
 
 - `PingThrottle`: at most one notification per tile per 2 minutes; more than
   3 in one cycle become one summary ("4 PRs need you", first titles listed,
-  a click opens the first).
-- Native `Notification` with sound. A click shows and focuses the window and
-  sends `postpile:open-ping` with `{topicId, tileId, prKey}`; the renderer
-  navigates through `go()`, so it is a normal history entry.
+  a click opens the first PR still on the board). `MacNotification.prKeys`
+  lists every PR it is about.
+- Native `Notification` with sound. A click shows and focuses the window,
+  looks the target up on the board as it is now (`pingClickTarget`, see the
+  2026-10-01 note below) and sends `postpile:open-ping` with
+  `{topicId, tileId, prKey}`; the renderer navigates through `go()`, so it
+  is a normal history entry.
 - Closing the window hides it on macOS and the app keeps polling; Cmd+Q quits
   (flushes mark-reads as before). Dock click shows the window again.
 - macOS asks for permission on the first notification. Electron cannot read
@@ -3973,6 +3976,34 @@ teammate even".
   Notifications; the packaged app has its own "PostPile" entry, so the
   permission is asked (and set) once for each.
 
+**Ping clicks look up their target, visits clear pings** (2026-10-01):
+
+- Wrong target on click: the ping carried the topic and tile ids from when
+  it was decided, and the click replayed them. Tiles get rebuilt and topics
+  tidied, merged, split or reassigned between ping and click (a Look closer
+  ping is even decided before the same sync regroups sets). For a topic the
+  sidebar does not list (gone, or hidden by the search, the "Topics with"
+  switch or the repo scope) the renderer showed the first listed topic and
+  its first unread tile instead, and with no filter on it pinned that
+  wrong pick into the history entry.
+- Now main asks the engine at click time (`pingClickTarget` in core,
+  `EngineService.pingClickTarget`): the tile holding the first of the
+  ping's PRs still on the board, by PR key; else the topic it pinged in,
+  while that is still active, finished or a non-empty Unsorted; else the
+  click only brings the app to the front.
+- The renderer reveals the target past its filters: the search, the queue
+  filter and the repo scope stay as they are, the ping's topic shows anyway
+  (listed in the sidebar like a kept view, or opened by id like a Finished
+  topic when the list does not hold it). It holds while the user stays in
+  that topic under the same filters.
+- Owner request: opening a tile in the app (a click on the tile or one of
+  its PRs, a ping click; not a tile the app picked on its own) takes that
+  tile's pings, and only those, out of Notification Center. The renderer
+  sends the tile's PR keys over `postpile:tile-visited` (preload
+  `tileVisited`); `PingShelf.closeVisited` closes every ping about any of
+  them, so a summary goes once any of its PRs' tiles is visited. Clicked,
+  closed and taken-back pings drop their references.
+
 **Dock badge, cleared pings and the bounce** (decided 2026-09-30, desktop
 main, `BoardWatcher`):
 
@@ -3991,7 +4022,8 @@ main, `BoardWatcher`):
   anymore (read, done or snoozed in PostPile), through
   `Notification.close()`. `PingShelf` keeps the delivered notifications by PR
   and drops references older than 24 hours; the list of unread PRs comes from
-  `unreadPrKeys()`. A summary is kept under its first ping's PR.
+  `unreadPrKeys()`. A summary is kept under all its PRs and closes once
+  none of them is unread.
 - The Dock bounces once (`app.dock.bounce('informational')`) for a batch with
   a personal ping, only while the window is not focused. Personal
   (`isPersonalPing` in core, carried as `personal` on `Ping` and

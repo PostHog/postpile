@@ -7,6 +7,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - A tile's ✨ Approve now approves the PRs the agent finds safe, like the topic's Approve, instead of greying out when any PR in the tile needs a closer look. It says "Approve 2 of 3 PRs" and the confirm list names the ones left out.
+- Opening a tile in the app takes its notifications out of Notification Center; notifications about other tiles stay.
+
+### Fixed
+
+- Clicking a Mac notification opens the right tile again, even after topics were tidied or merged since the ping, and even while a filter, the search or the repo menu hides that topic. The filters stay as they were.
 
 ## 0.13.1 (2026-10-01)
 

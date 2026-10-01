@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
-import { isPersonalPing, pingRule, pingTemplate } from './pings.ts';
+import { isPersonalPing, pingClickTarget, pingRule, pingTemplate, type PrPlace } from './pings.ts';
 import type { EventKind, Loudness, Pr, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
@@ -226,5 +226,34 @@ describe('isPersonalPing', () => {
   it('skips team mentions and other kinds', () => {
     expect(isPersonalPing(makeEvent({ id: 't', kind: 'team_mention' }), pr, viewer)).toBe(false);
     expect(isPersonalPing(makeEvent({ id: 'c', kind: 'review_changes_requested' }), pr, viewer)).toBe(false);
+  });
+});
+
+describe('pingClickTarget', () => {
+  // Pinged in topic "ci" on the single tile; since then a set took the PR in and the tidy moved it to "depot".
+  const pinged = { topicId: 'ci', tileId: 'pr:acme/app#7', prKey: 'acme/app#7' };
+  const board = new Map<string, PrPlace>([
+    ['acme/app#7', { topicId: 'depot', tileId: 'set:s1' }],
+    ['acme/app#9', { topicId: 'docs', tileId: 'pr:acme/app#9' }],
+  ]);
+  const placeOf = (prKey: string) => board.get(prKey) ?? null;
+  const openable = new Set(['ci', 'depot', 'docs']);
+
+  it('opens the tile that holds the PR now, not the ids it pinged with', () => {
+    const target = pingClickTarget({ target: pinged, prKeys: ['acme/app#7'] }, placeOf, (id) => openable.has(id));
+    expect(target).toEqual({ topicId: 'depot', tileId: 'set:s1', prKey: 'acme/app#7' });
+  });
+
+  it('opens a summary at its first PR still on the board', () => {
+    const gone = { topicId: 'ci', tileId: 'pr:acme/app#1', prKey: 'acme/app#1' };
+    const target = pingClickTarget({ target: gone, prKeys: ['acme/app#1', 'acme/app#9', 'acme/app#7'] }, placeOf, (id) => openable.has(id));
+    expect(target).toEqual({ topicId: 'docs', tileId: 'pr:acme/app#9', prKey: 'acme/app#9' });
+  });
+
+  it('opens the pinged topic once the PR left the board, and nothing once the topic is gone too', () => {
+    const gone = { topicId: 'ci', tileId: 'pr:acme/app#1', prKey: 'acme/app#1' };
+    expect(pingClickTarget({ target: gone, prKeys: ['acme/app#1'] }, placeOf, (id) => openable.has(id))).toEqual({ topicId: 'ci', tileId: null, prKey: 'acme/app#1' });
+    expect(pingClickTarget({ target: gone, prKeys: ['acme/app#1'] }, placeOf, () => false)).toBeNull();
+    expect(pingClickTarget({ target: null, prKeys: [] }, placeOf, () => true)).toBeNull();
   });
 });

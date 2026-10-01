@@ -1,6 +1,7 @@
 import { lookCloserEvent, lookCloserPingCheck, lookCloserPingText, lookCloserReason, type Ping, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
+import { placeOnBoard } from './ping-target.ts';
 
 /** Meta key: the review request a PR last pinged for through its glance. */
 export function lookCloserMetaKey(prKey: PrKey): string {
@@ -59,9 +60,8 @@ export class GlancePings {
         }
         this.store.pingDecisions.add({ threadId: thread.id, prKey: key, ping: true, ...text, reason: lookCloserReason(check.team), source: 'glance', at });
       });
-      const topicId = board.topicIdOf(key);
-      const tile = topicId ? board.tilesForTopic(topicId).find((candidate) => candidate.members.some((member) => member.prKey === key)) : undefined;
-      this.waiting.push({ ...text, target: { topicId, tileId: tile?.id ?? null, prKey: key }, personal: false });
+      const place = placeOnBoard(board, key);
+      this.waiting.push({ ...text, target: { topicId: place?.topicId ?? null, tileId: place?.tile?.id ?? null, prKey: key }, personal: false });
     }
   }
 

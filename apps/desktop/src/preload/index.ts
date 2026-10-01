@@ -1,6 +1,6 @@
 // Runs sandboxed before the renderer. It hands over where the API lives, the app version, two
-// listeners (trackpad swipes, clicks on Mac notifications) and one call (the
-// test notification), nothing else: no node access, no other ipc. The API URL
+// listeners (trackpad swipes, clicks on Mac notifications) and two calls (the
+// test notification, the tile the user visited), nothing else: no node access, no other ipc. The API URL
 // and token come from the main process over one sync ipc call (it answers
 // only the app's own page); the version comes as a command line argument.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('postpile', {
   /** Shows a test Mac notification; answers shown, off (POSTPILE_MAC_NOTIFICATIONS=0) or unsupported. */
   sendTestNotification(): Promise<'shown' | 'off' | 'unsupported'> {
     return ipcRenderer.invoke('postpile:test-notification') as Promise<'shown' | 'off' | 'unsupported'>;
+  },
+  /** The PRs of the tile the user opened, so their Mac pings leave Notification Center; main does the matching. */
+  tileVisited(prKeys: string[]): void {
+    ipcRenderer.send('postpile:tile-visited', prKeys);
   },
   /** Calls back with "back" or "forward" on a trackpad swipe; returns the unsubscribe. */
   onSwipe(callback: (direction: 'back' | 'forward') => void): () => void {
