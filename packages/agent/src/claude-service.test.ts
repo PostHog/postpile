@@ -66,7 +66,7 @@ describe('RunnerAgentService.assignTopics', () => {
 
     expect(result).toEqual([
       { prKey: 'acme/app#1', kind: 'existing', topicId: 't1', reason: 'CI work' },
-      { prKey: 'acme/app#2', kind: 'new', name: 'Billing rewrite', reason: 'new work' },
+      { prKey: 'acme/app#2', kind: 'new', name: 'Billing rewrite', goal: '', reason: 'new work' },
     ]);
     expect(runner.requests[0]?.model).toBe('claude-sonnet-5-5');
   });
@@ -83,7 +83,7 @@ describe('RunnerAgentService.assignTopics', () => {
 
     const result = await service.assignTopics({ prs, viewer, topics: [], context: emptyContext });
 
-    expect(result).toEqual([{ prKey: 'acme/app#2', kind: 'new', name: 'Billing rewrite', reason: 'new work' }]);
+    expect(result).toEqual([{ prKey: 'acme/app#2', kind: 'new', name: 'Billing rewrite', goal: '', reason: 'new work' }]);
   });
 
   it('does not call the model without PRs', async () => {

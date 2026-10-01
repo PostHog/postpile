@@ -44,6 +44,21 @@ a direct follow-up; anything else gets a new topic. There is no catch-all
 preference let unrelated PRs pile into one topic. The user's instructions may
 set a finer or coarser grain.
 
+**Topic size by example** (2026-10-01). A fresh start on the user's last
+seven days (`simulate-start`) gave 150 topics for about 260 PRs, 109 of them
+with one PR: the agent took each PR's own change as its goal, and one
+project of the user's came out as three topics. The assignment prompt now
+carries `TOPIC_SIZE_EXAMPLES`: a topic is a project someone drives for days to
+weeks ("would the driver name it in a weekly update?"), with right-size,
+too-small and too-big examples; a project named in the user's work context is
+the topic for their PRs; the same person on the same product in the same
+stretch of time is usually one project. How PRs are fed changed too: batches
+go by author, then oldest first (was repo, then branch name, which scattered
+one person's feat/, fix/ and chore/ branches); every batch sees the round's
+whole backlog as one fenced line per PR; a new topic comes with a one-sentence
+goal, kept as its summary until the first dossier, so later batches see what
+it is for. Routed one-off PRs still get a topic each.
+
 **Topic status**: `active`, `retired` (finished) or `archived` (merged
 away, never comes back). Every full sync ends by retiring each active topic
 that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR

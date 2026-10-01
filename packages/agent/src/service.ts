@@ -77,6 +77,12 @@ export interface TopicChoice {
 
 export interface TopicAssignmentInput {
   prs: Pr[];
+  /**
+   * Every PR waiting for a topic in this sync, this batch's own included, so
+   * the agent sees the whole backlog while it assigns its batch. Missing: the
+   * batch alone.
+   */
+  waiting?: Pr[];
   viewer: Viewer;
   topics: TopicChoice[];
   context: PromptContext;
@@ -84,7 +90,8 @@ export interface TopicAssignmentInput {
 
 export type TopicAssignment =
   | { prKey: PrKey; kind: 'existing'; topicId: string; reason: string }
-  | { prKey: PrKey; kind: 'new'; name: string; reason: string };
+  /** goal: one sentence, shown to later batches until the topic's first dossier. */
+  | { prKey: PrKey; kind: 'new'; name: string; goal: string; reason: string };
 
 export interface SetGroupingInput {
   topic: Topic;

@@ -44,7 +44,7 @@ export const topicAssignmentOutput = z.object({
   assignments: z.array(
     z.discriminatedUnion('kind', [
       z.object({ prKey: text, kind: z.literal('existing'), topicId: text, reason: text }),
-      z.object({ prKey: text, kind: z.literal('new'), name: text.min(1), reason: text }),
+      z.object({ prKey: text, kind: z.literal('new'), name: text.min(1), goal: text.default(''), reason: text }),
       // No longer asked for. Still parsed so one such entry does not fail the
       // whole batch; the service drops it and the engine asks again.
       z.object({ prKey: text, kind: z.literal('unsorted'), reason: text.default('') }),
