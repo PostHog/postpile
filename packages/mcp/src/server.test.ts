@@ -92,9 +92,17 @@ describe('PostPile MCP server', () => {
     expect(data).toContain('<- this PR');
   });
 
-  it('says when the app is not running, so nothing refreshes by itself', async () => {
-    const client = await connected(undefined, { appRunning: () => false });
-    expect(await callText(client, 'pr_context', { pr: '#1902' })).toContain('The app is not running, so nothing updates until the user opens it.');
+  it('refuses every tool while the app is not running, and answers again once it is', async () => {
+    let running = false;
+    const reports: ToolCallReport[] = [];
+    const client = await connected(undefined, { appRunning: () => running, onToolCall: (_tool, report) => reports.push(report) });
+    const refused = await call(client, 'pr_context', { pr: '#1902' });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe("PostPile isn't running. Open the PostPile app, then ask again.");
+    expect((await call(client, 'whats_on_me')).isError).toBe(true);
+    running = true;
+    expect(await callText(client, 'pr_context', { pr: '#1902' })).toContain('acme/app#1902  ');
+    expect(reports.map((report) => report.error)).toEqual([true, true, false]);
   });
 
   it('resolves a bare number, and answers unknown or unreadable PRs with a tool error and an example', async () => {

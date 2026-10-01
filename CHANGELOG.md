@@ -11,6 +11,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- The MCP server refuses to answer while the PostPile app is closed, with a one-line error asking you to open it. It answers again as soon as the app is back, no reconnect.
 - Update reminder: after 24 hours behind, the small title bar pill becomes a bar under the title bar with how many releases you missed, the brew command and release notes. "Later" brings back the pill for a day, then the bar returns.
 - Sets (tiles that hold several PRs) now group PRs you can judge in one go: the same change in several places, or one small step of the goal, with similar risk. A set keeps its PRs until the agent changes it for a stated reason; a PR never moves because of its status, a review or a merge, and merged PRs stay in their set.
 - Each change to a set is recorded with its reason. The CLI `topic` command and the MCP `topic` tool (detail "full") list them.

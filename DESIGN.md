@@ -4410,8 +4410,14 @@ MCP process itself still never writes the database or GitHub.
 **Process**: its own process, not the app's. It opens the database the way
 `cli --read-only` does (`createEngine({ withoutLock: true })`: read-only
 SQLite, no migrations, no lock, no GitHub writes), so the reads work next to
-the running app and with the app closed, and need no port or token
-discovery. The data is as fresh as the app's last sync and poll; every
+the running app and need no port or token discovery. Decided 2026-10-01: the
+MCP follows the app. Before every tool call it looks at `postpile.lock` next
+to the database (`runningApp`: an app kind, a live pid; a lock left by a
+crashed app does not count). While the app is closed every tool returns a
+tool error, "PostPile isn't running. Open the PostPile app, then ask again."
+The process stays up and answers again after the app opens, no reconnect.
+Reason: the owner wants the MCP to follow the app, and data from a closed app
+only gets staler. POSTPILE_FAKE=1 skips the check. The data is as fresh as the app's last sync and poll; every
 answer says when the last full sync finished, and `pr_context` when the PR
 was fetched. The two tools that change something ask the running app
 ("Agent requests" below). Stdout is the protocol, so `console.log` goes to
