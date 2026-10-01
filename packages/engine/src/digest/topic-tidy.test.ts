@@ -1,10 +1,11 @@
 import type { Pr } from '@postpile/core';
-import { at } from '@postpile/core/fixtures';
+import { at, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
 import { topicWithPrs } from '../testing/topics.ts';
 import { changeTopicStatus } from '../topic-status.ts';
+import { saveViewer } from '../viewer-meta.ts';
 import { TOPIC_GRAIN_KEY, TOPIC_GRAIN_VERSION } from './topic-tidy.ts';
 
 // The topic tidy runs once after an upgrade that changed how topics are cut
@@ -202,5 +203,23 @@ describe('topic tidy after an upgrade', () => {
 
     const topicId = h.store.memberships.get(prs[3]!.key)?.topicId;
     expect(h.store.topics.get(topicId!)).toMatchObject({ name: 'Code ownership', kind: 'standing' });
+  });
+
+  it('runs first in a full sync, before the GitHub fetch, so the cover goes up at once', async () => {
+    const { h } = tidyHarness();
+    saveViewer(h.store, viewer);
+    const fetchesAtTidy: number[] = [];
+    const run = h.runner.run.bind(h.runner);
+    h.runner.run = (request) => {
+      if (request.purpose === 'topic_tidy') {
+        fetchesAtTidy.push(h.reader.notificationCalls);
+      }
+      return run(request);
+    };
+    h.runner.answer('topic_tidy', {});
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(fetchesAtTidy).toEqual([0]);
   });
 });

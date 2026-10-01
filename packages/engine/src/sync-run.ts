@@ -10,13 +10,15 @@ import {
   type SyncOptions,
   type SyncProgress,
   type SyncReport,
+  type Viewer,
 } from '@postpile/core';
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { retireFinishedTopics } from './consolidation/retire.ts';
 import { reviveRetiredTopics, reviveUnreadTopics } from './consolidation/revive.ts';
-import type { DigestTally } from './digest/deps.ts';
+import type { DigestDeps, DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
+import { TopicTidy } from './digest/topic-tidy.ts';
 import { errorText } from './errors.ts';
 import type { GitHubQuota, QuotaRunStats } from './github-quota.ts';
 import { saveLastSyncReport, syncReportLogLines } from './last-sync-report.ts';
@@ -126,6 +128,41 @@ export class SyncRun {
    * GitHub. The full sync and digestStored share it, so both run the same
    * pipeline.
    */
+  private digestDeps(viewer: Viewer, run: { budget: AgentBudget; tally: DigestTally; errors: string[] }): DigestDeps {
+    return {
+      store: this.deps.store,
+      agent: this.deps.agent,
+      contexts: this.deps.contexts,
+      budget: run.budget,
+      facts: this.deps.facts,
+      viewer,
+      errors: run.errors,
+      tally: run.tally,
+      now: this.deps.now,
+      onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
+      onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, viewer)) ?? [],
+      topicDigest: this.deps.topicDigest ?? false,
+    };
+  }
+
+  /**
+   * The one-time topic tidy after an upgrade, first thing in a full sync: it
+   * reads only stored topics and PRs, so it need not wait for the fetch, and
+   * the app's cover goes up as the sync starts instead of half a minute in,
+   * while the old topics took clicks. The digest's own call stays for a
+   * store without a viewer yet and for digestStored; once done it is a no-op.
+   */
+  private async tidyFirst(agentJobs: AgentJob[] | undefined, run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[] }): Promise<void> {
+    const viewer = loadViewer(this.deps.store);
+    if (viewer === null || this.deps.agentOff() !== null || !(agentJobs ?? ALL_AGENT_JOBS).includes('topics')) {
+      return;
+    }
+    const tidy = new TopicTidy(this.digestDeps(viewer, run));
+    if (tidy.callsAgent()) {
+      await run.phases.time('tidy', () => tidy.runOnce());
+    }
+  }
+
   private async digest(
     fetched: FetchedForDigest,
     agentJobs: AgentJob[] | undefined,
@@ -139,20 +176,7 @@ export class SyncRun {
       run.report.agentOff = agentOff;
       this.log(`sync: agent jobs skipped: ${agentOff}`);
     }
-    const digester = new Digester({
-      store,
-      agent: this.deps.agent,
-      contexts: this.deps.contexts,
-      budget: run.budget,
-      facts: this.deps.facts,
-      viewer: fetched.viewer,
-      errors: run.errors,
-      tally: run.tally,
-      now,
-      onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
-      onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, fetched.viewer)) ?? [],
-      topicDigest: this.deps.topicDigest ?? false,
-    }, run.phases);
+    const digester = new Digester(this.digestDeps(fetched.viewer, run), run.phases);
     await digester.run(agentOff === null ? (agentJobs ?? ALL_AGENT_JOBS) : []);
     // After the digest classified the new events, so one the agent turned quiet brings no retired topic back.
     reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
@@ -254,6 +278,7 @@ export class SyncRun {
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
     this.live = { startedAt, phases, budget, stats: report.agentCallStats };
     try {
+      await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
       const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? SYNC_MAX_PRS));
       report.notificationsNotModified = fetched.notModified;
       report.threads = fetched.threads;

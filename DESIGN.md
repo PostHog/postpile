@@ -3666,7 +3666,11 @@ for the user to work through, and never in later syncs.
   assignment; the live poll never does. Raise the version with the next
   steering change that should reshape existing topics.
 - The call runs as its own sync phase, `tidy`, when there are topics to
-  tidy (a fresh install skips it). While that phase runs, the app covers the
+  tidy (a fresh install skips it). Since 2026-10-01 it runs first in a full
+  sync, before the GitHub fetch (`tidyFirst`): it reads only stored topics
+  and PRs, and the cover used to go up half a minute in, after the fetch,
+  while the old topics took clicks. The digest still calls it for a store
+  with no viewer yet and for `digestStored`; once done that is a no-op. While that phase runs, the app covers the
   window with "Tidying up your topics and tiles" and a spinner (0.13.1): the
   call takes a minute or two (about 2 minutes for 117 topics), and a click
   meanwhile could land on a topic about to merge or lose PRs.
