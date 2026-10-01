@@ -25,6 +25,7 @@ describe('PingThrottle', () => {
         title: '5 PRs need you',
         body: 'about 1\nabout 2\nabout 3\nand 2 more',
         target: { topicId: 't', tileId: '1', prKey: 'acme/app#1' },
+        prKeys: ['acme/app#1', 'acme/app#2', 'acme/app#3', 'acme/app#4', 'acme/app#5'],
         count: 5,
         personal: false,
       },

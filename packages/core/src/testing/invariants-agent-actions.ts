@@ -65,9 +65,9 @@ function checkApprove(where: string, got: AgentApproveOffer | null, want: SpecAp
 /**
  * Approve covers only agent-safe, approvable PRs, and covered and left out
  * split the approvable PRs exactly, each once. Absent exactly when nothing
- * is approvable; a tile is active exactly when every approvable PR is
- * agent-safe, a topic when at least one is; greyed otherwise, with the
- * reason's precedence from the spec.
+ * is approvable; a tile and a topic alike are active exactly when at least
+ * one approvable PR is agent-safe (owner, 2026-10-01); greyed otherwise,
+ * with the reason's precedence from the spec.
  */
 export const agentApproveMatchesTheSpec: Invariant = {
   name: 'agent Approve covers exactly the agent-safe approvable PRs, and is active, greyed or absent as the spec says',
@@ -82,6 +82,27 @@ export const agentApproveMatchesTheSpec: Invariant = {
       checkApprove(`tile ${view.tile.id}`, offer, specTileApprove(board, view), true);
     }
     checkApprove('topic', topicOffersOf(views).approve, specTopicApprove(board, views), false);
+  },
+};
+
+/**
+ * The topic's Approve is literally its tiles' Approves added up: it covers
+ * exactly the union of what the unsnoozed tiles cover, so a PR a tile
+ * offers is offered by the topic too, and nothing else. An active tile
+ * always covers something, a greyed one nothing.
+ */
+export const topicApproveCoversTheTilesUnion: Invariant = {
+  name: "topic Approve covers exactly the union of the unsnoozed tiles' covered PRs",
+  check(_board, views) {
+    for (const view of views) {
+      const offer = view.agent.approve;
+      if (offer !== null) {
+        ensure((offer.state === 'active') === (offer.covered.length > 0), `tile ${view.tile.id}: approve ${offer.state} covering ${offer.covered.length}`);
+      }
+    }
+    const fromTiles = [...new Set(views.filter((view) => view.state.kind !== 'snoozed').flatMap((view) => view.agent.approve?.covered.map((pr) => pr.prKey) ?? []))];
+    const covered = topicOffersOf(views).approve?.covered.map((pr) => pr.prKey) ?? [];
+    ensure(sameSet(covered, fromTiles), `topic covers ${keysLine(covered)}, unsnoozed tiles cover ${keysLine(fromTiles)}`);
   },
 };
 
@@ -183,6 +204,7 @@ export const pulledInNeverCovered: Invariant = {
 export const AGENT_ACTION_INVARIANTS: readonly Invariant[] = [
   agentApproveMatchesTheSpec,
   agentApproveRiskIsTheHighestCovered,
+  topicApproveCoversTheTilesUnion,
   topicMarkReadMatchesTheSpec,
   topicMarkReadCoversQuietBackedTiles,
   pulledInNeverCovered,

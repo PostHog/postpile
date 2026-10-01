@@ -22,6 +22,7 @@ import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { loadRepoSettings } from '../repo-settings.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
+import { placeOnBoard } from './ping-target.ts';
 
 /** Ping decisions per rolling 24 hours. One sonnet call per poll cycle with news, whatever the batch size. */
 export const PING_DECISIONS_PER_DAY = 200;
@@ -84,14 +85,8 @@ export class PingDecider {
 
   /** The tile a click should open: the one in the PR's topic that holds it, pinged there if possible. */
   private locate(board: Board, key: PrKey): { target: PingTarget; tile: Tile | null } {
-    const topicId = board.topicIdOf(key);
-    const tiles = topicId ? board.tilesForTopic(topicId) : [];
-    const holding = tiles.filter((tile) => tile.members.some((member) => member.prKey === key));
-    const tile =
-      holding.find((candidate) => candidate.members.some((m) => m.prKey === key && m.provenance.kind === 'pinged')) ??
-      holding[0] ??
-      null;
-    return { target: { topicId, tileId: tile?.id ?? null, prKey: key }, tile };
+    const place = placeOnBoard(board, key);
+    return { target: { topicId: place?.topicId ?? null, tileId: place?.tile?.id ?? null, prKey: key }, tile: place?.tile ?? null };
   }
 
   private decision(candidate: Candidate, fields: Pick<PingDecision, 'ping' | 'title' | 'body' | 'reason' | 'source'>): PingDecision {

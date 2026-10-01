@@ -54,6 +54,8 @@ import {
   type Pr,
   type PrDetail,
   type PrKey,
+  type MacNotification,
+  type PingTarget,
   type PrSummaryInput,
   type TilePendingWrite,
   type PrTier,
@@ -79,6 +81,7 @@ import { GlanceInputs, glanceTargetKeys } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
 import { placementOf } from './memory/placement.ts';
 import type { PromptContextSource } from './prompt-context.ts';
+import { pingClickTargetOnBoard } from './live/ping-target.ts';
 import { loadRepoSettings } from './repo-settings.ts';
 import { loadViewer } from './viewer-meta.ts';
 import { OpenedReadInputs } from './writes/opened-read-inputs.ts';
@@ -302,6 +305,10 @@ export class ReadModels {
     const board = this.board();
     const unread = board.allTiles().filter((tile) => board.stateOf(tile).kind === 'unread');
     return [...new Set(unread.flatMap(memberKeys))];
+  }
+
+  pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): PingTarget | null {
+    return pingClickTargetOnBoard(this.board(), notification);
   }
 
   /** The topics the sidebar lists with all repos, each with its tiles. */

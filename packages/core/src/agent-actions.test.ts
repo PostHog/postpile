@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { agentPrFacts, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
+import { agentApproveRefusal, agentPrFacts, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
 import { at, makePr, makeReview, NO_OPENED_READ_INPUT, singleTile, viewer } from './fixtures.ts';
 import { buildPrSummary, buildTileView, type PrSummaryInput } from './tile-view.ts';
-import type { Glance, Pr, PrEvent, PrKey, TileState, UserPrState, Verdict } from './types.ts';
+import type { Glance, Pr, PrEvent, PrKey, Tile, TileState, UserPrState, Verdict } from './types.ts';
 import type { TileView } from './views.ts';
 
 const UNREAD: TileState = { kind: 'unread', unreadBecause: [], unreadOnGitHub: true, loud: false };
@@ -16,11 +16,11 @@ interface RowSpec {
   stale?: boolean;
 }
 
-/** A single-PR tile as the read models build it, with the agent facts from the same inputs as the row. */
-function tileView(spec: RowSpec, state: TileState = OPEN): TileView {
+/** One row's read-model input, with the agent facts built from the same input. */
+function rowInput(spec: RowSpec, state: TileState): PrSummaryInput {
   const { pr } = spec;
   const glance: Pick<Glance, 'verdict' | 'forYou' | 'risk'> | null = spec.verdict ? { verdict: spec.verdict, forYou: 'for you', risk: spec.risk ?? 'low' } : null;
-  const input: PrSummaryInput = {
+  return {
     pr,
     member: { prKey: pr.key, provenance: { kind: 'pinged', reason: 'review_requested' } },
     viewer,
@@ -40,12 +40,17 @@ function tileView(spec: RowSpec, state: TileState = OPEN): TileView {
     pendingWrite: null,
     opened: NO_OPENED_READ_INPUT,
   };
+}
+
+/** A tile as the read models build it: the given tile with one row per spec, in member order. */
+function buildView(tile: Tile, specs: RowSpec[], state: TileState): TileView {
+  const inputs = specs.map((spec) => rowInput(spec, state));
   return buildTileView({
-    tile: singleTile(pr),
+    tile,
     state,
-    prs: [buildPrSummary(input)],
-    agentPrs: [agentPrFacts(input)],
-    prsByKey: new Map<PrKey, Pr>([[pr.key, pr]]),
+    prs: inputs.map(buildPrSummary),
+    agentPrs: inputs.map(agentPrFacts),
+    prsByKey: new Map<PrKey, Pr>(specs.map((spec) => [spec.pr.key, spec.pr])),
     events: new Map<PrKey, PrEvent[]>(),
     userStates: new Map<PrKey, UserPrState>(),
     viewer,
@@ -54,6 +59,25 @@ function tileView(spec: RowSpec, state: TileState = OPEN): TileView {
     repoLabel: null,
     now: at(100),
   });
+}
+
+/** A single-PR tile. */
+function tileView(spec: RowSpec, state: TileState = OPEN): TileView {
+  return buildView(singleTile(spec.pr), [spec], state);
+}
+
+/** A stack tile, base first, every layer pinged. */
+function stackView(specs: RowSpec[], state: TileState = OPEN): TileView {
+  const keys = specs.map((spec) => spec.pr.key);
+  const tile: Tile = {
+    id: `stack:${keys[0]}`,
+    topicId: 'topic-1',
+    kind: 'stack',
+    title: 'stack',
+    members: keys.map((prKey) => ({ prKey, provenance: { kind: 'pinged', reason: 'review_requested' } })),
+    stacks: [{ id: `stack:${keys[0]}`, prKeys: keys }],
+  };
+  return buildView(tile, specs, state);
 }
 
 /** ada's open PR asking the viewer for a review: approvable. */
@@ -74,6 +98,36 @@ describe('tile Approve', () => {
     const approve = tileView({ pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'medium - touches the worker loop' }).agent.approve;
     expect(approve).toMatchObject({ state: 'active', risk: 'medium', reason: null, coveredCount: 1, totalCount: 1 });
     expect(approve?.covered[0]).toMatchObject({ prKey: 'acme/app#1', verdict: 'LOOKS_SAFE', riskLine: 'medium - touches the worker loop' });
+  });
+
+  // Owner, 2026-10-01: the same magic approval as the topic, so a stack approves the PRs the agent backs.
+  it('is active on a stack when some approvable PRs are agent-safe, covering only those base to head', () => {
+    const view = stackView([
+      { pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low' },
+      { pr: reviewPr(2), verdict: 'LOOK_CLOSER', risk: 'low' },
+      { pr: reviewPr(3), verdict: 'LOOKS_SAFE', risk: 'medium - wide diff' },
+      { pr: reviewPr(4), verdict: 'LOOKS_SAFE', risk: 'low', stale: true },
+    ]);
+    const approve = view.agent.approve;
+    expect(approve).toMatchObject({ state: 'active', risk: 'medium', reason: null, coveredCount: 2, totalCount: 4 });
+    expect(approve?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#1', 'acme/app#3']);
+    expect(approve?.leftOut.map((pr) => [pr.prKey, pr.reason])).toEqual([
+      ['acme/app#2', 'look_closer'],
+      ['acme/app#4', 'rechecking'],
+    ]);
+    const topic = topicAgentOffers([view]).approve;
+    expect(topic?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#1', 'acme/app#3']);
+    expect(topic).toMatchObject({ state: 'active', coveredCount: 2, totalCount: 4 });
+  });
+
+  it('is greyed with nothing covered when no approvable PR is agent-safe, rechecking first', () => {
+    const approve = stackView([
+      { pr: reviewPr(1), verdict: 'LOOK_CLOSER', risk: 'low' },
+      { pr: reviewPr(2), verdict: 'LOOKS_SAFE', risk: 'high - auth' },
+      { pr: reviewPr(3) },
+    ]).agent.approve;
+    expect(approve).toMatchObject({ state: 'greyed', risk: null, reason: 'rechecking', coveredCount: 0, totalCount: 3 });
+    expect(approve?.covered).toEqual([]);
   });
 
   it('is greyed as look closer on a Look closer verdict', () => {
@@ -119,6 +173,17 @@ describe('topic Approve', () => {
       ['acme/app#3', 'look_closer'],
       ['acme/app#4', 'high'],
     ]);
+  });
+});
+
+describe('agentApproveRefusal', () => {
+  it('lets the covered PRs of a partial tile through and refuses the ones left out', () => {
+    const view = stackView([
+      { pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low' },
+      { pr: reviewPr(2), verdict: 'LOOK_CLOSER', risk: 'low' },
+    ]);
+    expect(agentApproveRefusal('acme/app#1', [view], 'agent_tile')).toBeNull();
+    expect(agentApproveRefusal('acme/app#2', [view], 'agent_tile')).toBe('the agent now says look closer');
   });
 });
 

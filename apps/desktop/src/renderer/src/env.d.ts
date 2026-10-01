@@ -10,6 +10,8 @@ interface Window {
     sendTestNotification?: () => Promise<'shown' | 'off' | 'unsupported'>;
     /** Trackpad swipe as back / forward; returns the unsubscribe. */
     onSwipe?: (callback: (direction: 'back' | 'forward') => void) => () => void;
+    /** The PRs of the tile open in the detail pane, so main takes their Mac pings out of Notification Center. */
+    tileVisited?: (prKeys: string[]) => void;
     /** A click on a Mac notification: open this tile. Returns the unsubscribe. */
     onOpenPing?: (callback: (target: import('@postpile/core').PingTarget) => void) => () => void;
   };

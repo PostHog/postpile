@@ -60,6 +60,19 @@ export function keptFor(kept: KeptView | null, entry: NavEntry, key: string): Ke
   return kept;
 }
 
+/**
+ * The view a Mac ping click revealed (2026-10-01), while it still applies:
+ * the user is in its topic (picking another tile there keeps it) and the
+ * filters are the ones it was revealed under. The filters and the repo
+ * scope may hide the topic meanwhile; that is the point.
+ */
+export function revealedFor(revealed: KeptView | null, entry: NavEntry, key: string): KeptView | null {
+  if (!revealed || revealed.filterKey !== key || entry.pane !== 'topic' || entry.topicId !== revealed.topicId) {
+    return null;
+  }
+  return revealed;
+}
+
 function sameAuto(a: AutoPick | null, b: AutoPick | null): boolean {
   return a === b || (a !== null && b !== null && a.group === b.group);
 }

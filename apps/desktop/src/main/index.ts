@@ -15,7 +15,7 @@ import {
   type EngineService,
   type Telemetry,
 } from '@postpile/engine';
-import type { McpLauncher } from '@postpile/core';
+import type { MacNotification, McpLauncher } from '@postpile/core';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, updateSourceFromEnv, type RunningServer } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { ConsolidationSchedule } from './consolidation-schedule.ts';
@@ -312,6 +312,24 @@ async function openWindow(): Promise<BrowserWindow> {
   return window;
 }
 
+/**
+ * Where a clicked ping goes is looked up now, on the board as it is: the
+ * tiles and topics it pointed at may have moved since it pinged. Without a
+ * target (its PRs and topic are gone) the click only showed the window.
+ */
+async function openPing(notification: MacNotification): Promise<void> {
+  try {
+    const target = (await engine?.pingClickTarget(notification)) ?? null;
+    if (target) {
+      mainWindow?.webContents.send('postpile:open-ping', target);
+    } else if (notification.prKeys.length > 0) {
+      console.log(`mac ping click: ${notification.prKeys.join(', ')} and its topic left the board, only showed the window`);
+    }
+  } catch (error) {
+    console.warn('mac ping click:', error);
+  }
+}
+
 async function start(): Promise<void> {
   setAppMenu();
   denyPermissions();
@@ -365,13 +383,17 @@ async function start(): Promise<void> {
   const notifier = new MacNotifier({
     enabled: process.env.POSTPILE_MAC_NOTIFICATIONS !== '0',
     isWindowFocused: () => mainWindow?.isFocused() ?? false,
-    onClick: (target) => {
+    onClick: (notification) => {
       telemetry.capture('mac_ping_clicked', {});
       showWindow();
-      if (target) {
-        mainWindow?.webContents.send('postpile:open-ping', target);
-      }
+      void openPing(notification);
     },
+  });
+  // A visit to a tile in the app takes its pings out of Notification Center (DESIGN.md "Mac notifications").
+  ipcMain.on('postpile:tile-visited', (_event, prKeys: unknown) => {
+    if (Array.isArray(prKeys) && prKeys.every((key) => typeof key === 'string')) {
+      notifier.closeVisited(prKeys);
+    }
   });
   // The Dock badge counts topics with an unread tile; a ping leaves
   // Notification Center once its tile is read or done. Both follow the board:

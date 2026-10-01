@@ -14,7 +14,7 @@ function tileKey(target: PingTarget): string {
 }
 
 function single(ping: Ping): MacNotification {
-  return { title: ping.title, body: ping.body, target: ping.target, count: 1, personal: ping.personal };
+  return { title: ping.title, body: ping.body, target: ping.target, prKeys: [ping.target.prKey], count: 1, personal: ping.personal };
 }
 
 function summary(pings: Ping[]): MacNotification {
@@ -23,7 +23,14 @@ function summary(pings: Ping[]): MacNotification {
   if (more > 0) {
     lines.push(`and ${more} more`);
   }
-  return { title: `${pings.length} PRs need you`, body: lines.join('\n'), target: pings[0]!.target, count: pings.length, personal: pings.some((ping) => ping.personal) };
+  return {
+    title: `${pings.length} PRs need you`,
+    body: lines.join('\n'),
+    target: pings[0]!.target,
+    prKeys: pings.map((ping) => ping.target.prKey),
+    count: pings.length,
+    personal: pings.some((ping) => ping.personal),
+  };
 }
 
 /**

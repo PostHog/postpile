@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { PingTarget } from '@postpile/core';
 import { useActions } from './api/actions.tsx';
 import { useAppConfig } from './api/config.ts';
 import { useLivePoll } from './api/live.ts';
@@ -34,7 +35,7 @@ import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
 import type { SetupStepKey } from './lib/setup.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
-import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './lib/selection.ts';
+import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedFor, withSelectedTile, type KeptView } from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { toolsNotice } from './lib/tools.ts';
@@ -42,6 +43,7 @@ import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
+import { useTileVisit } from './lib/use-tile-visit.ts';
 
 function MainPane(props: { children: ReactNode }) {
   return <main className="pane-scroll flex min-w-0 flex-col gap-4 overflow-auto pl-[26px] pr-[16px] pt-5 pb-[22px]">{props.children}</main>;
@@ -129,11 +131,19 @@ export function App() {
   const [kept, setKept] = useState<KeptView | null>(null);
   const currentFilterKey = filterKey(queueFilter, filter ? (search.data?.query ?? null) : null);
   const keptNow = keptFor(kept, nav.current, currentFilterKey);
+  // A click on a Mac ping shows its tile even while the search, the queue
+  // filter or the repo scope hides its topic, and leaves them as they are
+  // (2026-10-01). It holds while the user stays in that topic under the same filters.
+  const [revealed, setRevealed] = useState<KeptView | null>(null);
+  const revealedNow = revealedFor(revealed, nav.current, currentFilterKey);
   // A topic picked in the Finished drawer is not in the list, so it opens by id.
   // Search and the queue filters cover live topics only: while they narrow, their first match shows.
+  // A revealed topic the list does not hold (another repo, finished) opens by id the same way.
   const pickedFinishedId = nav.current.topicId !== null && finishedIds.has(nav.current.topicId) ? nav.current.topicId : null;
-  const finishedId = narrowed ? null : pickedFinishedId;
-  const activeItem = finishedId === null ? visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null, keptNow?.topicId ?? null) : null;
+  const revealedUnlistedId = revealedNow && !items.some((item) => item.topic.id === revealedNow.topicId) ? revealedNow.topicId : null;
+  const finishedId = revealedUnlistedId ?? (narrowed ? null : pickedFinishedId);
+  const activeItem =
+    finishedId === null ? visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null, revealedNow?.topicId ?? keptNow?.topicId ?? null) : null;
   const activeTopicId = finishedId ?? activeItem?.topic.id ?? null;
   const sidebarTopics = listedTopics(items, shownItems, activeTopicId);
   // A topic kept on screen after it stopped matching is listed, so it does not count as hidden.
@@ -142,7 +152,8 @@ export function App() {
   const matchingTileIds = activeItem && filter ? (filter.tilesByTopic.get(activeItem.topic.id) ?? new Set<string>()) : null;
   const allTiles = topic.data?.tiles ?? [];
   const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
-  const keptTile = keptNow && keptNow.topicId === activeTopicId ? keptNow : null;
+  // The kept view once there is one for this pick; right after a ping click, the revealed tile.
+  const keptTile = [keptNow, revealedNow].find((view) => view && view.topicId === activeTopicId) ?? null;
   const selected = resolveSelection(nav.current, shownTiles, allTiles, filter?.prKeys ?? null, keptTile);
   // What is on screen after the fallbacks. Picking it again adds no history entry.
   const shown: NavEntry = { pane, topicId: activeTopicId, tileId: selected.view?.tile.id ?? null, prKey: selected.prKey };
@@ -156,8 +167,13 @@ export function App() {
   const go = (next: NavEntry) => {
     if (!sameView(shown, next)) {
       nav.navigate(next);
+    } else if (selected.auto && next.pane === 'topic' && next.tileId !== null) {
+      // Picking the tile the app picked makes it the user's pick, without a new history entry.
+      nav.replace(next);
     }
   };
+  // Grows with every explicit open (a tile click, a ping click), so opening the tile already open counts as a visit again.
+  const [visits, setVisits] = useState(0);
   // Write the fallbacks into the current entry, so a reorder or refetch does
   // not move the selection (and remount the detail pane, losing a chat draft)
   // or mark a topic seen the user never left. Not while a search or queue
@@ -180,6 +196,7 @@ export function App() {
       sendTelemetry('tile_opened', tileOpenedProps(view));
     }
     go({ pane: 'topic', topicId: activeTopicId, tileId, prKey });
+    setVisits((count) => count + 1);
   };
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 
@@ -189,7 +206,7 @@ export function App() {
   // This follows the picked topic, not the shown one, so a search filter that
   // hides the topic for a moment does not mark it seen.
   const shownTopicId = pane === 'topic' ? activeTopicId : null;
-  const pickedTopicId = pane === 'topic' ? (pickedFinishedId ?? visibleTopic(items, nav.current.topicId, null, null)?.topic.id ?? null) : null;
+  const pickedTopicId = pane === 'topic' ? (revealedUnlistedId ?? pickedFinishedId ?? visibleTopic(items, nav.current.topicId, null, null)?.topic.id ?? null) : null;
   const lastPickedTopicId = useRef<string | null>(null);
   useEffect(() => {
     const left = lastPickedTopicId.current;
@@ -219,18 +236,24 @@ export function App() {
     }
   }, [actions, syncOnStart, setupLoaded, toolsLoaded, ghWorks, setupNeeded]);
 
-  // A click on a Mac notification opens its tile, as a normal navigation. The
-  // listener is added once and calls the latest go() through this ref.
-  const latestGo = useRef(go);
+  // A click on a Mac notification opens its tile, as a normal navigation, and
+  // reveals it past the filters (`revealed`). Main looked the target up at the
+  // click. The listener is added once and calls the latest openPing through this ref.
+  const openPing = (target: PingTarget) => {
+    if (target.topicId === null) {
+      return;
+    }
+    const entry: NavEntry = { pane: 'topic', topicId: target.topicId, tileId: target.tileId, prKey: target.prKey };
+    go(entry);
+    setRevealed({ filterKey: currentFilterKey, entry, topicId: target.topicId, tileId: target.tileId, prKey: target.prKey });
+    setVisits((count) => count + 1);
+  };
+  const latestOpenPing = useRef(openPing);
   useEffect(() => {
-    latestGo.current = go;
+    latestOpenPing.current = openPing;
   });
   useEffect(() => {
-    return window.postpile?.onOpenPing?.((target) => {
-      if (target.topicId !== null) {
-        latestGo.current({ pane: 'topic', topicId: target.topicId, tileId: target.tileId, prKey: target.prKey });
-      }
-    });
+    return window.postpile?.onOpenPing?.((target) => latestOpenPing.current(target));
   }, []);
 
   let main = <EmptyMain text="Loading…" />;
@@ -261,9 +284,9 @@ export function App() {
         </p>
       </MainPane>
     );
-  } else if (filter && !activeItem) {
+  } else if (filter && !activeItem && revealedUnlistedId === null) {
     main = <EmptyMain text={`Nothing matches “${query.trim()}”. Esc clears the filter.`} />;
-  } else if (queueFilter && !activeItem) {
+  } else if (queueFilter && !activeItem && revealedUnlistedId === null) {
     main = <EmptyMain text="No topic has a PR that matches the filter. Pick “any PR” to show all topics." />;
   } else if (topic.error) {
     main = <EmptyMain text={`Could not load the topic: ${topic.error.message}`} />;
@@ -307,6 +330,8 @@ export function App() {
   // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
   const detailShown = !showSetup && !wideList;
   const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? selected.prKey : null);
+  // The user's pick clears its Mac pings from Notification Center; a tile the app picked does not.
+  useTileVisit(detailShown && !selected.auto ? selected.view : null, visits);
 
   const tellAgent = {
     available: selected.view !== null,

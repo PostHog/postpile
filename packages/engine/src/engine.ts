@@ -32,6 +32,7 @@ import type {
   InstructionsSaveResult,
   InstructionsView,
   LivePollStatus,
+  MacNotification,
   McpConnectFrom,
   McpConnectionView,
   McpLauncher,
@@ -42,6 +43,7 @@ import type {
   MemorySources,
   MemoryTarget,
   PendingProposals,
+  PingTarget,
   PrDetail,
   PrKey,
   RepoOverview,
@@ -854,6 +856,10 @@ export class Engine implements EngineService {
 
   async unreadPrKeys(): Promise<PrKey[]> {
     return this.reads.unreadPrKeys();
+  }
+
+  async pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): Promise<PingTarget | null> {
+    return this.reads.pingClickTarget(notification);
   }
 
   async listFinishedTopics(): Promise<FinishedTopic[]> {
