@@ -1,6 +1,6 @@
 # Releasing
 
-How a PostPile release goes out: a `v*` tag builds the app on GitHub Actions, attaches the zip to a GitHub release, and renders the Homebrew cask into [PostHog/homebrew-tap](https://github.com/PostHog/homebrew-tap).
+How a PostPile release goes out: a `v*` tag builds the app and the `postpile-server` tarball on GitHub Actions, attaches both to a GitHub release, and renders the Homebrew cask and the `postpile-server` formula into [PostHog/homebrew-tap](https://github.com/PostHog/homebrew-tap).
 
 ## Repo setup
 
@@ -46,17 +46,18 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
    If the Release workflow does not start (a tag ruleset bypass does not fire the push trigger), run it by hand: Actions › Release › Run workflow, with the tag. Pick the tag under "Use workflow from" as well: the `desktop-signing` and `homebrew-tap` environments only admit `v*` refs, and GitHub rejects a run from `main` there.
 
 6. **What the workflow does** (`.github/workflows/release.yml`):
-   - `build` on `macos-14` (arm64), in the `desktop-signing` environment: checks the tag equals `v` + `apps/desktop/package.json` version, installs with the frozen lockfile, typechecks, tests, builds the bundle, injects chunk ids and uploads the source maps to PostHog (when `POSTHOG_CLI_API_KEY` is there, see below), packages the app (Developer ID signed and notarized when the Apple secrets are there, else ad-hoc, see below), verifies the signature (`codesign --verify --deep --strict`), the bundle id (`com.posthog.postpile`) and the version in `Info.plist`, then creates the GitHub release with `PostPile-<version>-mac-arm64.zip` and `PostPile-<version>-mac-arm64.zip.sha256`. Versions with a `-` become pre-releases.
-   - `publish-homebrew` on ubuntu, in the `homebrew-tap` environment: renders `homebrew/postpile.rb.tmpl` with the version, the sha256 and the right caveats (signed or ad-hoc), mints a tap token from the GitHub App, and commits `Casks/postpile.rb` to PostHog/homebrew-tap `main`.
+   - `build` on `macos-14` (arm64), in the `desktop-signing` environment: checks the tag equals `v` + `apps/desktop/package.json` version, installs with the frozen lockfile, typechecks, tests, builds the bundle, injects chunk ids and uploads the source maps to PostHog (when `POSTHOG_CLI_API_KEY` is there, see below), builds the server tarball (`pnpm dist:server`, checked to hold `lib/server.js` and `web/index.html`), packages the app (Developer ID signed and notarized when the Apple secrets are there, else ad-hoc, see below), verifies the signature (`codesign --verify --deep --strict`), the bundle id (`com.posthog.postpile`) and the version in `Info.plist`, then creates the GitHub release with `PostPile-<version>-mac-arm64.zip`, `postpile-server-<version>.tar.gz` and a `.sha256` for each. Versions with a `-` become pre-releases.
+   - `publish-homebrew` on ubuntu, in the `homebrew-tap` environment: renders `homebrew/postpile.rb.tmpl` with the version, the sha256 and the right caveats (signed or ad-hoc), renders `homebrew/postpile-server.rb.tmpl` with the version and the tarball's sha256, mints a tap token from the GitHub App, and commits `Casks/postpile.rb` and `Formula/postpile-server.rb` to PostHog/homebrew-tap `main`.
 
 7. **Verify:**
    - The GitHub release has the zip and the `.sha256`, with the changelog notes. It is marked pre-release only for a version with a `-` (like the old `0.1.0-alpha.0`).
    - `shasum -a 256 -c PostPile-<version>-mac-arm64.zip.sha256` passes on the downloaded zip.
-   - PostHog/homebrew-tap has a commit "chore: update postpile cask to <version>" with the right version and sha256.
+   - PostHog/homebrew-tap has a commit "chore: update postpile cask and postpile-server formula to <version>" with the right version and both sha256s.
    - The build log says which way the app was signed: a "building an ad-hoc signed, not notarized release" warning, or a green "Verify signing and notarization" step.
    - The build log has a green "Upload source maps to PostHog" step, or the "POSTHOG_CLI_API_KEY is not set" warning. With the upload, the `postpile` release at the new version and its uploaded symbol sets show up in PostHog Error Tracking (project PostPile).
    - On a Mac: `brew update && brew install --cask posthog/tap/postpile` (or `brew upgrade --cask postpile`), open the app (for an ad-hoc release, clear the quarantine flag first as the caveats say). About PostPile shows the version, the status bar shows it too.
    - `brew audit --cask --tap posthog/tap postpile` has no errors worth fixing in the template.
+   - The formula: `brew update && brew upgrade postpile-server` (or `brew install posthog/tap/postpile-server`), `brew test postpile-server` passes (it starts the server on sample data and fetches the page), and after `brew services restart postpile-server` the page at `http://127.0.0.1:4870` shows the new version in the status bar. `brew audit --formula --tap posthog/tap postpile-server` has no errors worth fixing in the template.
 
 ## Signing and notarization
 

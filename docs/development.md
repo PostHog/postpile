@@ -58,11 +58,16 @@ To run PostPile in a browser instead of Electron:
 pnpm web                    # API on 127.0.0.1:4870 + Vite dev server, opens the page
 POSTPILE_FAKE=1 pnpm web    # the same on sample data
 pnpm build:web              # static HTML, JS and CSS in apps/desktop/dist-web
+pnpm dist:server            # the postpile-server tarball for the Homebrew formula
 ```
 
 `pnpm web` starts `pnpm server` with a fresh token (or `POSTPILE_TOKEN`) and the renderer's Vite dev server (`apps/desktop/vite.web.config.ts`) with hot reload, then opens `http://127.0.0.1:5173/?api=…&token=…`. Other environment variables go to the server as with `pnpm server`; `PORT` sets the API port. `BROWSER=none` keeps the page from opening.
 
-`pnpm build:web` writes the renderer as static files with relative paths, so any static host or folder can serve `apps/desktop/dist-web`. The page needs a running API: start `pnpm server` and open the page with the `?token=` it prints (and `?api=http://127.0.0.1:<port>` when the port is not 4870). The API only listens on 127.0.0.1, so the page talks to the server on the viewer's own machine. It answers Chrome's private network preflight, so a page served from another origin can reach it.
+`pnpm server` serves the built UI itself at `http://127.0.0.1:4870/` once `pnpm build:web` has run (it looks for `web/` next to the bundle, then `apps/desktop/dist-web`; `POSTPILE_WEB_ROOT` points elsewhere, empty turns it off). The page it serves carries the API token in a `<meta name="postpile-token">` tag and calls its own origin, so no query string is needed. The server answers only requests whose host is `127.0.0.1` or `localhost`, so a DNS-rebinding page cannot read that token, and the page refuses to be framed. Without `POSTPILE_TOKEN` the standalone server keeps its token in `server-token` next to the database (mode 600), so open tabs keep working across restarts.
+
+The static files use relative paths, so any static host can serve `apps/desktop/dist-web` too. Such a page needs `?token=` (and `?api=http://127.0.0.1:<port>` when the port is not 4870). The API answers Chrome's private network preflight, so a page served from another origin can reach it.
+
+`pnpm dist:server` builds `apps/service/dist/postpile-server-<version>.tar.gz`: the standalone server and the MCP server bundled by Vite into `lib/` (no `node_modules`), the web UI in `web/`, and two launchers in `bin/` that run `$POSTPILE_NODE` (or `node`, 24 or later). The Homebrew formula (`homebrew/postpile-server.rb.tmpl`) installs it, sets `POSTPILE_INSTALL=brew-service` (the update reminder then names the brew command) and `POSTPILE_MCP_LAUNCHER`, and runs it under `brew services`. To try the tarball: `POSTPILE_FAKE=1 apps/service/dist/postpile-server/bin/postpile-server`, then open `http://127.0.0.1:4870`.
 
 `pnpm server` runs the same background jobs as the desktop app (`startBackgroundJobs` in `apps/server`): the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code through the MCP server. Only Mac notifications stay desktop-only. Turn the jobs down the same way: `POSTPILE_POLL_SECONDS=0`, `POSTPILE_AUTO_SYNC_MINUTES=0` (or `POSTPILE_SYNC_ON_START=0`), `POSTPILE_MAX_AGENT_CALLS=0`.
 
@@ -142,5 +147,6 @@ packages/engine   sync orchestration, live poll, work context sweep, EngineServi
 packages/mcp      MCP server: reads over the engine, asks the running app for the rest
 apps/server       Hono JSON API over EngineService, plus the sample-data engine
 apps/desktop      Electron shell, Mac notifications, React UI (also built for the web)
+apps/service      the postpile-server tarball: bundled server, MCP server and web UI
 apps/cli          dev CLI, plain text
 ```

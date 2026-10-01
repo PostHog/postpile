@@ -1,0 +1,82 @@
+# typed: false
+# frozen_string_literal: true
+
+# Rendered into PostHog/homebrew-tap as Formula/postpile-server.rb by
+# .github/workflows/release.yml on v* tags. Edit this template, not the
+# rendered file in the tap; the next release overwrites it.
+#
+# PostPile without Electron: the local API, its background jobs and the web
+# UI in one process on 127.0.0.1:4870, kept running by `brew services`.
+class PostpileServer < Formula
+  desc "PostPile in the browser: GitHub PR notifications as agent-maintained topics"
+  homepage "https://github.com/PostHog/postpile"
+  url "https://github.com/PostHog/postpile/releases/download/vVERSION_PLACEHOLDER/postpile-server-VERSION_PLACEHOLDER.tar.gz"
+  sha256 "SHA256_PLACEHOLDER"
+  license "MIT"
+
+  depends_on "gh"
+  depends_on "node"
+
+  def install
+    libexec.install Dir["*"]
+    node = formula_opt_bin("node")/"node"
+    server_env = {
+      POSTPILE_NODE:         node,
+      POSTPILE_INSTALL:      "brew-service",
+      POSTPILE_MCP_LAUNCHER: opt_libexec/"postpile-mcp",
+    }
+    (libexec/"postpile-mcp").write_env_script libexec/"bin/postpile-mcp", POSTPILE_NODE: node
+    (bin/"postpile-server").write_env_script libexec/"bin/postpile-server", server_env
+  end
+
+  service do
+    run opt_bin/"postpile-server"
+    keep_alive true
+    log_path var/"log/postpile-server.log"
+    error_log_path var/"log/postpile-server.log"
+  end
+
+  def caveats
+    <<~EOS
+      PostPile needs the GitHub CLI and the Claude Code CLI, both logged in:
+
+        gh auth login
+        curl -fsSL https://claude.ai/install.sh | bash && claude auth login
+
+      Start it now and at every login, then open it in your browser:
+
+        brew services start postpile-server
+        open http://127.0.0.1:4870
+
+      It uses the same data as the PostPile desktop app, and only one of them
+      can open it at a time: quit the app before starting the service.
+      Logs: #{var}/log/postpile-server.log
+
+      Let other agents ask PostPile about your PRs (read-only):
+
+        claude mcp add postpile -- #{opt_libexec}/postpile-mcp
+
+      Update later with:
+
+        brew upgrade postpile-server && brew services restart postpile-server
+    EOS
+  end
+
+  test do
+    port = free_port
+    env = { "POSTPILE_FAKE" => "1", "PORT" => port.to_s, "POSTPILE_UPDATE_CHECK" => "0", "POSTPILE_TELEMETRY" => "0" }
+    pid = spawn(env, bin/"postpile-server")
+    begin
+      page = ""
+      30.times do
+        sleep 1
+        page = shell_output("curl -s -m 5 http://127.0.0.1:#{port}/ || true")
+        break if page.include?("postpile-token")
+      end
+      assert_match "postpile-token", page
+    ensure
+      Process.kill("TERM", pid)
+      Process.wait(pid)
+    end
+  end
+end

@@ -5328,8 +5328,13 @@ preflight and does not know the token, so CORS stays open.
   `pnpm --filter @postpile/desktop exec install-electron` after a fresh `pnpm install` (only
   needed for `pnpm desktop`; `pnpm dist` downloads its own copy).
 - **Localhost API safety**: binds 127.0.0.1, and a token is always required (per launch in the
-  desktop app, per run in the standalone server) so web pages and other local processes cannot
-  drive approve/comment/mark-read.
+  desktop app; kept in `server-token` next to the database, mode 600, by the standalone server,
+  or `POSTPILE_TOKEN`) so web pages and other local processes cannot drive
+  approve/comment/mark-read. The standalone server also serves the web UI and writes the token
+  into that page (`<meta name="postpile-token">`); only same-origin code can read it, so every
+  request whose host is not `127.0.0.1` or `localhost` is refused (DNS rebinding), and the page
+  sends `X-Frame-Options: DENY` (no clickjacking of Approve). Decided 2026-10-01 with the
+  `postpile-server` Homebrew formula (README › In the browser instead of the app).
 - **Paths**: `POSTPILE_CLAUDE_DIR` (default `~/.claude`) is what the work context sweep
   reads. Database at `~/Library/Application Support/PostPile/db.sqlite` on macOS
   (`$XDG_DATA_HOME/postpile/db.sqlite` elsewhere), instructions at

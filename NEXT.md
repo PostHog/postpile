@@ -803,7 +803,12 @@ now".
   against `pnpm server`, found through `?api=...&token=...`. The server runs
   the desktop app's background jobs (`startBackgroundJobs`: live poll, auto
   sync, consolidation, work context schedule, MCP agent requests); only Mac
-  notifications are desktop-only. Not tried for a full day on real data yet.
+  notifications are desktop-only. The server also serves the built UI at
+  `/` with the token in the page, keeps its token across restarts, and
+  ships as the `postpile-server` Homebrew formula (`apps/service` tarball,
+  `homebrew/postpile-server.rb.tmpl`, `brew services`). Not tried for a full
+  day on real data yet, and the release plumbing runs for the first time
+  with the next tag. Mac notifications have no browser replacement yet.
 
 - Stack completion follows base/head branches only. PRs linked from bodies
   or comments are not pulled in, and `subscribed` threads still count as

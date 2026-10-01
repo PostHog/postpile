@@ -112,6 +112,20 @@ brew upgrade --cask postpile
 
 Then quit and reopen PostPile. When a new version is out, the app shows "Update available" in the title bar, with the release notes and this command.
 
+### In the browser instead of the app
+
+The `postpile-server` formula runs PostPile without Electron: the same local API, background sync and live poll as the app, and the web UI, in one process on `127.0.0.1:4870`. `brew services` keeps it running and starts it at login.
+
+```
+brew install posthog/tap/postpile-server
+brew services start postpile-server
+open http://127.0.0.1:4870
+```
+
+Update with `brew upgrade postpile-server && brew services restart postpile-server`, then reload the page. The page shows the same "Update available" reminder with this command.
+
+It uses the same data as the desktop app, and only one of them can open it at a time, so quit the app before starting the service. There are no Mac notifications in the browser. The server only listens on 127.0.0.1 and answers only requests for `127.0.0.1` or `localhost`; the page gets the API token from the server. Logs go to `$(brew --prefix)/var/log/postpile-server.log`. For other agents, the caveats of `brew info postpile-server` show the `claude mcp add` command for this install.
+
 ## Ask PostPile from other agents
 
 PostPile ships an MCP server, so an agent working in your checkout can ask what PostPile knows about a PR before it acts: whose move it is, what changed since you looked, the agent glance, and the topic around it (goal, status, open questions, the other PRs and where each stands).
