@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- Approving a PR no longer flips it back to unread a moment later, and the sidebar's unread count and dot clear once the mark-read reaches GitHub.
+- Opening a PR that shows "Marks read when you leave" now really marks it read. It failed for about half of unread PRs, whose stored snapshot was cut off at the query's limits; the button now only shows when the mark will happen.
+
 ## 0.13.1 (2026-10-01)
 
 ### Changed
