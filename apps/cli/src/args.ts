@@ -1,4 +1,5 @@
-import { ALL_AGENT_JOBS, type AgentJob, type ConsolidateOptions, type SyncOptions } from '@postpile/core';
+import { ALL_AGENT_JOBS, SYNC_MAX_PRS, type AgentJob, type ConsolidateOptions, type SyncOptions } from '@postpile/core';
+import { DEFAULT_SIMULATION_CALLS, parseSimulateRoundFlags, parseSimulateStartFlags, type SimulateRoundOptions, type SimulateStartOptions } from './simulate/simulate-args.ts';
 
 export type Command =
   | { name: 'sync'; options: SyncOptions }
@@ -11,6 +12,8 @@ export type Command =
   | { name: 'topic'; topicId: string }
   | { name: 'pr'; prKey: string }
   | { name: 'mcp' }
+  | { name: 'simulate-start'; options: SimulateStartOptions }
+  | { name: 'simulate-round'; options: SimulateRoundOptions }
   | { name: 'help' };
 
 export const usage = `usage: postpile <command>
@@ -31,6 +34,15 @@ export const usage = `usage: postpile <command>
   topic <id>           show a topic: dossier, changes since seen, tiles
   pr <owner/repo#n>    show one PR: glance, facts and events
   mcp                  read-only MCP server on stdin/stdout (always without the lock): claude mcp add postpile -- pnpm -C <repo> cli mcp
+  simulate-start --from <db> [flags]  a new user's first syncs on a copy, once per agent pipeline; writes report.md
+    --days <n>           only threads of the last n days (default 7)
+    --round-size <n>     pinged PRs per round (default ${SYNC_MAX_PRS})
+    --out <dir>          scratch folder (default a new one under the temp folder)
+    --arms <list>        old,combined (default both; the first assigns topics)
+    --max-agent-calls <n>  per arm and round (default ${DEFAULT_SIMULATION_CALLS})
+    --rounds <n>         stop after n rounds
+    --now <iso>          default: the newest activity in the source
+    --dry-run            everything but agent calls
 
   --read-only          (topics, topic, pr, tools) read the database while the app holds it; no GitHub writes
 
@@ -114,6 +126,15 @@ export function parseArgs(argv: string[]): Command {
   }
   if (name === 'consolidate') {
     const options = parseConsolidateFlags(argv.slice(1));
+    return options ? { name, options } : { name: 'help' };
+  }
+  if (name === 'simulate-start') {
+    const options = parseSimulateStartFlags(argv.slice(1));
+    return options ? { name, options } : { name: 'help' };
+  }
+  // Hidden: simulate-start runs it as a child process per arm and round.
+  if (name === 'simulate-round') {
+    const options = parseSimulateRoundFlags(argv.slice(1));
     return options ? { name, options } : { name: 'help' };
   }
   if ((name === 'topics' || name === 'mcp' || name === 'poll' || name === 'sweep' || name === 'setup-draft' || name === 'tools') && arg === undefined) {

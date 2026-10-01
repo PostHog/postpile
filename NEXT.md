@@ -1503,6 +1503,7 @@ pnpm cli poll                           # one live-poll cycle, prints ping decis
 pnpm cli sweep                          # "what you're working on" from ~/.claude, one opus call
 pnpm cli setup-draft                    # setup checks, sweep and the drafted instructions with sources, one opus call
 pnpm cli tools                          # gh and claude: found where, logged in, the fix when not
+pnpm cli simulate-start --from <copy.sqlite> --dry-run   # a new user's first syncs, old vs combined pipeline (docs/development.md)
 ```
 
 Setup draft against a real account with scratch state (writes no

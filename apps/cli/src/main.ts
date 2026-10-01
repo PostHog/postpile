@@ -9,8 +9,12 @@ import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
 import { formatSetupDraft } from './format-setup.ts';
 import { formatTools } from './format-tools.ts';
-import { applyLegacyEnv, type EngineService } from '@postpile/engine';
+import { readFileSync } from 'node:fs';
+import { applyLegacyEnv, runSimulatedRound, type EngineService } from '@postpile/engine';
 import { runMcpFromEnv } from '@postpile/mcp';
+import type { RoundKeys, SimulateRoundOptions } from './simulate/simulate-args.ts';
+import { refuseAppDataPath, simulateStart } from './simulate/simulate-start.ts';
+import { spawnRound } from './simulate/spawn-round.ts';
 
 applyLegacyEnv();
 
@@ -28,6 +32,27 @@ async function setupDraft(engine: EngineService): Promise<string> {
     sweep = (await engine.setupSweep()) ?? sweep;
   }
   return formatSetupDraft(checks, sweep);
+}
+
+/** The child of simulate-start: one arm's round on the database in POSTPILE_DB, never the app's own. */
+async function simulateRound(options: SimulateRoundOptions): Promise<string> {
+  const databaseFile = process.env.POSTPILE_DB;
+  const instructionsFile = process.env.POSTPILE_INSTRUCTIONS;
+  if (!databaseFile || !instructionsFile) {
+    throw new Error('simulate-round only runs as a child of simulate-start (POSTPILE_DB and POSTPILE_INSTRUCTIONS are not set)');
+  }
+  refuseAppDataPath(databaseFile);
+  const keys = JSON.parse(readFileSync(options.keysFile, 'utf8')) as RoundKeys;
+  const report = await runSimulatedRound({
+    databaseFile,
+    instructionsFile,
+    startAt: options.startAt,
+    prKeys: keys.prKeys,
+    pingedKeys: keys.pingedKeys,
+    maxAgentCalls: options.maxAgentCalls,
+    agentJobs: options.agentJobs,
+  });
+  return formatSync(report);
 }
 
 async function runCommand(engine: EngineService, command: Command): Promise<string> {
@@ -57,6 +82,8 @@ async function runCommand(engine: EngineService, command: Command): Promise<stri
       return detail ? formatPr(detail) : `no PR ${command.prKey} in the store`;
     }
     case 'mcp':
+    case 'simulate-start':
+    case 'simulate-round':
     case 'help':
       return usage;
   }
@@ -74,6 +101,15 @@ async function main(): Promise<void> {
   if (command.name === 'mcp') {
     // Owns stdout for the protocol and opens its own read-only engine.
     await runMcpFromEnv(readOwnVersion());
+    return;
+  }
+  // Both open their own scratch databases, never the dev or real one.
+  if (command.name === 'simulate-start') {
+    await simulateStart(command.options, spawnRound);
+    return;
+  }
+  if (command.name === 'simulate-round') {
+    console.log(await simulateRound(command.options));
     return;
   }
   // Refuses (DataDirLockedError, exit 1) while the app or a server holds the database, unless --read-only.

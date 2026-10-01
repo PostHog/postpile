@@ -11,7 +11,7 @@ export { GitHubWrites, type WriteContext, type WriteResult } from './writes/gith
 export { ActionLog } from './writes/action-log.ts';
 export { NEW_COMMITS_SINCE_LOOKED } from './actions/pr-actions.ts';
 export { catchUpCapFromEnv, createEngine, pingCapFromEnv, type CreateEngineOptions } from './create.ts';
-export { AutoSyncSchedule, DEFAULT_AUTO_SYNC_MINUTES, type AutoSyncOptions } from './auto-sync.ts';
+export { AutoSyncSchedule, BACKLOG_SYNC_MINUTES, DEFAULT_AUTO_SYNC_MINUTES, type AutoSyncOptions } from './auto-sync.ts';
 export { GitHubQuota, quotaFetch, type QuotaRunStats } from './github-quota.ts';
 export { CATCH_UP_CALLS_PER_DAY } from './catch-up/catch-up-cap.ts';
 export { AgentCallLog, ACTION_RUN_ID, SWEEP_RUN_ID } from './agent-call-log.ts';
@@ -40,3 +40,8 @@ export { telemetryEnabled } from './telemetry/telemetry-env.ts';
 export { AgentRefresher, type AgentRefreshDeps, type RefreshRun, type StoredPrInfo } from './agent-requests/agent-refresh.ts';
 export { AgentRequestInbox, type AgentRequestInboxOptions } from './agent-requests/inbox.ts';
 export { answerAgentRequest } from './agent-requests/answer.ts';
+export { startFresh } from './simulation/fresh-start.ts';
+export { ArmDatabase } from './simulation/arm-database.ts';
+export { readArmSnapshot, type ArmSnapshot, type SnapshotCall, type SnapshotDossier, type SnapshotTile } from './simulation/snapshot.ts';
+export { runSimulatedRound } from './simulation/round.ts';
+export { STACK_DEPTH } from './stack-layers.ts';
