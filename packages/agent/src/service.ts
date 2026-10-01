@@ -88,6 +88,33 @@ export interface TopicAssignmentInput {
   context: PromptContext;
 }
 
+/** One active topic as the topic tidy sees it. */
+export interface TidyTopic {
+  id: string;
+  name: string;
+  /** The dossier's goal, else the topic summary; '' when neither exists. */
+  goal: string;
+  prs: Pr[];
+}
+
+export interface TopicTidyInput {
+  topics: TidyTopic[];
+  viewer: Viewer;
+  context: PromptContext;
+}
+
+/**
+ * The topic tidy's changes, already checked against the input: merges name
+ * known, distinct topics; split PRs are members of their topic; a topic is
+ * merged away or split, never both.
+ */
+export interface TopicTidyResult {
+  /** Folds fromTopicIds into intoTopicId; name renames the merged topic when set. */
+  merges: { fromTopicIds: string[]; intoTopicId: string; name: string | null; reason: string }[];
+  /** PRs that do not belong to topicId: they lose their topic and topic assignment places them again. */
+  splits: { topicId: string; prKeys: PrKey[]; reason: string }[];
+}
+
 export type TopicAssignment =
   | { prKey: PrKey; kind: 'existing'; topicId: string; reason: string }
   /** goal: one sentence, shown to later batches until the topic's first dossier. */
@@ -545,6 +572,8 @@ export interface SetupFitInput {
 export interface AgentService {
   /** v2: topics carry their dossier brief. */
   assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]>;
+  /** Once after an upgrade: merges and splits that bring the existing topics to project size. */
+  tidyTopics(input: TopicTidyInput): Promise<TopicTidyResult>;
   /** Changes to the topic's sets; empty when nothing should change. */
   groupSets(input: SetGroupingInput): Promise<SetChanges>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;

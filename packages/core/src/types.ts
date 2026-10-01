@@ -444,8 +444,12 @@ export interface TopicMembership {
 /** split: move prKeys out of topicId into a new topic called name. One proposal per new part. */
 export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split' | 'area_merge';
 export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
-/** Who filed a topic proposal: the consolidation job, or an outside agent through the MCP server (propose_topic_change). */
-export type ProposalSource = 'consolidation' | 'agent';
+/**
+ * Who filed a topic proposal: the consolidation job, an outside agent through
+ * the MCP server (propose_topic_change), or the one-time topic tidy after an
+ * upgrade, which applies its changes itself and records them as accepted.
+ */
+export type ProposalSource = 'consolidation' | 'agent' | 'upgrade';
 
 /** Topic changes are never applied silently. The agent proposes, the user decides. */
 export interface TopicProposal {

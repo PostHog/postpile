@@ -31,7 +31,8 @@ export function modelFor(purpose: AgentPurpose): string {
   if (purpose === 'context_sweep') {
     return process.env.POSTPILE_SWEEP_MODEL || SWEEP_MODEL;
   }
-  if (purpose === 'setup_draft' || purpose === 'setup_refine') {
+  // The topic tidy reads every topic once and reshapes them without asking: it gets the setup model too.
+  if (purpose === 'setup_draft' || purpose === 'setup_refine' || purpose === 'topic_tidy') {
     return process.env.POSTPILE_SETUP_MODEL || SETUP_MODEL;
   }
   return process.env.POSTPILE_MODEL || DEFAULT_MODEL;

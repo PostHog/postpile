@@ -11,6 +11,10 @@ now".
   runs on new triggers only (open PR in no set, risk level change, feedback,
   instructions), after the glances; merged members stay; every change is in
   `pr_set_change` (migration 022) and shown in the CLI and MCP topic views.
+- Topic tidy after an upgrade (2026-10-01, DESIGN.md "Topic tidy after an
+  upgrade"): the first full sync below `TOPIC_GRAIN_VERSION` 2 merges topics of
+  one project and splits catch-alls once, by itself; merges are recorded as
+  accepted proposals from the upgrade.
 - One call per topic, behind `POSTPILE_TOPIC_DIGEST=1` (2026-10-01, DESIGN.md
   "One call per topic"): dossier and the topic's first 18 glances in one
   `topic_digest` call, plus the topic's set changes when a regroup is due;

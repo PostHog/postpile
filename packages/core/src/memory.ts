@@ -382,6 +382,8 @@ export type AgentCallKind =
    */
   | 'topic_digest'
   | 'fact_reconcile'
+  /** Once after an upgrade that changed how topics are cut: merges and splits of the existing topics. */
+  | 'topic_tidy'
   | 'glance_batch'
   | 'event_classification'
   | 'consolidation'

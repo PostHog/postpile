@@ -20,10 +20,12 @@ import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
 import { topicDigestPrompt } from './prompts/topic-digest.ts';
+import { topicTidyPrompt } from './prompts/topic-tidy.ts';
 import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
 import { mapSetAnswer } from './set-answer.ts';
+import { mapTidyAnswer } from './tidy-answer.ts';
 import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
 import {
   chatOutput,
@@ -43,6 +45,7 @@ import {
   setupRefineOutput,
   topicAssignmentOutput,
   topicDigestOutput,
+  topicTidyOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -71,6 +74,8 @@ import type {
   SetChanges,
   TopicDigestInput,
   TopicDigestResult,
+  TopicTidyInput,
+  TopicTidyResult,
   SetupDraftInput,
   SetupDraftResult,
   SetupFitInput,
@@ -89,6 +94,8 @@ const timeouts: Record<AgentPurpose, number> = {
   // A dossier and up to 18 glances in one answer: about the two calls it replaces, end to end.
   topic_digest: 420_000,
   fact_reconcile: 180_000,
+  // Opus over every active topic, once after an upgrade.
+  topic_tidy: 600_000,
   event_classification: 120_000,
   consolidation: 300_000,
   draft_comment: 120_000,
@@ -212,6 +219,14 @@ export class RunnerAgentService implements AgentService {
       result.push(assignment);
     }
     return result;
+  }
+
+  async tidyTopics(input: TopicTidyInput): Promise<TopicTidyResult> {
+    if (input.topics.length < 2) {
+      return { merges: [], splits: [] };
+    }
+    const { value } = await this.ask('topic_tidy', topicTidyPrompt(input), topicTidyOutput);
+    return mapTidyAnswer(value, input);
   }
 
   async groupSets(input: SetGroupingInput): Promise<SetChanges> {

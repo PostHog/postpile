@@ -3376,6 +3376,37 @@ GLANCE_BATCH_SIZE:
 - Compared with `pnpm cli simulate-start` (old vs combined from the same
   fresh start); the switch becomes the default only after that.
 
+## Topic tidy after an upgrade (2026-10-01)
+
+New steering only changes where new PRs go; existing users would keep
+topics cut the old way (a 51-PR catch-all, a project split in three). Owner
+decision: the first full sync after an upgrade that changes how topics are
+cut tidies them once, by itself, as part of the upgrade, with no proposals
+for the user to work through, and never in later syncs.
+
+- `TOPIC_GRAIN_VERSION` (engine `digest/topic-tidy.ts`, now 2: topics sized
+  like projects) against `meta.topic_grain_version`. A store below it runs
+  `TopicTidy` once, inside the full sync's topics phase, before the topic
+  assignment; the live poll never does. Raise the version with the next
+  steering change that should reshape existing topics.
+- One `topic_tidy` call (setup model, Opus) reads every active topic: name,
+  goal (dossier goal, else summary) and one line per PR (date, author,
+  state, title), with the glossary, `TOPIC_SIZE_EXAMPLES`, instructions and
+  work context. It answers `merges` (topics that are one project: fold
+  `fromTopicIds` into `intoTopicId`, optional new name) and `splits` (PRs that
+  do not belong to their topic). `mapTidyAnswer` keeps only known topics, never
+  folds a merge target away, and a split must leave a PR behind.
+- Merges move the PRs the way an accepted merge does (new `created_at`, so
+  the target's next dossier update introduces them) and archive the merged-away
+  topics; each is recorded as an accepted `merge` proposal with source
+  `upgrade`, so the topic's decided changes show it (MCP `topic`). Split PRs
+  lose their topic, a stack whole; the assignment right after places them
+  under the current steering. What the tidy did is kept in
+  `meta.topic_tidy_result`.
+- A store with fewer than two active topics (a fresh install) is marked done
+  without a call. A failed call is an error line and the next full sync tries
+  again.
+
 ## You already dealt with it
 
 Decided 2026-09-29 (evening), agreed before building. When the user acts on

@@ -43,6 +43,7 @@ import { GitHubWrites } from '../writes/github-writes.ts';
 import { PendingWrites } from '../writes/pending-writes.ts';
 import { WriteSwitch } from '../writes/write-switch.ts';
 import { FakeAgent } from './fake-agent.ts';
+import { TOPIC_GRAIN_KEY, TOPIC_GRAIN_VERSION } from '../digest/topic-tidy.ts';
 
 function toBranchPr(pr: Pr): BranchPr {
   return {
@@ -414,6 +415,8 @@ export interface HarnessOptions {
   catchUpCallsPerDay?: number;
   /** One call per topic for dossier and first glances (POSTPILE_TOPIC_DIGEST=1). Off by default. */
   topicDigest?: boolean;
+  /** The store predates the current topic grain, so the next full sync runs the topic tidy. Off by default. */
+  topicTidyDue?: boolean;
   /** GitHub writes on (the default here, so action tests reach FakeWriter) or off, as on a first real run. */
   writesEnabled?: boolean;
   /** Build the switch with no real writer, like POSTPILE_READ_ONLY=1. */
@@ -440,6 +443,10 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const instructionsFile = options.instructionsFile ?? '/nonexistent/instructions.md';
   const now = options.now ?? (() => NOW);
   const store = options.store ?? Store.open(':memory:');
+  // Stores start tidied to the current topic grain, as a fresh install ends up: only tidy tests opt in.
+  if (!options.store && !options.topicTidyDue) {
+    store.meta.set(TOPIC_GRAIN_KEY, String(TOPIC_GRAIN_VERSION));
+  }
   if (!options.firstRun && loadSetupFlag(store) === null) {
     saveSetupFlag(store, 'done', now().toISOString());
   }
