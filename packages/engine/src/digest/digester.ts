@@ -7,6 +7,7 @@ import { FactReconciler } from './fact-reconcile.ts';
 import { GlanceBatchWriter } from './glance-batches.ts';
 import { SetGrouper } from './set-grouping.ts';
 import { TopicAssigner } from './topic-assignment.ts';
+import { TopicTidy } from './topic-tidy.ts';
 import { refreshDriversAndRoles } from './topic-roles.ts';
 
 /** Stands in for the dossier job when a sync leaves it out: nothing to wait for. */
@@ -42,7 +43,11 @@ export class Digester {
   }
 
   async run(jobs: AgentJob[]): Promise<void> {
-    await this.job(jobs, 'topics', 'topics', () => new TopicAssigner(this.deps).run());
+    // Once after an upgrade that changed how topics are cut, before the assignment places the PRs it split out.
+    await this.job(jobs, 'topics', 'topics', async () => {
+      await new TopicTidy(this.deps).runOnce();
+      await new TopicAssigner(this.deps).run();
+    });
     const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps, { withGlances: jobs.includes('glances'), withSets: jobs.includes('sets') && jobs.includes('glances') }).start() : NO_DOSSIERS;
     const dossiersDone = this.job(jobs, 'dossiers', 'dossiers', async () => {
       await dossiers.done;

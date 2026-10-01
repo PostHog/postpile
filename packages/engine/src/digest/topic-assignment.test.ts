@@ -1,4 +1,4 @@
-import { makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
@@ -80,12 +80,12 @@ describe('topic assignment places every PR', () => {
     expect(report.errors.at(-1)).toBe(`topic assignment: no topic after a retry, asked again next sync: ${prs[0]!.key}`);
   });
 
-  it('asks by repo, then by head branch, so related PRs share a request', async () => {
+  it('asks by author, then oldest first, so the project of one person shares a request', async () => {
     const h = makeHarness();
     const mixed = [
-      reviewRequestedPr(1, { repo: 'acme/web', headRef: 'alice/billing-2' }),
-      reviewRequestedPr(2, { repo: 'acme/app', headRef: 'bob/storybook' }),
-      reviewRequestedPr(3, { repo: 'acme/web', headRef: 'alice/billing-1' }),
+      reviewRequestedPr(1, { repo: 'acme/web', author: 'alice', createdAt: at(3) }),
+      reviewRequestedPr(2, { repo: 'acme/app', author: 'bob', createdAt: at(1) }),
+      reviewRequestedPr(3, { repo: 'acme/app', author: 'alice', createdAt: at(2) }),
     ];
     for (const pr of mixed) {
       h.reader.addPr(pr, makeThreadFor(pr));
@@ -96,7 +96,19 @@ describe('topic assignment places every PR', () => {
 
     const prompt = h.runner.promptsFor('topic_assignment')[0]!;
     const order = mixed.map((pr) => prompt.indexOf(`${pr.key} "`));
-    expect(order[1]).toBeLessThan(order[2]!);
     expect(order[2]).toBeLessThan(order[0]!);
+    expect(order[0]).toBeLessThan(order[1]!);
+  });
+
+  it('keeps the goal of a new topic as its summary, so the next batch sees what it is for', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'new', name: 'Desktop review app', goal: 'Ship the desktop app that sorts PR notifications.', reason: 'app work' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    const topicId = h.store.memberships.get(pr.key)!.topicId;
+    expect(h.store.topics.get(topicId)?.summary).toBe('Ship the desktop app that sorts PR notifications.');
   });
 });

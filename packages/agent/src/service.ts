@@ -77,14 +77,51 @@ export interface TopicChoice {
 
 export interface TopicAssignmentInput {
   prs: Pr[];
+  /**
+   * Every PR waiting for a topic in this sync, this batch's own included, so
+   * the agent sees the whole backlog while it assigns its batch. Missing: the
+   * batch alone.
+   */
+  waiting?: Pr[];
   viewer: Viewer;
   topics: TopicChoice[];
   context: PromptContext;
 }
 
+/** Where split PRs go: an existing topic, or a new one named after the project they serve. */
+export type TidyDestination = { kind: 'existing'; topicId: string } | { kind: 'new'; name: string };
+
+/** One active topic as the topic tidy sees it. */
+export interface TidyTopic {
+  id: string;
+  name: string;
+  /** The dossier's goal, else the topic summary; '' when neither exists. */
+  goal: string;
+  prs: Pr[];
+}
+
+export interface TopicTidyInput {
+  topics: TidyTopic[];
+  viewer: Viewer;
+  context: PromptContext;
+}
+
+/**
+ * The topic tidy's changes, already checked against the input: merges name
+ * known, distinct topics; split PRs are members of their topic; a topic is
+ * merged away or split, never both.
+ */
+export interface TopicTidyResult {
+  /** Folds fromTopicIds into intoTopicId; name renames the merged topic when set. */
+  merges: { fromTopicIds: string[]; intoTopicId: string; name: string | null; reason: string }[];
+  /** PRs that do not belong to topicId, and where they go instead; the tidy places them itself. */
+  splits: { topicId: string; prKeys: PrKey[]; into: TidyDestination; reason: string }[];
+}
+
 export type TopicAssignment =
   | { prKey: PrKey; kind: 'existing'; topicId: string; reason: string }
-  | { prKey: PrKey; kind: 'new'; name: string; reason: string };
+  /** goal: one sentence, shown to later batches until the topic's first dossier. */
+  | { prKey: PrKey; kind: 'new'; name: string; goal: string; reason: string };
 
 export interface SetGroupingInput {
   topic: Topic;
@@ -538,6 +575,8 @@ export interface SetupFitInput {
 export interface AgentService {
   /** v2: topics carry their dossier brief. */
   assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]>;
+  /** Once after an upgrade: merges and splits that bring the existing topics to project size. */
+  tidyTopics(input: TopicTidyInput): Promise<TopicTidyResult>;
   /** Changes to the topic's sets; empty when nothing should change. */
   groupSets(input: SetGroupingInput): Promise<SetChanges>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;

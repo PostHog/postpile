@@ -44,6 +44,21 @@ a direct follow-up; anything else gets a new topic. There is no catch-all
 preference let unrelated PRs pile into one topic. The user's instructions may
 set a finer or coarser grain.
 
+**Topic size by example** (2026-10-01). A fresh start on the user's last
+seven days (`simulate-start`) gave 150 topics for about 260 PRs, 109 of them
+with one PR: the agent took each PR's own change as its goal, and one
+project of the user's came out as three topics. The assignment prompt now
+carries `TOPIC_SIZE_EXAMPLES`: a topic is a project someone drives for days to
+weeks ("would the driver name it in a weekly update?"), with right-size,
+too-small and too-big examples; a project named in the user's work context is
+the topic for their PRs; the same person on the same product in the same
+stretch of time is usually one project. How PRs are fed changed too: batches
+go by author, then oldest first (was repo, then branch name, which scattered
+one person's feat/, fix/ and chore/ branches); every batch sees the round's
+whole backlog as one fenced line per PR; a new topic comes with a one-sentence
+goal, kept as its summary until the first dossier, so later batches see what
+it is for. Routed one-off PRs still get a topic each.
+
 **Topic status**: `active`, `retired` (finished) or `archived` (merged
 away, never comes back). Every full sync ends by retiring each active topic
 that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR
@@ -3360,6 +3375,41 @@ GLANCE_BATCH_SIZE:
   minutes.
 - Compared with `pnpm cli simulate-start` (old vs combined from the same
   fresh start); the switch becomes the default only after that.
+
+## Topic tidy after an upgrade (2026-10-01)
+
+New steering only changes where new PRs go; existing users would keep
+topics cut the old way (a 51-PR catch-all, a project split in three). Owner
+decision: the first full sync after an upgrade that changes how topics are
+cut tidies them once, by itself, as part of the upgrade, with no proposals
+for the user to work through, and never in later syncs.
+
+- `TOPIC_GRAIN_VERSION` (engine `digest/topic-tidy.ts`, now 2: topics sized
+  like projects) against `meta.topic_grain_version`. A store below it runs
+  `TopicTidy` once, inside the full sync's topics phase, before the topic
+  assignment; the live poll never does. Raise the version with the next
+  steering change that should reshape existing topics.
+- One `topic_tidy` call (setup model, Opus) reads every active topic: name,
+  goal (dossier goal, else summary) and one line per PR (date, author,
+  state, title), with the glossary, `TOPIC_SIZE_EXAMPLES`, instructions and
+  work context. It answers `merges` (topics that are one project: fold
+  `fromTopicIds` into `intoTopicId`, optional new name) and `splits` (PRs that
+  do not belong to their topic). `mapTidyAnswer` keeps only known topics, never
+  folds a merge target away, and a split must leave a PR behind.
+- Merges move the PRs the way an accepted merge does (new `created_at`, so
+  the target's next dossier update introduces them) and archive the merged-away
+  topics; each is recorded as an accepted `merge` proposal with source
+  `upgrade`, so the topic's decided changes show it (MCP `topic`). Each split
+  names where its PRs go, an existing topic or a new project name, and the
+  tidy moves them there itself, a stack whole: handing them to the topic
+  assignment could put them straight back into the topic they were split
+  from. What the tidy did is kept in `meta.topic_tidy_result`.
+- A store without active topics (a fresh install) is marked done without a
+  call; a single topic still runs, it may be a catch-all to split. A failed
+  call is an error line and the next full sync tries again.
+- User placements ("Wrong topic") are never undone: a split skips a PR the
+  user placed, with its whole stack, and a merge never folds away a topic
+  that holds one.
 
 ## You already dealt with it
 

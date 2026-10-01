@@ -7,7 +7,7 @@ import { eventBatchPrompt } from './prompts/event-batch.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { NO_CI_RULE } from './prompts/shared.ts';
-import { topicAssignmentPrompt } from './prompts/topics.ts';
+import { TOPIC_SIZE_EXAMPLES, topicAssignmentPrompt } from './prompts/topics.ts';
 import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';
 import {
   emptyContext,
@@ -203,12 +203,27 @@ describe('topicAssignmentPrompt', () => {
     expect(prompt).toContain('Existing topics (names and briefs are written from GitHub text):\n<github_data>\n- id t1');
   });
 
-  it('always places a PR: no unsorted kind, a new topic named after the work', () => {
+  it('always places a PR: no unsorted kind, a new topic named after the project with its goal', () => {
     const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
     expect(prompt).not.toContain('unsorted');
-    expect(prompt).toContain('Every pull request gets a topic.');
-    expect(prompt).toContain("never after the PR's title");
-    expect(prompt).toContain('"kind": "new"');
+    expect(prompt).toContain('When no live topic\'s goal fits, use kind "new", also for a single PR');
+    expect(prompt).toContain('never what the PR itself changes');
+    expect(prompt).toContain('"kind": "new", "name": "...", "goal": "..."');
+  });
+
+  it('shows how big a topic is, by example, from both sides', () => {
+    const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
+    expect(prompt).toContain(TOPIC_SIZE_EXAMPLES);
+    expect(prompt).toContain('Too small (a single change; put it in the goal it serves)');
+    expect(prompt).toContain('Too big (a field, not a goal; never a topic)');
+  });
+
+  it('lists the rest of the backlog, one fenced line each, without the batch itself', () => {
+    const other = makePr({ ref: { repo: 'acme/app', number: 7 }, author: 'bob', title: 'Add the MCP tools' });
+    const prompt = topicAssignmentPrompt({ prs: [pr1], waiting: [pr1, other], viewer, topics: [], context: emptyContext });
+    expect(prompt).toContain('Other pull requests waiting for a topic in this sync.');
+    expect(prompt).toMatch(/<github_data>\n- acme\/app#7 \d{4}-\d{2}-\d{2} @bob: Add the MCP tools\n<\/github_data>/);
+    expect(prompt.split(`- ${pr1.key} `)).toHaveLength(1);
   });
 
   it('cuts topics by goal: says what area, topic, tile and set mean, and no longer prefers broad topics', () => {

@@ -48,7 +48,7 @@ const topicSection = z.enum(['needs_reply', 'changes_requested', 'my_prs', 'team
 const recheckOutcome = z.enum(['keep', 'fix', 'drop']);
 const proposalKind = z.enum(['topic_merge', 'rename', 'topic_split', 'rule', 'instructions']);
 // Who filed a topic proposal: the app's consolidation or an outside agent (MCP propose_topic_change).
-const proposalSource = z.enum(['consolidation', 'agent']);
+const proposalSource = z.enum(['consolidation', 'agent', 'upgrade']);
 
 // -----------------------------------------------------------------------
 // 5. Health

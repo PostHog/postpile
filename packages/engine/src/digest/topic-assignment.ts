@@ -36,9 +36,13 @@ interface StackSplit {
   followers: Map<PrKey, PrKey[]>;
 }
 
-/** Same repo together, then similar branch names and titles, so related PRs share a request. */
+/**
+ * One person's work together, oldest first, so a project's PRs share a
+ * request. Ordered by repo and branch name before (until 2026-10-01), which
+ * scattered one person's feat/, fix/ and chore/ branches across batches.
+ */
 function askOrder(a: Pr, b: Pr): number {
-  return a.ref.repo.localeCompare(b.ref.repo) || a.headRef.localeCompare(b.headRef) || a.title.localeCompare(b.title);
+  return a.author.localeCompare(b.author) || a.createdAt.localeCompare(b.createdAt) || a.key.localeCompare(b.key);
 }
 
 /**
@@ -139,15 +143,19 @@ export class TopicAssigner {
     });
   }
 
-  /** An offered topic of that name (any case), else a new one. */
-  private findOrCreateTopic(name: string): Topic {
+  /**
+   * An offered topic of that name (any case), else a new one. A new topic's
+   * summary is the goal sentence until its first dossier replaces it, so the
+   * next batch sees what the topic is for, not only its name.
+   */
+  private findOrCreateTopic(name: string, goal: string): Topic {
     const clean = cleanTopicName(name);
     const wanted = clean.toLowerCase();
     const existing = this.offeredTopics().find((t) => cleanTopicName(t.name).toLowerCase() === wanted);
     if (existing) {
       return existing;
     }
-    const topic = newTopic(newTopicId(clean), clean, this.deps.now().toISOString());
+    const topic = { ...newTopic(newTopicId(clean), clean, this.deps.now().toISOString()), summary: goal };
     this.deps.store.topics.create(topic);
     return topic;
   }
@@ -156,7 +164,7 @@ export class TopicAssigner {
     if (assignment.kind === 'existing') {
       return assignment.topicId;
     }
-    return this.findOrCreateTopic(assignment.name).id;
+    return this.findOrCreateTopic(assignment.name, assignment.goal).id;
   }
 
   private apply(assignments: TopicAssignment[]): void {
@@ -181,13 +189,14 @@ export class TopicAssigner {
    * badly (all of them when the call failed); none when the call cap is hit,
    * since those wait for the next sync anyway.
    */
-  private async askBatch(batch: Pr[]): Promise<Pr[]> {
+  private async askBatch(batch: Pr[], waiting: Pr[]): Promise<Pr[]> {
     if (!this.deps.budget.take('topic_assignment')) {
       return [];
     }
     try {
       const assignments = await this.deps.agent.assignTopics({
         prs: batch,
+        waiting,
         viewer: this.deps.viewer,
         // Re-read per batch so a topic created by the previous batch is offered again.
         topics: this.topicChoices(),
@@ -204,11 +213,15 @@ export class TopicAssigner {
     }
   }
 
-  /** Batches one after the other, so each sees the topics the ones before created. Returns the PRs still missing. */
+  /**
+   * Batches one after the other, so each sees the topics the ones before
+   * created, and every batch sees the round's whole backlog as one line per
+   * PR. Returns the PRs still missing.
+   */
   private async askRound(prs: Pr[]): Promise<Pr[]> {
     const missing: Pr[] = [];
     for (const batch of chunk(prs, ASSIGNMENT_BATCH_SIZE)) {
-      missing.push(...(await this.askBatch(batch)));
+      missing.push(...(await this.askBatch(batch, prs)));
     }
     return missing;
   }

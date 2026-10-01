@@ -44,12 +44,29 @@ export const topicAssignmentOutput = z.object({
   assignments: z.array(
     z.discriminatedUnion('kind', [
       z.object({ prKey: text, kind: z.literal('existing'), topicId: text, reason: text }),
-      z.object({ prKey: text, kind: z.literal('new'), name: text.min(1), reason: text }),
+      z.object({ prKey: text, kind: z.literal('new'), name: text.min(1), goal: text.default(''), reason: text }),
       // No longer asked for. Still parsed so one such entry does not fail the
       // whole batch; the service drops it and the engine asks again.
       z.object({ prKey: text, kind: z.literal('unsorted'), reason: text.default('') }),
     ]),
   ),
+});
+
+export const topicTidyOutput = z.object({
+  merges: z
+    .array(z.object({ fromTopicIds: z.array(text), intoTopicId: text, name: text.nullable().default(null), reason: text.min(1) }))
+    .default([]),
+  splits: z
+    .array(
+      z.object({
+        topicId: text,
+        prKeys: z.array(text),
+        intoTopicId: text.nullable().default(null),
+        newName: text.nullable().default(null),
+        reason: text.min(1),
+      }),
+    )
+    .default([]),
 });
 
 /** Only what changes: anything the answer leaves out stays as it is. */

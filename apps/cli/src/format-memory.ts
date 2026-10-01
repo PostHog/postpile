@@ -11,6 +11,7 @@ const KIND_ORDER: AgentCallKind[] = [
   'topic_assignment',
   'dossier_update',
   'topic_digest',
+  'topic_tidy',
   'event_classification',
   'glance_batch',
   'set_grouping',

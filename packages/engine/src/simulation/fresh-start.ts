@@ -57,6 +57,7 @@ export const AGENT_META_PREFIXES: Record<string, string> = {
   'relation_override:': 'memory/placement.ts relationOverrideKey: user corrections of an old topic relation',
   'look_closer_ping:': 'live/glance-pings.ts lookCloserMetaKey: Look closer pings sent for old glances',
   last_sync_report: 'last-sync-report.ts: the source sync report and its agent stats',
+  topic_tidy_result: 'digest/topic-tidy.ts TOPIC_TIDY_RESULT_KEY: what the topic tidy after an upgrade changed',
 };
 
 export function tableExists(store: Store, name: string): boolean {
