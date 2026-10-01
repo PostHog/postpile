@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, PrTier, TileView, Topic, TopicListItem } from '@postpile/core';
-import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
+import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { holdPlace, placeIn } from './hold-place.ts';
 import {
   applyQueueFilter,
@@ -68,6 +68,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     turn: { kind: 'none', who: null, what: '', prKey: null },
     facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
+    openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(0),
     quietRepo: false,

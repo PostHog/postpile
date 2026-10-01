@@ -644,7 +644,7 @@ export interface OpenedTile {
  * - no_tile: no tile shows the PR
  * - snoozed: the user put a tile holding it away for later
  * - asks_you: a mark-read of the PR would leave something asked of the user
- * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, or cut off at the query's caps, so the user did not see the newest activity
+ * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, or PostPile's own caps cut activity from the unread interval, so the detail pane the user looked at missed the newest activity (`openedSnapshotCovers`)
  */
 export type OpenedSkip = 'no_thread' | 'no_tile' | 'snoozed' | 'asks_you' | 'stale_snapshot';
 
@@ -659,8 +659,8 @@ export interface OpenedReadInput {
   /** The PR's notification thread, null when it has none (a found PR). */
   thread: NotificationThread | null;
   prFetchedAt: IsoTime | null;
-  /** The stored snapshot was cut off at the query's caps (`Pr.truncated`). */
-  prTruncated: boolean;
+  /** The stored snapshot, for whether the caps cut anything (`truncated`, `capHits`); null when none is stored. */
+  pr: Pr | null;
   /** Every tile that holds the PR. */
   tiles: OpenedTile[];
   /** A mark-read of this PR alone would leave it done: nothing asked of the user (`PrSummary.afterRead.done`). */
@@ -668,11 +668,33 @@ export interface OpenedReadInput {
 }
 
 /**
+ * The detail pane the user looked at showed everything up to the thread's
+ * last update: the snapshot was fetched at or after it, and PostPile's caps
+ * cut nothing from the unread interval. A truncated snapshot passes when no
+ * list hit our caps (empty `capHits`: only GitHub's total counted more), or
+ * when what fell off is older than GitHub's read time (`cutSnapshotCovers`).
+ * Looser than the quiet reads' rule only in the first case (2026-10-01).
+ */
+function openedSnapshotCovers(thread: NotificationThread, prFetchedAt: IsoTime | null, pr: Pr | null): boolean {
+  if (prFetchedAt === null || prFetchedAt < thread.updatedAt) {
+    return false;
+  }
+  if (pr === null || pr.truncated !== true) {
+    return true;
+  }
+  if (pr.capHits !== undefined && pr.capHits.length === 0) {
+    return true;
+  }
+  return thread.lastReadAt !== null && cutSnapshotCovers(pr, thread.lastReadAt);
+}
+
+/**
  * Whether opening the PR in PostPile's detail pane may mark it read on
  * GitHub, like a visit on github.com does, and handle it in PostPile, limited
  * to cases where that cannot hide a to-do (DESIGN.md "You already dealt with
  * it", part 3). Checked per PR since 2026-09-29: that PR done after a
- * mark-read, no tile holding it snoozed.
+ * mark-read, no tile holding it snoozed. An unread thread also needs a
+ * snapshot that showed its unread activity (`openedSnapshotCovers`).
  */
 export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (input.thread === null) {
@@ -690,7 +712,7 @@ export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (!input.thread.unread) {
     return { kind: 'handle' };
   }
-  if (!snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt, prTruncated: input.prTruncated })) {
+  if (!openedSnapshotCovers(input.thread, input.prFetchedAt, input.pr)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   return { kind: 'mark' };

@@ -166,11 +166,11 @@ export const openedReadLeavesDone: Invariant = {
         const thread = board.threads.get(row.key) ?? null;
         const holding = board.tiles.filter((tile) => tile.members.some((member) => member.prKey === row.key));
         const tilesSnoozed = holding.map((tile) => tileStateOf(board, tile).kind === 'snoozed');
-        const input = { thread, prFetchedAt: board.prFetchedAt.get(row.key) ?? null, truncated: prOf(board, row.key).truncated === true, tilesSnoozed, doneAfterRead: row.afterRead.done };
-        const check = openedReadCheck({ ...input, prTruncated: input.truncated, tiles: tilesSnoozed.map((snoozed) => ({ snoozed })) });
+        const input = { thread, prFetchedAt: board.prFetchedAt.get(row.key) ?? null, pr: prOf(board, row.key), tilesSnoozed, doneAfterRead: row.afterRead.done };
+        const check = openedReadCheck({ ...input, tiles: tilesSnoozed.map((snoozed) => ({ snoozed })) });
         // Also as if no tile held it, or it had no thread: nothing to mirror then.
         for (const variant of [input, { ...input, tilesSnoozed: [] }, { ...input, thread: null }]) {
-          const got = JSON.stringify(openedReadCheck({ ...variant, prTruncated: variant.truncated, tiles: variant.tilesSnoozed.map((snoozed) => ({ snoozed })) }));
+          const got = JSON.stringify(openedReadCheck({ ...variant, tiles: variant.tilesSnoozed.map((snoozed) => ({ snoozed })) }));
           const expected = JSON.stringify(expectedOpenedRead(variant));
           ensure(got === expected, `${row.key}: opened read ${got}, expected ${expected}`);
         }

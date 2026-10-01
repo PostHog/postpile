@@ -1,10 +1,8 @@
 import {
   isClearableNonPr,
-  isTracked,
   judgedReadCheck,
   judgedReadDetail,
   openedReadCheck,
-  prAfterMarkRead,
   prReadScope,
   quietReadCheck,
   quietReadDetail,
@@ -12,7 +10,8 @@ import {
   QUIET_READS_PER_RUN,
   touchedReadCheck,
   type NotificationThread,
-  type OpenedTile,
+  type OpenedReadInput,
+  type OpenedSkip,
   type PrKey,
   type QuietReadInput,
 } from '@postpile/core';
@@ -23,6 +22,7 @@ import { errorText } from '../errors.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import { readLocally } from '../actions/local-change.ts';
 import type { GitHubWrites } from './github-writes.ts';
+import { OpenedReadInputs } from './opened-read-inputs.ts';
 import { markThreadReadIfUnchanged } from './thread-mark-read.ts';
 
 /** A thread that passed the rules, with the action log detail that says why. `prKey` is null for a notification that is not a PR. */
@@ -63,6 +63,14 @@ function quietDetail(input: QuietReadInput): string | null {
   return null;
 }
 
+/** Why an open marked nothing, for the text log: "stale_snapshot (fetched …, thread updated …)". */
+function openedSkipDetail(why: OpenedSkip, input: OpenedReadInput): string {
+  if (why === 'stale_snapshot') {
+    return `${why} (snapshot fetched ${input.prFetchedAt ?? 'never'}, thread updated ${input.thread?.updatedAt ?? 'never'})`;
+  }
+  return why;
+}
+
 /**
  * "Handled quietly" (DESIGN.md): after a full sync, PR threads the user had
  * read that turned unread only because of bots get marked read on GitHub,
@@ -85,6 +93,7 @@ export class QuietReads {
     private readonly reader: GitHubReader,
     private readonly writes: GitHubWrites,
     private readonly now: () => Date,
+    private readonly textLog: (line: string) => void = () => {},
   ) {}
 
   /** PR threads the rules may mark read. Whether the tile is unread is no input: an unread thread always makes it so. */
@@ -144,34 +153,6 @@ export class QuietReads {
     return true;
   }
 
-  /** Every tile that holds the PR, and whether one of them is snoozed. */
-  private tilesHolding(board: Board, prKey: PrKey): OpenedTile[] {
-    return board
-      .allTiles()
-      .filter((tile) => tile.members.some((member) => member.prKey === prKey))
-      .map((tile) => ({ snoozed: board.stateOf(tile).kind === 'snoozed' }));
-  }
-
-  /** A mark-read of this PR alone would leave it done (the rule behind `PrSummary.afterRead`); tracked when any tile tracks it. */
-  private prDoneAfterRead(board: Board, prKey: PrKey): boolean {
-    const pr = board.prs.get(prKey);
-    if (!pr) {
-      return false;
-    }
-    const tracked = board
-      .allTiles()
-      .some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
-    return prAfterMarkRead({
-      pr,
-      events: board.events.get(prKey) ?? [],
-      userState: board.userStates.get(prKey) ?? null,
-      viewer: board.viewer,
-      notYours: board.notYours.has(prKey),
-      tracked,
-      readAt: board.now,
-    }).done;
-  }
-
   /**
    * PostPile's side of an open: every event of the PR seen and the PR
    * handled, like a mark-read of it. True when anything changed.
@@ -196,16 +177,14 @@ export class QuietReads {
       return false;
     }
     const nowIso = this.now().toISOString();
-    const board = Board.load(this.store, nowIso);
-    const thread = board.threads.get(prKey) ?? null;
-    const check = openedReadCheck({
-      thread,
-      prFetchedAt: this.store.prs.fetchedAtByKey().get(prKey) ?? null,
-      prTruncated: this.store.prs.get(prKey)?.truncated === true,
-      tiles: this.tilesHolding(board, prKey),
-      doneAfterRead: this.prDoneAfterRead(board, prKey),
-    });
-    if (check.kind === 'skip' || thread === null) {
+    const input = new OpenedReadInputs(Board.load(this.store, nowIso), this.store).of(prKey);
+    const thread = input.thread;
+    const check = openedReadCheck(input);
+    if (check.kind === 'skip') {
+      this.textLog(`opened read of ${prKey} skipped: ${openedSkipDetail(check.why, input)}`);
+      return false;
+    }
+    if (thread === null) {
       return false;
     }
     if (check.kind === 'mark') {

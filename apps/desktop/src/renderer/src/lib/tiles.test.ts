@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
-import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
+import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { countPrs, isDraftTile, isFyiNews, kindParts, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
@@ -33,6 +33,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     turn: { kind: 'none', who: null, what: '', prKey: null },
     facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
+    openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(number),
     quietRepo: false,

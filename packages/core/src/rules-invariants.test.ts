@@ -4,7 +4,7 @@
 // live tile, a snoozed tile holding a done PR, routed team requests.
 import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
-import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, viewer as baseViewer } from './fixtures.ts';
+import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, NO_OPENED_READ_INPUT, viewer as baseViewer } from './fixtures.ts';
 import type { PaneOffers } from './offers.ts';
 import { deriveTileState } from './tiles.ts';
 import { buildPrSummary, buildTileView } from './tile-view.ts';
@@ -67,6 +67,7 @@ function tileView(input: BoardInput): TileView {
       lastReadAt: threads.get(pr.key)?.lastReadAt ?? null,
       now: NOW,
       pendingWrite: null,
+      opened: NO_OPENED_READ_INPUT,
     });
   });
   return buildTileView({ tile, state, prs: rows, agentPrs: [], prsByKey: prs, events, userStates, viewer, notYours, pendingWrite: null, quietRepo: false, repoLabel: null, now: NOW });

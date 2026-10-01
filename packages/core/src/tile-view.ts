@@ -15,6 +15,7 @@ import { prPrimaryAction } from './primary-action.ts';
 import { isApprovedByViewer, ownTeamRequests, reviewRequest } from './review-request.ts';
 import { tileGroup } from './tile-groups.ts';
 import { tilePeople } from './tile-people.ts';
+import { openedReadCheck, type OpenedReadInput } from './quiet-reads.ts';
 import { isTracked } from './provenance.ts';
 import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
 import { memberTier, ownerRelation, tileTier } from './topic-queues.ts';
@@ -50,6 +51,8 @@ export interface PrSummaryInput {
   now: IsoTime;
   /** A mark-read of this PR waiting for the writes lock, or null. */
   pendingWrite: TilePendingWrite | null;
+  /** What the "opened in PostPile" rule reads of this PR, gathered like the server's check does it (`openedReadCheck`). */
+  opened: OpenedReadInput;
 }
 
 /** The PR facts every consumer reads (`PrFacts`); without a viewer nothing is aimed at anyone. */
@@ -103,6 +106,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours }) : NO_TURN,
     facts: prFacts(pr, events, viewer),
     afterRead: prAfterMarkRead({ pr, events, userState, viewer, notYours, tracked: isTracked(member.provenance), readAt: input.now }),
+    openedRead: openedReadCheck(input.opened),
     whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),
     updatedAt: pr.updatedAt,
     quietRepo: input.quietRepo,
