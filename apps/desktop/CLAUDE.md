@@ -224,6 +224,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   never "the next sync picks it up". Only a failed glance gets a button:
   Retry (`useActions().retryGlance`, local, not on the `GithubWrite`
   list). No manual refresh per PR or topic (decided 2026-09-29).
+  Refresh on look is automatic, not a button (2026-10-01): `useGlanceLook`
+  in `DetailPane` asks `useActions().refreshGlanceOnLook` once per open
+  after the 1.5s dwell when the glance is stale; the server decides, and
+  the words come from `glanceState` and `glanceRefreshBlock`. Its timer
+  (`lib/glance-look.ts`) is its own, apart from the opened mark's.
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the action bar right under the assessment boxes.
 - The detail pane acts on the selected PR, the tile footer on the tile

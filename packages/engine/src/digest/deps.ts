@@ -33,4 +33,6 @@ export interface DigestDeps {
 /** One topic for a glance catch-up run; topicId null is the virtual Unsorted topic. */
 export interface TopicScope {
   topicId: string | null;
+  /** Only these PRs of the topic (a glance refresh on look). Missing: every PR of the topic. */
+  prKeys?: PrKey[];
 }

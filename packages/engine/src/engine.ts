@@ -68,6 +68,7 @@ import type {
   TopicProposalKind,
   ViewerView,
   NotificationDebugRow,
+  GlanceLookResult,
   OpenedReadResult,
   QuietReadView,
   Timers,
@@ -292,6 +293,7 @@ export class Engine implements EngineService {
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUpCap: CatchUpCap;
   private readonly catchUps: CatchUpQueue;
+  private readonly topicCatchUp: TopicCatchUp;
   private readonly github: GitHubSync;
   private readonly quietReads: QuietReads;
   private readonly telemetry: Telemetry;
@@ -338,7 +340,8 @@ export class Engine implements EngineService {
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
     this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites, {
       agentOff: () => agentOff() !== null,
-      catchUp: (topicId) => this.catchUps.stateOf(topicId),
+      catchUp: (topicId, prKey) => this.catchUps.stateOf(topicId, prKey),
+      catchUpCap: () => ({ off: this.catchUpCap.perDay === 0, spent: this.catchUpCap.remaining() === 0 }),
     });
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
@@ -393,9 +396,10 @@ export class Engine implements EngineService {
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
     this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
     const topicCatchUp = new TopicCatchUp(runDeps, this.catchUpCap, lineLog);
+    this.topicCatchUp = topicCatchUp;
     // Never beside a full sync or a consolidation: the request is skipped and the sync covers the topic.
     this.catchUps = new CatchUpQueue(
-      (topicId) => topicCatchUp.run(topicId),
+      { topic: (topicId) => topicCatchUp.run(topicId), glances: (topicId, prKeys) => topicCatchUp.runGlances(topicId, prKeys) },
       () => !this.syncing && !this.consolidating && agentOff() === null,
       lineLog,
     );
@@ -774,6 +778,23 @@ export class Engine implements EngineService {
     const request = this.catchUps.request(topicId);
     const message = request === 'queued' ? 'Glance queued: its topic is being caught up, one more run follows.' : 'Writing the glance…';
     return { ok: true, message, undoToken: null };
+  }
+
+  async refreshGlanceOnLook(prKey: PrKey): Promise<GlanceLookResult> {
+    const { store, now } = this.deps;
+    if (this.toolHealth.agentOffReason() !== null || this.catchUpCap.perDay === 0 || this.catchUpCap.remaining() === 0) {
+      return { outcome: 'blocked' };
+    }
+    if (this.syncing || this.consolidating || !store.prs.get(prKey)) {
+      return { outcome: 'skipped' };
+    }
+    if (!this.topicCatchUp.needsGlance(prKey)) {
+      return { outcome: 'current' };
+    }
+    const topicId = Board.load(store, now().toISOString()).memberships.get(prKey)?.topicId ?? null;
+    const request = this.catchUps.requestGlance(topicId, prKey);
+    (this.deps.syncLog ?? console.log)(`catch-up ${topicId ?? 'unsorted'} glance ${prKey}: looked at, ${request}`);
+    return { outcome: request };
   }
 
   async refreshOnFocus(prKeys: PrKey[]): Promise<void> {

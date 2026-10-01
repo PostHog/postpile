@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TileView } from '@postpile/core';
 import { usePr } from '../api/pr.ts';
+import { useGlanceLook } from '../lib/use-glance-look.ts';
 import { ActionBar } from './ActionBar.tsx';
 import { AskComposer } from './AskComposer.tsx';
 import { DetailContext } from './DetailContext.tsx';
@@ -24,6 +25,8 @@ const paneFrame = 'flex min-h-0 flex-col bg-surface shadow-[inset_1px_0_0_var(--
 /** Right pane: the selected tile's context header, then one of its PRs in full. */
 export function DetailPane(props: DetailPaneProps) {
   const pr = usePr(props.prKey);
+  // A stale glance on the PR open here is rewritten once it stayed open a moment (refresh on look).
+  useGlanceLook(props.prKey, pr.data ?? null);
   const [chatOpen, setChatOpen] = useState(false);
   const [askingFor, setAskingFor] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState('');

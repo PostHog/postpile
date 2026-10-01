@@ -24,6 +24,10 @@ function groupByTopic(targets: GlanceTarget[]): Map<string | null, GlanceTarget[
   return groups;
 }
 
+function isInScope(target: GlanceTarget, scope: TopicScope): boolean {
+  return target.topicId === scope.topicId && (scope.prKeys === undefined || scope.prKeys.includes(target.item.pr.key));
+}
+
 /**
  * Glances as a view written from the topic dossier: per topic, the pinged
  * PRs whose glance input changed, 18 per call, unread tiles first within a
@@ -154,13 +158,14 @@ export class GlanceBatchWriter {
    * dossiers: the running dossier updates. Each topic's glances start as soon
    * as its own dossier settled, not after every dossier; topics whose update
    * the budget skipped get none (glancing them now would pay twice). A glance
-   * catch-up run passes its topic as scope: only that topic's PRs.
+   * catch-up run passes its topic as scope: only that topic's PRs (and with
+   * `scope.prKeys`, a refresh on look, only those).
    */
   async run(dossiers: Pick<DossierRun, 'skippedByBudget' | 'settled'>, scope: TopicScope | null = null): Promise<void> {
     const { store, viewer, contexts } = this.deps;
     const board = Board.load(store, this.deps.now().toISOString());
     const inputs = new GlanceInputs(store, board, viewer, contexts);
-    const inScope = inputs.targets().filter((target) => scope === null || target.topicId === scope.topicId);
+    const inScope = inputs.targets().filter((target) => scope === null || isInScope(target, scope));
     const targets = this.withoutSkipped(inScope, dossiers.skippedByBudget);
     const byKey = new Map<PrKey, GlanceTarget>();
 

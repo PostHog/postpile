@@ -39,6 +39,7 @@ import type {
   MemorySources,
   MemoryTarget,
   NotificationDebugRow,
+  GlanceLookResult,
   OpenedReadResult,
   QuietReadView,
   PendingProposals,
@@ -117,6 +118,15 @@ export interface EngineService {
    * is going). Local: agent calls only, never a GitHub write.
    */
   retryGlance(prKey: PrKey): Promise<ActionResult>;
+  /**
+   * The PR stayed open in the detail pane with a stale glance (DESIGN.md
+   * "Glance refresh on look"): checks the input hash again and, when the
+   * glance is still behind, runs a glance-only catch-up for that PR from
+   * the topic's dossier as it is. Folded into a run for its topic that is
+   * going or queued; counts against the daily catch-up cap; nothing over it
+   * or with catch-up off. Local: agent calls only, never a GitHub write.
+   */
+  refreshGlanceOnLook(prKey: PrKey): Promise<GlanceLookResult>;
   /**
    * The window got focus: one poll cycle now, unless one started less than
    * 15s ago, none ran yet, or the poll is off or paused by the quota. prKeys are the PRs the

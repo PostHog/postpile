@@ -4,6 +4,7 @@ import type {
   ActionResult,
   ChatReply,
   GitHubWritesChange,
+  GlanceLookResult,
   InstructionsChatReply,
   InstructionsProposalReply,
   InstructionsSaveResult,
@@ -71,6 +72,22 @@ describe('server routes over the fake engine', () => {
     expect(res.json).toMatchObject({ ok: true, message: 'Writing the glance…' });
     expect(((await (await app.request(path)).json()) as PrDetail).glanceState).toBe('queued');
     await vi.waitFor(async () => expect(((await (await app.request(path)).json()) as PrDetail).glanceState).toBe('ready'));
+  });
+
+  it('rewrites the stale sample glance when looked at: writing, then current', async () => {
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, catchUpStepMs: 5 }));
+    const stale = (await allRows(app)).find((row) => row.glanceStale);
+    expect(stale).toBeDefined();
+    const path = `/api/prs/${stale!.key.replace('#', '/')}`;
+    expect(((await (await app.request(path)).json()) as PrDetail).glanceRefreshBlock).toBeNull();
+
+    const res = await post<GlanceLookResult>(app, `${path}/glance/look`);
+
+    expect(res.json).toEqual({ outcome: 'started' });
+    expect(((await (await app.request(path)).json()) as PrDetail).glanceState).toBe('writing');
+    expect((await post<GlanceLookResult>(app, `${path}/glance/look`)).json).toEqual({ outcome: 'covered' });
+    await vi.waitFor(async () => expect(((await (await app.request(path)).json()) as PrDetail).glanceStale).toBe(false));
+    expect((await post<GlanceLookResult>(app, `${path}/glance/look`)).json).toEqual({ outcome: 'current' });
   });
 
   it('shows the inbox cleanup on sample data and parks it while locked', async () => {

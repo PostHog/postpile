@@ -17,6 +17,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - After this update, PostPile tidies your topics once more: it sorts them into projects and standing topics, folds the pieces of one standard into one topic, and renames a topic named after one step of its goal. PRs you moved by hand stay where you put them.
 - A topic with nothing left moves to the Archive 2 days after the last human activity (was 3 days of any activity). Deploy, CI and bot comments after a merge no longer keep it in the sidebar.
 - The sidebar's "Finished" drawer is now "Archive".
+- An out-of-date assessment is rewritten when you look at the PR: keep it open in the detail pane for a moment and it says "Updating now" instead of waiting up to an hour for the next sync. Only the PR you look at is rewritten, and it counts against the daily catch-up limit (`POSTPILE_CATCHUP_CAP`). The note says "next sync" only when that limit is spent or catch-up is off.
 
 ## 0.13.3 (2026-10-01)
 

@@ -13,6 +13,7 @@ import type {
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
+  GlanceLookResult,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposal,
@@ -143,6 +144,12 @@ export interface Actions {
   removeTeamRequest(prKey: PrKey, team: string): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
+  /**
+   * The PR stayed open with a stale glance (`useGlanceLook`): the server
+   * writes a new one when it is still behind and a refresh can run. Quiet
+   * (no toast, no busy key). Agent calls only, not a GitHub write.
+   */
+  refreshGlanceOnLook(prKey: PrKey): Promise<void>;
   /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
   markRead(tileId: string, afterRead?: TileAfterRead): Promise<void>;
   /** The topic's ✨ "Mark N read": the covered tiles as one batch with one Undo. `skipped` only words the toast. */
@@ -543,6 +550,18 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function refreshGlanceOnLook(prKey: PrKey): Promise<void> {
+    try {
+      const result = await request<GlanceLookResult>('POST', `${prPath(prKey)}/glance/look`);
+      // A run started or queued: refetch now, so the card says "Updating now" without waiting for the live status.
+      if (result.outcome === 'started' || result.outcome === 'queued') {
+        await refreshAll();
+      }
+    } catch {
+      // Nobody clicked anything, so nothing to report: the next open or sync tries again.
+    }
+  }
+
   async function setRepoScope(repo: string | null): Promise<void> {
     try {
       await withBusy('repos', () => request<RepoOverview>('POST', '/api/repos/scope', { repo }));
@@ -820,6 +839,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markTopicSeen,
     archiveTopic,
     markOpenedRead,
+    refreshGlanceOnLook,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     chat,

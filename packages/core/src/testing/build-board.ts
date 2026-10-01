@@ -850,6 +850,7 @@ function prRowInputs(board: PropertyBoard, tile: Tile, state: TileState, viewer:
         glance: verdict === null ? null : { verdict, forYou: 'Routed to your team; nothing risky.', risk: board.glanceRisks.get(pr.key) ?? RISK_LINES.low },
         glanceStale: board.staleGlances.has(pr.key),
         glanceGap: null,
+        glanceRefreshBlock: null,
         glanceState: verdict === null ? 'none' : 'ready',
         quietRepo: false,
         repoLabel: null,

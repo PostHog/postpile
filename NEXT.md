@@ -1106,6 +1106,15 @@ the app meanwhile.
   "Archive now" in a box in the topic's action row, at the Approve height,
   skips the wait (user picked the box over a header button or a sidebar row
   action). "Finished" drawer renamed "Archive"; code keeps `retired`.
+- **Refresh a stale glance on look** (2026-10-01, DESIGN.md "Glance
+  refresh on look"): a PR shown in the detail pane for 1.5s with a stale
+  glance asks for a glance-only catch-up of that PR, from the topic's
+  dossier as it is. Coalesced with the topic's catch-up queue, counted
+  against the daily catch-up cap, nothing over it or with catch-up off.
+  Owner: the hourly sync is too slow when they are looking at the PR; only
+  opened PRs refresh, so the cost stays low. The stale note says "next
+  sync" only when the refresh can't run (`glanceRefreshBlock`). Automatic,
+  so "No manual refresh per PR or topic" (2026-09-29) stays.
 - **Bots on your own open PR clear quietly too** (2026-10-01, DESIGN.md
   "Handled quietly" rule 2, removed): a bot's review or inline comment no
   longer keeps your own open PR unread. Owner: "I never care about bot

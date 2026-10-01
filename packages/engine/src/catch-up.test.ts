@@ -160,3 +160,87 @@ describe('Engine.retryGlance', () => {
     expect((await h.engine.retryGlance(pr.key)).ok).toBe(false);
   });
 });
+
+/** The stored glance reads as made for an older input (new commits, say): stale, as the read model sees it. */
+function makeGlanceStale(h: Harness, key: PrKey): void {
+  const glance = h.store.glances.get(key);
+  h.store.glances.put({ ...glance!, inputHash: 'an-older-input' });
+}
+
+describe('Engine.refreshGlanceOnLook', () => {
+  it('rewrites a stale glance from the dossier as it is, shown as writing meanwhile', async () => {
+    const { h, pr } = await syncedTopic();
+    makeGlanceStale(h, pr.key);
+    expect((await h.engine.getPr(pr.key))?.glanceRefreshBlock).toBeNull();
+    const dossierCalls = h.agent.dossierInputs.length;
+    const glanceCalls = h.agent.glanceInputs.length;
+
+    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'started' });
+    expect(await glanceState(h, pr.key)).toBe('writing');
+
+    await vi.waitFor(async () => expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false));
+    expect(await glanceState(h, pr.key)).toBe('ready');
+    expect(h.agent.glanceInputs.length).toBe(glanceCalls + 1);
+    expect(h.agent.glanceInputs.at(-1)?.items.map((item) => item.pr.key)).toEqual([pr.key]);
+    // No dossier update: the dossier is used as it is.
+    expect(h.agent.dossierInputs.length).toBe(dossierCalls);
+    expect(h.store.dossiers.latest('depot')?.version).toBe(1);
+    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:glance:/)]);
+  });
+
+  it('makes no call for an up-to-date glance', async () => {
+    const { h, pr } = await syncedTopic();
+    const glanceCalls = h.agent.glanceInputs.length;
+
+    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'current' });
+
+    await h.engine.livePollStatus();
+    expect(h.agent.glanceInputs.length).toBe(glanceCalls);
+    expect(catchUpRunIds(h)).toEqual([]);
+  });
+
+  it('makes no call over the daily cap, and says the next sync writes it', async () => {
+    // One catch-up call a day: the first refresh takes it.
+    const { h, pr } = await syncedTopic({ catchUpCallsPerDay: 1 });
+    makeGlanceStale(h, pr.key);
+    await h.engine.refreshGlanceOnLook(pr.key);
+    await vi.waitFor(async () => expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false));
+    makeGlanceStale(h, pr.key);
+    const glanceCalls = h.agent.glanceInputs.length;
+
+    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'blocked' });
+
+    expect(h.agent.glanceInputs.length).toBe(glanceCalls);
+    const detail = await h.engine.getPr(pr.key);
+    expect(detail?.glanceRefreshBlock).toBe('daily_cap');
+    expect(detail?.glanceState).toBe('ready');
+  });
+
+  it('makes no call with catch-up off (cap 0)', async () => {
+    const { h, pr } = await syncedTopic({ catchUpCallsPerDay: 0 });
+    makeGlanceStale(h, pr.key);
+
+    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'blocked' });
+    expect((await h.engine.getPr(pr.key))?.glanceRefreshBlock).toBe('catch_up_off');
+    expect(catchUpRunIds(h)).toEqual([]);
+  });
+
+  it('adds no run while a catch-up for its topic is going or queued', async () => {
+    const { h, pr } = await syncedTopic();
+    askViewer(h, pr, 'c1', 'etag-2');
+    const release = h.agent.holdDossier('depot');
+    await h.engine.pollOnce();
+    // The topic's catch-up runs (its dossier call is held); its glance step comes after the dossier.
+    await vi.waitFor(() => expect(h.agent.dossierInputs).toHaveLength(2));
+    makeGlanceStale(h, pr.key);
+    expect(await glanceState(h, pr.key)).toBe('writing');
+
+    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'covered' });
+
+    release();
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    await vi.waitFor(async () => expect(await glanceState(h, pr.key)).toBe('ready'));
+    // Only the topic's own run: no glance-only run was added.
+    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:\d/)]);
+  });
+});

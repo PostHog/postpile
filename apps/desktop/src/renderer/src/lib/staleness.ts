@@ -31,18 +31,28 @@ export function staleBadge(reasonLabel: string, updating: boolean): string {
   return `${staleWord(updating)} · ${reasonLabel}`;
 }
 
-/** The one line in a stale verdict box, in place of its advice lines. */
-export function staleGlanceNote(updating: boolean): string {
-  return updating
-    ? 'Written before the last change. Updating now: a new assessment is being written.'
-    : 'Written before the last change. A new assessment will be written on the next sync.';
+/**
+ * The one line in a stale verdict box, in place of its advice lines.
+ * `waitsForSync`: the server says looking at the PR cannot rewrite it
+ * (`glanceRefreshBlock` set: daily cap spent, catch-up or agent off), so
+ * only the next sync will (DESIGN.md "Glance refresh on look").
+ */
+export function staleGlanceNote(updating: boolean, waitsForSync: boolean): string {
+  if (updating) {
+    return 'Written before the last change. Updating now: a new assessment is being written.';
+  }
+  return waitsForSync
+    ? 'Written before the last change. A new assessment will be written on the next sync.'
+    : 'Written before the last change. A new assessment is written when you stay on this PR.';
 }
 
-/** The verdict chip's tooltip on a stale glance. */
-export function staleVerdictTitle(updating: boolean): string {
-  return updating
-    ? 'Updating now: this verdict was written before the last change to the PR or your instructions.'
-    : 'Out of date: this verdict was written before the last change to the PR or your instructions. The next sync writes a new one.';
+/** The verdict chip's tooltip on a stale glance; `waitsForSync` as in `staleGlanceNote`. */
+export function staleVerdictTitle(updating: boolean, waitsForSync: boolean): string {
+  if (updating) {
+    return 'Updating now: this verdict was written before the last change to the PR or your instructions.';
+  }
+  const next = waitsForSync ? 'The next sync writes a new one.' : 'Opening the PR writes a new one.';
+  return `Out of date: this verdict was written before the last change to the PR or your instructions. ${next}`;
 }
 
 /** Under "Since you last looked" when the dossier trails the event log: "Updating now: 3 newer events." */

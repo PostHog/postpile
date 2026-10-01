@@ -63,7 +63,15 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
  * (`lib/staleness.ts`). Without a verdict it says where the glance stands
  * (`glanceStateText`). Same height as the "for whom" chip.
  */
-export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; updating?: boolean; greyed?: boolean; missing?: GlanceStateText | null }) {
+export function VerdictPill(props: {
+  verdict: Verdict | null;
+  stale?: boolean;
+  updating?: boolean;
+  /** Only the next sync rewrites a stale verdict (`glanceRefreshBlock` set), not opening the PR. */
+  waitsForSync?: boolean;
+  greyed?: boolean;
+  missing?: GlanceStateText | null;
+}) {
   if (!props.verdict) {
     const text = props.missing;
     const tone = text?.problem ? 'border-status-bad text-status-bad' : 'border-frame text-hint';
@@ -82,7 +90,7 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; u
   return (
     <span
       className={`flex h-5 shrink-0 items-center gap-[5px] rounded-full pr-2 pl-1.5 text-[11px] font-semibold whitespace-nowrap inset-ring ${tone}`}
-      title={props.stale ? staleVerdictTitle(props.updating ?? false) : undefined}
+      title={props.stale ? staleVerdictTitle(props.updating ?? false, props.waitsForSync ?? true) : undefined}
     >
       {verdict.icon}
       {verdict.label}
