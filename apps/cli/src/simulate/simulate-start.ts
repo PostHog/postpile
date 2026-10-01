@@ -8,7 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { ALL_AGENT_JOBS, buildStacks, planRounds, roundPrKeys, simulationNow, type AgentJob, type IsoTime, type PrKey, type SimulationPullIn, type SimulationRound } from '@postpile/core';
-import { ArmDatabase, BACKLOG_SYNC_MINUTES, readArmSnapshot, startFresh } from '@postpile/engine';
+import { ArmDatabase, BACKLOG_SYNC_MINUTES, readArmSnapshot, STACK_DEPTH, startFresh } from '@postpile/engine';
 import { Store } from '@postpile/store';
 import { formatReportMarkdown } from './report-markdown.ts';
 import { buildReport, type ReportMeta, type RoundRecord, type SimulationReport } from './report.ts';
@@ -108,15 +108,21 @@ async function copyDatabase(from: string, to: string): Promise<void> {
 /**
  * Stack layers as a fresh sync would pull them in, from today's stack shape:
  * every stored PR nobody tracks (no thread, not found) comes in with each
- * tracked PR of its current stack. Stored pull-in rows are not used: they
- * outlive later syncs and keep the anchor a layer had before a rebase.
+ * tracked PR of its current stack at most STACK_DEPTH layers away, the
+ * sync's own walk limit. Stored pull-in rows are not used: they outlive
+ * later syncs and keep the anchor a layer had before a rebase.
  */
 export function currentPullIns(store: Store, tracked: Set<PrKey>): SimulationPullIn[] {
   const pullIns: SimulationPullIn[] = [];
   for (const stack of buildStacks(store.prs.listAll())) {
-    const anchors = stack.prKeys.filter((key) => tracked.has(key));
-    for (const key of stack.prKeys.filter((key) => !tracked.has(key))) {
-      anchors.forEach((anchor) => pullIns.push({ prKey: key, anchorPrKey: anchor }));
+    const keys = stack.prKeys;
+    for (let layer = 0; layer < keys.length; layer++) {
+      for (let anchor = 0; anchor < keys.length; anchor++) {
+        const close = Math.abs(layer - anchor) <= STACK_DEPTH;
+        if (close && !tracked.has(keys[layer]!) && tracked.has(keys[anchor]!)) {
+          pullIns.push({ prKey: keys[layer]!, anchorPrKey: keys[anchor]! });
+        }
+      }
     }
   }
   return pullIns;
@@ -128,7 +134,12 @@ function planSimulation(store: Store, options: SimulateStartOptions): Plan {
     (row) => ({ key: row.pr_key, unread: row.unread !== 0, updatedAt: row.updated_at }),
   );
   const prs = store.db.prepare('SELECT key, updated_at FROM pr').all() as { key: string; updated_at: string }[];
-  const newest = options.now ?? simulationNow([...threads.map((thread) => thread.updatedAt), ...prs.map((pr) => pr.updated_at)]);
+  const newestStored = simulationNow([...threads.map((thread) => thread.updatedAt), ...prs.map((pr) => pr.updated_at)]);
+  // The copies hold every snapshot and event up to the newest activity, so an earlier "now" would feed later activity into the rounds.
+  if (options.now !== null && newestStored !== null && new Date(options.now).getTime() < new Date(newestStored).getTime()) {
+    throw new Error(`--now ${options.now} is before the newest stored activity (${new Date(newestStored).toISOString()}); pick that time or later`);
+  }
+  const newest = options.now ?? newestStored;
   // Written as toISOString writes it: snapshots compare round times with agent_call.at and pr_set_change.at as strings.
   const now = newest === null ? new Date().toISOString() : new Date(newest).toISOString();
   const found = [...store.foundPrs.listAll().keys()];

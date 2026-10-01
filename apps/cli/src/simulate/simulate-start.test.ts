@@ -106,6 +106,12 @@ describe('simulateStart', () => {
     expect(readFileSync(join(other, 'report.json'), 'utf8')).toBe('mine');
   });
 
+  it('refuses a --now before the newest stored activity', async () => {
+    const from = await sourceDatabase();
+
+    await expect(simulateStart({ ...options(from), now: '2000-01-01T00:00:00.000Z' }, async () => {}, () => {})).rejects.toThrow('before the newest stored activity');
+  });
+
   it('refuses a source without a viewer before copying anything', async () => {
     const from = join(dir, 'never-synced.sqlite');
     Store.open(from).close();
@@ -192,6 +198,17 @@ describe('currentPullIns', () => {
 
     const tracked = new Set([oldAnchor.key, newAnchor.key]);
     expect(currentPullIns(store, tracked)).toEqual([{ prKey: rebased.key, anchorPrKey: newAnchor.key }]);
+    store.close();
+  });
+
+  it('pulls in layers only as far as the sync walks from a tracked PR', () => {
+    const store = Store.open(':memory:');
+    const chain = Array.from({ length: 9 }, (_, i) => makePr({ number: i + 1, baseRef: i === 0 ? 'main' : `s${i}`, headRef: `s${i + 1}` }));
+    chain.forEach((pr) => store.prs.upsert(pr, at(0)));
+
+    const layers = currentPullIns(store, new Set([chain[0]!.key])).map((pullIn) => pullIn.prKey);
+
+    expect(layers).toEqual(chain.slice(1, 7).map((pr) => pr.key));
     store.close();
   });
 });
