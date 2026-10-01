@@ -55,6 +55,14 @@ describe('DataDirLock', () => {
     lock.release();
   });
 
+  it('records the process start as ps reports it, so the holder check agrees', () => {
+    const db = tempDb();
+    const lock = DataDirLock.acquire(db, 'dev');
+    expect(lock.info.processStartedAt).toBe(new Date(processStartTime(process.pid)!).toISOString());
+    expect(runningApp(db)?.pid).toBe(process.pid);
+    lock.release();
+  });
+
   it('refuses while the holder is the same process it names, by start time', () => {
     const db = tempDb();
     const started = processStartTime(process.ppid);
