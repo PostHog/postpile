@@ -146,6 +146,12 @@ describe('dossierUpdatePrompt', () => {
     const first = dossierInput({ previous: null });
     expect(dossierUpdatePrompt(first, new DossierRefs(first))).toContain('None yet. This is the first write-up');
   });
+
+  it('tells the agent a standing topic never finishes, and leaves a project as it was', () => {
+    const standing = dossierInput({ topic: makeTopic({ kind: 'standing' }) });
+    expect(dossierUpdatePrompt(standing, new DossierRefs(standing))).toContain('It is a standing topic: one standard kept up for months');
+    expect(prompt).not.toContain('It is a standing topic');
+  });
 });
 
 describe('glanceBatchPrompt', () => {

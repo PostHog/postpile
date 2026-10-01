@@ -47,22 +47,30 @@ export function lastJoinAt(memberships: Pick<TopicMembership, 'createdAt'>[]): I
 }
 
 /**
- * Whether a topic still takes new PRs: every active topic; a project in the
- * Archive for 30 days after it got there; a standing topic in the Archive
- * until half a year passed without a PR joining it. Past that a topic is
- * retired for good: the agent no longer offers it and the Archive drawer
- * drops it. A merged-away topic never takes any.
+ * When a topic in the Archive stops taking new PRs and retires for good: a
+ * project 30 days after it got there, a standing topic half a year after the
+ * last PR joined it (or after it got there, without a join on record). Null
+ * for a topic not in the Archive.
+ */
+export function archiveEndsAt(topic: Pick<Topic, 'status' | 'kind' | 'retiredAt'>, lastJoin: IsoTime | null): IsoTime | null {
+  if (topic.status !== 'retired' || topic.retiredAt === null) {
+    return null;
+  }
+  const from = topic.kind === 'standing' ? (lastJoin ?? topic.retiredAt) : topic.retiredAt;
+  const span = topic.kind === 'standing' ? STANDING_IDLE_MS : PROJECT_ARCHIVE_MS;
+  return new Date(new Date(from).getTime() + span).toISOString();
+}
+
+/**
+ * Whether a topic still takes new PRs: every active topic, and a topic in
+ * the Archive until `archiveEndsAt`. Past that it is retired for good: the
+ * agent no longer offers it and the Archive drawer drops it. A merged-away
+ * topic never takes any.
  */
 export function takesNewPrs(topic: Pick<Topic, 'status' | 'kind' | 'retiredAt'>, lastJoin: IsoTime | null, now: Date): boolean {
   if (topic.status === 'active') {
     return true;
   }
-  if (topic.status !== 'retired' || topic.retiredAt === null) {
-    return false;
-  }
-  if (topic.kind === 'standing') {
-    const since = lastJoin ?? topic.retiredAt;
-    return now.getTime() - new Date(since).getTime() < STANDING_IDLE_MS;
-  }
-  return now.getTime() - new Date(topic.retiredAt).getTime() < PROJECT_ARCHIVE_MS;
+  const ends = archiveEndsAt(topic, lastJoin);
+  return ends !== null && now.getTime() < new Date(ends).getTime();
 }

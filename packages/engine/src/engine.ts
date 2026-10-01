@@ -118,6 +118,8 @@ import { OpenedReads } from './actions/opened-reads.ts';
 import type { AgentCallLog } from './agent-call-log.ts';
 import { AutoSyncSchedule } from './auto-sync.ts';
 import { Board } from './board.ts';
+import { RetireGate } from './consolidation/retire-gate.ts';
+import { changeTopicStatus } from './topic-status.ts';
 import { CatchUpCap } from './catch-up/catch-up-cap.ts';
 import { CatchUpQueue } from './catch-up/catch-up-queue.ts';
 import { TopicCatchUp } from './catch-up/topic-catch-up.ts';
@@ -1172,6 +1174,24 @@ export class Engine implements EngineService {
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {
     return this.memoryActions.markTopicSeen(topicId);
+  }
+
+  /**
+   * "Archive now": a topic with nothing left moves to the Archive without
+   * waiting its 2 quiet days. It comes back like any topic there: a new PR,
+   * or a thread turning unread.
+   */
+  async archiveTopic(topicId: string): Promise<ActionResult> {
+    const { store } = this.deps;
+    const at = this.deps.now().toISOString();
+    if (!new RetireGate(Board.load(store, at)).nothingLeft(topicId)) {
+      return { ok: false, message: 'Something in this topic is still open or unread', undoToken: null };
+    }
+    if (!changeTopicStatus(store, topicId, 'retire', at)) {
+      return { ok: false, message: 'This topic is not in the sidebar', undoToken: null };
+    }
+    this.telemetry.capture('topic_archived', {});
+    return { ok: true, message: 'Moved to the Archive', undoToken: null };
   }
 
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {

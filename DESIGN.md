@@ -49,7 +49,7 @@ seven days (`simulate-start`) gave 150 topics for about 260 PRs, 109 of them
 with one PR: the agent took each PR's own change as its goal, and one
 project of the user's came out as three topics. The assignment prompt now
 carries `TOPIC_SIZE_EXAMPLES`: a topic is a project someone drives for days to
-weeks ("would the driver name it in a weekly update?"), with right-size,
+weeks (or, since the same evening, a standing topic: see "Topic kinds") ("would the driver name it in a weekly update?"), with right-size,
 too-small and too-big examples; a project named in the user's work context is
 the topic for their PRs; the same person on the same product in the same
 stretch of time is usually one project. How PRs are fed changed too: batches
@@ -59,10 +59,35 @@ whole backlog as one fenced line per PR; a new topic comes with a one-sentence
 goal, kept as its summary until the first dossier, so later batches see what
 it is for. Routed one-off PRs still get a topic each.
 
-**Topic status**: `active`, `retired` (finished) or `archived` (merged
-away, never comes back). Every full sync ends by retiring each active topic
-that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR
-merged or closed, no events for 3 days, every thread of the topic read on
+**Topic kinds** (2026-10-01): a topic is a `project` (one goal with a
+finish line) or `standing` (one standard kept up for months with no finish
+line, "Migration safety", "Code ownership"; its PRs come in waves). "A
+project of days to weeks" had split such standards into deliverables: a real
+database held migration safety as "Django migration runbook docs" and code
+ownership in four topics. `topic.kind` (migration 023, default `project`):
+the agent picks it for a new topic (`topicKind` in the assignment answer), the
+grain 3 tidy sorts existing ones, and `TOPIC_SIZE_EXAMPLES` describes both,
+with sub-parts of a standing topic as too small (a wave of them is a set) and
+a whole product as too big. The kind decides how long a topic in the Archive
+still takes new PRs (`takesNewPrs`, `archiveEndsAt`): a project 30 days after
+it got there, a standing topic until half a year passes without a PR joining
+it (the user's rule). Past that it is retired for good: the agent no longer
+offers it and the Archive drawer drops it. The topic list in the assignment
+prompt says each topic's kind, and a topic in the Archive says "Finished" or
+"Quiet for now"; a quiet standing topic takes the next PR of its standard
+however long it slept. A standing topic's dossier follows the current wave
+and never calls the topic finished (`STANDING_DOSSIER_RULE`). Research
+(PARA, GTD, Linear, Jira, Shape Up) found no third lifecycle worth a kind:
+incidents behave like short projects, chores are single tiles.
+
+**Topic status**: `active`, `retired` (in the Archive) or `archived`
+(merged away, never comes back). The app says "Archive" for retired topics;
+code keeps "retired" because "archived" already means merged away. Every
+full sync ends by retiring each active topic that passes the gate
+(`RetireGate`, `retireFinishedTopics`): every member PR merged or closed, no
+human activity for 2 days (2026-10-01; was any event for 3 days: deploys,
+CI and bot comments land after a merge and kept 18 of 32 finished topics of
+a real database in the sidebar), every thread of the topic read on
 GitHub (since 2026-09-30, "GitHub unread is PostPile unread") and every
 tile done (since 2026-09-29 evening; before, only "no unread or snoozed
 tile", which retired topics holding unseen merges without the user's
@@ -75,15 +100,25 @@ member thread unread on GitHub that the quiet reads would not clear by
 rule (`reviveUnreadTopics`, after the retire step of every full sync and in
 every poll that moved the inbox, also for topics an older build retired
 with an unread thread) or a new PR assigned to it
-(retired topics stay on offer for 30 days) makes it active again. Every
+(while it takes new PRs, see "Topic kinds") makes it active again. Every
 status change goes through `nextTopicStatus` (engine: `changeTopicStatus`),
 and retiring records `retiredAt` (migration 020; before, "retired at" read
 `updatedAt`, which any rename moved). Loud means effective loudness: the
 full sync classifies new events first (retired topics' events included) and
 revives after, so an event the agent turned quiet brings nothing back. The
 live poll does not classify and still revives on the rule's loudness. Retired
-topics leave the sidebar list and wait in its Finished drawer (see "Queue
-sections"). Until 2026-09-29 only the daily consolidation retired topics,
+topics leave the sidebar list and wait in its Archive drawer (see "Queue
+sections"). **Archive now** (2026-10-01): the topic's action row, where ✨
+Approve and "Mark N read" sit under the Tiles count, shows a box once nothing
+is left in the topic (every PR over, every thread read, every tile done;
+`TopicDetail.archive`, `TopicArchiveBox`): "Everything here is dealt with. It
+moves to the Archive by itself on <day>", and an "Archive now" button
+(`POST /api/topics/:id/archive`, refused while anything is open or unread;
+telemetry `topic_archived`) that skips the 2 quiet days. In the Archive the
+box says since when, what brings the topic back, and until when it takes new
+PRs. The renderer refetches the Archive list before the rest, so the open
+topic never sits in neither list (the view would fall back to another topic
+and pin it). Until 2026-09-29 only the daily consolidation retired topics,
 and only when the agent said finished and 14 quiet days had passed; most
 topics with every PR merged never left the sidebar.
 
@@ -989,7 +1024,7 @@ Output and what happens:
 | `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1. Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
 | `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
 | `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
-| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 3 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
+| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no human activity for 2 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
 
 Also deterministic, in the same run: retire topics that pass the gate and
 whose dossier status is `finished`. Dossier versions are pruned on every
@@ -2715,13 +2750,15 @@ avatars and filters", QueuesB2).
   team the code belongs to; only Needs reply ranks above it (as in
   ghatchup). An area is a label for where the code lives and never moves a
   topic between sections.
-- **Finished drawer** (2026-09-29): under the sections, a folded "Finished"
-  group header lists topics retired in the last 30 days, newest first
+- **Archive drawer** (2026-09-29 as "Finished", renamed 2026-10-01): under
+  the sections, a folded "Archive" group header lists retired topics that
+  still take new PRs (`takesNewPrs`: projects for 30 days, standing topics
+  until half a year without a new PR), newest first
   (`GET /api/topics/finished`, `FinishedTopic`: name and how long ago it
   retired, PR count in the tooltip). Quiet on purpose: muted names, no
   bubble, no faces, no count on the header. A row opens the topic like any
   other (`getTopic` and `tilesForTopic` work for a retired topic; the
-  breadcrumb says "Finished"). Search and the queue filters cover live
+  breadcrumb says "Archive"). Search and the queue filters cover live
   topics only, so the drawer hides while they narrow. Hidden when empty.
 - **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
   per tier over the PRs in the topic's tiles (each PR once), plus open PRs
@@ -3622,8 +3659,9 @@ decision: the first full sync after an upgrade that changes how topics are
 cut tidies them once, by itself, as part of the upgrade, with no proposals
 for the user to work through, and never in later syncs.
 
-- `TOPIC_GRAIN_VERSION` (engine `digest/topic-tidy.ts`, now 2: topics sized
-  like projects) against `meta.topic_grain_version`. A store below it runs
+- `TOPIC_GRAIN_VERSION` (engine `digest/topic-tidy.ts`; 2: topics sized
+  like projects; 3: project and standing topics, the same day) against
+  `meta.topic_grain_version`. A store below it runs
   `TopicTidy` once, inside the full sync's topics phase, before the topic
   assignment; the live poll never does. Raise the version with the next
   steering change that should reshape existing topics.
@@ -3632,13 +3670,20 @@ for the user to work through, and never in later syncs.
   window with "Tidying up your topics and tiles" and a spinner (0.13.1): the
   call takes a minute or two (about 2 minutes for 117 topics), and a click
   meanwhile could land on a topic about to merge or lose PRs.
-- One `topic_tidy` call (setup model, Opus) reads every active topic: name,
-  goal (dossier goal, else summary) and one line per PR (date, author,
+- One `topic_tidy` call (setup model, Opus) reads every topic that still
+  takes PRs, active or in the Archive (since grain 3: a quiet standing topic
+  needs its kind, or it would drop off after 30 days like a project): name,
+  kind, goal (dossier goal, else summary) and one line per PR (date, author,
   state, title), with the glossary, `TOPIC_SIZE_EXAMPLES`, instructions and
-  work context. It answers `merges` (topics that are one project: fold
-  `fromTopicIds` into `intoTopicId`, optional new name) and `splits` (PRs that
-  do not belong to their topic). `mapTidyAnswer` keeps only known topics, never
-  folds a merge target away, and a split must leave a PR behind.
+  work context. It answers `merges` (topics that are one goal: fold
+  `fromTopicIds` into `intoTopicId`, optional new name), `splits` (PRs that
+  do not belong to their topic; a new destination carries `newKind`),
+  `renames` (a topic named after one step of its goal) and `kinds` (only
+  topics whose kind is wrong). `mapTidyAnswer` keeps only known topics, never
+  folds a merge target away, a split must leave a PR behind, and a renamed or
+  re-kinded topic must stay. Renames are recorded like merges (accepted,
+  source `upgrade`). A topic in the Archive that gains PRs comes back; the
+  sync's retire step sends it back when nothing in it is open.
 - Merges move the PRs the way an accepted merge does (new `created_at`, so
   the target's next dossier update introduces them) and archive the merged-away
   topics; each is recorded as an accepted `merge` proposal with source
@@ -4641,7 +4686,8 @@ topic names are never event props.
    it at most once an hour after a sync or a poll cycle, window end kept in
    meta `pings_summarized_at`; nothing when every count is 0, the first call
    only starts the clock; no per-notification events), `search_used` (throttled, query length bucket only),
-   `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked`
+   `queue_filter_changed`, `topic_opened` (section), `topic_archived` ("Archive
+   now" on a topic with nothing left), `update_pill_clicked`
    (the title bar pill opened) / `update_later_clicked`, `update_bar_shown`
    (releases_behind capped at 10, hours_behind rounded; once per app run) /
    `update_bar_later_clicked`,

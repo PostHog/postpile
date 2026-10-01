@@ -5,10 +5,10 @@ import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { readThreadsOnGitHub, topicWithPrs } from './testing/topics.ts';
 
-/** Four days after the fixture PRs' activity: past the 3 quiet days. */
+/** Days after the fixture PRs' activity (2026-09-01): past the 2 quiet days, or not. */
 const FOUR_DAYS_LATER = new Date('2026-09-05T12:00:00Z');
-/** Two days after the fixture PRs' activity: not quiet long enough. */
 const TWO_DAYS_LATER = new Date('2026-09-03T12:00:00Z');
+const ONE_DAY_LATER = new Date('2026-09-02T12:00:00Z');
 
 function mergedPr(number: number): Pr {
   return reviewRequestedPr(number, { state: 'MERGED', mergedAt: at(5), mergedBy: 'alice' });
@@ -24,7 +24,7 @@ async function syncedAndRead(h: Harness, prs: Pr[]): Promise<void> {
 }
 
 describe('Engine.sync retires finished topics', () => {
-  it('retires a topic whose PRs are all merged, quiet for 3 days, with nothing unread', async () => {
+  it('retires a topic whose PRs are all merged, quiet for 2 days, with nothing unread', async () => {
     const h = makeHarness({ now: () => FOUR_DAYS_LATER });
     await syncedAndRead(h, [mergedPr(1)]);
 
@@ -131,13 +131,25 @@ describe('Engine.sync retires finished topics', () => {
     expect(h.store.topics.get('depot')?.status).toBe('retired');
   });
 
-  it('keeps a topic that has been quiet for less than 3 days', async () => {
-    const h = makeHarness({ now: () => TWO_DAYS_LATER });
+  it('keeps a topic that has been quiet for less than 2 days', async () => {
+    const h = makeHarness({ now: () => ONE_DAY_LATER });
     await syncedAndRead(h, [mergedPr(1)]);
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
     expect(h.store.topics.get('depot')?.status).toBe('active');
+  });
+
+  it('does not let bot comments after the merge hold a finished topic back', async () => {
+    const h = makeHarness({ now: () => TWO_DAYS_LATER });
+    const deployedAt = '2026-09-03T10:00:00.000Z';
+    const pr = { ...mergedPr(1), comments: [makeComment({ id: 'c9', author: 'deploy-bot[bot]', body: 'Deployed to production', createdAt: deployedAt })] };
+    await syncedAndRead(h, [pr]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.store.events.listForPr(pr.key).some((event) => event.isBot && event.at === deployedAt)).toBe(true);
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
   });
 
   it('brings a retired topic back when a new event arrives, and keeps it while unread', async () => {
@@ -268,5 +280,29 @@ describe('Engine.sync retires finished topics', () => {
     h.reader.etag = 'etag-3';
     await h.engine.sync({ maxAgentCalls: 0 });
     expect(h.store.topics.get('depot')?.status).toBe('retired');
+  });
+
+  it('offers Archive now on a topic with nothing left before its quiet days are up', async () => {
+    const h = makeHarness({ now: () => ONE_DAY_LATER });
+    await syncedAndRead(h, [mergedPr(1)]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const box = (await h.engine.getTopic('depot'))?.archive;
+    expect(box?.state).toBe('ready');
+    expect(box!.at > ONE_DAY_LATER.toISOString()).toBe(true);
+
+    const result = await h.engine.archiveTopic('depot');
+
+    expect(result.ok).toBe(true);
+    expect(h.store.topics.get('depot')?.status).toBe('retired');
+    expect((await h.engine.getTopic('depot'))?.archive).toEqual({ state: 'archived', at: ONE_DAY_LATER.toISOString(), until: '2026-10-02T12:00:00.000Z' });
+  });
+
+  it('refuses Archive now while a PR is open, and shows no box', async () => {
+    const h = makeHarness({ now: () => ONE_DAY_LATER });
+    await syncedAndRead(h, [reviewRequestedPr(1)]);
+
+    expect((await h.engine.getTopic('depot'))?.archive).toBeNull();
+    expect((await h.engine.archiveTopic('depot')).ok).toBe(false);
+    expect(h.store.topics.get('depot')?.status).toBe('active');
   });
 });

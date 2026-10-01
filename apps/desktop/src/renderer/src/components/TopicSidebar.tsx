@@ -243,7 +243,7 @@ function FinishedDrawer(props: { open: boolean; onToggle: () => void; activeTopi
   }
   return (
     <div className="flex flex-col gap-px">
-      <GroupHeader small label="Finished" open={props.open} onToggle={props.onToggle} flipKey="group:finished" />
+      <GroupHeader small label="Archive" open={props.open} onToggle={props.onToggle} flipKey="group:finished" />
       {props.open &&
         finished.map((topic) => {
           const active = topic.id === props.activeTopicId;
@@ -329,7 +329,7 @@ type SectionKey = string;
 /**
  * Inside Other topics, Routed and FYI start folded: they are other teams'
  * work. Topics that need you never hide in them, they are listed under
- * "Needs you" whatever their relation. Finished starts folded too.
+ * "Needs you" whatever their relation. The Archive starts folded too.
  */
 const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi', 'finished'];
 

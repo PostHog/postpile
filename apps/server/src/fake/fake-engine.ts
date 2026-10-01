@@ -76,6 +76,7 @@ import type {
   PrApproveResult,
   ToolsView,
   Topic,
+  TopicArchiveBox,
   TopicDetail,
   TopicListItem,
   TopicQueues,
@@ -105,6 +106,7 @@ import {
   prReadScope,
   deriveTileState,
   takesNewPrs,
+  archiveEndsAt,
   snoozeWrites,
   eventView,
   compareTopicUrgency,
@@ -982,9 +984,20 @@ export class FakeEngine implements EngineService {
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback),
       agent: topicAgentOffers(tiles),
+      archive: this.archiveBox(topic, tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
       section: topicSection(this.topicQueuesOf(topicTiles)),
     };
+  }
+
+  /** Like the engine's, simpler: samples keep no join times or events, so "ready" means every tile is done and it would go in a day. */
+  private archiveBox(topic: Topic, tiles: TileView[]): TopicArchiveBox | null {
+    if (topic.status === 'retired') {
+      const until = archiveEndsAt(topic, null);
+      return until !== null && topic.retiredAt !== null ? { state: 'archived', at: topic.retiredAt, until } : null;
+    }
+    const nothingLeft = topic.status === 'active' && tiles.length > 0 && tiles.every((view) => view.state.kind === 'done');
+    return nothingLeft ? { state: 'ready', at: new Date(this.now().getTime() + 24 * 3_600_000).toISOString() } : null;
   }
 
   /** Same matcher as the engine, over the sample topics the sidebar lists. */
@@ -1560,6 +1573,19 @@ export class FakeEngine implements EngineService {
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     return this.memory.decideRuleProposal(proposalId, accept, this.data.topics);
+  }
+
+  async archiveTopic(topicId: string): Promise<ActionResult> {
+    const topic = this.data.topics.find((candidate) => candidate.id === topicId);
+    if (!topic) {
+      return fail(`no topic ${topicId}`);
+    }
+    if (this.archiveBox(topic, this.topicTileViews(topicId))?.state !== 'ready') {
+      return fail('Something in this topic is still open or unread');
+    }
+    const at = this.timestamp();
+    Object.assign(topic, { status: 'retired', retiredAt: at, updatedAt: at });
+    return ok('Moved to the Archive');
   }
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {

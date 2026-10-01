@@ -109,6 +109,8 @@ export const TELEMETRY_EVENTS = {
   search_used: z.object({ query_length_bucket: queryLengthBucket }).strict(),
   queue_filter_changed: z.object({ filter: queueFilter }).strict(),
   topic_opened: z.object({ section: topicSection }).strict(),
+  // "Archive now" on a topic with nothing left, before it would go by itself.
+  topic_archived: NO_PROPS,
   update_pill_clicked: NO_PROPS,
   update_later_clicked: NO_PROPS,
   // The bar under the title bar (24h or more behind): once per app run, when it first shows.

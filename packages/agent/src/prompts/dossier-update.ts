@@ -5,6 +5,15 @@ import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
 import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine, withoutCi, WORK_GLOSSARY, workContextBlock } from './shared.ts';
 
+/**
+ * A standing topic has no finish line (core TopicKind): its dossier follows
+ * the current wave, and a wave that ends is not the topic finishing.
+ */
+const STANDING_DOSSIER_RULE = `It is a standing topic: one standard kept up for months, with no finish line. goal: the
+standard. summary and status: the current wave of work. When a wave ends the topic goes quiet; it
+is not finished, so never use status "finished" or the looks_finished flag for it. Fold waves that
+are over into earlier.`;
+
 function factLine(fact: Fact, shortId: string, staleNote: string): string {
   const since = fact.validFrom.slice(0, 10);
   return `- ${shortId} [${fact.predicate}] ${entityText(fact.subject)} -> ${entityText(fact.object)}: ${fact.text} (since ${since})${staleNote}`;
@@ -174,7 +183,7 @@ export function dossierUpdateInstructions(input: DossierUpdateInput, refs: Dossi
 for a developer who follows it on GitHub. You get the previous dossier and only what happened
 since. Rewrite the dossier so it is true now. The topic's current name:
 ${githubData(input.topic.name)}
-${WORK_GLOSSARY}
+${input.topic.kind === 'standing' ? `${STANDING_DOSSIER_RULE}\n` : ''}${WORK_GLOSSARY}
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}

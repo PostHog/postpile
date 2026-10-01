@@ -4,11 +4,19 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Added
+
+- "Archive now": once everything in a topic is dealt with (every PR merged or closed, every thread read), a box under the Tiles count says when the topic moves to the Archive by itself, with a button to do it right away. In the Archive the box says what brings the topic back.
+
 ### Changed
 
 - ✨ Approve on a stack goes from the base up: a layer is only offered when no layer below it needs a closer look. The confirm list says what the others wait on ("waits on #109499"). When the button approves one PR out of several it names it ("Approve #109533"), and "Approve stack" shows only when it approves the whole stack. If a lower layer fails to approve, the layers above it are skipped.
 - Bot reviews and bot comments in review threads on your own open PR no longer keep it unread. They clear quietly like other bot activity; failing checks and unresolved threads still show up on the PR.
 - Opening a PR marks it read as soon as the 1.5s fill completes, instead of later when you move on. The button then says "✓ Marked read" with an Undo link for a few seconds, and the unread dot fades out. The tile and its topic row stay put until you pick something else, then slide to their new place. Tiles a sync moves slide too. "Marks read when you leave" and the "Keep unread" X are gone, and these marks no longer show under Handled quietly.
+- Topics come in two kinds: projects, which have a finish line, and standing topics, which keep a standard up for months ("Migration safety"). A standing topic stays ready for its next PR for half a year after the last one joined; a finished project takes follow-ups for 30 days.
+- After this update, PostPile tidies your topics once more: it sorts them into projects and standing topics, folds the pieces of one standard into one topic, and renames a topic named after one step of its goal. PRs you moved by hand stay where you put them.
+- A topic with nothing left moves to the Archive 2 days after the last human activity (was 3 days of any activity). Deploy, CI and bot comments after a merge no longer keep it in the sidebar.
+- The sidebar's "Finished" drawer is now "Archive".
 
 ## 0.13.3 (2026-10-01)
 

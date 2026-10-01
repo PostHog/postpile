@@ -318,6 +318,8 @@ export interface EngineService {
   decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
   /** Moves the topic's seen cursor to now, so "changes since seen" starts over. */
   markTopicSeen(topicId: string): Promise<ActionResult>;
+  /** "Archive now" on a topic with nothing left; refused while anything is open or unread. */
+  archiveTopic(topicId: string): Promise<ActionResult>;
   /**
    * "Forget" on a care, or accepting a recheck outcome: drop (kind wrong),
    * holds (confirm) or fix. A fact changes right away; every correction is

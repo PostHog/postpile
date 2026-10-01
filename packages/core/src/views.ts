@@ -119,6 +119,14 @@ export interface TopicListItem {
   prStateCounts: TopicPrStateCounts;
 }
 
+/**
+ * The box under a topic's Tiles count (DESIGN "The Archive"). ready: nothing
+ * is left in the topic; it moves to the Archive by itself at `at` (the next
+ * full sync once that has passed), or now with "Archive now". archived: in
+ * the Archive since `at`; it takes new PRs until `until`, then retires for good.
+ */
+export type TopicArchiveBox = { state: 'ready'; at: IsoTime } | { state: 'archived'; at: IsoTime; until: IsoTime };
+
 /** A retired topic in the sidebar's Archive drawer (code says "finished" for the drawer's list). */
 export interface FinishedTopic {
   id: string;
@@ -329,6 +337,8 @@ export interface TopicDetail {
   dossier: DossierView | null;
   /** The header's ✨ Approve and ✨ "Mark N read" (`topicAgentOffers`), from the tiles above. */
   agent: TopicAgentOffers;
+  /** The Archive box in the same row; null while something in the topic is open or unread. */
+  archive: TopicArchiveBox | null;
   /**
    * The header's PR pill (`topicPrState` over each PR of the tiles once): the
    * same state as the sidebar row's icon, every PR counted (found and
