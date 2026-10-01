@@ -127,7 +127,9 @@ describe('lasting sets', () => {
       ],
     });
     await h.engine.sync({ agentJobs: ['sets'] });
-    const [keys, paths] = h.store.sets.listActiveForTopic('depot');
+    const created = h.store.sets.listActiveForTopic('depot');
+    const keys = created.find((set) => set.title === 'Cache keys');
+    const paths = created.find((set) => set.title === 'Cache paths');
 
     h.store.glances.put(glance(prs[4]!.key, 'low - docs'));
     h.runner.answer('set_grouping', { merges: [{ setId: paths!.id, intoSetId: keys!.id, reason: 'both are the same cache rework now' }] });
