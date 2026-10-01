@@ -12,7 +12,8 @@ import { VerdictPill } from './pills.tsx';
  * action. It sits inside the button's own height and never grows it.
  */
 export function AgentPill(props: { word: string; off: boolean }) {
-  const look = props.off ? 'text-muted inset-ring inset-ring-edge-control' : 'bg-safe-soft text-safe';
+  // Green when the agent backs the action, the Look closer honey when it cannot.
+  const look = props.off ? 'bg-closer-soft text-closer inset-ring inset-ring-closer-line' : 'bg-mark-safe text-safe';
   return (
     <span className={`box-border flex h-[18px] shrink-0 items-center gap-1 rounded-full px-1.5 text-[11px] leading-none font-semibold ${look}`}>
       <span aria-hidden="true">✨</span>
@@ -21,9 +22,7 @@ export function AgentPill(props: { word: string; off: boolean }) {
   );
 }
 
-/** Secondary looks: green text and outline when active, muted and flat when greyed. The reason stays readable. */
-const APPROVE_ACTIVE = 'text-safe inset-ring-safe/40';
-// Flat: no fill, shadow or solid ring. A dashed outline pulled inside the box keeps the 30px size.
+// Greyed, for actions the agent advises against. Flat: no fill, shadow or solid ring. A dashed outline pulled inside the box keeps the 30px size.
 const GREYED =
   'bg-transparent! text-muted shadow-none! inset-ring-0! outline-1 -outline-offset-1 outline-dashed outline-faint cursor-not-allowed! disabled:opacity-100';
 
@@ -109,7 +108,8 @@ export function AgentApproveButton(props: { offer: AgentApproveOffer | null; lab
   return (
     <>
       <Button
-        className={active ? APPROVE_ACTIVE : GREYED}
+        variant={active ? 'safe-soft' : 'secondary'}
+        className={active ? '' : GREYED}
         title={blocked ?? approveTitle(offer)}
         disabled={!active || actions.isBusy(props.busyKey)}
         onClick={() => (blocked ? confirm() : setAsking(true))}
@@ -144,7 +144,7 @@ export function TopicMarkReadButton(props: { offer: TopicMarkReadOffer | null; t
   );
 }
 
-/** The compact "For this topic" row under the Tiles count. Gone when both offers are. */
+/** The topic's buttons on their own row under the Tiles count, "for this topic" trailing. Gone when both offers are. */
 export function TopicActions(props: { detail: TopicDetail }) {
   const { agent, topic } = props.detail;
   if (!agent.approve && !agent.markRead) {
@@ -152,7 +152,6 @@ export function TopicActions(props: { detail: TopicDetail }) {
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[11px] text-muted">For this topic</span>
       <AgentApproveButton
         offer={agent.approve}
         label={agent.approve ? topicApproveLabel(agent.approve) : ''}
@@ -160,6 +159,7 @@ export function TopicActions(props: { detail: TopicDetail }) {
         from="agent_topic"
       />
       <TopicMarkReadButton offer={agent.markRead} topicId={topic.id} />
+      <span className="pl-1 text-[11.5px] text-hint">for this topic</span>
     </div>
   );
 }

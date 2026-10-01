@@ -20,8 +20,7 @@ const OPTIONS: { label: string; condition: () => SnoozeCondition }[] = [
 
 /**
  * Snooze for a tile, or Unsnooze when it is snoozed. Local only, no GitHub
- * write. `variant` primary: the tile is read and still your move, so Snooze
- * is its main button.
+ * write. `variant` primary: the pane's main button (read and still your move).
  */
 export function SnoozeMenu(props: { tileId: string; snoozed: boolean; size?: ButtonSize; up?: boolean; variant?: ButtonVariant }) {
   const actions = useActions();
@@ -29,7 +28,8 @@ export function SnoozeMenu(props: { tileId: string; snoozed: boolean; size?: But
   const busy = actions.isBusy(`snooze:${props.tileId}`);
   if (props.snoozed) {
     return (
-      <Button size={props.size} disabled={busy} onClick={() => void actions.unsnooze(props.tileId)}>
+      // Never the main button; inside joined buttons it takes their look.
+      <Button variant={props.variant === 'joined' ? 'joined' : 'secondary'} size={props.size} disabled={busy} onClick={() => void actions.unsnooze(props.tileId)}>
         Unsnooze
       </Button>
     );

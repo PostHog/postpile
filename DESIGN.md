@@ -2140,8 +2140,8 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
 
 - Tile footer: "Mark read" on an unread tile. On a read tile "Mark done"
   only when `afterRead.done`, else "Mark read". A read (open) tile that is
-  still your move gets no mark button: Snooze is the primary (ink) button,
-  with its usual menu, and a quieter "Review on GitHub" opens the files tab
+  still your move gets no mark button: Snooze leads, with its usual menu,
+  and "Review on GitHub" opens the files tab
   of the move's PR ("Open on GitHub" and the PR itself on your own PR),
   through the external link path (so `opened_on_github` fires). Done tiles
   keep "Open" and nothing else: no mark button and no Snooze, in the tile
@@ -3131,7 +3131,7 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   `unreadOnGitHub` or `automation` again. The one exception is the
   optimistic guess after a click (`lib/optimistic.ts`), from `afterRead`,
   until the refetch brings core's answer.
-- **Three groups, always in this order: Unread, Open, Dealt with (n).**
+- **Three groups, always in this order: Unread, Open, Dealt with N.**
   Empty groups don't show. Dealt with is folded by default and follows the
   user's last click on it: opened stays open, closed stays closed, for the
   rest of the session in every topic (App state). The search filtering or a
@@ -3219,12 +3219,24 @@ Owner decisions (2026-09-30):
 - **Pill wording and placement.** Approve: `✨ Low risk` / `✨ Medium risk`
   when active (tooltip "Agent verdict: Looks safe."), `✨ Look closer`,
   `✨ High risk`, `✨ Rechecking…` when greyed. A greyed Approve is a plain
-  "Approve" plus the pill, never a count. The topic buttons sit in a compact
-  "For this topic" row under the "Tiles N · M unread" line, above the first
-  group, and the row is gone when both offers are. Tile footer order:
-  Approve (✨), Mark read, Snooze, Open. They are secondary buttons (green
-  outline for Approve, neutral for Mark read); filled green is only the
-  confirm dialog's "Approve N".
+  "Approve" plus the pill, never a count. The topic buttons sit on their own
+  row under the "Tiles N" line (only the count: the Unread label below says
+  how many are unread), with a muted "for this topic" trailing them, above
+  the first group; the row is gone when both offers are. Active Approve is
+  soft green (light green fill, green text and edge) with a green pill;
+  greyed buttons keep the dashed outline with a honey pill, like Look
+  closer. Filled green is only the confirm dialog's "Approve N".
+- **Tile footer (2026-10-01, design 4b/5e).** No ink button. Left: the turn
+  line, then the tile's Approve (✨) right next to it; next to Approve the
+  move text needs a wider footer before it shows. Right: Mark read, Snooze,
+  Open, Review on GitHub and ⋯ as one joined control (one outline, hairline
+  dividers), in every footer. Everything is 28px high.
+- **Group labels (2026-10-01).** Unread, Open and Dealt with line up with
+  the tile text (16px: the tile's 15px padding plus its frame). The marker
+  hangs in that padding: coral dot for Unread, chevron for Dealt with,
+  none for Open. The whole Dealt with row is the button: open, a 28px row
+  "Dealt with N", a hairline rule and "Hide"; folded, a 32px bar with the
+  first tile's title and "Show".
 - **Core decides, the renderer displays.** Core ships each offer on
   `TileView` and on the topic's view model: kind, state (active/greyed),
   counts, risk, reason, covered PRs or tiles, and left-out PRs with reasons.

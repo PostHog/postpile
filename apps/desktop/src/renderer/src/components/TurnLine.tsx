@@ -7,8 +7,11 @@ import { Avatar } from './Avatar.tsx';
  * on ("sol to merge", on your own PR "Waiting on sol"). Renders nothing when
  * it is nobody's turn.
  */
-export function TurnLine(props: { turn: WhoseTurn; greyed?: boolean }) {
+export function TurnLine(props: { turn: WhoseTurn; greyed?: boolean; besideButton?: boolean }) {
   const { turn } = props;
+  // The move needs room to read: below 14rem of footer it drops out whole (no sliver), and the label truncates alone.
+  // A button right after the line (the agent's Approve) takes up to 14rem of that footer too.
+  const moveShows = props.besideButton ? '@min-[28rem]:block' : '@min-[14rem]:block';
   if (turn.kind === 'you') {
     return (
       <span title={turnTitle(turn)} className={`flex min-w-0 items-center gap-[7px] text-xs ${props.greyed ? 'text-muted' : 'text-ink-2'}`}>
@@ -16,8 +19,7 @@ export function TurnLine(props: { turn: WhoseTurn; greyed?: boolean }) {
           <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${props.greyed ? 'bg-ghost' : 'bg-honey ring-2 ring-honey/22'}`} />
           <span className="truncate">Your move</span>
         </span>
-        {/* The move needs room to read: below 14rem of footer it drops out whole (no sliver), and the label truncates alone. */}
-        <span className="hidden min-w-0 truncate @min-[14rem]:block">{turn.what}</span>
+        <span className={`hidden min-w-0 truncate ${moveShows}`}>{turn.what}</span>
       </span>
     );
   }
