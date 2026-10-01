@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import { UNDO_WINDOW_MS, type Pr } from '@postpile/core';
 import { makeComment, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
@@ -300,6 +300,28 @@ describe('refresh after a write and on focus', () => {
     const fresh = h.store.events.listForPr(pr.key).filter((event) => event.sourceId === 'c-new');
     expect(fresh).toHaveLength(1);
     expect(fresh[0]?.seenAt).toBeNull();
+  });
+
+  it('keeps an approved PR read through the poll in its undo window, and moves changeCount once the mark-read lands', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    const thread = makeThreadFor(pr);
+    h.reader.addPr(pr, thread);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    // GitHub's inbox still lists the thread unread (a new ETag, so it answers 200) until the queued mark-read is sent.
+    h.reader.etag = 'etag-after-approve';
+
+    await h.engine.approve(pr.key, pr.headOid);
+    await h.engine.writeRefreshSettled();
+    await h.engine.pollOnce();
+
+    expect(h.store.notifications.get(thread.id)?.unread).toBe(false);
+    const changesBefore = (await h.engine.livePollStatus()).changeCount;
+    h.timers.advance(UNDO_WINDOW_MS);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.writer.calls).toContain(`markThreadRead ${thread.id}`);
+    expect(h.store.notifications.get(thread.id)?.unread).toBe(false);
+    expect((await h.engine.livePollStatus()).changeCount).toBe(changesBefore + 1);
   });
 
   it('looks up the thread of a PR opened on github.com, and fetches one without a thread', async () => {

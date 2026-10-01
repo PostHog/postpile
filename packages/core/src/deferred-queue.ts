@@ -39,8 +39,8 @@ interface Entry<T> {
  */
 export class DeferredQueue<T> {
   private readonly entries: Entry<T>[] = [];
-  /** Sends that already left `entries` but have not finished yet. */
-  private readonly inFlight = new Set<Promise<void>>();
+  /** Sends that already left `entries` but have not finished yet, with what they send. */
+  private readonly inFlight = new Map<Promise<void>, T>();
   private counter = 0;
 
   constructor(
@@ -69,7 +69,7 @@ export class DeferredQueue<T> {
     }
     this.timers.clearTimeout(entry.handle);
     const sending = this.sendEntry(entry).finally(() => this.inFlight.delete(sending));
-    this.inFlight.add(sending);
+    this.inFlight.set(sending, entry.batch.payload);
     return sending;
   }
 
@@ -109,6 +109,11 @@ export class DeferredQueue<T> {
     return this.entries.map((entry) => entry.batch);
   }
 
+  /** Every payload not finished yet: still waiting out its delay, or being sent right now. */
+  unfinished(): T[] {
+    return [...this.entries.map((entry) => entry.batch.payload), ...this.inFlight.values()];
+  }
+
   /**
    * Sends every pending batch now, oldest first, and waits for sends whose
    * timer already fired. On quit the store closes right after this resolves.
@@ -118,6 +123,6 @@ export class DeferredQueue<T> {
     for (const token of tokens) {
       await this.sendNow(token);
     }
-    await Promise.all(this.inFlight);
+    await Promise.all(this.inFlight.keys());
   }
 }
