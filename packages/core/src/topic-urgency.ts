@@ -3,7 +3,8 @@
 // all merged or closed only has news to read, nothing to act on, and a tile
 // unread with only quiet news (DESIGN.md "GitHub unread is PostPile unread")
 // counts but never lights the topic up: urgency follows loud news.
-import { tileGroup } from './tile-groups.ts';
+import { tileGroup, type TileGroup } from './tile-groups.ts';
+import type { PrSummary, TileView } from './views.ts';
 import type { PrKey, PrState, TileStateKind } from './types.ts';
 import { YOUR_MOVE_ORDER, type WhoseTurn, type YourMove } from './whose-turn.ts';
 
@@ -66,11 +67,49 @@ function byMoveUrgency(a: TopicMove, b: TopicMove): number {
   return YOUR_MOVE_ORDER.indexOf(a.move) - YOUR_MOVE_ORDER.indexOf(b.move);
 }
 
+/** A tile counts for your move only while live: not done, not snoozed. */
+function isLive(tile: Pick<UrgencyTile, 'state'>): boolean {
+  return tile.state !== 'done' && tile.state !== 'snoozed';
+}
+
+/** The part of a built tile (`TileView`) that urgency reads. */
+export type UrgencyView = Pick<TileView, 'state' | 'unreadPrKeys' | 'turn' | 'quietRepo'> & { prs: Pick<PrSummary, 'state' | 'quietRepo'>[] };
+
+/** The urgency input of a built tile, so a topic's detail uses the same rule as its sidebar row. */
+export function urgencyTileOf(view: UrgencyView): UrgencyTile {
+  return {
+    state: view.state.kind,
+    unreadOnGitHub: view.state.unreadOnGitHub,
+    loud: view.state.loud,
+    unreadPrKeys: view.unreadPrKeys,
+    prStates: view.prs.filter((pr) => !pr.quietRepo).map((pr) => pr.state),
+    move: topicMove(view.turn),
+    quiet: view.quietRepo,
+  };
+}
+
+/** The topic header's chip: the same live moves as the sidebar row, most urgent first. */
+export function topicYourMoves(views: UrgencyView[]): TopicMove[] {
+  return topicUrgency(views.map(urgencyTileOf)).yourMoves;
+}
+
+/** Live tiles where it is your move, per group, for the group headings ("Open 4 · 2 your move"). Every group is present. */
+export function yourMovesByGroup(views: (UrgencyView & Pick<TileView, 'group'>)[]): Record<TileGroup, number> {
+  const counts: Record<TileGroup, number> = { unread: 0, open: 0, dealt_with: 0 };
+  for (const view of views) {
+    const tile = urgencyTileOf(view);
+    if (isLive(tile) && tile.move !== null) {
+      counts[view.group] += 1;
+    }
+  }
+  return counts;
+}
+
 export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
   const unreadTiles = tiles.filter((tile) => tileGroup({ kind: tile.state, unreadOnGitHub: tile.unreadOnGitHub }) === 'unread').length;
   const unreadPrKeys = [...new Set(tiles.flatMap((tile) => tile.unreadPrKeys))];
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
-  const live = tiles.filter((tile) => tile.state !== 'done' && tile.state !== 'snoozed');
+  const live = tiles.filter(isLive);
   const yourMoves = live.flatMap((tile) => (tile.move === null ? [] : [tile.move])).toSorted(byMoveUrgency);
   const urgentMoves = live.filter((tile) => tile.move !== null && tile.move.move !== 'merge' && !tile.quiet).length;
   return { unreadTiles, unreadPrs: unreadPrKeys.length, unreadPrKeys, urgentUnreadTiles, yourMoves, needsYou: urgentUnreadTiles > 0 || urgentMoves > 0 };
