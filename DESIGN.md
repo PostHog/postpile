@@ -1678,13 +1678,14 @@ review. When the author pushed after a changes request and the requester is
 requested again, it is the requester's move: "ada to re-review"
 (whose-turn rule 4).
 
-**Own merged PRs clear on GitHub too** (changes rule 2 of "Handled quietly"
+**Own merged PRs clear on GitHub too** (changed rule 2 of "Handled quietly"
 and part 2 of "You already dealt with it"). The own-PR exception (bots after
 your last touch keep the thread unread, since on your own PR they can mean
-work) applies only while the PR is open. Every own PR merges through trunk
-after the last comment, so 14 merged own PRs stayed unread after 0.10.0.
+work) first applied only while the PR was open. Every own PR merges through
+trunk after the last comment, so 14 merged own PRs stayed unread after 0.10.0.
 Julian: "my own merged or closed PRs can be cleared when only bots come in
-after my last touch."
+after my last touch." Since 2026-10-01 the exception is gone for open PRs too
+(see rule 2 of "Handled quietly").
 
 **Not marked read from a guess** (decided the same day, recorded to stop the
 question coming back). PostPile marks a thread read on GitHub only from what
@@ -1822,9 +1823,9 @@ updates it while I'm looking at it."
 - Re-reviewer: core `reReviewAsked` (`changes-answered.ts`), used by
   whose turn on the routed team hold, on a team request a teammate picked
   up with a change request, and on the viewer's own PR.
-- Own merged PRs: `isOwnOpenPr` in core `quiet-reads.ts`, in both the
-  bot-only and the "you acted after it" rule; `botOnlySinceRead` leaves the
-  viewer's own events out.
+- Own PRs: no exception in core `quiet-reads.ts` any more (2026-10-01,
+  `isOwnOpenPr` and `isAutomationFinding` removed); `botOnlySinceRead` leaves
+  the viewer's own events out.
 - Remove a team review request: `PrActions.removeTeamRequest` (engine),
   `GitHubWriter.removeTeamReviewRequest` / `unsubscribeThread`, `POST
   /api/prs/:owner/:repo/:number/remove-team-request` `{team}`, renderer
@@ -2975,8 +2976,7 @@ bot's comments. Now the queue decides it again before putting anything back
 same refresh as after a write (or the running full sync; nothing while the
 quota is critical), then the bot-only rule runs from the click's cutoff (the
 thread's `updated_at` the click saw). Only the viewer's own activity and
-automation since, bot reviews on the viewer's own open PR included (the
-click means "I saw what PostPile showed me"), and the thread is marked read
+automation since (the click means "I saw what PostPile showed me"), and the thread is marked read
 on GitHub now, guarded again against the fresh `updated_at`, logged
 "marked after refresh: only your own activity". A person's activity since,
 or a snapshot that still does not cover the thread, and it stays unread:
@@ -3164,8 +3164,7 @@ finished topics included.
   alone (`never_looked`). Judged means an override below loud on the
   event. Asks are `isAskOfViewer`; a mention of only routing teams is FYI
   ("Team roles"), not an ask, so the agent judges it like other quiet news.
-  "Your own open PR" is one the viewer owns (`isPrOwner`, a bot PR assigned
-  to them too). Log detail "nothing that needs you since
+  Log detail "nothing that needs you since
   you last looked: lyra, CI"; Handled quietly says "nothing for you from
   lyra, CI".
 - The events agent (`EventBatchClassifier`) also gets people's quiet
@@ -3670,11 +3669,11 @@ Merging or closing counts only when the viewer did it.
      one when the thread was never read. None known: left alone, like the
      bot-only rule.
    - Bots after the touch are fine as in the bot-only rule (CI and the merge
-     queue follow most approvals), except on the viewer's own open PR, where
-     they can mean work. Once the own PR is merged or closed they are fine
-     there too (2026-09-29, "Own merged PRs clear on GitHub too" in "Actions
-     act on what you look at"). The grace counts from the newest of the
-     touch, those bots and the thread's update.
+     queue follow most approvals), on the viewer's own open PR too. Until
+     2026-10-01 a bot's review there kept the thread unread, and until
+     2026-09-29 so did any bot on a merged or closed own PR ("Own merged PRs
+     clear on GitHub too" in "Actions act on what you look at"). The grace
+     counts from the newest of the touch, those bots and the thread's update.
    - No unseen loud news on the PR (until 2026-09-30: the tile must not be
      unread, which since "GitHub unread is PostPile unread" it always is
      while its thread is). Whose turn is not checked: every event before
@@ -3795,13 +3794,17 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    the snapshot from then still covers the thread. A snapshot cut off at
    the query's caps covers only when what fell off is older than the read
    (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
-2. *No bot finding on the user's own open PR.* A review bot's finding on
-   your own PR can mean work, so it stays unread while it is open. A merged
-   or closed own PR is fine (2026-09-29: every own PR merges through trunk
-   after the last comment, so 14 merged own PRs stayed unread after 0.10.0).
-   Since 2026-09-30 only a finding blocks: a bot's review or its comment in
-   a review thread (core `isAutomationFinding`). Plain bot comments (a
-   stale-PR nudge, a sticky CI report), their edits, CI and deploys do not.
+2. *(Removed 2026-10-01: no bot finding on the user's own open PR.)* A
+   bot's review, or its comment in a review thread, on the user's own open
+   PR used to keep the thread unread, because it can mean work. Owner: "I
+   never care about bot replies... and it's my PR so I will have it on the
+   radar anyway." A finding that matters also shows up as failing checks or
+   unresolved threads that block the merge. The real case: ReviewHog's
+   FLASH-mode review kept an own PR unread. The number stays so references
+   to the other rules hold. History: merged and closed own PRs were let
+   through on 2026-09-29 (every own PR merges through trunk after the last
+   comment, so 14 merged own PRs stayed unread after 0.10.0); on 2026-09-30
+   only findings blocked, not plain bot comments, CI or deploys.
 3. *No unseen merge without the user's review* ("Merged without your
    review", rule 5: PostPile never marks those read by itself). Checked on
    its own, since a merge queue bot merging counts as bot activity.
@@ -3860,8 +3863,7 @@ extra request), and each comment edited after it was posted gives one
 `comment_edited` event at its latest edit, by the editor (else the author),
 id `<prKey>:comment_edited:<comment id>@<edit time>` so re-syncs keep it and
 a later edit is a new event. A bot editing its comment is automation, so
-the bots-only read clears it, also on the user's own open PR (not a
-finding). A person's edit is quiet news the events agent judges; it is loud
+the bots-only read clears it, also on the user's own open PR. A person's edit is quiet news the events agent judges; it is loud
 and an ask when the edited body mentions the viewer or a home team (Codex
 review: a person editing in "@viewer" is a real ask). The old body is not
 fetched, so a mention already there counts too: the event is new and
@@ -3899,8 +3901,8 @@ so the real case clears.
 merges Julian wants to see (see "Merged without your review"). Bot-only
 activity since the last read is the safe case: the user already read
 everything a person said, and what came after can't ask them anything. Own
-open PRs are excluded because bot reviews there can mean work; merged or
-closed ones are not (2026-09-29).
+open PRs were excluded because bot reviews there can mean work; merged or
+closed ones were not (2026-09-29). The exclusion was dropped on 2026-10-01.
 
 **Fake mode**: seven sample quiet mark-reads in the action log (two for
 "you acted after it", one older than 7 days, so it stays out of the view)

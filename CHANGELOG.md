@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - ✨ Approve on a stack goes from the base up: a layer is only offered when no layer below it needs a closer look. The confirm list says what the others wait on ("waits on #109499"). When the button approves one PR out of several it names it ("Approve #109533"), and "Approve stack" shows only when it approves the whole stack. If a lower layer fails to approve, the layers above it are skipped.
+- Bot reviews and bot comments in review threads on your own open PR no longer keep it unread. They clear quietly like other bot activity; failing checks and unresolved threads still show up on the PR.
 
 ## 0.13.3 (2026-10-01)
 

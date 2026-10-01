@@ -7,7 +7,7 @@ import { standingApprovals } from '../approvals.ts';
 import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
-import { isAutomationFinding, isNewYourMove, judgedReadCheck, quietReadCheck, touchedReadCheck, type JudgedReadCheck, type QuietReadCheck } from '../quiet-reads.ts';
+import { isNewYourMove, judgedReadCheck, quietReadCheck, touchedReadCheck, type JudgedReadCheck, type QuietReadCheck } from '../quiet-reads.ts';
 import { ownedByTeammate, requestedTeam, reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
 import { isRoutingTeam } from '../team-roles.ts';
 import { actedAfterSeeing } from '../saw-before-acting.ts';
@@ -238,7 +238,7 @@ function editLabels(pr: Pr, events: PrEvent[]): string[] {
   return labels;
 }
 
-/** The own-PR and new-move branches of the quiet reads (2026-09-30): cleared with only bot noise on an own open PR, kept for a finding, cleared with a move that stood before. */
+/** The own-PR and new-move branches of the quiet reads: cleared with only bot noise on an own open PR (a bot review too, since 2026-10-01), cleared with a move that stood before. */
 function ownPrQuietLabels(board: PropertyBoard, key: PrKey, pr: Pr, quiet: QuietReadCheck, judged: JudgedReadCheck): string[] {
   const labels: string[] = [];
   const ownOpen = pr.state === 'OPEN' && specOwners(pr).some((owner) => sameLogin(owner, board.viewer.login));
@@ -247,9 +247,6 @@ function ownPrQuietLabels(board: PropertyBoard, key: PrKey, pr: Pr, quiet: Quiet
   }
   const events = board.events.get(key) ?? [];
   const lastReadAt = board.threads.get(key)?.lastReadAt ?? null;
-  if (ownOpen && lastReadAt !== null && events.some((event) => event.at > lastReadAt && isAutomationFinding(event, pr))) {
-    labels.push('shape:bot finding on own open PR');
-  }
   const input = { pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer, notYours: board.notYours.has(key) };
   if (prWhoseTurn(input).kind === 'you' && (quiet.kind === 'mark' || judged.kind === 'mark')) {
     labels.push('shape:cleared with a move that stood before');
@@ -443,7 +440,6 @@ export const REQUIRED_LABELS: readonly string[] = [
   'edit:person mentions you',
   'touched-read:acted_without_seeing',
   'shape:own open PR cleared with bot noise',
-  'shape:bot finding on own open PR',
   'shape:cleared with a move that stood before',
   'shape:new move since the read',
   'shape:done by acting after reading',

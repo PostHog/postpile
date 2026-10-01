@@ -1082,6 +1082,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Bots on your own open PR clear quietly too** (2026-10-01, DESIGN.md
+  "Handled quietly" rule 2, removed): a bot's review or inline comment no
+  longer keeps your own open PR unread. Owner: "I never care about bot
+  replies... and it's my PR so I will have it on the radar anyway." A
+  finding that matters shows as failing checks or unresolved threads.
+  Triggered by ReviewHog's FLASH-mode review keeping an own PR unread. The
+  other own-PR logic (loudness, pings, whose turn) stays.
 - **Agent Approve goes base up on a stack** (2026-10-01, DESIGN.md
   "Agent-assisted actions" › "Base up on a stack", "Approve labels"): a
   layer is covered only when no approvable layer below it needs a look;
@@ -1138,7 +1145,7 @@ the app meanwhile.
   already dealt with it" › Read before acting): a comment's latest edit is a
   `comment_edited` event (bots clear quietly, a person's edit that mentions
   you is an ask); on your own open PR only a bot review or inline comment
-  keeps the thread unread; a move that stood before your last read does not;
+  kept the thread unread (dropped 2026-10-01); a move that stood before your last read does not;
   acting counts as having seen earlier news only with a read in between,
   and then also makes the PR done without a click.
 - **Tiles lead with the important news** (2026-09-30, DESIGN.md "Tile faces"
@@ -1218,8 +1225,8 @@ the app meanwhile.
   unread tiles (owner, 2026-09-30).
   Opening a PR in PostPile also handles it, checked per PR. The lead PR
   (core `leadPrKey`) prefers the turn's PR. Whose turn names the
-  re-reviewer after a push and a re-request. The own-PR bot exception only applies while the PR is
-  open. Marking read from a guess (finished team requests handled by a
+  re-reviewer after a push and a re-request. The own-PR bot exception first applied only while the PR was
+  open (dropped altogether 2026-10-01). Marking read from a guess (finished team requests handled by a
   teammate, lost mentions) stays turned down. Added the same day: "Remove
   <team>" in the detail pane removes a team review request, unsubscribes
   and marks the PR done (confirm once, no undo, blocked while locked);
@@ -1282,8 +1289,7 @@ the app meanwhile.
 - **Handled quietly: bot-only activity gets marked read** (2026-09-29): a
   thread you had read that turned unread only because of bots is marked read
   on GitHub by PostPile after a full sync, 10 minutes after the last bot
-  activity at the earliest, only while writes are unlocked. Never your own PR
-  (bot reviews can mean work), never with an unseen merge without your
+  activity at the earliest, only while writes are unlocked. Never with an unseen merge without your
   review, never while the tile is unread or it is your move. Rules only, no
   agent. The sidebar's "Handled quietly" lists the last 7 days. Pings get
   one hourly telemetry summary (`pings_summarized`, counts only), and the
