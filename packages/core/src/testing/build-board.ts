@@ -17,7 +17,8 @@ import { applyReadPlan, planRead, prReadScope, type ReadCause } from '../read-pl
 import { snoozeWrites } from '../snooze.ts';
 import { buildStacks } from '../stacks.ts';
 import { buildTopicTiles, deriveTileState } from '../tiles.ts';
-import { buildPrSummary, buildTileView } from '../tile-view.ts';
+import { agentPrFacts } from '../agent-actions.ts';
+import { buildPrSummary, buildTileView, type PrSummaryInput } from '../tile-view.ts';
 import type {
   Comment,
   Commit,
@@ -40,8 +41,8 @@ import type {
   Verdict,
   Viewer,
 } from '../types.ts';
-import type { PrSummary, TilePendingWrite, TileView } from '../views.ts';
-import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, SnoozeSpec, StepSpec, TeamSetup } from './board-spec.ts';
+import type { TilePendingWrite, TileView } from '../views.ts';
+import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, RiskWord, SnoozeSpec, StepSpec, TeamSetup } from './board-spec.ts';
 
 export const PROPERTY_REPO = 'acme/app';
 export const PROPERTY_TOPIC_ID = 'topic-1';
@@ -62,6 +63,14 @@ export const LOGINS: Record<Person, string> = {
   app: 'renovate',
   agent: 'acme-agent[bot]',
   ghost: '',
+};
+
+/** The glance's risk line for each risk word; garbage starts with a word that only looks like a level. */
+export const RISK_LINES: Record<RiskWord, string> = {
+  low: 'low - routed review',
+  medium: 'medium - touches the worker loop',
+  high: 'high - rewrites the login flow',
+  garbage: 'lowish - hard to say',
 };
 
 /** Every automation account on a board: what the spec oracles call automation, without asking `isBot`. */
@@ -506,6 +515,10 @@ export interface PropertyBoard {
   found: Map<PrKey, FoundPr>;
   /** Stored glance verdicts by PR. */
   glances: Map<PrKey, Verdict>;
+  /** The stored glance's risk line by PR (`RISK_LINES`), for every PR with a glance. */
+  glanceRisks: Map<PrKey, string>;
+  /** PRs whose stored glance is stale. */
+  staleGlances: Set<PrKey>;
   /** PRs whose glance says NOT_YOURS, as the Board reads them. */
   notYours: Set<PrKey>;
   /** Mark-reads waiting for the writes lock, by PR. */
@@ -672,6 +685,8 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     threads: new Map(),
     found: new Map(),
     glances: new Map(),
+    glanceRisks: new Map(),
+    staleGlances: new Set(),
     notYours: new Set(),
     pendingWrites: new Map(),
     prFetchedAt: new Map(),
@@ -719,6 +734,10 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     }
     if (entry.spec.glance !== null) {
       board.glances.set(pr.key, entry.spec.glance);
+      board.glanceRisks.set(pr.key, RISK_LINES[entry.spec.glanceRisk]);
+      if (entry.spec.glanceStale) {
+        board.staleGlances.add(pr.key);
+      }
       if (entry.spec.glance === 'NOT_YOURS') {
         board.notYours.add(pr.key);
       }
@@ -790,23 +809,23 @@ export function tileStateOf(board: PropertyBoard, tile: Tile, viewer: Viewer | n
   });
 }
 
-function prRows(board: PropertyBoard, tile: Tile, state: TileState, viewer: Viewer | null): PrSummary[] {
-  return tile.members.flatMap((member) => {
+function prRowInputs(board: PropertyBoard, tile: Tile, state: TileState, viewer: Viewer | null): PrSummaryInput[] {
+  return tile.members.flatMap((member): PrSummaryInput[] => {
     const pr = board.prs.get(member.prKey);
     if (!pr) {
       return [];
     }
     const verdict = board.glances.get(pr.key) ?? null;
     return [
-      buildPrSummary({
+      {
         pr,
         member,
         viewer,
         userState: board.userStates.get(pr.key) ?? null,
         events: board.events.get(pr.key) ?? [],
         reason: board.threads.get(pr.key)?.reason ?? null,
-        glance: verdict === null ? null : { verdict, forYou: 'Routed to your team; nothing risky.' },
-        glanceStale: false,
+        glance: verdict === null ? null : { verdict, forYou: 'Routed to your team; nothing risky.', risk: board.glanceRisks.get(pr.key) ?? RISK_LINES.low },
+        glanceStale: board.staleGlances.has(pr.key),
         glanceGap: null,
         glanceState: verdict === null ? 'none' : 'ready',
         quietRepo: false,
@@ -816,7 +835,7 @@ function prRows(board: PropertyBoard, tile: Tile, state: TileState, viewer: View
         lastReadAt: board.threads.get(pr.key)?.lastReadAt ?? null,
         now: board.now,
         pendingWrite: board.pendingWrites.get(pr.key) ?? null,
-      }),
+      },
     ];
   });
 }
@@ -824,10 +843,12 @@ function prRows(board: PropertyBoard, tile: Tile, state: TileState, viewer: View
 /** One tile as the read models build it: state, rows, then the view with its offers. */
 export function tileViewOf(board: PropertyBoard, tile: Tile, viewer: Viewer | null = board.viewer): TileView {
   const state = tileStateOf(board, tile, viewer);
+  const rows = prRowInputs(board, tile, state, viewer);
   return buildTileView({
     tile,
     state,
-    prs: prRows(board, tile, state, viewer),
+    prs: rows.map(buildPrSummary),
+    agentPrs: rows.map(agentPrFacts),
     prsByKey: board.prs,
     events: board.events,
     userStates: board.userStates,

@@ -1,4 +1,4 @@
-import { isTracked, prReadScope, snoozeWrites, threadPrKey, tileReadScope, type ActionResult, type PrKey, type SnoozeCondition, type SnoozeWrites, type Tile } from '@postpile/core';
+import { isTracked, prReadScope, snoozeWrites, threadPrKey, tileReadScope, tilesReadScope, type ActionResult, type PrKey, type SnoozeCondition, type SnoozeWrites, type Tile } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import type { ReadMarker } from './read-marker.ts';
@@ -35,6 +35,29 @@ export class TileActions {
     }
     const batch = this.readMarker.markRead(tileReadScope(tile), { kind: 'button' }, { origin: 'tile', tileId });
     return ok(readMessage('Marked read', batch), batch.token);
+  }
+
+  /**
+   * The agent's Mark read over several tiles: one batch, so one undo token
+   * brings every tile back. Unknown tile ids refuse the whole batch.
+   */
+  markTilesRead(tileIds: string[]): ActionResult {
+    const board = Board.load(this.store, this.now().toISOString());
+    const tiles: Tile[] = [];
+    for (const tileId of tileIds) {
+      const tile = board.findTile(tileId);
+      if (!tile) {
+        return failed(`no tile ${tileId}`);
+      }
+      tiles.push(tile);
+    }
+    if (tiles.length === 0) {
+      return failed('no tiles to mark read');
+    }
+    const tileId = tiles.length === 1 ? (tiles[0]?.id ?? null) : null;
+    const batch = this.readMarker.markRead(tilesReadScope(tiles), { kind: 'button' }, { origin: 'tile', tileId });
+    const base = tiles.length === 1 ? 'Marked read' : `Marked ${tiles.length} tiles read`;
+    return ok(readMessage(base, batch), batch.token);
   }
 
   /**

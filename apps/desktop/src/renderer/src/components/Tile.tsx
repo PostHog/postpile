@@ -9,8 +9,10 @@ import { stackPlaces } from '../lib/stacks.ts';
 import { isDraftTile, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
+import { AgentApproveButton } from './AgentActions.tsx';
+import { tileApproveLabel } from '../lib/agent-actions.ts';
 import { Avatar } from './Avatar.tsx';
-import { Button, buttonClasses } from './Button.tsx';
+import { Button, buttonClasses, JoinedButtons } from './Button.tsx';
 import { ExternalIcon, KindIcon } from './icons.tsx';
 import { ForWhomChip, PendingWritePill, RepoLabel, VerdictPill } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
@@ -182,11 +184,11 @@ export function Tile(props: TileProps) {
   const menuPrKey = props.selected ? props.selectedPrKey : (lead?.key ?? null);
   const yourMove = view.turn.kind === 'you' && !done;
   const footer = yourMove ? 'bg-move shadow-move-footer' : done ? 'shadow-[inset_0_1px_0_var(--hairline-done)]' : 'shadow-[inset_0_1px_0_var(--hairline-soft)]';
-  const secondary = yourMove ? 'move' : 'secondary';
-  // From core (`tileOffers`): never "Done for now" where a mark-read leaves the tile your move; read and still your move, Snooze leads.
+  // From core (`tileOffers`): never "Done for now" where a mark-read leaves the tile your move; read and still your move, no mark button.
   const footerAction = view.offers.footer;
   const markLabel = view.offers.markLabel;
   const github = view.offers.github;
+  const approve = view.agent.approve;
 
   function selectLead() {
     if (lead) {
@@ -282,17 +284,18 @@ export function Tile(props: TileProps) {
         </div>
         <PrRows {...props} done={done} />
       </div>
-      <div className={`mt-auto flex min-h-[46px] items-center gap-2 rounded-b-tile pr-3 pl-[15px] ${footer}`}>
-        <TurnLine turn={view.turn} greyed={done} />
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {footerAction === 'open' && (
-            <Button variant={secondary} onClick={selectLead}>
-              Open
-            </Button>
-          )}
+      <div className={`mt-auto flex min-h-[46px] flex-wrap items-center gap-x-2 gap-y-1.5 rounded-b-tile py-1.5 pr-3 pl-[15px] ${footer}`}>
+        {/* Zero basis: whose turn and the agent's Approve shrink (the turn line to its dot) before they push the joined buttons, which wrap below when they alone do not fit. */}
+        <div className="@container flex min-w-0 flex-1 basis-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+            <TurnLine turn={view.turn} greyed={done} besideButton={approve !== null} />
+            <AgentApproveButton offer={approve} label={approve ? tileApproveLabel(approve, tile.kind) : ''} busyKey={`approveTile:${tile.id}`} from="agent_tile" />
+          </div>
+        </div>
+        <JoinedButtons look={yourMove ? 'move' : 'secondary'} className="ml-auto">
           {(footerAction === 'mark_read' || footerAction === 'mark_done') && (
             <Button
-              variant="primary"
+              variant="joined"
               title={
                 view.pendingWrite
                   ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
@@ -304,15 +307,20 @@ export function Tile(props: TileProps) {
               {markLabel}
             </Button>
           )}
-          {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant={footerAction === 'snooze' ? 'primary' : secondary} />}
+          {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant="joined" />}
+          {footerAction === 'open' && (
+            <Button variant="joined" onClick={selectLead}>
+              Open
+            </Button>
+          )}
           {github && (
-            <a href={github.filesTab ? filesTabUrl(github.url) : github.url} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={`${buttonClasses(secondary, 'sm')} gap-[5px]`}>
+            <a href={github.filesTab ? filesTabUrl(github.url) : github.url} target="_blank" rel="noreferrer" title="Opens the PR on github.com" className={`${buttonClasses('joined', 'sm')} gap-[5px]`}>
               {github.label}
               <ExternalIcon size={10} className="text-faint" />
             </a>
           )}
-          <TileMenu view={view} topics={props.topics} prKey={menuPrKey} variant={secondary} />
-        </div>
+          <TileMenu view={view} topics={props.topics} prKey={menuPrKey} variant="joined" />
+        </JoinedButtons>
       </div>
     </article>
   );

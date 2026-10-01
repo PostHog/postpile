@@ -4,6 +4,10 @@ import type {
   ListScope,
   ActionLogEntry,
   ActionResult,
+  AgentActionFrom,
+  ApprovePrRequest,
+  BatchApproveResult,
+  PrApproveResult,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -72,6 +76,9 @@ import type {
 } from '@postpile/core';
 import { arch, release } from 'node:os';
 import {
+  agentApproveRefusal,
+  agentMarkReadRefusal,
+  approvalsSummary,
   emptyAgentCallStats,
   normalizeRepoScope,
   OFF_POLL_STATUS,
@@ -97,6 +104,7 @@ import { AgentRequestInbox } from './agent-requests/inbox.ts';
 import { OutsideProposals } from './agent-requests/topic-change.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
+import { failed } from './actions/results.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
 import { PrActions } from './actions/pr-actions.ts';
 import { MemoryActions } from './actions/memory-actions.ts';
@@ -947,12 +955,38 @@ export class Engine implements EngineService {
   async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
     const result = await this.prActions.approve(prKey, headOid);
     if (result.ok) {
-      // Approve only ever runs from the detail pane's action bar (CLAUDE.md
-      // "Approve is final"); was_agent_approved is reserved for a future
-      // agent-driven approve, which does not exist yet.
+      // The single approve runs from the detail pane's action bar (CLAUDE.md
+      // "Approve is final"); the agent-backed ones go through approveMany.
       this.telemetry.capture('pr_approved', { from: 'detail', was_agent_approved: false });
     }
     return result;
+  }
+
+  async approveMany(prs: ApprovePrRequest[], from: AgentActionFrom): Promise<BatchApproveResult> {
+    if (prs.length === 0) {
+      return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
+    }
+    // Approve is final: every PR is checked against the current board first, with the same core rules as the offer.
+    const keys = new Set(prs.map((pr) => pr.prKey));
+    const views = this.reads.currentTileViews((tile) => tile.members.some((member) => keys.has(member.prKey)));
+    const results: PrApproveResult[] = [];
+    let settleToken: string | undefined;
+    for (const { prKey, headOid } of prs) {
+      const holding = views.filter((view) => view.tile.members.some((member) => member.prKey === prKey));
+      const refusal = agentApproveRefusal(prKey, holding, from);
+      if (refusal !== null) {
+        results.push({ prKey, ok: false, message: refusal });
+        continue;
+      }
+      const result = await this.prActions.approve(prKey, headOid);
+      results.push({ prKey, ok: result.ok, message: result.message });
+      if (result.ok) {
+        this.telemetry.capture('pr_approved', { from, was_agent_approved: true });
+        settleToken = result.settleToken ?? settleToken;
+      }
+    }
+    const summary = approvalsSummary(results);
+    return { ...summary, undoToken: null, results, ...(settleToken ? { settleToken } : {}) };
   }
 
   async removeTeamRequest(prKey: PrKey, team: string): Promise<ActionResult> {
@@ -977,6 +1011,29 @@ export class Engine implements EngineService {
       this.telemetry.capture('marked_read', { count: 1, origin: 'detail' });
     }
     return result;
+  }
+
+  async markTilesRead(tileIds: string[], from: AgentActionFrom): Promise<ActionResult> {
+    // Checked against the current board like the offer: tiles no longer backed are skipped and named.
+    const ids = new Set(tileIds);
+    const views = this.reads.currentTileViews((tile) => ids.has(tile.id));
+    const unknown = tileIds.find((tileId) => !views.some((view) => view.tile.id === tileId));
+    if (unknown !== undefined) {
+      return failed(`no tile ${unknown}`);
+    }
+    const skipped = views.flatMap((view) => {
+      const refusal = agentMarkReadRefusal(view);
+      return refusal === null ? [] : [`${view.tile.title}: ${refusal}`];
+    });
+    const backed = views.filter((view) => agentMarkReadRefusal(view) === null).map((view) => view.tile.id);
+    if (backed.length === 0) {
+      return failed(`Nothing marked read; skipped ${skipped.join('; ')}`);
+    }
+    const result = this.tiles.markTilesRead(backed);
+    if (result.ok) {
+      this.telemetry.capture('marked_read', { count: backed.length, origin: from });
+    }
+    return skipped.length === 0 ? result : { ...result, message: `${result.message}; skipped ${skipped.join('; ')}` };
   }
 
   async markThreadRead(threadId: string): Promise<ActionResult> {

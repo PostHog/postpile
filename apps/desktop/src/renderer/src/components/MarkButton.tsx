@@ -20,6 +20,8 @@ const FILLS: Record<ButtonVariant, string> = {
   safe: 'bg-on-ink/20',
   secondary: 'bg-ink/10',
   move: 'bg-ink/10',
+  'safe-soft': 'bg-safe/10',
+  joined: 'bg-ink/10',
 };
 
 /**

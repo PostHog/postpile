@@ -2,6 +2,8 @@
 // that thousands of runs are not all trivial boards. Every label names a
 // branch the rules take (PR state, author, request, review, CI, thread,
 // snooze, snapshot) or a board shape a past bug needed.
+import { topicAgentOffers, type AgentApproveOffer } from '../agent-actions.ts';
+import { standingApprovals } from '../approvals.ts';
 import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
@@ -137,7 +139,10 @@ function prLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   }
   const verdict = board.glances.get(key);
   if (verdict) {
-    labels.push(`glance:${verdict}`);
+    labels.push(`glance:${verdict}`, `glance-risk:${board.prSpecs.get(key)?.glanceRisk}`);
+  }
+  if (verdict && board.staleGlances.has(key)) {
+    labels.push('glance:stale');
   }
   if (verdict === 'NOT_YOURS' && reviewRequest(pr, board.viewer) === 'team') {
     labels.push('shape:NOT_YOURS routed request');
@@ -293,6 +298,48 @@ function tileLabels(view: TileView): string[] {
   return labels;
 }
 
+function approveLabel(prefix: string, offer: AgentApproveOffer | null): string[] {
+  if (offer === null) {
+    return [`${prefix}:absent`];
+  }
+  if (offer.state === 'greyed') {
+    return [`${prefix}:greyed:${offer.reason}`];
+  }
+  const labels = [`${prefix}:active`, `${prefix}:active ${offer.risk}`];
+  if (offer.coveredCount < offer.totalCount) {
+    labels.push(`${prefix}:partial`);
+  }
+  return labels;
+}
+
+/**
+ * The agent-assisted offers (DESIGN "Agent-assisted actions"): each tile's
+ * and the topic's Approve state and greyed reason, a partial topic Approve
+ * ("3 of 5"), the topic's Mark N read and one that skips an ask, and an
+ * approvable PR someone else approved already.
+ */
+function agentLabels(board: PropertyBoard, views: TileView[]): string[] {
+  const labels = views.flatMap((view) => approveLabel('agent-approve-tile', view.agent.approve));
+  const topic = topicAgentOffers(views.map((view) => ({ tile: view.tile, state: view.state, agent: view.agent })));
+  labels.push(...approveLabel('agent-approve-topic', topic.approve));
+  const markRead = topic.markRead;
+  labels.push(markRead === null ? 'agent-mark-read-topic:absent' : `agent-mark-read-topic:${markRead.state}`);
+  if (markRead?.skipped.some((tile) => tile.reason === 'asks_for_you')) {
+    labels.push(markRead.state === 'active' ? 'agent-mark-read-topic:active, skips an ask' : 'agent-mark-read-topic:greyed by an ask');
+  }
+  for (const view of views) {
+    for (const row of view.prs) {
+      const pr = board.prs.get(row.key);
+      const approvals = pr ? standingApprovals(pr) : { people: [], agents: [] };
+      const approvedByOthers = [...approvals.people, ...approvals.agents].some((login) => !sameLogin(login, board.viewer.login)) || pr?.reviewDecision === 'APPROVED';
+      if (view.offers.pane[row.key]?.lead === 'approve' && isTracked(row.provenance) && approvedByOthers) {
+        labels.push('agent:approvable PR someone else approved');
+      }
+    }
+  }
+  return labels;
+}
+
 /** Every label of the board: PR labels for each PR in a tile, tile labels for each tile. */
 export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsOf(board)): Set<string> {
   const labels = new Set<string>();
@@ -304,6 +351,7 @@ export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsO
     }
   }
   views.flatMap(tileLabels).forEach((label) => labels.add(label));
+  agentLabels(board, views).forEach((label) => labels.add(label));
   if (board.spec.groups.some((group) => group.kind === 'dissolved_set')) {
     labels.add('shape:dissolved set');
   }
@@ -419,6 +467,29 @@ export const REQUIRED_LABELS: readonly string[] = [
   'glance:LOOKS_SAFE',
   'glance:LOOK_CLOSER',
   'glance:NOT_YOURS',
+  'glance:stale',
+  'glance-risk:low',
+  'glance-risk:medium',
+  'glance-risk:high',
+  'glance-risk:garbage',
+  'agent-approve-tile:active',
+  'agent-approve-tile:active low',
+  'agent-approve-tile:active medium',
+  'agent-approve-tile:greyed:rechecking',
+  'agent-approve-tile:greyed:look_closer',
+  'agent-approve-tile:greyed:high',
+  'agent-approve-tile:absent',
+  'agent-approve-topic:active',
+  'agent-approve-topic:partial',
+  'agent-approve-topic:greyed:rechecking',
+  'agent-approve-topic:greyed:look_closer',
+  'agent-approve-topic:absent',
+  'agent-mark-read-topic:active',
+  'agent-mark-read-topic:greyed',
+  'agent-mark-read-topic:absent',
+  'agent-mark-read-topic:active, skips an ask',
+  'agent-mark-read-topic:greyed by an ask',
+  'agent:approvable PR someone else approved',
   'tile:single',
   'tile:stack',
   'tile:set',

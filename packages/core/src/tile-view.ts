@@ -2,6 +2,7 @@
 // engine and FakeEngine only collect the inputs (store or sample data); the
 // rules that turn them into a view live here, once.
 import { prAfterMarkRead, tileAfterMarkRead } from './after-read.ts';
+import { tileAgentOffers, type AgentPrFacts } from './agent-actions.ts';
 import { isBot } from './bots.ts';
 import { forWhom, tileForWhom } from './for-whom.ts';
 import { lastTouch } from './last-touch.ts';
@@ -33,7 +34,7 @@ export interface PrSummaryInput {
   events: PrEvent[];
   /** The notification thread's reason, for the tier; null without a thread. */
   reason: NotificationReason | null;
-  glance: Pick<Glance, 'verdict' | 'forYou'> | null;
+  glance: Pick<Glance, 'verdict' | 'forYou' | 'risk'> | null;
   glanceStale: boolean;
   glanceGap: GlanceGap | null;
   glanceState: GlanceState;
@@ -152,6 +153,8 @@ export interface TileViewInput {
   state: TileState;
   /** The tile's rows, from buildPrSummary, in member order. */
   prs: PrSummary[];
+  /** The agent's facts per row (`agentPrFacts`, from the same inputs as the row), for the ✨ offers. */
+  agentPrs: AgentPrFacts[];
   /** Every PR, events and user state whose turn may look at (at least the tile's members). */
   prsByKey: Map<PrKey, Pr>;
   events: Map<PrKey, PrEvent[]>;
@@ -180,6 +183,8 @@ export function buildTileView(input: TileViewInput): TileView {
     notYours: input.notYours,
     readAt: input.now,
   });
+  const offers = tileOffers({ tile, state: input.state, turn, afterRead, prs, pendingWrite: input.pendingWrite });
+  const unreadPrKeys = tileUnreadPrKeys(input.state, prs);
   return {
     tile,
     state: input.state,
@@ -191,8 +196,9 @@ export function buildTileView(input: TileViewInput): TileView {
     turn,
     afterRead,
     pendingWrite: input.pendingWrite,
-    offers: tileOffers({ tile, state: input.state, turn, afterRead, prs, pendingWrite: input.pendingWrite }),
-    unreadPrKeys: tileUnreadPrKeys(input.state, prs),
+    offers,
+    agent: tileAgentOffers({ prs, offers, state: input.state, unreadPrKeys }, input.agentPrs),
+    unreadPrKeys,
     group: tileGroup(input.state),
     newBadge: tileNewBadge(input.state),
     quietRepo: input.quietRepo,

@@ -56,7 +56,7 @@ function tileView(input: BoardInput): TileView {
       events: events.get(pr.key) ?? [],
       reason: 'review_requested',
       // The row reads NOT_YOURS off the stored glance, like the engine.
-      glance: notYours.has(pr.key) ? { verdict: 'NOT_YOURS', forYou: 'Routed to lyra.' } : null,
+      glance: notYours.has(pr.key) ? { verdict: 'NOT_YOURS', forYou: 'Routed to lyra.', risk: 'low' } : null,
       glanceStale: false,
       glanceGap: null,
       glanceState: 'none',
@@ -69,7 +69,7 @@ function tileView(input: BoardInput): TileView {
       pendingWrite: null,
     });
   });
-  return buildTileView({ tile, state, prs: rows, prsByKey: prs, events, userStates, viewer, notYours, pendingWrite: null, quietRepo: false, repoLabel: null, now: NOW });
+  return buildTileView({ tile, state, prs: rows, agentPrs: [], prsByKey: prs, events, userStates, viewer, notYours, pendingWrite: null, quietRepo: false, repoLabel: null, now: NOW });
 }
 
 function paneOf(view: TileView, key: PrKey): PaneOffers {

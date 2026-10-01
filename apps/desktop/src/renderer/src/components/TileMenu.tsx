@@ -10,7 +10,7 @@ interface TileMenuProps {
   topics: TopicListItem[];
   /** "Wrong topic" moves one PR: the selected one, else the tile's lead. */
   prKey: string | null;
-  /** Matches the footer's other secondary buttons (honey edge on "Your move"). */
+  /** Matches the footer's other buttons (`joined` inside the tile footer's joined control). */
   variant?: ButtonVariant;
 }
 
