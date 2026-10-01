@@ -7,7 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpath
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
-import { ALL_AGENT_JOBS, buildStacks, planRounds, roundPrKeys, simulationNow, stackByPrKey, type AgentJob, type IsoTime, type PrKey, type SimulationPullIn, type SimulationRound } from '@postpile/core';
+import { ALL_AGENT_JOBS, buildStacks, planRounds, roundPrKeys, simulationNow, type AgentJob, type IsoTime, type PrKey, type SimulationPullIn, type SimulationRound } from '@postpile/core';
 import { ArmDatabase, BACKLOG_SYNC_MINUTES, readArmSnapshot, startFresh } from '@postpile/engine';
 import { Store } from '@postpile/store';
 import { formatReportMarkdown } from './report-markdown.ts';
@@ -106,16 +106,20 @@ async function copyDatabase(from: string, to: string): Promise<void> {
 }
 
 /**
- * Stored pull-ins whose layer still sits in its anchor's stack. Pull-in rows
- * outlive later syncs, and a PR may have been rebased or restacked since: a
- * fresh sync walks today's branches, so only today's stack shape counts.
+ * Stack layers as a fresh sync would pull them in, from today's stack shape:
+ * every stored PR nobody tracks (no thread, not found) comes in with each
+ * tracked PR of its current stack. Stored pull-in rows are not used: they
+ * outlive later syncs and keep the anchor a layer had before a rebase.
  */
-export function currentPullIns(store: Store): SimulationPullIn[] {
-  const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
-  return [...store.pullIns.listAll().values()].filter((pullIn) => {
-    const stack = stackOf.get(pullIn.prKey);
-    return stack !== undefined && stack === stackOf.get(pullIn.anchorPrKey);
-  });
+export function currentPullIns(store: Store, tracked: Set<PrKey>): SimulationPullIn[] {
+  const pullIns: SimulationPullIn[] = [];
+  for (const stack of buildStacks(store.prs.listAll())) {
+    const anchors = stack.prKeys.filter((key) => tracked.has(key));
+    for (const key of stack.prKeys.filter((key) => !tracked.has(key))) {
+      anchors.forEach((anchor) => pullIns.push({ prKey: key, anchorPrKey: anchor }));
+    }
+  }
+  return pullIns;
 }
 
 /** The rounds to run, from the fresh-start copy. */
@@ -127,10 +131,11 @@ function planSimulation(store: Store, options: SimulateStartOptions): Plan {
   const newest = options.now ?? simulationNow([...threads.map((thread) => thread.updatedAt), ...prs.map((pr) => pr.updated_at)]);
   // Written as toISOString writes it: snapshots compare round times with agent_call.at and pr_set_change.at as strings.
   const now = newest === null ? new Date().toISOString() : new Date(newest).toISOString();
+  const found = [...store.foundPrs.listAll().keys()];
   const rounds = planRounds({
     threads,
-    found: [...store.foundPrs.listAll().keys()],
-    pullIns: currentPullIns(store),
+    found,
+    pullIns: currentPullIns(store, new Set([...threads.map((thread) => thread.key), ...found])),
     stored: new Set(prs.map((pr) => pr.key)),
     now,
     days: options.days,

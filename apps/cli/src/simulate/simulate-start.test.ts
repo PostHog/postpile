@@ -178,18 +178,20 @@ describe('roundEnv', () => {
 });
 
 describe('currentPullIns', () => {
-  it('keeps a stored pull-in only while its layer still sits in its anchor\'s stack', () => {
+  it('pulls in an untracked layer with the tracked PRs of its current stack, whatever the stored rows say', () => {
     const store = Store.open(':memory:');
-    const bottom = makePr({ number: 1, baseRef: 'main', headRef: 's1' });
-    const layer = makePr({ number: 2, baseRef: 's1', headRef: 's2' });
-    const restacked = makePr({ number: 3, baseRef: 'main', headRef: 'own-branch' });
-    for (const pr of [bottom, layer, restacked]) {
+    const oldAnchor = makePr({ number: 1, baseRef: 'main', headRef: 'a1' });
+    const newAnchor = makePr({ number: 2, baseRef: 'main', headRef: 'b1' });
+    const rebased = makePr({ number: 3, baseRef: 'b1', headRef: 'b2' });
+    const loner = makePr({ number: 4, baseRef: 'main', headRef: 'own-branch' });
+    for (const pr of [oldAnchor, newAnchor, rebased, loner]) {
       store.prs.upsert(pr, at(0));
     }
-    store.pullIns.put({ prKey: layer.key, anchorPrKey: bottom.key, reason: 'stack layer above #1', pulledAt: at(0) });
-    store.pullIns.put({ prKey: restacked.key, anchorPrKey: bottom.key, reason: 'stack layer above #1', pulledAt: at(0) });
+    // The stored row still names the anchor the layer had before its rebase.
+    store.pullIns.put({ prKey: rebased.key, anchorPrKey: oldAnchor.key, reason: 'stack layer above #1', pulledAt: at(0) });
 
-    expect(currentPullIns(store).map((pullIn) => pullIn.prKey)).toEqual([layer.key]);
+    const tracked = new Set([oldAnchor.key, newAnchor.key]);
+    expect(currentPullIns(store, tracked)).toEqual([{ prKey: rebased.key, anchorPrKey: newAnchor.key }]);
     store.close();
   });
 });
