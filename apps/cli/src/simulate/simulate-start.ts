@@ -3,11 +3,11 @@
 // start runs through each agent pipeline (arm), round by round as the
 // backlog would drain, and the report compares them. Never asks GitHub,
 // never writes to the source database.
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
-import { ALL_AGENT_JOBS, planRounds, roundPrKeys, simulationNow, type AgentJob, type IsoTime, type PrKey, type SimulationRound } from '@postpile/core';
+import { ALL_AGENT_JOBS, buildStacks, planRounds, roundPrKeys, simulationNow, stackByPrKey, type AgentJob, type IsoTime, type PrKey, type SimulationPullIn, type SimulationRound } from '@postpile/core';
 import { ArmDatabase, BACKLOG_SYNC_MINUTES, readArmSnapshot, startFresh } from '@postpile/engine';
 import { Store } from '@postpile/store';
 import { formatReportMarkdown } from './report-markdown.ts';
@@ -105,6 +105,19 @@ async function copyDatabase(from: string, to: string): Promise<void> {
   }
 }
 
+/**
+ * Stored pull-ins whose layer still sits in its anchor's stack. Pull-in rows
+ * outlive later syncs, and a PR may have been rebased or restacked since: a
+ * fresh sync walks today's branches, so only today's stack shape counts.
+ */
+export function currentPullIns(store: Store): SimulationPullIn[] {
+  const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
+  return [...store.pullIns.listAll().values()].filter((pullIn) => {
+    const stack = stackOf.get(pullIn.prKey);
+    return stack !== undefined && stack === stackOf.get(pullIn.anchorPrKey);
+  });
+}
+
 /** The rounds to run, from the fresh-start copy. */
 function planSimulation(store: Store, options: SimulateStartOptions): Plan {
   const threads = (store.db.prepare('SELECT pr_key, unread, updated_at FROM notification_thread WHERE pr_key IS NOT NULL').all() as { pr_key: string; unread: number; updated_at: string }[]).map(
@@ -117,7 +130,7 @@ function planSimulation(store: Store, options: SimulateStartOptions): Plan {
   const rounds = planRounds({
     threads,
     found: [...store.foundPrs.listAll().keys()],
-    pullIns: [...store.pullIns.listAll().values()],
+    pullIns: currentPullIns(store),
     stored: new Set(prs.map((pr) => pr.key)),
     now,
     days: options.days,
@@ -182,12 +195,20 @@ function snapshotArms(out: string, arms: ArmName[], now: IsoTime, since: IsoTime
   return snapshots;
 }
 
+/**
+ * Refuses an --out that holds anything: the simulation writes databases,
+ * reports and instructions there, and an SQLite backup replaces a file
+ * without asking. A new or empty folder only.
+ */
+function refuseUsedFolder(out: string): void {
+  if (existsSync(out) && readdirSync(out).length > 0) {
+    throw new Error(`${out} is not empty; simulate-start only writes into a new or empty folder, pick another --out`);
+  }
+}
+
 /** Copies the source, makes the fresh start and the arm databases. Returns the plan. */
 async function prepare(options: SimulateStartOptions, out: string): Promise<Plan> {
   const baseFile = join(out, 'base.sqlite');
-  if (existsSync(baseFile)) {
-    throw new Error(`${out} already holds a simulation; pick another --out`);
-  }
   await copyDatabase(options.from, join(out, 'source.sqlite'));
   await copyDatabase(join(out, 'source.sqlite'), baseFile);
   const base = Store.open(baseFile);
@@ -212,6 +233,7 @@ async function prepare(options: SimulateStartOptions, out: string): Promise<Plan
 export async function simulateStart(options: SimulateStartOptions, runRound: RoundRunner, log: (line: string) => void = console.log): Promise<SimulationResult> {
   const out = resolve(options.out ?? mkdtempSync(join(tmpdir(), 'postpile-simulate-')));
   refuseAppDataPath(out);
+  refuseUsedFolder(out);
   checkSource(options.from);
   mkdirSync(out, { recursive: true });
   const plan = await prepare(options, out);

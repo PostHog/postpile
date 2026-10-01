@@ -1,16 +1,16 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Pr } from '@postpile/core';
-import { makeThreadFor } from '@postpile/core/fixtures';
+import { at, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { runSimulatedRound } from '@postpile/engine';
 import { makeHarness } from '@postpile/engine/testing';
 import { reviewRequestedPr } from '@postpile/engine/testing/prs';
 import { Store } from '@postpile/store';
 import type { SimulateStartOptions } from './simulate-args.ts';
-import { refuseAppDataPath, simulateStart, type RoundRun } from './simulate-start.ts';
+import { currentPullIns, refuseAppDataPath, simulateStart, type RoundRun } from './simulate-start.ts';
 import { roundEnv } from './spawn-round.ts';
 
 const PRS = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
@@ -94,10 +94,16 @@ describe('simulateStart', () => {
     arm.close();
   });
 
-  it('refuses an out folder that already holds a simulation', async () => {
+  it('refuses an out folder that holds anything, and leaves its files alone', async () => {
     const from = await sourceDatabase();
     await simulateStart({ ...options(from), rounds: 1 }, (run) => runSimulatedRound(run).then(() => {}), () => {});
-    await expect(simulateStart(options(from), async () => {}, () => {})).rejects.toThrow('already holds a simulation');
+    await expect(simulateStart(options(from), async () => {}, () => {})).rejects.toThrow('not empty');
+
+    const other = join(dir, 'notes');
+    mkdirSync(other);
+    writeFileSync(join(other, 'report.json'), 'mine');
+    await expect(simulateStart({ ...options(from), out: other }, async () => {}, () => {})).rejects.toThrow('not empty');
+    expect(readFileSync(join(other, 'report.json'), 'utf8')).toBe('mine');
   });
 
   it('refuses a source without a viewer before copying anything', async () => {
@@ -168,5 +174,22 @@ describe('roundEnv', () => {
       POSTPILE_TOPIC_DIGEST: '1',
     });
     expect(roundEnv({ ...run, arm: 'old' }, {}).POSTPILE_TOPIC_DIGEST).toBe('0');
+  });
+});
+
+describe('currentPullIns', () => {
+  it('keeps a stored pull-in only while its layer still sits in its anchor\'s stack', () => {
+    const store = Store.open(':memory:');
+    const bottom = makePr({ number: 1, baseRef: 'main', headRef: 's1' });
+    const layer = makePr({ number: 2, baseRef: 's1', headRef: 's2' });
+    const restacked = makePr({ number: 3, baseRef: 'main', headRef: 'own-branch' });
+    for (const pr of [bottom, layer, restacked]) {
+      store.prs.upsert(pr, at(0));
+    }
+    store.pullIns.put({ prKey: layer.key, anchorPrKey: bottom.key, reason: 'stack layer above #1', pulledAt: at(0) });
+    store.pullIns.put({ prKey: restacked.key, anchorPrKey: bottom.key, reason: 'stack layer above #1', pulledAt: at(0) });
+
+    expect(currentPullIns(store).map((pullIn) => pullIn.prKey)).toEqual([layer.key]);
+    store.close();
   });
 });
