@@ -56,6 +56,22 @@ The packaged app bundles main, preload, renderer, the workspace packages and the
 
 Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPile-dev`), rotated at 5 MB. Help › Reveal Logs opens the folder.
 
+### Simulate a fresh start
+
+`pnpm cli simulate-start` replays a new user's first syncs on a copy of a database, once per agent pipeline, to compare them from the same start:
+
+```
+pnpm cli simulate-start --from <db file> [--days 7] [--round-size 60] [--out <dir>] \
+  [--arms old,combined] [--max-agent-calls 1000] [--rounds <n>] [--now <iso>] [--dry-run]
+```
+
+- `--from` is opened read-only and copied (SQLite backup) into the out folder (default: a new folder under the system temp folder). Everything else happens on copies there.
+- Fresh start: topics, memberships, dossiers, facts, glances, sets, proposals, cursors, agent calls, chats, snoozes, agent event overrides and the agent's meta keys are wiped; GitHub data and the user's read state stay (`packages/engine/src/simulation/fresh-start.ts` lists every table with its reason).
+- Only threads of the last `--days` count, plus found PRs. "Now" is the newest activity in the source. The PRs come in rounds the way a backlog drains (unread first, newest first, `--round-size` per round, found PRs and stack layers ride along), and each round runs only the digest a sync runs after its fetch (`Engine.digestStored`), in a child process per arm with `POSTPILE_TOPIC_DIGEST=0` (old) or `1` (combined), `POSTPILE_READ_ONLY=1`, no GitHub calls at all.
+- The first arm assigns topics; the others get its topics each round and run every other job. Prompts use the instructions the source database last recorded (`instructions.md` in the out folder).
+- `report.md` and `report.json` in the out folder: agent calls, cost and time per round and arm, tiles per topic, tile churn, then glances, dossiers and tiles side by side. They hold real PR data: keep them out of the repo.
+- `--dry-run` makes no agent calls (for checking the plumbing).
+
 ## Screenshots
 
 The README screenshots in `docs/images/` come from `pnpm screenshots`. It builds the renderer, starts the sample data server and a static file server on free ports, and takes one cropped shot per entry of the list at the top of `scripts/screenshots.ts`. Add a shot by adding an entry (name, selector, optional setup and cursor).

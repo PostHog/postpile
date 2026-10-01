@@ -23,7 +23,8 @@
     "@postpile/core": "workspace:*",
     "@postpile/engine": "workspace:*",
     "@postpile/mcp": "workspace:*",
-    "@postpile/server": "workspace:*"
+    "@postpile/server": "workspace:*",
+    "@postpile/store": "workspace:*"
   },
   "bin": {
     "postpile": "./src/main.ts"

@@ -143,7 +143,7 @@ import { loadLastSyncReport } from './last-sync-report.ts';
 import { SetupChecks, systemCommands, type CommandRunner } from './setup/setup-checks.ts';
 import { SetupFlow } from './setup/setup-flow.ts';
 import { SetupSweep } from './setup/setup-sweep.ts';
-import { SyncRun } from './sync-run.ts';
+import { SyncRun, type DigestStoredOptions } from './sync-run.ts';
 import { TeamMembers } from './team-members.ts';
 import { saveViewerFollowingRoles } from './team-role-events.ts';
 import { TeamRoleKeeper } from './team-roles.ts';
@@ -641,6 +641,15 @@ export class Engine implements EngineService {
         });
     }
     return this.syncing;
+  }
+
+  /**
+   * Dev only (`pnpm cli simulate-start`, see SyncRun.digestStored): the
+   * sync's digest and retire steps on stored data, no GitHub at all. Not
+   * part of EngineService; the CLI runs it alone on a scratch database.
+   */
+  digestStored(options: DigestStoredOptions): Promise<SyncReport> {
+    return this.syncRun.digestStored(options);
   }
 
   consolidate(options: ConsolidateOptions = {}): Promise<ConsolidationReport> {

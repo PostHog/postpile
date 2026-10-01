@@ -202,6 +202,9 @@ importers:
       '@postpile/server':
         specifier: workspace:*
         version: link:../server
+      '@postpile/store':
+        specifier: workspace:*
+        version: link:../../packages/store
 
   apps/desktop:
     devDependencies:

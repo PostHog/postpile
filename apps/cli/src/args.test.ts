@@ -61,3 +61,33 @@ describe('withCallCap', () => {
     expect(withCallCap(parseArgs(['topics']), 7)).toEqual({ name: 'topics' });
   });
 });
+
+describe('simulate-start flags', () => {
+  it('needs --from and has defaults for the rest', () => {
+    expect(parseArgs(['simulate-start'])).toEqual({ name: 'help' });
+    expect(parseArgs(['simulate-start', '--from', '/scratch/db.sqlite'])).toEqual({
+      name: 'simulate-start',
+      options: { from: '/scratch/db.sqlite', days: 7, roundSize: 60, out: null, arms: ['old', 'combined'], maxAgentCalls: 1000, rounds: null, dryRun: false, now: null },
+    });
+  });
+
+  it('reads every flag and rejects bad values', () => {
+    const command = parseArgs(['simulate-start', '--from', 'a.sqlite', '--days', '3', '--round-size', '10', '--out', '/scratch/out', '--arms', 'combined', '--max-agent-calls', '0', '--rounds', '2', '--now', '2026-09-29T12:00:00Z', '--dry-run']);
+    expect(command).toEqual({
+      name: 'simulate-start',
+      options: { from: 'a.sqlite', days: 3, roundSize: 10, out: '/scratch/out', arms: ['combined'], maxAgentCalls: 0, rounds: 2, dryRun: true, now: '2026-09-29T12:00:00.000Z' },
+    });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--arms', 'old,old'])).toEqual({ name: 'help' });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--arms', 'new'])).toEqual({ name: 'help' });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--days', '0'])).toEqual({ name: 'help' });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--now', 'soon'])).toEqual({ name: 'help' });
+  });
+
+  it('parses the hidden child command', () => {
+    expect(parseArgs(['simulate-round', '--start-at', '2026-09-29T12:00:00Z', '--keys', 'k.json', '--max-agent-calls', '5', '--agent-jobs', 'dossiers,glances'])).toEqual({
+      name: 'simulate-round',
+      options: { startAt: '2026-09-29T12:00:00.000Z', keysFile: 'k.json', maxAgentCalls: 5, agentJobs: ['dossiers', 'glances'] },
+    });
+    expect(parseArgs(['simulate-round', '--keys', 'k.json'])).toEqual({ name: 'help' });
+  });
+});

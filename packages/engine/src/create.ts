@@ -12,7 +12,6 @@ import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
 import { agentCwdFor, defaultPaths, seedDevInstructions, type AppPaths } from './paths.ts';
-import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
 import { PendingWrites } from './writes/pending-writes.ts';
@@ -48,6 +47,8 @@ export interface CreateEngineOptions {
   telemetry?: Telemetry;
   /** How Claude Code starts the MCP server; only the desktop app knows. Missing: "Add to Claude Code" only shows the command. */
   mcpLauncher?: McpLauncher | null;
+  /** The engine's clock. Defaults to the system clock; `pnpm cli simulate-start` runs the engine at a simulated time. */
+  now?: () => Date;
 }
 
 /** POSTPILE_PING_CAP when it is a whole number >= 0, else the default. */
@@ -69,8 +70,12 @@ export function catchUpCapFromEnv(value: string | undefined, maxAgentCalls: stri
   return maxAgentCalls?.trim() === '0' ? 0 : CATCH_UP_CALLS_PER_DAY;
 }
 
-/** Wires the real dependencies. Tests build Engine directly with fakes instead. */
-export function createEngine(options: CreateEngineOptions = {}): EngineService {
+/**
+ * Wires the real dependencies. Tests build Engine directly with fakes
+ * instead. Returns the Engine itself so the dev CLI reaches its dev-only
+ * methods (digestStored); everything else uses it as EngineService.
+ */
+export function createEngine(options: CreateEngineOptions = {}): Engine {
   if (!options.paths) {
     const seeded = seedDevInstructions();
     if (seeded) {
@@ -81,7 +86,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
   const readOnly = options.withoutLock === true || (options.readOnly ?? process.env.POSTPILE_READ_ONLY === '1');
   // Before the store opens: a second process on the same database refuses here.
   const lock = options.withoutLock ? null : DataDirLock.acquire(paths.databaseFile, options.lockKind ?? 'server');
-  const now = (): Date => new Date();
+  const now = options.now ?? ((): Date => new Date());
   const telemetry =
     options.telemetry ??
     telemetryFromEnv({

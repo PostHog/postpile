@@ -5,6 +5,8 @@ import {
   splitAgentOffErrors,
   SYNC_MAX_PRS,
   type AgentCallStats,
+  type AgentJob,
+  type PrKey,
   type SyncOptions,
   type SyncProgress,
   type SyncReport,
@@ -18,7 +20,7 @@ import { Digester } from './digest/digester.ts';
 import { errorText } from './errors.ts';
 import type { GitHubQuota, QuotaRunStats } from './github-quota.ts';
 import { saveLastSyncReport, syncReportLogLines } from './last-sync-report.ts';
-import type { GitHubSync } from './github-sync.ts';
+import type { GitHubSync, GitHubSyncResult } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { FactVerifier } from './memory/fact-verifier.ts';
 import { emptyFactCounts } from './memory/fact-writer.ts';
@@ -27,6 +29,7 @@ import { PhaseClock } from './phase-clock.ts';
 import type { RunDeps } from './run-deps.ts';
 import { runTelemetry } from './run-deps.ts';
 import { hasCompletedFirstSync, markFirstSyncCompleted } from './telemetry/first-sync.ts';
+import { loadViewer } from './viewer-meta.ts';
 import type { QuietReads } from './writes/quiet-reads.ts';
 
 function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): SyncReport {
@@ -48,6 +51,20 @@ function emptyReport(startedAt: string, tally: DigestTally, errors: string[]): S
     topicsRetired: 0,
   };
 }
+
+/**
+ * Dev only (`pnpm cli simulate-start`): a digest over what is stored, as if
+ * a sync had just fetched `prKeys`. No GitHub call at all.
+ */
+export interface DigestStoredOptions {
+  /** The PRs to treat as just fetched: facts about them are verified, events of the pinged ones count as new. */
+  prKeys: PrKey[];
+  maxAgentCalls?: number;
+  agentJobs?: AgentJob[];
+}
+
+/** The part of a fetch the digest reads. */
+type FetchedForDigest = Pick<GitHubSyncResult, 'viewer' | 'fetchedPrKeys' | 'newEventIds' | 'readOnGitHub'>;
 
 /** What progress() reads while a sync runs. */
 interface LiveSync {
@@ -97,6 +114,91 @@ export class SyncRun {
   }
 
   /**
+   * Everything a sync does between the fetch and the quiet reads: verify
+   * facts about the fetched PRs, the agent digest, bring back retired topics
+   * with new loud events, move "since you last looked" for what was read on
+   * GitHub. The full sync and digestStored share it, so both run the same
+   * pipeline.
+   */
+  private async digest(
+    fetched: FetchedForDigest,
+    agentJobs: AgentJob[] | undefined,
+    run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[]; report: SyncReport },
+  ): Promise<void> {
+    const { store, now } = this.deps;
+    new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, run.tally.facts);
+    // Without claude the fetch and the rules still ran; the agent jobs would only fail one by one.
+    const agentOff = this.deps.agentOff();
+    if (agentOff !== null) {
+      run.report.agentOff = agentOff;
+      this.log(`sync: agent jobs skipped: ${agentOff}`);
+    }
+    const digester = new Digester({
+      store,
+      agent: this.deps.agent,
+      contexts: this.deps.contexts,
+      budget: run.budget,
+      facts: this.deps.facts,
+      viewer: fetched.viewer,
+      errors: run.errors,
+      tally: run.tally,
+      now,
+      onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
+      onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, fetched.viewer)) ?? [],
+      topicDigest: this.deps.topicDigest ?? false,
+    }, run.phases);
+    await digester.run(agentOff === null ? (agentJobs ?? ALL_AGENT_JOBS) : []);
+    // After the digest classified the new events, so one the agent turned quiet brings no retired topic back.
+    reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
+    // After the digest, so dossier changes about events already read on GitHub count as seen too.
+    advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
+  }
+
+  /** The stored PRs as a fetch would have reported them: events of the pinged ones are new, read state is already stored. */
+  private storedAsFetched(prKeys: PrKey[]): FetchedForDigest {
+    const { store } = this.deps;
+    const viewer = loadViewer(store);
+    if (!viewer) {
+      throw new Error('no viewer stored: digestStored needs a database that synced once');
+    }
+    const pinged = prKeys.filter((key) => store.notifications.getByPrKey(key) !== null);
+    const newEventIds = [...store.events.listForPrs(pinged).values()].flatMap((events) => events.map((event) => event.id));
+    return { viewer, fetchedPrKeys: prKeys, newEventIds, readOnGitHub: prKeys };
+  }
+
+  /**
+   * Dev only (`pnpm cli simulate-start`): the agent digest and the retire
+   * steps of a sync, on what is stored, as if a sync had just fetched
+   * `prKeys`. Never asks GitHub: no fetch and no quiet reads (they write to
+   * GitHub). No telemetry and no stored sync report.
+   */
+  async digestStored(options: DigestStoredOptions): Promise<SyncReport> {
+    const { store, now, callLog } = this.deps;
+    const startedAt = now().toISOString();
+    const errors: string[] = [];
+    const tally: DigestTally = { dossiersUpdated: 0, facts: emptyFactCounts() };
+    const report = emptyReport(startedAt, tally, errors);
+    report.agentCallStats = callLog.begin(`digest-stored:${startedAt}`);
+    const phases = new PhaseClock(now);
+    const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
+    try {
+      const fetched = this.storedAsFetched(options.prKeys);
+      report.prsFetched = options.prKeys.length;
+      report.newEvents = fetched.newEventIds.length;
+      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report });
+      report.topicsRetired = retireFinishedTopics(store, now().toISOString());
+      reviveUnreadTopics(store, now().toISOString(), false);
+    } finally {
+      callLog.end();
+    }
+    report.agentCalls = report.agentCallStats.total;
+    report.dossiersUpdated = tally.dossiersUpdated;
+    report.finishedAt = now().toISOString();
+    report.phaseMs = phases.timings();
+    return report;
+  }
+
+  /**
    * The running sync, null between syncs. Planned is what the budget granted
    * so far, so it grows as later phases plan their calls; done counts calls
    * that came back, failed ones included.
@@ -143,32 +245,7 @@ export class SyncRun {
       report.newEvents = fetched.newEventIds.length;
       errors.push(...fetched.errors);
 
-      new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, tally.facts);
-      // Without claude the fetch and the rules still ran; the agent jobs would only fail one by one.
-      const agentOff = this.deps.agentOff();
-      if (agentOff !== null) {
-        report.agentOff = agentOff;
-        this.log(`sync: agent jobs skipped: ${agentOff}`);
-      }
-      const digester = new Digester({
-        store,
-        agent: this.deps.agent,
-        contexts: this.deps.contexts,
-        budget,
-        facts: this.deps.facts,
-        viewer: fetched.viewer,
-        errors,
-        tally,
-        now,
-        onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
-        onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, fetched.viewer)) ?? [],
-        topicDigest: this.deps.topicDigest ?? false,
-      }, phases);
-      await digester.run(agentOff === null ? (options.agentJobs ?? ALL_AGENT_JOBS) : []);
-      // After the digest classified the new events, so one the agent turned quiet brings no retired topic back.
-      reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
-      // After the digest, so dossier changes about events already read on GitHub count as seen too.
-      advanceSeenFromGitHub(store, fetched.readOnGitHub, now().toISOString());
+      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report });
       // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
       await this.handleQuietly(errors);
       // Last, so the new events, what was read on GitHub and the quiet reads all count.
