@@ -3206,10 +3206,18 @@ Owner decisions (2026-09-30):
   button stays, disabled, with the reason in its pill. Nothing to act on at
   all: no button.
 - **Tile Approve** (new button in the tile footer). Gone when the tile has no
-  approvable PR. Active when every approvable PR in the tile is agent-safe:
-  it approves all of them (a stack base to head), and the pill shows the
-  highest risk. Otherwise greyed out. The reason is `rechecking…` when any
+  approvable PR. Active when at least one approvable PR in the tile is
+  agent-safe: it approves only those (a stack base to head), names the rest
+  as left out, and the pill shows the highest risk among the covered PRs.
+  The label says "Approve 2 of 3 PRs" when it leaves some out, else
+  "Approve", "Approve stack" or "Approve 3 PRs" on a set. Greyed out only
+  when no approvable PR is agent-safe. The reason is `rechecking…` when any
   approvable PR's glance is stale or missing, else `look closer` or `high`.
+  The topic's Approve covers exactly the union of what its unsnoozed tiles
+  cover.
+  Owner, 2026-10-01: the tile Approve is the same magic approval as the
+  topic's; the earlier all-or-nothing tile rule was a spec mistake and
+  greyed a stack while the topic offered two of its PRs.
 - **Topic Approve** (topic header). It covers the approvable PRs in the
   topic's tiles, leaving out snoozed tiles. It approves only the agent-safe
   ones: "Approve 3 of 5 PRs", or "Approve 3 PRs" when all qualify. Each PR

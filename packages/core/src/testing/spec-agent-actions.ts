@@ -119,8 +119,9 @@ function coveredRisks(board: PropertyBoard, covered: PrKey[]): BackedRisk[] {
 }
 
 /**
- * The tile's ✨ Approve: gone without an approvable PR; active when every
- * approvable PR is agent-safe, with the highest risk; else greyed,
+ * The tile's ✨ Approve: gone without an approvable PR; active when at least
+ * one approvable PR is agent-safe, covering only those, with the highest
+ * risk among them (owner, 2026-10-01: like the topic's); else greyed,
  * rechecking when any glance is stale or missing, else look closer, else
  * high.
  */
@@ -131,7 +132,7 @@ export function specTileApprove(board: PropertyBoard, view: TileView): SpecAppro
   }
   const covered = prs.filter((pr) => pr.block === null).map((pr) => pr.key);
   const leftOut = prs.filter((pr) => pr.block !== null);
-  if (leftOut.length === 0) {
+  if (covered.length > 0) {
     return { state: 'active', risk: specHighestRisk(coveredRisks(board, covered)), reason: null, covered, leftOut };
   }
   const blocks = leftOut.map((pr) => pr.block);

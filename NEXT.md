@@ -1093,7 +1093,8 @@ the app meanwhile.
   because an agent's verdict supports it, in a pill that says what the
   agent judged (risk level, or why it cannot back it). Topic and tile
   Approve take only agent-safe PRs (Looks safe, low or medium risk, current
-  glance) and ask first. Not backed means greyed out with the reason;
+  glance) and ask first; a tile, like the topic, approves the agent-safe
+  subset (2026-10-01, was all-or-nothing). Not backed means greyed out with the reason;
   nothing to act on means no button. Mark read skips tiles with asks for you. Only actions carry ✨, never
   text. Tile Mark read is always offered, so it stays plain.
 - **Tiles hold still** (2026-10-01, DESIGN.md "Tiles hold still"): topics
