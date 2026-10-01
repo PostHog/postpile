@@ -71,6 +71,7 @@ export * from './tile-view.ts';
 export * from './tile-groups.ts';
 export * from './agent-actions.ts';
 export * from './set-history.ts';
+export * from './glance-risk.ts';
 export * from './instructions-sections.ts';
 export * from './setup.ts';
 export * from './setup-draft.ts';

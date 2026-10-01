@@ -1,4 +1,4 @@
-import { isBot, prOwners, standingApprovals } from '@postpile/core';
+import { glanceRiskLevel, isBot, prOwners, standingApprovals } from '@postpile/core';
 import type { Pr } from '@postpile/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
@@ -65,11 +65,6 @@ function prGlanceSnapshot(pr: Pr): unknown {
  */
 export const SET_PROMPT_VERSION = 's2';
 
-/** The first word of a glance's risk line, lowercased: "Medium - touches the loop" -> "medium". */
-function riskWord(line: string | undefined): string {
-  return (line ?? '').trim().split(/[\s.,:-]/)[0]?.toLowerCase() ?? '';
-}
-
 /**
  * What a set regroup reacts to, one string per fact. The engine runs a
  * regroup only when a fact shows up that the last run did not see: an open
@@ -88,11 +83,11 @@ export function setGroupingTriggers(input: SetGroupingInput): string[] {
   );
   const triggers = [`context:${context}`];
   for (const key of unplacedKeys(input)) {
-    triggers.push(`open:${key}:${riskWord(input.risks[key])}`);
+    triggers.push(`open:${key}:${glanceRiskLevel(input.risks[key] ?? '')}`);
   }
   for (const set of activeSets(input)) {
     for (const member of set.members) {
-      triggers.push(`member:${set.id}:${member.prKey}:${riskWord(input.risks[member.prKey])}`);
+      triggers.push(`member:${set.id}:${member.prKey}:${glanceRiskLevel(input.risks[member.prKey] ?? '')}`);
     }
   }
   for (const set of input.existingSets) {
