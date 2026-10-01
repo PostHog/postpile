@@ -118,8 +118,8 @@ function UnseenMergeChip(props: { count: number }) {
 
 /**
  * The fixed leading column of a topic row, 14px with its gap: line one holds
- * the unread dot, line two the PR state icon, both centred. The name and the
- * summary start right after it on every row, so they share one x.
+ * the unread dot, line two stays empty. The name and the summary start right
+ * after it on every row, so they share one x.
  */
 function LeadSlot(props: { children?: ReactNode }) {
   return <span className="flex w-3.5 shrink-0 items-center justify-center">{props.children}</span>;
@@ -134,7 +134,12 @@ function PrStateMark(props: { item: TopicListItem }) {
   if (prState === null) {
     return null;
   }
-  return <PrStateIcon lifecycle={prState} size={11} title={stateMix(prStateCounts)} />;
+  // A 16px box, as wide as the smallest unread bubble above it, so the icon ends on the bubble's right edge.
+  return (
+    <span className="flex min-w-4 shrink-0 items-center justify-end">
+      <PrStateIcon lifecycle={prState} size={11} title={stateMix(prStateCounts)} />
+    </span>
+  );
 }
 
 /** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
@@ -173,15 +178,14 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       </span>
       {/* The chip sits under the bubble; at 1100px row one has no room left, so the summary gives way first. */}
       <span className="flex w-full min-w-0 items-center">
-        <LeadSlot>
-          <PrStateMark item={item} />
-        </LeadSlot>
+        <LeadSlot />
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
             {topicSnippet(item)}
           </span>
           <YourMoveChip moves={item.yourMoves} />
           {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
+          <PrStateMark item={item} />
         </span>
       </span>
     </button>
@@ -204,10 +208,10 @@ function SectionHeader(props: { tier: PrTier | 'other' }) {
 }
 
 /** A section title that folds its topics away. The chevron takes the topic rows' leading slot, so the label starts on the topic names' x. */
-function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; indent?: boolean }) {
+function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean }) {
   const size = props.small ? 'text-[10.5px] font-medium text-hint' : 'text-[11px] font-semibold tracking-[0.04em] text-hint';
   return (
-    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center py-1 text-left ${props.indent ? 'px-4' : 'px-2'}`}>
+    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className="flex items-center px-2 py-1 text-left">
       <LeadSlot>
         <span className={`flex text-faint ${props.open ? '' : '-rotate-90'}`}>
           <ChevronIcon />
@@ -410,7 +414,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
             groups.team.flatMap((entry) => entry.items),
             groups.team.map((entry) => (
               <div key={entry.area} className="flex flex-col gap-px">
-                <GroupHeader small indent label={entry.area} open={isOpen(`area:${entry.area}`)} onToggle={() => toggle(`area:${entry.area}`)} />
+                <GroupHeader small label={entry.area} open={isOpen(`area:${entry.area}`)} onToggle={() => toggle(`area:${entry.area}`)} />
                 {isOpen(`area:${entry.area}`) && otherItems(entry.items)}
               </div>
             )),

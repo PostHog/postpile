@@ -2739,11 +2739,16 @@ avatars and filters", QueuesB2).
   merged shows open; merged shows only when nothing is open or draft; closed
   only when everything is closed. Pulled-in stack layers do not count. It is
   the same icon and colour as a PR row (`PrStateIcon`). Every row has a
-  fixed 14px leading slot inside the highlight: the unread dot on line one,
-  the icon on line two, both centred, so the name and the summary start at
-  the same x on every row (and the section labels line up with them; so do
-  the fold headers, whose chevron takes the slot, and the filter, hidden
-  topics and error lines). The
+  fixed 14px leading slot inside the highlight, holding only the unread dot
+  on line one (empty on line two), so the name and the summary start at the
+  same x on every row (and the section labels line up with them; so do the
+  fold headers, including the area headers under Your team, whose chevron
+  takes the slot, and the filter, hidden topics and error lines). The icon
+  sits at the right end of line two, after the summary and the chips, and
+  ends on the same right edge as the unread bubble and faces above it
+  (2026-10-01: icon moved right for a calmer left edge; coloured icons on
+  most rows made the left edge noisy, and the area headers sat deeper than
+  the names). The
   tooltip ("5 open · 1 merged") is the only place the counts show. Chosen
   over counts per state (busier, steals summary width) and a progress bar.
 - **Topic header PR pill** (`TopicDetail.prRollup` = `topicPrRollup`,
