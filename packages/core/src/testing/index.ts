@@ -17,5 +17,7 @@ export * from './spec-events.ts';
 export * from './spec-rules.ts';
 export * from './spec-layout.ts';
 export * from './spec-offers.ts';
+export * from './spec-agent-actions.ts';
 export * from './invariants-board.ts';
 export * from './invariants-rules.ts';
+export * from './invariants-agent-actions.ts';

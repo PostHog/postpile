@@ -4820,6 +4820,12 @@ a boundary is restated as `specSnapshotAt`, and `newMoveMatchesTheSpec`
 checks `isNewYourMove` at the read and the last look on every thread. The property
 invariants alone now kill 83% of the rule-file mutants (28% before, at the
 same rule code; 300 boards per invariant).
+The agent-assisted offers (2026-09-30) have their own oracle
+(`spec-agent-actions.ts`: agent-safe, approvable, the tile and topic
+Approve, the tile's Mark read backing and the topic's "Mark N read") and
+invariants (`invariants-agent-actions.ts`, run in
+`properties/agent-actions.test.ts`). The generator gives each glance a risk
+line (low, medium, high or an unreadable word) and a stale flag.
 
 Measuring with Stryker (one-off, not a dependency): in a throwaway
 worktree add `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`,
