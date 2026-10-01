@@ -2669,8 +2669,10 @@ avatars and filters", QueuesB2).
   draft, merged, closed (closed without merging). One open PR among nine
   merged shows open; merged shows only when nothing is open or draft; closed
   only when everything is closed. Pulled-in stack layers do not count. It is
-  the same icon and colour as a PR row (`PrStateIcon`), hung in the left
-  gutter of the summary line so the name and summary keep their x. The
+  the same icon and colour as a PR row (`PrStateIcon`). Every row has a
+  fixed 14px leading slot inside the highlight: the unread dot on line one,
+  the icon on line two, both centred, so the name and the summary start at
+  the same x on every row (and the section labels line up with them). The
   tooltip ("5 open · 1 merged") is the only place the counts show. Chosen
   over counts per state (busier, steals summary width) and a progress bar.
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread

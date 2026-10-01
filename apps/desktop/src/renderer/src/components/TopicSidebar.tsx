@@ -149,9 +149,17 @@ function UnseenMergeChip(props: { count: number }) {
 const PR_STATE_WORDS = { open: 'open', draft: 'draft', merged: 'merged', closed: 'closed' } as const;
 
 /**
+ * The fixed leading column of a topic row, 14px with its gap: line one holds
+ * the unread dot, line two the PR state icon, both centred. The name and the
+ * summary start right after it on every row, so they share one x.
+ */
+function LeadSlot(props: { children?: ReactNode }) {
+  return <span className="flex w-3.5 shrink-0 items-center justify-center">{props.children}</span>;
+}
+
+/**
  * The topic's PR state (core `prState`: open, else draft, else merged, else
- * closed) in the left gutter of the summary line, so the name and summary
- * keep their x. The only place the per-state counts show, as the tooltip.
+ * closed). The only place the per-state counts show, as the tooltip.
  */
 function PrStateMark(props: { item: TopicListItem }) {
   const { prState, prStateCounts } = props.item;
@@ -162,11 +170,7 @@ function PrStateMark(props: { item: TopicListItem }) {
     .filter((state) => prStateCounts[state] > 0)
     .map((state) => `${prStateCounts[state]} ${PR_STATE_WORDS[state]}`)
     .join(' · ');
-  return (
-    <span className="absolute top-1/2 right-full mr-[3px] flex -translate-y-1/2">
-      <PrStateIcon lifecycle={prState} size={11} title={title} />
-    </span>
-  );
+  return <PrStateIcon lifecycle={prState} size={11} title={title} />;
 }
 
 /** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
@@ -192,23 +196,29 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      className={`relative flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
+      className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
     >
-      <span className="flex w-full min-w-0 items-center gap-[7px]">
-        {item.unreadPrs > 0 && <UnreadDot />}
-        <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>
-        <span className="ml-auto" />
-        <FaceStack people={item.people} tone={tone} />
-        <UnreadBubble item={item} />
+      <span className="flex w-full min-w-0 items-center">
+        <LeadSlot>{item.unreadPrs > 0 && <UnreadDot />}</LeadSlot>
+        <span className="flex min-w-0 flex-1 items-center gap-[7px]">
+          <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>
+          <span className="ml-auto" />
+          <FaceStack people={item.people} tone={tone} />
+          <UnreadBubble item={item} />
+        </span>
       </span>
       {/* The chip sits under the bubble; at 1100px row one has no room left, so the summary gives way first. */}
-      <span className="relative flex w-full min-w-0 items-center gap-1.5">
-        <PrStateMark item={item} />
-        <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
-          {topicSnippet(item)}
+      <span className="flex w-full min-w-0 items-center">
+        <LeadSlot>
+          <PrStateMark item={item} />
+        </LeadSlot>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
+            {topicSnippet(item)}
+          </span>
+          <YourMoveChip moves={item.yourMoves} />
+          {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
         </span>
-        <YourMoveChip moves={item.yourMoves} />
-        {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
       </span>
     </button>
   );
@@ -221,9 +231,9 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
 function SectionHeader(props: { tier: PrTier | 'other' }) {
   const look = SECTION_LOOK[props.tier];
   return (
-    // The dot hangs in the gutter (no left padding), so the label lands on the 18px line with the topic names.
-    <span className={`flex items-center pt-1.5 pr-2 pb-1 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}>
-      <span className={`mr-[3px] size-[5px] rounded-[1.5px] ${look.dot}`} />
+    // The dot sits in the row's leading slot column, so the label lands on the same x as the topic names.
+    <span className={`flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}>
+      <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />
       {look.label}
     </span>
   );
