@@ -21,7 +21,12 @@ export interface LockInfo {
 /** An unreadable lock file may be one being written right now: read it this often, this far apart, before calling it stale. */
 const UNREADABLE_RETRIES = 5;
 const UNREADABLE_RETRY_MS = 20;
-/** ps reports start times to the second; a holder whose start time differs by more is another process on a reused pid. */
+/**
+ * ps reports start times to the second (rounded down). Only a holder that started
+ * this much later than the lock says is another process on a reused pid; a lock
+ * start after the ps start is the same process (locks before 0.13.2 took it from
+ * process.uptime(), which trails the real start by seconds in Electron).
+ */
 const START_TIME_SLACK_MS = 2000;
 /** A takeover folder this old was left by a process that died while taking over. */
 export const TAKEOVER_ABANDONED_MS = 30_000;
@@ -74,11 +79,6 @@ function readLockPatiently(file: string): LockInfo | null {
   return null;
 }
 
-/** When this process started. */
-function ownProcessStart(): string {
-  return new Date(Date.now() - process.uptime() * 1000).toISOString();
-}
-
 /** When a live process started, from `ps`, in ms. Null when ps cannot tell. */
 export function processStartTime(pid: number): number | null {
   const result = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
@@ -87,6 +87,17 @@ export function processStartTime(pid: number): number | null {
   }
   const parsed = Date.parse(result.stdout.trim());
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * When this process started, from `ps`: the same clock and precision
+ * `holderAlive` checks against. `process.uptime()` counts from Node's start,
+ * which in Electron can come seconds after the process's, and a live app
+ * then looked like a reused pid. That estimate stays as the fallback.
+ */
+function ownProcessStart(): string {
+  const started = processStartTime(process.pid) ?? Date.now() - process.uptime() * 1000;
+  return new Date(started).toISOString();
 }
 
 /**
@@ -101,7 +112,7 @@ function holderAlive(holder: LockInfo): boolean {
     return true;
   }
   const started = processStartTime(holder.pid);
-  return started === null || Math.abs(started - Date.parse(holder.processStartedAt)) <= START_TIME_SLACK_MS;
+  return started === null || started - Date.parse(holder.processStartedAt) <= START_TIME_SLACK_MS;
 }
 
 /** Lock kinds of the desktop app: the only holder that runs the live poll and answers agent requests. */

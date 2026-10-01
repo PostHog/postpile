@@ -62,6 +62,14 @@ describe('DataDirLock', () => {
     lock.release();
   });
 
+  it('records the process start as ps reports it, so the holder check agrees', () => {
+    const db = tempDb();
+    const lock = DataDirLock.acquire(db, 'dev');
+    expect(lock.info.processStartedAt).toBe(new Date(processStartTime(process.pid)!).toISOString());
+    expect(runningApp(db)?.pid).toBe(process.pid);
+    lock.release();
+  });
+
   it('refuses while the holder is the same process it names, by start time', () => {
     const db = tempDb();
     const started = processStartTime(process.ppid);
@@ -69,6 +77,15 @@ describe('DataDirLock', () => {
     const holder = { pid: process.ppid, kind: 'dev', startedAt: 'x', databaseFile: db, processStartedAt: new Date(started!).toISOString() };
     writeFileSync(join(db, '..', LOCK_FILE_NAME), JSON.stringify(holder));
     expect(() => DataDirLock.acquire(db, 'server')).toThrow(DataDirLockedError);
+  });
+
+  it('still sees the holder when its lock start trails ps by seconds (an uptime-written lock)', () => {
+    const db = tempDb();
+    const started = processStartTime(process.ppid);
+    expect(started).not.toBeNull();
+    const holder = { pid: process.ppid, kind: 'packaged', startedAt: 'x', databaseFile: db, processStartedAt: new Date(started! + 9000).toISOString() };
+    writeFileSync(join(db, '..', LOCK_FILE_NAME), JSON.stringify(holder));
+    expect(runningApp(db)?.pid).toBe(process.ppid);
   });
 
   it('takes over a lock whose pid now belongs to another process', () => {
