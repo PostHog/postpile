@@ -6,6 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Added
 
+- "Move to topic…" in a tile's ⋯ menu opens a searchable picker instead of listing every topic. It suggests topics with the same people and the most recently active ones; finished topics only show when you search.
 - Agent-assisted Approve and Mark read on topics and tiles, marked ✨; Approve updates at once and no longer shows Undo.
 
 ## 0.12.4 (2026-09-30)

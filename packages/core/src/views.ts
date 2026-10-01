@@ -478,6 +478,8 @@ export interface FeedbackInput {
   prKey: PrKey | null;
   /** wrong_topic: where it should go instead, if the user said. */
   targetTopicId: string | null;
+  /** wrong_topic with a target: whether the pick came from the picker's suggestions or from a search. Telemetry only. */
+  pickedFrom?: 'suggestion' | 'search';
   note: string;
 }
 

@@ -294,7 +294,13 @@ Action details:
   dissolves); regroups never put it back with the remaining members.
 - wrong topic: moved as a user assignment when a target is given, otherwise
   membership removed so the next sync re-sorts it with the feedback in the
-  prompt.
+  prompt. The tile's ⋯ menu stays short (Not mine, Wrong topic, "Move to
+  topic…"); the last one swaps the menu for a filter field over a scrolling
+  list. `moveTargets` (core) ranks it: with no query, topics that share
+  people with the tile (you left out), then the most recently updated ones,
+  five in all; with a query, active topics by name, then retired ones marked
+  "finished". Retired topics are never suggested. Topics the user recently
+  moved tiles into are not ranked yet (the renderer has no feedback history).
 - unmute: user override (`quiet`, or the rule loudness if that was not muted).
 
 ## Merged without your review
@@ -4180,7 +4186,7 @@ topic names are never event props.
    `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked`
    (the title bar pill opened) / `update_later_clicked`,
    `glance_retry_clicked` (Retry on a failed glance).
-4. *Agent trust*: `wrong_topic_marked`, `not_related_marked`,
+4. *Agent trust*: `wrong_topic_marked` (`from` `suggestion` / `search` when a topic was picked in "Move to topic…"), `not_related_marked`,
    `recheck_requested`, `recheck_proposed` (outcome: the agent's answer),
    `recheck_resolved` (outcome keep/fix/drop: the user's Accept in the
    recheck dialog, sent with the correction as `fromRecheck`),

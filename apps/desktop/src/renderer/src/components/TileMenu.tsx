@@ -3,6 +3,7 @@ import { useActions } from '../api/actions.tsx';
 import { prNumber } from '../lib/tiles.ts';
 import type { ButtonVariant } from './Button.tsx';
 import { Menu, type MenuItem } from './Menu.tsx';
+import { MovePicker } from './MovePicker.tsx';
 import { markReadNote } from '../lib/guard.ts';
 
 interface TileMenuProps {
@@ -20,8 +21,8 @@ export function TileMenu(props: TileMenuProps) {
   const { tile } = props.view;
   const which = props.view.prs.length > 1 && props.prKey ? `#${prNumber(props.prKey)} ` : '';
 
-  function wrongTopic(targetTopicId: string | null) {
-    void actions.feedback({ kind: 'wrong_topic', tileId: tile.id, prKey: props.prKey, targetTopicId, note: '' });
+  function wrongTopic(targetTopicId: string | null, pickedFrom?: 'suggestion' | 'search') {
+    void actions.feedback({ kind: 'wrong_topic', tileId: tile.id, prKey: props.prKey, targetTopicId, pickedFrom, note: '' });
   }
 
   const items: MenuItem[] = [
@@ -31,12 +32,21 @@ export function TileMenu(props: TileMenuProps) {
       onSelect: () => void actions.feedback({ kind: 'not_mine', tileId: tile.id, prKey: null, targetTopicId: null, note: '' }),
     },
     { label: `Wrong topic: re-sort ${which}on next sync`, onSelect: () => wrongTopic(null) },
+    {
+      label: `Move ${which}to topic…`,
+      onSelect: () => undefined,
+      panel: (close) => (
+        <MovePicker
+          view={props.view}
+          topics={props.topics}
+          onPick={(topicId, from) => {
+            close();
+            wrongTopic(topicId, from);
+          }}
+        />
+      ),
+    },
   ];
-  for (const item of props.topics) {
-    if (item.topic.id !== tile.topicId) {
-      items.push({ label: `Move ${which}to ${item.topic.name}`, onSelect: () => wrongTopic(item.topic.id) });
-    }
-  }
   // Three dots keep the tile footer room for the whose-turn line.
   const dots = (
     <span aria-hidden="true" className="flex gap-[2.5px]">

@@ -1092,7 +1092,7 @@ export class Engine implements EngineService {
   async giveFeedback(input: FeedbackInput): Promise<ActionResult> {
     const result = await this.feedback.giveFeedback(input);
     if (result.ok && input.kind === 'wrong_topic') {
-      this.telemetry.capture('wrong_topic_marked', {});
+      this.telemetry.capture('wrong_topic_marked', input.pickedFrom ? { from: input.pickedFrom } : {});
     } else if (result.ok && input.kind === 'not_related') {
       this.telemetry.capture('not_related_marked', {});
     }

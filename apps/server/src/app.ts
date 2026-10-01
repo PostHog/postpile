@@ -38,6 +38,7 @@ const feedbackBody = z.object({
   tileId: z.string(),
   prKey: z.string().nullable().default(null),
   targetTopicId: z.string().nullable().default(null),
+  pickedFrom: z.enum(['suggestion', 'search']).optional(),
   note: z.string().default(''),
 });
 
