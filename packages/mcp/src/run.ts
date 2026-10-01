@@ -1,10 +1,11 @@
 import { arch, release } from 'node:os';
 import { dirname, join } from 'node:path';
 import { AGENT_REQUESTS_FOLDER } from '@postpile/core';
-import { defaultPaths, runningApp, telemetryFromEnv } from '@postpile/engine';
+import { LATEST_SCHEMA_VERSION, defaultPaths, runningApp, telemetryFromEnv } from '@postpile/engine';
 import { engineFromEnv, isFake } from '@postpile/server';
 import { FileAgentRequests, InMemoryAgentRequests, type AgentRequests } from './agent-requests.ts';
 import { routeConsoleToStderr, serveStdio } from './server.ts';
+import { updateCheck } from './update-check.ts';
 
 /** How long a "running" answer counts: it runs ps, and a busy agent may call several tools a second. */
 const APP_CHECK_MS = 5000;
@@ -34,7 +35,8 @@ function appRunningCheck(databaseFile: string): () => boolean {
  * postpile-mcp. Opens the database read-only without the lock (no
  * migrations, safe next to the running app) and serves until the client hangs
  * up. Every tool refuses while the app is closed; the process stays up and
- * answers again once it opens. POSTPILE_FAKE=1 serves the sample data.
+ * answers again once it opens. After an app update (another schema or app
+ * version) every tool refuses until the session reconnects. POSTPILE_FAKE=1 serves the sample data.
  */
 export async function runMcpFromEnv(appVersion: string): Promise<void> {
   routeConsoleToStderr();
@@ -54,6 +56,15 @@ export async function runMcpFromEnv(appVersion: string): Promise<void> {
     await serveStdio(engine, {
       version: appVersion,
       appRunning,
+      // Sample data has no database or app to go stale.
+      updated: isFake()
+        ? undefined
+        : updateCheck({
+            ownVersion: appVersion,
+            expectedSchema: LATEST_SCHEMA_VERSION,
+            databaseSchema: () => engine.databaseSchemaVersion(),
+            appVersion: () => runningApp(databaseFile)?.appVersion ?? null,
+          }),
       requests,
       onToolCall: (tool, report) =>
         telemetry?.capture('mcp_tool_called', { tool, found: report.found, response_chars: report.responseChars, error: report.error }),

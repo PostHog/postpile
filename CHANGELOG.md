@@ -6,6 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- After an update, the PostPile MCP server in a running Claude Code session says "PostPile was updated. Run /mcp and reconnect postpile to load the new version." instead of answering from old code against the new database.
 - A tile's ✨ Approve now approves the PRs the agent finds safe, like the topic's Approve, instead of greying out when any PR in the tile needs a closer look. It says "Approve 2 of 3 PRs" and the confirm list names the ones left out.
 - Opening a tile in the app takes its notifications out of Notification Center; notifications about other tiles stay.
 

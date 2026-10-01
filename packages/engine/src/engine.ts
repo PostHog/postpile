@@ -98,7 +98,7 @@ import { PingSummary } from './telemetry/ping-summary.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
 import { loadViewer } from './viewer-meta.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
-import type { Store } from '@postpile/store';
+import { recordedVersion, type Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
 import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.ts';
 import { answerAgentRequest } from './agent-requests/answer.ts';
@@ -839,6 +839,10 @@ export class Engine implements EngineService {
 
   async recordedAppVersion(): Promise<string | null> {
     return loadAppVersion(this.deps.store);
+  }
+
+  async databaseSchemaVersion(): Promise<number | null> {
+    return recordedVersion(this.deps.store.db);
   }
 
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {

@@ -88,6 +88,8 @@ export interface EngineService {
   lastSyncReport(): Promise<SyncReport | null>;
   /** The version of the app that last opened the database for writing (meta app_version); null before one recorded it, and on sample data. */
   recordedAppVersion(): Promise<string | null>;
+  /** The schema version the open database has right now (MAX(version) of schema_migrations); null on sample data. Cheap, and read on the connection already open. */
+  databaseSchemaVersion(): Promise<number | null>;
   /** The sync in flight (phases, agent calls done and planned so far); null when none runs. */
   syncProgress(): Promise<SyncProgress | null>;
 

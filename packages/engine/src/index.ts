@@ -1,4 +1,5 @@
 export type { EngineService } from './service.ts';
+export { LATEST_VERSION as LATEST_SCHEMA_VERSION } from '@postpile/store';
 export { Engine, type EngineDeps } from './engine.ts';
 export { MarkReadQueue, type PendingBatch } from './mark-read-queue.ts';
 export { agentCwdFor, applyLegacyEnv, dataDirs, defaultPaths, profileFromEnv, realDataDirs, seedDevInstructions, type AppPaths, type Profile } from './paths.ts';

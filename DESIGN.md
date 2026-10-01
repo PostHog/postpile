@@ -4499,6 +4499,23 @@ was fetched. The two tools that change something ask the running app
 ("Agent requests" below). Stdout is the protocol, so `console.log` goes to
 stderr (`routeConsoleToStderr`).
 
+**Refuses after an update** (decided 2026-10-01): the process opens the
+database once and keeps its code, so after a `brew upgrade` an old MCP would
+run old queries against the new schema (SQL errors or wrong answers). Before
+every tool call, right after the app-running check, it looks for a mismatch:
+the database's `MAX(version)` from `schema_migrations` (read on the open
+read-only connection) differs from this build's `LATEST_VERSION`, or the
+running app's version in `postpile.lock` (`appVersion`, written by whoever
+takes the lock; old locks have none and count as unknown) differs from this
+process's own. A version that is unknown on either side never counts, so dev
+runs with equal strings stay quiet. On a mismatch every tool returns the
+tool error "PostPile was updated. Run /mcp and reconnect postpile to load the
+new version." The closed message still wins. A "no mismatch" is kept for 5 s
+like the running check; a mismatch is permanent, so it is not. Reason for
+refusing instead of exiting: Claude Code never restarts a stdio server on its
+own, so an exit would leave a silent failure, while the refusal tells the user
+what to do. `POSTPILE_FAKE=1` skips the check (`packages/mcp/src/update-check.ts`).
+
 **Shipping**: electron-vite builds `apps/desktop/src/main/mcp.ts` next to the
 main process as `out/main/mcp.js`. `Contents/Resources/postpile-mcp`
 (`apps/desktop/build/postpile-mcp`, via `extraResources`) runs the app's own
@@ -5262,7 +5279,7 @@ preflight and does not know the token, so CORS stays open.
   code-manager move never runs in dev and only targets the real folder. The title bar shows a
   DEV badge (`AppConfig.profile`) with the database path in its tooltip.
 - **Database lock**: whoever opens a database takes `<data folder>/postpile.lock` (pid, kind
-  `packaged` / `dev` / `cli` / `server`, start time, database; `DataDirLock`, O_EXCL create).
+  `packaged` / `dev` / `cli` / `server`, start time, database, app version; `DataDirLock`, O_EXCL create).
   A second process refuses with "PostPile is already running with this database (pid N,
   kind, ...)": the desktop app shows a dialog with Quit, the CLI and the server exit 1. A lock
   whose pid is dead is stale and taken over. Released on close and on process exit. The CLI's
