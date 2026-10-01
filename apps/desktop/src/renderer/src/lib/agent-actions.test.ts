@@ -16,8 +16,16 @@ describe('approve wording', () => {
     expect(topicApproveLabel(offer({}))).toBe('Approve 3 of 5 PRs');
     expect(topicApproveLabel(offer({ totalCount: 3 }))).toBe('Approve 3 PRs');
     expect(topicApproveLabel(offer({ state: 'greyed', coveredCount: 0, totalCount: 1 }))).toBe('Approve');
-    expect(tileApproveLabel(offer({}), 'set')).toBe('Approve 3 PRs');
-    expect(tileApproveLabel(offer({ state: 'greyed' }), 'stack')).toBe('Approve stack');
+    expect(tileApproveLabel(offer({ totalCount: 3 }), 'set')).toBe('Approve 3 PRs');
+    expect(tileApproveLabel(offer({ totalCount: 3 }), 'stack')).toBe('Approve stack');
+    expect(tileApproveLabel(offer({ coveredCount: 1, totalCount: 1 }), 'single')).toBe('Approve');
+    expect(tileApproveLabel(offer({ state: 'greyed', coveredCount: 0 }), 'stack')).toBe('Approve stack');
+    expect(tileApproveLabel(offer({ state: 'greyed', coveredCount: 0 }), 'set')).toBe('Approve');
+  });
+
+  it('counts a partial tile like the topic', () => {
+    expect(tileApproveLabel(offer({ coveredCount: 2, totalCount: 5 }), 'stack')).toBe('Approve 2 of 5 PRs');
+    expect(tileApproveLabel(offer({ coveredCount: 1, totalCount: 2 }), 'set')).toBe('Approve 1 of 2 PRs');
   });
 });
 

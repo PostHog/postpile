@@ -76,10 +76,10 @@ export interface LeftOutPr {
  * The ✨ Approve button, on a tile's footer or the topic header. Absent (null
  * on the view) when there is no approvable PR at all.
  * - active: approves `covered`, base to head on a stack; the pill shows `risk`.
- * - greyed: disabled, the pill shows `reason`.
- * A tile is active only when every approvable PR is covered; a topic is
- * active when at least one is ("Approve 3 of 5 PRs"). On a greyed tile
- * `covered` still lists the PRs that would qualify, but nothing is approved.
+ * - greyed: disabled, the pill shows `reason`; `covered` is empty.
+ * A tile and a topic alike are active when at least one approvable PR is
+ * agent-safe ("Approve 2 of 3 PRs"); the rest are named in `leftOut`
+ * (owner, 2026-10-01).
  */
 export interface AgentApproveOffer {
   state: AgentOfferState;
@@ -282,14 +282,18 @@ function splitApprovable(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>):
   return { covered, leftOut };
 }
 
-/** The tile's ✨ Approve: gone without an approvable PR, active when every one is agent-safe, else greyed. */
+/**
+ * The tile's ✨ Approve: gone without an approvable PR; active when at least
+ * one is agent-safe, approving only those (owner, 2026-10-01: the same as
+ * the topic's Approve); greyed when none is.
+ */
 export function tileApproveOffer(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): AgentApproveOffer | null {
   const { covered, leftOut } = splitApprovable(view, facts);
   const totalCount = covered.length + leftOut.length;
   if (totalCount === 0) {
     return null;
   }
-  const active = leftOut.length === 0;
+  const active = covered.length > 0;
   return {
     state: active ? 'active' : 'greyed',
     risk: active ? highestRisk(covered.map((pr) => pr.risk)) : null,
@@ -329,26 +333,25 @@ export type TopicAgentTile = { tile: Pick<Tile, 'id'>; state: Pick<TileState, 'k
 
 /**
  * The topic's ✨ Approve: the approvable PRs of its unsnoozed tiles (each PR
- * once). It approves the agent-safe ones and names the rest. Gone without an
- * approvable PR; greyed when none is agent-safe, `rechecking` if any is
- * rechecking, else `look_closer`.
+ * once). It covers exactly what those tiles' Approves cover and names the
+ * rest. Gone without an approvable PR; greyed when none is agent-safe,
+ * `rechecking` if any is rechecking, else `look_closer`.
  */
 export function topicApproveOffer(tiles: TopicAgentTile[]): AgentApproveOffer | null {
+  const offers = tiles.filter((view) => view.state.kind !== 'snoozed').flatMap((view) => view.agent.approve ?? []);
   const seen = new Set<PrKey>();
   const covered: AgentApprovePr[] = [];
   const leftOut: LeftOutPr[] = [];
-  for (const view of tiles.filter((candidate) => candidate.state.kind !== 'snoozed')) {
-    for (const pr of view.agent.approve?.covered ?? []) {
-      if (!seen.has(pr.prKey)) {
-        seen.add(pr.prKey);
-        covered.push(pr);
-      }
+  for (const pr of offers.flatMap((offer) => offer.covered)) {
+    if (!seen.has(pr.prKey)) {
+      seen.add(pr.prKey);
+      covered.push(pr);
     }
-    for (const pr of view.agent.approve?.leftOut ?? []) {
-      if (!seen.has(pr.prKey)) {
-        seen.add(pr.prKey);
-        leftOut.push(pr);
-      }
+  }
+  for (const pr of offers.flatMap((offer) => offer.leftOut)) {
+    if (!seen.has(pr.prKey)) {
+      seen.add(pr.prKey);
+      leftOut.push(pr);
     }
   }
   const totalCount = covered.length + leftOut.length;
