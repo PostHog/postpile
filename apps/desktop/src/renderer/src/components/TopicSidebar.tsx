@@ -301,6 +301,8 @@ interface TopicSidebarProps {
   /** Topics left after the search and the queue filter, in API order. */
   shown: TopicListItem[];
   queueFilter: QueueFilter | null;
+  /** Topics the queue filter hides (after the search), for "11 topics without your PRs are hidden". */
+  hiddenByQueueFilter: number;
   onQueueFilter: (filter: QueueFilter | null) => void;
   filterCounts: Record<QueueFilter, number>;
   viewer: ViewerView | undefined;
@@ -315,6 +317,24 @@ type SectionKey = string;
  * "Needs you" whatever their relation. Finished starts folded too.
  */
 const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi', 'finished'];
+
+/**
+ * "11 topics without your PRs are hidden · Show all", under the sections
+ * while "Topics with" narrows: says what the switch did and how to undo it.
+ */
+function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll: () => void }) {
+  const whose = props.filter === 'mine' ? 'your PRs' : "your team's PRs";
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-1.5 px-2.5 text-[12px] text-muted">
+      <span>
+        <span className="font-semibold text-ink-2 tabular-nums">{props.hidden}</span> {props.hidden === 1 ? 'topic' : 'topics'} without {whose} {props.hidden === 1 ? 'is' : 'are'} hidden
+      </span>
+      <button type="button" onClick={props.onShowAll} className="text-accent hover:underline">
+        Show all
+      </button>
+    </p>
+  );
+}
 
 /** "Filtering: 2 topics, 5 tiles · Clear", above the topic list while the search bar filters. */
 function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
@@ -374,6 +394,9 @@ export function TopicSidebar(props: TopicSidebarProps) {
           {section.rows.map((row) => topicItem(row.item))}
         </div>
       ))}
+      {props.queueFilter && props.hiddenByQueueFilter > 0 && (
+        <HiddenByFilter filter={props.queueFilter} hidden={props.hiddenByQueueFilter} onShowAll={() => props.onQueueFilter(null)} />
+      )}
       {layout.other.length > 0 && (
         <div className="flex flex-col gap-1">
           <SectionHeader tier="other" />

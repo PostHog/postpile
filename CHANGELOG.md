@@ -11,6 +11,9 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- The sidebar's four filter buttons are now one switch: "Topics with any PR | my PRs | team PRs". The sections stay while it narrows, and a line says how many topics it hides, with "Show all". Reply and Review are gone: the Needs reply and To review sections show those.
+- A topic that holds your own PR next to other people's work sits where that work puts it (a review waiting on you puts it under To review), not under My PRs.
+- Inside a topic, your own tiles come first in each group.
 - The MCP server refuses to answer while the PostPile app is closed, with a one-line error asking you to open it. It answers again as soon as the app is back, no reconnect.
 - Update reminder: after 24 hours behind, the small title bar pill becomes a bar under the title bar with how many releases you missed, the brew command and release notes. "Later" brings back the pill for a day, then the bar returns.
 - Sets (tiles that hold several PRs) now group PRs you can judge in one go: the same change in several places, or one small step of the goal, with similar risk. A set keeps its PRs until the agent changes it for a stated reason; a PR never moves because of its status, a review or a merge, and merged PRs stay in their set.

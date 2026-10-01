@@ -8,10 +8,14 @@ import type { Bucket } from './hold-place.ts';
  */
 export const TIER_ORDER: PrTierOrder = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
 
-/** The sidebar's filter buttons. */
-export type QueueFilter = 'mine' | 'team' | 'reply' | 'review';
+/**
+ * The sidebar's "Topics with any PR | my PRs | team PRs" switch; null is
+ * "any PR" (DESIGN.md "Topics with: the sidebar filter", 2026-10-01).
+ * Reply and Review went: the Needs reply and To review sections are those.
+ */
+export type QueueFilter = 'mine' | 'team';
 
-export const QUEUE_FILTERS: QueueFilter[] = ['mine', 'team', 'reply', 'review'];
+export const QUEUE_FILTERS: QueueFilter[] = ['mine', 'team'];
 
 /**
  * The filter buttons to show. Without a home team there are no teammates,
@@ -24,46 +28,27 @@ export function visibleQueueFilters(homeTeams: string[] | null | undefined, acti
 }
 
 /**
- * Review covers To review and Changes you requested: an addressed change
- * request was To review before that section existed, and one still waiting
- * on the author is the viewer's review in progress.
- */
-const REVIEW_TIERS: PrTier[] = ['to_review', 'changes_requested'];
-
-/**
- * Mine / Team: open PRs you or a teammate wrote. Reply: needs_reply. Review:
- * `REVIEW_TIERS`. A pulled-in stack layer never matches: it is context,
- * outside the queues. Neither does a PR in a quiet repo ("Let it go stale").
+ * my PRs / team PRs: open PRs you or a teammate wrote. A pulled-in stack
+ * layer never matches: it is context, outside the queues. Neither does a PR
+ * in a quiet repo ("Let it go stale").
  */
 export function prMatchesFilter(pr: PrSummary, filter: QueueFilter): boolean {
   if (pr.provenance.kind === 'pulled_in' || pr.quietRepo) {
     return false;
   }
-  if (filter === 'mine') {
-    return pr.authorRelation === 'you' && pr.state === 'OPEN';
-  }
-  if (filter === 'team') {
-    return pr.authorRelation === 'team' && pr.state === 'OPEN';
-  }
-  return filter === 'reply' ? pr.tier === 'needs_reply' : REVIEW_TIERS.includes(pr.tier);
+  const relation = filter === 'mine' ? 'you' : 'team';
+  return pr.authorRelation === relation && pr.state === 'OPEN';
 }
 
 /** How many of the topic's PRs the filter matches. */
 function topicFilterCount(item: TopicListItem, filter: QueueFilter): number {
-  const { queues } = item;
-  if (filter === 'mine') {
-    return queues.byYou;
-  }
-  if (filter === 'team') {
-    return queues.byTeam;
-  }
-  return filter === 'reply' ? queues.tiers.needs_reply : queues.tiers.to_review + queues.tiers.changes_requested;
+  return filter === 'mine' ? item.queues.byYou : item.queues.byTeam;
 }
 
-/** Matching PRs over all topics, for the button counts. */
+/** Matching PRs over all topics: a switch option with none is off. */
 export function filterCounts(items: TopicListItem[]): Record<QueueFilter, number> {
   const sum = (filter: QueueFilter) => items.reduce((total, item) => total + topicFilterCount(item, filter), 0);
-  return { mine: sum('mine'), team: sum('team'), reply: sum('reply'), review: sum('review') };
+  return { mine: sum('mine'), team: sum('team') };
 }
 
 /** Topics with at least one matching PR, in their order. Without a filter, all of them. */
@@ -91,9 +76,20 @@ export interface QueueLayout {
   other: TopicListItem[];
 }
 
-/** The highest section the topic has a PR in, or null when it only has rest PRs (or none). */
+/**
+ * The section a topic sits in, or null when it only has rest PRs (or none).
+ * A mixed topic follows the work (2026-10-01): the highest section any PR
+ * other than your own gives it, so a review waiting on you inside a topic
+ * that also holds your PR shows under To review. My PRs only when nothing
+ * else in the topic asks for a section.
+ */
 export function topicSectionTier(item: TopicListItem): PrTier | null {
-  return TIER_ORDER.find((tier) => tier !== 'rest' && item.queues.tiers[tier] > 0) ?? null;
+  const tiers = item.queues.tiers;
+  const work = TIER_ORDER.find((tier) => tier !== 'rest' && tier !== 'mine' && tiers[tier] > 0);
+  if (work) {
+    return work;
+  }
+  return tiers.mine > 0 ? 'mine' : null;
 }
 
 /**
@@ -180,15 +176,22 @@ export function tilesInTierOrder(views: TileView[]): TileView[] {
  */
 export const GROUP_ORDER: TileGroupOrder = ['unread', 'open', 'dealt_with'];
 
+/** A tile holding a PR of your own (author, or a bot's PR assigned to you). */
+function holdsYourPr(view: TileView): boolean {
+  return view.prs.some((pr) => pr.authorRelation === 'you');
+}
+
 /**
  * The grid's groups (DESIGN.md "Groups inside a topic"): Unread, Open, Dealt
  * with, by core's `TileView.group`, empty ones included (the held place needs
- * them). Inside a group tiles go in tier order, snoozed ones last.
+ * them). Inside a group your own tiles come first, in every topic and view
+ * (2026-10-01), then tier order; snoozed ones last.
  */
 export function gridGroups(views: TileView[]): Bucket<TileView>[] {
   const ordered = tilesInTierOrder(views);
-  const awake = ordered.filter((view) => view.state.kind !== 'snoozed');
-  const snoozed = ordered.filter((view) => view.state.kind === 'snoozed');
+  const yoursFirst = [...ordered.filter(holdsYourPr), ...ordered.filter((view) => !holdsYourPr(view))];
+  const awake = yoursFirst.filter((view) => view.state.kind !== 'snoozed');
+  const snoozed = yoursFirst.filter((view) => view.state.kind === 'snoozed');
   return GROUP_ORDER.map((group) => ({ key: group, items: [...awake, ...snoozed].filter((view) => view.group === group) }));
 }
 

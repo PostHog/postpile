@@ -459,9 +459,11 @@ highest section (`topicSectionTier`); the queue filters still match it by
 any PR. Fold state is local UI state; Routed, FYI and Finished start
 folded. The Finished drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so
-`App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The Mine / Team /
-Reply / Review buttons (`QueueFilters`) are plain UI state in `App.tsx`,
-not history entries; they narrow together with the search. Relation
+`App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The "Topics with
+any PR | my PRs | team PRs" switch (`QueueFilters`) is plain UI state in
+`App.tsx`, not a history entry; it narrows together with the search, and
+`App` passes how many topics it hides for the "N topics … hidden · Show
+all" line. Relation
 corrections go through `correctMemory` with `relation` set
 (`RelationLine`), local only. `TileGrid` shows three groups by
 `TileView.group`, always Unread, Open, Dealt with (`gridGroups` in

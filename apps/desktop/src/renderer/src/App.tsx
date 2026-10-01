@@ -120,7 +120,8 @@ export function App() {
   // brings the picked topic back.
   // Search and queue filter both narrow the sidebar; the open topic follows.
   const narrowed = filter !== null || queueFilter !== null;
-  const shownItems = applyQueueFilter(filterTopics(items, filter), queueFilter);
+  const searched = filterTopics(items, filter);
+  const shownItems = applyQueueFilter(searched, queueFilter);
   // What was on screen for this pick and these filters. An approve, refetch,
   // poll or sync that drops it from the filter keeps it on screen; only a new
   // pick or a filter change lets the "first match" fallback move the view.
@@ -356,6 +357,7 @@ export function App() {
               onClearFilter={() => setQuery('')}
               shown={listedTopics(items, shownItems, activeTopicId)}
               queueFilter={queueFilter}
+              hiddenByQueueFilter={searched.length - shownItems.length}
               onQueueFilter={changeQueueFilter}
               filterCounts={filterCounts(items)}
               viewer={viewer.data}
