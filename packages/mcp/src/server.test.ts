@@ -4,7 +4,7 @@ import { FakeEngine } from '@postpile/server';
 import { describe, expect, it } from 'vitest';
 import { InMemoryAgentRequests } from './agent-requests.ts';
 import type { PostPileReader } from './reads.ts';
-import { createMcpServer, staleServerNote, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
+import { APP_CLOSED_MESSAGE, APP_UPDATED_MESSAGE, createMcpServer, staleServerNote, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
 
 /** Claude Code cuts tool descriptions and server instructions at this many characters, without a word. */
 const CLAUDE_CODE_CUT = 2048;
@@ -207,6 +207,21 @@ describe('PostPile MCP server', () => {
     expect(await staleServerNote(recorded('unknown'), '0.11.1')).toBeNull();
     expect(await staleServerNote(recorded('0.12.0'), 'unknown')).toBeNull();
     expect(await staleServerNote(recorded('0.11.1'), '0.11.1')).toBeNull();
+  });
+
+  it('refuses every tool after an update until the session reconnects', async () => {
+    const reports: ToolCallReport[] = [];
+    const client = await connected(new FakeEngine(), { updated: async () => true, onToolCall: (_tool, report) => reports.push(report) });
+    for (const tool of ['whats_on_me', 'search_prs']) {
+      const refused = await call(client, tool, { query: 'depot' });
+      expect(refused).toEqual({ text: APP_UPDATED_MESSAGE, isError: true });
+    }
+    expect(reports.map((report) => report.error)).toEqual([true, true]);
+  });
+
+  it('answers the closed message before the update message', async () => {
+    const client = await connected(new FakeEngine(), { appRunning: () => false, updated: async () => true });
+    expect(await call(client, 'whats_on_me')).toEqual({ text: APP_CLOSED_MESSAGE, isError: true });
   });
 
   it('searches PRs with paging and flat filters', async () => {

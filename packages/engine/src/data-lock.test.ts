@@ -35,6 +35,13 @@ describe('DataDirLock', () => {
     expect(existsSync(file)).toBe(false);
   });
 
+  it('writes the app version into the lock when it has one', () => {
+    const db = tempDb();
+    const lock = DataDirLock.acquire(db, 'packaged', undefined, '0.13.1');
+    expect(runningApp(db)?.appVersion).toBe('0.13.1');
+    lock.release();
+  });
+
   it('refuses while another live process holds it', () => {
     const db = tempDb();
     // The parent process (the test runner) is alive and is not us.

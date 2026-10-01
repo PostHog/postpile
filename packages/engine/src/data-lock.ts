@@ -14,6 +14,8 @@ export interface LockInfo {
   databaseFile: string;
   /** When the holding process started. Tells a live holder from a new process that got the same pid. Missing in old lock files. */
   processStartedAt?: string;
+  /** The version of the app (or CLI, or server) that wrote the lock. The MCP process compares it with its own. Missing in old lock files: unknown. */
+  appVersion?: string;
 }
 
 /** An unreadable lock file may be one being written right now: read it this often, this far apart, before calling it stale. */
@@ -126,6 +128,17 @@ export function runningApp(databaseFile: string): LockInfo | null {
     return null;
   }
   return holder;
+}
+
+/**
+ * The app version in this database's lock file, from a plain file read: no
+ * liveness check (no ps), so it is cheap enough for every call. Null when
+ * there is no lock, a non-app holder, or an old lock without a version. Use
+ * it only while `runningApp` says the app runs: a stale lock keeps its version.
+ */
+export function lockedAppVersion(databaseFile: string): string | null {
+  const holder = readLock(join(dirname(databaseFile), LOCK_FILE_NAME));
+  return holder && APP_LOCK_KINDS.includes(holder.kind) ? (holder.appVersion ?? null) : null;
 }
 
 /** The same lock holder: same pid and same process start (both missing counts as the same). */
@@ -241,11 +254,11 @@ export class DataDirLock {
     process.once('exit', this.onExit);
   }
 
-  static acquire(databaseFile: string, kind: LockKind, startedAt: string = new Date().toISOString()): DataDirLock {
+  static acquire(databaseFile: string, kind: LockKind, startedAt: string = new Date().toISOString(), appVersion?: string): DataDirLock {
     const folder = dirname(databaseFile);
     mkdirSync(folder, { recursive: true });
     const lockFile = join(folder, LOCK_FILE_NAME);
-    const info: LockInfo = { pid: process.pid, kind, startedAt, databaseFile, processStartedAt: ownProcessStart() };
+    const info: LockInfo = { pid: process.pid, kind, startedAt, databaseFile, processStartedAt: ownProcessStart(), ...(appVersion ? { appVersion } : {}) };
     for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt++) {
       // Read back after creating: a process taking over the same stale lock may have replaced ours.
       if (createExclusive(lockFile, info) && readLock(lockFile)?.pid === process.pid) {

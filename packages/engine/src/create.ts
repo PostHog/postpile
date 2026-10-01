@@ -87,7 +87,7 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
   const paths = options.paths ?? defaultPaths();
   const readOnly = options.withoutLock === true || (options.readOnly ?? process.env.POSTPILE_READ_ONLY === '1');
   // Before the store opens: a second process on the same database refuses here.
-  const lock = options.withoutLock ? null : DataDirLock.acquire(paths.databaseFile, options.lockKind ?? 'server');
+  const lock = options.withoutLock ? null : DataDirLock.acquire(paths.databaseFile, options.lockKind ?? 'server', undefined, options.appVersion);
   const now = options.now ?? ((): Date => new Date());
   const telemetry =
     options.telemetry ??
