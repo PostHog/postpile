@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentApproveRefusal, agentPrFacts, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
+import { agentApproveRefusal, agentApproveSkip, agentPrFacts, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
 import { at, makePr, makeReview, NO_OPENED_READ_INPUT, singleTile, viewer } from './fixtures.ts';
 import { buildPrSummary, buildTileView, type PrSummaryInput } from './tile-view.ts';
 import type { Glance, Pr, PrEvent, PrKey, Tile, TileState, UserPrState, Verdict } from './types.ts';
@@ -215,6 +215,17 @@ describe('agentApproveRefusal', () => {
     expect(agentApproveRefusal('acme/app#1', [view], 'agent_tile')).toBeNull();
     expect(agentApproveRefusal('acme/app#2', [view], 'agent_tile')).toBe('the agent now says look closer');
     expect(agentApproveRefusal('acme/app#3', [view], 'agent_tile')).toBe('a layer below it needs a look first');
+  });
+
+  it('lets a covered stack layer through only after the covered layers below it', () => {
+    const view = stackView([
+      { pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low' },
+      { pr: reviewPr(2), verdict: 'LOOKS_SAFE', risk: 'low' },
+    ]);
+    expect(view.agent.approve?.covered.map((pr) => pr.dependsOn)).toEqual([[], ['acme/app#1']]);
+    expect(agentApproveSkip('acme/app#2', [view], 'agent_tile', [{ prKey: 'acme/app#1', ok: true }])).toBeNull();
+    expect(agentApproveSkip('acme/app#2', [view], 'agent_tile', [{ prKey: 'acme/app#1', ok: false }])).toBe('skipped: a layer below failed');
+    expect(agentApproveSkip('acme/app#2', [view], 'agent_tile', [])).toBe('skipped: a layer below was not approved first');
   });
 });
 

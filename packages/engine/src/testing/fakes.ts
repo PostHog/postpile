@@ -270,6 +270,8 @@ export class FakeWriter implements GitHubWriter {
   readonly calls: string[] = [];
   /** markThreadRead throws for these ids. */
   readonly failingThreads = new Set<string>();
+  /** PR keys whose approve throws, like a GitHub error or timeout. */
+  readonly failingApprovals = new Set<string>();
   /** removeTeamReviewRequest throws while set. */
   failRemoveTeamRequest = false;
   /** unsubscribeThread throws while set. */
@@ -287,6 +289,9 @@ export class FakeWriter implements GitHubWriter {
   }
 
   async approvePr(ref: PrRef, _body: string, commitOid: string): Promise<void> {
+    if (this.failingApprovals.has(`${ref.repo}#${ref.number}`)) {
+      throw new Error('GitHub timed out');
+    }
     this.calls.push(`approvePr ${ref.repo}#${ref.number}@${commitOid}`);
   }
 

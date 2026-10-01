@@ -3373,7 +3373,11 @@ Owner decisions (2026-09-30):
   At click time the engine checks each PR again against the current board
   with the same core rules (`agentApproveRefusal`); one that no longer
   qualifies is refused and named ("the agent now says look closer"), the
-  rest are approved. Mark N read skips and names tiles no longer backed
+  rest are approved. On a stack each covered layer carries the covered
+  layers below it (`dependsOn`); the engine skips it when one of those failed
+  or did not go first in the batch ("skipped: a layer below failed",
+  `agentApproveSkip`), so an upper layer is never approved over a base
+  that wasn't. Unrelated PRs carry on. Mark N read skips and names tiles no longer backed
   (`agentMarkReadRefusal`) and refuses unknown tile ids.
 - **Mark read skips asks.** Only actions carry ✨, never text or lines. A
   tile's Mark read is always on offer, so it stays plain: no ✨, no pill, the

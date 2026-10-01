@@ -6,7 +6,7 @@ function offer(overrides: Partial<AgentApproveOffer>): AgentApproveOffer {
   return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, prCount: 5, naming: 'some', ...overrides };
 }
 
-const BASE: AgentApprovePr = { prKey: 'acme/app#109533', title: 'Base', headOid: 'abc', verdict: 'LOOKS_SAFE', riskLine: 'low', risk: 'low' };
+const BASE: AgentApprovePr = { prKey: 'acme/app#109533', title: 'Base', headOid: 'abc', verdict: 'LOOKS_SAFE', riskLine: 'low', risk: 'low', dependsOn: [] };
 
 describe('approve wording', () => {
   it('says the risk when active and the reason when greyed', () => {

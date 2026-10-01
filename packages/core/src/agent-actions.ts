@@ -10,7 +10,7 @@ import { standingApprovals } from './approvals.ts';
 import { isTracked } from './provenance.ts';
 import { isNewYourMove } from './quiet-reads.ts';
 import type { IsoTime, Pr, PrEvent, PrKey, Tile, TileStack, TileState, UserPrState, Verdict, Viewer } from './types.ts';
-import type { TileView } from './views.ts';
+import type { PrApproveResult, TileView } from './views.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 /** The first word of the glance's risk line. Anything unreadable counts as high. */
@@ -68,6 +68,12 @@ export interface AgentApprovePr {
   verdict: Verdict;
   riskLine: string;
   risk: BackedRisk;
+  /**
+   * The covered layers below it in its stack, base first: approving it waits
+   * until these went through in the same batch (base up; empty for a single
+   * or a set's PR outside a stack).
+   */
+  dependsOn: PrKey[];
 }
 
 /** An approvable PR the agent does not back, named in the confirm list with its reason. */
@@ -303,8 +309,8 @@ function approvablePrs(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): A
   return view.prs.filter((pr) => view.offers.pane[pr.key]?.lead === 'approve' && isTracked(pr.provenance) && facts.get(pr.key)?.approvedOnGitHub !== true);
 }
 
-/** The covered entry of an agent-safe PR (`approveBlock` says null), else null; null without facts too. */
-function coveredPr(pr: AgentOfferView['prs'][number], fact: AgentPrFacts | undefined): AgentApprovePr | null {
+/** The covered entry of an agent-safe PR (`approveBlock` says null) without its `dependsOn`, else null; null without facts too. */
+function coveredPr(pr: AgentOfferView['prs'][number], fact: AgentPrFacts | undefined): Omit<AgentApprovePr, 'dependsOn'> | null {
   if (!fact) {
     return null;
   }
@@ -315,14 +321,10 @@ function coveredPr(pr: AgentOfferView['prs'][number], fact: AgentPrFacts | undef
   return { prKey: pr.key, title: pr.title, headOid: fact.headOid, verdict: fact.verdict, riskLine: fact.riskLine, risk };
 }
 
-/** The lowest of `blocked` below `key` in its stack, or null when none is (or `key` is in no stack). */
-function lowestBlockedBelow(key: PrKey, stacks: TileStack[], blocked: Set<PrKey>): PrKey | null {
+/** The layers below `key` in its stack, base first; empty when `key` is in no stack. */
+function layersBelow(key: PrKey, stacks: TileStack[]): PrKey[] {
   const stack = stacks.find((candidate) => candidate.prKeys.includes(key));
-  if (!stack) {
-    return null;
-  }
-  const below = stack.prKeys.slice(0, stack.prKeys.indexOf(key));
-  return below.find((layer) => blocked.has(layer)) ?? null;
+  return stack ? stack.prKeys.slice(0, stack.prKeys.indexOf(key)) : [];
 }
 
 /**
@@ -334,17 +336,20 @@ function lowestBlockedBelow(key: PrKey, stacks: TileStack[], blocked: Set<PrKey>
 function splitApprovable(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): { covered: AgentApprovePr[]; leftOut: LeftOutPr[] } {
   const approvable = approvablePrs(view, facts);
   const blocked = new Set(approvable.filter((pr) => coveredPr(pr, facts.get(pr.key)) === null).map((pr) => pr.key));
+  const safeKeys = new Set(approvable.filter((pr) => !blocked.has(pr.key)).map((pr) => pr.key));
   const covered: AgentApprovePr[] = [];
   const leftOut: LeftOutPr[] = [];
   for (const pr of approvable) {
     const fact = facts.get(pr.key);
-    const waitsOn = lowestBlockedBelow(pr.key, view.tile.stacks, blocked);
+    const below = layersBelow(pr.key, view.tile.stacks);
+    const waitsOn = below.find((layer) => blocked.has(layer)) ?? null;
     const safe = coveredPr(pr, fact);
     const left = { prKey: pr.key, title: pr.title, verdict: fact?.verdict ?? null, riskLine: fact?.riskLine ?? null };
     if (waitsOn !== null) {
       leftOut.push({ ...left, reason: 'layer_below', waitsOn });
     } else if (safe) {
-      covered.push(safe);
+      // Nothing below blocks, so every approvable layer below is covered too.
+      covered.push({ ...safe, dependsOn: below.filter((layer) => safeKeys.has(layer)) });
     } else {
       leftOut.push({ ...left, reason: (fact && approveBlock(fact)) ?? 'rechecking', waitsOn: null });
     }
@@ -493,6 +498,9 @@ const APPROVE_REFUSALS: Record<LeftOutReason, string> = {
   layer_below: 'a layer below it needs a look first',
 };
 
+const SKIPPED_FAILED = 'skipped: a layer below failed';
+const SKIPPED_NOT_FIRST = 'skipped: a layer below was not approved first';
+
 const MARK_READ_REFUSALS: Record<MarkReadBlock, string> = {
   ...AGENT_REFUSALS,
   asks_for_you: 'it asks something of you',
@@ -514,6 +522,25 @@ export function agentApproveRefusal(prKey: PrKey, views: Pick<TileView, 'state' 
   return leftOut ? APPROVE_REFUSALS[leftOut.reason] : 'nothing to approve on it any more';
 }
 
+/**
+ * The click-time base-up check of an agent Approve: why to skip `prKey`
+ * because a covered layer below it (`dependsOn` in the current offers) was
+ * not approved earlier in this batch, or null. `earlier` holds the batch's
+ * results so far. Approvals are final, so an upper layer never goes through
+ * after its base failed.
+ */
+export function agentApproveSkip(prKey: PrKey, views: Pick<TileView, 'state' | 'agent'>[], from: 'agent_tile' | 'agent_topic', earlier: Pick<PrApproveResult, 'prKey' | 'ok'>[]): string | null {
+  const counted = from === 'agent_topic' ? views.filter((view) => view.state.kind !== 'snoozed') : views;
+  const entries = counted.flatMap((view) => view.agent.approve?.covered ?? []).filter((pr) => pr.prKey === prKey);
+  const dependsOn = [...new Set(entries.flatMap((pr) => pr.dependsOn))];
+  const missing = dependsOn.filter((key) => !earlier.some((result) => result.prKey === key && result.ok));
+  if (missing.length === 0) {
+    return null;
+  }
+  const failed = missing.some((key) => earlier.some((result) => result.prKey === key));
+  return failed ? SKIPPED_FAILED : SKIPPED_NOT_FIRST;
+}
+
 /** The click-time check of an agent Mark read: why the tile is skipped, or null while the agent still backs its Mark read. */
 export function agentMarkReadRefusal(view: Pick<TileView, 'agent'>): string | null {
   const backing = view.agent.markRead;
@@ -523,14 +550,24 @@ export function agentMarkReadRefusal(view: Pick<TileView, 'agent'>): string | nu
   return backing.state === 'active' ? null : MARK_READ_REFUSALS[backing.reason ?? 'rechecking'];
 }
 
-/** "Approved 3 PRs", or "Approved 2 of 3 PRs" with the first failure's reason; ok only when every PR was approved. */
+function isSkip(result: { message: string }): boolean {
+  return result.message === SKIPPED_FAILED || result.message === SKIPPED_NOT_FIRST;
+}
+
+/**
+ * "Approved 3 PRs", or "Approved 1 of 3 PRs" with the first failure's
+ * reason and how many upper layers were skipped for it ("; 1 skipped, a
+ * layer below was not approved"); ok only when every PR was approved.
+ */
 export function approvalsSummary(results: { prKey: PrKey; ok: boolean; message: string }[]): { ok: boolean; message: string } {
   const approved = results.filter((result) => result.ok).length;
-  const failure = results.find((result) => !result.ok);
+  const failure = results.find((result) => !result.ok && !isSkip(result)) ?? results.find((result) => !result.ok);
   if (!failure) {
     return { ok: results.length > 0, message: results.length === 1 ? 'Approved' : `Approved ${approved} PRs` };
   }
-  return { ok: false, message: `Approved ${approved} of ${results.length} PRs; ${failure.prKey}: ${failure.message}` };
+  const skipped = results.filter((result) => isSkip(result) && result !== failure).length;
+  const skippedNote = skipped > 0 ? `; ${skipped} skipped, a layer below was not approved` : '';
+  return { ok: false, message: `Approved ${approved} of ${results.length} PRs; ${failure.prKey}: ${failure.message}${skippedNote}` };
 }
 
 /** Both agent offers of a topic's header, from its tile views. */

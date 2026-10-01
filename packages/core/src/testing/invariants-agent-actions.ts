@@ -136,6 +136,35 @@ export const noCoveredLayerAboveAnUnbackedOne: Invariant = {
   },
 };
 
+/** The spec's covered layers below `key` on the tile, base first: what its approve waits for. */
+function specDependsOn(board: PropertyBoard, view: TileView, key: PrKey): PrKey[] {
+  const covered = specTileApprove(board, view)?.covered ?? [];
+  return specLayersBelow(view, key).filter((layer) => covered.includes(layer));
+}
+
+/**
+ * Each covered PR depends on exactly the covered layers below it in its
+ * stack (`dependsOn`, base first), so the engine never approves it after
+ * one of them failed; a single or a set's PR outside a stack depends on
+ * nothing. The topic keeps a tile's entry as it is.
+ */
+export const coveredLayersDependOnTheCoveredBelow: Invariant = {
+  name: 'a covered PR depends on exactly the covered layers below it in its stack',
+  check(board, views) {
+    for (const view of views) {
+      for (const pr of view.agent.approve?.covered ?? []) {
+        const want = specDependsOn(board, view, pr.prKey);
+        ensure(pr.dependsOn.join() === want.join(), `tile ${view.tile.id}: ${pr.prKey} depends on ${keysLine(pr.dependsOn)}, expected ${keysLine(want)}`);
+      }
+    }
+    const unsnoozed = views.filter((view) => view.state.kind !== 'snoozed');
+    for (const pr of topicOffersOf(views).approve?.covered ?? []) {
+      const fromTiles = unsnoozed.filter((view) => view.agent.approve?.covered.some((candidate) => candidate.prKey === pr.prKey)).map((view) => specDependsOn(board, view, pr.prKey).join());
+      ensure(fromTiles.includes(pr.dependsOn.join()), `topic: ${pr.prKey} depends on ${keysLine(pr.dependsOn)}, its tiles say ${fromTiles.join(' | ')}`);
+    }
+  },
+};
+
 /**
  * Every approvable layer above the lowest blocking layer of its stack is
  * left out as `layer_below`, waiting on that layer; `layer_below` names
@@ -294,6 +323,7 @@ export const pulledInNeverCovered: Invariant = {
 export const AGENT_ACTION_INVARIANTS: readonly Invariant[] = [
   agentApproveMatchesTheSpec,
   noCoveredLayerAboveAnUnbackedOne,
+  coveredLayersDependOnTheCoveredBelow,
   upperLayersWaitOnTheLowestBlock,
   agentApproveLabelNamesWhatItCovers,
   agentApproveRiskIsTheHighestCovered,
