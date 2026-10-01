@@ -4,8 +4,8 @@
 # (Homebrew links it into its bin; without Homebrew use the full path,
 # /Applications/PostPile.app/Contents/Resources/postpile-mcp.)
 # Runs the app's own binary as plain Node (no window, no dock icon) on the
-# bundled server. Reads the database next to the running app, or with the
-# app closed; never writes to GitHub.
+# bundled server. Reads the database next to the running app; while the app
+# is closed every tool refuses and says so. Never writes to GitHub.
 self="$0"
 # Follow the Homebrew symlink back into the app bundle.
 while [ -L "$self" ]; do

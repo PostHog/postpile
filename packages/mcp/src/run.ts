@@ -6,18 +6,24 @@ import { engineFromEnv, isFake } from '@postpile/server';
 import { FileAgentRequests, InMemoryAgentRequests, type AgentRequests } from './agent-requests.ts';
 import { routeConsoleToStderr, serveStdio } from './server.ts';
 
-/** How long one look at postpile.lock counts: it runs ps, and a busy agent may call several tools a second. */
+/** How long a "running" answer counts: it runs ps, and a busy agent may call several tools a second. */
 const APP_CHECK_MS = 5000;
 
-/** Whether the desktop app holds the database folder, asked at most every APP_CHECK_MS. */
+/**
+ * Whether the desktop app holds the database folder. Only a "running" answer
+ * is kept (for APP_CHECK_MS); "closed" is looked up again on every call, so
+ * the first call after the app opens works.
+ */
 function appRunningCheck(databaseFile: string): () => boolean {
-  let checkedAt = 0;
-  let running = false;
+  let runningUntil = 0;
   return () => {
     const now = Date.now();
-    if (now - checkedAt >= APP_CHECK_MS) {
-      checkedAt = now;
-      running = runningApp(databaseFile) !== null;
+    if (now < runningUntil) {
+      return true;
+    }
+    const running = runningApp(databaseFile) !== null;
+    if (running) {
+      runningUntil = now + APP_CHECK_MS;
     }
     return running;
   };
@@ -26,8 +32,9 @@ function appRunningCheck(databaseFile: string): () => boolean {
 /**
  * The whole MCP process, for `pnpm cli mcp` and the app bundle's
  * postpile-mcp. Opens the database read-only without the lock (no
- * migrations, safe next to the running app, works with the app closed) and
- * serves until the client hangs up. POSTPILE_FAKE=1 serves the sample data.
+ * migrations, safe next to the running app) and serves until the client hangs
+ * up. Every tool refuses while the app is closed; the process stays up and
+ * answers again once it opens. POSTPILE_FAKE=1 serves the sample data.
  */
 export async function runMcpFromEnv(appVersion: string): Promise<void> {
   routeConsoleToStderr();
@@ -37,6 +44,7 @@ export async function runMcpFromEnv(appVersion: string): Promise<void> {
   const engine = engineFromEnv({ lockKind: 'cli', withoutLock: true, telemetry, appVersion });
   const databaseFile = defaultPaths().databaseFile;
   // Sample data has no app to ask: it counts as running, and the fake engine answers requests in memory.
+  // Same database as above, so the dev profile and POSTPILE_DB pick the app that owns it.
   const appRunning = isFake() ? () => true : appRunningCheck(databaseFile);
   const requests: AgentRequests = isFake()
     ? new InMemoryAgentRequests(engine)

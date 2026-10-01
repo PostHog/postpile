@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, processStartTime, removeStaleLock, takeoverDir, type LockInfo } from './data-lock.ts';
+import { DataDirLock, DataDirLockedError, LOCK_FILE_NAME, processStartTime, runningApp, removeStaleLock, takeoverDir, type LockInfo, type LockKind } from './data-lock.ts';
 
 const dirs: string[] = [];
 
@@ -148,5 +148,24 @@ describe('DataDirLock', () => {
     writeFileSync(file, JSON.stringify({ pid: process.ppid, kind: 'dev', startedAt: 'x', databaseFile: db }));
     lock.release();
     expect(existsSync(file)).toBe(true);
+  });
+});
+
+describe('runningApp', () => {
+  function writeLock(db: string, pid: number, kind: LockKind = 'packaged'): void {
+    const info: LockInfo = { pid, kind, startedAt: '2026-10-01T10:00:00.000Z', databaseFile: db };
+    writeFileSync(join(db, '..', LOCK_FILE_NAME), JSON.stringify(info));
+  }
+
+  it('finds a live app, and not a missing lock, a dead pid or a CLI holder', () => {
+    const db = tempDb();
+    expect(runningApp(db)).toBeNull();
+    writeLock(db, process.pid);
+    expect(runningApp(db)?.pid).toBe(process.pid);
+    writeLock(db, process.pid, 'cli');
+    expect(runningApp(db)).toBeNull();
+    // A lock left by a crashed app: that pid is gone.
+    writeLock(db, 2 ** 22 + 12345);
+    expect(runningApp(db)).toBeNull();
   });
 });
