@@ -165,8 +165,8 @@ describe('You already dealt with it: opening a PR in PostPile marks it read when
     return makePr({ number: 3, comments: [makeComment({ id: 'c-rowan', author: 'rowan', body: 'Nice cleanup', createdAt: at(10) })], updatedAt: at(10) });
   }
 
-  const NOT_MARKED = { marked: false, undoToken: null };
-  const MARKED = { marked: true, undoToken: expect.any(String) };
+  const NOT_MARKED = { marked: false, undoToken: null, undoUntil: null };
+  const MARKED = { marked: true, undoToken: expect.any(String), undoUntil: expect.any(String) };
 
   async function syncedTopic(pr: Pr, writesEnabled = true): Promise<Harness> {
     const h = makeHarness({ writesEnabled: false });
@@ -210,6 +210,8 @@ describe('You already dealt with it: opening a PR in PostPile marks it read when
     const before = await tileState(h, 't');
 
     const result = await h.engine.markOpenedRead(pr.key);
+    // The window the renderer shows Undo for is the queue's own, from the enqueue.
+    expect(result.undoUntil).toBe(new Date(h.timers.now() + UNDO_WINDOW_MS).toISOString());
     expect(await tileState(h, 't')).toBe('done');
     expect(await h.engine.undo(result.undoToken)).toMatchObject({ ok: true });
 

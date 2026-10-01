@@ -264,6 +264,8 @@ const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 /** How long before start the sample PRs count as fetched. */
 const SAMPLE_FETCH_AGE_MS = 4 * 60_000;
 
+const NOT_OPENED: OpenedReadResult = { marked: false, undoToken: null, undoUntil: null };
+
 function ok(message: string, undoToken: string | null = null): ActionResult {
   return { ok: true, message, undoToken };
 }
@@ -1334,17 +1336,19 @@ export class FakeEngine implements EngineService {
   async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
     this.writes.settle();
     if (!this.writes.isEnabled()) {
-      return { marked: false, undoToken: null };
+      return NOT_OPENED;
     }
     const check = openedReadCheck(this.openedReadInput(prKey));
     if (check.kind === 'skip') {
-      return { marked: false, undoToken: null };
+      return NOT_OPENED;
     }
     if (check.kind === 'handle' && !this.readChangesAnything(prKey)) {
-      return { marked: false, undoToken: null };
+      return NOT_OPENED;
     }
     const marked = this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
-    return { marked: true, undoToken: marked.undoToken };
+    const batch = this.batches.find((candidate) => candidate.token === marked.undoToken);
+    const undoUntil = batch ? new Date(batch.queuedAt + UNDO_WINDOW_MS).toISOString() : null;
+    return { marked: true, undoToken: marked.undoToken, undoUntil };
   }
 
   /** Whether a read of the PR changes anything in the sample: unseen events, or not handled yet. */

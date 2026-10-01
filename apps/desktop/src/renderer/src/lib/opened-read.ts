@@ -29,10 +29,11 @@ export function opensMarkRead(view: OpenedTileView | null, prKey: PrKey | null, 
   return pr.openedRead.kind !== 'skip';
 }
 
-/** The timer functions the wait needs; `window` in the app, a fake in tests. */
+/** The timer functions the wait needs; the window's timers and `Date.now` in the app, a fake in tests. */
 export interface OpenedReadClock {
   setTimeout(callback: () => void, ms: number): number;
   clearTimeout(handle: number): void;
+  now(): number;
 }
 
 /**
@@ -113,13 +114,20 @@ export class OpenedReadTimer {
       this.setPhase('settled');
       return;
     }
+    // The engine's window started when it queued the mark; Undo ends with it, not a fresh window from now.
+    const until = result.undoUntil === null ? this.clock.now() + UNDO_WINDOW_MS : Date.parse(result.undoUntil);
+    const left = until - this.clock.now();
+    if (left <= 0) {
+      this.setPhase('settled');
+      return;
+    }
     this.undoToken = result.undoToken;
     this.setPhase('marked');
     this.undoWindow = this.clock.setTimeout(() => {
       this.undoWindow = null;
       this.undoToken = null;
       this.setPhase('settled');
-    }, UNDO_WINDOW_MS);
+    }, left);
   }
 
   /** Fires once, when the dwell is over and a mark is wanted. */

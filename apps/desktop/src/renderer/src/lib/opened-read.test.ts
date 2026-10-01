@@ -44,14 +44,14 @@ describe('opensMarkRead', () => {
 
 /** Timers that run only when the test moves the time. */
 class FakeClock implements OpenedReadClock {
-  private now = 0;
+  private time = 0;
   private nextHandle = 1;
   private readonly timers = new Map<number, { at: number; callback: () => void }>();
 
   setTimeout(callback: () => void, ms: number): number {
     const handle = this.nextHandle;
     this.nextHandle += 1;
-    this.timers.set(handle, { at: this.now + ms, callback });
+    this.timers.set(handle, { at: this.time + ms, callback });
     return handle;
   }
 
@@ -59,11 +59,15 @@ class FakeClock implements OpenedReadClock {
     this.timers.delete(handle);
   }
 
+  now(): number {
+    return this.time;
+  }
+
   advance(ms: number): void {
-    this.now += ms;
+    this.time += ms;
     // oxlint-disable-next-line unicorn/no-useless-spread -- snapshot: a fired callback may schedule more timers
     for (const [handle, timer] of [...this.timers]) {
-      if (timer.at <= this.now) {
+      if (timer.at <= this.time) {
         this.timers.delete(handle);
         timer.callback();
       }
@@ -76,7 +80,8 @@ function answered(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-const MARKED: OpenedReadResult = { marked: true, undoToken: 'undo-1' };
+/** Queued at clock 0 + the dwell, like the engine: the window runs from there. */
+const MARKED: OpenedReadResult = { marked: true, undoToken: 'undo-1', undoUntil: new Date(OPENED_READ_DELAY_MS + UNDO_WINDOW_MS).toISOString() };
 
 describe('OpenedReadTimer', () => {
   function started(wanted = true, result: OpenedReadResult | null = MARKED) {
@@ -192,8 +197,28 @@ describe('OpenedReadTimer', () => {
     expect(timer.undo()).toBeNull();
   });
 
+  it("ends Undo at the engine's expiry, not a fresh window from when the answer arrived", async () => {
+    // The engine queued the mark at the dwell end; the answer took 2s to come back.
+    const late: OpenedReadResult = { marked: true, undoToken: 'undo-1', undoUntil: new Date(OPENED_READ_DELAY_MS + UNDO_WINDOW_MS).toISOString() };
+    const clock = new FakeClock();
+    let answer: (result: OpenedReadResult) => void = () => {};
+    const timer = new OpenedReadTimer(() => new Promise((resolve) => (answer = resolve)), clock);
+    timer.setWanted(true);
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    clock.advance(2000);
+    answer(late);
+    await answered();
+    expect(timer.phase).toBe('marked');
+
+    clock.advance(UNDO_WINDOW_MS - 2000);
+
+    expect(timer.phase).toBe('settled');
+    expect(timer.undo()).toBeNull();
+  });
+
   it('shows nothing marked when the server marked nothing or the request failed', async () => {
-    const refused = started(true, { marked: false, undoToken: null });
+    const refused = started(true, { marked: false, undoToken: null, undoUntil: null });
     refused.timer.visible();
     refused.clock.advance(OPENED_READ_DELAY_MS);
     await answered();

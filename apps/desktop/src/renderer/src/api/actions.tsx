@@ -511,13 +511,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
     try {
       const result = await request<OpenedReadResult>('POST', `${prPath(prKey)}/opened`);
-      if (result.undoToken) {
-        // Counted in the footer and refetched when its window ends, like a clicked mark-read.
-        const entry = { token: result.undoToken, until: Date.now() + UNDO_WINDOW_MS };
-        setPendingUndos((current) => [...current, entry]);
+      const token = result.undoToken;
+      if (token) {
+        // Counted in the footer and refetched when the engine's window ends, like a clicked mark-read.
+        const until = result.undoUntil === null ? Date.now() + UNDO_WINDOW_MS : Date.parse(result.undoUntil);
+        setPendingUndos((current) => [...current, { token, until }]);
       }
       if (result.marked) {
-        await refreshAll();
+        // Not awaited: the button's Undo window runs from this answer, not from when the refetch lands.
+        void refreshAll();
       }
       return result;
     } catch {

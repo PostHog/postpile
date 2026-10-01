@@ -5,7 +5,7 @@ import type { GitHubWrites } from '../writes/github-writes.ts';
 import { OpenedReadInputs } from '../writes/opened-read-inputs.ts';
 import type { ReadMarker } from './read-marker.ts';
 
-const NOT_MARKED: OpenedReadResult = { marked: false, undoToken: null };
+const NOT_MARKED: OpenedReadResult = { marked: false, undoToken: null, undoUntil: null };
 
 /** Why an open marked nothing, for the text log: "stale_snapshot (fetched …, thread updated …)". */
 function openedSkipDetail(why: OpenedSkip, input: OpenedReadInput): string {
@@ -66,6 +66,6 @@ export class OpenedReads {
     }
     const tileId = board.allTiles().find((tile) => tile.members.some((member) => member.prKey === prKey))?.id ?? null;
     const batch = this.readMarker.markRead(prReadScope(prKey, true), { kind: 'opened' }, { origin: 'detail', tileId });
-    return { marked: true, undoToken: batch.token };
+    return { marked: true, undoToken: batch.token, undoUntil: new Date(batch.dueAt).toISOString() };
   }
 }

@@ -517,6 +517,8 @@ export interface OpenedReadResult {
   marked: boolean;
   /** Takes the mark back inside the undo window (`POST /api/undo`); null when nothing was marked. */
   undoToken: string | null;
+  /** When the queue sends it to GitHub and Undo stops working: the window started at the enqueue, not when the renderer got the answer. */
+  undoUntil: IsoTime | null;
 }
 
 export type TileFeedbackKind = 'not_mine' | 'not_related' | 'wrong_topic';

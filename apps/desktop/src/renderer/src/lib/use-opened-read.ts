@@ -62,7 +62,8 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null): Opene
       setMarkedLabel(label.current);
       return latest.current.markOpenedRead(prKey);
     };
-    const open = new OpenedReadTimer(markOpened, window, setPhase);
+    const clock = { setTimeout: (callback: () => void, ms: number) => window.setTimeout(callback, ms), clearTimeout: (handle: number) => window.clearTimeout(handle), now: () => Date.now() };
+    const open = new OpenedReadTimer(markOpened, clock, setPhase);
     timer.current = open;
     setPhase('idle');
     // Visibility only counts for the dwell; once it is over, leaving the app changes nothing.

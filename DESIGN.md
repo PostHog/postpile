@@ -1812,8 +1812,10 @@ happened when it did. Chosen from a clickable mockup:
 - Undo uses the mark-read queue like every clicked mark-read. The opened
   mark used to be a quiet, immediate GitHub write; GitHub has no
   mark-unread, so an Undo needs the write deferred. It is now its own batch
-  (origin `detail`, read cause `opened`) with an undo token
-  (`OpenedReadResult.undoToken`): the PR is seen and handled here right
+  (origin `detail`, read cause `opened`) with an undo token and the
+  queue's own expiry (`OpenedReadResult.undoToken`, `undoUntil`; the
+  button hides Undo at that time, not a fresh 6s from the answer, Codex
+  review on PR #75): the PR is seen and handled here right
   away, the thread goes to GitHub after `UNDO_WINDOW_MS`. Undo inside the
   window puts it all back and nothing reaches GitHub; the open does not arm
   again. Side effects: the opened mark no longer shows under Handled

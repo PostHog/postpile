@@ -204,12 +204,12 @@ describe('server routes over the fake engine', () => {
     const doneKey = done.tile.members[0]!.prKey;
     const opened = (key: string) => post<OpenedReadResult>(app, `/api/prs/${key.replace('#', '/')}/opened`);
 
-    const notMarked = { marked: false, undoToken: null };
+    const notMarked = { marked: false, undoToken: null, undoUntil: null };
     expect((await opened(doneKey)).json).toEqual(notMarked);
     await post(app, '/api/github-writes', { enabled: true });
     expect((await opened(yours.tile.members[0]!.prKey)).json).toEqual(notMarked);
     const marked = (await opened(doneKey)).json;
-    expect(marked).toEqual({ marked: true, undoToken: expect.any(String) });
+    expect(marked).toEqual({ marked: true, undoToken: expect.any(String), undoUntil: expect.any(String) });
     expect((await opened(doneKey)).json).toEqual(notMarked);
     // Handled in PostPile too: the tile is done now, not just read.
     const tileState = async () => {
