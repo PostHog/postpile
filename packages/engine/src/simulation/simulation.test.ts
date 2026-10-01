@@ -16,7 +16,7 @@ import { makeHarness, type Harness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
 import { makeTopic, topicWithPrs } from '../testing/topics.ts';
 import { ArmDatabase } from './arm-database.ts';
-import { AGENT_META_PREFIXES, checkSimulationSource, KEPT_TABLES, startFresh, WIPED_TABLES } from './fresh-start.ts';
+import { AGENT_META_PREFIXES, KEPT_TABLES, startFresh, WIPED_TABLES } from './fresh-start.ts';
 import { readArmSnapshot } from './snapshot.ts';
 
 const PR1 = reviewRequestedPr(1);
@@ -158,17 +158,6 @@ describe('ArmDatabase', () => {
     ]);
     follower.close();
     expect(fileHash(join(dir, 'leader.sqlite'))).toBe(leaderBefore);
-  });
-});
-
-describe('checkSimulationSource', () => {
-  it('refuses a database that never synced, takes one that did', async () => {
-    const empty = Store.open(join(dir, 'empty.sqlite'));
-    expect(() => checkSimulationSource(empty)).toThrow('synced at least once');
-    empty.close();
-    const h = await syncedHarness();
-    expect(() => checkSimulationSource(h.store)).not.toThrow();
-    h.store.close();
   });
 });
 

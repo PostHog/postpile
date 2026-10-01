@@ -40,7 +40,7 @@ export { telemetryEnabled } from './telemetry/telemetry-env.ts';
 export { AgentRefresher, type AgentRefreshDeps, type RefreshRun, type StoredPrInfo } from './agent-requests/agent-refresh.ts';
 export { AgentRequestInbox, type AgentRequestInboxOptions } from './agent-requests/inbox.ts';
 export { answerAgentRequest } from './agent-requests/answer.ts';
-export { checkSimulationSource, startFresh } from './simulation/fresh-start.ts';
+export { startFresh } from './simulation/fresh-start.ts';
 export { ArmDatabase } from './simulation/arm-database.ts';
 export { readArmSnapshot, type ArmSnapshot, type SnapshotCall, type SnapshotDossier, type SnapshotTile } from './simulation/snapshot.ts';
 export { runSimulatedRound } from './simulation/round.ts';

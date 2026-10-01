@@ -8,7 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { ALL_AGENT_JOBS, planRounds, roundPrKeys, simulationNow, type AgentJob, type IsoTime, type PrKey, type SimulationRound } from '@postpile/core';
-import { ArmDatabase, BACKLOG_SYNC_MINUTES, checkSimulationSource, readArmSnapshot, startFresh } from '@postpile/engine';
+import { ArmDatabase, BACKLOG_SYNC_MINUTES, readArmSnapshot, startFresh } from '@postpile/engine';
 import { Store } from '@postpile/store';
 import { formatReportMarkdown } from './report-markdown.ts';
 import { buildReport, type ReportMeta, type RoundRecord, type SimulationReport } from './report.ts';
@@ -78,11 +78,18 @@ export function refuseAppDataPath(path: string, env: NodeJS.ProcessEnv = process
   }
 }
 
-/** Refuses a source database the rounds cannot digest, before anything is copied. */
+/**
+ * Refuses a source database the rounds cannot digest, before anything is
+ * copied. Plain SQL on purpose: the source may be on an older schema (the
+ * store refuses those read-only), and only the copy gets migrated.
+ */
 function checkSource(from: string): void {
-  const source = Store.openReadOnly(from);
+  const source = new DatabaseSync(from, { readOnly: true });
   try {
-    checkSimulationSource(source);
+    const viewer = source.prepare("SELECT 1 FROM meta WHERE key = 'viewer'").get();
+    if (viewer === undefined) {
+      throw new Error('the database holds no viewer: simulate-start needs a database that synced at least once');
+    }
   } finally {
     source.close();
   }

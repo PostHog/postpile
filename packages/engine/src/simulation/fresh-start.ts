@@ -3,7 +3,6 @@
 // GitHub data and the user's own state stay; everything the agent wrote, and
 // everything tied to the old topics and tiles, goes.
 import type { Store } from '@postpile/store';
-import { loadViewer } from '../viewer-meta.ts';
 import { GITHUB_WRITES_META_KEY } from '../writes/write-switch.ts';
 
 /** Kept as they are, with why. */
@@ -63,17 +62,6 @@ export const AGENT_META_PREFIXES: Record<string, string> = {
 export function tableExists(store: Store, name: string): boolean {
   const row = store.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
   return row !== undefined;
-}
-
-/**
- * Throws when a database cannot start a simulation, before anything is
- * copied: every round's digest (SyncRun.digestStored) needs the viewer a
- * first sync stores.
- */
-export function checkSimulationSource(store: Store): void {
-  if (loadViewer(store) === null) {
-    throw new Error('the database holds no viewer: simulate-start needs a database that synced at least once');
-  }
 }
 
 function deleteMetaByPrefix(store: Store, prefix: string): void {
