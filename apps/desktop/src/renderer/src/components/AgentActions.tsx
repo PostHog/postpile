@@ -23,7 +23,9 @@ export function AgentPill(props: { word: string; off: boolean }) {
 
 /** Secondary looks: green text and outline when active, muted and flat when greyed. The reason stays readable. */
 const APPROVE_ACTIVE = 'text-safe inset-ring-safe/40';
-const GREYED = 'text-muted disabled:opacity-100';
+// Flat: no fill, shadow or solid ring. A dashed outline pulled inside the box keeps the 30px size.
+const GREYED =
+  'bg-transparent! text-muted shadow-none! inset-ring-0! outline-1 -outline-offset-1 outline-dashed outline-faint cursor-not-allowed! disabled:opacity-100';
 
 /** The confirm list: each covered PR with its verdict and risk line, the ones left out, Cancel and "Approve N". */
 function ConfirmApprove(props: { offer: AgentApproveOffer; onCancel: () => void; onConfirm: () => void }) {
