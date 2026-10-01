@@ -118,7 +118,8 @@ export const TELEMETRY_EVENTS = {
   glance_retry_clicked: NO_PROPS,
 
   // 4. Agent trust
-  wrong_topic_marked: NO_PROPS,
+  // from: only when the user picked a topic in "Move to topic…"; absent for a plain re-sort.
+  wrong_topic_marked: z.object({ from: z.enum(['suggestion', 'search']).optional() }).strict(),
   not_related_marked: NO_PROPS,
   recheck_requested: NO_PROPS,
   // The agent's answer to a recheck, before the user decides.

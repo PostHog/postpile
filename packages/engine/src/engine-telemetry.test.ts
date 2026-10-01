@@ -149,6 +149,13 @@ describe('engine telemetry', () => {
     expect(names).toEqual(['wrong_topic_marked']);
   });
 
+  it('adds where a picked topic came from to wrong_topic_marked', async () => {
+    const h = await synced();
+    await h.engine.giveFeedback({ kind: 'wrong_topic', tileId, prKey: pr.key, targetTopicId: null, pickedFrom: 'search', note: '' });
+
+    expect(h.telemetry.events).toContainEqual({ event: 'wrong_topic_marked', props: { from: 'search' } });
+  });
+
   it('fires not_related_marked when a PR is dropped from a set tile', async () => {
     const h = await synced();
     const other = reviewRequestedPr(2);
