@@ -309,7 +309,29 @@ function approveLabel(prefix: string, offer: AgentApproveOffer | null): string[]
   if (offer.coveredCount < offer.totalCount) {
     labels.push(`${prefix}:partial`);
   }
+  if (offer.naming === 'one') {
+    labels.push(`${prefix}:names one of several`);
+  }
+  if (offer.naming === 'every' && offer.prCount > 1) {
+    labels.push(`${prefix}:every of several`);
+  }
   return labels;
+}
+
+/** Base up on a stack (owner, 2026-10-01): a layer waits on a blocking layer below, also on a greyed offer. */
+function waitingLabels(prefix: string, offer: AgentApproveOffer | null): string[] {
+  if (!offer?.leftOut.some((pr) => pr.reason === 'layer_below')) {
+    return [];
+  }
+  return [`${prefix}:waits on a layer below`, `${prefix}:${offer.state} with a layer waiting`];
+}
+
+/** A covered stack layer with a draft above it: the base goes through, so the label must not say "Approve stack". */
+function draftAboveCovered(view: TileView): boolean {
+  const covered = view.agent.approve?.covered.map((pr) => pr.prKey) ?? [];
+  return view.tile.stacks.some((stack) =>
+    stack.prKeys.some((key, index) => covered.includes(key) && stack.prKeys.slice(index + 1).some((above) => view.prs.find((row) => row.key === above)?.isDraft === true)),
+  );
 }
 
 /**
@@ -319,9 +341,12 @@ function approveLabel(prefix: string, offer: AgentApproveOffer | null): string[]
  * approvable PR someone else approved already.
  */
 function agentLabels(board: PropertyBoard, views: TileView[]): string[] {
-  const labels = views.flatMap((view) => approveLabel('agent-approve-tile', view.agent.approve));
-  const topic = topicAgentOffers(views.map((view) => ({ tile: view.tile, state: view.state, agent: view.agent })));
-  labels.push(...approveLabel('agent-approve-topic', topic.approve));
+  const labels = views.flatMap((view) => [...approveLabel('agent-approve-tile', view.agent.approve), ...waitingLabels('agent-approve-tile', view.agent.approve)]);
+  if (views.some(draftAboveCovered)) {
+    labels.push('agent-approve-tile:draft above a covered layer');
+  }
+  const topic = topicAgentOffers(views.map((view) => ({ tile: view.tile, state: view.state, agent: view.agent, prs: view.prs })));
+  labels.push(...approveLabel('agent-approve-topic', topic.approve), ...waitingLabels('agent-approve-topic', topic.approve));
   const markRead = topic.markRead;
   labels.push(markRead === null ? 'agent-mark-read-topic:absent' : `agent-mark-read-topic:${markRead.state}`);
   if (markRead?.skipped.some((tile) => tile.reason === 'asks_for_you')) {
@@ -480,11 +505,19 @@ export const REQUIRED_LABELS: readonly string[] = [
   'agent-approve-tile:greyed:look_closer',
   'agent-approve-tile:greyed:high',
   'agent-approve-tile:absent',
+  'agent-approve-tile:waits on a layer below',
+  'agent-approve-tile:active with a layer waiting',
+  'agent-approve-tile:greyed with a layer waiting',
+  'agent-approve-tile:names one of several',
+  'agent-approve-tile:every of several',
+  'agent-approve-tile:draft above a covered layer',
   'agent-approve-topic:active',
   'agent-approve-topic:partial',
   'agent-approve-topic:greyed:rechecking',
   'agent-approve-topic:greyed:look_closer',
   'agent-approve-topic:absent',
+  'agent-approve-topic:waits on a layer below',
+  'agent-approve-topic:names one of several',
   'agent-mark-read-topic:active',
   'agent-mark-read-topic:greyed',
   'agent-mark-read-topic:absent',

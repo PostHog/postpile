@@ -79,6 +79,7 @@ import type {
 import { arch, release } from 'node:os';
 import {
   agentApproveRefusal,
+  agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
   emptyAgentCallStats,
@@ -993,14 +994,15 @@ export class Engine implements EngineService {
     if (prs.length === 0) {
       return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
     }
-    // Approve is final: every PR is checked against the current board first, with the same core rules as the offer.
+    // Approve is final: every PR is checked against the current board first, with the same core rules as the offer,
+    // and a stack layer only goes through after the covered layers below it did (base up).
     const keys = new Set(prs.map((pr) => pr.prKey));
     const views = this.reads.currentTileViews((tile) => tile.members.some((member) => keys.has(member.prKey)));
     const results: PrApproveResult[] = [];
     let settleToken: string | undefined;
     for (const { prKey, headOid } of prs) {
       const holding = views.filter((view) => view.tile.members.some((member) => member.prKey === prKey));
-      const refusal = agentApproveRefusal(prKey, holding, from);
+      const refusal = agentApproveRefusal(prKey, holding, from) ?? agentApproveSkip(prKey, holding, from, results);
       if (refusal !== null) {
         results.push({ prKey, ok: false, message: refusal });
         continue;

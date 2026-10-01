@@ -3323,21 +3323,44 @@ Owner decisions (2026-09-30):
   all: no button.
 - **Tile Approve** (new button in the tile footer). Gone when the tile has no
   approvable PR. Active when at least one approvable PR in the tile is
-  agent-safe: it approves only those (a stack base to head), names the rest
+  covered: it approves only those (a stack base to head), names the rest
   as left out, and the pill shows the highest risk among the covered PRs.
-  The label says "Approve 2 of 3 PRs" when it leaves some out, else
-  "Approve", "Approve stack" or "Approve 3 PRs" on a set. Greyed out only
-  when no approvable PR is agent-safe. The reason is `rechecking…` when any
-  approvable PR's glance is stale or missing, else `look closer` or `high`.
-  The topic's Approve covers exactly the union of what its unsnoozed tiles
-  cover.
+  Greyed out only when nothing is covered. The reason is `rechecking…` when
+  any approvable PR's own glance is stale or missing, else `look closer` or
+  `high`. The topic's Approve covers exactly the union of what its
+  unsnoozed tiles cover.
   Owner, 2026-10-01: the tile Approve is the same magic approval as the
   topic's; the earlier all-or-nothing tile rule was a spec mistake and
   greyed a stack while the topic offered two of its PRs.
+- **Base up on a stack** (owner, 2026-10-01). A stack layer is covered only
+  when it is agent-safe and no approvable layer below it is left out. The
+  lowest approvable layer the agent does not back (rechecking, look closer,
+  high) blocks every approvable layer above it; those are left out as
+  "waits on #N" (`layer_below`, with `waitsOn`). Layers below that need no
+  review from the user do not block: merged or closed, a draft, the user's
+  own PR, one the user or anyone else approved already, one dealt with
+  (done), a pulled-in layer.
+  On a stack only the lowest blocking layer keeps its own reason, so a
+  greyed stack's pill shows that layer's block ("Look closer"), never the
+  new reason. A set's PRs outside a stack keep their own verdicts; a stack
+  inside a set goes base up like a stack tile. Why: the glance on an upper
+  layer says "safe once the base is settled", so approving it above a base
+  that needs a look made no sense, and the topic followed the tiles into
+  the same mistake.
+- **Approve labels** (owner, 2026-10-01; core decides `naming`, the
+  renderer spells it). Exactly one PR covered out of several on the tile
+  (or the topic) names it: "Approve #109533", so "Low risk" can't read as a
+  verdict on the PR the user is looking at. "Approve stack", "Approve 3
+  PRs" on a set, or "Approve" on a single only when every PR on the tile is
+  covered (`prCount`), so never over a draft or pulled-in layer. Else
+  "Approve 2 of 3 PRs" (approvable PRs), or "Approve 2 PRs" when it covers
+  every approvable PR and only drafts or pulled-in layers stay out. Greyed
+  is a plain "Approve".
 - **Topic Approve** (topic header). It covers the approvable PRs in the
   topic's tiles, leaving out snoozed tiles. It approves only the agent-safe
   ones: "Approve 3 of 5 PRs", or "Approve 3 PRs" when all qualify. Each PR
-  left out is named with its reason (look closer, high risk, rechecking).
+  left out is named with its reason (look closer, high risk, rechecking,
+  or "waits on #N" for a stack layer above one that needs a look).
   A PR whose recheck comes back safe joins the count. Greyed out when no
   approvable PR is agent-safe, with `rechecking…` if any is rechecking,
   else `look closer`.
@@ -3350,7 +3373,11 @@ Owner decisions (2026-09-30):
   At click time the engine checks each PR again against the current board
   with the same core rules (`agentApproveRefusal`); one that no longer
   qualifies is refused and named ("the agent now says look closer"), the
-  rest are approved. Mark N read skips and names tiles no longer backed
+  rest are approved. On a stack each covered layer carries the covered
+  layers below it (`dependsOn`); the engine skips it when one of those failed
+  or did not go first in the batch ("skipped: a layer below failed",
+  `agentApproveSkip`), so an upper layer is never approved over a base
+  that wasn't. Unrelated PRs carry on. Mark N read skips and names tiles no longer backed
   (`agentMarkReadRefusal`) and refuses unknown tile ids.
 - **Mark read skips asks.** Only actions carry ✨, never text or lines. A
   tile's Mark read is always on offer, so it stays plain: no ✨, no pill, the

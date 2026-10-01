@@ -94,6 +94,7 @@ import {
   viewerApproval,
   agentPrFacts,
   agentApproveRefusal,
+  agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
   tilesReadScope,
@@ -1139,10 +1140,11 @@ export class FakeEngine implements EngineService {
       return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
     }
     const results: PrApproveResult[] = [];
-    // Checked up front against the current sample, like the engine.
-    const refusals = new Map(prs.map(({ prKey }) => [prKey, agentApproveRefusal(prKey, this.tilesHolding(prKey).map((tile) => this.tileView(tile)), from)]));
+    // Checked up front against the current sample, like the engine; a stack layer waits for the covered layers below it.
+    const holding = new Map(prs.map(({ prKey }) => [prKey, this.tilesHolding(prKey).map((tile) => this.tileView(tile))]));
     for (const { prKey, headOid } of prs) {
-      const refusal = refusals.get(prKey) ?? null;
+      const views = holding.get(prKey) ?? [];
+      const refusal = agentApproveRefusal(prKey, views, from) ?? agentApproveSkip(prKey, views, from, results);
       if (refusal !== null) {
         results.push({ prKey, ok: false, message: refusal });
         continue;

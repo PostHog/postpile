@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentApproveOffer } from '@postpile/core';
-import { approvePillWord, batchMarkReadMessage, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
+import type { AgentApproveOffer, AgentApprovePr } from '@postpile/core';
+import { approvePillWord, batchMarkReadMessage, leftOutReason, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
 
 function offer(overrides: Partial<AgentApproveOffer>): AgentApproveOffer {
-  return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, ...overrides };
+  return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, prCount: 5, naming: 'some', ...overrides };
 }
+
+const BASE: AgentApprovePr = { prKey: 'acme/app#109533', title: 'Base', headOid: 'abc', verdict: 'LOOKS_SAFE', riskLine: 'low', risk: 'low', dependsOn: [] };
 
 describe('approve wording', () => {
   it('says the risk when active and the reason when greyed', () => {
@@ -15,17 +17,29 @@ describe('approve wording', () => {
   it('never counts PRs on a greyed button', () => {
     expect(topicApproveLabel(offer({}))).toBe('Approve 3 of 5 PRs');
     expect(topicApproveLabel(offer({ totalCount: 3 }))).toBe('Approve 3 PRs');
-    expect(topicApproveLabel(offer({ state: 'greyed', coveredCount: 0, totalCount: 1 }))).toBe('Approve');
-    expect(tileApproveLabel(offer({ totalCount: 3 }), 'set')).toBe('Approve 3 PRs');
-    expect(tileApproveLabel(offer({ totalCount: 3 }), 'stack')).toBe('Approve stack');
-    expect(tileApproveLabel(offer({ coveredCount: 1, totalCount: 1 }), 'single')).toBe('Approve');
-    expect(tileApproveLabel(offer({ state: 'greyed', coveredCount: 0 }), 'stack')).toBe('Approve stack');
-    expect(tileApproveLabel(offer({ state: 'greyed', coveredCount: 0 }), 'set')).toBe('Approve');
+    expect(topicApproveLabel(offer({ state: 'greyed', coveredCount: 0, totalCount: 1, naming: 'none' }))).toBe('Approve');
+    expect(tileApproveLabel(offer({ totalCount: 3, prCount: 3, naming: 'every' }), 'set')).toBe('Approve 3 PRs');
+    expect(tileApproveLabel(offer({ totalCount: 3, prCount: 3, naming: 'every' }), 'stack')).toBe('Approve stack');
+    expect(tileApproveLabel(offer({ coveredCount: 1, totalCount: 1, prCount: 1, naming: 'every' }), 'single')).toBe('Approve');
+    expect(tileApproveLabel(offer({ state: 'greyed', coveredCount: 0, naming: 'none' }), 'stack')).toBe('Approve');
+    expect(tileApproveLabel(offer({ state: 'greyed', coveredCount: 0, naming: 'none' }), 'set')).toBe('Approve');
   });
 
-  it('counts a partial tile like the topic', () => {
+  it('counts a partial tile like the topic, and says stack only when it covers every PR', () => {
     expect(tileApproveLabel(offer({ coveredCount: 2, totalCount: 5 }), 'stack')).toBe('Approve 2 of 5 PRs');
-    expect(tileApproveLabel(offer({ coveredCount: 1, totalCount: 2 }), 'set')).toBe('Approve 1 of 2 PRs');
+    expect(tileApproveLabel(offer({ coveredCount: 2, totalCount: 2, prCount: 3 }), 'stack')).toBe('Approve 2 PRs');
+  });
+
+  // Owner, 2026-10-01: one PR out of several is named, so "Low risk" can't read as a verdict on the whole stack.
+  it('names the one PR it covers out of several', () => {
+    const one = offer({ covered: [BASE], coveredCount: 1, totalCount: 1, prCount: 3, naming: 'one' });
+    expect(tileApproveLabel(one, 'stack')).toBe('Approve #109533');
+    expect(topicApproveLabel(offer({ covered: [BASE], coveredCount: 1, totalCount: 3, naming: 'one' }))).toBe('Approve #109533');
+  });
+
+  it('says what a left-out layer waits on', () => {
+    expect(leftOutReason({ reason: 'layer_below', waitsOn: 'acme/app#109499' })).toBe('waits on #109499');
+    expect(leftOutReason({ reason: 'look_closer', waitsOn: null })).toBe('look closer');
   });
 });
 

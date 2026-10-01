@@ -319,6 +319,31 @@ describe('agent actions re-check at click time', () => {
     expect(h.writer.calls).toEqual(['approvePr acme/app#1@head']);
   });
 
+  // Approvals are final: an upper stack layer never goes through after its base failed (base up, 2026-10-01).
+  it('skips a stack layer whose base failed to approve, and approves an unrelated PR', async () => {
+    const h = makeHarness();
+    const upper = reviewRequestedPr(2, { baseRef: pr.headRef });
+    const loose = reviewRequestedPr(3);
+    for (const candidate of [pr, upper, loose]) {
+      h.reader.addPr(candidate, makeThreadFor(candidate));
+    }
+    await h.engine.sync({ maxAgentCalls: 50 });
+    h.writer.failingApprovals.add(pr.key);
+
+    const result = await h.engine.approveMany(
+      [pr, upper, loose].map((candidate) => ({ prKey: candidate.key, headOid: candidate.headOid })),
+      'agent_topic',
+    );
+
+    expect(result.results).toEqual([
+      { prKey: pr.key, ok: false, message: 'Approve failed: GitHub timed out' },
+      { prKey: upper.key, ok: false, message: 'skipped: a layer below failed' },
+      { prKey: loose.key, ok: true, message: 'Approved' },
+    ]);
+    expect(result.message).toBe('Approved 1 of 3 PRs; acme/app#1: Approve failed: GitHub timed out; 1 skipped, a layer below was not approved');
+    expect(h.writer.calls).toEqual(['approvePr acme/app#3@head']);
+  });
+
   it('skips a tile the agent no longer backs and refuses unknown tiles', async () => {
     const h = makeHarness();
     h.reader.addPr(pr, makeThreadFor(pr));

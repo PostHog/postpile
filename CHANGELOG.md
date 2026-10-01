@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- ✨ Approve on a stack goes from the base up: a layer is only offered when no layer below it needs a closer look. The confirm list says what the others wait on ("waits on #109499"). When the button approves one PR out of several it names it ("Approve #109533"), and "Approve stack" shows only when it approves the whole stack. If a lower layer fails to approve, the layers above it are skipped.
+
 ## 0.13.3 (2026-10-01)
 
 ### Changed

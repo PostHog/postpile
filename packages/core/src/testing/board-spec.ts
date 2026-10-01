@@ -333,8 +333,39 @@ function groupArb(kind: GroupKind, minLength: number, maxLength: number): fc.Arb
   });
 }
 
+/**
+ * A PR asking the viewer for a review, so the pane leads with Approve:
+ * ada's open PR with a request for the viewer and a glance that is mostly
+ * Looks safe, now and then a draft, stale, missing or at any risk word.
+ * Stacks of these mix covered, blocking and draft layers, the shapes the
+ * agent Approve's base-up rule branches on (owner, 2026-10-01).
+ */
+const reviewPrSpecArb: fc.Arbitrary<PrSpec> = fc
+  .record({
+    draft: sometimes(1, 4),
+    glance: fc.oneof(
+      { weight: 5, arbitrary: fc.constant<Verdict | null>('LOOKS_SAFE') },
+      { weight: 2, arbitrary: fc.constant<Verdict | null>('LOOK_CLOSER') },
+      { weight: 1, arbitrary: fc.constant<Verdict | null>(null) },
+    ),
+    glanceRisk: fc.oneof(
+      { weight: 3, arbitrary: fc.constantFrom<RiskWord>('low', 'medium') },
+      { weight: 1, arbitrary: fc.constantFrom<RiskWord>('high', 'garbage') },
+    ),
+    glanceStale: sometimes(1, 7),
+  })
+  .map((picked) => ({ ...QUIET_PR, steps: [{ kind: 'request' as const, target: 'viewer' as const, byBot: false }], ...picked }));
+
+/** Mostly a stack of review PRs, sometimes the same inside a set. */
+const reviewGroupArb: fc.Arbitrary<GroupSpec> = fc.record({
+  kind: fc.constantFrom<GroupKind>('stack', 'stack', 'stack', 'set_with_stack', 'set'),
+  prs: fc.array(reviewPrSpecArb, { minLength: 2, maxLength: 4 }),
+  snooze: maybe(snoozeArb, 10),
+});
+
 const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
   { weight: 6, arbitrary: groupArb('single', 1, 1) },
+  { weight: 3, arbitrary: reviewGroupArb },
   { weight: 4, arbitrary: groupArb('stack', 2, 4) },
   { weight: 4, arbitrary: groupArb('set', 2, 4) },
   { weight: 1, arbitrary: groupArb('set_with_stack', 2, 4) },
