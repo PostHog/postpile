@@ -3,6 +3,7 @@ import type { LivePollStatus, TopicDetail, TopicListItem } from '@postpile/core'
 import { useActions } from '../api/actions.tsx';
 import { useMcpConnection } from '../api/mcp.ts';
 import { useTools } from '../api/tools.ts';
+import { useUpdate } from '../api/update.ts';
 import { callStatsWords } from '../lib/agent-stats.ts';
 import { liveLabel, quotaLabel } from '../lib/live.ts';
 import { mcpFooterShows } from '../lib/mcp.ts';
@@ -32,6 +33,8 @@ function withDividers(items: ReactNode[]): ReactNode[] {
 /** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, the GitHub quota while low, what gh or claude leave off, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version. */
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
+  const serverVersion = useUpdate().data?.current;
+  const version = window.postpile?.version || serverVersion;
   const now = useNow(1000);
   const live = liveLabel(props.live, now);
   const liveOn = props.live !== undefined && props.live.state !== 'off';
@@ -98,9 +101,9 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
   ]);
   const right = withDividers([
     <span key="queue">{actions.pendingMarkReads > 0 ? `${actions.pendingMarkReads} mark-read in the undo window` : 'mark-read queue empty'}</span>,
-    window.postpile?.version && (
-      <span key="version" title="PostPile › About PostPile">
-        v{window.postpile.version}
+    version && (
+      <span key="version" title={window.postpile ? 'PostPile › About PostPile' : 'PostPile version'}>
+        v{version}
       </span>
     ),
   ]);

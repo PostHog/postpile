@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import type { AppConfig, McpLauncher } from '@postpile/core';
+import { dirname, join } from 'node:path';
+import type { AppConfig, AppInstall, McpLauncher } from '@postpile/core';
 import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind, type Telemetry } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeQuotaLevel } from './fake/fake-quota.ts';
@@ -12,13 +12,26 @@ export function isFake(): boolean {
   return process.env.POSTPILE_FAKE === '1';
 }
 
-/** Always run from source (tsx), never bundled, so reading this file at runtime is safe. */
-export function readOwnVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '../package.json'), 'utf8')) as { version?: string };
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
+const SERVER_PACKAGE_NAMES = new Set(['@postpile/server', 'postpile-server']);
+
+/**
+ * The version in the nearest server package.json above this file: apps/server
+ * when run from source (tsx), the postpile-server bundle's root when bundled
+ * (apps/service), wherever the bundler put this module.
+ */
+export function readOwnVersion(fromDir: string = import.meta.dirname): string {
+  for (let dir = fromDir; ; dir = dirname(dir)) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: string; version?: string };
+      if (pkg.name && SERVER_PACKAGE_NAMES.has(pkg.name)) {
+        return pkg.version ?? 'unknown';
+      }
+    } catch {
+      // no package.json here
+    }
+    if (dirname(dir) === dir) {
+      return 'unknown';
+    }
   }
 }
 
@@ -89,7 +102,7 @@ export function syncCallCapFromEnv(value: string | undefined): number {
  * Fixed for the process. Whether GitHub writes are on is the engine's
  * runtime switch (footer lock, GET /api/github-writes), not config.
  */
-export function appConfigFromEnv(): AppConfig {
+export function appConfigFromEnv(install: AppInstall = 'app'): AppConfig {
   return {
     fake: isFake(),
     syncCallCap: syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS),
@@ -97,6 +110,7 @@ export function appConfigFromEnv(): AppConfig {
     profile: profileFromEnv(process.env),
     databasePath: isFake() ? null : defaultPaths().databaseFile,
     autoSyncMinutes: autoSyncMinutesFromEnv(process.env.POSTPILE_AUTO_SYNC_MINUTES, process.env.POSTPILE_SYNC_ON_START !== '0'),
+    install,
   };
 }
 

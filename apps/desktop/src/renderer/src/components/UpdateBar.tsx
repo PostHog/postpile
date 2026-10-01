@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
+import { useAppConfig } from '../api/config.ts';
 import { sendTelemetry } from '../api/telemetry.ts';
-import { behindSinceDate, releasesBehindText, UPGRADE_COMMAND } from '../lib/update.ts';
+import { behindSinceDate, releasesBehindText, upgradeSteps } from '../lib/update.ts';
 import { useUpdateReminder } from '../lib/use-update-reminder.ts';
 import { Button } from './Button.tsx';
 import { FixCommand } from './FixCommand.tsx';
@@ -17,6 +18,7 @@ let shownReported = false;
  */
 export function UpdateBar() {
   const { view, urgency, hoursBehind, later } = useUpdateReminder();
+  const steps = upgradeSteps(useAppConfig().data?.install ?? 'app');
   const latest = view?.latest ?? null;
   const visible = urgency === 'bar' && latest !== null;
 
@@ -42,8 +44,8 @@ export function UpdateBar() {
         You&apos;re <span className="font-semibold">{releasesBehindText(latest.releasesBehind, latest.moreBehind)}</span> behind{since && ` (since ${since})`}. PostPile{' '}
         <span className="font-mono text-[11px]">{latest.version}</span> is out.
       </span>
-      <FixCommand command={UPGRADE_COMMAND} label={null} />
-      <span>Then quit and reopen PostPile.</span>
+      <FixCommand command={steps.command} label={null} />
+      <span>{steps.afterwards}</span>
       <div className="ml-auto flex items-center gap-3">
         <a href={latest.url} target="_blank" rel="noreferrer" className="underline hover:text-ink">
           Release notes

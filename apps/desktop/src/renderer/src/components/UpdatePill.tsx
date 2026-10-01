@@ -1,13 +1,14 @@
 import { useCallback, useRef, useState } from 'react';
 import type { AvailableUpdate } from '@postpile/core';
 import { sendTelemetry } from '../api/telemetry.ts';
-import { releaseDate, UPGRADE_COMMAND } from '../lib/update.ts';
+import { useAppConfig } from '../api/config.ts';
+import { releaseDate, upgradeSteps, type UpgradeSteps } from '../lib/update.ts';
 import { useUpdateReminder } from '../lib/use-update-reminder.ts';
 import { useDismiss } from '../lib/use-dismiss.ts';
 import { Button } from './Button.tsx';
 import { FixCommand } from './FixCommand.tsx';
 
-function UpdatePopover(props: { update: AvailableUpdate; current: string; onLater: () => void }) {
+function UpdatePopover(props: { update: AvailableUpdate; current: string; steps: UpgradeSteps; onLater: () => void }) {
   const date = releaseDate(props.update.publishedAt);
   return (
     <div role="dialog" aria-label="Update available" className="absolute top-full right-0 z-30 mt-1 flex w-80 flex-col gap-2.5 rounded-row bg-surface p-3 shadow-menu">
@@ -22,8 +23,8 @@ function UpdatePopover(props: { update: AvailableUpdate; current: string; onLate
         Release notes
       </a>
       <div className="flex flex-col gap-1 border-t border-hairline pt-2.5">
-        <FixCommand command={UPGRADE_COMMAND} label={null} />
-        <span className="text-[11px] text-muted">Then quit and reopen PostPile.</span>
+        <FixCommand command={props.steps.command} label={null} />
+        <span className="text-[11px] text-muted">{props.steps.afterwards}</span>
       </div>
       <div className="flex justify-end">
         <Button title="Remind me again later" onClick={props.onLater}>
@@ -44,6 +45,7 @@ function UpdatePopover(props: { update: AvailableUpdate; current: string; onLate
  */
 export function UpdatePill() {
   const { view: update, urgency, later } = useUpdateReminder();
+  const steps = upgradeSteps(useAppConfig().data?.install ?? 'app');
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -77,7 +79,7 @@ export function UpdatePill() {
         <span className="size-1.5 rounded-full bg-ink-2" />
         Update available · <span className="font-mono text-[10.5px]">{latest.version}</span>
       </button>
-      {open && <UpdatePopover update={latest} current={update.current} onLater={snooze} />}
+      {open && <UpdatePopover update={latest} current={update.current} steps={steps} onLater={snooze} />}
     </div>
   );
 }

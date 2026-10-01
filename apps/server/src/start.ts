@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import type { AppConfig } from '@postpile/core';
 import type { EngineService, Telemetry } from '@postpile/engine';
 import { createApp } from './app.ts';
+import { serveWebUi } from './web-ui.ts';
 import type { UpdateSource } from './update-check.ts';
 
 export interface ServerOptions {
@@ -18,6 +19,7 @@ export interface ServerOptions {
   telemetry?: Telemetry;
   /** Called after every non-read API request, so the host can follow local actions (the Dock badge). */
   onWrite?: () => void;
+  webRoot?: string | null;
 }
 
 export interface RunningServer {
@@ -29,6 +31,9 @@ export interface RunningServer {
 /** Binds to 127.0.0.1 only. The API can approve PRs, so it never listens on the network. */
 export function startServer(options: ServerOptions): Promise<RunningServer> {
   const app = createApp(options.engine, options.token, options.config, options.updates, options.telemetry, options.onWrite);
+  if (options.webRoot) {
+    serveWebUi(app, options.webRoot, options.token);
+  }
   options.updates.start();
   return new Promise((resolve) => {
     const server = serve({ fetch: app.fetch, port: options.port, hostname: '127.0.0.1' }, (info) => {

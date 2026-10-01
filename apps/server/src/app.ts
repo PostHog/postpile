@@ -20,6 +20,8 @@ import { UpdatesOff, type UpdateSource } from './update-check.ts';
 /** Every /api request must carry the server's token in this header. */
 export const TOKEN_HEADER = 'x-postpile-token';
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost']);
+
 const snoozeCondition = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('someone_replies') }),
   z.object({ kind: z.literal('new_push') }),
@@ -200,6 +202,12 @@ export function createApp(
   }
   const app = new Hono();
 
+  app.use('*', async (c, next) => {
+    if (!LOOPBACK_HOSTS.has(new URL(c.req.url).hostname)) {
+      return c.json({ error: 'unknown host' }, 403);
+    }
+    await next();
+  });
   app.use('/api/*', async (c, next) => {
     await next();
     if (c.req.method === 'OPTIONS' && c.req.header('access-control-request-private-network') === 'true') {

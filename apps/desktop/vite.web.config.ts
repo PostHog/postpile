@@ -9,7 +9,7 @@ function relaxCspForDevServer(): Plugin {
     transformIndexHtml(html) {
       return html
         .replace("default-src 'self';", "default-src 'self'; script-src 'self' 'unsafe-inline';")
-        .replace('connect-src http://127.0.0.1:*', 'connect-src http://127.0.0.1:* ws://127.0.0.1:*');
+        .replace("connect-src 'self' http://127.0.0.1:*", "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*");
     },
   };
 }

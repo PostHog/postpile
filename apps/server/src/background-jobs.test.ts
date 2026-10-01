@@ -4,7 +4,7 @@ import type { EngineService } from '@postpile/engine';
 import { startBackgroundJobs } from './background-jobs.ts';
 import { CONSOLIDATION_CHECK_MS } from './consolidation-schedule.ts';
 
-const CONFIG: AppConfig = { fake: false, syncCallCap: 40, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 15 };
+const CONFIG: AppConfig = { fake: false, syncCallCap: 40, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 15, install: 'app' };
 
 function recordingEngine(calls: string[]): EngineService {
   const record = (name: string) => (options?: unknown) => {

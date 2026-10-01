@@ -605,7 +605,12 @@ export interface AppConfig {
    * POSTPILE_AUTO_SYNC_MINUTES, default 60; 0 turns it off.
    */
   autoSyncMinutes: number;
+  /** How this copy was installed, so the update reminder names the right upgrade steps. */
+  install: AppInstall;
 }
+
+/** app: the desktop app (Homebrew cask). brew-service: the postpile-server formula. source: a repo checkout (`pnpm server`). */
+export type AppInstall = 'app' | 'brew-service' | 'source';
 
 /**
  * A lasting point in the user's message comes back for the user to place:
