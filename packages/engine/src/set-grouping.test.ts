@@ -249,4 +249,20 @@ describe('lasting sets', () => {
     expect(h.store.sets.get(setId)).toBeNull();
     expect(changes(h)[0]).toBe('ended - (rules): fewer than two PRs left');
   });
+
+  it('regroups again after a PR left a set, so it can join another one', async () => {
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
+    const { h, setId } = await depotWithSet(prs);
+    h.runner.answer('set_grouping', { joins: [{ setId, prKey: prs[2]!.key, reason: 'same change' }] });
+    h.store.glances.put(glance(prs[2]!.key, 'low - same'));
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    h.store.glances.put(glance(prs[2]!.key, 'high - migrations'));
+    h.runner.answer('set_grouping', { leaves: [{ setId, prKey: prs[2]!.key, reason: 'its risk is now high' }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    h.runner.answer('set_grouping', {});
+    const report = await h.engine.sync({ agentJobs: ['sets'] });
+    expect(report.agentCallStats.byKind.set_grouping?.calls).toBe(1);
+  });
 });

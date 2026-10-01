@@ -219,12 +219,18 @@ export class SetGrouper {
    * What this regroup counts as seen: everything the agent was shown, plus
    * the open-PR and member lines its own changes produced (read with the
    * risk it was shown), so it does not trigger itself. Feedback, corrections
-   * or risk changes that arrived during the call stay new.
+   * or risk changes that arrived during the call stay new, and so does a PR
+   * that just left a set: the next regroup may place it in another one,
+   * which this answer could not (it only saw that PR as a member).
    */
   private seenTriggers(topic: Topic, input: SetGroupingInput): string[] {
     const shown = new Set(input.prs.map((pr) => pr.key));
+    const wasPlaced = new Set(activeSets(input).flatMap((set) => set.members.map((member) => member.prKey)));
     const now = this.input(topic);
-    const after = { ...now, prs: now.prs.filter((pr) => shown.has(pr.key)), risks: input.risks, context: input.context };
+    const placedNow = new Set(activeSets(now).flatMap((set) => set.members.map((member) => member.prKey)));
+    const leftASet = (key: PrKey): boolean => wasPlaced.has(key) && !placedNow.has(key);
+    const prs = now.prs.filter((pr) => shown.has(pr.key) && !leftASet(pr.key));
+    const after = { ...now, prs, risks: input.risks, context: input.context };
     const made = setGroupingTriggers(after).filter((trigger) => trigger.startsWith('open:') || trigger.startsWith('member:'));
     return [...new Set([...setGroupingTriggers(input), ...made])];
   }
@@ -266,10 +272,11 @@ export class SetGrouper {
       if (!set || !set.members.some((member) => member.prKey === leave.prKey)) {
         continue;
       }
-      // A stack leaves a set whole, like it joined it.
+      // A stack leaves a set whole, like it joined it; each PR that left gets its own line.
       const leaving = new Set(stackOf.get(leave.prKey)?.prKeys ?? [leave.prKey]);
+      const left = set.members.filter((member) => leaving.has(member.prKey));
       set.members = set.members.filter((member) => !leaving.has(member.prKey));
-      this.record(topicId, set.id, leave.prKey, 'left', leave.reason);
+      left.forEach((member) => this.record(topicId, set.id, member.prKey, 'left', member.prKey === leave.prKey ? leave.reason : `with its stack: ${leave.reason}`));
     }
   }
 
@@ -283,7 +290,7 @@ export class SetGrouper {
         continue;
       }
       set.members = [...set.members, ...unit];
-      this.record(topicId, set.id, join.member.prKey, 'joined', join.member.reason);
+      unit.forEach((member) => this.record(topicId, set.id, member.prKey, 'joined', member.reason));
     }
   }
 
