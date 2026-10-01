@@ -74,6 +74,15 @@ export function tileReadScope(tile: Tile): ReadScope {
   };
 }
 
+/** Several tiles read as one (the topic's "Mark N read"): each PR once, handled when any of the tiles tracks it. */
+export function tilesReadScope(tiles: Tile[]): ReadScope {
+  const scopes = tiles.map(tileReadScope);
+  return {
+    prKeys: [...new Set(scopes.flatMap((scope) => scope.prKeys))],
+    handleKeys: [...new Set(scopes.flatMap((scope) => scope.handleKeys))],
+  };
+}
+
 /** One PR seen, and handled when `handles` (the tile tracks it). */
 export function prReadScope(key: PrKey, handles: boolean): ReadScope {
   return { prKeys: [key], handleKeys: handles ? [key] : [] };

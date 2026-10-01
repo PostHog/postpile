@@ -93,6 +93,9 @@ export interface OverrideSpec {
   loudness: 'loud' | 'quiet' | 'muted';
 }
 
+/** How the glance's risk line starts: a level the agent can back an action at, high, or a word nobody can read as a level. */
+export type RiskWord = 'low' | 'medium' | 'high' | 'garbage';
+
 export interface PrSpec {
   author: Person;
   /** In this order; the first names the owner in sentences when a bot opened the PR. */
@@ -111,6 +114,10 @@ export interface PrSpec {
   markedReadAfter: number | null;
   snooze: SnoozeSpec | null;
   glance: Verdict | null;
+  /** How the glance's risk line starts (`RISK_LINES`). Ignored without a glance. */
+  glanceRisk: RiskWord;
+  /** The PR, instructions or feedback moved since the glance was made (`glanceStale`). Ignored without a glance. */
+  glanceStale: boolean;
   /** The Look closer ping fired for a routed team request (only kept when `lookCloserPingCheck` agrees). */
   lookCloser: boolean;
   overrides: OverrideSpec[];
@@ -143,6 +150,8 @@ export const QUIET_PR: PrSpec = {
   markedReadAfter: null,
   snooze: null,
   glance: null,
+  glanceRisk: 'low',
+  glanceStale: false,
   lookCloser: false,
   overrides: [],
   judged: false,
@@ -303,6 +312,11 @@ export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
   markedReadAfter: maybe(stepIndex, 35),
   snooze: maybe(snoozeArb, 15),
   glance: maybe(fc.constantFrom<Verdict>('LOOKS_SAFE', 'LOOK_CLOSER', 'NOT_YOURS'), 60),
+  glanceRisk: fc.oneof(
+    { weight: 3, arbitrary: fc.constantFrom<RiskWord>('low', 'medium') },
+    { weight: 1, arbitrary: fc.constantFrom<RiskWord>('high', 'garbage') },
+  ),
+  glanceStale: sometimes(1, 4),
   lookCloser: sometimes(3, 1),
   overrides: fc.array(fc.record({ pick: fc.nat({ max: 20 }), loudness: fc.constantFrom<OverrideSpec['loudness']>('quiet', 'loud', 'muted') }), { maxLength: 2 }),
   judged: sometimes(1, 1),

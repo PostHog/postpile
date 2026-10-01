@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileView, TopicDetail, WhoseTurn } from '@postpile/core';
 import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
-import { markedReadPr, markedReadTile, snoozedTile, withTile } from './optimistic.ts';
+import { approvedPrsTile, markedReadPr, markedReadTile, snoozedTile, withTile, withTiles } from './optimistic.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REVIEW: WhoseTurn = { kind: 'you', move: 'review', who: 'rowan', what: 'Review, rowan asked', prKey: 'acme/app#1' };
@@ -114,5 +114,37 @@ describe('withTile', () => {
     const detail = { tiles: [unreadTile([summary(1)])] } as unknown as TopicDetail;
     expect(withTile(detail, 'set:other', snoozedTile)).toBe(detail);
     expect(withTile(detail, 'set:s1', snoozedTile).tiles[0]?.state.kind).toBe('snoozed');
+  });
+});
+
+describe('approvedPrsTile', () => {
+  it('sends a tile whose only unread PR was approved to Dealt with and drops its agent Approve', () => {
+    const view = { ...unreadTile([summary(1)]), unreadPrKeys: ['acme/app#1'] };
+    const approved = approvedPrsTile(view, ['acme/app#1']);
+
+    expect(approved.unreadPrKeys).toEqual([]);
+    expect([approved.state.kind, approved.group]).toEqual(['done', 'dealt_with']);
+    expect(approved.prs[0]).toMatchObject({ unseenLoudEvents: 0, done: true });
+    expect(approved.agent.approve).toBeNull();
+  });
+
+  it('keeps the tile unread while another PR is, and ignores a tile without the PR', () => {
+    const view = { ...unreadTile([summary(1), summary(3)]), unreadPrKeys: ['acme/app#1', 'acme/app#3'] };
+    const approved = approvedPrsTile(view, ['acme/app#3']);
+
+    expect(approved.unreadPrKeys).toEqual(['acme/app#1']);
+    expect(approved.state).toBe(view.state);
+    expect(approvedPrsTile(view, ['acme/app#9'])).toBe(view);
+  });
+});
+
+describe('withTiles', () => {
+  it('changes every listed tile in one result and leaves the input untouched', () => {
+    const second = { ...unreadTile([summary(3)]), tile: { ...unreadTile([]).tile, id: 'set:s2' } };
+    const detail = { tiles: [unreadTile([summary(1)]), second] } as unknown as TopicDetail;
+    const changed = withTiles(detail, ['set:s1', 'set:s2'], snoozedTile);
+
+    expect(changed.tiles.map((view) => view.state.kind)).toEqual(['snoozed', 'snoozed']);
+    expect(detail.tiles.map((view) => view.state.kind)).toEqual(['unread', 'unread']);
   });
 });

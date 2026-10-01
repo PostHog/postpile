@@ -190,8 +190,8 @@
 
   /* Shadows */
   --elev-control: 0 1px 1px rgba(16, 24, 40, 0.04);
-  --elev-primary: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 0 0 1px rgba(16, 24, 40, 0.9), 0 1px 2px rgba(16, 24, 40, 0.28);
-  --elev-safe: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 0 0 1px var(--safe-edge), 0 1px 2px rgba(15, 90, 47, 0.3);
+  --elev-primary: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 0 0 1px rgba(16, 24, 40, 0.9), 0 1px 1px rgba(16, 24, 40, 0.08);
+  --elev-safe: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 0 0 1px var(--safe-edge), 0 1px 1px rgba(15, 90, 47, 0.08);
   /* The tile's lift without its ring, for frames that keep a real border (drafts, filter matches). */
   --elev-tile-lift: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 20px -14px rgba(16, 24, 40, 0.2);
   --elev-tile: 0 0 0 1px var(--ring-hairline), var(--elev-tile-lift);

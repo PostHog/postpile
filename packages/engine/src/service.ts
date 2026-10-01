@@ -1,6 +1,9 @@
 import type {
   ActionLogEntry,
   ActionResult,
+  AgentActionFrom,
+  ApprovePrRequest,
+  BatchApproveResult,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -244,6 +247,12 @@ export interface EngineService {
    */
   approve(prKey: PrKey, headOid: string): Promise<ActionResult>;
   /**
+   * Agent-assisted Approve (a tile's or the topic's ✨ Approve, DESIGN.md
+   * "Agent-assisted actions"): each PR through `approve` with its head guard,
+   * in the order given, reported per PR. Final, no undo.
+   */
+  approveMany(prs: ApprovePrRequest[], from: AgentActionFrom): Promise<BatchApproveResult>;
+  /**
    * "Remove <team>": removes the review request of one of the viewer's teams
    * (`team` as GitHub lists it, "acme/team-devex"), unsubscribes from the
    * PR's thread and marks the PR done here. Final, no undo; refused while
@@ -262,6 +271,12 @@ export interface EngineService {
    * the same queue, lock and undo as markRead; undo brings back that PR only.
    */
   markPrRead(tileId: string, prKey: PrKey): Promise<ActionResult>;
+  /**
+   * Agent-assisted Mark read (a tile's ✨ Mark read, the topic's "Mark N
+   * read"): the tiles' reads as one batch through the same queue, lock and
+   * pending writes as markRead, so one undo token brings all of them back.
+   */
+  markTilesRead(tileIds: string[], from: AgentActionFrom): Promise<ActionResult>;
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
   markThreadRead(threadId: string): Promise<ActionResult>;
   /**

@@ -2140,8 +2140,8 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
 
 - Tile footer: "Mark read" on an unread tile. On a read tile "Mark done"
   only when `afterRead.done`, else "Mark read". A read (open) tile that is
-  still your move gets no mark button: Snooze is the primary (ink) button,
-  with its usual menu, and a quieter "Review on GitHub" opens the files tab
+  still your move gets no mark button: Snooze leads, with its usual menu,
+  and "Review on GitHub" opens the files tab
   of the move's PR ("Open on GitHub" and the PR itself on your own PR),
   through the external link path (so `opened_on_github` fires). Done tiles
   keep "Open" and nothing else: no mark button and no Snooze, in the tile
@@ -3131,7 +3131,7 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   `unreadOnGitHub` or `automation` again. The one exception is the
   optimistic guess after a click (`lib/optimistic.ts`), from `afterRead`,
   until the refetch brings core's answer.
-- **Three groups, always in this order: Unread, Open, Dealt with (n).**
+- **Three groups, always in this order: Unread, Open, Dealt with N.**
   Empty groups don't show. Dealt with is folded by default and follows the
   user's last click on it: opened stays open, closed stays closed, for the
   rest of the session in every topic (App state). The search filtering or a
@@ -3157,6 +3157,94 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   headline left quiet; the groups come in the order Unread, Open, Dealt
   with. The fake engine builds its tiles through `buildTileView`, and its
   rules test checks the groups and the counts per topic and in total.
+
+## Agent-assisted actions (2026-09-30)
+
+Approve and Mark read on a whole topic or tile, offered when the agent's
+current verdicts back them. Mockup: https://claude.ai/artifact/UQz3CKZwhJbSg6MgbQrhMS.
+Owner decisions (2026-09-30):
+
+- **The ✨ rule.** ✨ marks an action that is on offer because an agent's
+  verdict supports it. It sits in a pill on the button, and the pill says
+  what the agent judged: the risk level (`✨ low`, `✨ medium`) or why it
+  cannot back the action (`✨ look closer`, `✨ high`, `✨ rechecking…`).
+  Actions that work without the agent never carry ✨.
+- **Agent-safe PR.** A current glance (not `glanceStale`, not missing),
+  verdict `LOOKS_SAFE`, risk low or medium. The risk level is the first
+  word of the glance's `risk` line ("medium - touches the worker loop"). An
+  unreadable risk word counts as high.
+- **Approvable PR.** Exactly today's Approve rule (`paneOffers`, primary
+  action `approve`): someone else's open non-draft PR, tracked (not a
+  pulled-in layer), not approved at its head, not dealt with, and nobody
+  has approved it yet (a standing approval on GitHub, or the review
+  decision says approved; owner, 2026-09-30: an agent Approve on an
+  approved PR is redundant noise). Such a PR is neither covered nor left
+  out; the pane's own Approve stays.
+- **Greyed out or gone.** Something to act on but no agent backing: the
+  button stays, disabled, with the reason in its pill. Nothing to act on at
+  all: no button.
+- **Tile Approve** (new button in the tile footer). Gone when the tile has no
+  approvable PR. Active when every approvable PR in the tile is agent-safe:
+  it approves all of them (a stack base to head), and the pill shows the
+  highest risk. Otherwise greyed out. The reason is `rechecking…` when any
+  approvable PR's glance is stale or missing, else `look closer` or `high`.
+- **Topic Approve** (topic header). It covers the approvable PRs in the
+  topic's tiles, leaving out snoozed tiles. It approves only the agent-safe
+  ones: "Approve 3 of 5 PRs", or "Approve 3 PRs" when all qualify. Each PR
+  left out is named with its reason (look closer, high risk, rechecking).
+  A PR whose recheck comes back safe joins the count. Greyed out when no
+  approvable PR is agent-safe, with `rechecking…` if any is rechecking,
+  else `look closer`.
+- **Approve is final, so it asks first.** Both Approve buttons open a
+  confirm list: each PR with its verdict and risk line, plus the PRs left
+  out and why. Each PR goes through the existing approve path with its
+  head guard (`approve(prKey, headOid)`), and the result is reported per PR.
+  Optimistic like the pane's Approve.
+  No Undo after any approve, not even for the mark-read that follows.
+  At click time the engine checks each PR again against the current board
+  with the same core rules (`agentApproveRefusal`); one that no longer
+  qualifies is refused and named ("the agent now says look closer"), the
+  rest are approved. Mark N read skips and names tiles no longer backed
+  (`agentMarkReadRefusal`) and refuses unknown tile ids.
+- **Mark read skips asks.** Only actions carry ✨, never text or lines. A
+  tile's Mark read is always on offer, so it stays plain: no ✨, no pill, the
+  old route. Core's tile backing (the unread news holds no ask for you, and
+  every unread PR has a current glance that is not `LOOK_CLOSER`, low or
+  medium risk) only feeds the topic's "Mark N read", which covers the
+  unread, unsnoozed tiles whose backing is active. Tiles with an ask for you
+  are skipped and stay unread. It is gone when no tile is unread; when tiles
+  are unread but none qualify it shows a plain "Mark read" greyed out, with
+  `✨ Needs you` or `✨ Rechecking…`. Active, it says `✨ No ask for you`.
+  It keeps the 6s Undo for the whole batch.
+- **Pill wording and placement.** Approve: `✨ Low risk` / `✨ Medium risk`
+  when active (tooltip "Agent verdict: Looks safe."), `✨ Look closer`,
+  `✨ High risk`, `✨ Rechecking…` when greyed. A greyed Approve is a plain
+  "Approve" plus the pill, never a count. The topic buttons sit on their own
+  row under the "Tiles N" line (only the count: the Unread label below says
+  how many are unread), with a muted "for this topic" trailing them, above
+  the first group; the row is gone when both offers are. Active Approve is
+  soft green (light green fill, green text and edge) with a green pill;
+  greyed buttons keep the dashed outline with a honey pill, like Look
+  closer. Filled green is only the confirm dialog's "Approve N".
+- **Tile footer (2026-10-01, design 4b/5e).** No ink button. Left: the turn
+  line, then the tile's Approve (✨) right next to it; next to Approve the
+  move text needs a wider footer before it shows. Right: Mark read, Snooze,
+  Open, Review on GitHub and ⋯ as one joined control (one outline, hairline
+  dividers), in every footer. Everything is 28px high.
+- **Group labels (2026-10-01).** Unread, Open and Dealt with line up with
+  the tile text (16px: the tile's 15px padding plus its frame). The marker
+  hangs in that padding: coral dot for Unread, chevron for Dealt with,
+  none for Open. The whole Dealt with row is the button: open, a 28px row
+  "Dealt with N", a hairline rule and "Hide"; folded, a 32px bar with the
+  first tile's title and "Show".
+- **Core decides, the renderer displays.** Core ships each offer on
+  `TileView` and on the topic's view model: kind, state (active/greyed),
+  counts, risk, reason, covered PRs or tiles, and left-out PRs with reasons.
+  The renderer works none of it out (see "Groups inside a topic" and the
+  static renderer rule test).
+- **Telemetry.** `pr_approved` with `from: agent_tile | agent_topic` and
+  `was_agent_approved: true`. `marked_read` with `origin: agent_tile |
+  agent_topic` and the tile count.
 
 ## You already dealt with it
 
@@ -4074,8 +4162,10 @@ topic names are never event props.
 2. *Retention*: `app_active` (once per calendar day), `window_focused`
    (throttled to once per 30 minutes).
 3. *Core actions*: `tile_opened` (`for_whom` gained `routing` on
-   2026-09-30), `pr_approved`, `marked_read` (origin
-   `tile`, `detail`, `debug` or `cleanup`), `team_request_removed` (no
+   2026-09-30), `pr_approved` (from `detail`, `tile`, `agent_tile` or
+   `agent_topic`; `was_agent_approved` true for the agent ones), `marked_read`
+   (origin `tile`, `detail`, `debug`, `cleanup`, `agent_tile` or
+   `agent_topic`; count is the tile count for the agent ones), `team_request_removed` (no
    props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,
@@ -4746,6 +4836,12 @@ a boundary is restated as `specSnapshotAt`, and `newMoveMatchesTheSpec`
 checks `isNewYourMove` at the read and the last look on every thread. The property
 invariants alone now kill 83% of the rule-file mutants (28% before, at the
 same rule code; 300 boards per invariant).
+The agent-assisted offers (2026-09-30) have their own oracle
+(`spec-agent-actions.ts`: agent-safe, approvable, the tile and topic
+Approve, the tile's Mark read backing and the topic's "Mark N read") and
+invariants (`invariants-agent-actions.ts`, run in
+`properties/agent-actions.test.ts`). The generator gives each glance a risk
+line (low, medium, high or an unreadable word) and a stale flag.
 
 Measuring with Stryker (one-off, not a dependency): in a throwaway
 worktree add `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`,

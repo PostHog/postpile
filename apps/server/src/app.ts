@@ -31,6 +31,8 @@ const snoozeCondition = z.discriminatedUnion('kind', [
   }),
 ]);
 
+const agentActionFrom = z.enum(['agent_tile', 'agent_topic']);
+
 const feedbackBody = z.object({
   kind: z.enum(['not_mine', 'not_related', 'wrong_topic']),
   tileId: z.string(),
@@ -400,6 +402,16 @@ export function createApp(
     const body = z.object({ headOid: z.string().min(1).max(100) }).parse(await c.req.json());
     return c.json(await engine.approve(prKeyFromParams(c.req.param()), body.headOid));
   });
+  // Agent-assisted Approve (a tile's or the topic's ✨ Approve): each PR with the head the confirm list showed, reported per PR.
+  app.post('/api/agent-actions/approve', async (c) => {
+    const body = z
+      .object({
+        prs: z.array(z.object({ prKey: z.string().min(1).max(300), headOid: z.string().min(1).max(100) })).min(1).max(100),
+        from: agentActionFrom,
+      })
+      .parse(await c.req.json());
+    return c.json(await engine.approveMany(body.prs, body.from));
+  });
   // "Remove <team>": removes a team review request and unsubscribes. Final; refused while writes are locked.
   app.post('/api/prs/:owner/:repo/:number/remove-team-request', async (c) => {
     const body = z.object({ team: z.string().min(1).max(200) }).parse(await c.req.json());
@@ -419,6 +431,11 @@ export function createApp(
   });
 
   app.post('/api/tiles/:tileId/mark-read', async (c) => c.json(await engine.markRead(c.req.param('tileId'))));
+  // Agent-assisted Mark read (a tile's ✨ Mark read, the topic's "Mark N read"): one batch, one undo token.
+  app.post('/api/agent-actions/mark-read', async (c) => {
+    const body = z.object({ tileIds: z.array(z.string().min(1).max(300)).min(1).max(500), from: agentActionFrom }).parse(await c.req.json());
+    return c.json(await engine.markTilesRead(body.tileIds, body.from));
+  });
   // The detail pane's Mark read / Mark done: one PR of the tile, same queue, lock and undo.
   app.post('/api/tiles/:tileId/prs/:owner/:repo/:number/mark-read', async (c) => {
     return c.json(await engine.markPrRead(c.req.param('tileId'), prKeyFromParams(c.req.param())));

@@ -1,6 +1,6 @@
-import type { ButtonHTMLAttributes } from 'react';
+import { Children, Fragment, isValidElement, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
-export type ButtonVariant = 'primary' | 'safe' | 'secondary' | 'move';
+export type ButtonVariant = 'primary' | 'safe' | 'secondary' | 'move' | 'safe-soft' | 'joined';
 export type ButtonSize = 'sm' | 'md' | 'icon' | 'icon-md';
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -11,6 +11,10 @@ const VARIANTS: Record<ButtonVariant, string> = {
   secondary: 'bg-surface text-ink-2 shadow-control inset-ring inset-ring-edge-control hover:bg-subtle',
   // Secondary on the warm "Your move" footer: a honey edge instead of the grey one.
   move: 'bg-surface text-ink-2 shadow-control inset-ring inset-ring-edge-honey hover:bg-move-hover',
+  // The agent's active Approve: soft green, so filled green stays the confirm dialog's "Approve N".
+  'safe-soft': 'bg-safe-soft font-medium text-safe shadow-control inset-ring inset-ring-safe/40 hover:inset-ring-safe/60',
+  // One segment of JoinedButtons: the group draws the fill, the outline and the dividers.
+  joined: 'bg-transparent text-ink-2 hover:bg-subtle',
 };
 
 // Solid buttons get a pixel more side padding than outlined ones, as in the mockup.
@@ -36,4 +40,31 @@ export function buttonClasses(variant: ButtonVariant = 'secondary', size: Button
 /** The button looks from the mockup. Disabled buttons keep their title so the reason shows on hover. */
 export function Button({ variant = 'secondary', size = 'sm', className = '', type = 'button', ...rest }: ButtonProps) {
   return <button type={type} className={`${buttonClasses(variant, size)} ${className}`} {...rest} />;
+}
+
+const JOINED_EDGES: Record<'secondary' | 'move', { outline: string; divider: string }> = {
+  secondary: { outline: 'after:inset-ring-edge-control', divider: 'bg-edge-control' },
+  move: { outline: 'after:inset-ring-edge-honey', divider: 'bg-edge-honey' },
+};
+
+/**
+ * Buttons joined into one control: one rounded outline, a hairline between
+ * neighbours. Children use the `joined` variant. The outline is drawn on top
+ * of them, so a hovered segment never covers it.
+ */
+export function JoinedButtons(props: { look: 'secondary' | 'move'; className?: string; children: ReactNode }) {
+  const edges = JOINED_EDGES[props.look];
+  const items = Children.toArray(props.children);
+  return (
+    <div
+      className={`relative flex shrink-0 items-center rounded-control bg-surface shadow-control after:pointer-events-none after:absolute after:inset-0 after:rounded-control after:inset-ring ${edges.outline} ${props.className ?? ''}`}
+    >
+      {items.map((item, index) => (
+        <Fragment key={isValidElement(item) ? item.key : index}>
+          {index > 0 && <span aria-hidden="true" className={`my-px w-px shrink-0 self-stretch ${edges.divider}`} />}
+          {item}
+        </Fragment>
+      ))}
+    </div>
+  );
 }

@@ -1,6 +1,7 @@
 // Builders for tests in any package: `import { makePr } from '@postpile/core/fixtures'`.
 // Not exported from the main index, so app code cannot pick them up by accident.
 
+import { tileAgentOffers, type AgentPrFacts } from './agent-actions.ts';
 import type { Timers } from './deferred-queue.ts';
 import { emptyDossier } from './dossier.ts';
 import { prKey } from './keys.ts';
@@ -255,6 +256,15 @@ export class FakeTimers implements Timers {
 export const NO_PR_FACTS: PrFacts = { owners: ['alice'], ownerIsAutomation: false, reviewRequest: null, lastTouch: null, openAsk: null };
 
 /** A hand-built tile view with the offers, dots, group and NEW pill core would give it (`tileOffers`, `tileUnreadPrKeys`, `tileGroup`, `tileNewBadge`). */
-export function withOffers(view: Omit<TileView, 'offers' | 'unreadPrKeys' | 'group' | 'newBadge'>): TileView {
-  return { ...view, offers: tileOffers(view), unreadPrKeys: tileUnreadPrKeys(view.state, view.prs), group: tileGroup(view.state), newBadge: tileNewBadge(view.state) };
+export function withOffers(view: Omit<TileView, 'offers' | 'agent' | 'unreadPrKeys' | 'group' | 'newBadge'>, agentPrs: AgentPrFacts[] = []): TileView {
+  const offers = tileOffers(view);
+  const unreadPrKeys = tileUnreadPrKeys(view.state, view.prs);
+  return {
+    ...view,
+    offers,
+    agent: tileAgentOffers({ prs: view.prs, offers, state: view.state, unreadPrKeys }, agentPrs),
+    unreadPrKeys,
+    group: tileGroup(view.state),
+    newBadge: tileNewBadge(view.state),
+  };
 }

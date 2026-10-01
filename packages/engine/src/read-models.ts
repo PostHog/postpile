@@ -14,8 +14,10 @@ import {
   agentOnlyApprovers,
   standingApprovals,
   viewerApproval,
+  agentPrFacts,
   buildPrSummary,
   buildTileView,
+  topicAgentOffers,
   compareTopicUrgency,
   eventView,
   FINISHED_TOPICS_MS,
@@ -51,7 +53,7 @@ import {
   type Pr,
   type PrDetail,
   type PrKey,
-  type PrSummary,
+  type PrSummaryInput,
   type TilePendingWrite,
   type PrTier,
   type RepoOverview,
@@ -192,8 +194,8 @@ export class ReadModels {
     return isReReviewMove(turn);
   }
 
-  /** The tile's rows: gathers each member's inputs from the board and the store. */
-  private prSummaries(
+  /** The inputs of the tile's rows, gathered from the board and the store: the rows (`buildPrSummary`) and the agent's facts (`agentPrFacts`) read them. */
+  private prSummaryInputs(
     board: Board,
     tile: Tile,
     stale: Set<PrKey>,
@@ -203,9 +205,9 @@ export class ReadModels {
     tileUnread: boolean,
     wanted: Set<PrKey>,
     pending: Map<PrKey, TilePendingWrite>,
-  ): PrSummary[] {
+  ): PrSummaryInput[] {
     const glances = this.store.glances.getMany(tile.members.map((m) => m.prKey));
-    return tile.members.flatMap((member, index) => {
+    return tile.members.flatMap((member, index): PrSummaryInput[] => {
       const pr = board.prs.get(member.prKey);
       if (!pr) {
         return [];
@@ -213,7 +215,7 @@ export class ReadModels {
       const glance = glances.get(pr.key) ?? null;
       const gap = this.glanceGap(pr.key, glance !== null);
       return [
-        buildPrSummary({
+        {
           pr,
           member,
           viewer,
@@ -231,7 +233,7 @@ export class ReadModels {
           lastReadAt: board.threads.get(pr.key)?.lastReadAt ?? null,
           now: board.now,
           pendingWrite: pending.get(pr.key) ?? null,
-        }),
+        },
       ];
     });
   }
@@ -249,10 +251,12 @@ export class ReadModels {
     const views = tiles.map((tile): TileView => {
       const labels = tileRepoLabels(memberKeys(tile), baseRepo, orgs);
       const state = board.stateOf(tile);
+      const rows = this.prSummaryInputs(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted, pending);
       return buildTileView({
         tile,
         state,
-        prs: this.prSummaries(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted, pending),
+        prs: rows.map(buildPrSummary),
+        agentPrs: rows.map(agentPrFacts),
         prsByKey: board.prs,
         events: board.events,
         userStates: board.userStates,
@@ -265,6 +269,16 @@ export class ReadModels {
       });
     });
     return views.sort((a, b) => tileListRank(a) - tileListRank(b));
+  }
+
+  /**
+   * The current views of the tiles `wanted` picks, built like an opened
+   * topic's. The agent actions re-check their offers against them at click time.
+   */
+  currentTileViews(wanted: (tile: Tile) => boolean): TileView[] {
+    const board = this.board();
+    const topicIds = [...new Set(board.allTiles().filter(wanted).map((tile) => tile.topicId))];
+    return topicIds.flatMap((topicId) => this.tileViews(board, topicId)).filter((view) => wanted(view.tile));
   }
 
   /** Each PR of the topic's tiles once, in tile order. */
@@ -404,14 +418,16 @@ export class ReadModels {
       return null;
     }
     const isUnsorted = topicId === UNSORTED_TOPIC_ID;
+    const tiles = this.tileViews(board, topicId);
     return {
       topic,
       placement: isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined),
-      tiles: this.tileViews(board, topicId),
+      tiles,
       sets: isUnsorted ? [] : this.store.sets.listActiveForTopic(topicId),
       pendingProposals: isUnsorted ? [] : this.store.proposals.listPendingForTopic(topicId).filter((proposal) => isLiveProposal(proposal, now)),
       decidedProposals: isUnsorted ? [] : this.decidedProposals(topicId, now),
       dossier: isUnsorted ? null : this.memory.dossierView(topicId, board.prs),
+      agent: topicAgentOffers(tiles),
     };
   }
 

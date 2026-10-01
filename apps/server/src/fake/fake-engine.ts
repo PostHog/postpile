@@ -69,6 +69,11 @@ import type {
   TileRepoLabels,
   TileState,
   TileView,
+  PrSummaryInput,
+  AgentActionFrom,
+  ApprovePrRequest,
+  BatchApproveResult,
+  PrApproveResult,
   ToolsView,
   Topic,
   TopicDetail,
@@ -86,8 +91,14 @@ import {
   standingApprovals,
   UNDO_WINDOW_MS,
   viewerApproval,
+  agentPrFacts,
+  agentApproveRefusal,
+  agentMarkReadRefusal,
+  approvalsSummary,
+  tilesReadScope,
   buildPrSummary,
   buildTileView,
+  topicAgentOffers,
   planRead,
   prReadScope,
   deriveTileState,
@@ -521,13 +532,13 @@ export class FakeEngine implements EngineService {
     const events = this.eventsByKey(tile.members.map((member) => member.prKey));
     const userStates = this.userStatesByKey();
     const threads = this.prThreads();
-    const prs = tile.members.flatMap((member, index) => {
+    const rows = tile.members.flatMap((member, index): PrSummaryInput[] => {
       const pr = prsByKey.get(member.prKey);
       if (!pr) {
         return [];
       }
       return [
-        buildPrSummary({
+        {
           pr,
           member,
           viewer,
@@ -545,13 +556,14 @@ export class FakeEngine implements EngineService {
           lastReadAt: threads.get(pr.key)?.lastReadAt ?? null,
           now: this.timestamp(),
           pendingWrite: pending.get(pr.key) ?? null,
-        }),
+        },
       ];
     });
     return buildTileView({
       tile,
       state,
-      prs,
+      prs: rows.map(buildPrSummary),
+      agentPrs: rows.map(agentPrFacts),
       prsByKey,
       events,
       userStates,
@@ -875,14 +887,16 @@ export class FakeEngine implements EngineService {
     if (!topic) {
       return null;
     }
+    const tiles = this.topicTileViews(topicId);
     return {
       topic,
       placement: this.memory.placement(topic),
-      tiles: this.topicTileViews(topicId),
+      tiles,
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       pendingProposals: this.topicChanges.pendingForTopic(topicId),
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback),
+      agent: topicAgentOffers(tiles),
     };
   }
 
@@ -1034,6 +1048,26 @@ export class FakeEngine implements EngineService {
     return ok(`fake: approved ${prKey} locally, nothing sent to GitHub`);
   }
 
+  /** Like the engine's approveMany: each PR through the fake approve, reported per PR, no undo. */
+  async approveMany(prs: ApprovePrRequest[], from: AgentActionFrom): Promise<BatchApproveResult> {
+    if (prs.length === 0) {
+      return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
+    }
+    const results: PrApproveResult[] = [];
+    // Checked up front against the current sample, like the engine.
+    const refusals = new Map(prs.map(({ prKey }) => [prKey, agentApproveRefusal(prKey, this.tilesHolding(prKey).map((tile) => this.tileView(tile)), from)]));
+    for (const { prKey, headOid } of prs) {
+      const refusal = refusals.get(prKey) ?? null;
+      if (refusal !== null) {
+        results.push({ prKey, ok: false, message: refusal });
+        continue;
+      }
+      const result = await this.approve(prKey, headOid);
+      results.push({ prKey, ok: result.ok, message: result.message });
+    }
+    return { ...approvalsSummary(results), undoToken: null, results };
+  }
+
   /**
    * Like PrActions.removeTeamRequest, in memory: the team leaves the PR's
    * requested teams, the sample thread is unsubscribed (logged only) and the
@@ -1143,6 +1177,38 @@ export class FakeEngine implements EngineService {
     const keys = tile.members.map((member) => member.prKey);
     const pinged = tile.members.filter((member) => member.provenance.kind !== 'pulled_in').map((member) => member.prKey);
     return this.markPrsRead(keys, pinged, 'tile', tileId);
+  }
+
+  /** Like TileActions.markTilesRead: every tile's read in one batch, one undo token. */
+  async markTilesRead(tileIds: string[], _from: AgentActionFrom): Promise<ActionResult> {
+    const tiles: Tile[] = [];
+    for (const tileId of tileIds) {
+      const tile = this.findTile(tileId);
+      if (!tile) {
+        return fail(`no tile ${tileId}`);
+      }
+      tiles.push(tile);
+    }
+    if (tiles.length === 0) {
+      return fail('no tiles to mark read');
+    }
+    // Checked against the current sample like the engine: tiles no longer backed are skipped and named.
+    const skipped: string[] = [];
+    const backed: Tile[] = [];
+    for (const tile of tiles) {
+      const refusal = agentMarkReadRefusal(this.tileView(tile));
+      if (refusal === null) {
+        backed.push(tile);
+      } else {
+        skipped.push(`${tile.title}: ${refusal}`);
+      }
+    }
+    if (backed.length === 0) {
+      return fail(`Nothing marked read; skipped ${skipped.join('; ')}`);
+    }
+    const scope = tilesReadScope(backed);
+    const result = this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', backed.length === 1 ? (backed[0]?.id ?? null) : null);
+    return skipped.length === 0 ? result : { ...result, message: `${result.message}; skipped ${skipped.join('; ')}` };
   }
 
   /** Like TileActions.markPrRead: one PR of the tile, handled unless it is a pulled-in layer. */
