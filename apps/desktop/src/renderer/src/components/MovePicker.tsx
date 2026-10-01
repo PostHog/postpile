@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { moveTargets, type MoveTarget, type TileView, type TopicListItem } from '@postpile/core';
+import type { TileView, TopicListItem } from '@postpile/core';
 import { useFinishedTopics } from '../api/topics.ts';
+import { moveTargets, type MoveTarget } from '../lib/move-targets.ts';
 import { FilterInput } from './FilterInput.tsx';
 
 interface MovePickerProps {
@@ -19,7 +20,7 @@ function note(target: MoveTarget): string {
 
 /**
  * The "Move to topic…" panel inside the tile menu: a filter field over a
- * fixed-height list. Core ranks (`moveTargets`), this only shows it. Up and
+ * fixed-height list. `moveTargets` (lib) ranks, this only shows it. Up and
  * Down move, Enter picks; Escape is the menu's (steps back to its list).
  */
 export function MovePicker(props: MovePickerProps) {

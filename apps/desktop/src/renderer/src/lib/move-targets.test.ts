@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { moveTargets } from './move-targets.ts';
-import type { Topic } from './types.ts';
-import type { FinishedTopic, TopicListItem } from './views.ts';
+import type { FinishedTopic, Topic, TopicListItem } from '@postpile/core';
 
 function topic(id: string, day: string, people: string[] = []): Pick<TopicListItem, 'topic' | 'people'> {
   return {

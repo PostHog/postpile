@@ -1,7 +1,6 @@
-// Where "Move to topic…" can send a tile, ranked. The renderer only draws the list.
-import type { TilePerson } from './tile-people.ts';
-import { sameLogin } from './mentions.ts';
-import type { FinishedTopic, TopicListItem } from './views.ts';
+// Where "Move to topic…" can send a tile, ranked. A small pure helper: this ranks a picker
+// list, it is not a fact about the tile, so it lives here and not in core.
+import type { FinishedTopic, TilePerson, TopicListItem } from '@postpile/core';
 
 /** Suggestions shown before the user types. */
 export const MOVE_SUGGESTION_LIMIT = 5;
@@ -54,7 +53,7 @@ export function moveTargets(input: MoveTargetsInput): MoveTargets {
   if (query === '') {
     const people = input.tile.people.filter((person) => person.role !== 'you');
     const shared = (item: Pick<TopicListItem, 'people'>) =>
-      item.people.filter((face) => people.some((person) => sameLogin(person.login, face.login))).length;
+      item.people.filter((face) => people.some((person) => person.login.toLowerCase() === face.login.toLowerCase())).length;
     const sharing = others
       .map((item) => ({ item, shared: shared(item) }))
       .filter((entry) => entry.shared > 0)

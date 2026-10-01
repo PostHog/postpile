@@ -296,7 +296,7 @@ Action details:
   membership removed so the next sync re-sorts it with the feedback in the
   prompt. The tile's ⋯ menu stays short (Not mine, Wrong topic, "Move to
   topic…"); the last one swaps the menu for a filter field over a scrolling
-  list. `moveTargets` (core) ranks it: with no query, topics that share
+  list. `moveTargets` (renderer `lib/`, a pure helper with a test) ranks it: with no query, topics that share
   people with the tile (you left out), then the most recently updated ones,
   five in all; with a query, active topics by name, then retired ones marked
   "finished". Retired topics are never suggested. Topics the user recently

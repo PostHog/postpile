@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes } from 'react';
+import { forwardRef, useRef, type InputHTMLAttributes } from 'react';
 import { CloseIcon, SearchIcon } from './icons.tsx';
 
 interface FilterInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type' | 'className'> {
@@ -13,12 +13,22 @@ interface FilterInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, '
  */
 export const FilterInput = forwardRef<HTMLInputElement, FilterInputProps>(function FilterInput(props, ref) {
   const { value, onChange, clearTitle = 'Clear filter', ...inputProps } = props;
+  // Own ref so the clear button can refocus whoever mounted us; a forwarded ref gets the same node.
+  const input = useRef<HTMLInputElement | null>(null);
+  function setRef(node: HTMLInputElement | null) {
+    input.current = node;
+    if (typeof ref === 'function') {
+      ref(node);
+    } else if (ref) {
+      ref.current = node;
+    }
+  }
   return (
     <label className="flex h-7 w-full items-center gap-[7px] rounded-control bg-surface px-2.5 text-faint shadow-control inset-ring inset-ring-edge-field focus-within:inset-ring-accent-line">
       <SearchIcon />
       <input
         {...inputProps}
-        ref={ref}
+        ref={setRef}
         type="search"
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -32,9 +42,7 @@ export const FilterInput = forwardRef<HTMLInputElement, FilterInputProps>(functi
           title={clearTitle}
           onClick={() => {
             onChange('');
-            if (typeof ref === 'object') {
-              ref?.current?.focus();
-            }
+            input.current?.focus();
           }}
           className="flex size-4 items-center justify-center rounded-full bg-chip text-ink-2 hover:bg-hairline-strong"
         >
