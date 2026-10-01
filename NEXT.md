@@ -6,6 +6,16 @@ now".
 
 ## Done
 
+- Lasting sets (2026-10-01, DESIGN.md "Tiles hold still"): the set prompt
+  asks for PRs one judgement covers and answers with changes only; a regroup
+  runs on new triggers only (open PR in no set, risk level change, feedback,
+  instructions), after the glances; merged members stay; every change is in
+  `pr_set_change` (migration 022) and shown in the CLI and MCP topic views.
+- One call per topic, behind `POSTPILE_TOPIC_DIGEST=1` (2026-10-01, DESIGN.md
+  "One call per topic"): dossier and the topic's first 18 glances in one
+  `topic_digest` call, plus the topic's set changes when a regroup is due;
+  the rest stays in glance batches and the set job. Off by default until the
+  side-by-side comparison.
 - PR assignees and ownership (2026-09-30, DESIGN.md "PR ownership: bot PRs
   belong to their assignees"): the PR query reads `assignees(first: 10)`,
   kept in the PR JSON (`Pr.assignees`, no migration). Core `prOwners`
@@ -1076,7 +1086,13 @@ the app meanwhile.
   glance) and ask first. Not backed means greyed out with the reason;
   nothing to act on means no button. Mark read skips tiles with asks for you. Only actions carry ✨, never
   text. Tile Mark read is always offered, so it stays plain.
-
+- **Tiles hold still** (2026-10-01, DESIGN.md "Tiles hold still"): topics
+  stay the focus; a set is a lasting tile of PRs one judgement covers (same
+  change or pattern, similar risk by the glance's level, the same kind of
+  author preferred); status, turn, review, unread and CI never move a PR
+  between tiles; the agent changes sets without asking, with a recorded
+  reason; no separate risk class ("gears") and no rules per repo; no big UI
+  changes; batch approve is PR #48's.
 - **Groups inside a topic** (2026-09-30, DESIGN.md "Groups inside a topic"):
   the tile grid's All / Unread toggle is gone; a topic shows three groups,
   always Unread, Open, Dealt with (n), empty ones hidden, Dealt with folded

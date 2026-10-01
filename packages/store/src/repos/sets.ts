@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PrKey, PrSet, PrSetMember, PrSetStatus } from '@postpile/core';
+import type { PrKey, PrSet, PrSetChange, PrSetChangeBy, PrSetChangeKind, PrSetMember, PrSetStatus } from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, one, run } from '../sql.ts';
 
@@ -18,6 +18,28 @@ interface MemberRow {
   set_id: string;
   pr_key: string;
   reason: string;
+}
+
+interface ChangeRow {
+  set_id: string;
+  topic_id: string;
+  pr_key: string | null;
+  change: string;
+  reason: string;
+  by: string;
+  at: string;
+}
+
+function toChange(row: ChangeRow): PrSetChange {
+  return {
+    setId: row.set_id,
+    topicId: row.topic_id,
+    prKey: row.pr_key,
+    kind: row.change as PrSetChangeKind,
+    reason: row.reason,
+    by: row.by as PrSetChangeBy,
+    at: row.at,
+  };
 }
 
 export class PrSetRepo {
@@ -142,6 +164,21 @@ export class PrSetRepo {
     });
   }
 
+  /**
+   * Records "not related" for a PR that was never a member here: a merge
+   * carries the merged-away set's corrections over, so they keep holding.
+   */
+  addRemoved(setId: string, prKey: PrKey, at: string): void {
+    run(
+      this.db,
+      `INSERT INTO pr_set_member (set_id, pr_key, reason, position, removed_at) VALUES (?, ?, '', -1, ?)
+       ON CONFLICT (set_id, pr_key) DO UPDATE SET removed_at = excluded.removed_at`,
+      setId,
+      prKey,
+      at,
+    );
+  }
+
   /** Hard delete, for an agent set the agent itself dropped on regroup. User-dissolved sets use dissolve. */
   delete(id: string): void {
     run(this.db, 'DELETE FROM pr_set WHERE id = ?', id);
@@ -150,5 +187,30 @@ export class PrSetRepo {
   /** Keeps the row and its members so the agent remembers not to regroup them. */
   dissolve(id: string, at: string): void {
     run(this.db, "UPDATE pr_set SET status = 'dissolved', updated_at = ? WHERE id = ?", at, id);
+  }
+
+  /** One line of a set's history. Every change to a set's members writes one. */
+  recordChange(change: PrSetChange): void {
+    run(
+      this.db,
+      'INSERT INTO pr_set_change (set_id, topic_id, pr_key, change, reason, by, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      change.setId,
+      change.topicId,
+      change.prKey,
+      change.kind,
+      change.reason,
+      change.by,
+      change.at,
+    );
+  }
+
+  /** The topic's set history, newest first, ended sets included. */
+  listChangesForTopic(topicId: string, limit: number): PrSetChange[] {
+    return all<ChangeRow>(
+      this.db,
+      'SELECT set_id, topic_id, pr_key, change, reason, by, at FROM pr_set_change WHERE topic_id = ? ORDER BY id DESC LIMIT ?',
+      topicId,
+      limit,
+    ).map(toChange);
   }
 }

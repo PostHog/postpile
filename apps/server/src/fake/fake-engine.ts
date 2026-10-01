@@ -893,6 +893,7 @@ export class FakeEngine implements EngineService {
       placement: this.memory.placement(topic),
       tiles,
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
+      setChanges: [],
       pendingProposals: this.topicChanges.pendingForTopic(topicId),
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback),

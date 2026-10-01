@@ -128,7 +128,7 @@ describe('a stack is one unit in sets', () => {
     const { h, prs } = await depotWithStack();
     const { bottom, middle, top, lone } = prs;
     h.runner.answer('set_grouping', {
-      sets: [
+      newSets: [
         { title: 'Runner switch', take: 'Same rollout.', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] },
         { title: 'Just the stack', take: '', members: [{ prKey: bottom.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] },
       ],
@@ -143,11 +143,66 @@ describe('a stack is one unit in sets', () => {
     expect(view?.tile.stacks).toEqual([{ id: prs.stackId, prKeys: [bottom.key, middle.key, top.key] }]);
   });
 
+  it('ends the set when "not related" leaves only one stack', async () => {
+    const { h, prs } = await depotWithStack();
+    const { middle, lone } = prs;
+    h.runner.answer('set_grouping', {
+      newSets: [{ title: 'Runner switch', take: '', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] }],
+    });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;
+
+    await h.engine.giveFeedback({ kind: 'not_related', tileId: `set:${setId}`, prKey: lone.key, targetTopicId: null, note: '' });
+
+    expect(h.store.sets.get(setId)?.status).toBe('dissolved');
+    expect(h.store.sets.listChangesForTopic('depot', 5)[0]).toMatchObject({ kind: 'ended', by: 'user' });
+  });
+
+  it('keeps a stack in its set while the stack shows in the set\'s topic, whatever one layer\'s own membership says', async () => {
+    const { h, prs } = await depotWithStack();
+    const { bottom, middle, lone } = prs;
+    h.runner.answer('set_grouping', {
+      newSets: [{ title: 'Runner switch', take: '', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] }],
+    });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;
+    // An older membership of the bottom layer points elsewhere; the stack still shows in depot (newest membership wins).
+    h.store.topics.create(makeTopic('billing'));
+    h.store.memberships.assign({ prKey: bottom.key, topicId: 'billing', assignedBy: 'agent', reason: '', createdAt: at(-5) });
+    h.store.glances.put({ prKey: lone.key, verdict: 'LOOKS_SAFE', forYou: '', does: '', risk: 'low - x', othersSaid: '', keyFiles: [], pullInReason: null, dossierVersion: null, inputHash: 'h', model: 'm', createdAt: at(3) });
+    h.runner.answer('set_grouping', {});
+
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.store.sets.get(setId)?.status).toBe('active');
+    expect(h.store.sets.get(setId)?.members.map((m) => m.prKey)).toContain(bottom.key);
+  });
+
+  it('records a line for every layer when the agent takes a stack out of a set', async () => {
+    const { h, prs } = await depotWithStack();
+    const { bottom, middle, top, lone } = prs;
+    const other = reviewRequestedPr(5);
+    h.reader.addPr(other, makeThreadFor(other));
+    h.store.memberships.assign({ prKey: other.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    h.runner.answer('set_grouping', {
+      newSets: [{ title: 'Runner switch', take: '', members: [{ prKey: lone.key, reason: 'a' }, { prKey: other.key, reason: 'b' }, { prKey: middle.key, reason: 'c' }] }],
+    });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;
+    h.store.glances.put({ prKey: middle.key, verdict: 'LOOK_CLOSER', forYou: '', does: '', risk: 'high - x', othersSaid: '', keyFiles: [], pullInReason: null, dossierVersion: null, inputHash: 'h', model: 'm', createdAt: at(3) });
+    h.runner.answer('set_grouping', { leaves: [{ setId, prKey: middle.key, reason: 'its risk is now high' }] });
+
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    const left = h.store.sets.listChangesForTopic('depot', 20).filter((change) => change.kind === 'left').map((change) => change.prKey);
+    expect(left.sort()).toEqual([bottom.key, middle.key, top.key].sort());
+  });
+
   it('takes the whole stack out on "not related" for one layer', async () => {
     const { h, prs } = await depotWithStack();
     const { middle, lone, stackId } = prs;
     h.runner.answer('set_grouping', {
-      sets: [{ title: 'Runner switch', take: '', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] }],
+      newSets: [{ title: 'Runner switch', take: '', members: [{ prKey: lone.key, reason: 'a' }, { prKey: middle.key, reason: 'b' }] }],
     });
     await h.engine.sync({ agentJobs: ['sets'] });
     const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;

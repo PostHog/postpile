@@ -226,7 +226,7 @@ describe('Engine.sync with the agent', () => {
     expect((await h.engine.getPr(pr.key))?.glance?.verdict).toBe('LOOKS_SAFE');
   });
 
-  it('stores agent sets and keeps the set id when the agent keeps the title', async () => {
+  it('stores agent sets and keeps them when a regroup changes nothing', async () => {
     const h = makeHarness();
     const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
     for (const pr of prs) {
@@ -239,7 +239,7 @@ describe('Engine.sync with the agent', () => {
       h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
     }
     const members = prs.map((pr) => ({ prKey: pr.key, reason: 'same runner change' }));
-    h.runner.answer('set_grouping', { sets: [{ title: 'Runner switch', take: 'Both switch runners.', members }] });
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Runner switch', take: 'Both switch runners.', members }] });
 
     await h.engine.sync({ agentJobs: ['sets'] });
 
@@ -248,13 +248,13 @@ describe('Engine.sync with the agent', () => {
     const setTile = detail?.tiles.find((t) => t.tile.kind === 'set');
     expect(setTile?.prs.map((p) => p.key)).toEqual(prs.map((p) => p.key));
 
-    // Feedback changes the input hash, so the next sync regroups; same title keeps the id.
+    // Feedback is a new trigger, so the next sync regroups; an empty answer keeps the set as it is.
     await h.engine.giveFeedback({ kind: 'not_mine', tileId: setTile!.tile.id, prKey: prs[0]!.key, targetTopicId: null, note: '' });
-    h.runner.answer('set_grouping', { sets: [{ title: 'Runner switch', take: 'Still both.', members }] });
-    await h.engine.sync({ agentJobs: ['sets'] });
+    h.runner.answer('set_grouping', {});
+    const report = await h.engine.sync({ agentJobs: ['sets'] });
+    expect(report.agentCallStats.byKind.set_grouping?.calls).toBe(1);
     const after = await h.engine.getTopic('depot');
-    expect(after?.sets.map((s) => s.id)).toEqual(detail?.sets.map((s) => s.id));
-    expect(after?.sets[0]?.take).toBe('Still both.');
+    expect(after?.sets.map((s) => [s.id, s.take])).toEqual(detail?.sets.map((s) => [s.id, s.take]));
   });
 
   it('never puts a PR back into a set the user removed it from', async () => {
@@ -270,18 +270,16 @@ describe('Engine.sync with the agent', () => {
       h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
     }
     const members = prs.map((pr) => ({ prKey: pr.key, reason: 'runner change' }));
-    h.runner.answer('set_grouping', { sets: [{ title: 'Runner switch', take: 'All three.', members }] });
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Runner switch', take: 'All three.', members }] });
     await h.engine.sync({ agentJobs: ['sets'] });
     const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;
 
     const removed = prs[2]!.key;
     await h.engine.giveFeedback({ kind: 'not_related', tileId: `set:${setId}`, prKey: removed, targetTopicId: null, note: '' });
-    // The agent proposes the same grouping again, once under the old title and once under a new one.
+    // The agent tries to put it back, and to start a new set with it and a member.
     h.runner.answer('set_grouping', {
-      sets: [
-        { title: 'Runner switch', take: 'All three again.', members },
-        { title: 'Other name', take: 'Same pair.', members: [members[0], members[2]] },
-      ],
+      joins: [{ setId, prKey: removed, reason: 'runner change' }],
+      newSets: [{ title: 'Other name', take: 'Same pair.', members: [members[2], { prKey: 'acme/app#9', reason: 'unknown' }] }],
     });
     const report = await h.engine.sync({ agentJobs: ['sets'] });
 

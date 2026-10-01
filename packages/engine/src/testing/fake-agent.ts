@@ -17,6 +17,9 @@ import {
   type GlanceBatchInput,
   type GlanceBatchItem,
   type GlanceBatchResult,
+  type SetChanges,
+  type TopicDigestInput,
+  type TopicDigestResult,
 } from '@postpile/agent';
 import { emptyDossier, type Glance, type ReconcileAction } from '@postpile/core';
 
@@ -64,12 +67,14 @@ export class FakeAgent extends RunnerAgentService {
   readonly reconcileInputs: FactReconcileInput[] = [];
   readonly eventInputs: EventBatchInput[] = [];
   readonly consolidationInputs: ConsolidationInput[] = [];
+  readonly topicDigestInputs: TopicDigestInput[] = [];
 
   private readonly dossierAnswers: Answer<DossierUpdateInput, DossierUpdateResult>[] = [];
   private readonly glanceAnswers: Answer<GlanceBatchInput, GlanceBatchResult>[] = [];
   private readonly reconcileAnswers: Answer<FactReconcileInput, ReconcileAction[]>[] = [];
   private readonly eventAnswers: Answer<EventBatchInput, EventOverrideProposal[]>[] = [];
   private readonly consolidationAnswers: Answer<ConsolidationInput, ConsolidationResult>[] = [];
+  private readonly digestSetAnswers: (Partial<SetChanges> | null)[] = [];
   private readonly dossierHolds = new Map<string, Promise<void>>();
 
   constructor(
@@ -103,6 +108,12 @@ export class FakeAgent extends RunnerAgentService {
 
   answerEvents(answer: Answer<EventBatchInput, EventOverrideProposal[]>): this {
     this.eventAnswers.push(answer);
+    return this;
+  }
+
+  /** The set part of the next topic digest that carries one; no changes by default, null for an unusable part. */
+  answerDigestSets(changes: Partial<SetChanges> | null): this {
+    this.digestSetAnswers.push(changes);
     return this;
   }
 
@@ -175,6 +186,20 @@ export class FakeAgent extends RunnerAgentService {
     await hold;
     const result = this.answer('dossier_update', this.dossierAnswers, input, defaultDossier, { topicId: input.topic.id, attempt: 1 });
     return { ...result, inputHash: this.dossierHash(input) };
+  }
+
+  /**
+   * The dossier from the dossier queue, the glances from the glance queue
+   * (all of them by default), the set part from answerDigestSets (none by
+   * default); one topic_digest call.
+   */
+  override async topicDigest(input: TopicDigestInput): Promise<TopicDigestResult> {
+    this.topicDigestInputs.push(input);
+    const dossier = this.answer('topic_digest', this.dossierAnswers, input.dossier, defaultDossier, { topicId: input.dossier.topic.id, attempt: 1 });
+    const glances = (this.glanceAnswers.shift() ?? ((i: GlanceBatchInput) => this.allGlances(i)))(input.glances);
+    const answer = this.digestSetAnswers.length > 0 ? this.digestSetAnswers.shift() : {};
+    const sets = input.sets && answer ? { created: [], joined: [], left: [], merged: [], updated: [], ...answer } : null;
+    return { dossier: { ...dossier, inputHash: this.dossierHash(input.dossier) }, glances, sets };
   }
 
   override async reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]> {

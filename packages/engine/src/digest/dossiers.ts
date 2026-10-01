@@ -2,12 +2,15 @@ import {
   CHAT_TURNS_IN_DOSSIER_PROMPT,
   dossierContextHash,
   FACTS_IN_DOSSIER_PROMPT,
+  modelFor,
   STALE_FACTS_IN_DOSSIER_PROMPT,
   type AreaChoice,
   type DossierUpdateInput,
   type DossierUpdateResult,
+  type SetGroupingInput,
 } from '@postpile/agent';
 import {
+  GLANCE_BATCH_SIZE,
   isEmptyDelta,
   joinedMembers,
   relationSignals,
@@ -19,14 +22,18 @@ import {
   type EntityRef,
   type Fact,
   type FactCandidate,
+  type Glance,
   type PrKey,
   type Topic,
 } from '@postpile/core';
 import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
+import { GlanceInputs, type GlanceTarget } from '../glance-inputs.ts';
 import { verifyWorldFor } from '../memory/fact-world.ts';
 import { FEEDBACK_IN_PROMPTS } from '../prompt-context.ts';
 import type { DigestDeps, TopicScope } from './deps.ts';
+import { glanceGapKey } from './glance-batches.ts';
+import { SetGrouper } from './set-grouping.ts';
 
 /** Versions kept per topic; older ones are pruned on every save. */
 export const DOSSIER_VERSIONS_KEPT = 50;
@@ -60,6 +67,16 @@ export function contextHashKey(topicId: string): string {
 }
 
 /**
+ * What the run asked for besides dossiers. withGlances: a topic digest may
+ * write glances. withSets: it may carry the topic's set changes too (needs
+ * the glances, which the sets read).
+ */
+export interface DossierUpdaterOptions {
+  withGlances: boolean;
+  withSets: boolean;
+}
+
+/**
  * REFINE per topic: previous dossier + only the events since the digest
  * cursor -> new dossier version, flags and fact candidates. A topic with an
  * empty delta costs nothing, unless the user's instructions, tailoring or
@@ -69,8 +86,16 @@ export function contextHashKey(topicId: string): string {
  */
 export class DossierUpdater {
   private newAreas = 0;
+  /** Per topic, the PRs that ride along with its dossier update (topic digest only), most urgent first. */
+  private glanceTargets = new Map<string, GlanceTarget[]>();
+  private readonly sets: SetGrouper;
 
-  constructor(private readonly deps: DigestDeps) {}
+  constructor(
+    private readonly deps: DigestDeps,
+    private readonly options: DossierUpdaterOptions = { withGlances: true, withSets: false },
+  ) {
+    this.sets = new SetGrouper(deps);
+  }
 
   /** Areas in use on other active topics, most used first. */
   private areasInUse(topicId: string): AreaChoice[] {
@@ -107,8 +132,7 @@ export class DossierUpdater {
   }
 
   /** Every active topic, or only the scope's (none for Unsorted, which has no dossier). */
-  private topicsInOrder(scope: TopicScope | null): Topic[] {
-    const board = Board.load(this.deps.store, this.deps.now().toISOString());
+  private topicsInOrder(board: Board, scope: TopicScope | null): Topic[] {
     const hasUnread = (topic: Topic): boolean =>
       board.tilesForTopic(topic.id).some((tile) => board.stateOf(tile).kind === 'unread');
     const active = this.deps.store.topics.listActive();
@@ -245,25 +269,98 @@ export class DossierUpdater {
     tally.dossiersUpdated += 1;
   }
 
-  private async update(topic: Topic, candidates: TopicCandidates[], skippedByBudget: Set<string>): Promise<void> {
+  /**
+   * Stamps the glances against the dossier version just stored, the way the
+   * glance batches do, so the batches count them as current. The topic's
+   * other PRs, and any the answer left out, go to the glance batches once
+   * this update settled.
+   */
+  private saveGlances(targets: GlanceTarget[], glances: Glance[], board: Board): void {
+    const { store, agent, viewer, contexts } = this.deps;
+    const after = new GlanceInputs(store, board, viewer, contexts);
+    const byKey = new Map(targets.map((target) => [target.item.pr.key, target]));
+    const stored: PrKey[] = [];
+    store.transaction(() => {
+      for (const glance of glances) {
+        const target = byKey.get(glance.prKey);
+        if (!target) {
+          continue;
+        }
+        store.glances.put({ ...glance, inputHash: after.itemHash(agent, target), dossierVersion: after.dossierVersion(target.topicId) });
+        store.meta.delete(glanceGapKey(glance.prKey));
+        stored.push(glance.prKey);
+      }
+    });
+    this.deps.onGlancesStored?.(stored);
+  }
+
+  /**
+   * One call for the dossier, the topic's first glance batch and, when a
+   * regroup is due, its set changes (DESIGN.md "One call per topic"). The
+   * sets are applied after the glances are stored, so the regroup's
+   * triggers already hold the new risk and the set job does not ask again.
+   */
+  private async digest(input: DossierUpdateInput, targets: GlanceTarget[], sets: SetGroupingInput | null, board: Board): Promise<DossierUpdateResult> {
+    const { store, agent, viewer, contexts } = this.deps;
+    const before = new GlanceInputs(store, board, viewer, contexts);
+    const glances = before.batchInput(input.topic.id, targets.map((target) => target.item), 1);
+    const result = await agent.topicDigest({ dossier: input, glances, sets });
+    this.save(input, result.dossier);
+    this.saveGlances(targets, result.glances.glances, board);
+    if (sets && result.sets) {
+      // The set part read the risk it had just written in the glances.
+      const risks = { ...sets.risks };
+      for (const glance of result.glances.glances) {
+        risks[glance.prKey] = glance.risk;
+      }
+      this.sets.apply(input.topic, { ...sets, risks }, result.sets);
+    }
+    return result.dossier;
+  }
+
+  private async update(topic: Topic, board: Board, candidates: TopicCandidates[], skippedByBudget: Set<string>): Promise<void> {
     const { agent, budget } = this.deps;
     // Everything up to the agent call is synchronous, so budget.take runs in topic order.
     const input = this.input(topic);
     if (!input) {
       return;
     }
-    if (!budget.take('dossier_update')) {
+    const targets = (this.glanceTargets.get(topic.id) ?? []).slice(0, GLANCE_BATCH_SIZE);
+    const sets = targets.length > 0 && this.options.withSets ? this.sets.due(topic) : null;
+    if (!budget.take(targets.length > 0 ? 'topic_digest' : 'dossier_update')) {
       skippedByBudget.add(topic.id);
       return;
     }
     try {
-      const result = await agent.updateDossier(input);
-      this.save(input, result);
+      let result: DossierUpdateResult;
+      if (targets.length > 0) {
+        result = await this.digest(input, targets, sets, board);
+      } else {
+        result = await agent.updateDossier(input);
+        this.save(input, result);
+      }
       if (result.facts.length > 0) {
         candidates.push({ topicId: topic.id, candidates: result.facts });
       }
     } catch (error) {
       this.deps.errors.push(`dossier ${topic.id}: ${errorText(error)}`);
+    }
+  }
+
+  /**
+   * With the topic digest on, the glance targets of each topic, so a topic's
+   * most urgent PRs ride along with its dossier update. Only while glances
+   * and the digest use the same model: a glance's hash names its model.
+   */
+  private planGlances(board: Board): void {
+    const { store, viewer, contexts } = this.deps;
+    if (!this.deps.topicDigest || !this.options.withGlances || modelFor('glance_batch') !== modelFor('topic_digest')) {
+      return;
+    }
+    for (const target of new GlanceInputs(store, board, viewer, contexts).targets()) {
+      if (target.topicId !== null) {
+        this.glanceTargets.set(target.topicId, [...(this.glanceTargets.get(target.topicId) ?? []), target]);
+      }
     }
   }
 
@@ -275,8 +372,10 @@ export class DossierUpdater {
     const candidates: TopicCandidates[] = [];
     const skippedByBudget = new Set<string>();
     const updates = new Map<string, Promise<void>>();
-    for (const topic of this.topicsInOrder(scope)) {
-      updates.set(topic.id, this.update(topic, candidates, skippedByBudget));
+    const board = Board.load(this.deps.store, this.deps.now().toISOString());
+    this.planGlances(board);
+    for (const topic of this.topicsInOrder(board, scope)) {
+      updates.set(topic.id, this.update(topic, board, candidates, skippedByBudget));
     }
     return {
       skippedByBudget,

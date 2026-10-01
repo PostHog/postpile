@@ -107,6 +107,20 @@ function careSources(input: DossierUpdateInput): Set<DossierCareSource> {
   return sources;
 }
 
+/**
+ * A care says it comes from the user's own words only when it cites them:
+ * the user's instructions (I), topic instructions (T) or a correction (U).
+ * Otherwise it is what the agent observed. A blind comparison (2026-10-01)
+ * found cares labelled "instructions" that came from elsewhere, which makes
+ * the user distrust the line.
+ */
+function checkedCareSource(source: DossierCareSource, sources: LineSources): DossierCareSource {
+  if (source === 'observed') {
+    return source;
+  }
+  return (sources.userRefs ?? []).some((ref) => ref.kind === source) ? source : 'observed';
+}
+
 function toCares(answer: DossierAnswer['dossier']['userCares'], input: DossierUpdateInput, refs: DossierRefs): DossierCare[] {
   const allowed = careSources(input);
   const previous = input.previous?.dossier.userCares ?? [];
@@ -114,7 +128,7 @@ function toCares(answer: DossierAnswer['dossier']['userCares'], input: DossierUp
     .filter((care) => allowed.has(care.source))
     .map((care) => {
       const sources = lineSources(care.refs, refs, sourcesOf(previous.find((old) => old.text === care.text)));
-      return { text: care.text, source: care.source, ...sources };
+      return { text: care.text, source: checkedCareSource(care.source, sources), ...sources };
     });
 }
 

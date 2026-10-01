@@ -52,14 +52,21 @@ export const topicAssignmentOutput = z.object({
   ),
 });
 
+/** Only what changes: anything the answer leaves out stays as it is. */
 export const setGroupingOutput = z.object({
-  sets: z.array(
-    z.object({
-      title: text.min(1),
-      take: text,
-      members: z.array(z.object({ prKey: text, reason: text })),
-    }),
-  ),
+  newSets: z
+    .array(
+      z.object({
+        title: text.min(1),
+        take: text,
+        members: z.array(z.object({ prKey: text, reason: text })),
+      }),
+    )
+    .default([]),
+  joins: z.array(z.object({ setId: text, prKey: text, reason: text })).default([]),
+  leaves: z.array(z.object({ setId: text, prKey: text, reason: text.min(1) })).default([]),
+  merges: z.array(z.object({ setId: text, intoSetId: text, reason: text.min(1) })).default([]),
+  updates: z.array(z.object({ setId: text, title: text.min(1), take: text })).default([]),
 });
 
 export const draftCommentOutput = z.object({
@@ -260,6 +267,16 @@ export const factReconcileOutput = z.object({
  */
 export const glanceBatchOutput = z.object({
   glances: z.array(z.unknown()),
+});
+
+/**
+ * The dossier answer plus the glances and the set changes. Each glance is
+ * checked on its own, like a glance batch; the set part is checked on its
+ * own too, so a broken one never costs the dossier.
+ */
+export const topicDigestOutput = dossierUpdateOutput.extend({
+  glances: z.array(z.unknown()).default([]),
+  sets: z.unknown().optional(),
 });
 
 export const glanceBatchItemOutput = glanceOutput.extend({

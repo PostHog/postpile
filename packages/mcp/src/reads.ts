@@ -4,6 +4,7 @@ import {
   formatDossier,
   formatFacts,
   OUTSIDE_PROPOSAL_DAYS,
+  setChangeText,
   parsePrKey,
   proposalOutcome,
   proposalOutcomeAt,
@@ -264,6 +265,9 @@ function fullTopicLines(detail: TopicDetail, thisPr: PrKey | null): string[] {
     for (const pr of view.prs) {
       lines.push(`    ${prSummaryLine(pr)}${pr.key === thisPr ? '  <- this PR' : ''}`);
     }
+  }
+  if (detail.setChanges.length > 0) {
+    lines.push('', 'Set history, newest first (why each set holds what it holds):', ...detail.setChanges.map((change) => `  ${setChangeText(change)}`));
   }
   return lines;
 }

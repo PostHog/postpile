@@ -94,36 +94,47 @@ describe('RunnerAgentService.assignTopics', () => {
 });
 
 describe('RunnerAgentService.groupSets', () => {
-  it('drops unknown members and sets that end up with fewer than two', async () => {
+  it('keeps only changes the input allows', async () => {
     const { runner, service } = setup();
     runner.answer('set_grouping', {
-      sets: [
-        {
-          title: 'Runner switch',
-          take: 'Both halves of the switch.',
-          members: [
-            { prKey: 'acme/app#1', reason: 'workflows' },
-            { prKey: 'acme/app#2', reason: 'cache' },
-            { prKey: 'acme/app#2', reason: 'repeat' },
-          ],
-        },
-        { title: 'Lonely', take: '', members: [{ prKey: 'acme/app#1', reason: '' }, { prKey: 'acme/app#77', reason: '' }] },
+      joins: [
+        { setId: 's1', prKey: 'acme/app#3', reason: 'same cap' },
+        { setId: 's1', prKey: 'acme/app#99', reason: 'unknown PR' },
       ],
+      newSets: [{ title: 'Pair', take: '', members: [{ prKey: 'acme/app#3', reason: 'taken already' }, { prKey: 'acme/app#4', reason: '' }] }],
+      leaves: [
+        { setId: 's1', prKey: 'acme/app#1', reason: 'its risk is now high' },
+        { setId: 's1', prKey: 'acme/app#4', reason: 'not a member' },
+      ],
+      merges: [{ setId: 's1', intoSetId: 's1', reason: 'itself' }],
+      updates: [{ setId: 's9', title: 'Unknown', take: '' }],
     });
-    const prs = [1, 2].map((number) => makePr({ ref: { repo: 'acme/app', number } }));
+    const prs = [1, 2, 3, 4].map((number) => makePr({ ref: { repo: 'acme/app', number } }));
+    const set = {
+      id: 's1',
+      topicId: 'topic-1',
+      title: 'Pin SDKs',
+      take: '',
+      members: [
+        { prKey: 'acme/app#1', reason: '' },
+        { prKey: 'acme/app#2', reason: '' },
+      ],
+      removedKeys: [],
+      status: 'active' as const,
+      inputHash: '',
+      createdAt: '',
+      updatedAt: '',
+    };
 
-    const result = await service.groupSets({ topic: makeTopic(), prs, existingSets: [], context: emptyContext });
+    const result = await service.groupSets({ topic: makeTopic(), prs, existingSets: [set], risks: {}, context: emptyContext });
 
-    expect(result).toEqual([
-      {
-        title: 'Runner switch',
-        take: 'Both halves of the switch.',
-        members: [
-          { prKey: 'acme/app#1', reason: 'workflows' },
-          { prKey: 'acme/app#2', reason: 'cache' },
-        ],
-      },
-    ]);
+    expect(result).toEqual({
+      joined: [{ setId: 's1', member: { prKey: 'acme/app#3', reason: 'same cap' } }],
+      created: [],
+      left: [{ setId: 's1', prKey: 'acme/app#1', reason: 'its risk is now high' }],
+      merged: [],
+      updated: [],
+    });
   });
 });
 

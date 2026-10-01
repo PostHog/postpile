@@ -497,6 +497,31 @@ export interface PrSet {
   updatedAt: IsoTime;
 }
 
+/**
+ * What happened to a set: created, a PR joined or left, merged into another
+ * set, title or take rewritten, ended (fewer than two PRs left).
+ */
+export type PrSetChangeKind = 'created' | 'joined' | 'left' | 'merged' | 'updated' | 'ended';
+
+/** agent: a regroup. user: "not related". rules: the PR moved to another topic. */
+export type PrSetChangeBy = 'agent' | 'user' | 'rules';
+
+/**
+ * One line of a set's history (DESIGN.md "Tiles hold still"). Every change
+ * to a set's members is recorded with its reason, so a tile never changes
+ * without the user being able to see why. Kept after the set ends.
+ */
+export interface PrSetChange {
+  setId: string;
+  topicId: string;
+  /** The PR that joined or left; null for a change to the whole set. */
+  prKey: PrKey | null;
+  kind: PrSetChangeKind;
+  reason: string;
+  by: PrSetChangeBy;
+  at: IsoTime;
+}
+
 /** A real stack, derived from base/head refs. Never stored, always recomputed. */
 export interface Stack {
   /** "stack:<bottom prKey>" */

@@ -187,6 +187,12 @@ export interface EngineDeps {
    * tests opt in; createEngine passes the env value or CATCH_UP_CALLS_PER_DAY.
    */
   catchUpCallsPerDay?: number;
+  /**
+   * One agent call per topic: the dossier update and the topic's first glance
+   * batch together (DESIGN.md "One call per topic"). createEngine passes
+   * POSTPILE_TOPIC_DIGEST=1. Missing: off, separate calls.
+   */
+  topicDigest?: boolean;
   /** The database folder's lock; released on close. Null in tests and read-only CLI access. */
   dataLock?: { release(): void } | null;
   /** Local Claude Code folder the work context sweep reads. Defaults to POSTPILE_CLAUDE_DIR, else ~/.claude. */
@@ -357,6 +363,7 @@ export class Engine implements EngineService {
       telemetry: this.telemetry,
       glancePings: new GlancePings(store, now),
       raisedPings: new RaisedPings(decider),
+      topicDigest: deps.topicDigest ?? false,
     };
     const github = new GitHubSync(
       store,

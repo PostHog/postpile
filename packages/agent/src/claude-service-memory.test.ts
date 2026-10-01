@@ -301,6 +301,27 @@ describe('RunnerAgentService.updateDossier', () => {
     expect(result.facts).toEqual([]);
   });
 
+  it('labels a care as the user\'s own words only when it cites them, else observed', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    answer.dossier = {
+      ...answer.dossier,
+      // The fixture's type has no refs on cares; the model's answer does.
+      userCares: [
+        { text: 'CI cost', source: 'instructions', refs: ['I1'] },
+        { text: 'One review bot per PR', source: 'instructions', refs: ['e1'] },
+      ] as unknown as typeof answer.dossier.userCares,
+    };
+    runner.answer('dossier_update', answer);
+
+    const result = await service.updateDossier(dossierInput());
+
+    expect(result.dossier.userCares.map((c) => [c.text, c.source])).toEqual([
+      ['CI cost', 'instructions'],
+      ['One review bot per PR', 'observed'],
+    ]);
+  });
+
   it('rejects an answer without a dossier', async () => {
     const { runner, service, calls } = setup();
     runner.answer('dossier_update', { flags: [] });
@@ -586,5 +607,68 @@ describe('RunnerAgentService.consolidate', () => {
     const result = await service.consolidate({ ...input, topics: [], duplicateFacts: [] });
     expect(result).toEqual({ topicProposals: [], areaMerges: [], factMerges: [], ruleIdeas: [], finishedTopics: [] });
     expect(runner.requests).toHaveLength(0);
+  });
+});
+
+describe('RunnerAgentService.topicDigest', () => {
+  it('maps the dossier like an update and checks each glance on its own', async () => {
+    const { runner, service, calls } = setup();
+    runner.answer('topic_digest', {
+      ...dossierAnswer(),
+      glances: [{ prKey: 'acme/app#1', ...glanceEntry }, { prKey: 'acme/app#3', ...glanceEntry, verdict: 'SHIP_IT' }],
+    });
+    const input = { dossier: dossierInput(), glances: glanceInput(), sets: null };
+
+    const result = await service.topicDigest(input);
+
+    expect(result.dossier.dossier.goal).toBe('Run CI on Depot.');
+    expect(result.dossier.inputHash).toBe(dossierInputHash(input.dossier));
+    expect(result.glances.glances.map((glance) => glance.prKey)).toEqual(['acme/app#1']);
+    expect(result.glances.missing).toEqual(['acme/app#2', 'acme/app#3']);
+    expect(calls).toMatchObject([{ purpose: 'topic_digest', ok: true, topicId: 'topic-1', attempt: 1 }]);
+    const prompt = runner.promptsFor('topic_digest')[0]!;
+    expect(prompt).toContain('You keep a living dossier');
+    expect(prompt).toContain('=== acme/app#3');
+    expect(prompt.lastIndexOf('"confirmedFactIds"')).toBeLessThan(prompt.lastIndexOf('"glances"'));
+    // The user's instructions sit next to the glances again, not only at the top.
+    const instructions = fullContext.instructions.trim();
+    expect(prompt.indexOf(instructions)).toBeLessThan(prompt.lastIndexOf(instructions));
+    expect(prompt.lastIndexOf(instructions)).toBeGreaterThan(prompt.indexOf('Second part of the job'));
+  });
+
+  it('adds the set part when a regroup is due, and drops it alone when it is broken', async () => {
+    const { runner, service } = setup();
+    const sets = { topic: makeTopic(), prs: [pr1, pr3], existingSets: [], risks: {}, context: fullContext };
+    const newSet = { title: 'Cache keys', take: 'Same key change.', members: [{ prKey: 'acme/app#1', reason: 'a' }, { prKey: 'acme/app#3', reason: 'b' }] };
+    runner.answer('topic_digest', { ...dossierAnswer(), glances: [], sets: { newSets: [newSet] } });
+    runner.answer('topic_digest', { ...dossierAnswer(), glances: [], sets: { leaves: 'not a list' } });
+
+    const result = await service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets });
+    const broken = await service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets });
+
+    expect(result.sets?.created).toEqual([newSet]);
+    expect(broken.sets).toBeNull();
+    expect(broken.dossier.dossier.goal).toBe('Run CI on Depot.');
+    const prompt = runner.promptsFor('topic_digest')[0]!;
+    expect(prompt).toContain('Third part of the job');
+    expect(prompt).toContain('Open PRs in no set yet:');
+    expect(prompt.lastIndexOf('"glances"')).toBeLessThan(prompt.lastIndexOf('"sets"'));
+  });
+
+  it('counts a left-out set part as unusable, not as "no changes"', async () => {
+    const { runner, service } = setup();
+    const sets = { topic: makeTopic(), prs: [pr1, pr3], existingSets: [], risks: {}, context: fullContext };
+    runner.answer('topic_digest', { ...dossierAnswer(), glances: [] });
+
+    const result = await service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets });
+
+    expect(result.sets).toBeNull();
+  });
+
+  it('fails the whole call when the dossier part is broken', async () => {
+    const { runner, service } = setup();
+    runner.answer('topic_digest', { glances: [{ prKey: 'acme/app#1', ...glanceEntry }] });
+
+    await expect(service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets: null })).rejects.toThrow();
   });
 });

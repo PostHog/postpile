@@ -149,6 +149,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineService {
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),
     catchUpCallsPerDay: catchUpCapFromEnv(process.env.POSTPILE_CATCHUP_CAP, process.env.POSTPILE_MAX_AGENT_CALLS),
+    topicDigest: process.env.POSTPILE_TOPIC_DIGEST === '1',
     dataLock: lock,
     userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
     setupCommands: commands,

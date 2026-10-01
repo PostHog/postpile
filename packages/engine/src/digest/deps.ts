@@ -26,6 +26,8 @@ export interface DigestDeps {
   onGlancesStored?: (prKeys: PrKey[]) => void;
   /** Told the events the events agent just raised to loud (their ping decision runs again); answers the errors. */
   onEventsRaised?: (events: PrEvent[]) => Promise<string[]>;
+  /** One call per topic: dossier and first glance batch together (POSTPILE_TOPIC_DIGEST=1). Missing: off. */
+  topicDigest?: boolean;
 }
 
 /** One topic for a glance catch-up run; topicId null is the virtual Unsorted topic. */

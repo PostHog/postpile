@@ -20,12 +20,13 @@ const NO_DOSSIERS: DossierRun = {
  * The agentic half of a sync. Topics come first, alone: everything else
  * needs them. After that every job runs side by side, and waits only where
  * it reads another job's output: a topic's glances wait for that topic's
- * dossier, the fact reconcile and the driver refresh wait for all dossiers.
- * Sets and event classification read neither, so they start right away.
+ * dossier, the fact reconcile and the driver refresh wait for all dossiers,
+ * sets wait for the glances (they read each PR's risk). Event
+ * classification reads none of them, so it starts right away.
  *
  * The runner's limiter decides how many calls run at once. budget.take is
  * synchronous, so a capped budget is spent in the order jobs ask: topics,
- * dossiers, sets, events, then glances as their dossiers land, then fact
+ * dossiers, events, then glances as their dossiers land, then sets and fact
  * reconcile. Every job skips work whose input did not change, so a quiet
  * sync makes no agent calls.
  */
@@ -42,7 +43,7 @@ export class Digester {
 
   async run(jobs: AgentJob[]): Promise<void> {
     await this.job(jobs, 'topics', 'topics', () => new TopicAssigner(this.deps).run());
-    const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps).start() : NO_DOSSIERS;
+    const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps, { withGlances: jobs.includes('glances'), withSets: jobs.includes('sets') && jobs.includes('glances') }).start() : NO_DOSSIERS;
     const dossiersDone = this.job(jobs, 'dossiers', 'dossiers', async () => {
       await dossiers.done;
     });
@@ -51,9 +52,11 @@ export class Digester {
     );
     // After the dossiers: a dossier's driver wins over the most frequent author.
     const roles = dossiers.done.then(() => refreshDriversAndRoles(this.deps));
-    const sets = this.job(jobs, 'sets', 'sets', () => new SetGrouper(this.deps).run());
     const events = this.job(jobs, 'events', 'events', () => new EventBatchClassifier(this.deps).run());
     const glances = this.job(jobs, 'glances', 'glances', () => new GlanceBatchWriter(this.deps).run(dossiers));
+    // After the glances: a set keeps PRs of similar risk, and the risk comes from the glance. After the
+    // dossiers too: a topic digest may carry the topic's set changes.
+    const sets = Promise.all([glances, dossiersDone]).then(() => this.job(jobs, 'sets', 'sets', () => new SetGrouper(this.deps).run()));
     await Promise.all([dossiersDone, facts, roles, sets, events, glances]);
   }
 }

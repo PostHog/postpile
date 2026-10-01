@@ -19,9 +19,11 @@ import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { factReconcilePrompt } from './prompts/reconcile.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
+import { topicDigestPrompt } from './prompts/topic-digest.ts';
 import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
+import { mapSetAnswer } from './set-answer.ts';
 import type { AgentCallObserver, AgentPurpose, AgentRunner } from './runner.ts';
 import {
   chatOutput,
@@ -40,6 +42,7 @@ import {
   setupFitOutput,
   setupRefineOutput,
   topicAssignmentOutput,
+  topicDigestOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -65,7 +68,9 @@ import type {
   PingDecisionAnswer,
   PingDecisionInput,
   SetGroupingInput,
-  SetProposal,
+  SetChanges,
+  TopicDigestInput,
+  TopicDigestResult,
   SetupDraftInput,
   SetupDraftResult,
   SetupFitInput,
@@ -81,6 +86,8 @@ const timeouts: Record<AgentPurpose, number> = {
   topic_assignment: 240_000,
   set_grouping: 240_000,
   dossier_update: 240_000,
+  // A dossier and up to 18 glances in one answer: about the two calls it replaces, end to end.
+  topic_digest: 420_000,
   fact_reconcile: 180_000,
   event_classification: 120_000,
   consolidation: 300_000,
@@ -207,25 +214,12 @@ export class RunnerAgentService implements AgentService {
     return result;
   }
 
-  async groupSets(input: SetGroupingInput): Promise<SetProposal[]> {
-    if (input.prs.length < 2) {
-      return [];
-    }
-    const { value } = await this.ask('set_grouping', setGroupingPrompt(input), setGroupingOutput);
-    const known = new Set(input.prs.map((pr) => pr.key));
-    const result: SetProposal[] = [];
-    for (const set of value.sets) {
-      const seen = new Set<string>();
-      const members = set.members.filter((m) => {
-        const keep = known.has(m.prKey) && !seen.has(m.prKey);
-        seen.add(m.prKey);
-        return keep;
-      });
-      if (members.length >= 2) {
-        result.push({ title: set.title, take: set.take, members });
-      }
-    }
-    return result;
+  async groupSets(input: SetGroupingInput): Promise<SetChanges> {
+    const { value } = await this.ask('set_grouping', setGroupingPrompt(input), setGroupingOutput, {
+      topicId: input.topic.id,
+      attempt: 1,
+    });
+    return mapSetAnswer(value, input);
   }
 
   async draftComment(input: DraftCommentInput): Promise<{ body: string }> {
@@ -262,6 +256,27 @@ export class RunnerAgentService implements AgentService {
     });
     const mapped = mapDossierAnswer(value, input, refs, this.now());
     return { ...mapped, inputHash: dossierInputHash(input), model };
+  }
+
+  /**
+   * A broken dossier part fails the whole call (the glances depend on it).
+   * Glances are checked one by one like a glance batch; the missing ones go
+   * to the topic's glance batches. A broken set part is null: the set job
+   * asks again on its own.
+   */
+  async topicDigest(input: TopicDigestInput): Promise<TopicDigestResult> {
+    const refs = new DossierRefs(input.dossier);
+    const { value, model } = await this.ask('topic_digest', topicDigestPrompt(input, refs), topicDigestOutput, {
+      topicId: input.dossier.topic.id,
+      attempt: 1,
+    });
+    const dossier = { ...mapDossierAnswer(value, input.dossier, refs, this.now()), inputHash: dossierInputHash(input.dossier), model };
+    const stamp = { model, createdAt: this.now(), inputHash: (item: GlanceBatchItem) => glanceItemInputHash(input.glances, item) };
+    const glances = { ...mapGlanceAnswer({ glances: value.glances }, input.glances, stamp), model };
+    // A left-out set part is broken too: treating it as "no changes" would mark the regroup as done.
+    const setAnswer = input.sets && value.sets !== undefined ? setGroupingOutput.safeParse(value.sets) : null;
+    const sets = input.sets && setAnswer?.success ? mapSetAnswer(setAnswer.data, input.sets) : null;
+    return { dossier, glances, sets };
   }
 
   async reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]> {

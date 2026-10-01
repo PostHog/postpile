@@ -92,6 +92,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_UPDATE_CHECK=0`: no update check (the title bar reminder asks `api.github.com` for releases ~30s after start, then every 6 hours)
 - `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`: no usage analytics (also off by default under `POSTPILE_PROFILE=dev`, `POSTPILE_FAKE=1` and in tests). `POSTPILE_TELEMETRY=1` forces it on, including in dev, for checking the pipeline by hand — never in tests. See README › Privacy and DESIGN.md › Usage analytics.
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL` (default `claude-sonnet-5-5`), `POSTPILE_SWEEP_MODEL`, `POSTPILE_SETUP_MODEL` (default `opus`), `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs
+- `POSTPILE_TOPIC_DIGEST=1`: one agent call per topic for the dossier and its first glances (`topic_digest`), instead of separate dossier and glance calls. Off by default while it is compared (DESIGN.md › One call per topic)
 - `POSTPILE_CLAUDE_BIN`: the `claude` binary to run
 - `POSTPILE_CLAUDE_DIR`: the folder the work context sweep reads, default `~/.claude`
 - `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `personal,private`; empty means none

@@ -376,6 +376,11 @@ export type AgentCallKind =
   | 'topic_assignment'
   | 'set_grouping'
   | 'dossier_update'
+  /**
+   * One call per topic (POSTPILE_TOPIC_DIGEST=1): the dossier update and the
+   * topic's first glance batch in one answer, the dossier first.
+   */
+  | 'topic_digest'
   | 'fact_reconcile'
   | 'glance_batch'
   | 'event_classification'

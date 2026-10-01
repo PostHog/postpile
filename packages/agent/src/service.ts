@@ -88,15 +88,32 @@ export type TopicAssignment =
 
 export interface SetGroupingInput {
   topic: Topic;
+  /** The topic's open PRs and every member of its sets, merged ones included. */
   prs: Pr[];
+  /** Active and dissolved sets of the topic. */
   existingSets: PrSet[];
+  /** The glance's risk line per PR ("medium - touches the worker loop"), where a glance exists. */
+  risks: Record<PrKey, string>;
   context: PromptContext;
 }
 
+/** A new set: two or more PRs one judgement covers. */
 export interface SetProposal {
   title: string;
   take: string;
   members: PrSetMember[];
+}
+
+/**
+ * What the agent changes in a topic's sets. Anything it does not mention
+ * stays as it is: sets are lasting (DESIGN.md "Tiles hold still").
+ */
+export interface SetChanges {
+  created: SetProposal[];
+  joined: { setId: string; member: PrSetMember }[];
+  left: { setId: string; prKey: PrKey; reason: string }[];
+  merged: { setId: string; intoSetId: string; reason: string }[];
+  updated: { setId: string; title: string; take: string }[];
 }
 
 export interface EventOverrideProposal {
@@ -244,6 +261,31 @@ export interface GlanceBatchInput {
   viewer: Viewer;
   context: PromptContext;
   attempt: 1 | 2;
+}
+
+/**
+ * The dossier update, the topic's first glance batch and, when a regroup is
+ * due, its set changes in one call (POSTPILE_TOPIC_DIGEST=1, DESIGN.md "One
+ * call per topic"). The answer follows that order, so the glances read the
+ * dossier and the sets read the glances' risk.
+ */
+export interface TopicDigestInput {
+  dossier: DossierUpdateInput;
+  /** At most GLANCE_BATCH_SIZE PRs of the same topic, most urgent first. Carries the previous dossier. */
+  glances: GlanceBatchInput;
+  /** The topic's sets when a regroup is due, else null. */
+  sets: SetGroupingInput | null;
+}
+
+export interface TopicDigestResult {
+  dossier: DossierUpdateResult;
+  /**
+   * Stamped against the previous dossier: the engine stamps them again once
+   * the new version is stored. Missing ones go to the glance batches.
+   */
+  glances: GlanceBatchResult;
+  /** Null when no regroup was asked, or the set part was unusable (the set job then asks on its own). */
+  sets: SetChanges | null;
 }
 
 export interface GlanceBatchResult {
@@ -496,13 +538,16 @@ export interface SetupFitInput {
 export interface AgentService {
   /** v2: topics carry their dossier brief. */
   assignTopics(input: TopicAssignmentInput): Promise<TopicAssignment[]>;
-  groupSets(input: SetGroupingInput): Promise<SetProposal[]>;
+  /** Changes to the topic's sets; empty when nothing should change. */
+  groupSets(input: SetGroupingInput): Promise<SetChanges>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;
   chat(input: ChatInput): Promise<AgentChatReply>;
   /** A proposed new instructions text from one of the user's own messages. Nothing is written here. */
   proposeInstructionsChange(input: InstructionsChangeInput): Promise<InstructionsChangeReply>;
 
   updateDossier(input: DossierUpdateInput): Promise<DossierUpdateResult>;
+  /** Dossier update and first glance batch of one topic in one call. A broken dossier part fails the call. */
+  topicDigest(input: TopicDigestInput): Promise<TopicDigestResult>;
   /** At most one action per item; items the answer skipped are left out. */
   reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]>;
   /** Per PR, independent of the other PRs in the batch. Covers the dossier version. */

@@ -138,8 +138,8 @@ function feedbackBlock(input: DossierUpdateInput): string {
   return block('New corrections from the user since the last version. Take them into the dossier:', lines);
 }
 
-const answerShape = `{
-  "dossier": {
+/** The dossier answer's fields, without the outer braces: the topic digest adds its glances after them. */
+export const DOSSIER_ANSWER_FIELDS = `  "dossier": {
     "goal": "...", "goalRefs": ["owner/repo#1"],
     "summary": "...", "status": "starting" | "active" | "blocked" | "winding_down" | "finished",
     "statusNote": "...", "statusRefs": ["e4"],
@@ -155,15 +155,15 @@ const answerShape = `{
   "flags": [{"kind": "needs_user" | "contradiction" | "looks_finished" | "off_topic_pr", "text": "...", "prKey": "owner/repo#1" | null}],
   "facts": [{"subject": {"kind": "person", "key": "alice"}, "predicate": "works_on", "object": {"kind": "pr", "key": "owner/repo#1"} | null, "text": "...", "refs": ["e2"]}],
   "closeFacts": [{"factId": "F2", "reason": "..."}],
-  "confirmedFactIds": ["F7"]
-}`;
+  "confirmedFactIds": ["F7"]`;
+
+const answerShape = `{\n${DOSSIER_ANSWER_FIELDS}\n}`;
 
 /**
- * REFINE: the previous dossier plus only what is new since it was written.
- * The model rewrites the whole dossier, reports flags, and extracts facts
- * with short-id refs; the service maps refs back and drops unknown ids.
+ * Everything the dossier update asks, without the answer shape: the topic
+ * digest sends the same words and adds its glances.
  */
-export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs): string {
+export function dossierUpdateInstructions(input: DossierUpdateInput, refs: DossierRefs): string {
   const limits = DOSSIER_LIMITS;
   const prsByKey = new Map(input.prs.map((pr) => [pr.key, pr]));
   // The previous dossier was written from GitHub text: data, not instructions.
@@ -233,6 +233,15 @@ initiative -> pr or person), decided / status / note (object null, the text says
 Do not repeat a known fact unless it changed.
 
 closeFacts: known or failed facts (F ids) that are no longer true. confirmedFactIds: failed facts
-that are still true.
+that are still true.`;
+}
+
+/**
+ * REFINE: the previous dossier plus only what is new since it was written.
+ * The model rewrites the whole dossier, reports flags, and extracts facts
+ * with short-id refs; the service maps refs back and drops unknown ids.
+ */
+export function dossierUpdatePrompt(input: DossierUpdateInput, refs: DossierRefs): string {
+  return `${dossierUpdateInstructions(input, refs)}
 ${jsonOnly(answerShape)}`;
 }

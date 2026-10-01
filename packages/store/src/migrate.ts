@@ -20,6 +20,7 @@ import * as cleanTopicNames from './migrations/018_clean_topic_names.ts';
 import * as prSnooze from './migrations/019_pr_snooze.ts';
 import * as topicRetiredAt from './migrations/020_topic_retired_at.ts';
 import * as dropStartFresh from './migrations/021_drop_start_fresh.ts';
+import * as prSetChange from './migrations/022_pr_set_change.ts';
 
 interface Migration {
   version: number;
@@ -29,7 +30,7 @@ interface Migration {
 }
 
 // Append new migrations here, in order. Never edit one that has shipped.
-const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource, cleanTopicNames, prSnooze, topicRetiredAt, dropStartFresh];
+const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource, cleanTopicNames, prSnooze, topicRetiredAt, dropStartFresh, prSetChange];
 
 /** The schema version this build writes and expects. */
 export const LATEST_VERSION = migrations[migrations.length - 1]!.version;
