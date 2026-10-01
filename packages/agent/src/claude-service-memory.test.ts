@@ -301,6 +301,27 @@ describe('RunnerAgentService.updateDossier', () => {
     expect(result.facts).toEqual([]);
   });
 
+  it('labels a care as the user\'s own words only when it cites them, else observed', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    answer.dossier = {
+      ...answer.dossier,
+      // The fixture's type has no refs on cares; the model's answer does.
+      userCares: [
+        { text: 'CI cost', source: 'instructions', refs: ['I1'] },
+        { text: 'One review bot per PR', source: 'instructions', refs: ['e1'] },
+      ] as unknown as typeof answer.dossier.userCares,
+    };
+    runner.answer('dossier_update', answer);
+
+    const result = await service.updateDossier(dossierInput());
+
+    expect(result.dossier.userCares.map((c) => [c.text, c.source])).toEqual([
+      ['CI cost', 'instructions'],
+      ['One review bot per PR', 'observed'],
+    ]);
+  });
+
   it('rejects an answer without a dossier', async () => {
     const { runner, service, calls } = setup();
     runner.answer('dossier_update', { flags: [] });
@@ -609,6 +630,10 @@ describe('RunnerAgentService.topicDigest', () => {
     expect(prompt).toContain('You keep a living dossier');
     expect(prompt).toContain('=== acme/app#3');
     expect(prompt.lastIndexOf('"confirmedFactIds"')).toBeLessThan(prompt.lastIndexOf('"glances"'));
+    // The user's instructions sit next to the glances again, not only at the top.
+    const instructions = fullContext.instructions.trim();
+    expect(prompt.indexOf(instructions)).toBeLessThan(prompt.lastIndexOf(instructions));
+    expect(prompt.lastIndexOf(instructions)).toBeGreaterThan(prompt.indexOf('Second part of the job'));
   });
 
   it('adds the set part when a regroup is due, and drops it alone when it is broken', async () => {

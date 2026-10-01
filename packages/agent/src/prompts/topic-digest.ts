@@ -3,7 +3,7 @@ import type { TopicDigestInput } from '../service.ts';
 import { DOSSIER_ANSWER_FIELDS, dossierUpdateInstructions } from './dossier-update.ts';
 import { GLANCE_ENTRY_SHAPE, glanceRules, glanceSections } from './glance-batch.ts';
 import { SET_ANSWER_FIELDS, SET_RULES, setGroupingSections } from './sets.ts';
-import { jsonOnly } from './shared.ts';
+import { contextBlock, jsonOnly } from './shared.ts';
 
 /** The third part, when a regroup is due: the topic's sets, read with the risk just written. */
 function setsPart(input: TopicDigestInput): string {
@@ -31,8 +31,11 @@ function answerShape(input: TopicDigestInput): string {
  * word for word, then the glances of the topic's most urgent PRs, then the
  * set changes when a regroup is due. Thinking is off, so the order of the
  * answer is the order of the work: the glances read the dossier, the sets
- * read the glances' risk. User memory, viewer, glossary and the GitHub data
- * rule are in the dossier part and are not repeated.
+ * read the glances' risk. Viewer, glossary and the GitHub data rule are in
+ * the dossier part and are not repeated. The user's instructions are: far
+ * above in a long prompt they lost weight, and on a fresh start the
+ * combined call said NOT_YOURS 3 times where separate glances said it 14
+ * times (2026-10-01).
  */
 export function topicDigestPrompt(input: TopicDigestInput, refs: DossierRefs): string {
   const count = input.glances.items.length;
@@ -40,8 +43,9 @@ export function topicDigestPrompt(input: TopicDigestInput, refs: DossierRefs): s
 
 Second part of the job: after the dossier, help the developer decide at a glance what to do about
 ${count} pull ${count === 1 ? 'request' : 'requests'} of this same topic. Read each one against the dossier you just
-wrote and against what the user cares about.
-
+wrote and against what the user cares about. The user's own words once more, since each verdict
+(NOT_YOURS above all) is judged by them:
+${contextBlock(input.glances.context)}
 The pull requests, each headed by its key:
 
 ${glanceSections(input.glances)}
