@@ -22,6 +22,8 @@ function item(id: string, unreadTiles: number, placement: Partial<TopicPlacement
     yourMoves: [], unseenMergeTiles: 0,
     queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 1 }, byYou: 0, byTeam: 0, changesAddressed: 0 },
     people: [],
+    prState: null,
+    prStateCounts: { open: 0, draft: 0, merged: 0, closed: 0 },
   };
 }
 
