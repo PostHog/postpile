@@ -1,20 +1,22 @@
 import { useState, type ReactNode } from 'react';
-import type { PrTier, TopicListItem, TopicMove, TopicPerson, ViewerView } from '@postpile/core';
+import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
 import { layoutBuckets, layoutFromBuckets, queueLayout, queueRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { type SearchFilter } from '../lib/search.ts';
+import { stateMix } from '../lib/pr-mix.ts';
+import { sectionLook } from '../lib/sections.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { teamPill } from '../lib/faces.ts';
 import { UnreadDot } from './pills.tsx';
-import { yourMoveChip } from '../lib/your-move.ts';
 import { Avatar } from './Avatar.tsx';
 import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon, PrStateIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
+import { YourMoveChip } from './YourMoveChip.tsx';
 import { InboxCleanup } from './InboxCleanup.tsx';
 
 /**
@@ -30,18 +32,6 @@ function topicSnippet(item: TopicListItem): string {
   }
   return `${item.openTiles} open · ${item.totalTiles} tiles`;
 }
-
-/** Section title, dot and count colors. Honey = aimed at you, ink = yours, sea = your team, grey = the rest. */
-const SECTION_LOOK: Record<PrTier | 'other', { label: string; text: string; dot: string }> = {
-  needs_reply: { label: 'Needs reply', text: 'text-honey-ink', dot: 'bg-honey' },
-  changes_requested: { label: 'Changes you requested', text: 'text-honey-ink', dot: 'bg-honey' },
-  mine: { label: 'My PRs', text: 'text-ink', dot: 'bg-ink' },
-  team: { label: "Team's PRs", text: 'text-sea-ink', dot: 'bg-sea' },
-  to_review: { label: 'To review', text: 'text-honey-ink', dot: 'bg-honey' },
-  team_mentioned: { label: 'Team mentioned', text: 'text-sea-ink', dot: 'bg-sea-pale' },
-  rest: { label: 'Other topics', text: 'text-muted', dot: 'bg-ghost' },
-  other: { label: 'Other topics', text: 'text-muted', dot: 'bg-ghost' },
-};
 
 /**
  * The row's one number: unread tiles, in a small bubble (the dots stay per PR). Coral while an unread
@@ -114,26 +104,6 @@ function FaceStack(props: { people: TopicPerson[]; tone: RowTone }) {
 }
 
 /**
- * "Reply +2" in the warm-reach honey: the most urgent of the user's moves on
- * live tiles, plus how many more; the tooltip lists them all. Each topic
- * shows once, so the chip is where the row hints at what else is inside.
- */
-function YourMoveChip(props: { moves: TopicMove[] }) {
-  const chip = yourMoveChip(props.moves);
-  if (chip === null) {
-    return null;
-  }
-  return (
-    <span
-      title={chip.title}
-      className="flex h-[15px] shrink-0 items-center rounded bg-honey-soft px-[5px] text-[9.5px] font-semibold whitespace-nowrap text-honey-ink inset-ring inset-ring-honey-ink/10"
-    >
-      {chip.label}
-    </span>
-  );
-}
-
-/**
  * "2 merged without you" in plain grey, never coral: tiles holding a merge
  * without the user's review they have not seen (DESIGN "Merged without your review").
  */
@@ -145,8 +115,6 @@ function UnseenMergeChip(props: { count: number }) {
     </span>
   );
 }
-
-const PR_STATE_WORDS = { open: 'open', draft: 'draft', merged: 'merged', closed: 'closed' } as const;
 
 /**
  * The fixed leading column of a topic row, 14px with its gap: line one holds
@@ -166,11 +134,7 @@ function PrStateMark(props: { item: TopicListItem }) {
   if (prState === null) {
     return null;
   }
-  const title = (Object.keys(PR_STATE_WORDS) as (keyof typeof PR_STATE_WORDS)[])
-    .filter((state) => prStateCounts[state] > 0)
-    .map((state) => `${prStateCounts[state]} ${PR_STATE_WORDS[state]}`)
-    .join(' · ');
-  return <PrStateIcon lifecycle={prState} size={11} title={title} />;
+  return <PrStateIcon lifecycle={prState} size={11} title={stateMix(prStateCounts)} />;
 }
 
 /** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
@@ -229,7 +193,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
  * an unread count, and how many PRs a queue holds does not matter.
  */
 function SectionHeader(props: { tier: PrTier | 'other' }) {
-  const look = SECTION_LOOK[props.tier];
+  const look = sectionLook(props.tier);
   return (
     // The dot sits in the row's leading slot column, so the label lands on the same x as the topic names.
     <span className={`flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}>

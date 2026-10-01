@@ -295,7 +295,7 @@ export function App() {
       <MainPane>
         <ToolsNotice place="banner" />
         <InboxCleanup place="banner" />
-        <TopicHeader detail={topic.data} group={activeItem?.group ?? 'quiet'} topics={items} />
+        <TopicHeader detail={topic.data} topics={items} />
         <TileGrid
           detail={topic.data}
           topics={items}

@@ -28,7 +28,7 @@ import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
-import type { TopicPrState, TopicPrStateCounts } from './topic-pr-state.ts';
+import type { TopicPrState, TopicPrStateCounts, TopicPrStateSummary } from './topic-pr-state.ts';
 import type { OpenedReadCheck } from './quiet-reads.ts';
 import type { TileOffers } from './offers.ts';
 import type { TileAgentOffers, TopicAgentOffers } from './agent-actions.ts';
@@ -105,6 +105,8 @@ export interface TopicListItem {
   unseenMergeTiles: number;
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
+  /** The sidebar section it sits in (`topicSection` over `queues`); null for Other topics. */
+  section: PrTier | null;
   /**
    * The row's faces (`topicFaces` over `topicPeople`): PR authors only, you
    * and your teammates first (the team pill), then others by PR count;
@@ -271,6 +273,8 @@ export interface TileView {
   offers: TileOffers;
   /** The ✨ Approve and the ✨ pill on Mark read, when the agent's verdicts back them (`tileAgentOffers`). */
   agent: TileAgentOffers;
+  /** The grey Draft chip, dashed frame and muted title (`isDraftTile`): same rule as the topic's draft icon. */
+  draft: boolean;
   /** The PRs whose rows get the unread dot (`unreadPrKeys`: what makes the tile unread), in tile order. */
   unreadPrKeys: PrKey[];
   /** Its group in the topic (`tileGroup`): Unread, Open or Dealt with. The renderer groups by it and never works it out itself. */
@@ -297,6 +301,10 @@ export interface TopicDetail {
   topic: Topic;
   placement: TopicPlacement | null;
   tiles: TileView[];
+  /** The viewer's moves on live tiles, most urgent first (`topicYourMoves`): the header's chip, same as the sidebar row's. */
+  yourMoves: TopicMove[];
+  /** Live tiles that are the viewer's move, per group (`yourMovesByGroup`): the group headings' "2 your move". */
+  groupYourMoves: Record<TileGroup, number>;
   sets: PrSet[];
   /** The topic's set history, newest first (SET_CHANGES_SHOWN): why each tile holds what it holds. */
   setChanges: PrSetChange[];
@@ -313,6 +321,14 @@ export interface TopicDetail {
   dossier: DossierView | null;
   /** The header's ✨ Approve and ✨ "Mark N read" (`topicAgentOffers`), from the tiles above. */
   agent: TopicAgentOffers;
+  /**
+   * The header's PR pill (`topicPrState` over each PR of the tiles once): the
+   * same state as the sidebar row's icon, every PR counted (found and
+   * pulled-in ones too), and the lifecycle and review mix for its tooltip.
+   */
+  prRollup: TopicPrStateSummary;
+  /** The sidebar section, as on the list item (`topicSection`): the breadcrumb's label. */
+  section: PrTier | null;
 }
 
 export interface EventView {
