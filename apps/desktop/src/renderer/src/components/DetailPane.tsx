@@ -54,7 +54,7 @@ export function DetailPane(props: DetailPaneProps) {
   if (chatOpen) {
     body = <TileChat view={view} draft={chatDraft} onDraftChange={setChatDraft} onClose={() => setChatOpen(false)} />;
   } else if (pr.error) {
-    body = <p className="flex-1 px-[22px] py-[18px] text-xs text-unread-ink">Could not load {prKey}: {pr.error.message}</p>;
+    body = <p className="flex-1 px-[22px] py-[18px] text-xs text-status-bad">Could not load {prKey}: {pr.error.message}</p>;
   } else if (pr.data) {
     const detail = pr.data;
     const actions = (

@@ -17,9 +17,9 @@ interface GlanceCardProps {
   view: TileView;
 }
 
-/** Box 1 takes the verdict's look: honey to look closer, green when safe, grey when not yours. Edges are inset rings. */
+/** Box 1 takes the verdict's look: amber to look closer, green when safe, grey when not yours. Edges are inset rings. */
 const VERDICT_BOX: Record<Verdict, { box: string; mark: string }> = {
-  LOOK_CLOSER: { box: 'bg-move text-honey-ink inset-ring inset-ring-edge-honey-box', mark: 'bg-mark-honey text-honey-ink' },
+  LOOK_CLOSER: { box: 'bg-closer-soft text-closer inset-ring inset-ring-edge-closer-box', mark: 'bg-mark-closer text-closer' },
   LOOKS_SAFE: { box: 'bg-safe-soft text-safe inset-ring inset-ring-safe-line', mark: 'bg-mark-safe text-safe' },
   NOT_YOURS: { box: 'bg-segment text-muted inset-ring inset-ring-hairline', mark: 'bg-chip text-ink-2' },
 };

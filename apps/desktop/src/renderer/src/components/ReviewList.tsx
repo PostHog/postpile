@@ -11,7 +11,7 @@ import { SectionLabel } from './SectionLabel.tsx';
 // Same glyphs and soft tints as the tile's status pill and event badges.
 const STATUS: Record<ReviewStatus, { label: string; badge: string; glyph: EventGlyph }> = {
   requested: { label: 'review requested', badge: 'bg-quiet-soft text-muted', glyph: 'eye' },
-  approved: { label: 'approved', badge: 'bg-status-good-soft text-status-good', glyph: 'check' },
+  approved: { label: 'approved', badge: 'bg-safe-soft text-safe', glyph: 'check' },
   changes_requested: { label: 'requested changes', badge: 'bg-status-bad-soft text-status-bad', glyph: 'changes' },
   commented: { label: 'commented', badge: 'bg-quiet-soft text-muted', glyph: 'bubble' },
   dismissed: { label: 'dismissed', badge: 'bg-quiet-soft text-faint', glyph: 'eye' },

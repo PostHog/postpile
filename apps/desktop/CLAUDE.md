@@ -255,6 +255,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   chevrons, ages next to a louder line, done tiles.
 - **Diff red**: `--diff-red` for deletions in the Size fact. Coral
   (`unread`) is never a diff or CI colour; the Checks fact is grey.
+- **One colour per meaning** (2026-10-01, DESIGN.md "Colour per
+  meaning"): `closer` only for the agent's Look closer; `status-bad` the
+  one red for bad (closed, changes requested, risk, errors); `safe` the one
+  good green (approved, Looks safe, Approve); merged purple also for
+  queued; coral only for unread; honey only for aimed at you and your
+  move; app-health warnings use `amber-*`.
 - **Tailwind's default palette is switched off** (`--color-*: initial`). Only
   token colors exist as utilities. Need a new color? Add a token to
   `tokens.css` and a `--color-*` line to `@theme`, don't reach for hex in a
@@ -353,7 +359,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   a dash pattern gets its own small component (`PrStateIcon` draft,
   `RingDotIcon`).
 - PR state: `PrStateIcon` (open green pull request, draft dashed grey
-  circle, merged purple, closed red, queued amber; the word from
+  circle, merged purple, closed red, queued purple; the word from
   `LIFECYCLE_WORDS` as its title). Review state: `StateWordLabel` with a
   `StateWord` from `reviewWord` / `rowStateWord` (`lib/pr.ts`). Never a CI
   icon or word outside `PrFacts`.

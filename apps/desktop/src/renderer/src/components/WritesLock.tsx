@@ -120,7 +120,7 @@ export function WritesLock() {
         aria-label={writes.enabled ? 'GitHub writes on, click to lock' : 'GitHub writes off (read-only)'}
         aria-pressed={writes.enabled}
         aria-expanded={open}
-        className={`flex items-center gap-[5px] rounded px-1 hover:bg-subtle disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent ${writes.enabled ? 'text-ink-2' : 'text-closer'}`}
+        className={`flex items-center gap-[5px] rounded px-1 hover:bg-subtle disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent ${writes.enabled ? 'text-ink-2' : 'text-amber-ink'}`}
       >
         {writes.enabled ? <UnlockIcon size={11} /> : <LockIcon size={11} />}
         {writes.enabled ? 'GitHub writes on' : 'read-only'}

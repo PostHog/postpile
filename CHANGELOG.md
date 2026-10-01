@@ -8,6 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Each topic in the sidebar shows one PR state icon in front of its summary: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").
 - A tile's verdict pill shows the worst glance among its open PRs, not only the lead PR's. A stack whose top PR looks safe but whose third layer needs a closer look now says "Look closer"; a missing or out-of-date glance beats "Looks safe".
+- One colour per meaning: amber is only the agent's "Look closer". "Needs review" is now neutral, a queued PR is merged purple, closed PRs, changes requested, risk and errors share one red, and approved, "Looks safe" and Approve share one green.
 
 ## 0.13.2 (2026-10-01)
 

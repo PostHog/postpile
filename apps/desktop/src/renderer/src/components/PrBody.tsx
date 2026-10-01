@@ -57,7 +57,7 @@ function RepoRef(props: { prKey: string }) {
 const LIFECYCLE_TEXT_TONES: Record<PrLifecycle, string> = {
   open: 'text-open',
   draft: 'text-muted',
-  queued: 'text-status-queued',
+  queued: 'text-merged-ink',
   merged: 'text-merged-ink',
   closed: 'text-status-bad',
 };

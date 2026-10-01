@@ -116,8 +116,8 @@ export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance
 }
 
 const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { glyph: EventGlyph | null; stroke: number; tone: string }> = {
-  review: { glyph: 'eye', stroke: 1.7, tone: 'text-closer' },
-  approved: { glyph: 'check', stroke: 1.9, tone: 'text-status-good' },
+  review: { glyph: 'eye', stroke: 1.7, tone: 'text-ink-2' },
+  approved: { glyph: 'check', stroke: 1.9, tone: 'text-safe' },
   changes: { glyph: 'changes', stroke: 1.7, tone: 'text-status-bad' },
   merged: { glyph: null, stroke: 0, tone: 'text-merged-ink' },
   closed: { glyph: null, stroke: 0, tone: 'text-status-bad' },
@@ -130,8 +130,9 @@ const STATE_WORD_SIZES = {
 
 /**
  * A PR's state word with its icon (`reviewWord` / `rowStateWord` in
- * lib/pr.ts): "Needs review" honey eye, "Approved" green check, "Changes
- * requested" red, merged / closed as the colored word, drafts as an
+ * lib/pr.ts): "Needs review" neutral eye, "Approved" green check, "Changes
+ * requested" red, merged / closed as the colored word (one colour per
+ * meaning, 2026-10-01), drafts as an
  * outlined DRAFT chip with a pencil. Never CI.
  */
 export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STATE_WORD_SIZES }) {
@@ -159,7 +160,8 @@ export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STA
 
 const RELATION_TONES: Record<TopicRelation, string> = {
   team: 'bg-sea-soft text-sea-ink',
-  routed: 'bg-closer-soft text-closer',
+  // Neutral like the routing "for whom" chip: amber is only the agent's Look closer (2026-10-01).
+  routed: 'bg-segment text-ink-2',
   fyi: 'bg-segment text-muted',
 };
 

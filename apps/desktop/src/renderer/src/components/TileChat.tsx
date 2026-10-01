@@ -69,7 +69,7 @@ export function TileChat(props: { view: TileView; draft: string; onDraftChange: 
         </Button>
       </div>
       <div className="pane-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-auto pl-[22px] pr-[12px] py-3">
-        {chat.error && <p className="text-xs text-unread-ink">Could not load the chat: {chat.error.message}</p>}
+        {chat.error && <p className="text-xs text-status-bad">Could not load the chat: {chat.error.message}</p>}
         {chat.data?.length === 0 && <p className="text-xs text-muted">Tell the agent what matters here, or ask why the tile looks the way it does.</p>}
         {chat.data?.map((message) => (
           <p

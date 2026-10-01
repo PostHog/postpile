@@ -15,9 +15,9 @@ import { UpdatePill } from './UpdatePill.tsx';
 /** The status dot with a halo at 16% of its own color. */
 const DOTS = {
   accent: 'bg-accent ring-accent/16',
-  closer: 'bg-closer ring-closer/16',
+  amber: 'bg-amber ring-amber/16',
   quiet: 'bg-dot-quiet ring-dot-quiet/16',
-  unread: 'bg-unread ring-unread/16',
+  bad: 'bg-status-bad ring-status-bad/16',
   open: 'bg-open ring-open/16',
 };
 
@@ -61,7 +61,7 @@ function SyncStatus() {
   }
   if (tools && !tools.canSync) {
     return (
-      <StatusText dot="closer" detail={`${tools.gh.headline}. The note in the middle column has the fix.`}>
+      <StatusText dot="amber" detail={`${tools.gh.headline}. The note in the middle column has the fix.`}>
         sync off <Sep /> gh needs a fix
       </StatusText>
     );
@@ -76,9 +76,9 @@ function SyncStatus() {
   }
   const age = ageLabel(report.finishedAt, now);
   const capped = capNote(report.agentCallStats, actions.config?.autoSyncMinutes ?? 0);
-  let dot: DotTone = report.errors.length > 0 ? 'unread' : 'open';
+  let dot: DotTone = report.errors.length > 0 ? 'bad' : 'open';
   if (capped) {
-    dot = 'closer';
+    dot = 'amber';
   }
   return (
     <StatusText dot={dot} detail={syncReportDetail(report)}>

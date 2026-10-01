@@ -279,7 +279,8 @@ export function Glyph(props: IconProps & { glyph: EventGlyph; strokeWidth?: numb
 const LIFECYCLE_TONES: Record<PrLifecycle, string> = {
   open: 'text-open',
   draft: 'text-faint',
-  queued: 'text-status-queued',
+  // Queued is on its way to merged: the merged purple, with the open-PR outline (2026-10-01).
+  queued: 'text-merged',
   merged: 'text-merged',
   closed: 'text-closed',
 };
