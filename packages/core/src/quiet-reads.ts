@@ -644,7 +644,7 @@ export interface OpenedTile {
  * - no_tile: no tile shows the PR
  * - snoozed: the user put a tile holding it away for later
  * - asks_you: a mark-read of the PR would leave something asked of the user
- * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, or cut off at the query's caps, so the user did not see the newest activity
+ * - stale_snapshot: the thread is unread and the stored PR snapshot is older than it, so the user did not see the newest activity. A snapshot cut off at the query's caps still counts (2026-10-01): the user looked at the PR, so only freshness matters here
  */
 export type OpenedSkip = 'no_thread' | 'no_tile' | 'snoozed' | 'asks_you' | 'stale_snapshot';
 
@@ -659,8 +659,6 @@ export interface OpenedReadInput {
   /** The PR's notification thread, null when it has none (a found PR). */
   thread: NotificationThread | null;
   prFetchedAt: IsoTime | null;
-  /** The stored snapshot was cut off at the query's caps (`Pr.truncated`). */
-  prTruncated: boolean;
   /** Every tile that holds the PR. */
   tiles: OpenedTile[];
   /** A mark-read of this PR alone would leave it done: nothing asked of the user (`PrSummary.afterRead.done`). */
@@ -672,7 +670,10 @@ export interface OpenedReadInput {
  * GitHub, like a visit on github.com does, and handle it in PostPile, limited
  * to cases where that cannot hide a to-do (DESIGN.md "You already dealt with
  * it", part 3). Checked per PR since 2026-09-29: that PR done after a
- * mark-read, no tile holding it snoozed.
+ * mark-read, no tile holding it snoozed. An unread thread also needs a
+ * snapshot fetched at or after its last update; unlike the quiet reads
+ * (`snapshotCoversThread`), a snapshot cut off at the caps is fine, since
+ * the user looked at the PR (2026-10-01).
  */
 export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (input.thread === null) {
@@ -690,7 +691,7 @@ export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (!input.thread.unread) {
     return { kind: 'handle' };
   }
-  if (!snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt, prTruncated: input.prTruncated })) {
+  if (input.prFetchedAt === null || input.prFetchedAt < input.thread.updatedAt) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
   return { kind: 'mark' };

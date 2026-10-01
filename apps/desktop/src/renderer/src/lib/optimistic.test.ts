@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileView, TopicDetail, WhoseTurn } from '@postpile/core';
-import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
+import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { approvedPrsTile, markedReadPr, markedReadTile, snoozedTile, withTile, withTiles } from './optimistic.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
@@ -36,6 +36,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     turn: REVIEW,
     facts: NO_PR_FACTS,
     afterRead: { done: true, turn: NONE },
+    openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(number),
     quietRepo: false,

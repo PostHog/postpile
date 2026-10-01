@@ -8,7 +8,7 @@
 import { eventsSeenByTouch } from '../last-touch.ts';
 import { at, makePr } from '../fixtures.ts';
 import { deriveEvents } from '../events.ts';
-import { awaitsJudgement } from '../quiet-reads.ts';
+import { awaitsJudgement, type OpenedReadInput } from '../quiet-reads.ts';
 import { ownEventsOnReadThread } from '../github-read.ts';
 import { lookCloserEvent, lookCloserPingCheck } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
@@ -17,6 +17,7 @@ import { applyReadPlan, planRead, prReadScope, type ReadCause } from '../read-pl
 import { snoozeWrites } from '../snooze.ts';
 import { buildStacks } from '../stacks.ts';
 import { buildTopicTiles, deriveTileState } from '../tiles.ts';
+import { prAfterMarkRead } from '../after-read.ts';
 import { agentPrFacts } from '../agent-actions.ts';
 import { buildPrSummary, buildTileView, type PrSummaryInput } from '../tile-view.ts';
 import type {
@@ -809,6 +810,27 @@ export function tileStateOf(board: PropertyBoard, tile: Tile, viewer: Viewer | n
   });
 }
 
+/** What the "opened in PostPile" rule reads of a PR, gathered like the engine's OpenedReadInputs. */
+function openedInputOf(board: PropertyBoard, pr: Pr, viewer: Viewer | null): OpenedReadInput {
+  const holding = board.tiles.filter((tile) => tile.members.some((member) => member.prKey === pr.key));
+  const tracked = holding.some((tile) => tile.members.some((member) => member.prKey === pr.key && isTracked(member.provenance)));
+  const afterRead = prAfterMarkRead({
+    pr,
+    events: board.events.get(pr.key) ?? [],
+    userState: board.userStates.get(pr.key) ?? null,
+    viewer,
+    notYours: board.notYours.has(pr.key),
+    tracked,
+    readAt: board.now,
+  });
+  return {
+    thread: board.threads.get(pr.key) ?? null,
+    prFetchedAt: board.prFetchedAt.get(pr.key) ?? null,
+    tiles: holding.map((tile) => ({ snoozed: tileStateOf(board, tile, viewer).kind === 'snoozed' })),
+    doneAfterRead: afterRead.done,
+  };
+}
+
 function prRowInputs(board: PropertyBoard, tile: Tile, state: TileState, viewer: Viewer | null): PrSummaryInput[] {
   return tile.members.flatMap((member): PrSummaryInput[] => {
     const pr = board.prs.get(member.prKey);
@@ -835,6 +857,7 @@ function prRowInputs(board: PropertyBoard, tile: Tile, state: TileState, viewer:
         lastReadAt: board.threads.get(pr.key)?.lastReadAt ?? null,
         now: board.now,
         pendingWrite: board.pendingWrites.get(pr.key) ?? null,
+        opened: openedInputOf(board, pr, viewer),
       },
     ];
   });

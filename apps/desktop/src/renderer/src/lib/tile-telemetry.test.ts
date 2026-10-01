@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileView } from '@postpile/core';
-import { at, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
+import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { tileOpenedProps } from './tile-telemetry.ts';
 
 function summary(overrides: Partial<PrSummary> = {}): PrSummary {
@@ -33,6 +33,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     turn: { kind: 'none', who: null, what: '', prKey: null },
     facts: NO_PR_FACTS,
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
+    openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(1),
     quietRepo: false,

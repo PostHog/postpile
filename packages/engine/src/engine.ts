@@ -379,7 +379,7 @@ export class Engine implements EngineService {
     this.github = github;
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
-    this.quietReads = new QuietReads(store, deps.reader, deps.writes, now);
+    this.quietReads = new QuietReads(store, deps.reader, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
     this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog, () => this.syncCompletedListener?.());
     this.consolidationRun = new ConsolidationRun(runDeps);
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));

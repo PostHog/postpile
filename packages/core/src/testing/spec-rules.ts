@@ -988,9 +988,10 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
 /**
  * Opening a PR in PostPile reads it only where that hides nothing: it has
  * a thread and a tile, no tile holding it is snoozed, a mark-read leaves it
- * done; an unread thread also needs a fresh complete snapshot.
+ * done; an unread thread also needs a snapshot fetched at or after its
+ * last update, cut off at the caps or not (2026-10-01).
  */
-export function expectedOpenedRead(input: { thread: NotificationThread | null; prFetchedAt: IsoTime | null; truncated: boolean; tilesSnoozed: boolean[]; doneAfterRead: boolean }): OpenedReadCheck {
+export function expectedOpenedRead(input: { thread: NotificationThread | null; prFetchedAt: IsoTime | null; tilesSnoozed: boolean[]; doneAfterRead: boolean }): OpenedReadCheck {
   if (input.thread === null) {
     return { kind: 'skip', why: 'no_thread' };
   }
@@ -1006,7 +1007,8 @@ export function expectedOpenedRead(input: { thread: NotificationThread | null; p
   if (!input.thread.unread) {
     return { kind: 'handle' };
   }
-  return snapshotIsFresh(input.thread, input.prFetchedAt, input.truncated) ? { kind: 'mark' } : { kind: 'skip', why: 'stale_snapshot' };
+  // The user looked at the PR: a snapshot cut off at the caps is fine, only its age counts.
+  return snapshotIsFresh(input.thread, input.prFetchedAt, false) ? { kind: 'mark' } : { kind: 'skip', why: 'stale_snapshot' };
 }
 
 // ---------------------------------------------------------------------------

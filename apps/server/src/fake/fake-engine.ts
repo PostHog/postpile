@@ -152,8 +152,10 @@ import {
   type SearchableTopic,
   type SearchResult,
   type Viewer,
+  type OpenedReadInput,
   actorsFromQuietDetail,
   openedReadCheck,
+  prAfterMarkRead,
   ownTeamRequests,
   teamSlug,
   quietReasonDetail,
@@ -523,6 +525,34 @@ export class FakeEngine implements EngineService {
   }
 
   /**
+   * What the "opened in PostPile" rule reads of a PR, like the engine's
+   * OpenedReadInputs. Sample snapshots are always as fresh as their threads.
+   */
+  private openedReadInput(prKey: PrKey): OpenedReadInput {
+    const thread = this.prThreads().get(prKey) ?? null;
+    const tiles = this.tilesHolding(prKey);
+    const pr = this.prsByKey().get(prKey);
+    const tracked = tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
+    const doneAfterRead =
+      pr !== undefined &&
+      prAfterMarkRead({
+        pr,
+        events: this.eventsOf(prKey),
+        userState: this.data.userStates.find((entry) => entry.prKey === prKey) ?? null,
+        viewer: this.viewer(),
+        notYours: this.notYours().has(prKey),
+        tracked,
+        readAt: this.timestamp(),
+      }).done;
+    return {
+      thread,
+      prFetchedAt: thread?.updatedAt ?? null,
+      tiles: tiles.map((tile) => ({ snoozed: this.tileState(tile).kind === 'snoozed' })),
+      doneAfterRead,
+    };
+  }
+
+  /**
    * Gathers the sample's inputs for core's buildPrSummary / buildTileView,
    * the same rules as the engine. The sample has no threads, so a pinged
    * member's reason stands in for the thread reason. `labels` are the repo
@@ -560,6 +590,7 @@ export class FakeEngine implements EngineService {
           lastReadAt: threads.get(pr.key)?.lastReadAt ?? null,
           now: this.timestamp(),
           pendingWrite: pending.get(pr.key) ?? null,
+          opened: this.openedReadInput(pr.key),
         },
       ];
     });
@@ -1263,17 +1294,9 @@ export class FakeEngine implements EngineService {
     if (!this.writes.isEnabled()) {
       return { marked: false };
     }
-    const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey) ?? null;
-    const views = this.tilesHolding(prKey).map((tile) => this.tileView(tile));
-    const rows = views.flatMap((view) => view.prs.filter((pr) => pr.key === prKey));
-    const check = openedReadCheck({
-      thread,
-      // Sample snapshots are always as fresh as their threads.
-      prFetchedAt: thread?.updatedAt ?? null,
-      prTruncated: false,
-      tiles: views.map((view) => ({ snoozed: view.state.kind === 'snoozed' })),
-      doneAfterRead: rows.some((pr) => pr.afterRead.done),
-    });
+    const input = this.openedReadInput(prKey);
+    const thread = input.thread;
+    const check = openedReadCheck(input);
     if (check.kind === 'skip' || thread === null) {
       return { marked: false };
     }

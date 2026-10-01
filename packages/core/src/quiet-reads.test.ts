@@ -383,7 +383,7 @@ describe('openedReadCheck', () => {
   const unreadThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: true });
   const tile = { snoozed: false };
   const opened = (overrides: Partial<Parameters<typeof openedReadCheck>[0]> = {}) =>
-    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), prTruncated: false, tiles: [tile], doneAfterRead: true, ...overrides });
+    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), tiles: [tile], doneAfterRead: true, ...overrides });
 
   it('marks an unread thread when a mark-read of that PR would leave it done', () => {
     expect(opened()).toEqual({ kind: 'mark' });
@@ -410,7 +410,7 @@ describe('openedReadCheck', () => {
     expect(opened({ thread: null })).toEqual({ kind: 'skip', why: 'no_thread' });
     expect(opened({ tiles: [] })).toEqual({ kind: 'skip', why: 'no_tile' });
     expect(opened({ prFetchedAt: at(29) })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
-    expect(opened({ prTruncated: true })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+    expect(opened({ prFetchedAt: null })).toEqual({ kind: 'skip', why: 'stale_snapshot' });
   });
 });
 

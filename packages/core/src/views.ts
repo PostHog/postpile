@@ -28,6 +28,7 @@ import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
+import type { OpenedReadCheck } from './quiet-reads.ts';
 import type { TileOffers } from './offers.ts';
 import type { TileAgentOffers, TopicAgentOffers } from './agent-actions.ts';
 import type { TileGroup } from './tile-groups.ts';
@@ -199,6 +200,13 @@ export interface PrSummary {
    * for a pulled-in stack layer.
    */
   afterRead: TileAfterRead;
+  /**
+   * What opening this PR in the detail pane would do (`openedReadCheck`),
+   * from the same inputs the server's check reads: mark it read, only handle
+   * it, or skip and why. The renderer promises "Marks read when you leave"
+   * only when this is not a skip (and writes are on).
+   */
+  openedRead: OpenedReadCheck;
   /** What changed since the viewer's last touch (`whatsNew`), for the why-now strip; null on a first look or with nothing new. */
   whatsNew: WhatsNew | null;
   updatedAt: IsoTime;
