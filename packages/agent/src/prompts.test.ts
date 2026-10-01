@@ -132,7 +132,7 @@ describe('every prompt carries the memory and asks for JSON', () => {
   const topic = makeTopic();
   const prompts: Record<string, string> = {
     glance: oneGlancePrompt(pr, { kind: 'pinged', reason: 'review_requested' }, fullContext),
-    topics: topicAssignmentPrompt({ prs: [pr], viewer, topics: [{ id: 't1', name: 'CI', summary: '', kind: 'project', brief: '', memberCount: 3, openCount: 0, lastActivityAt: null }], context: fullContext }),
+    topics: topicAssignmentPrompt({ prs: [pr], viewer, topics: [{ id: 't1', name: 'CI', summary: '', kind: 'project', ownerTeam: null, brief: '', memberCount: 3, openCount: 0, lastActivityAt: null }], context: fullContext }),
     sets: setGroupingPrompt({ topic, prs: [pr, makePr({ ref: { repo: 'acme/app', number: 2 } })], existingSets: [], risks: {}, context: fullContext }),
     events: eventBatchPrompt({ topic, items: [{ pr, events: [makeEvent()] }], viewer, context: fullContext }),
     comment: draftCommentPrompt({ pr, viewer, person: 'bob', intent: 'is the cache key stable?', context: fullContext }),

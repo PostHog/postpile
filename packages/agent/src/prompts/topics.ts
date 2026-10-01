@@ -5,7 +5,8 @@ import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE,
 /** The dossier brief (goal, status, driver) says far more than a name; the summary is the fallback. */
 function topicLine(topic: TopicChoice): string {
   const about = topic.brief || clip(topic.summary, 400);
-  const size = `${topic.kind}, ${topic.memberCount} ${topic.memberCount === 1 ? 'PR' : 'PRs'}, ${topic.openCount} open`;
+  const owner = topic.ownerTeam ? `, owned by ${topic.ownerTeam}` : '';
+  const size = `${topic.kind}${owner}, ${topic.memberCount} ${topic.memberCount === 1 ? 'PR' : 'PRs'}, ${topic.openCount} open`;
   const active = topic.lastActivityAt ? `, last activity ${topic.lastActivityAt.slice(0, 10)}` : '';
   return `- id ${topic.id}: "${topic.name}" (${size}${active})${about ? ` - ${about}` : ''}`;
 }
@@ -32,7 +33,8 @@ Right size:
   Homebrew listing are all PRs of it), "Dev box rollout", "Move CI runners to a new provider",
   "Cut p95 latency of the query service", "Migrate the tests to pytest".
 - Standing: "Migration safety" (runbooks, lock rules, migration guards and the migration skill,
-  for a year), "Code ownership" (teams claiming paths, routing reviews to owners).
+  for a year), "Code ownership" (teams claiming paths, routing reviews to owners), "Egress"
+  (every outbound call through one layer: labels, budgets, tracing, guards, whoever adds to it).
 
 Too small (put it in the topic it serves):
 - "Homebrew cask listing", "MCP server tools": steps of "Desktop review app".
@@ -107,6 +109,14 @@ Rules:
 - Topics in the Archive say so in their brief. A finished project there only takes a PR that
   clearly continues that exact goal (a follow-up fix to it). A quiet standing topic there takes
   the next PR of its standard, however long it slept.
+- When a finished project built something that people now extend (new uses, follow-ups by others,
+  weeks later), those PRs serve a standard, not the old goal: put them in the standing topic that
+  keeps it, or start one named after the standard ("Egress", not "GitHub egress tracing").
+- Ownership: a PR that reaches the user through a team review request (see its pending review
+  requests and the user's teams) is judged by what that team keeps up. When it changes code that
+  belongs to a standard a listed standing topic keeps (same owner team, same code), it joins that
+  topic, also when it is a step of someone else's project. A routed PR that fits no standing topic
+  is placed like any other PR.
 - When no live topic's goal fits, use kind "new", also for a single PR, but name the project the
   PR serves, 2 to 6 words, never what the PR itself changes. PRs above or in the waiting list that
   serve the same project get the same new name. goal: one sentence on what that project is for.

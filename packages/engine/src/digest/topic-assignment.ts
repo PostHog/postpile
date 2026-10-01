@@ -137,6 +137,7 @@ export class TopicAssigner {
         name: t.name,
         summary: t.summary,
         kind: t.kind,
+        ownerTeam: dossier?.dossier.relation?.ownerTeam ?? null,
         brief: t.status === 'retired' ? `${t.kind === 'standing' ? 'Quiet for now, in the Archive.' : 'Finished, in the Archive.'} ${brief}`.trim() : brief,
         memberCount: prs.length,
         openCount: prs.filter((pr) => pr.state === 'OPEN').length,

@@ -161,6 +161,7 @@ export const DOSSIER_ANSWER_FIELDS = `  "dossier": {
     "relation": {"kind": "team" | "routed" | "fyi", "ownerTeam": "org/team" | null, "whyYou": "...", "refs": ["e2"]}
   },
   "area": "CI",
+  "topicKind": "project" | "standing",
   "flags": [{"kind": "needs_user" | "contradiction" | "looks_finished" | "off_topic_pr", "text": "...", "prKey": "owner/repo#1" | null}],
   "facts": [{"subject": {"kind": "person", "key": "alice"}, "predicate": "works_on", "object": {"kind": "pr", "key": "owner/repo#1"} | null, "text": "...", "refs": ["e2"]}],
   "closeFacts": [{"factId": "F2", "reason": "..."}],
@@ -227,6 +228,11 @@ area: the part of the product or codebase the topic's work touches, 1 to 3 words
 every topic they see would fit it. Reuse an area in use when the work touches that part; replace
 the current area when it is such a catch-all or no longer fits; a new one when no area in use
 names that part.
+
+topicKind: the topic is ${input.topic.kind === 'standing' ? 'a standing topic' : 'a project'} now. Keep that unless it was clearly cut as
+the wrong kind: "standing" for one standard kept up for months with no finish line, "project" for one goal
+that ends. A project whose goal is reached stays a project, also when its PRs keep coming: the next
+ones start a standing topic of their own.
 
 flags: needs_user when the user should act or decide something; contradiction when new activity
 contradicts the dossier or a fact; looks_finished when the work seems done; off_topic_pr (with

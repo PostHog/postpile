@@ -149,8 +149,11 @@ describe('dossierUpdatePrompt', () => {
 
   it('tells the agent a standing topic never finishes, and leaves a project as it was', () => {
     const standing = dossierInput({ topic: makeTopic({ kind: 'standing' }) });
-    expect(dossierUpdatePrompt(standing, new DossierRefs(standing))).toContain('It is a standing topic: one standard kept up for months');
+    const text = dossierUpdatePrompt(standing, new DossierRefs(standing));
+    expect(text).toContain('It is a standing topic: one standard kept up for months');
+    expect(text).toContain('topicKind: the topic is a standing topic now. Keep that unless it was clearly cut as\nthe wrong kind');
     expect(prompt).not.toContain('It is a standing topic');
+    expect(prompt).toContain('topicKind: the topic is a project now.');
   });
 });
 
@@ -198,8 +201,8 @@ describe('topicAssignmentPrompt', () => {
       prs: [pr1],
       viewer,
       topics: [
-        { id: 't1', name: 'CI', summary: 'old summary', kind: 'project', brief: 'Run CI on Depot. Status: active. Driver: @alice.', memberCount: 4, openCount: 2, lastActivityAt: '2026-09-28T10:00:00Z' },
-        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', kind: 'standing', brief: '', memberCount: 1, openCount: 0, lastActivityAt: null },
+        { id: 't1', name: 'CI', summary: 'old summary', kind: 'project', ownerTeam: null, brief: 'Run CI on Depot. Status: active. Driver: @alice.', memberCount: 4, openCount: 2, lastActivityAt: '2026-09-28T10:00:00Z' },
+        { id: 't2', name: 'Billing', summary: 'Billing rewrite.', kind: 'standing', ownerTeam: null, brief: '', memberCount: 1, openCount: 0, lastActivityAt: null },
       ],
       context: emptyContext,
     });
@@ -227,10 +230,16 @@ describe('topicAssignmentPrompt', () => {
   });
 
   it('marks each topic\'s kind, and keeps a quiet standing topic open for its next wave', () => {
-    const topics = [{ id: 't1', name: 'Migration safety', summary: '', kind: 'standing' as const, brief: 'Quiet for now, in the Archive.', memberCount: 5, openCount: 0, lastActivityAt: null }];
+    const topics = [{ id: 't1', name: 'Migration safety', summary: '', kind: 'standing' as const, ownerTeam: 'acme/team-devex', brief: 'Quiet for now, in the Archive.', memberCount: 5, openCount: 0, lastActivityAt: null }];
     const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics, context: emptyContext });
-    expect(prompt).toContain('- id t1: "Migration safety" (standing, 5 PRs, 0 open) - Quiet for now, in the Archive.');
+    expect(prompt).toContain('- id t1: "Migration safety" (standing, owned by acme/team-devex, 5 PRs, 0 open) - Quiet for now, in the Archive.');
     expect(prompt).toContain('A quiet standing topic there takes\n  the next PR of its standard, however long it slept.');
+  });
+
+  it('files routed PRs under the standing topic that keeps their standard, and starts one for a finished project\'s afterlife', () => {
+    const prompt = topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext });
+    expect(prompt).toContain('When it changes code that\n  belongs to a standard a listed standing topic keeps (same owner team, same code), it joins that\n  topic');
+    expect(prompt).toContain('start one named after the standard ("Egress", not "GitHub egress tracing")');
   });
 
   it('lists the rest of the backlog, one fenced line each, without the batch itself', () => {

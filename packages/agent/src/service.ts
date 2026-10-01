@@ -67,6 +67,8 @@ export interface TopicChoice {
   name: string;
   summary: string;
   kind: TopicKind;
+  /** The team that owns the topic's code ("acme/team-devex"), from its dossier; null when unknown. */
+  ownerTeam: string | null;
   /** dossierBrief() of the topic's latest dossier; '' when it has none yet. In the Archive, says so first. */
   brief: string;
   /** PRs in the topic now. Small topics are where fragmentation shows. */
@@ -282,6 +284,8 @@ export interface DossierUpdateResult {
   confirmedFactIds: string[];
   /** The area the answer picked, or null. The engine caps new areas per sync. */
   area: string | null;
+  /** The kind the answer judged the topic to be, or null to keep it. The engine sets it without asking. */
+  topicKind: TopicKind | null;
   inputHash: string;
   model: string;
 }

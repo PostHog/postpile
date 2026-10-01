@@ -62,7 +62,7 @@ describe('RunnerAgentService.assignTopics', () => {
     });
     const prs = [1, 2, 3].map((number) => makePr({ ref: { repo: 'acme/app', number } }));
 
-    const result = await service.assignTopics({ prs, viewer, topics: [{ id: 't1', name: 'CI', summary: '', kind: 'project', brief: '', memberCount: 3, openCount: 0, lastActivityAt: null }], context: emptyContext });
+    const result = await service.assignTopics({ prs, viewer, topics: [{ id: 't1', name: 'CI', summary: '', kind: 'project', ownerTeam: null, brief: '', memberCount: 3, openCount: 0, lastActivityAt: null }], context: emptyContext });
 
     expect(result).toEqual([
       { prKey: 'acme/app#1', kind: 'existing', topicId: 't1', reason: 'CI work' },

@@ -76,7 +76,21 @@ offers it and the Archive drawer drops it. The topic list in the assignment
 prompt says each topic's kind, and a topic in the Archive says "Finished" or
 "Quiet for now"; a quiet standing topic takes the next PR of its standard
 however long it slept. A standing topic's dossier follows the current wave
-and never calls the topic finished (`STANDING_DOSSIER_RULE`). Research
+and never calls the topic finished (`STANDING_DOSSIER_RULE`).
+The kind is the agent's (owner decision): no switch for the user and no
+proposal. A dossier update may correct it (`topicKind` in the answer, applied
+right away) when the topic was clearly cut as the wrong kind. A project whose
+goal is reached stays a project; when people keep extending what it built
+("GitHub egress" turned into "egress", with others adding to it), the next
+PRs go to a standing topic named after the standard, started if needed.
+**Ownership signal**: the topic list shows each topic's owner team (the
+dossier relation's `ownerTeam`), and a PR that reaches the user through a
+team review request is judged by what that team keeps up: when it changes
+code of a standard a standing topic keeps (same owner team, same code), it
+joins that topic, also when it is a step of someone else's project. Routed
+PRs that fit no standing topic are placed as before. On a real database 35
+of 53 one-PR topics were routed reviews, so this is where ownership helps;
+it never cuts topics by team on its own (a team owns many goals). Research
 (PARA, GTD, Linear, Jira, Shape Up) found no third lifecycle worth a kind:
 incidents behave like short projects, chores are single tiles.
 

@@ -269,6 +269,8 @@ export const dossierUpdateOutput = z.object({
   closeFacts: z.array(z.object({ factId: text, reason: text.default('closed by the dossier update') })).default([]),
   confirmedFactIds: z.array(text).default([]),
   area: text.nullable().catch(null).default(null),
+  // Null or anything unknown keeps the topic's kind.
+  topicKind: z.enum(['project', 'standing']).nullable().catch(null).default(null),
 });
 
 /** item is the 0-based index into FactReconcileInput.items. */
