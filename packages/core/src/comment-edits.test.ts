@@ -8,7 +8,7 @@ import { deriveEvents, editMentionOf } from './events.ts';
 import { at, makeComment, makeCommit, makePr, makeThreadFor, makeTimelineItem, viewer } from './fixtures.ts';
 import { headlineClass } from './headline.ts';
 import { isPersonalPing, pingRule } from './pings.ts';
-import { isAskOfViewer, isAutomationFinding, judgedReadCheck, quietReadCheck, touchedReadCheck, type QuietReadInput } from './quiet-reads.ts';
+import { isAskOfViewer, judgedReadCheck, quietReadCheck, touchedReadCheck, type QuietReadInput } from './quiet-reads.ts';
 import { prTier } from './pr-tier.ts';
 import type { Comment, Pr, PrEvent, Viewer } from './types.ts';
 import { prWhoseTurn, unansweredAsk } from './whose-turn.ts';
@@ -55,17 +55,16 @@ describe('deriveEvents: comment edits', () => {
     expect(edits(makePr({ comments: [edited({ author: 'bob', editor: null })] }))[0]?.actor).toBe('bob');
   });
 
-  it('makes a bot updating its own sticky comment quiet automation, never a finding', () => {
+  it('makes a bot updating its own sticky comment quiet automation', () => {
     const pr = makePr({ comments: [edited({ author: 'github-actions[bot]', editor: 'github-actions[bot]', body: '## CI report\nAll green' })] });
     const [event] = edits(pr);
     expect(event).toMatchObject({ actor: 'github-actions[bot]', isBot: true, ruleLoudness: 'quiet', ruleReason: 'bot activity', summary: 'github-actions[bot] updated its comment: ## CI report' });
-    expect(isAutomationFinding(event!, pr)).toBe(false);
   });
 
-  it('does not count a bot editing its inline review comment as a new finding', () => {
+  it('makes a bot editing its inline review comment quiet automation too', () => {
     const inline = edited({ id: 'rc1', kind: 'review_comment', threadId: 't1', path: 'a.ts', author: 'coderabbitai[bot]', editor: 'coderabbitai[bot]', body: 'Resolved in the latest commit' });
     const pr = makePr({ comments: [inline] });
-    expect(isAutomationFinding(edits(pr)[0]!, pr)).toBe(false);
+    expect(edits(pr)[0]).toMatchObject({ isBot: true, ruleLoudness: 'quiet' });
   });
 
   it('makes a bot mentioning the viewer in its edited comment quiet too: automation asks nothing', () => {
@@ -197,10 +196,10 @@ describe('scenario: bot sticky comments edited on your own open PR', () => {
     expect(pingRule(synced(pr).filter((event) => event.seenAt === null), pr, viewer, false).class).toBe('bot');
   });
 
-  it('still keeps a bot inline review comment on your own open PR unread: that is a finding', () => {
+  it('clears a bot inline review comment on your own open PR as bot-only activity (2026-10-01)', () => {
     const finding = makeComment({ id: 'new', kind: 'review_comment', threadId: 't9', path: 'cache.ts', author: 'coderabbitai[bot]', body: 'Potential issue: the key ignores the lockfile', createdAt: at(192) });
     const pr = ownPr([...stickies, finding], at(192));
-    expect(quietReadCheck(check(pr, at(210)))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(quietReadCheck(check(pr, at(210))).kind).toBe('mark');
   });
 
   it('keeps a person editing a comment to mention you unread and loud', () => {

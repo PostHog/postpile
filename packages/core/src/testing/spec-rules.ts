@@ -16,7 +16,7 @@ import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
 import type { WhyCode } from '../why-here.ts';
 import type { YourMove } from '../whose-turn.ts';
-import { answersChanges, editAsks, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS, SPEC_REVIEW_KINDS } from './spec-events.ts';
+import { answersChanges, editAsks, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS } from './spec-events.ts';
 import {
   askedToReReview,
   asksViewer,
@@ -775,15 +775,6 @@ export function expectedNewMove(input: Pick<QuietReadSpecInput, 'pr' | 'events' 
   return then.kind !== 'you' || then.move !== now.move;
 }
 
-/** On the viewer's own open PR, automation that can mean work: a bot's review, or its comment in a review thread (not an edit of one). */
-function isFinding(pr: Pr, event: PrEvent): boolean {
-  if (SPEC_REVIEW_KINDS.includes(event.kind)) {
-    return true;
-  }
-  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
-  return event.kind !== 'comment_edited' && comment !== undefined && comment.threadId !== null;
-}
-
 function othersEvents(input: Pick<QuietReadSpecInput, 'events' | 'viewer'>): PrEvent[] {
   return input.events.filter((event) => !isViewerLogin(input.viewer, event.actor));
 }
@@ -798,14 +789,10 @@ function actorNames(events: PrEvent[]): string[] {
   return [...new Set(events.map((event) => (event.actor === '' ? 'CI' : event.actor)))];
 }
 
-function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
-  return pr.state === 'OPEN' && viewerOwns(pr, viewer);
-}
-
 /**
  * "Handled quietly", bots only (DESIGN): a thread the viewer had read that
  * turned unread only because of automation, on a fresh complete snapshot,
- * no bot finding on their own open PR, no unseen merge without their
+ * no unseen merge without their
  * review, no unseen loud news on the PR, no move of theirs new since the
  * read, and past the grace. Whether the tile
  * is unread never matters: its thread is unread, so it always is. Liveness
@@ -826,9 +813,6 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   const since = othersEvents(input).filter((event) => event.at > readAt);
   if (since.length === 0 || !since.every((event) => isAutomationEvent(pr, viewer, event))) {
     return { kind: 'skip', why: 'human_activity' };
-  }
-  if (isOwnOpenPr(pr, viewer) && since.some((event) => isFinding(pr, event))) {
-    return { kind: 'skip', why: 'own_pr' };
   }
   if (input.events.some(isUnseenMergeWithoutViewer)) {
     return { kind: 'skip', why: 'unseen_merge' };
@@ -855,7 +839,7 @@ const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_request
 /**
  * "You already dealt with it": the viewer reviewed or commented after every
  * unread event, having read every person's event before it (a read between
- * the event and the touch, 2026-09-30) (bots after it are fine, except a bot finding on their own open PR), on a
+ * the event and the touch, 2026-09-30) (bots after it are fine), on a
  * fresh complete snapshot, no unseen merge without their review after the
  * touch, no unseen loud news on the PR, and past the grace.
  */
@@ -882,9 +866,6 @@ export function expectedTouchedRead(input: QuietReadSpecInput): TouchedReadCheck
   const late = unread.filter((event) => event.at > touch.at);
   if (!late.every((event) => isAutomationEvent(pr, viewer, event))) {
     return { kind: 'skip', why: 'activity_after' };
-  }
-  if (late.some((event) => isFinding(pr, event)) && isOwnOpenPr(pr, viewer)) {
-    return { kind: 'skip', why: 'own_pr' };
   }
   if (input.events.some((event) => isUnseenMergeWithoutViewer(event) && event.at > touch.at)) {
     return { kind: 'skip', why: 'unseen_merge' };
@@ -936,8 +917,7 @@ export function lastLooked(thread: NotificationThread, pr: Pr, viewer: Viewer): 
  * else since the viewer last looked is automation or a person's activity
  * the events agent (or the user) left below loud, with no ask among it and
  * no loud news; at least one person, else the bot-only and acted-after
- * rules decide. Plus the safety checks: fresh complete snapshot, no bot
- * finding on the viewer's own open PR, no unseen merge without their
+ * rules decide. Plus the safety checks: fresh complete snapshot, no unseen merge without their
  * review, no move of theirs new since they last looked, past the grace. Liveness too: all of that holds, so it marks.
  */
 export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
@@ -968,10 +948,6 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   }
   if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
     return { kind: 'skip', why: 'not_judged' };
-  }
-  const automation = after.filter((event) => isAutomationEvent(pr, viewer, event));
-  if (automation.some((event) => isFinding(pr, event)) && isOwnOpenPr(pr, viewer)) {
-    return { kind: 'skip', why: 'own_pr' };
   }
   if (input.events.some(isUnseenMergeWithoutViewer)) {
     return { kind: 'skip', why: 'unseen_merge' };

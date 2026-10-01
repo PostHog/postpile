@@ -134,12 +134,12 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ events: [botComment(30), humanComment(33)] }))).toEqual({ kind: 'skip', why: 'human_activity' });
   });
 
-  it('never marks the user own open PR after a bot finding: a bot review or inline comment can mean work', () => {
+  it('marks the user own open PR after a bot review or inline comment too (2026-10-01)', () => {
     const own = { ...pr, author: viewer.login };
-    expect(quietReadCheck(input({ pr: own, events: [humanComment(5), botReview(30), ciResult(31)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(quietReadCheck(input({ pr: own, events: [humanComment(5), botReview(30), ciResult(31)] })).kind).toBe('mark');
     const inline = makeComment({ id: 'rc9', kind: 'review_comment', threadId: 't1', path: 'a.ts', author: 'coderabbitai[bot]', createdAt: at(30) });
     const inlineEvent = makeEvent({ id: 'inline', prKey: pr.key, kind: 'bot_comment', actor: 'coderabbitai[bot]', isBot: true, at: at(30), sourceId: 'rc9' });
-    expect(quietReadCheck(input({ pr: { ...own, comments: [inline] }, events: [humanComment(5), inlineEvent, ciResult(31)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(quietReadCheck(input({ pr: { ...own, comments: [inline] }, events: [humanComment(5), inlineEvent, ciResult(31)] })).kind).toBe('mark');
   });
 
   it('marks the user own open PR when the bots only commented, ran CI or deployed (2026-09-30)', () => {
@@ -243,11 +243,11 @@ describe('touchedReadCheck', () => {
     expect(touchedReadCheck(touched({ events: [humanComment(25), own('merged', 30)] }))).toEqual({ kind: 'skip', why: 'no_touch' });
   });
 
-  it('includes the user own PR, unless a bot finding came after the touch', () => {
+  it('includes the user own PR, a bot review after the touch included', () => {
     const ownPr = { ...pr, author: viewer.login };
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30)] }))).toEqual({ kind: 'mark', reason: 'replied' });
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), ciResult(35)] }))).toEqual({ kind: 'mark', reason: 'replied' });
-    expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), botReview(35)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), botReview(35)] })).kind).toBe('mark');
   });
 
   it('lets bots after the touch pass on the user own PR once it is merged', () => {
@@ -331,10 +331,10 @@ describe('judgedReadCheck', () => {
     expect(judgedReadCheck(judged({ pr: merged, events: [merge] }))).toEqual({ kind: 'skip', why: 'asks_you' });
   });
 
-  it('leaves bots-only threads to the other rules, and a bot finding on your own open PR alone', () => {
+  it('leaves bots-only threads to the other rules, a bot review on your own open PR included', () => {
     expect(judgedReadCheck(judged({ events: [ciResult(31)] }))).toEqual({ kind: 'skip', why: 'no_people' });
     const own = { ...pr, author: viewer.login };
-    expect(judgedReadCheck(judged({ pr: own, events: [teammate(30, { override: judgedQuiet }), botReview(31)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(judgedReadCheck(judged({ pr: own, events: [teammate(30, { override: judgedQuiet }), botReview(31)] }))).toEqual({ kind: 'mark', actors: ['lyra', 'coderabbitai[bot]'] });
     expect(judgedReadCheck(judged({ pr: own }))).toEqual({ kind: 'mark', actors: ['lyra', 'CI'] });
   });
 
@@ -554,10 +554,10 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
     expect(quietReadCheck(input).kind).toBe('mark');
   });
 
-  it('still blocks after a bot review on the own open PR: that can be a finding', () => {
+  it('clears it after a bot review on the own open PR: findings show up as checks and threads', () => {
     const review = makeReview({ id: 'cr', author: 'coderabbitai[bot]', state: 'COMMENTED', submittedAt: day(30, 9) });
     const base = agentPr();
-    expect(judgedReadCheck(caseInput(agentPr({ reviews: [...base.reviews, review] })))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(judgedReadCheck(caseInput(agentPr({ reviews: [...base.reviews, review] }))).kind).toBe('mark');
   });
 
   it('still blocks after a re-review request: the move is new since the read', () => {

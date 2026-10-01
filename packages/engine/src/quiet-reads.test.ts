@@ -83,12 +83,12 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);
   });
 
-  it('leaves the viewer own PR alone after a bot review: that can mean work', async () => {
+  it('marks the viewer own PR read after a bot review too (2026-10-01)', async () => {
     const review = makeReview({ id: 'r-bot', author: 'coderabbitai[bot]', state: 'COMMENTED', submittedAt: at(30) });
-    const h = await synced(alicePr({ author: viewer.login, reviews: [review] }));
+    const pr = alicePr({ author: viewer.login, reviews: [review] });
+    const h = await synced(pr);
 
-    expect(h.writer.calls).toEqual([]);
-    expect(quietRows(h)).toEqual([]);
+    expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);
   });
 
   it('leaves a PR whose snapshot was cut off after the last read: a human reply may be past the caps', async () => {
