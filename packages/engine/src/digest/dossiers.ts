@@ -67,6 +67,16 @@ export function contextHashKey(topicId: string): string {
 }
 
 /**
+ * What the run asked for besides dossiers. withGlances: a topic digest may
+ * write glances. withSets: it may carry the topic's set changes too (needs
+ * the glances, which the sets read).
+ */
+export interface DossierUpdaterOptions {
+  withGlances: boolean;
+  withSets: boolean;
+}
+
+/**
  * REFINE per topic: previous dossier + only the events since the digest
  * cursor -> new dossier version, flags and fact candidates. A topic with an
  * empty delta costs nothing, unless the user's instructions, tailoring or
@@ -74,11 +84,6 @@ export function contextHashKey(topicId: string): string {
  * those. Topics with unread tiles go first so a capped budget is spent where
  * the user looks first.
  */
-/** withSets: the run includes the set job, so a topic digest may carry the topic's set changes. */
-export interface DossierUpdaterOptions {
-  withSets: boolean;
-}
-
 export class DossierUpdater {
   private newAreas = 0;
   /** Per topic, the PRs that ride along with its dossier update (topic digest only), most urgent first. */
@@ -87,7 +92,7 @@ export class DossierUpdater {
 
   constructor(
     private readonly deps: DigestDeps,
-    private readonly options: DossierUpdaterOptions = { withSets: false },
+    private readonly options: DossierUpdaterOptions = { withGlances: true, withSets: false },
   ) {
     this.sets = new SetGrouper(deps);
   }
@@ -303,7 +308,12 @@ export class DossierUpdater {
     this.save(input, result.dossier);
     this.saveGlances(targets, result.glances.glances, board);
     if (sets && result.sets) {
-      this.sets.apply(input.topic, sets, result.sets);
+      // The set part read the risk it had just written in the glances.
+      const risks = { ...sets.risks };
+      for (const glance of result.glances.glances) {
+        risks[glance.prKey] = glance.risk;
+      }
+      this.sets.apply(input.topic, { ...sets, risks }, result.sets);
     }
     return result.dossier;
   }
@@ -344,7 +354,7 @@ export class DossierUpdater {
    */
   private planGlances(board: Board): void {
     const { store, viewer, contexts } = this.deps;
-    if (!this.deps.topicDigest || modelFor('glance_batch') !== modelFor('topic_digest')) {
+    if (!this.deps.topicDigest || !this.options.withGlances || modelFor('glance_batch') !== modelFor('topic_digest')) {
       return;
     }
     for (const target of new GlanceInputs(store, board, viewer, contexts).targets()) {

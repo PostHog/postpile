@@ -108,4 +108,15 @@ describe('topic digest with sets', () => {
 
     expect(h.agent.topicDigestInputs[0]?.sets).toBeNull();
   });
+
+  it('writes no glances and no set part when the run has no glance job', async () => {
+    const h = makeHarness({ topicDigest: true });
+    depot(h, 3);
+    h.runner.answer('set_grouping', {});
+
+    const report = await h.engine.sync({ agentJobs: ['dossiers', 'sets'] });
+
+    expect(calls(report, 'topic_digest')).toBe(0);
+    expect(calls(report, 'dossier_update')).toBe(1);
+  });
 });

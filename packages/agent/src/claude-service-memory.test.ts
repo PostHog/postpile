@@ -630,6 +630,16 @@ describe('RunnerAgentService.topicDigest', () => {
     expect(prompt.lastIndexOf('"glances"')).toBeLessThan(prompt.lastIndexOf('"sets"'));
   });
 
+  it('counts a left-out set part as unusable, not as "no changes"', async () => {
+    const { runner, service } = setup();
+    const sets = { topic: makeTopic(), prs: [pr1, pr3], existingSets: [], risks: {}, context: fullContext };
+    runner.answer('topic_digest', { ...dossierAnswer(), glances: [] });
+
+    const result = await service.topicDigest({ dossier: dossierInput(), glances: glanceInput(), sets });
+
+    expect(result.sets).toBeNull();
+  });
+
   it('fails the whole call when the dossier part is broken', async () => {
     const { runner, service } = setup();
     runner.answer('topic_digest', { glances: [{ prKey: 'acme/app#1', ...glanceEntry }] });

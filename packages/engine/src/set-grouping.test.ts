@@ -164,4 +164,60 @@ describe('lasting sets', () => {
 
     expect(changes(h).slice(0, 2)).toEqual(['ended - (user): fewer than two PRs left', 'left acme/app#2 (user): you said not related']);
   });
+
+  it('keeps the user\'s "not related" when the set ends or merges', async () => {
+    const h = makeHarness();
+    const prs = [1, 2, 3, 4, 5].map((n) => reviewRequestedPr(n));
+    topicWithPrs(h, 'depot', prs);
+    h.runner.answer('set_grouping', {
+      newSets: [
+        { title: 'Cache keys', take: '', members: [member(prs[0]!), member(prs[1]!), member(prs[2]!)] },
+        { title: 'Cache paths', take: '', members: [member(prs[3]!), member(prs[4]!)] },
+      ],
+    });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const created = h.store.sets.listActiveForTopic('depot');
+    const keys = created.find((set) => set.title === 'Cache keys')!;
+    const paths = created.find((set) => set.title === 'Cache paths')!;
+    await h.engine.giveFeedback({ kind: 'not_related', tileId: `set:${keys.id}`, prKey: prs[2]!.key, targetTopicId: null, note: '' });
+
+    // Merged into another set, the correction moves along.
+    h.runner.answer('set_grouping', { merges: [{ setId: keys.id, intoSetId: paths.id, reason: 'one cache rework' }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    expect(h.store.sets.get(paths.id)?.removedKeys).toEqual([prs[2]!.key]);
+
+    // The agent tries to bring #3 back: the correction still holds.
+    h.store.glances.put(glance(prs[2]!.key, 'low - same'));
+    h.runner.answer('set_grouping', { joins: [{ setId: paths.id, prKey: prs[2]!.key, reason: 'cache' }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    expect(h.store.sets.get(paths.id)?.members.map((m) => m.prKey)).not.toContain(prs[2]!.key);
+  });
+
+  it('keeps an ended set with corrections as dissolved, so they still hold', async () => {
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', prs);
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Runner switch', take: '', members: prs.map((pr) => member(pr)) }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;
+    await h.engine.giveFeedback({ kind: 'not_related', tileId: `set:${setId}`, prKey: prs[2]!.key, targetTopicId: null, note: '' });
+
+    h.store.glances.put(glance(prs[1]!.key, 'high - migrations'));
+    h.runner.answer('set_grouping', { leaves: [{ setId, prKey: prs[1]!.key, reason: 'its risk is now high' }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.store.sets.get(setId)?.status).toBe('dissolved');
+    expect(h.store.sets.get(setId)?.removedKeys).toEqual([prs[2]!.key]);
+  });
+
+  it('writes no history line for a rewrite that changes nothing', async () => {
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
+    const { h, setId } = await depotWithSet(prs);
+    h.store.glances.put(glance(prs[0]!.key, 'low - one line'));
+    h.runner.answer('set_grouping', { updates: [{ setId, title: 'Runner switch', take: 'Both switch runners.' }] });
+
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(changes(h).some((line) => line.startsWith('updated'))).toBe(false);
+  });
 });

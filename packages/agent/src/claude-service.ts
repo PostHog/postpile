@@ -273,7 +273,8 @@ export class RunnerAgentService implements AgentService {
     const dossier = { ...mapDossierAnswer(value, input.dossier, refs, this.now()), inputHash: dossierInputHash(input.dossier), model };
     const stamp = { model, createdAt: this.now(), inputHash: (item: GlanceBatchItem) => glanceItemInputHash(input.glances, item) };
     const glances = { ...mapGlanceAnswer({ glances: value.glances }, input.glances, stamp), model };
-    const setAnswer = input.sets ? setGroupingOutput.safeParse(value.sets ?? {}) : null;
+    // A left-out set part is broken too: treating it as "no changes" would mark the regroup as done.
+    const setAnswer = input.sets && value.sets !== undefined ? setGroupingOutput.safeParse(value.sets) : null;
     const sets = input.sets && setAnswer?.success ? mapSetAnswer(setAnswer.data, input.sets) : null;
     return { dossier, glances, sets };
   }

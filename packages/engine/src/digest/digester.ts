@@ -43,7 +43,7 @@ export class Digester {
 
   async run(jobs: AgentJob[]): Promise<void> {
     await this.job(jobs, 'topics', 'topics', () => new TopicAssigner(this.deps).run());
-    const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps, { withSets: jobs.includes('sets') }).start() : NO_DOSSIERS;
+    const dossiers = jobs.includes('dossiers') ? new DossierUpdater(this.deps, { withGlances: jobs.includes('glances'), withSets: jobs.includes('sets') && jobs.includes('glances') }).start() : NO_DOSSIERS;
     const dossiersDone = this.job(jobs, 'dossiers', 'dossiers', async () => {
       await dossiers.done;
     });
@@ -54,8 +54,9 @@ export class Digester {
     const roles = dossiers.done.then(() => refreshDriversAndRoles(this.deps));
     const events = this.job(jobs, 'events', 'events', () => new EventBatchClassifier(this.deps).run());
     const glances = this.job(jobs, 'glances', 'glances', () => new GlanceBatchWriter(this.deps).run(dossiers));
-    // After the glances: a set keeps PRs of similar risk, and the risk comes from the glance.
-    const sets = glances.then(() => this.job(jobs, 'sets', 'sets', () => new SetGrouper(this.deps).run()));
+    // After the glances: a set keeps PRs of similar risk, and the risk comes from the glance. After the
+    // dossiers too: a topic digest may carry the topic's set changes.
+    const sets = Promise.all([glances, dossiersDone]).then(() => this.job(jobs, 'sets', 'sets', () => new SetGrouper(this.deps).run()));
     await Promise.all([dossiersDone, facts, roles, sets, events, glances]);
   }
 }

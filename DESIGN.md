@@ -3300,7 +3300,15 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   (detail full) show them. The app shows each member's reason as before; no
   new UI for now.
 - **A set ends** when fewer than two units are left (a set of one PR or one
-  stack is just that tile); its history stays.
+  stack is just that tile); its history stays. One that holds the user's
+  "not related" corrections is kept as dissolved, so they keep holding, and
+  a merge carries the merged-away set's corrections into the set it joins.
+- **Answers land on the sets as they are now**: a set the user dissolved
+  while the call ran stays dissolved, and a PR placed meanwhile joins
+  nothing. What counts as seen afterwards is what the agent was shown plus
+  the lines its own changes made; feedback or a risk change that arrived
+  during the call still triggers the next regroup. A PR that moves topic
+  leaves its set with its whole stack.
 - Not part of this: batch approve (PR #48, agent-assisted actions), a
   rolled-up verdict on the tile (the PR rows show each), shorter "same as
   #N" glances for same-pattern sets.
@@ -3343,8 +3351,9 @@ GLANCE_BATCH_SIZE:
   answers `sets` after the glances, told that the risk it just wrote counts.
   The engine applies them after storing the glances, so the regroup's
   triggers already hold the new risk and the set job skips the topic. A
-  broken set part is dropped alone (the set job then asks on its own); it
-  never costs the dossier.
+  broken or left-out set part is dropped alone (the set job then asks on its
+  own); it never costs the dossier. Only when the run has the glance job:
+  without it the digest stays a plain dossier update.
 - Events stay their own calls for now (they drive pings, and a dossier-sized
   call would delay them).
 - Budget: one `topic_digest` take replaces the dossier take; timeout 7

@@ -164,6 +164,21 @@ export class PrSetRepo {
     });
   }
 
+  /**
+   * Records "not related" for a PR that was never a member here: a merge
+   * carries the merged-away set's corrections over, so they keep holding.
+   */
+  addRemoved(setId: string, prKey: PrKey, at: string): void {
+    run(
+      this.db,
+      `INSERT INTO pr_set_member (set_id, pr_key, reason, position, removed_at) VALUES (?, ?, '', -1, ?)
+       ON CONFLICT (set_id, pr_key) DO UPDATE SET removed_at = excluded.removed_at`,
+      setId,
+      prKey,
+      at,
+    );
+  }
+
   /** Hard delete, for an agent set the agent itself dropped on regroup. User-dissolved sets use dissolve. */
   delete(id: string): void {
     run(this.db, 'DELETE FROM pr_set WHERE id = ?', id);

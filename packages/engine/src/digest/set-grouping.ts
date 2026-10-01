@@ -80,6 +80,11 @@ function hasNewTrigger(seen: string[], now: string[]): boolean {
   return now.some((trigger) => !before.has(trigger));
 }
 
+/** Keys of every PR in one of the sets. */
+function placedKeys(sets: Map<string, PrSet>): Set<PrKey> {
+  return new Set([...sets.values()].flatMap((set) => set.members.map((member) => member.prKey)));
+}
+
 /**
  * Keeps a topic's sets: lasting tiles of PRs that one judgement covers
  * (DESIGN.md "Tiles hold still"). A regroup runs only when something new
@@ -94,13 +99,43 @@ export class SetGrouper {
     this.deps.store.sets.recordChange({ setId, topicId, prKey, kind, reason, by, at: this.deps.now().toISOString() });
   }
 
+  private stacks(): Map<PrKey, Stack> {
+    return stackByPrKey(buildStacks(this.deps.store.prs.listAll()));
+  }
+
   /**
-   * A member whose PR now sits in another topic leaves the set: the user or
-   * topic sorting moved it. Stack layers without a topic of their own stay.
+   * Saves a changed set, or ends it when fewer than two units are left: a
+   * set of one PR or one stack is just that tile. A set holding the user's
+   * "not related" corrections is kept as dissolved, so they keep holding.
+   */
+  private saveOrEnd(set: PrSet, by: PrSetChangeBy, stackOf: Map<PrKey, Stack>): void {
+    const { store } = this.deps;
+    const at = this.deps.now().toISOString();
+    if (unitsOf(set.members, stackOf).length >= 2) {
+      store.sets.save({ ...set, updatedAt: at });
+      return;
+    }
+    if (set.removedKeys.length > 0) {
+      store.sets.save({ ...set, status: 'dissolved', updatedAt: at });
+    } else {
+      store.sets.delete(set.id);
+    }
+    this.record(set.topicId, set.id, null, 'ended', 'fewer than two PRs left', by);
+  }
+
+  /**
+   * A member whose PR now sits in another topic leaves the set, with its
+   * whole stack: the user or topic sorting moved it. Stack layers without a
+   * topic of their own stay when their stack does.
    */
   private dropMovedMembers(topic: Topic): void {
     const { store } = this.deps;
-    for (const set of store.sets.listActiveForTopic(topic.id)) {
+    const sets = store.sets.listActiveForTopic(topic.id);
+    if (sets.length === 0) {
+      return;
+    }
+    const stackOf = this.stacks();
+    for (const set of sets) {
       const moved = set.members.filter((member) => {
         const topicId = store.memberships.get(member.prKey)?.topicId;
         return topicId !== undefined && topicId !== topic.id;
@@ -108,10 +143,10 @@ export class SetGrouper {
       if (moved.length === 0) {
         continue;
       }
-      const left = new Set(moved.map((member) => member.prKey));
+      const leaving = new Set(moved.flatMap((member) => stackOf.get(member.prKey)?.prKeys ?? [member.prKey]));
       store.transaction(() => {
         moved.forEach((member) => this.record(topic.id, set.id, member.prKey, 'left', 'moved to another topic', 'rules'));
-        this.saveOrEnd({ ...set, members: set.members.filter((member) => !left.has(member.prKey)) }, 'rules');
+        this.saveOrEnd({ ...set, members: set.members.filter((member) => !leaving.has(member.prKey)) }, 'rules', stackOf);
       });
     }
   }
@@ -145,21 +180,21 @@ export class SetGrouper {
   }
 
   /**
-   * Saves a changed set, or ends it when fewer than two units are left: a
-   * set of one PR or one stack is just that tile.
+   * What this regroup counts as seen: everything the agent was shown, plus
+   * the open-PR and member lines its own changes produced (read with the
+   * risk it was shown), so it does not trigger itself. Feedback, corrections
+   * or risk changes that arrived during the call stay new.
    */
-  private saveOrEnd(set: PrSet, by: PrSetChangeBy): void {
-    const { store } = this.deps;
-    const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
-    if (unitsOf(set.members, stackOf).length < 2) {
-      store.sets.delete(set.id);
-      this.record(set.topicId, set.id, null, 'ended', 'fewer than two PRs left', by);
-      return;
-    }
-    store.sets.save({ ...set, updatedAt: this.deps.now().toISOString() });
+  private seenTriggers(topic: Topic, input: SetGroupingInput): string[] {
+    const shown = new Set(input.prs.map((pr) => pr.key));
+    const now = this.input(topic);
+    const after = { ...now, prs: now.prs.filter((pr) => shown.has(pr.key)), risks: input.risks, context: input.context };
+    const made = setGroupingTriggers(after).filter((trigger) => trigger.startsWith('open:') || trigger.startsWith('member:'));
+    return [...new Set([...setGroupingTriggers(input), ...made])];
   }
 
-  private applyMerges(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, rejected: Set<string>, ended: Set<string>): void {
+  private applyMerges(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, rejected: Set<string>): void {
+    const { store } = this.deps;
     for (const merge of changes.merged) {
       const from = sets.get(merge.setId);
       const into = sets.get(merge.intoSetId);
@@ -168,17 +203,31 @@ export class SetGrouper {
       }
       const moving = from.members.filter((member) => !into.members.some((m) => m.prKey === member.prKey));
       into.members = [...into.members, ...moving];
+      // The merged-away set's "not related" corrections now hold for the set it went into.
+      from.removedKeys.forEach((key) => store.sets.addRemoved(into.id, key, this.deps.now().toISOString()));
+      into.removedKeys = [...new Set([...into.removedKeys, ...from.removedKeys])];
       this.record(topicId, from.id, null, 'merged', `into "${into.title}": ${merge.reason}`);
       moving.forEach((member) => this.record(topicId, into.id, member.prKey, 'joined', `from "${from.title}": ${merge.reason}`));
+      store.sets.delete(from.id);
       sets.delete(from.id);
-      ended.add(from.id);
+    }
+  }
+
+  private applyUpdates(topicId: string, sets: Map<string, PrSet>, changes: SetChanges): void {
+    for (const update of changes.updated) {
+      const set = sets.get(update.setId);
+      if (set && (set.title !== update.title || set.take !== update.take)) {
+        set.title = update.title;
+        set.take = update.take;
+        this.record(topicId, set.id, null, 'updated', `now "${update.title}": ${update.take}`);
+      }
     }
   }
 
   private applyLeaves(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, stackOf: Map<PrKey, Stack>): void {
     for (const leave of changes.left) {
       const set = sets.get(leave.setId);
-      if (!set) {
+      if (!set || !set.members.some((member) => member.prKey === leave.prKey)) {
         continue;
       }
       // A stack leaves a set whole, like it joined it.
@@ -188,71 +237,69 @@ export class SetGrouper {
     }
   }
 
+  /** A PR (or its stack) that is in a set by now, the user's doing during the call included, joins nothing. */
   private applyJoins(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, stackOf: Map<PrKey, Stack>, rejected: Set<string>): void {
     for (const join of changes.joined) {
       const set = sets.get(join.setId);
       const unit = unitsOf([join.member], stackOf)[0];
-      if (!set || !unit || rejectedTogether(unit, set.members, rejected)) {
+      const taken = placedKeys(sets);
+      if (!set || !unit || unit.some((member) => taken.has(member.prKey)) || rejectedTogether(unit, set.members, rejected)) {
         continue;
       }
-      set.members = [...set.members, ...unit.filter((member) => !set.members.some((m) => m.prKey === member.prKey))];
+      set.members = [...set.members, ...unit];
       this.record(topicId, set.id, join.member.prKey, 'joined', join.member.reason);
     }
   }
 
-  private applyCreated(topic: Topic, input: SetGroupingInput, changes: SetChanges, stackOf: Map<PrKey, Stack>, rejected: Set<string>): void {
+  private applyCreated(topic: Topic, current: PrSet[], sets: Map<string, PrSet>, changes: SetChanges, stackOf: Map<PrKey, Stack>, rejected: Set<string>): void {
     const { store } = this.deps;
     const at = this.deps.now().toISOString();
-    const dissolved = new Set(input.existingSets.filter((s) => s.status === 'dissolved').map((s) => memberSignature(s.members.map((m) => m.prKey))));
+    const dissolved = new Set(current.filter((s) => s.status === 'dissolved').map((s) => memberSignature(s.members.map((m) => m.prKey))));
     for (const proposal of changes.created) {
+      const taken = placedKeys(sets);
       // The prompt says to respect the user's corrections; enforce it.
-      const units = withoutRejected(unitsOf(proposal.members, stackOf), rejected);
+      const free = unitsOf(proposal.members, stackOf).filter((unit) => !unit.some((member) => taken.has(member.prKey)));
+      const units = withoutRejected(free, rejected);
       const members = units.flat();
       // Two units at least: a set of one stack and nothing else is just that stack.
       if (units.length < 2 || dissolved.has(memberSignature(members.map((m) => m.prKey)))) {
         continue;
       }
-      const id = newSetId();
-      store.sets.save({ id, topicId: topic.id, title: proposal.title, take: proposal.take, members, removedKeys: [], status: 'active', inputHash: '', createdAt: at, updatedAt: at });
-      this.record(topic.id, id, null, 'created', proposal.take || proposal.title);
-      members.forEach((member) => this.record(topic.id, id, member.prKey, 'joined', member.reason));
+      const set: PrSet = { id: newSetId(), topicId: topic.id, title: proposal.title, take: proposal.take, members, removedKeys: [], status: 'active', inputHash: '', createdAt: at, updatedAt: at };
+      store.sets.save(set);
+      sets.set(set.id, set);
+      this.record(topic.id, set.id, null, 'created', proposal.take || proposal.title);
+      members.forEach((member) => this.record(topic.id, set.id, member.prKey, 'joined', member.reason));
     }
   }
 
   /**
-   * Applies the agent's changes and remembers what this regroup saw. Order:
-   * rewrites, merges, leaves, joins, then new sets; a set left with fewer
-   * than two units ends. A merge, join or new set the user's "not related"
-   * rules out is skipped.
+   * Applies the agent's changes to the sets as they are now, not as the
+   * agent saw them: a set the user dissolved during the call stays
+   * dissolved. Order: merges, rewrites, leaves, joins, then new sets; a set
+   * left with fewer than two units ends. A merge, join or new set the user's
+   * "not related" rules out is skipped. Then remembers what the regroup saw.
    */
   apply(topic: Topic, input: SetGroupingInput, changes: SetChanges): void {
     const { store } = this.deps;
-    const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
-    const rejected = rejectedPairs(input.existingSets);
-    const sets = new Map(activeSets(input).map((set) => [set.id, { ...set, members: [...set.members] }]));
-    const before = new Map([...sets].map(([id, set]) => [id, JSON.stringify([set.title, set.take, set.members])]));
-    const ended = new Set<string>();
-
+    const stackOf = this.stacks();
     store.transaction(() => {
-      for (const update of changes.updated) {
-        const set = sets.get(update.setId);
-        if (set) {
-          set.title = update.title;
-          set.take = update.take;
-          this.record(topic.id, set.id, null, 'updated', `now "${update.title}": ${update.take}`);
-        }
-      }
-      this.applyMerges(topic.id, sets, changes, rejected, ended);
+      const current = store.sets.listForTopic(topic.id);
+      const rejected = rejectedPairs(current);
+      const active = current.filter((set) => set.status === 'active');
+      const sets = new Map(active.map((set) => [set.id, { ...set, members: [...set.members], removedKeys: [...set.removedKeys] }]));
+      const before = new Map(active.map((set) => [set.id, JSON.stringify([set.title, set.take, set.members])]));
+      this.applyMerges(topic.id, sets, changes, rejected);
+      this.applyUpdates(topic.id, sets, changes);
       this.applyLeaves(topic.id, sets, changes, stackOf);
       this.applyJoins(topic.id, sets, changes, stackOf, rejected);
-      ended.forEach((id) => store.sets.delete(id));
       for (const set of sets.values()) {
-        if (before.get(set.id) !== JSON.stringify([set.title, set.take, set.members])) {
-          this.saveOrEnd(set, 'agent');
+        if (before.has(set.id) && before.get(set.id) !== JSON.stringify([set.title, set.take, set.members])) {
+          this.saveOrEnd(set, 'agent', stackOf);
         }
       }
-      this.applyCreated(topic, input, changes, stackOf, rejected);
-      store.meta.set(setTriggersKey(topic.id), JSON.stringify(setGroupingTriggers(this.input(topic))));
+      this.applyCreated(topic, current, sets, changes, stackOf, rejected);
+      store.meta.set(setTriggersKey(topic.id), JSON.stringify(this.seenTriggers(topic, input)));
     });
   }
 
