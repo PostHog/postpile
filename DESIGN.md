@@ -3403,9 +3403,12 @@ for the user to work through, and never in later syncs.
   lose their topic, a stack whole; the assignment right after places them
   under the current steering. What the tidy did is kept in
   `meta.topic_tidy_result`.
-- A store with fewer than two active topics (a fresh install) is marked done
-  without a call. A failed call is an error line and the next full sync tries
-  again.
+- A store without active topics (a fresh install) is marked done without a
+  call; a single topic still runs, it may be a catch-all to split. A failed
+  call is an error line and the next full sync tries again.
+- User placements ("Wrong topic") are never undone: a split skips a PR the
+  user placed, with its whole stack, and a merge never folds away a topic
+  that holds one.
 
 ## You already dealt with it
 

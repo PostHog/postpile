@@ -76,14 +76,38 @@ describe('topic tidy after an upgrade', () => {
     expect(h.store.meta.get(TOPIC_GRAIN_KEY)).toBeNull();
   });
 
-  it('marks a store with fewer than two topics done without a call', async () => {
+  it('marks a store without topics done without a call', async () => {
     const h = makeHarness({ topicTidyDue: true });
-    topicWithPrs(h, 'only', [reviewRequestedPr(1)]);
 
     const report = await h.engine.sync({ agentJobs: ['topics'] });
 
     expect(report.agentCallStats.byKind.topic_tidy).toBeUndefined();
     expect(h.store.meta.get(TOPIC_GRAIN_KEY)).toBe(String(TOPIC_GRAIN_VERSION));
+  });
+
+  it('tidies a store whose only topic is a catch-all', async () => {
+    const h = makeHarness({ topicTidyDue: true });
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
+    placedByAgent(h, 'everything', prs);
+    h.runner.answer('topic_tidy', { splits: [{ topicId: 'everything', prKeys: [prs[1]!.key], reason: 'unrelated' }] });
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: prs[1]!.key, kind: 'new', name: 'Billing rewrite', goal: '', reason: 'billing' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(prs[1]!.key)?.topicId).not.toBe('everything');
+  });
+
+  it('never folds away a topic that holds a PR the user placed', async () => {
+    const { h, prs } = tidyHarness();
+    h.store.memberships.assign({ prKey: prs[1]!.key, topicId: 'review-app-packaging', assignedBy: 'user', reason: 'mine', createdAt: at(1) });
+    h.runner.answer('topic_tidy', {
+      merges: [{ fromTopicIds: ['review-app-packaging'], intoTopicId: 'review-app-polling', name: null, reason: 'one app' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(prs[1]!.key)).toMatchObject({ topicId: 'review-app-packaging', assignedBy: 'user' });
+    expect(h.store.topics.get('review-app-packaging')?.status).toBe('active');
   });
 
   it('leaves a PR the user placed where they put it', async () => {

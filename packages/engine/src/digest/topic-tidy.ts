@@ -81,13 +81,23 @@ export class TopicTidy {
     this.deps.store.proposals.add(proposal);
   }
 
+  /**
+   * Folds topics into the one that names their project. A topic holding a PR
+   * the user placed ("Wrong topic") is never folded away: the tidy never
+   * sees who placed what, and folding would move and archive their call.
+   */
   private applyMerges(result: TopicTidyResult, at: string): void {
     const { store } = this.deps;
+    const holdsUserPlacement = (topicId: string): boolean => store.memberships.listForTopic(topicId).some((m) => m.assignedBy === 'user');
     for (const merge of result.merges) {
+      const folding = merge.fromTopicIds.filter((from) => !holdsUserPlacement(from));
+      if (folding.length === 0) {
+        continue;
+      }
       if (merge.name) {
         store.topics.rename(merge.intoTopicId, cleanTopicName(merge.name), at);
       }
-      for (const from of merge.fromTopicIds) {
+      for (const from of folding) {
         // A new created_at marks them as joined, so the target's next dossier update introduces them.
         for (const membership of store.memberships.listForTopic(from)) {
           store.memberships.assign({ ...membership, topicId: merge.intoTopicId, assignedBy: 'agent', reason: merge.reason, createdAt: at });
@@ -126,8 +136,8 @@ export class TopicTidy {
       return;
     }
     const topics = this.topics();
-    // Nothing to tidy on a fresh install: the topics are cut the new way from the start.
-    if (topics.length < 2) {
+    // Nothing to tidy on a fresh install. One topic may still be a catch-all to split.
+    if (topics.length === 0) {
       this.markDone(null);
       return;
     }
