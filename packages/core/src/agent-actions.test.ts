@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { agentPrFacts, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
-import { at, makePr, singleTile, viewer } from './fixtures.ts';
+import { at, makePr, makeReview, singleTile, viewer } from './fixtures.ts';
 import { buildPrSummary, buildTileView, type PrSummaryInput } from './tile-view.ts';
 import type { Glance, Pr, PrEvent, PrKey, TileState, UserPrState, Verdict } from './types.ts';
 import type { TileView } from './views.ts';
@@ -88,6 +88,16 @@ describe('tile Approve', () => {
   it('is gone without an approvable PR (your own PR)', () => {
     const own = makePr({ number: 1, author: viewer.login });
     expect(tileView({ pr: own, verdict: 'LOOKS_SAFE', risk: 'low' }).agent.approve).toBeNull();
+  });
+
+  // Owner, 2026-09-30: an agent Approve on a PR someone already approved is redundant noise.
+  it('is gone when someone else approved the PR on GitHub, while the pane keeps its Approve', () => {
+    const approved = { ...reviewPr(1), reviewDecision: 'APPROVED' as const, reviews: [makeReview({ author: 'rowan', state: 'APPROVED' })] };
+    const view = tileView({ pr: approved, verdict: 'LOOKS_SAFE', risk: 'low' });
+    expect(view.agent.approve).toBeNull();
+    expect(view.offers.pane[approved.key]?.lead).toBe('approve');
+    const byDecision = { ...reviewPr(2), reviewDecision: 'APPROVED' as const };
+    expect(tileView({ pr: byDecision, verdict: 'LOOKS_SAFE', risk: 'low' }).agent.approve).toBeNull();
   });
 });
 

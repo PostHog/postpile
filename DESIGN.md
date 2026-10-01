@@ -3175,7 +3175,11 @@ Owner decisions (2026-09-30):
   unreadable risk word counts as high.
 - **Approvable PR.** Exactly today's Approve rule (`paneOffers`, primary
   action `approve`): someone else's open non-draft PR, tracked (not a
-  pulled-in layer), not approved at its head, not dealt with.
+  pulled-in layer), not approved at its head, not dealt with, and nobody
+  has approved it yet (a standing approval on GitHub, or the review
+  decision says approved; owner, 2026-09-30: an agent Approve on an
+  approved PR is redundant noise). Such a PR is neither covered nor left
+  out; the pane's own Approve stays.
 - **Greyed out or gone.** Something to act on but no agent backing: the
   button stays, disabled, with the reason in its pill. Nothing to act on at
   all: no button.

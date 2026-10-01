@@ -4,8 +4,9 @@
 // `TileView.agent` and `TopicDetail.agent`; the renderer only displays them.
 //
 // The rules reuse what exists: Approve's own rule (`paneOffers`, lead
-// `approve`), the glance's stale flag, the "New moves only" asks
+// `approve`), who approved (`standingApprovals`), the glance's stale flag, the "New moves only" asks
 // (`isNewYourMove`), the snoozed tile state and provenance.
+import { standingApprovals } from './approvals.ts';
 import { isTracked } from './provenance.ts';
 import { isNewYourMove } from './quiet-reads.ts';
 import type { IsoTime, Pr, PrEvent, PrKey, Tile, TileState, UserPrState, Verdict, Viewer } from './types.ts';
@@ -47,6 +48,8 @@ export interface AgentPrFacts {
   headOid: string;
   /** Its news asks something of you: a move of yours that is new since your last read ("New moves only", `isNewYourMove`). */
   askForYou: boolean;
+  /** Someone approved it on GitHub already: a standing approval, or the review decision says approved. An agent Approve there is noise. */
+  approvedOnGitHub: boolean;
 }
 
 /** A PR an agent Approve covers, with what the confirm list shows and what the approve call needs. */
@@ -177,6 +180,12 @@ function asksForYou(input: AgentPrFactsInput): boolean {
   return isNewYourMove({ pr, events, userState, viewer, notYours }, input.lastReadAt);
 }
 
+/** Anyone's approval stands on GitHub (a person's or a bot's, any commit), or the review decision says approved. */
+function approvedByAnyone(pr: Pr): boolean {
+  const approvals = standingApprovals(pr);
+  return pr.reviewDecision === 'APPROVED' || approvals.people.length > 0 || approvals.agents.length > 0;
+}
+
 /** One PR's agent facts, from the same inputs as its row (`PrSummaryInput` fits). */
 export function agentPrFacts(input: AgentPrFactsInput): AgentPrFacts {
   const glance = input.glance;
@@ -188,6 +197,7 @@ export function agentPrFacts(input: AgentPrFactsInput): AgentPrFacts {
     risk: glance ? riskLevelOf(glance.risk) : null,
     headOid: input.pr.headOid,
     askForYou: asksForYou(input),
+    approvedOnGitHub: approvedByAnyone(input.pr),
   };
 }
 
@@ -238,9 +248,13 @@ const TOPIC_MARK_READ_ORDER: MarkReadBlock[] = ['rechecking', 'asks_for_you', 'l
 /** What the agent offers read of the tile view: the rows, Approve's own rule (`offers.pane`), the state and the unread PRs. */
 export type AgentOfferView = Pick<TileView, 'prs' | 'offers' | 'state' | 'unreadPrKeys'>;
 
-/** Approvable: exactly today's Approve rule (the pane leads with `approve`), and tracked, not a pulled-in layer. */
-function approvablePrs(view: AgentOfferView): AgentOfferView['prs'] {
-  return view.prs.filter((pr) => view.offers.pane[pr.key]?.lead === 'approve' && isTracked(pr.provenance));
+/**
+ * Approvable: exactly today's Approve rule (the pane leads with `approve`),
+ * tracked (not a pulled-in layer), and nobody approved it on GitHub yet
+ * (owner, 2026-09-30: an agent Approve there is redundant noise).
+ */
+function approvablePrs(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): AgentOfferView['prs'] {
+  return view.prs.filter((pr) => view.offers.pane[pr.key]?.lead === 'approve' && isTracked(pr.provenance) && facts.get(pr.key)?.approvedOnGitHub !== true);
 }
 
 /** The covered entry of an agent-safe PR (`approveBlock` says null), else null. */
@@ -256,7 +270,7 @@ function coveredPr(pr: AgentOfferView['prs'][number], fact: AgentPrFacts): Agent
 function splitApprovable(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): { covered: AgentApprovePr[]; leftOut: LeftOutPr[] } {
   const covered: AgentApprovePr[] = [];
   const leftOut: LeftOutPr[] = [];
-  for (const pr of approvablePrs(view)) {
+  for (const pr of approvablePrs(view, facts)) {
     const fact = facts.get(pr.key);
     const safe = fact ? coveredPr(pr, fact) : null;
     if (safe) {

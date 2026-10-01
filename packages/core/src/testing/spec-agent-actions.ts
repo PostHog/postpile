@@ -7,7 +7,7 @@
 // ask-for-you come from the spec oracles. Type imports only from the rule
 // modules.
 import type { AgentBlock, AgentOfferState, BackedRisk, MarkReadBlock, RiskLevel } from '../agent-actions.ts';
-import type { PrKey, Verdict } from '../types.ts';
+import type { Pr, PrKey, Review, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
 import { eventsOf, expectedUnreadRows, isTrackedHere, prOf } from './invariant.ts';
@@ -65,10 +65,23 @@ function turnInput(board: PropertyBoard, key: PrKey): TurnInput {
   return { pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) };
 }
 
+/** Someone approved on GitHub: GitHub's decision says approved, or a reviewer's newest approve, changes or dismissed review is an approval. */
+export function specApprovedOnGitHub(pr: Pr): boolean {
+  const newestByReviewer = new Map<string, Review>();
+  for (const review of pr.reviews.filter((candidate) => ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(candidate.state))) {
+    const seen = newestByReviewer.get(review.author);
+    if (!seen || review.submittedAt >= seen.submittedAt) {
+      newestByReviewer.set(review.author, review);
+    }
+  }
+  return pr.reviewDecision === 'APPROVED' || [...newestByReviewer.values()].some((review) => review.state === 'APPROVED');
+}
+
 /**
  * Approvable: today's Approve rule, where the pane leads with Approve.
  * Someone else's open, non-draft PR the viewer has not approved, on a tile
- * that is not done and not done itself, and tracked (not a pulled-in layer).
+ * that is not done and not done itself, tracked (not a pulled-in layer),
+ * and nobody approved it on GitHub yet (owner, 2026-09-30).
  */
 export function specApprovable(board: PropertyBoard, view: TileView, row: PrSummary): boolean {
   if (!isTrackedHere(row.provenance) || view.state.kind === 'done') {
@@ -76,7 +89,7 @@ export function specApprovable(board: PropertyBoard, view: TileView, row: PrSumm
   }
   const input = turnInput(board, row.key);
   const { pr, userState } = input;
-  if (pr.state !== 'OPEN' || pr.isDraft || viewerOwns(pr, board.viewer) || viewerApproved(pr, board.viewer, userState)) {
+  if (pr.state !== 'OPEN' || pr.isDraft || viewerOwns(pr, board.viewer) || viewerApproved(pr, board.viewer, userState) || specApprovedOnGitHub(pr)) {
     return false;
   }
   return !expectedDone({ ...input, lastReadAt: board.threads.get(row.key)?.lastReadAt ?? null });
