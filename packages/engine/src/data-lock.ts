@@ -22,11 +22,12 @@ export interface LockInfo {
 const UNREADABLE_RETRIES = 5;
 const UNREADABLE_RETRY_MS = 20;
 /**
- * ps reports start times to the second, and locks written before 0.13.2 took the
- * start from process.uptime(), which trails ps by seconds in Electron. A pid gets
- * reused far later than that, so a few seconds of slack only guards against reuse.
+ * ps reports start times to the second (rounded down). Only a holder that started
+ * this much later than the lock says is another process on a reused pid; a lock
+ * start after the ps start is the same process (locks before 0.13.2 took it from
+ * process.uptime(), which trails the real start by seconds in Electron).
  */
-const START_TIME_SLACK_MS = 5000;
+const START_TIME_SLACK_MS = 2000;
 /** A takeover folder this old was left by a process that died while taking over. */
 export const TAKEOVER_ABANDONED_MS = 30_000;
 /** How long to wait before trying again while another process takes the lock over. */
@@ -111,7 +112,7 @@ function holderAlive(holder: LockInfo): boolean {
     return true;
   }
   const started = processStartTime(holder.pid);
-  return started === null || Math.abs(started - Date.parse(holder.processStartedAt)) <= START_TIME_SLACK_MS;
+  return started === null || started - Date.parse(holder.processStartedAt) <= START_TIME_SLACK_MS;
 }
 
 /** Lock kinds of the desktop app: the only holder that runs the live poll and answers agent requests. */

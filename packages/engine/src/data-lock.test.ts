@@ -79,6 +79,15 @@ describe('DataDirLock', () => {
     expect(() => DataDirLock.acquire(db, 'server')).toThrow(DataDirLockedError);
   });
 
+  it('still sees the holder when its lock start trails ps by seconds (an uptime-written lock)', () => {
+    const db = tempDb();
+    const started = processStartTime(process.ppid);
+    expect(started).not.toBeNull();
+    const holder = { pid: process.ppid, kind: 'packaged', startedAt: 'x', databaseFile: db, processStartedAt: new Date(started! + 9000).toISOString() };
+    writeFileSync(join(db, '..', LOCK_FILE_NAME), JSON.stringify(holder));
+    expect(runningApp(db)?.pid).toBe(process.ppid);
+  });
+
   it('takes over a lock whose pid now belongs to another process', () => {
     const db = tempDb();
     // The pid is alive (the test runner), but it started long after this lock's process.
