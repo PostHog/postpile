@@ -1,4 +1,4 @@
-import { prReadScope, setIdFromTileId, tileReadScope, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@postpile/core';
+import { buildStacks, prReadScope, setIdFromTileId, stackByPrKey, tileReadScope, type ActionResult, type FeedbackInput, type PrKey, type Tile } from '@postpile/core';
 import type { NewFeedback, Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { prKeyOfEvent } from '../ids.ts';
@@ -6,6 +6,7 @@ import type { ReadMarker } from './read-marker.ts';
 import { failed, ok, readMessage } from './results.ts';
 import type { PendingBatch } from '../mark-read-queue.ts';
 import { changeTopicStatus } from '../topic-status.ts';
+import { setUnitCount } from '../digest/set-grouping.ts';
 
 /**
  * User corrections. Each one is logged (the newest go back into prompts) and
@@ -93,6 +94,11 @@ export class FeedbackActions {
         const at = this.now().toISOString();
         for (const layer of board.stackKeysOf(key)) {
           this.store.sets.removeMember(setId, layer, at);
+        }
+        // Ends by units, like an agent change: one stack and nothing else is just that stack.
+        const left = this.store.sets.get(setId);
+        if (left?.status === 'active' && setUnitCount(left.members, stackByPrKey(buildStacks(this.store.prs.listAll()))) < 2) {
+          this.store.sets.dissolve(setId, at);
         }
         const change = { setId, topicId: tile.topicId, by: 'user' as const, at };
         this.store.sets.recordChange({ ...change, prKey: key, kind: 'left', reason: input.note.trim() || 'you said not related' });

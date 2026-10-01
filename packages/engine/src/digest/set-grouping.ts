@@ -2,6 +2,7 @@ import { activeSets, setGroupingTriggers, unplacedKeys, type SetChanges, type Se
 import {
   buildStacks,
   stackByPrKey,
+  stackTopicId,
   type PrKey,
   type PrSet,
   type PrSetChangeBy,
@@ -66,6 +67,11 @@ function unitsOf(members: PrSetMember[], stackOf: Map<PrKey, Stack>): PrSetMembe
   return units;
 }
 
+/** How many units (lone PRs and whole stacks) a set holds; below two it is just one tile. */
+export function setUnitCount(members: PrSetMember[], stackOf: Map<PrKey, Stack>): number {
+  return unitsOf(members, stackOf).length;
+}
+
 /** Drops every unit (a PR, or a whole stack) the user already said is not related to another unit of the proposal. */
 function withoutRejected(units: PrSetMember[][], rejected: Set<string>): PrSetMember[][] {
   return units.filter((unit, index) => {
@@ -111,7 +117,7 @@ export class SetGrouper {
   private saveOrEnd(set: PrSet, by: PrSetChangeBy, stackOf: Map<PrKey, Stack>): void {
     const { store } = this.deps;
     const at = this.deps.now().toISOString();
-    if (unitsOf(set.members, stackOf).length >= 2) {
+    if (setUnitCount(set.members, stackOf) >= 2) {
       store.sets.save({ ...set, updatedAt: at });
       return;
     }
@@ -125,8 +131,9 @@ export class SetGrouper {
 
   /**
    * A member whose PR now sits in another topic leaves the set, with its
-   * whole stack: the user or topic sorting moved it. Stack layers without a
-   * topic of their own stay when their stack does.
+   * whole stack: the user or topic sorting moved it. A stack layer counts
+   * where its stack shows (`stackTopicId`), not where its own membership
+   * points: layers of one stack may hold memberships in different topics.
    */
   private dropMovedMembers(topic: Topic): void {
     const { store } = this.deps;
@@ -135,10 +142,16 @@ export class SetGrouper {
       return;
     }
     const stackOf = this.stacks();
+    const memberships = new Map(store.memberships.listAll().map((m) => [m.prKey, m]));
+    const activeTopicIds = new Set(store.topics.listActive().map((t) => t.id));
+    const shownIn = (key: PrKey): string | null => {
+      const stack = stackOf.get(key);
+      return stack ? stackTopicId(stack, memberships, activeTopicIds) : (memberships.get(key)?.topicId ?? null);
+    };
     for (const set of sets) {
       const moved = set.members.filter((member) => {
-        const topicId = store.memberships.get(member.prKey)?.topicId;
-        return topicId !== undefined && topicId !== topic.id;
+        const topicId = shownIn(member.prKey);
+        return topicId !== null && topicId !== topic.id;
       });
       if (moved.length === 0) {
         continue;
