@@ -21,7 +21,7 @@ import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
 import { memberTier, ownerRelation, tileTier } from './topic-queues.ts';
 import type { Glance, IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
 import type { GlanceState } from './glance-state.ts';
-import type { GlanceGap, PrFacts, PrSummary, TilePendingWrite, TileView } from './views.ts';
+import type { GlanceGap, PrFacts, PrSummary, TilePendingWrite, TileVerdict, TileView } from './views.ts';
 import { whatsNew } from './whats-new.ts';
 import { NO_TURN, prWhoseTurn, unansweredAsk, whoseTurn } from './whose-turn.ts';
 import { tileWhy, whyHere } from './why-here.ts';
@@ -152,6 +152,48 @@ export function tileNewBadge(state: Pick<TileState, 'kind' | 'unreadBecause'>): 
   return !headline.automation || headline.loud;
 }
 
+/**
+ * How much a row's glance asks for a closer look, lowest first: Look
+ * closer, then no current glance (missing, stale or being written), then
+ * Looks safe, then Not yours. A stale Look closer still says Look closer.
+ */
+function verdictRank(pr: PrSummary): number {
+  if (pr.verdict === 'LOOK_CLOSER') {
+    return 0;
+  }
+  if (pr.verdict === null || pr.glanceStale) {
+    return 1;
+  }
+  return pr.verdict === 'LOOKS_SAFE' ? 2 : 3;
+}
+
+function tileVerdictOf(pr: PrSummary): TileVerdict {
+  return { prKey: pr.key, verdict: pr.verdict, glanceStale: pr.glanceStale, glanceGap: pr.glanceGap, glanceState: pr.glanceState };
+}
+
+/**
+ * The glance the tile's verdict pill shows (2026-10-01): the worst one among
+ * the tile's open tracked PRs, so a stack whose lead looks safe but whose
+ * third layer needs a look says Look closer, without the user picking out
+ * that layer. Ties go to the lead PR, then tile order. With no open tracked
+ * PR (all merged or closed) it is the lead PR's glance, as before.
+ */
+export function tileVerdict(prs: PrSummary[], leadPrKey: PrKey | null): TileVerdict | null {
+  const lead = prs.find((pr) => pr.key === leadPrKey) ?? null;
+  const open = prs.filter((pr) => pr.provenance.kind !== 'pulled_in' && pr.state === 'OPEN');
+  if (open.length === 0) {
+    return lead ? tileVerdictOf(lead) : null;
+  }
+  // Start from the lead, so it wins a tie; a strictly worse row replaces it.
+  let worst = lead && open.includes(lead) ? lead : open[0]!;
+  for (const pr of open) {
+    if (verdictRank(pr) < verdictRank(worst)) {
+      worst = pr;
+    }
+  }
+  return tileVerdictOf(worst);
+}
+
 export interface TileViewInput {
   tile: Tile;
   state: TileState;
@@ -202,6 +244,7 @@ export function buildTileView(input: TileViewInput): TileView {
     pendingWrite: input.pendingWrite,
     offers,
     agent: tileAgentOffers({ prs, offers, state: input.state, unreadPrKeys }, input.agentPrs),
+    verdict: tileVerdict(prs, offers.leadPrKey),
     unreadPrKeys,
     group: tileGroup(input.state),
     newBadge: tileNewBadge(input.state),

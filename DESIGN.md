@@ -1668,6 +1668,9 @@ another one. The lead PR (core `leadPrKey`, shipped as
 `TileView.offers.leadPrKey`) now prefers the PR of the tile's turn when
 the turn is not `none`, then the newest unread reason, then the first open
 tracked PR.
+Since 2026-10-01 the pill shows the tile's worst glance instead of the
+lead PR's (see "Tile header" › "The verdict pill shows the tile's worst
+glance").
 
 **Whose turn names the re-reviewer.** "rowan to address ada's
 changes" stayed after rowan pushed and re-requested ada's
@@ -2021,6 +2024,20 @@ safe" check, "Not yours" dash, dashed "No glance yet"; a stale glance adds
 "Out of date wording"), then avatars and age
 on the right. Then the title, the agent's one-to-three-line take, the PR
 rows and the footer.
+
+**The verdict pill shows the tile's worst glance (2026-10-01).** The pill
+used the lead PR's verdict, so a stack whose lead looked safe said "Looks
+safe" while its third layer needed a closer look. Owner: the Look closer on
+a tile is for the worst PR in it, so the whole tile may need a closer look,
+and the user should not have to pick that PR out. Core picks it
+(`tileVerdict`, shipped as `TileView.verdict` with the chosen PR's key,
+verdict and glance state): the worst glance among the tile's tracked
+(not pulled-in), open PRs, in the order Look closer (stale or not), no
+current glance (missing, stale or being written), Looks safe, Not yours.
+Ties go to the lead PR, then tile order. With no open tracked PR (all
+merged or closed) the pill keeps the lead PR's glance. The pill keeps its
+look and its stale and updating words, for the chosen PR. Rejected: a
+glyph per PR row, "N of M" counts, a roll-up in the topic header.
 
 **People** (`tilePeople`): authors, the viewer if they submitted a review,
 other reviewers (submitted, then requested), four at most, bots only as
@@ -3389,9 +3406,10 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   the lines its own changes made; feedback or a risk change that arrived
   during the call still triggers the next regroup. A PR that moves topic
   leaves its set with its whole stack.
-- Not part of this: batch approve (PR #48, agent-assisted actions), a
-  rolled-up verdict on the tile (the PR rows show each), shorter "same as
-  #N" glances for same-pattern sets.
+- Not part of this: batch approve (PR #48, agent-assisted actions) and
+  shorter "same as #N" glances for same-pattern sets. The tile's verdict
+  pill rolls up since 2026-10-01: it shows the worst glance among the open
+  tracked PRs ("Tile header").
 
 ## One call per topic (2026-10-01, behind a switch)
 

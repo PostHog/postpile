@@ -291,6 +291,36 @@ export const leadPrIsTurnPr: Invariant = {
   },
 };
 
+/** A glance's need for a look, from the board, lowest first: Look closer (stale or not), no current glance, Looks safe, Not yours. */
+function boardVerdictRank(board: PropertyBoard, key: string): number {
+  const verdict = board.glances.get(key);
+  if (verdict === 'LOOK_CLOSER') {
+    return 0;
+  }
+  if (verdict === undefined || board.staleGlances.has(key)) {
+    return 1;
+  }
+  return verdict === 'LOOKS_SAFE' ? 2 : 3;
+}
+
+/** The tile pill shows the worst glance among the open tracked PRs, else the lead PR's (DESIGN.md "Tile faces" › Verdict pill). */
+export const tileVerdictIsWorstOpenTracked: Invariant = {
+  name: 'the tile verdict is the worst glance among open tracked PRs, else the lead PR\'s',
+  check(board, views) {
+    for (const view of views) {
+      const open = trackedMembers(view).filter((member) => prOf(board, member.prKey).state === 'OPEN');
+      if (open.length === 0) {
+        ensure((view.verdict?.prKey ?? null) === view.offers.leadPrKey, `${view.tile.id}: nothing open, verdict of ${view.verdict?.prKey}, lead ${view.offers.leadPrKey}`);
+        continue;
+      }
+      const worst = Math.min(...open.map((member) => boardVerdictRank(board, member.prKey)));
+      const chosen = view.verdict?.prKey ?? null;
+      ensure(chosen !== null && open.some((member) => member.prKey === chosen), `${view.tile.id}: verdict of ${chosen}, not an open tracked PR`);
+      ensure(boardVerdictRank(board, chosen!) === worst, `${view.tile.id}: verdict of ${chosen} ranks ${boardVerdictRank(board, chosen!)}, worst is ${worst}`);
+    }
+  },
+};
+
 /** A done PR asks nothing of the viewer: never their move. */
 export const donePrIsNeverYourMove: Invariant = {
   name: 'a done PR is never your move',
@@ -527,6 +557,7 @@ export const TILE_INVARIANTS: readonly Invariant[] = [
   tileTurnIsAPrTurn,
   tileTurnFollowsNewestNews,
   leadPrIsTurnPr,
+  tileVerdictIsWorstOpenTracked,
   donePrIsNeverYourMove,
   doneTileOffersOnlyOpen,
   donePrOffersOnlyOpen,
