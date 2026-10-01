@@ -798,8 +798,12 @@ now".
   changed direction reads as what it started with. Forks are matched on
   identical first prompts. Forget matches threads by title; a reworded
   thread can come back. Session refs use local time of the machine.
-- Web app: not started. The renderer already talks HTTP and takes
-  `?api=...&token=...`, so it can be served on its own later.
+- Web app: `pnpm web` (dev mode: API plus Vite) and `pnpm build:web`
+  (static files in `apps/desktop/dist-web`) run the renderer in a browser
+  against `pnpm server`, found through `?api=...&token=...`. The standalone
+  server runs no live poll, background sync, consolidation or work context
+  schedule (the desktop main process starts those), so the web page only
+  updates on load and on "Sync now".
 
 - Stack completion follows base/head branches only. PRs linked from bodies
   or comments are not pulled in, and `subscribed` threads still count as
@@ -1558,13 +1562,15 @@ mark-reads stay in the app:
 pnpm build                                 # electron-vite bundle into apps/desktop/out
 ```
 
-UI check in fake mode as a plain web page (no Electron):
+UI check in fake mode as a plain web page (no Electron), with hot reload:
 
 ```
-POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
-(cd apps/desktop/out/renderer && python3 -m http.server 5177)
-open 'http://127.0.0.1:5177/index.html?api=http://127.0.0.1:4877&token=devtok'
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm web
 ```
+
+For the built files instead: `pnpm build:web`, serve `apps/desktop/dist-web`
+(e.g. `python3 -m http.server 5177`) next to the `pnpm server` above and open
+`index.html?api=http://127.0.0.1:4877&token=devtok`.
 
 The renderer syncs on load. Against a real database that means real GitHub
 reads and agent calls; use a DB copy with `POSTPILE_READ_ONLY=1

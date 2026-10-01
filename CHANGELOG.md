@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Added
+
+- PostPile runs in a browser too. `pnpm web` starts the local API and a dev server for the UI; `pnpm build:web` writes the UI as static files (`apps/desktop/dist-web`) for any static host, used with `pnpm server`. See docs/development.md › Web.
+
 ### Changed
 
 - Each topic in the sidebar shows one PR state icon in front of its summary: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").

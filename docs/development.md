@@ -50,6 +50,22 @@ pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
 
 Dev runs use their own database: `pnpm desktop` (unpackaged Electron), `pnpm cli` and `pnpm server` run with `POSTPILE_PROFILE=dev`, which keeps data in `~/Library/Application Support/PostPile-dev` and instructions in `~/.config/postpile-dev` (seeded once with a copy of the real `instructions.md`). The title bar shows a DEV badge. To read the real database from the repo on purpose: `POSTPILE_PROFILE=default pnpm cli ...`.
 
+### Web
+
+To run PostPile in a browser instead of Electron:
+
+```
+pnpm web                    # API on 127.0.0.1:4870 + Vite dev server, opens the page
+POSTPILE_FAKE=1 pnpm web    # the same on sample data
+pnpm build:web              # static HTML, JS and CSS in apps/desktop/dist-web
+```
+
+`pnpm web` starts `pnpm server` with a fresh token (or `POSTPILE_TOKEN`) and the renderer's Vite dev server (`apps/desktop/vite.web.config.ts`) with hot reload, then opens `http://127.0.0.1:5173/?api=…&token=…`. Other environment variables go to the server as with `pnpm server`; `PORT` sets the API port. `BROWSER=none` keeps the page from opening.
+
+`pnpm build:web` writes the renderer as static files with relative paths, so any static host or folder can serve `apps/desktop/dist-web`. The page needs a running API: start `pnpm server` and open the page with the `?token=` it prints (and `?api=http://127.0.0.1:<port>` when the port is not 4870). The API only listens on 127.0.0.1, so the page talks to the server on the viewer's own machine. It answers Chrome's private network preflight, so a page served from another origin can reach it.
+
+The standalone server does not run what the desktop main process runs: no live poll, no background syncs, no consolidation or work context schedule, no Mac notifications. The page syncs on load and on "Sync now".
+
 Only one process opens a database at a time (`postpile.lock` next to it). While the app runs, `pnpm cli topics --read-only` (also `topic`, `pr`) still reads; sync, poll and sweep refuse.
 
 The packaged app bundles main, preload, renderer, the workspace packages and the server, so it runs without tsx or node_modules. The server runs in-process on a random localhost port, protected by a random token. A Finder launch gets a minimal PATH, so the app adds the folders from `/etc/paths`, `/etc/paths.d` and `toolPath` (see below), and also looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local` for `gh` and `claude`. It never runs your login shell.
@@ -125,6 +141,6 @@ packages/agent    AgentRunner (claude CLI), prompts, answer schemas
 packages/engine   sync orchestration, live poll, work context sweep, EngineService
 packages/mcp      MCP server: reads over the engine, asks the running app for the rest
 apps/server       Hono JSON API over EngineService, plus the sample-data engine
-apps/desktop      Electron shell, Mac notifications, React UI
+apps/desktop      Electron shell, Mac notifications, React UI (also built for the web)
 apps/cli          dev CLI, plain text
 ```

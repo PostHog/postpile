@@ -200,6 +200,12 @@ export function createApp(
   }
   const app = new Hono();
 
+  app.use('/api/*', async (c, next) => {
+    await next();
+    if (c.req.method === 'OPTIONS' && c.req.header('access-control-request-private-network') === 'true') {
+      c.res.headers.set('access-control-allow-private-network', 'true');
+    }
+  });
   app.use('/api/*', cors({ origin: '*', allowHeaders: ['content-type', TOKEN_HEADER] }));
   app.use('/api/*', async (c, next) => {
     if (c.req.method !== 'OPTIONS' && c.req.header(TOKEN_HEADER) !== token) {
