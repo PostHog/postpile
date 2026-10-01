@@ -1,16 +1,42 @@
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useActions } from '../api/actions.tsx';
+import { queryKeys } from '../api/keys.ts';
 import { useSyncProgress } from '../api/sync.ts';
 
 /**
  * Covers the window while the one-time topic tidy after an upgrade runs
  * (DESIGN.md "Topic tidy after an upgrade"). Topics merge and split for a
  * minute or two; a click meanwhile could land on a topic that is about to
- * move. Gone as soon as the sync's tidy phase ends.
+ * move. When the sync's tidy phase ends, the cover stays until the app has
+ * refetched what it shows: the rest of the sync can take minutes, and until
+ * it ends the cached topics are still the ones from before the tidy.
  */
 export function TidyOverlay() {
   const actions = useActions();
+  const queryClient = useQueryClient();
   const progress = useSyncProgress(actions.syncing).data;
-  if (!progress?.running.includes('tidy')) {
+  const tidying = progress?.running.includes('tidy') ?? false;
+  const wasTidying = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (tidying) {
+      wasTidying.current = true;
+      return;
+    }
+    if (!wasTidying.current) {
+      return;
+    }
+    wasTidying.current = false;
+    setRefreshing(true);
+    // Everything but the config, like a refresh after an action.
+    void queryClient
+      .invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.config[0] })
+      .finally(() => setRefreshing(false));
+  }, [tidying, queryClient]);
+
+  if (!tidying && !refreshing) {
     return null;
   }
   return (
