@@ -4184,7 +4184,9 @@ topic names are never event props.
    meta `pings_summarized_at`; nothing when every count is 0, the first call
    only starts the clock; no per-notification events), `search_used` (throttled, query length bucket only),
    `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked`
-   (the title bar pill opened) / `update_later_clicked`,
+   (the title bar pill opened) / `update_later_clicked`, `update_bar_shown`
+   (releases_behind capped at 10, hours_behind rounded; once per app run) /
+   `update_bar_later_clicked`,
    `glance_retry_clicked` (Retry on a failed glance).
 4. *Agent trust*: `wrong_topic_marked` (`from` `suggestion` / `search` when a topic was picked in "Move to topic…"), `not_related_marked`,
    `recheck_requested`, `recheck_proposed` (outcome: the agent's answer),
@@ -5108,3 +5110,27 @@ preflight and does not know the token, so CORS stays open.
   the user's approval are quiet unless the agent raises one (decided 2026-09-28).
 - **Repo name**: decided 2026-09-28, the app is PostPile (formerly the working title
   `code-manager`). Renaming the repo folder is still open.
+
+## Update reminder escalates (2026-10-01)
+
+The reminder has two sizes, picked by core (`updateUrgency` in
+`packages/core/src/updates.ts`), never by the renderer.
+
+- **Behind since**: the publish time of the oldest release newer than the
+  running version, so the first one the user missed. A newer release does not
+  restart the clock.
+- **Releases behind**: non-draft version releases newer than the running
+  version among the last 10 fetched. When the oldest fetched one is still
+  newer, there may be more, and the bar says "10+".
+- **Under 24h behind**: the small neutral pill in the title bar.
+- **24h or more**: a full-width bar under the title bar, calm amber (the
+  `--amber-*` tokens), never coral (coral means "new since you looked"). It has
+  the brew command, release notes and "Later".
+- **Later**: on the bar it drops back to the pill for 24h, then the bar
+  returns. In the pill's popover (under 24h) it hides the pill until the bar
+  takes over. Stored as one timestamp in localStorage; losing it only shows the
+  reminder again.
+
+Why: the owner releases about twice a day, and "Later" used to hide a version
+for good, so the reminder went quiet while the user kept falling behind.
+While the user is behind, it never goes quiet for good.

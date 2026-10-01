@@ -56,7 +56,7 @@ describe('GET /api/update', () => {
     await checker.check();
     const expected = {
       current: '0.1.0-alpha.0',
-      latest: { version: '0.1.0-alpha.1', url: 'https://github.com/acme/app/releases/tag/v0.1.0-alpha.1', publishedAt: '2026-09-28T09:00:00Z', notes: 'Fixes' },
+      latest: { version: '0.1.0-alpha.1', url: 'https://github.com/acme/app/releases/tag/v0.1.0-alpha.1', publishedAt: '2026-09-28T09:00:00Z', notes: 'Fixes', behindSince: '2026-09-28T09:00:00Z', releasesBehind: 1, moreBehind: false },
       checkedAt: NOW.toISOString(),
       error: null,
     };
@@ -95,7 +95,8 @@ describe('GET /api/update', () => {
   });
 
   it('serves a sample update in fake mode, or none with POSTPILE_FAKE_UPDATE=0', async () => {
-    expect(await getUpdate(new FakeUpdates('0.1.0-alpha.0', true))).toMatchObject({ latest: { version: '0.2.0' } });
-    expect(await getUpdate(new FakeUpdates('0.1.0-alpha.0', false))).toMatchObject({ latest: null });
+    expect(await getUpdate(new FakeUpdates('0.12.4', 'bar'))).toMatchObject({ latest: { version: '0.12.7', releasesBehind: 3 } });
+    expect(await getUpdate(new FakeUpdates('0.12.4', 'pill'))).toMatchObject({ latest: { version: '0.12.5', releasesBehind: 1 } });
+    expect(await getUpdate(new FakeUpdates('0.12.4', 'none'))).toMatchObject({ latest: null });
   });
 });

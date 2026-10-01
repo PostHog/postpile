@@ -111,6 +111,10 @@ export const TELEMETRY_EVENTS = {
   topic_opened: z.object({ section: topicSection }).strict(),
   update_pill_clicked: NO_PROPS,
   update_later_clicked: NO_PROPS,
+  // The bar under the title bar (24h or more behind): once per app run, when it first shows.
+  // releases_behind is capped at 10 (the update check only sees the last 10); hours_behind is rounded.
+  update_bar_shown: z.object({ releases_behind: count.max(10), hours_behind: count }).strict(),
+  update_bar_later_clicked: NO_PROPS,
   glance_retry_clicked: NO_PROPS,
 
   // 4. Agent trust
@@ -196,6 +200,8 @@ export const RENDERER_TELEMETRY_EVENTS = [
   'topic_opened',
   'update_pill_clicked',
   'update_later_clicked',
+  'update_bar_shown',
+  'update_bar_later_clicked',
   'glance_retry_clicked',
 ] as const satisfies readonly TelemetryEventName[];
 
