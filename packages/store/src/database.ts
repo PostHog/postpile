@@ -41,7 +41,7 @@ export function inTransaction<T>(db: DatabaseSync, fn: () => T): T {
 }
 
 /** The version recorded in the file, read without creating anything. 0 for a file without migrations. */
-function recordedVersion(db: DatabaseSync): number {
+export function recordedVersion(db: DatabaseSync): number {
   const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
   if (!table) {
     return 0;

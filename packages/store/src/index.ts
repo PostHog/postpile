@@ -1,4 +1,4 @@
-export { openDatabase, openDatabaseReadOnly, inTransaction } from './database.ts';
+export { openDatabase, openDatabaseReadOnly, inTransaction, recordedVersion } from './database.ts';
 export { runMigrations, currentVersion, LATEST_VERSION } from './migrate.ts';
 export { Store } from './store.ts';
 export { MetaRepo } from './repos/meta.ts';

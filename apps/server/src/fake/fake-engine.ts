@@ -694,6 +694,10 @@ export class FakeEngine implements EngineService {
     return null;
   }
 
+  async databaseSchemaVersion(): Promise<number | null> {
+    return null;
+  }
+
   async syncProgress(): Promise<SyncProgress | null> {
     return this.progress ? { ...this.progress, running: [...this.progress.running] } : null;
   }

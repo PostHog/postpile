@@ -1,8 +1,9 @@
 export type { EngineService } from './service.ts';
+export { LATEST_VERSION as LATEST_SCHEMA_VERSION } from '@postpile/store';
 export { Engine, type EngineDeps } from './engine.ts';
 export { MarkReadQueue, type PendingBatch } from './mark-read-queue.ts';
 export { agentCwdFor, applyLegacyEnv, dataDirs, defaultPaths, profileFromEnv, realDataDirs, seedDevInstructions, type AppPaths, type Profile } from './paths.ts';
-export { APP_LOCK_KINDS, DataDirLock, DataDirLockedError, LOCK_FILE_NAME, runningApp, type LockInfo, type LockKind } from './data-lock.ts';
+export { APP_LOCK_KINDS, DataDirLock, DataDirLockedError, LOCK_FILE_NAME, lockedAppVersion, runningApp, type LockInfo, type LockKind } from './data-lock.ts';
 export { migrateLegacyData } from './legacy-data.ts';
 export { UNSORTED_TOPIC_ID } from './board.ts';
 export { ReadOnlyWriter } from './writes/read-only-writer.ts';
