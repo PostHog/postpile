@@ -37,8 +37,9 @@ export function QueueFilters(props: QueueFiltersProps) {
   const options: (QueueFilter | null)[] = [null, ...visibleQueueFilters(props.viewer?.homeTeams, props.active)];
   return (
     <div className="flex items-center gap-2 px-1.5" role="group" aria-label="Show topics with">
-      <span className="shrink-0 text-[12.5px] text-muted">Topics with</span>
-      <div className="flex min-w-0 flex-1 rounded-control bg-segment p-0.5">
+      {/* The label gives way first when the sidebar is narrow; the options keep their words. */}
+      <span className="min-w-0 truncate text-[12.5px] text-muted">Topics with</span>
+      <div className="flex shrink-0 rounded-control bg-segment p-0.5">
         {options.map((filter) => {
           const on = props.active === filter;
           const blocked = filter === null || on ? null : disabledReason(filter, props.counts[filter], props.viewer);
@@ -56,7 +57,7 @@ export function QueueFilters(props: QueueFiltersProps) {
               disabled={blocked !== null}
               title={blocked ?? (filter === null ? 'All topics' : TITLES[filter])}
               onClick={() => props.onChange(filter)}
-              className={`h-6 min-w-0 flex-1 truncate rounded-[5px] px-1.5 text-[12px] ${look}`}
+              className={`h-6 rounded-[5px] px-2 text-[12px] whitespace-nowrap ${look}`}
             >
               {filter === null ? 'any PR' : LABELS[filter]}
             </button>

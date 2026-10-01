@@ -43,7 +43,7 @@ import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
 
 function MainPane(props: { children: ReactNode }) {
-  return <main className="pane-scroll flex min-w-0 flex-col gap-4 overflow-auto px-[26px] pt-5 pb-[22px]">{props.children}</main>;
+  return <main className="pane-scroll flex min-w-0 flex-col gap-4 overflow-auto pl-[26px] pr-[16px] pt-5 pb-[22px]">{props.children}</main>;
 }
 
 function EmptyMain(props: { text: string }) {
