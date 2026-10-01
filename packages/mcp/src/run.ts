@@ -1,7 +1,7 @@
 import { arch, release } from 'node:os';
 import { dirname, join } from 'node:path';
 import { AGENT_REQUESTS_FOLDER } from '@postpile/core';
-import { LATEST_SCHEMA_VERSION, defaultPaths, runningApp, telemetryFromEnv } from '@postpile/engine';
+import { LATEST_SCHEMA_VERSION, defaultPaths, lockedAppVersion, runningApp, telemetryFromEnv } from '@postpile/engine';
 import { engineFromEnv, isFake } from '@postpile/server';
 import { FileAgentRequests, InMemoryAgentRequests, type AgentRequests } from './agent-requests.ts';
 import { routeConsoleToStderr, serveStdio } from './server.ts';
@@ -63,7 +63,7 @@ export async function runMcpFromEnv(appVersion: string): Promise<void> {
             ownVersion: appVersion,
             expectedSchema: LATEST_SCHEMA_VERSION,
             databaseSchema: () => engine.databaseSchemaVersion(),
-            appVersion: () => runningApp(databaseFile)?.appVersion ?? null,
+            appVersion: () => lockedAppVersion(databaseFile),
           }),
       requests,
       onToolCall: (tool, report) =>

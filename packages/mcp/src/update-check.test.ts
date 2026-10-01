@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UPDATE_CHECK_MS, updateCheck, type UpdateSignals } from './update-check.ts';
+import { updateCheck, type UpdateSignals } from './update-check.ts';
 
 function check(overrides: Partial<UpdateSignals> = {}) {
   return updateCheck({ ownVersion: '0.13.1', expectedSchema: 12, databaseSchema: async () => 12, appVersion: () => '0.13.1', ...overrides });
@@ -22,15 +22,11 @@ describe('updateCheck', () => {
     expect(await check({ databaseSchema: async () => null })()).toBe(false);
   });
 
-  it('keeps a "no mismatch" for a few seconds, and a mismatch for good', async () => {
-    let clock = 0;
+  it('looks again on every call, and keeps a mismatch for good', async () => {
     let schema = 12;
-    const updated = check({ now: () => clock, databaseSchema: async () => schema });
+    const updated = check({ databaseSchema: async () => schema });
     expect(await updated()).toBe(false);
     schema = 13;
-    clock = UPDATE_CHECK_MS - 1;
-    expect(await updated()).toBe(false);
-    clock = UPDATE_CHECK_MS;
     expect(await updated()).toBe(true);
     schema = 12;
     expect(await updated()).toBe(true);

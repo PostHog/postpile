@@ -120,6 +120,17 @@ export function runningApp(databaseFile: string): LockInfo | null {
   return holder;
 }
 
+/**
+ * The app version in this database's lock file, from a plain file read: no
+ * liveness check (no ps), so it is cheap enough for every call. Null when
+ * there is no lock, a non-app holder, or an old lock without a version. Use
+ * it only while `runningApp` says the app runs: a stale lock keeps its version.
+ */
+export function lockedAppVersion(databaseFile: string): string | null {
+  const holder = readLock(join(dirname(databaseFile), LOCK_FILE_NAME));
+  return holder && APP_LOCK_KINDS.includes(holder.kind) ? (holder.appVersion ?? null) : null;
+}
+
 /** The same lock holder: same pid and same process start (both missing counts as the same). */
 function sameHolder(a: LockInfo, b: LockInfo): boolean {
   return a.pid === b.pid && a.processStartedAt === b.processStartedAt;

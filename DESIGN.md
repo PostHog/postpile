@@ -4537,8 +4537,10 @@ takes the lock; old locks have none and count as unknown) differs from this
 process's own. A version that is unknown on either side never counts, so dev
 runs with equal strings stay quiet. On a mismatch every tool returns the
 tool error "PostPile was updated. Run /mcp and reconnect postpile to load the
-new version." The closed message still wins. A "no mismatch" is kept for 5 s
-like the running check; a mismatch is permanent, so it is not. Reason for
+new version." The closed message still wins. Nothing is cached
+(the schema is one SQL query, the lock's version a plain file read, only the
+ps liveness of the running check is kept for 5 s), since a kept "no mismatch"
+would let calls through right after an upgrade; a mismatch is permanent. Reason for
 refusing instead of exiting: Claude Code never restarts a stdio server on its
 own, so an exit would leave a silent failure, while the refusal tells the user
 what to do. `POSTPILE_FAKE=1` skips the check (`packages/mcp/src/update-check.ts`).
