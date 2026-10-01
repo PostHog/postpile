@@ -6,7 +6,7 @@ import { glanceStateText } from '../lib/glance.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { isDraftTile, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { personTitle } from '../lib/why.ts';
 import { AgentApproveButton } from './AgentActions.tsx';
@@ -128,6 +128,7 @@ function PrRows(props: TileProps & { done: boolean }) {
   const grouped = view.prs.length > 1;
   const places = stackPlaces(view.tile.stacks);
   // Grouped rows sit 3px inside the box, so its edge can be an inset ring; a lone row would cover one.
+  // PrRow pads a lone row 2px more, so the state icon lands at the same x in both.
   const box = grouped
     ? `gap-0.5 rounded-group p-[3px] inset-ring ${props.selected ? 'bg-group-selected inset-ring-edge-accent-group' : 'bg-subtle inset-ring-hairline-soft'}`
     : `overflow-hidden rounded-row border ${props.selected ? 'border-accent-line' : 'border-pill-line'}`;
@@ -137,6 +138,7 @@ function PrRows(props: TileProps & { done: boolean }) {
         <PrRow
           key={pr.key}
           pr={pr}
+          place="tile"
           grouped={grouped}
           showForWhom={grouped && !sameForWhom(pr.forWhom, view.forWhom)}
           stackPlace={places.get(pr.key) ?? null}
@@ -160,7 +162,8 @@ export function Tile(props: TileProps) {
   // Core's group decides the look: Dealt with goes grey, Unread gets the strip and a bold title.
   const done = view.group === 'dealt_with';
   const unread = view.group === 'unread';
-  const draft = isDraftTile(view);
+  // Core's Draft rule (`TileView.draft`), the same one the topic's draft icon uses.
+  const draft = view.draft;
   // Unread: bold, full ink. Read: regular weight, a notch quieter (the your-move footer stays the reminder). Done and drafts: muted.
   let titleLook = unread ? 'font-semibold text-ink' : 'font-normal text-ink-2';
   if (props.selected && !unread) {
@@ -286,7 +289,7 @@ export function Tile(props: TileProps) {
         </div>
         <PrRows {...props} done={done} />
       </div>
-      <div className={`mt-auto flex min-h-[46px] flex-wrap items-center gap-x-2 gap-y-1.5 rounded-b-tile py-1.5 pr-3 pl-[15px] ${footer}`}>
+      <div className={`mt-auto flex min-h-[46px] flex-wrap items-center gap-x-2 gap-y-1.5 rounded-b-tile py-1.5 pr-3.5 pl-[15px] ${footer}`}>
         {/* Zero basis: whose turn and the agent's Approve shrink (the turn line to its dot) before they push the joined buttons, which wrap below when they alone do not fit. */}
         <div className="@container flex min-w-0 flex-1 basis-0">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">

@@ -77,22 +77,6 @@ export interface QueueLayout {
 }
 
 /**
- * The section a topic sits in, or null when it only has rest PRs (or none).
- * A mixed topic follows the work (2026-10-01): the highest section any PR
- * other than your own gives it, so a review waiting on you inside a topic
- * that also holds your PR shows under To review. My PRs only when nothing
- * else in the topic asks for a section.
- */
-export function topicSectionTier(item: TopicListItem): PrTier | null {
-  const tiers = item.queues.tiers;
-  const work = TIER_ORDER.find((tier) => tier !== 'rest' && tier !== 'mine' && tiers[tier] > 0);
-  if (work) {
-    return work;
-  }
-  return tiers.mine > 0 ? 'mine' : null;
-}
-
-/**
  * Inside Changes you requested: topics where the move is a re-review (the
  * author addressed the changes or asked again) before topics still waiting
  * on the author.
@@ -104,20 +88,21 @@ function changesRequestedRows(rows: QueueRow[]): QueueRow[] {
 }
 
 /**
- * Each topic once, in its highest section, with that section's PR count.
+ * Each topic once, in the section core put it in (`TopicListItem.section`),
+ * with that section's PR count.
  * Topics keep the API order (urgent first) inside a section, except that
  * Changes you requested lists addressed ones first.
  */
 export function queueLayout(items: TopicListItem[]): QueueLayout {
   const sections: QueueSection[] = [];
   for (const tier of TIER_ORDER.filter((entry) => entry !== 'rest')) {
-    const inTier = items.filter((item) => topicSectionTier(item) === tier).map((item) => ({ item, count: item.queues.tiers[tier] }));
+    const inTier = items.filter((item) => item.section === tier).map((item) => ({ item, count: item.queues.tiers[tier] }));
     const rows = tier === 'changes_requested' ? changesRequestedRows(inTier) : inTier;
     if (rows.length > 0) {
       sections.push({ tier, rows, count: rows.reduce((total, row) => total + row.count, 0) });
     }
   }
-  return { sections, other: items.filter((item) => topicSectionTier(item) === null) };
+  return { sections, other: items.filter((item) => item.section === null) };
 }
 
 /** The sidebar layout as lists to hold a row in (`holdPlace`): every section, empty ones too, then Other topics. */

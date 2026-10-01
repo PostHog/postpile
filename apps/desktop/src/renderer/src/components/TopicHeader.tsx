@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import type { DossierStatus, DossierView, TopicDetail, TopicGroup, TopicListItem, TopicProposal, UserRole } from '@postpile/core';
+import type { DossierStatus, DossierView, TopicDetail, TopicListItem, TopicProposal, UserRole } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { proposalText, suggestedBy } from '../lib/proposals.ts';
-import { countPrs } from '../lib/tiles.ts';
+import { prMixTitle } from '../lib/pr-mix.ts';
+import { sectionLook } from '../lib/sections.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
 import { DossierPanel } from './DossierPanel.tsx';
-import { ChevronIcon, QuoteIcon } from './icons.tsx';
+import { ChevronIcon, PrStateIcon, QuoteIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
 import { RelationLine } from './RelationLine.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
@@ -133,29 +134,62 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
   );
 }
 
+interface Crumb {
+  label: string;
+  /** The sidebar section's dot colour, on the section crumb only. */
+  dot: string | null;
+}
+
+/**
+ * Topics › section › area. The section is the one the sidebar lists the topic
+ * under (core's `TopicDetail.section`), with the same label and dot; a retired
+ * topic sits in the Finished drawer instead.
+ */
+function breadcrumbs(detail: TopicDetail): Crumb[] {
+  const look = sectionLook(detail.section);
+  const crumbs: Crumb[] = [detail.topic.status === 'retired' ? { label: 'Finished', dot: null } : { label: look.label, dot: look.dot }];
+  if (detail.placement?.area) {
+    crumbs.push({ label: detail.placement.area, dot: null });
+  }
+  return crumbs;
+}
+
+/**
+ * Every PR in the topic (core's `prRollup.total`, found and pulled-in ones
+ * included) behind the same state icon as the sidebar row, with the
+ * lifecycle and review mix as the tooltip.
+ */
+function PrCountPill(props: { detail: TopicDetail }) {
+  const { prRollup } = props.detail;
+  const title = prMixTitle(prRollup);
+  return (
+    <span className={`${pill} px-2`} title={title}>
+      {prRollup.state && <PrStateIcon lifecycle={prRollup.state} size={11} title={title} />}
+      <span className="font-mono text-[10px] font-semibold tabular-nums">{prRollup.total}</span>
+      <span className="text-hint">{prRollup.total === 1 ? 'PR' : 'PRs'}</span>
+    </span>
+  );
+}
+
 /** Breadcrumb, name, who drives, the dossier (or the plain summary before one exists) and what the user told the agent. */
-export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; topics: TopicListItem[] }) {
+export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[] }) {
   const { topic, tiles, pendingProposals, dossier, placement } = props.detail;
   const actions = useActions();
-  const counts = countPrs(tiles);
-  const prCount = counts.pinged + counts.pulledIn;
   // A catch-up run on the topic updates the dossier too; a PR of the topic writing its glance says one is going.
   const writing = tiles.some((view) => view.prs.some((pr) => pr.glanceState === 'writing'));
   const updating = updatingNow({ syncing: actions.syncing, writing });
-  const crumbs = [topic.status === 'retired' ? 'Finished' : props.group === 'needs_you' ? 'Needs you' : 'Quiet'];
-  if (placement?.area) {
-    crumbs.push(placement.area);
-  }
+  const crumbs = breadcrumbs(props.detail);
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-[5px] text-[11px] text-hint">
         <span>Topics</span>
         {crumbs.map((crumb, index) => (
-          <span key={crumb} className="flex items-center gap-[5px]">
+          <span key={crumb.label} className="flex items-center gap-[5px]">
             <span className="-rotate-90 text-ghost">
               <ChevronIcon size={8} />
             </span>
-            <span className={index === crumbs.length - 1 ? 'font-medium text-ink-2' : ''}>{crumb}</span>
+            {crumb.dot && <span aria-hidden="true" className={`size-[5px] rounded-[1.5px] ${crumb.dot}`} />}
+            <span className={index === crumbs.length - 1 ? 'font-medium text-ink-2' : ''}>{crumb.label}</span>
           </span>
         ))}
       </div>
@@ -173,10 +207,7 @@ export function TopicHeader(props: { detail: TopicDetail; group: TopicGroup; top
           <span className={`${pill} px-2`} title="Your role in this topic">
             {ROLE_LABELS[topic.userRole]}
           </span>
-          <span className={`${pill} px-2`}>
-            <span className="font-mono text-[10px] font-semibold tabular-nums">{prCount}</span>
-            <span className="text-hint">{prCount === 1 ? 'PR' : 'PRs'}</span>
-          </span>
+          <PrCountPill detail={props.detail} />
         </span>
         <YourMoveChip moves={props.detail.yourMoves} />
       </div>

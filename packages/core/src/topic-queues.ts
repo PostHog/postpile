@@ -142,6 +142,24 @@ export function topicQueues(prs: QueuedPr[]): TopicQueues {
   return { tiers, byYou, byTeam, changesAddressed };
 }
 
+/**
+ * The sidebar section a topic sits in, or null for Other topics (only rest
+ * PRs, or none). A mixed topic follows the work (2026-10-01): the highest
+ * section any PR other than your own gives it, so a review waiting on you
+ * inside a topic that also holds your PR shows under To review. My PRs only
+ * when nothing else in the topic asks for a section. The sidebar and the
+ * topic header's breadcrumb both read it (`TopicListItem.section`,
+ * `TopicDetail.section`).
+ */
+export function topicSection(queues: Pick<TopicQueues, 'tiers'>): PrTier | null {
+  const tiers = queues.tiers;
+  const work = PR_TIER_ORDER.find((tier) => tier !== 'rest' && tier !== 'mine' && tiers[tier] > 0);
+  if (work) {
+    return work;
+  }
+  return tiers.mine > 0 ? 'mine' : null;
+}
+
 /** The tile sorts under its most urgent PR's tier. A tile without PRs is `rest`. */
 export function tileTier(tiers: PrTier[]): PrTier {
   return PR_TIER_ORDER.find((tier) => tiers.includes(tier)) ?? 'rest';

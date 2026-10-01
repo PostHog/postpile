@@ -6,6 +6,8 @@ import { statusLabel } from '../lib/memory.ts';
 import { layoutBuckets, layoutFromBuckets, queueLayout, queueRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { type SearchFilter } from '../lib/search.ts';
+import { stateMix } from '../lib/pr-mix.ts';
+import { sectionLook } from '../lib/sections.ts';
 import { sidebarGroups } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -30,18 +32,6 @@ function topicSnippet(item: TopicListItem): string {
   }
   return `${item.openTiles} open · ${item.totalTiles} tiles`;
 }
-
-/** Section title, dot and count colors. Honey = aimed at you, ink = yours, sea = your team, grey = the rest. */
-const SECTION_LOOK: Record<PrTier | 'other', { label: string; text: string; dot: string }> = {
-  needs_reply: { label: 'Needs reply', text: 'text-honey-ink', dot: 'bg-honey' },
-  changes_requested: { label: 'Changes you requested', text: 'text-honey-ink', dot: 'bg-honey' },
-  mine: { label: 'My PRs', text: 'text-ink', dot: 'bg-ink' },
-  team: { label: "Team's PRs", text: 'text-sea-ink', dot: 'bg-sea' },
-  to_review: { label: 'To review', text: 'text-honey-ink', dot: 'bg-honey' },
-  team_mentioned: { label: 'Team mentioned', text: 'text-sea-ink', dot: 'bg-sea-pale' },
-  rest: { label: 'Other topics', text: 'text-muted', dot: 'bg-ghost' },
-  other: { label: 'Other topics', text: 'text-muted', dot: 'bg-ghost' },
-};
 
 /**
  * The row's one number: unread tiles, in a small bubble (the dots stay per PR). Coral while an unread
@@ -126,8 +116,6 @@ function UnseenMergeChip(props: { count: number }) {
   );
 }
 
-const PR_STATE_WORDS = { open: 'open', draft: 'draft', merged: 'merged', closed: 'closed' } as const;
-
 /**
  * The fixed leading column of a topic row, 14px with its gap: line one holds
  * the unread dot, line two the PR state icon, both centred. The name and the
@@ -146,11 +134,7 @@ function PrStateMark(props: { item: TopicListItem }) {
   if (prState === null) {
     return null;
   }
-  const title = (Object.keys(PR_STATE_WORDS) as (keyof typeof PR_STATE_WORDS)[])
-    .filter((state) => prStateCounts[state] > 0)
-    .map((state) => `${prStateCounts[state]} ${PR_STATE_WORDS[state]}`)
-    .join(' · ');
-  return <PrStateIcon lifecycle={prState} size={11} title={title} />;
+  return <PrStateIcon lifecycle={prState} size={11} title={stateMix(prStateCounts)} />;
 }
 
 /** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
@@ -209,7 +193,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
  * an unread count, and how many PRs a queue holds does not matter.
  */
 function SectionHeader(props: { tier: PrTier | 'other' }) {
-  const look = SECTION_LOOK[props.tier];
+  const look = sectionLook(props.tier);
   return (
     // The dot sits in the row's leading slot column, so the label lands on the same x as the topic names.
     <span className={`flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}>
@@ -219,14 +203,16 @@ function SectionHeader(props: { tier: PrTier | 'other' }) {
   );
 }
 
-/** A section title that folds its topics away. */
+/** A section title that folds its topics away. The chevron takes the topic rows' leading slot, so the label starts on the topic names' x. */
 function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; indent?: boolean }) {
   const size = props.small ? 'text-[10.5px] font-medium text-hint' : 'text-[11px] font-semibold tracking-[0.04em] text-hint';
   return (
-    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center gap-1.5 py-1 text-left ${props.indent ? 'px-4' : 'px-2'}`}>
-      <span className={`text-faint ${props.open ? '' : '-rotate-90'}`}>
-        <ChevronIcon />
-      </span>
+    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className={`flex items-center py-1 text-left ${props.indent ? 'px-4' : 'px-2'}`}>
+      <LeadSlot>
+        <span className={`flex text-faint ${props.open ? '' : '-rotate-90'}`}>
+          <ChevronIcon />
+        </span>
+      </LeadSlot>
       <span className={size}>{props.label}</span>
     </button>
   );
@@ -322,6 +308,9 @@ interface TopicSidebarProps {
   viewer: ViewerView | undefined;
 }
 
+/** Plain lines in the list (filter, hidden topics, errors) start on the topic names' x: a row's 8px padding plus its 14px leading slot. */
+const TEXT_COLUMN = 'pr-2.5 pl-[22px]';
+
 /** Section keys for the fold state: "team", "routed", "fyi", "finished", or "area:<name>". */
 type SectionKey = string;
 
@@ -339,7 +328,7 @@ const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi', 'finished'];
 function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll: () => void }) {
   const whose = props.filter === 'mine' ? 'your PRs' : "your team's PRs";
   return (
-    <p className="flex flex-wrap items-baseline gap-x-1.5 px-2.5 text-[12px] text-muted">
+    <p className={`flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-muted ${TEXT_COLUMN}`}>
       <span>
         <span className="font-semibold text-ink-2 tabular-nums">{props.hidden}</span> {props.hidden === 1 ? 'topic' : 'topics'} without {whose} {props.hidden === 1 ? 'is' : 'are'} hidden
       </span>
@@ -354,7 +343,7 @@ function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll:
 function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
   return (
-    <p className="flex items-center gap-1.5 px-2.5 text-[11.5px] text-muted">
+    <p className={`flex items-center gap-1.5 text-[11.5px] text-muted ${TEXT_COLUMN}`}>
       <span>
         Filtering: {plural(props.topics, 'topic')}, {plural(props.tiles, 'tile')}
       </span>
@@ -393,12 +382,12 @@ export function TopicSidebar(props: TopicSidebarProps) {
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
-      {props.error && <p className="px-2.5 text-xs text-status-bad">Could not load topics: {props.error}</p>}
+      {props.error && <p className={`text-xs text-status-bad ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
       {narrowed && props.shown.length === 0 && props.topics.length > 0 && (
-        <p className="px-2.5 text-xs leading-relaxed text-muted">No topic has a PR that matches.</p>
+        <p className={`text-xs leading-relaxed text-muted ${TEXT_COLUMN}`}>No topic has a PR that matches.</p>
       )}
       {!props.error && !props.loading && props.topics.length === 0 && (
-        <p className="px-2.5 text-xs leading-relaxed text-muted">
+        <p className={`text-xs leading-relaxed text-muted ${TEXT_COLUMN}`}>
           {tools && !tools.canSync ? 'No topics yet. Sync starts once gh works.' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'}
         </p>
       )}

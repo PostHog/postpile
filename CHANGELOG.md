@@ -9,7 +9,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Each topic in the sidebar shows one PR state icon in front of its summary: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").
 - A tile's verdict pill shows the worst glance among its open PRs, not only the lead PR's. A stack whose top PR looks safe but whose third layer needs a closer look now says "Look closer"; a missing or out-of-date glance beats "Looks safe".
 - One colour per meaning: amber is only the agent's "Look closer". "Needs review" is now neutral, a queued PR is merged purple, closed PRs, changes requested, risk and errors share one red, and approved, "Looks safe" and Approve share one green.
+- The topic header's PR pill counts every PR in the topic, also the ones the sync found on its own (your open PRs, review requests, recent merges), so a topic of only found PRs no longer says "0 PRs". It shows the same state icon as the sidebar; hover it for the mix ("3 open · 1 draft · 1 merged; 2 need review, 1 approved").
+- The topic header's breadcrumb names the sidebar section the topic sits in (To review, My PRs, …) with its coloured dot, instead of "Needs you" or "Quiet".
+- A tile's Draft chip and the topic's draft icon follow one rule, so they can't disagree.
 - The topic header shows the same honey "your move" chip as the sidebar row, and the group headings say how many of their tiles are your move: "Open 4 · 2 your move". Tiles waiting on others and snoozed tiles don't count.
+- The detail pane's PR list now shows the same row as the tile, with open threads, the author and "assigned to" (the last two step aside when the pane is narrow). PR numbers and titles line up on read and unread rows, tile text and right edges line up, and the sidebar's FYI and Finished headers and filter lines start where topic names do.
 
 ## 0.13.2 (2026-10-01)
 
