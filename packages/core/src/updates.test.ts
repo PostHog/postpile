@@ -92,9 +92,11 @@ describe('how far behind', () => {
     expect(after?.behindSince).toBe(before?.behindSince);
   });
 
-  it('says there may be more when the oldest fetched release is still newer', () => {
-    const fetched = Array.from({ length: 10 }, (_, index) => release(`v0.3.${10 - index}`));
-    expect(pickUpdate('0.2.0', fetched)).toMatchObject({ releasesBehind: 10, moreBehind: true });
+  it('says there may be more only when a full page is all newer', () => {
+    const page = (size: number) => Array.from({ length: size }, (_, index) => release(`v0.3.${size - index}`));
+    expect(pickUpdate('0.2.0', page(10))).toMatchObject({ releasesBehind: 10, moreBehind: true });
+    expect(pickUpdate('0.2.0', page(3))).toMatchObject({ releasesBehind: 3, moreBehind: false });
+    expect(pickUpdate('0.3.5', page(10))).toMatchObject({ releasesBehind: 5, moreBehind: false });
   });
 });
 

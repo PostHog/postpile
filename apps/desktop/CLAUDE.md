@@ -60,7 +60,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   30s while something is wrong, else every 5 min; "Check again" is
   `useActions().checkTools`),
   `update.ts` (`useUpdate`: the server's last update check, every minute;
-  `UpdatePill` in the title bar, "Later" per version in localStorage),
+  `lib/use-update-reminder.ts`: `useUpdateReminder` asks core's `updateUrgency`
+  for none / pill / bar; "Later" is one shared snooze timestamp in
+  localStorage, read by `UpdatePill` and `UpdateBar`),
   `mcp.ts` (`useMcpConnection`: is PostPile's MCP server in Claude Code,
   refetched on window focus; the server runs `claude mcp get` at most every
   5 minutes),
@@ -68,7 +70,7 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   POST to `/api/telemetry`; not a query hook, no cache, a dropped call is
   swallowed. Only the events in `RENDERER_TELEMETRY_EVENTS`
   (`@postpile/core`) go through it — search, queue filter, topic and tile
-  opens, setup steps and fit fixes, the update pill; everything else is the engine's own.
+  opens, setup steps and fit fixes, the update pill and bar; everything else is the engine's own.
   `errorReporter` sends renderer errors on the same route as
   `renderer_exception`: `main.tsx` hooks it to the window's `error` and
   `unhandledrejection` events, `components/ErrorBoundary.tsx` at the root to
@@ -314,7 +316,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `InboxCleanup` (sidebar footer line or middle-column banner, as the
   server's `look` says) + `InboxCleanupDialog`,
   `UpdatePill` (title bar update reminder, self-contained so it can move;
-  neutral, never coral),
+  neutral, never coral; under 24h behind) + `UpdateBar` (full-width bar under
+  the title bar from 24h behind, amber `--amber-*` tokens, never coral; mounted
+  in `App.tsx`; Later drops back to the pill for 24h; `update_bar_shown` once per run),
   `McpFooterItem` ("agents: not connected" in the footer, only while
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s

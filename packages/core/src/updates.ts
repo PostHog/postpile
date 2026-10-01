@@ -16,6 +16,9 @@ export interface ReleaseInfo {
   draft: boolean;
 }
 
+/** How many releases the update check asks GitHub for. A full page may have older releases behind it. */
+export const RELEASES_PAGE_SIZE = 10;
+
 /** A release newer than the running app. */
 export interface AvailableUpdate {
   /** Without the "v", e.g. "0.2.0". */
@@ -32,7 +35,7 @@ export interface AvailableUpdate {
   behindSince: IsoTime | null;
   /** Non-draft version releases newer than the running app, among those fetched. */
   releasesBehind: number;
-  /** The fetched list ends with a release still newer than the app: the user may be further behind than `releasesBehind` says. */
+  /** The fetched page was full and ends with a release still newer than the app: the user may be further behind than `releasesBehind` says. */
   moreBehind: boolean;
 }
 
@@ -150,7 +153,7 @@ export function pickUpdate(current: string, releases: ReleaseInfo[]): AvailableU
   newer.sort((a, b) => compareVersions(b.tag, a.tag));
   const newest = newer[0]!;
   const oldestMissed = newer[newer.length - 1]!;
-  // The list is newest first and cut short: if even its last release is newer, older ones may exist.
+  // Only a full page can be cut short: if even its last release is newer, older ones may exist.
   const oldestFetched = versions.reduce((oldest, release) => (compareVersions(release.tag, oldest.tag) < 0 ? release : oldest));
   return {
     version: versionFromTag(newest.tag),
@@ -159,7 +162,7 @@ export function pickUpdate(current: string, releases: ReleaseInfo[]): AvailableU
     notes: newest.notes,
     behindSince: oldestMissed.publishedAt,
     releasesBehind: newer.length,
-    moreBehind: oldestFetched === oldestMissed,
+    moreBehind: releases.length >= RELEASES_PAGE_SIZE && oldestFetched === oldestMissed,
   };
 }
 
