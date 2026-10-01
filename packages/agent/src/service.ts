@@ -90,13 +90,15 @@ export interface TopicAssignmentInput {
   context: PromptContext;
 }
 
-/** Where split PRs go: an existing topic, or a new one named after the project they serve. */
-export type TidyDestination = { kind: 'existing'; topicId: string } | { kind: 'new'; name: string };
+/** Where split PRs go: an existing topic, or a new one named after the goal they serve. */
+export type TidyDestination = { kind: 'existing'; topicId: string } | { kind: 'new'; name: string; topicKind: TopicKind };
 
-/** One active topic as the topic tidy sees it. */
+/** One topic as the topic tidy sees it: active, or in the Archive and still taking new PRs. */
 export interface TidyTopic {
   id: string;
   name: string;
+  kind: TopicKind;
+  inArchive: boolean;
   /** The dossier's goal, else the topic summary; '' when neither exists. */
   goal: string;
   prs: Pr[];
@@ -118,6 +120,10 @@ export interface TopicTidyResult {
   merges: { fromTopicIds: string[]; intoTopicId: string; name: string | null; reason: string }[];
   /** PRs that do not belong to topicId, and where they go instead; the tidy places them itself. */
   splits: { topicId: string; prKeys: PrKey[]; into: TidyDestination; reason: string }[];
+  /** A topic named after one step while it holds the whole goal; never one merged away. */
+  renames: { topicId: string; name: string; reason: string }[];
+  /** Topics whose kind changes; never one merged away. */
+  kinds: { topicId: string; kind: TopicKind }[];
 }
 
 export type TopicAssignment =

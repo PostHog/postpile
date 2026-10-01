@@ -66,10 +66,13 @@ export const topicTidyOutput = z.object({
         prKeys: z.array(text),
         intoTopicId: text.nullable().default(null),
         newName: text.nullable().default(null),
+        newKind: topicKind,
         reason: text.min(1),
       }),
     )
     .default([]),
+  renames: z.array(z.object({ topicId: text, name: text.min(1), reason: text.min(1) })).default([]),
+  kinds: z.array(z.object({ topicId: text, kind: topicKind })).default([]),
 });
 
 /** Only what changes: anything the answer leaves out stays as it is. */
