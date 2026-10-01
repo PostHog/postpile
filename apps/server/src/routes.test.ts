@@ -204,17 +204,23 @@ describe('server routes over the fake engine', () => {
     const doneKey = done.tile.members[0]!.prKey;
     const opened = (key: string) => post<OpenedReadResult>(app, `/api/prs/${key.replace('#', '/')}/opened`);
 
-    expect((await opened(doneKey)).json).toEqual({ marked: false });
+    const notMarked = { marked: false, undoToken: null };
+    expect((await opened(doneKey)).json).toEqual(notMarked);
     await post(app, '/api/github-writes', { enabled: true });
-    expect((await opened(yours.tile.members[0]!.prKey)).json).toEqual({ marked: false });
-    expect((await opened(doneKey)).json).toEqual({ marked: true });
-    expect((await opened(doneKey)).json).toEqual({ marked: false });
+    expect((await opened(yours.tile.members[0]!.prKey)).json).toEqual(notMarked);
+    const marked = (await opened(doneKey)).json;
+    expect(marked).toEqual({ marked: true, undoToken: expect.any(String) });
+    expect((await opened(doneKey)).json).toEqual(notMarked);
     // Handled in PostPile too: the tile is done now, not just read.
-    const topic = (await (await app.request(`/api/topics/${done.tile.topicId}`)).json()) as TopicDetail;
-    expect(topic.tiles.find((view) => view.tile.id === done.tile.id)?.state.kind).toBe('done');
+    const tileState = async () => {
+      const topic = (await (await app.request(`/api/topics/${done.tile.topicId}`)).json()) as TopicDetail;
+      return topic.tiles.find((view) => view.tile.id === done.tile.id)?.state.kind;
+    };
+    expect(await tileState()).toBe('done');
 
-    const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
-    expect(quiet[0]).toMatchObject({ prKey: doneKey, reason: 'opened' });
+    // The button's Undo takes it back through the mark-read undo window.
+    await post(app, '/api/undo', { undoToken: marked.undoToken });
+    expect(await tileState()).toBe(done.state.kind);
   });
 
   it('does not mark anything read when the debug list is read', async () => {

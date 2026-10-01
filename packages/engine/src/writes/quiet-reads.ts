@@ -2,7 +2,6 @@ import {
   isClearableNonPr,
   judgedReadCheck,
   judgedReadDetail,
-  openedReadCheck,
   prReadScope,
   quietReadCheck,
   quietReadDetail,
@@ -10,8 +9,6 @@ import {
   QUIET_READS_PER_RUN,
   touchedReadCheck,
   type NotificationThread,
-  type OpenedReadInput,
-  type OpenedSkip,
   type PrKey,
   type QuietReadInput,
 } from '@postpile/core';
@@ -22,7 +19,6 @@ import { errorText } from '../errors.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import { readLocally } from '../actions/local-change.ts';
 import type { GitHubWrites } from './github-writes.ts';
-import { OpenedReadInputs } from './opened-read-inputs.ts';
 import { markThreadReadIfUnchanged } from './thread-mark-read.ts';
 
 /** A thread that passed the rules, with the action log detail that says why. `prKey` is null for a notification that is not a PR. */
@@ -61,14 +57,6 @@ function quietDetail(input: QuietReadInput): string | null {
     return judgedReadDetail(judged.actors);
   }
   return null;
-}
-
-/** Why an open marked nothing, for the text log: "stale_snapshot (fetched …, thread updated …)". */
-function openedSkipDetail(why: OpenedSkip, input: OpenedReadInput): string {
-  if (why === 'stale_snapshot') {
-    return `${why} (snapshot fetched ${input.prFetchedAt ?? 'never'}, thread updated ${input.thread?.updatedAt ?? 'never'})`;
-  }
-  return why;
 }
 
 /**
@@ -151,55 +139,6 @@ export class QuietReads {
       readLocally(this.store, prReadScope(candidate.prKey, false), { kind: 'quiet', readAt: result.readAt }, result.readAt);
     }
     return true;
-  }
-
-  /**
-   * PostPile's side of an open: every event of the PR seen and the PR
-   * handled, like a mark-read of it. True when anything changed.
-   */
-  private handleOpened(prKey: PrKey, at: string): boolean {
-    const change = readLocally(this.store, prReadScope(prKey, true), { kind: 'opened' }, at);
-    return change.eventIds.length > 0 || change.handledKeys.length > 0;
-  }
-
-  /**
-   * "Opened in PostPile" (DESIGN.md "You already dealt with it"): the user
-   * opened the PR in the detail pane. When a mark-read of that PR would leave
-   * it done and no tile holding it is snoozed (`openedReadCheck`), and only
-   * while writes are unlocked: its thread is marked read on GitHub if it is
-   * unread there (same write and mirror as the sync's quiet mark-reads, no
-   * undo window), and the PR is handled here too (2026-09-29), events seen
-   * and `handledAt` set. A thread GitHub has read already only gets the
-   * PostPile side. True when anything changed.
-   */
-  async markOpened(prKey: PrKey): Promise<boolean> {
-    if (!this.writes.enabled()) {
-      return false;
-    }
-    const nowIso = this.now().toISOString();
-    const input = new OpenedReadInputs(Board.load(this.store, nowIso), this.store).of(prKey);
-    const thread = input.thread;
-    const check = openedReadCheck(input);
-    if (check.kind === 'skip') {
-      this.textLog(`opened read of ${prKey} skipped: ${openedSkipDetail(check.why, input)}`);
-      return false;
-    }
-    if (thread === null) {
-      return false;
-    }
-    if (check.kind === 'mark') {
-      const marked = await this.markOne({ thread, prKey, detail: quietReasonDetail('opened') });
-      if (!marked) {
-        return false;
-      }
-    }
-    const handled = this.handleOpened(prKey, nowIso);
-    if (check.kind === 'handle' && handled) {
-      // GitHub had it read already: logged like any mark-read that only changed the app.
-      this.writes.log.record({ action: 'mark_read', origin: 'quiet', outcome: 'local', prKey, threadId: thread.id, detail: 'no unread GitHub thread' });
-    }
-    advanceSeenFromGitHub(this.store, [prKey], nowIso);
-    return check.kind === 'mark' || handled;
   }
 
   async run(): Promise<QuietReadsResult> {

@@ -290,11 +290,12 @@ export interface EngineService {
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
   markThreadRead(threadId: string): Promise<ActionResult>;
   /**
-   * The user opened the PR in the detail pane: when a mark-read of that PR
-   * would leave it done and no tile holding it is snoozed, only while writes
-   * are unlocked, marks its GitHub thread read if it is unread ("opened in
-   * PostPile", origin quiet, no undo) and handles the PR here (events seen,
-   * handledAt). Nothing happens otherwise, not even a pending write.
+   * The PR stayed through the dwell in the detail pane: when a mark-read of
+   * that PR would leave it done and no tile holding it is snoozed, only while
+   * writes are unlocked, marks it read like the pane's Mark read (origin
+   * detail, its own batch and undo token): events seen, handledAt, and an
+   * unread GitHub thread queued for after the undo window. Nothing happens
+   * otherwise, not even a pending write.
    */
   markOpenedRead(prKey: PrKey): Promise<OpenedReadResult>;
   /** undoToken null undoes the most recent pending mark-read batch. Memory correction tokens undo that correction. */

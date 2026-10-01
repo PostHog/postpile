@@ -3,7 +3,8 @@
 // (DESIGN.md "You already dealt with it", part 3). Each row carries the
 // server's verdict (`PrSummary.openedRead`), so the button never promises a
 // mark the server then refuses; the server checks again when asked.
-import type { GitHubWritesStatus, PrKey, PrSummary } from '@postpile/core';
+import type { GitHubWritesStatus, OpenedReadResult, PrKey, PrSummary } from '@postpile/core';
+import { UNDO_WINDOW_MS } from './undo-window.ts';
 
 /** How long a PR stays open in the detail pane before it counts as opened; clicking through tiles marks nothing. */
 export const OPENED_READ_DELAY_MS = 1500;
@@ -35,34 +36,40 @@ export interface OpenedReadClock {
 }
 
 /**
- * Where the open stands, for the mark button's fill: idle (not counting),
- * filling (the dwell runs), ready (armed, marks when the user leaves),
- * cancelled ("Keep unread"), done (the mark was sent).
+ * Where the open stands, for the mark button:
+ * - idle: not counting (hidden during the dwell, or the server marked nothing).
+ * - filling: the dwell runs, the button fills.
+ * - sending: the dwell ended and the mark is on its way; the fill stays full.
+ * - marked: "✓ Marked read" with Undo, inside the undo window.
+ * - settled: still "✓ Marked read", the undo window is over.
+ * - undone: Undo took the mark back; this open does not arm again.
  */
-export type OpenedReadPhase = 'idle' | 'filling' | 'ready' | 'cancelled' | 'done';
+export type OpenedReadPhase = 'idle' | 'filling' | 'sending' | 'marked' | 'settled' | 'undone';
 
 /**
- * One open of a PR in the detail pane (2026-09-29, "Marked when you move
- * on"). The PR has to stay OPENED_READ_DELAY_MS on screen while the document
- * is visible: that arms the open, the proof the user looked. The mark itself
- * (`onOpened`) only fires when the user moves on: `leave()` (another PR or
- * tile, the detail pane closed) or `hidden()` (the window hidden or blurred:
- * leaving the app counts too). Marking while the PR is still on screen
- * changed its status under the user's eyes. Clicking through PRs faster
- * than the delay marks nothing; hidden before the delay, the wait starts
- * over once visible again (Codex review on PR #10). Once per open, and only
- * while `setWanted(true)` (`opensMarkRead`) holds at that moment.
+ * One open of a PR in the detail pane (2026-10-01, "Marked when the dwell
+ * ends"). The PR has to stay OPENED_READ_DELAY_MS on screen while the
+ * document is visible; when that dwell ends, the mark (`onOpened`) fires
+ * right away, if `setWanted(true)` (`opensMarkRead`) holds then, or as soon
+ * as it does while the PR stays open. Clicking through PRs faster than the
+ * delay marks nothing; hidden before the delay, the wait starts over once
+ * visible again (Codex review on PR #10). Hiding the window after that
+ * changes nothing. Once per open: Undo (`undo()`) hands back the server's
+ * token inside the undo window and the open stays spent. `leave()` drops
+ * the open: its timers stop and a late answer is ignored.
  */
 export class OpenedReadTimer {
-  private handle: number | null = null;
+  private dwell: number | null = null;
+  private undoWindow: number | null = null;
   private armed = false;
   private fired = false;
-  private cancelled = false;
+  private left = false;
   private wanted = false;
+  private undoToken: string | null = null;
   private current: OpenedReadPhase = 'idle';
 
   constructor(
-    private readonly onOpened: () => void,
+    private readonly onOpened: () => Promise<OpenedReadResult | null>,
     private readonly clock: OpenedReadClock,
     private readonly onPhase: (phase: OpenedReadPhase) => void = () => {},
   ) {}
@@ -78,57 +85,100 @@ export class OpenedReadTimer {
     return this.current;
   }
 
-  private stopWait(): void {
-    if (this.handle !== null) {
-      this.clock.clearTimeout(this.handle);
-      this.handle = null;
+  private stopDwell(): void {
+    if (this.dwell !== null) {
+      this.clock.clearTimeout(this.dwell);
+      this.dwell = null;
       this.setPhase('idle');
     }
   }
 
-  /** Fires once, when armed and wanted. */
-  private fireIfArmed(): void {
-    if (this.armed && this.wanted && !this.fired && !this.cancelled) {
-      this.fired = true;
-      this.setPhase('done');
-      this.onOpened();
+  private stopUndoWindow(): void {
+    if (this.undoWindow !== null) {
+      this.clock.clearTimeout(this.undoWindow);
+      this.undoWindow = null;
     }
+  }
+
+  /** What the server answered: marked with a token opens the undo window, anything else leaves the button as it was. */
+  private answered(result: OpenedReadResult | null): void {
+    if (this.left) {
+      return;
+    }
+    if (!result?.marked) {
+      this.setPhase('idle');
+      return;
+    }
+    if (result.undoToken === null) {
+      this.setPhase('settled');
+      return;
+    }
+    this.undoToken = result.undoToken;
+    this.setPhase('marked');
+    this.undoWindow = this.clock.setTimeout(() => {
+      this.undoWindow = null;
+      this.undoToken = null;
+      this.setPhase('settled');
+    }, UNDO_WINDOW_MS);
+  }
+
+  /** Fires once, when the dwell is over and a mark is wanted. */
+  private fireIfArmed(): void {
+    if (!this.armed || !this.wanted || this.fired || this.left) {
+      return;
+    }
+    this.fired = true;
+    this.setPhase('sending');
+    void this.onOpened().then(
+      (result) => this.answered(result),
+      () => this.answered(null),
+    );
   }
 
   /** Whether a mark-read of the PR is wanted right now (`opensMarkRead`), kept up to date while it is open. */
   setWanted(wanted: boolean): void {
     this.wanted = wanted;
+    this.fireIfArmed();
   }
 
-  /** The document is visible: start the wait, unless one runs or the open is armed already. */
+  /** The document is visible: start the dwell, unless one runs or it is over already. */
   visible(): void {
-    if (this.fired || this.cancelled || this.armed || this.handle !== null) {
+    if (this.left || this.armed || this.dwell !== null) {
       return;
     }
     this.setPhase('filling');
-    this.handle = this.clock.setTimeout(() => {
-      this.handle = null;
+    this.dwell = this.clock.setTimeout(() => {
+      this.dwell = null;
       this.armed = true;
-      this.setPhase('ready');
+      if (this.wanted) {
+        this.fireIfArmed();
+      } else {
+        this.setPhase('idle');
+      }
     }, OPENED_READ_DELAY_MS);
   }
 
-  /** "Keep unread": leaving no longer marks this open. Final for this open. */
-  cancel(): void {
-    this.cancelled = true;
-    this.stopWait();
-    this.setPhase('cancelled');
-  }
-
-  /** The window was hidden or lost focus: an armed open fires, a running wait stops. */
+  /** The window was hidden or lost focus: a running dwell stops and starts over once visible. A finished dwell stays finished. */
   hidden(): void {
-    this.stopWait();
-    this.fireIfArmed();
+    this.stopDwell();
   }
 
-  /** The user moved on to another PR or tile, or closed the pane: an armed open fires. */
+  /** "Undo" next to "✓ Marked read": the token to undo with, or null when the window is over. Final for this open. */
+  undo(): string | null {
+    const token = this.undoToken;
+    if (token === null || this.current !== 'marked') {
+      return null;
+    }
+    this.undoToken = null;
+    this.stopUndoWindow();
+    this.setPhase('undone');
+    return token;
+  }
+
+  /** The user moved on to another PR or tile, or closed the pane: the open ends. The mark, if any, already went out. */
   leave(): void {
-    this.stopWait();
-    this.fireIfArmed();
+    this.left = true;
+    this.stopDwell();
+    this.stopUndoWindow();
   }
 }

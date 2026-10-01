@@ -178,13 +178,15 @@ describe('markOpenedRead on a set: checked per PR', () => {
     await h.engine.setGitHubWrites(true);
     expect((await setView(h)).afterRead.done).toBe(false);
 
-    expect(await h.engine.markOpenedRead(second.key)).toEqual({ marked: true });
+    expect(await h.engine.markOpenedRead(second.key)).toEqual({ marked: true, undoToken: expect.any(String) });
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
 
     expect(h.writer.calls).toEqual([`markThreadRead thread-${second.ref.number}`]);
     const view = await setView(h);
     expect(doneByKey(view)).toEqual({ [first.key]: false, [second.key]: true, [asking.key]: false });
     expect(view.state.kind).not.toBe('done');
     // The PR that asks for a review is left alone.
-    expect(await h.engine.markOpenedRead(asking.key)).toEqual({ marked: false });
+    expect(await h.engine.markOpenedRead(asking.key)).toEqual({ marked: false, undoToken: null });
   });
 });

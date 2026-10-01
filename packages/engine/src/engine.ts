@@ -114,6 +114,7 @@ import { MemoryActions } from './actions/memory-actions.ts';
 import { ProposalActions } from './actions/proposal-actions.ts';
 import { ReadMarker } from './actions/read-marker.ts';
 import { TileActions } from './actions/tile-actions.ts';
+import { OpenedReads } from './actions/opened-reads.ts';
 import type { AgentCallLog } from './agent-call-log.ts';
 import { AutoSyncSchedule } from './auto-sync.ts';
 import { Board } from './board.ts';
@@ -256,6 +257,7 @@ function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic
 export class Engine implements EngineService {
   private readonly reads: ReadModels;
   private readonly tiles: TileActions;
+  private readonly openedReads: OpenedReads;
   private readonly prActions: PrActions;
   private readonly feedback: FeedbackActions;
   private readonly chats: ChatActions;
@@ -339,6 +341,7 @@ export class Engine implements EngineService {
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
+    this.openedReads = new OpenedReads(store, readMarker, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
     this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now, (key) => this.refreshAfterWrite(key));
     this.feedback = new FeedbackActions(store, readMarker, now);
     this.chats = new ChatActions(store, deps.agent, contexts, now);
@@ -1074,13 +1077,7 @@ export class Engine implements EngineService {
   }
 
   async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
-    try {
-      return { marked: await this.quietReads.markOpened(prKey) };
-    } catch (error) {
-      // GitHubWrites logged it as failed; the thread stays unread for the next open or sync.
-      (this.deps.syncLog ?? console.log)(`opened in PostPile: mark-read of ${prKey}: ${errorText(error)}`);
-      return { marked: false };
-    }
+    return this.openedReads.markOpened(prKey);
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

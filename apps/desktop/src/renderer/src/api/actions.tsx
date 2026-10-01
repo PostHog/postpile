@@ -55,6 +55,7 @@ import { markReadNotice } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
+import { UNDO_WINDOW_MS } from '../lib/undo-window.ts';
 import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
 import { useLastSyncReport } from './sync.ts';
@@ -63,8 +64,6 @@ import { prPath, request, tilePath, tilePrPath } from './client.ts';
 import { queryKeys } from './keys.ts';
 import { sendTelemetry } from './telemetry.ts';
 
-// Matches UNDO_WINDOW_MS in the engine. The renderer imports types only.
-const UNDO_WINDOW_MS = 6000;
 const NOTICE_MS = 6000;
 // Matches the engine's memory correction undo tokens.
 const MEMORY_UNDO_PREFIX = 'memory:';
@@ -125,11 +124,13 @@ export interface Actions {
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo and lock as a tile. */
   markThreadRead(threadId: string): Promise<void>;
   /**
-   * The PR stayed open in the detail pane: the server marks its GitHub thread
-   * read when nothing is asked of the user. Quiet (no toast, no undo), and
-   * never sent while GitHub writes are locked.
+   * The PR stayed through the dwell in the detail pane: the server marks it
+   * read when nothing is asked of the user, like the pane's Mark read. No
+   * toast: the mark button says it and offers the Undo (`undo` with the
+   * result's token). Never sent while GitHub writes are locked; null when it
+   * was not sent or failed.
    */
-  markOpenedRead(prKey: PrKey): Promise<void>;
+  markOpenedRead(prKey: PrKey): Promise<OpenedReadResult | null>;
   /** `headOid`: the head commit on screen; the server refuses the approval when the PR moved past it. */
   approve(prKey: PrKey, headOid: string): Promise<void>;
   /**
@@ -504,17 +505,24 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function markOpenedRead(prKey: PrKey): Promise<void> {
+  async function markOpenedRead(prKey: PrKey): Promise<OpenedReadResult | null> {
     if (writeBlockedReason('openedRead', writes) !== null) {
-      return;
+      return null;
     }
     try {
       const result = await request<OpenedReadResult>('POST', `${prPath(prKey)}/opened`);
+      if (result.undoToken) {
+        // Counted in the footer and refetched when its window ends, like a clicked mark-read.
+        const entry = { token: result.undoToken, until: Date.now() + UNDO_WINDOW_MS };
+        setPendingUndos((current) => [...current, entry]);
+      }
       if (result.marked) {
         await refreshAll();
       }
+      return result;
     } catch {
       // Nobody clicked anything, so nothing to report: the next open or sync tries again.
+      return null;
     }
   }
 

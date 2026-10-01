@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
 import { layoutBuckets, layoutFromBuckets, queueLayout, queueRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { stateMix } from '../lib/pr-mix.ts';
@@ -143,7 +144,7 @@ function PrStateMark(props: { item: TopicListItem }) {
 }
 
 /** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
-function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void }) {
+function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; flipGroup: string }) {
   const { item } = props;
   // Active: the white lift of the selected PR row. Unread: bold ink name, the bubble and a warm row with a faint honey ring. Read: regular, quieter.
   const unread = unreadLook(item) !== null;
@@ -163,12 +164,16 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
   return (
     <button
       type="button"
+      data-flip-key={`topic:${item.topic.id}`}
+      data-flip-group={props.flipGroup}
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
       className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
     >
       <span className="flex w-full min-w-0 items-center">
-        <LeadSlot>{item.unreadPrs > 0 && <UnreadDot />}</LeadSlot>
+        <LeadSlot>
+          <UnreadDot shown={item.unreadPrs > 0} />
+        </LeadSlot>
         <span className="flex min-w-0 flex-1 items-center gap-[7px]">
           <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>
           <span className="ml-auto" />
@@ -200,7 +205,10 @@ function SectionHeader(props: { tier: PrTier | 'other' }) {
   const look = sectionLook(props.tier);
   return (
     // The dot sits in the row's leading slot column, so the label lands on the same x as the topic names.
-    <span className={`flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}>
+    <span
+      data-flip-key={`section:${props.tier}`}
+      className={`flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}
+    >
       <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />
       {look.label}
     </span>
@@ -208,10 +216,10 @@ function SectionHeader(props: { tier: PrTier | 'other' }) {
 }
 
 /** A section title that folds its topics away. The chevron takes the topic rows' leading slot, so the label starts on the topic names' x. */
-function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean }) {
+function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; flipKey: string }) {
   const size = props.small ? 'text-[10.5px] font-medium text-hint' : 'text-[11px] font-semibold tracking-[0.04em] text-hint';
   return (
-    <button type="button" aria-expanded={props.open} onClick={props.onToggle} className="flex items-center px-2 py-1 text-left">
+    <button type="button" data-flip-key={props.flipKey} aria-expanded={props.open} onClick={props.onToggle} className="flex items-center px-2 py-1 text-left">
       <LeadSlot>
         <span className={`flex text-faint ${props.open ? '' : '-rotate-90'}`}>
           <ChevronIcon />
@@ -235,7 +243,7 @@ function FinishedDrawer(props: { open: boolean; onToggle: () => void; activeTopi
   }
   return (
     <div className="flex flex-col gap-px">
-      <GroupHeader small label="Finished" open={props.open} onToggle={props.onToggle} />
+      <GroupHeader small label="Finished" open={props.open} onToggle={props.onToggle} flipKey="group:finished" />
       {props.open &&
         finished.map((topic) => {
           const active = topic.id === props.activeTopicId;
@@ -364,25 +372,27 @@ export function TopicSidebar(props: TopicSidebarProps) {
   const tools = useTools().data;
   const filter = props.filter;
   const narrowed = filter !== null || props.queueFilter !== null;
-  // The open topic keeps its row while a tile in it stays selected ("Marked when you move on").
+  // The open topic keeps its row while a tile in it stays selected ("Marked when you move on"); when it moves, rows slide.
+  const navRef = useRef<HTMLElement>(null);
+  useFlip(navRef, { landed: false });
   const layout = layoutFromBuckets(useHeldPlace(props.selectedTileId, props.activeTopicId, layoutBuckets(queueLayout(props.shown)), queueRowId));
   const groups = sidebarGroups(layout.other);
   // While filtering every fold is open, so no match hides in one.
   const isOpen = (key: SectionKey) => narrowed || !folded.includes(key);
   const toggle = (key: SectionKey) => setFolded(isOpen(key) ? [...folded, key] : folded.filter((entry) => entry !== key));
-  const topicItem = (item: TopicListItem) => (
-    <TopicItem key={item.topic.id} item={item} active={item.topic.id === props.activeTopicId} onSelect={() => props.onSelect(item.topic.id)} />
+  const topicItem = (item: TopicListItem, group: string) => (
+    <TopicItem key={item.topic.id} item={item} flipGroup={group} active={item.topic.id === props.activeTopicId} onSelect={() => props.onSelect(item.topic.id)} />
   );
-  const otherItems = (items: TopicListItem[]) => items.map(topicItem);
+  const otherItems = (items: TopicListItem[], group: string) => items.map((item) => topicItem(item, group));
   const group = (key: SectionKey, label: string, items: TopicListItem[], children: ReactNode) =>
     items.length === 0 ? null : (
       <div key={key} className="flex flex-col gap-px">
-        <GroupHeader small label={label} open={isOpen(key)} onToggle={() => toggle(key)} />
+        <GroupHeader small label={label} open={isOpen(key)} onToggle={() => toggle(key)} flipKey={`group:${key}`} />
         {isOpen(key) && children}
       </div>
     );
   return (
-    <nav aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
+    <nav ref={navRef} aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
@@ -398,7 +408,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       {layout.sections.map((section) => (
         <div key={section.tier} className="flex flex-col gap-px">
           <SectionHeader tier={section.tier} />
-          {section.rows.map((row) => topicItem(row.item))}
+          {section.rows.map((row) => topicItem(row.item, section.tier))}
         </div>
       ))}
       {props.queueFilter && props.hiddenByQueueFilter > 0 && (
@@ -407,20 +417,26 @@ export function TopicSidebar(props: TopicSidebarProps) {
       {layout.other.length > 0 && (
         <div className="flex flex-col gap-1">
           <SectionHeader tier="other" />
-          {group('needs', 'Needs you', groups.needsYou, otherItems(groups.needsYou))}
+          {group('needs', 'Needs you', groups.needsYou, otherItems(groups.needsYou, 'needs'))}
           {group(
             'team',
             'Your team',
             groups.team.flatMap((entry) => entry.items),
             groups.team.map((entry) => (
               <div key={entry.area} className="flex flex-col gap-px">
-                <GroupHeader small label={entry.area} open={isOpen(`area:${entry.area}`)} onToggle={() => toggle(`area:${entry.area}`)} />
-                {isOpen(`area:${entry.area}`) && otherItems(entry.items)}
+                <GroupHeader
+                  small
+                  label={entry.area}
+                  open={isOpen(`area:${entry.area}`)}
+                  onToggle={() => toggle(`area:${entry.area}`)}
+                  flipKey={`group:area:${entry.area}`}
+                />
+                {isOpen(`area:${entry.area}`) && otherItems(entry.items, `area:${entry.area}`)}
               </div>
             )),
           )}
-          {group('routed', 'Routed to you', groups.routed, otherItems(groups.routed))}
-          {group('fyi', 'FYI', groups.fyi, otherItems(groups.fyi))}
+          {group('routed', 'Routed to you', groups.routed, otherItems(groups.routed, 'routed'))}
+          {group('fyi', 'FYI', groups.fyi, otherItems(groups.fyi, 'fyi'))}
         </div>
       )}
       {/* Search and the queue filters cover live topics only, so the drawer steps aside while they narrow. */}

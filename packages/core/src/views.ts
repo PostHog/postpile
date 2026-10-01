@@ -506,10 +506,17 @@ export interface BatchApproveResult extends ActionResult {
   results: PrApproveResult[];
 }
 
-/** Opening a PR in PostPile: whether its GitHub thread was marked read or the PR handled ("opened in PostPile"). Nothing to show either way. */
+/**
+ * Opening a PR in PostPile ("Marked when the dwell ends", 2026-10-01): whether
+ * the open marked it read (its GitHub thread queued, the PR handled here).
+ * The mark goes through the mark-read queue, so it has an undo window like
+ * the detail pane's Mark read.
+ */
 export interface OpenedReadResult {
-  /** Something changed (the thread on GitHub, or the PR's handled state here): the renderer refetches. */
+  /** Something changed (the thread queued for GitHub, or the PR's seen and handled state here): the renderer refetches. */
   marked: boolean;
+  /** Takes the mark back inside the undo window (`POST /api/undo`); null when nothing was marked. */
+  undoToken: string | null;
 }
 
 export type TileFeedbackKind = 'not_mine' | 'not_related' | 'wrong_topic';

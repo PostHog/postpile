@@ -199,19 +199,26 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
   leaves a topic (another topic or the Inbox), not on a timer.
-- `markOpenedRead` is quiet too (no toast, no undo) and on the
-  `GithubWrite` list as `openedRead`, blocked while locked (never a
-  pending write). `useOpenedRead` in `App.tsx` calls it once per open,
-  when the user moves on (another PR or tile, the pane closed, the window
-  hidden or blurred) after the PR stayed 1.5s in the detail pane with the
-  window visible and focused (`OpenedReadTimer`: the dwell arms, leaving
-  fires; hidden before the dwell restarts the wait). Never while the PR is
-  still on screen: the status must not change under the user's eyes. Only when
-  `opensMarkRead` (`lib/opened-read.ts`) says a mark-read of that PR
+- `markOpenedRead` has no toast and is on the `GithubWrite` list as
+  `openedRead`, blocked while locked. `useOpenedRead` in `App.tsx` calls it
+  once per open, when the PR has stayed 1.5s in the detail pane with the
+  window visible and focused (`OpenedReadTimer`: the dwell end fires;
+  hidden before that restarts the wait, after it changes nothing). Only
+  when `opensMarkRead` (`lib/opened-read.ts`) says a mark-read of that PR
   leaves it done (`PrSummary.afterRead.done`, per PR, not the tile's). The
-  server checks again, marks the GitHub thread read if it is unread
-  ("opened in PostPile", listed under Handled quietly) and handles the PR
-  (done in PostPile too).
+  server checks again and marks it read like the pane's Mark read (its own
+  batch, undo token in `OpenedReadResult`). The pane then shows
+  `OpenedMarkNote` ("✓ Marked read" / "✓ Done for now") in the mark
+  button's place with Undo while the window lasts (`UNDO_WINDOW_MS` in
+  `lib/undo-window.ts`); Undo goes through `useActions().undo` and the open
+  does not arm again. Never a "Marks read when you leave" promise
+  (2026-10-01, DESIGN.md "Marked when the dwell ends").
+- The selected tile and its topic row hold their place (`useHeldPlace`)
+  until the selection moves; list moves then slide with `useFlip`
+  (`lib/use-flip.ts`): mark the moving elements `data-flip-key` (never one
+  inside another) and `data-flip-group`. The unread dot (`UnreadDot`
+  `shown`) stays mounted and fades out. Respect `prefers-reduced-motion`
+  (`motion-reduce:` or the hook's check) in any new motion.
 - A missing glance is worded from `PrSummary.glanceState` /
   `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
   never "the next sync picks it up". Only a failed glance gets a button:
