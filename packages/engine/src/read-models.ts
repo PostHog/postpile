@@ -66,8 +66,10 @@ import {
   type Tile,
   type TileView,
   type TopicDetail,
-  topicPrState,
+  topicPrRollup,
+  topicSection,
   type TopicListItem,
+  type TopicQueues,
   type Viewer,
   type ViewerView,
   boardShapeEvents,
@@ -290,6 +292,21 @@ export class ReadModels {
     return topicIds.flatMap((topicId) => this.tileViews(board, topicId)).filter((view) => wanted(view.tile));
   }
 
+  /** The topic's PRs per tier and by author (`topicQueues`): the list row and the opened topic read the same numbers. */
+  private topicQueuesOf(board: Board, tiles: Tile[], prs: Pr[], viewer: Viewer | null, settings: RepoSettings): TopicQueues {
+    const pinged = pingedPrKeys(tiles);
+    return topicQueues(
+      prs.map((pr) => ({
+        tier: this.tierOf(board, pr, viewer),
+        author: ownerRelation(pr, viewer),
+        state: pr.state,
+        pulledIn: !pinged.has(pr.key),
+        quiet: isPrInQuietRepo(pr.key, settings),
+        changesAddressed: this.isReReview(board, pr, viewer),
+      })),
+    );
+  }
+
   /** Each PR of the topic's tiles once, in tile order. */
   private topicPrs(board: Board, tiles: Tile[]): Pr[] {
     const prs = new Map<PrKey, Pr>();
@@ -353,8 +370,8 @@ export class ReadModels {
         }),
       );
       const prs = this.topicPrs(board, tiles);
-      const pinged = pingedPrKeys(tiles);
-      const prSummary = topicPrState(prs.map((pr) => ({ state: pr.state, isDraft: pr.isDraft, pulledIn: !pinged.has(pr.key) })));
+      const queues = this.topicQueuesOf(board, tiles, prs, viewer, settings);
+      const prRollup = topicPrRollup(tiles, prs);
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
       items.push({
@@ -370,19 +387,11 @@ export class ReadModels {
         totalTiles: states.length,
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
-        queues: topicQueues(
-          prs.map((pr) => ({
-            tier: this.tierOf(board, pr, viewer),
-            author: ownerRelation(pr, viewer),
-            state: pr.state,
-            pulledIn: !pinged.has(pr.key),
-            quiet: isPrInQuietRepo(pr.key, settings),
-            changesAddressed: this.isReReview(board, pr, viewer),
-          })),
-        ),
+        queues,
+        section: topicSection(queues),
         people: topicFaces(topicPeople(prs, viewer)),
-        prState: prSummary.state,
-        prStateCounts: prSummary.counts,
+        prState: prRollup.state,
+        prStateCounts: prRollup.counts,
       });
     }
     return items.sort(compareTopics);
@@ -435,6 +444,9 @@ export class ReadModels {
     }
     const isUnsorted = topicId === UNSORTED_TOPIC_ID;
     const tiles = this.tileViews(board, topicId);
+    const topicTiles = board.tilesForTopic(topicId);
+    const prs = this.topicPrs(board, topicTiles);
+    const queues = this.topicQueuesOf(board, topicTiles, prs, loadViewer(this.store), loadRepoSettings(this.store));
     return {
       topic,
       placement: isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined),
@@ -445,6 +457,8 @@ export class ReadModels {
       decidedProposals: isUnsorted ? [] : this.decidedProposals(topicId, now),
       dossier: isUnsorted ? null : this.memory.dossierView(topicId, board.prs),
       agent: topicAgentOffers(tiles),
+      prRollup: topicPrRollup(topicTiles, prs),
+      section: topicSection(queues),
     };
   }
 

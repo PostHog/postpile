@@ -391,8 +391,8 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   warm strip; an open tile with an unseen merge without the user's review
   (`TileState.unseenMerges`) gets the same-sized grey `UnseenMergeStrip`,
   no NEW pill; read tiles get a quieter (ink-2) title, Dealt with and draft tiles a
-  muted one. Drafts (`isDraftTile`): grey "Draft" chip and a dashed frame
-  or dashed left band.
+  muted one. Drafts (core's `TileView.draft`, `isDraftTile`): grey "Draft"
+  chip and a dashed frame or dashed left band.
 - PR status (design 3a, 2026-09-29): `PrStateIcon` at the start of the row,
   `StateWordLabel` on the right ("Needs review", "Approved", "Changes
   requested", DRAFT chip, "Merged", "Closed"), open threads after it. The
@@ -460,7 +460,9 @@ The sidebar lists topics in queue sections (`lib/queues.ts`,
 requested, My PRs, Team's PRs, To review, Team mentioned, then Other
 topics, which keeps the old groups from `lib/sidebar.ts` (`sidebarGroups`:
 Needs you, Your team by area, Routed, FYI). Each topic sits once, in its
-highest section (`topicSectionTier`); the queue filters still match it by
+section core gives it (`TopicListItem.section`, `topicSection`); the
+topic header's breadcrumb reads the same field on `TopicDetail` and the same
+label and dot (`lib/sections.ts`). The queue filters still match it by
 any PR. Fold state is local UI state; Routed, FYI and Finished start
 folded. The Finished drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so

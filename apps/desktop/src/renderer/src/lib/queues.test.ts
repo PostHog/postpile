@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PrSummary, PrTier, TileView, Topic, TopicListItem } from '@postpile/core';
+import { topicSection, type PrSummary, type PrTier, type TileView, type Topic, type TopicListItem } from '@postpile/core';
 import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { holdPlace, placeIn } from './hold-place.ts';
 import {
@@ -18,8 +18,10 @@ import {
 
 type Tiers = Partial<Record<PrTier, number>>;
 
+/** A topic with these PRs per tier, in the section core gives it (`topicSection`). */
 function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): TopicListItem {
   const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
+  const queues = { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0, changesAddressed: 0 };
   return {
     topic,
     placement: null,
@@ -32,7 +34,8 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): Top
     openTiles: 0,
     totalTiles: 1,
     yourMoves: [], unseenMergeTiles: 0,
-    queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0, changesAddressed: 0 },
+    queues,
+    section: topicSection(queues),
     people: [],
     prState: null,
     prStateCounts: { open: 0, draft: 0, merged: 0, closed: 0 },
@@ -132,18 +135,6 @@ describe('queueLayout', () => {
       ['team', 1, [['ci', 1]]],
     ]);
     expect(layout.other.map((entry) => entry.topic.id)).toEqual(['docs']);
-  });
-
-  it('lets a mixed topic follow the work: your PR never pulls it above what other PRs ask', () => {
-    const devbox = item('devbox', { mine: 2, to_review: 1 });
-    const runners = item('runners', { mine: 1, team: 1 });
-    const app = item('app', { mine: 3, rest: 2 });
-    const layout = queueLayout([devbox, runners, app]);
-    expect(layout.sections.map((section) => [section.tier, section.rows.map((row) => row.item.topic.id)])).toEqual([
-      ['mine', ['app']],
-      ['team', ['runners']],
-      ['to_review', ['devbox']],
-    ]);
   });
 
   it('puts Changes you requested under Needs reply and above My PRs', () => {

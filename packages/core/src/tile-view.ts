@@ -15,6 +15,7 @@ import { prPrimaryAction } from './primary-action.ts';
 import { isApprovedByViewer, ownTeamRequests, reviewRequest } from './review-request.ts';
 import { tileGroup } from './tile-groups.ts';
 import { tilePeople } from './tile-people.ts';
+import { isDraftTile } from './topic-pr-state.ts';
 import { openedReadCheck, type OpenedReadInput } from './quiet-reads.ts';
 import { isTracked } from './provenance.ts';
 import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
@@ -202,6 +203,7 @@ export function buildTileView(input: TileViewInput): TileView {
     pendingWrite: input.pendingWrite,
     offers,
     agent: tileAgentOffers({ prs, offers, state: input.state, unreadPrKeys }, input.agentPrs),
+    draft: isDraftTile(prs),
     unreadPrKeys,
     group: tileGroup(input.state),
     newBadge: tileNewBadge(input.state),

@@ -2218,7 +2218,10 @@ it won't merge soon. Rules in core:
   mention or reply.
 - UI: a tile whose open tracked PRs are all drafts gets a grey "Draft" chip,
   a dashed frame (a dashed left band when it has a for-whom band) and a
-  muted title; the row's DRAFT chip already says so.
+  muted title; the row's DRAFT chip already says so. Core decides it
+  (`TileView.draft` = `isDraftTile`, 2026-10-01) with the same rule as the
+  topic's PR state icon (`topicPrState` says draft), so the chip and a draft
+  topic icon can't disagree; pulled-in layers are skipped in both.
 
 **Own PRs never ask for a review** (2026-09-28, Julian got asked to
 approve his own PRs). The rules above already route own PRs to rule 3 before
@@ -2675,6 +2678,20 @@ avatars and filters", QueuesB2).
   the same x on every row (and the section labels line up with them). The
   tooltip ("5 open · 1 merged") is the only place the counts show. Chosen
   over counts per state (busier, steals summary width) and a progress bar.
+- **Topic header PR pill** (`TopicDetail.prRollup` = `topicPrRollup`,
+  2026-10-01): the same state icon as the sidebar row, from the same core
+  helper, then the number of distinct PRs in the topic's tiles. Found PRs
+  (own open PRs, review requests, recent merges the sync found) count, and so
+  do pulled-in stack layers, since the tiles show them; the old
+  pinged + pulled-in count said "0 PRs" on a topic of only found PRs. The
+  tooltip gives the lifecycle mix and the review mix of the tracked PRs from
+  `PrStatus.review`, plus any pulled-in layers: "3 open · 1 draft · 1
+  merged; 2 need review, 1 approved".
+- **Breadcrumb = sidebar section** (`TopicDetail.section`, 2026-10-01):
+  "Topics › To review › area", with the section's label and coloured dot as
+  the sidebar draws them; Other topics for a topic without a section,
+  Finished for a retired one. It used to say "Needs you" or "Quiet" from
+  `TopicGroup`, which only matches a subgroup inside Other topics.
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
   (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
@@ -3320,7 +3337,9 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
 - **The sections stay while it narrows**: the switch says which topics,
   the sections still say what needs you. Under "team PRs" a topic can sit
   under To review or Team's PRs, by what it asks of you.
-- **A mixed topic follows the work** (`topicSectionTier`): its section is the
+- **A mixed topic follows the work** (`topicSection` in core, on
+  `TopicListItem.section` and `TopicDetail.section` since 2026-10-01; it was
+  `topicSectionTier` in the renderer): its section is the
   highest any PR other than your own gives it; My PRs only when nothing else
   in it asks for a section. Your PR next to a teammate's review request puts
   the topic under To review; next to FYI PRs only, it stays under My PRs.
