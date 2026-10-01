@@ -1082,6 +1082,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Agent Approve goes base up on a stack** (2026-10-01, DESIGN.md
+  "Agent-assisted actions" › "Base up on a stack", "Approve labels"): a
+  layer is covered only when no approvable layer below it needs a look;
+  the layers above wait on it ("waits on #N"). Layers below that need no
+  review (merged, draft, own, approved already, pulled in) don't block. One
+  covered PR out of several is named ("Approve #109533"); "Approve stack"
+  only when every PR on the tile is covered.
 - **One colour per meaning** (2026-10-01, DESIGN.md "Colour per meaning"):
   amber only for Look closer, Needs review neutral ink, queued merged
   purple, one red for bad (closed, changes requested, risk), one green for

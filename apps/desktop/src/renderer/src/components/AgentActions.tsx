@@ -78,7 +78,7 @@ function ConfirmApprove(props: { offer: AgentApproveOffer; onCancel: () => void;
             <span className="font-medium text-ink-2">Left out</span>
             {offer.leftOut.map((pr) => (
               <span key={pr.prKey}>
-                <code className="font-mono text-[11px]">{pr.prKey}</code> {pr.title}: {leftOutReason(pr.reason)}
+                <code className="font-mono text-[11px]">{pr.prKey}</code> {pr.title}: {leftOutReason(pr)}
               </span>
             ))}
           </div>

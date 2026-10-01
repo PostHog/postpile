@@ -270,7 +270,7 @@ export function withOffers(view: Omit<TileView, 'offers' | 'agent' | 'draft' | '
   return {
     ...view,
     offers,
-    agent: tileAgentOffers({ prs: view.prs, offers, state: view.state, unreadPrKeys }, agentPrs),
+    agent: tileAgentOffers({ tile: view.tile, prs: view.prs, offers, state: view.state, unreadPrKeys }, agentPrs),
     draft: isDraftTile(view.prs),
     unreadPrKeys,
     group: tileGroup(view.state),

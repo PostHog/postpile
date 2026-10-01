@@ -1,12 +1,13 @@
 // The agent-assisted offers restated from the spec (DESIGN "Agent-assisted
 // actions", 2026-09-30): agent-safe and approvable PRs, the tile and topic
-// ✨ Approve, the tile's Mark read backing and the topic's "Mark N read".
+// ✨ Approve (base up on a stack, 2026-10-01), the tile's Mark read backing
+// and the topic's "Mark N read".
 // Read from the board (the stored glance, its risk line and stale flag,
 // the snapshot and the events), never from `agent-actions.ts`. Approvable
 // restates today's Approve rule the way `spec-offers.ts` does, done and
 // ask-for-you come from the spec oracles. Type imports only from the rule
 // modules.
-import type { AgentBlock, AgentOfferState, BackedRisk, MarkReadBlock, RiskLevel } from '../agent-actions.ts';
+import type { AgentBlock, AgentOfferState, ApproveNaming, BackedRisk, LeftOutReason, MarkReadBlock, RiskLevel } from '../agent-actions.ts';
 import type { Pr, PrKey, Review, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
@@ -98,7 +99,9 @@ export function specApprovable(board: PropertyBoard, view: TileView, row: PrSumm
 /** A PR an Approve names, with why it is left out (null when covered). */
 export interface SpecApprovePr {
   key: PrKey;
-  block: AgentBlock | null;
+  block: LeftOutReason | null;
+  /** On `layer_below`: the lowest layer below it that blocks it. */
+  waitsOn: PrKey | null;
 }
 
 export interface SpecApprove {
@@ -108,10 +111,58 @@ export interface SpecApprove {
   /** Covered PRs, in member order on a tile. */
   covered: PrKey[];
   leftOut: SpecApprovePr[];
+  /** Every PR the button stands for: the tile's rows, or each PR of the unsnoozed tiles once. */
+  prCount: number;
+  naming: ApproveNaming;
 }
 
+/** The layers below `key` in its stack on the tile, base first; empty outside a stack. */
+export function specLayersBelow(view: TileView, key: PrKey): PrKey[] {
+  const stack = view.tile.stacks.find((candidate) => candidate.prKeys.includes(key));
+  return stack ? stack.prKeys.slice(0, stack.prKeys.indexOf(key)) : [];
+}
+
+/**
+ * The lowest layer below `key` that blocks it (owner, 2026-10-01, base up):
+ * approvable on this tile but not agent-safe. Layers that are not
+ * approvable (merged, draft, the viewer's own, approved already, dealt
+ * with, pulled in) never block. Null outside a stack or with no such layer.
+ */
+export function specBlockingLayerBelow(board: PropertyBoard, view: TileView, key: PrKey): PrKey | null {
+  const approvableBelow = specLayersBelow(view, key).filter((layer) => {
+    const row = view.prs.find((candidate) => candidate.key === layer);
+    return row !== undefined && specApprovable(board, view, row);
+  });
+  return approvableBelow.find((layer) => specApproveBlock(board, layer) !== null) ?? null;
+}
+
+/** The tile's approvable PRs: an agent-safe one is covered unless a layer below blocks it; a layer below that blocks wins over its own block. */
 function approvePrsOf(board: PropertyBoard, view: TileView): SpecApprovePr[] {
-  return view.prs.filter((row) => specApprovable(board, view, row)).map((row) => ({ key: row.key, block: specApproveBlock(board, row.key) }));
+  return view.prs
+    .filter((row) => specApprovable(board, view, row))
+    .map((row) => {
+      const waitsOn = specBlockingLayerBelow(board, view, row.key);
+      if (waitsOn !== null) {
+        return { key: row.key, block: 'layer_below', waitsOn };
+      }
+      return { key: row.key, block: specApproveBlock(board, row.key), waitsOn: null };
+    });
+}
+
+/** The PRs' own agent blocks, without `layer_below`: what a greyed pill can say. */
+function ownBlocksOf(prs: SpecApprovePr[]): AgentBlock[] {
+  return prs.flatMap((pr) => (pr.block === null || pr.block === 'layer_below' ? [] : [pr.block]));
+}
+
+/** Greyed names nothing; exactly one covered out of several PRs is named; covering every PR says so; else some. */
+export function specApproveNaming(state: AgentOfferState, covered: number, prCount: number): ApproveNaming {
+  if (state === 'greyed') {
+    return 'none';
+  }
+  if (covered === 1 && prCount > 1) {
+    return 'one';
+  }
+  return covered === prCount ? 'every' : 'some';
 }
 
 function coveredRisks(board: PropertyBoard, covered: PrKey[]): BackedRisk[] {
@@ -120,10 +171,12 @@ function coveredRisks(board: PropertyBoard, covered: PrKey[]): BackedRisk[] {
 
 /**
  * The tile's ✨ Approve: gone without an approvable PR; active when at least
- * one approvable PR is agent-safe, covering only those, with the highest
- * risk among them (owner, 2026-10-01: like the topic's); else greyed,
- * rechecking when any glance is stale or missing, else look closer, else
- * high.
+ * one approvable PR is covered (agent-safe, nothing below it in its stack
+ * blocks it), covering only those, with the highest risk among them
+ * (owner, 2026-10-01: like the topic's); else greyed. The reason is an own
+ * block, never `layer_below`: rechecking when any is stale or missing, else
+ * look closer, else high. On a stack only the lowest blocking layer keeps
+ * its own block, so that one names the reason.
  */
 export function specTileApprove(board: PropertyBoard, view: TileView): SpecApprove | null {
   const prs = approvePrsOf(board, view);
@@ -132,22 +185,25 @@ export function specTileApprove(board: PropertyBoard, view: TileView): SpecAppro
   }
   const covered = prs.filter((pr) => pr.block === null).map((pr) => pr.key);
   const leftOut = prs.filter((pr) => pr.block !== null);
+  const prCount = view.prs.length;
   if (covered.length > 0) {
-    return { state: 'active', risk: specHighestRisk(coveredRisks(board, covered)), reason: null, covered, leftOut };
+    return { state: 'active', risk: specHighestRisk(coveredRisks(board, covered)), reason: null, covered, leftOut, prCount, naming: specApproveNaming('active', covered.length, prCount) };
   }
-  const blocks = leftOut.map((pr) => pr.block);
+  const blocks = ownBlocksOf(leftOut);
   const reason: AgentBlock = blocks.includes('rechecking') ? 'rechecking' : blocks.includes('look_closer') ? 'look_closer' : 'high';
-  return { state: 'greyed', risk: null, reason, covered, leftOut };
+  return { state: 'greyed', risk: null, reason, covered, leftOut, prCount, naming: 'none' };
 }
 
 /**
- * The topic's ✨ Approve: every approvable PR of its unsnoozed tiles, once.
- * Gone without one; active when at least one is agent-safe ("Approve 3 of
- * 5 PRs"); else greyed, rechecking if any is rechecking, else look closer.
+ * The topic's ✨ Approve: every approvable PR of its unsnoozed tiles, once,
+ * with the tile's verdict on it (so base up on stacks too). Gone without
+ * one; active when at least one is covered ("Approve 3 of 5 PRs"); else
+ * greyed, rechecking if any is rechecking, else look closer.
  */
 export function specTopicApprove(board: PropertyBoard, views: TileView[]): SpecApprove | null {
+  const unsnoozed = views.filter((candidate) => candidate.state.kind !== 'snoozed');
   const byKey = new Map<PrKey, SpecApprovePr>();
-  for (const view of views.filter((candidate) => candidate.state.kind !== 'snoozed')) {
+  for (const view of unsnoozed) {
     for (const pr of approvePrsOf(board, view)) {
       byKey.set(pr.key, pr);
     }
@@ -158,11 +214,12 @@ export function specTopicApprove(board: PropertyBoard, views: TileView[]): SpecA
   }
   const covered = prs.filter((pr) => pr.block === null).map((pr) => pr.key);
   const leftOut = prs.filter((pr) => pr.block !== null);
+  const prCount = new Set(unsnoozed.flatMap((view) => view.prs.map((row) => row.key))).size;
   if (covered.length > 0) {
-    return { state: 'active', risk: specHighestRisk(coveredRisks(board, covered)), reason: null, covered, leftOut };
+    return { state: 'active', risk: specHighestRisk(coveredRisks(board, covered)), reason: null, covered, leftOut, prCount, naming: specApproveNaming('active', covered.length, prCount) };
   }
   const reason: AgentBlock = leftOut.some((pr) => pr.block === 'rechecking') ? 'rechecking' : 'look_closer';
-  return { state: 'greyed', risk: null, reason, covered, leftOut };
+  return { state: 'greyed', risk: null, reason, covered, leftOut, prCount, naming: 'none' };
 }
 
 /**

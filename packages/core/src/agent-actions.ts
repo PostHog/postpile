@@ -9,7 +9,7 @@
 import { standingApprovals } from './approvals.ts';
 import { isTracked } from './provenance.ts';
 import { isNewYourMove } from './quiet-reads.ts';
-import type { IsoTime, Pr, PrEvent, PrKey, Tile, TileState, UserPrState, Verdict, Viewer } from './types.ts';
+import type { IsoTime, Pr, PrEvent, PrKey, Tile, TileStack, TileState, UserPrState, Verdict, Viewer } from './types.ts';
 import type { TileView } from './views.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
@@ -29,6 +29,14 @@ export type AgentOfferState = 'active' | 'greyed';
  * - high: Looks safe, but the risk is high or unreadable ("✨ high")
  */
 export type AgentBlock = 'rechecking' | 'look_closer' | 'high';
+
+/**
+ * Why an approvable PR is left out of an agent Approve: its own agent block,
+ * or `layer_below`: a lower layer of its stack is approvable but not
+ * agent-safe, so approving this one waits for that one (owner, 2026-10-01).
+ * `layer_below` only names a left-out PR; it is never a greyed pill's reason.
+ */
+export type LeftOutReason = AgentBlock | 'layer_below';
 
 /** Why the agent cannot back a Mark read: an agent block, or the unread news asks something of you ("✨ asks for you"). */
 export type MarkReadBlock = AgentBlock | 'asks_for_you';
@@ -66,11 +74,24 @@ export interface AgentApprovePr {
 export interface LeftOutPr {
   prKey: PrKey;
   title: string;
-  reason: AgentBlock;
+  reason: LeftOutReason;
+  /** On `layer_below`: the lowest layer below that blocks it ("waits on #12"); null for any other reason. */
+  waitsOn: PrKey | null;
   /** The stored verdict and risk line, for the confirm list; null without a glance. */
   verdict: Verdict | null;
   riskLine: string | null;
 }
+
+/**
+ * What the Approve label names, so the renderer only spells it out:
+ * - none: greyed, a plain "Approve"
+ * - one: exactly one PR covered out of several: "Approve #12"
+ * - every: every PR the button stands for is covered: "Approve", "Approve
+ *   stack", "Approve 3 PRs" on a set or the topic
+ * - some: anything else: "Approve 2 of 3 PRs", or "Approve 2 PRs" when it
+ *   covers every approvable PR but the tile shows more (a draft layer)
+ */
+export type ApproveNaming = 'none' | 'one' | 'every' | 'some';
 
 /**
  * The ✨ Approve button, on a tile's footer or the topic header. Absent (null
@@ -78,8 +99,14 @@ export interface LeftOutPr {
  * - active: approves `covered`, base to head on a stack; the pill shows `risk`.
  * - greyed: disabled, the pill shows `reason`; `covered` is empty.
  * A tile and a topic alike are active when at least one approvable PR is
- * agent-safe ("Approve 2 of 3 PRs"); the rest are named in `leftOut`
- * (owner, 2026-10-01).
+ * covered; the rest are named in `leftOut` (owner, 2026-10-01).
+ * On a stack, coverage goes base up (owner, 2026-10-01): a layer is covered
+ * only when it is agent-safe and no approvable layer below it is left out.
+ * The lowest approvable layer the agent does not back blocks every
+ * approvable layer above it (`layer_below`). Layers below that are not
+ * approvable (merged, a draft, your own, approved already, dealt with,
+ * pulled in) do not block. Singles and a set's PRs outside a stack keep
+ * their own verdict. The label follows `naming`.
  */
 export interface AgentApproveOffer {
   state: AgentOfferState;
@@ -93,6 +120,25 @@ export interface AgentApproveOffer {
   coveredCount: number;
   /** Every approvable PR: the 5 in "Approve 3 of 5 PRs". */
   totalCount: number;
+  /**
+   * Every PR the button stands for, approvable or not (drafts, pulled-in
+   * layers, your own): the tile's rows, or each PR of the topic's unsnoozed
+   * tiles once. "Approve stack" only when `coveredCount` equals it.
+   */
+  prCount: number;
+  /** What the label names (`approveNaming`). */
+  naming: ApproveNaming;
+}
+
+/** One covered out of several PRs is named; covering every PR says so; greyed names nothing. */
+function approveNaming(active: boolean, coveredCount: number, prCount: number): ApproveNaming {
+  if (!active) {
+    return 'none';
+  }
+  if (coveredCount === 1 && prCount > 1) {
+    return 'one';
+  }
+  return coveredCount === prCount ? 'every' : 'some';
 }
 
 /**
@@ -245,8 +291,8 @@ const TILE_MARK_READ_ORDER: MarkReadBlock[] = ['asks_for_you', 'rechecking', 'lo
 // Rechecking first: waiting helps there, an ask for you or a verdict does not go away by itself.
 const TOPIC_MARK_READ_ORDER: MarkReadBlock[] = ['rechecking', 'asks_for_you', 'look_closer', 'high'];
 
-/** What the agent offers read of the tile view: the rows, Approve's own rule (`offers.pane`), the state and the unread PRs. */
-export type AgentOfferView = Pick<TileView, 'prs' | 'offers' | 'state' | 'unreadPrKeys'>;
+/** What the agent offers read of the tile view: its stacks, the rows, Approve's own rule (`offers.pane`), the state and the unread PRs. */
+export type AgentOfferView = Pick<TileView, 'prs' | 'offers' | 'state' | 'unreadPrKeys'> & { tile: Pick<Tile, 'stacks'> };
 
 /**
  * Approvable: exactly today's Approve rule (the pane leads with `approve`),
@@ -257,8 +303,11 @@ function approvablePrs(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): A
   return view.prs.filter((pr) => view.offers.pane[pr.key]?.lead === 'approve' && isTracked(pr.provenance) && facts.get(pr.key)?.approvedOnGitHub !== true);
 }
 
-/** The covered entry of an agent-safe PR (`approveBlock` says null), else null. */
-function coveredPr(pr: AgentOfferView['prs'][number], fact: AgentPrFacts): AgentApprovePr | null {
+/** The covered entry of an agent-safe PR (`approveBlock` says null), else null; null without facts too. */
+function coveredPr(pr: AgentOfferView['prs'][number], fact: AgentPrFacts | undefined): AgentApprovePr | null {
+  if (!fact) {
+    return null;
+  }
   const risk = backedRisk(fact.risk);
   if (approveBlock(fact) !== null || fact.verdict === null || fact.riskLine === null || risk === null) {
     return null;
@@ -266,26 +315,54 @@ function coveredPr(pr: AgentOfferView['prs'][number], fact: AgentPrFacts): Agent
   return { prKey: pr.key, title: pr.title, headOid: fact.headOid, verdict: fact.verdict, riskLine: fact.riskLine, risk };
 }
 
-/** The tile's approvable PRs in member order (base to head on a stack), split into agent-safe and left out. */
+/** The lowest of `blocked` below `key` in its stack, or null when none is (or `key` is in no stack). */
+function lowestBlockedBelow(key: PrKey, stacks: TileStack[], blocked: Set<PrKey>): PrKey | null {
+  const stack = stacks.find((candidate) => candidate.prKeys.includes(key));
+  if (!stack) {
+    return null;
+  }
+  const below = stack.prKeys.slice(0, stack.prKeys.indexOf(key));
+  return below.find((layer) => blocked.has(layer)) ?? null;
+}
+
+/**
+ * The tile's approvable PRs in member order (base to head on a stack), split
+ * into covered and left out. An approvable PR the agent does not back is
+ * left out for its own block; an approvable stack layer above such a PR is
+ * left out as `layer_below`, waiting on the lowest one (base up).
+ */
 function splitApprovable(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): { covered: AgentApprovePr[]; leftOut: LeftOutPr[] } {
+  const approvable = approvablePrs(view, facts);
+  const blocked = new Set(approvable.filter((pr) => coveredPr(pr, facts.get(pr.key)) === null).map((pr) => pr.key));
   const covered: AgentApprovePr[] = [];
   const leftOut: LeftOutPr[] = [];
-  for (const pr of approvablePrs(view, facts)) {
+  for (const pr of approvable) {
     const fact = facts.get(pr.key);
-    const safe = fact ? coveredPr(pr, fact) : null;
-    if (safe) {
+    const waitsOn = lowestBlockedBelow(pr.key, view.tile.stacks, blocked);
+    const safe = coveredPr(pr, fact);
+    const left = { prKey: pr.key, title: pr.title, verdict: fact?.verdict ?? null, riskLine: fact?.riskLine ?? null };
+    if (waitsOn !== null) {
+      leftOut.push({ ...left, reason: 'layer_below', waitsOn });
+    } else if (safe) {
       covered.push(safe);
     } else {
-      leftOut.push({ prKey: pr.key, title: pr.title, reason: (fact && approveBlock(fact)) ?? 'rechecking', verdict: fact?.verdict ?? null, riskLine: fact?.riskLine ?? null });
+      leftOut.push({ ...left, reason: (fact && approveBlock(fact)) ?? 'rechecking', waitsOn: null });
     }
   }
   return { covered, leftOut };
 }
 
+/** The own agent blocks among the left out: what a greyed pill can say. On a stack only its lowest blocking layer has one. */
+function ownBlocks(leftOut: LeftOutPr[]): AgentBlock[] {
+  return leftOut.flatMap((pr) => (pr.reason === 'layer_below' ? [] : [pr.reason]));
+}
+
 /**
  * The tile's ✨ Approve: gone without an approvable PR; active when at least
- * one is agent-safe, approving only those (owner, 2026-10-01: the same as
- * the topic's Approve); greyed when none is.
+ * one is covered, approving only those (owner, 2026-10-01: the same as the
+ * topic's Approve, base up on a stack); greyed when none is, with the first
+ * own block in `TILE_APPROVE_ORDER`. On a stack tile that is the block of
+ * its lowest blocking layer, the only one left out for its own reason.
  */
 export function tileApproveOffer(view: AgentOfferView, facts: Map<PrKey, AgentPrFacts>): AgentApproveOffer | null {
   const { covered, leftOut } = splitApprovable(view, facts);
@@ -297,11 +374,13 @@ export function tileApproveOffer(view: AgentOfferView, facts: Map<PrKey, AgentPr
   return {
     state: active ? 'active' : 'greyed',
     risk: active ? highestRisk(covered.map((pr) => pr.risk)) : null,
-    reason: active ? null : firstReason(leftOut.map((pr) => pr.reason), TILE_APPROVE_ORDER),
+    reason: active ? null : firstReason(ownBlocks(leftOut), TILE_APPROVE_ORDER),
     covered,
     leftOut,
     coveredCount: covered.length,
     totalCount,
+    prCount: view.prs.length,
+    naming: approveNaming(active, covered.length, view.prs.length),
   };
 }
 
@@ -329,16 +408,18 @@ export function tileAgentOffers(view: AgentOfferView, facts: AgentPrFacts[]): Ti
 }
 
 /** What the topic offers read of each tile view. */
-export type TopicAgentTile = { tile: Pick<Tile, 'id'>; state: Pick<TileState, 'kind'>; agent: TileAgentOffers };
+export type TopicAgentTile = { tile: Pick<Tile, 'id'>; state: Pick<TileState, 'kind'>; agent: TileAgentOffers; prs: Pick<TileView['prs'][number], 'key'>[] };
 
 /**
  * The topic's ✨ Approve: the approvable PRs of its unsnoozed tiles (each PR
- * once). It covers exactly what those tiles' Approves cover and names the
- * rest. Gone without an approvable PR; greyed when none is agent-safe,
- * `rechecking` if any is rechecking, else `look_closer`.
+ * once). It covers exactly what those tiles' Approves cover (so base up on
+ * stacks too) and names the rest. Gone without an approvable PR; greyed
+ * when none is covered, `rechecking` if any is rechecking, else
+ * `look_closer`.
  */
 export function topicApproveOffer(tiles: TopicAgentTile[]): AgentApproveOffer | null {
-  const offers = tiles.filter((view) => view.state.kind !== 'snoozed').flatMap((view) => view.agent.approve ?? []);
+  const unsnoozed = tiles.filter((view) => view.state.kind !== 'snoozed');
+  const offers = unsnoozed.flatMap((view) => view.agent.approve ?? []);
   const seen = new Set<PrKey>();
   const covered: AgentApprovePr[] = [];
   const leftOut: LeftOutPr[] = [];
@@ -359,6 +440,7 @@ export function topicApproveOffer(tiles: TopicAgentTile[]): AgentApproveOffer | 
     return null;
   }
   const active = covered.length > 0;
+  const prCount = new Set(unsnoozed.flatMap((view) => view.prs.map((pr) => pr.key))).size;
   return {
     state: active ? 'active' : 'greyed',
     risk: active ? highestRisk(covered.map((pr) => pr.risk)) : null,
@@ -367,6 +449,8 @@ export function topicApproveOffer(tiles: TopicAgentTile[]): AgentApproveOffer | 
     leftOut,
     coveredCount: covered.length,
     totalCount,
+    prCount,
+    naming: approveNaming(active, covered.length, prCount),
   };
 }
 
@@ -398,14 +482,19 @@ export function topicMarkReadOffer(tiles: TopicAgentTile[]): TopicMarkReadOffer 
   };
 }
 
-const APPROVE_REFUSALS: Record<AgentBlock, string> = {
+const AGENT_REFUSALS: Record<AgentBlock, string> = {
   rechecking: 'the agent is rechecking it',
   look_closer: 'the agent now says look closer',
   high: 'the agent now rates it high risk',
 };
 
+const APPROVE_REFUSALS: Record<LeftOutReason, string> = {
+  ...AGENT_REFUSALS,
+  layer_below: 'a layer below it needs a look first',
+};
+
 const MARK_READ_REFUSALS: Record<MarkReadBlock, string> = {
-  ...APPROVE_REFUSALS,
+  ...AGENT_REFUSALS,
   asks_for_you: 'it asks something of you',
 };
 

@@ -244,7 +244,7 @@ export function buildTileView(input: TileViewInput): TileView {
     afterRead,
     pendingWrite: input.pendingWrite,
     offers,
-    agent: tileAgentOffers({ prs, offers, state: input.state, unreadPrKeys }, input.agentPrs),
+    agent: tileAgentOffers({ tile: input.tile, prs, offers, state: input.state, unreadPrKeys }, input.agentPrs),
     verdict: tileVerdict(prs, offers.leadPrKey),
     draft: isDraftTile(prs),
     unreadPrKeys,

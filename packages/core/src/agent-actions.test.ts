@@ -100,8 +100,8 @@ describe('tile Approve', () => {
     expect(approve?.covered[0]).toMatchObject({ prKey: 'acme/app#1', verdict: 'LOOKS_SAFE', riskLine: 'medium - touches the worker loop' });
   });
 
-  // Owner, 2026-10-01: the same magic approval as the topic, so a stack approves the PRs the agent backs.
-  it('is active on a stack when some approvable PRs are agent-safe, covering only those base to head', () => {
+  // Owner, 2026-10-01: base up. A stack layer goes through only when no approvable layer below it needs a look.
+  it('covers a stack base up: the lowest blocking layer holds back every layer above it', () => {
     const view = stackView([
       { pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low' },
       { pr: reviewPr(2), verdict: 'LOOK_CLOSER', risk: 'low' },
@@ -109,25 +109,54 @@ describe('tile Approve', () => {
       { pr: reviewPr(4), verdict: 'LOOKS_SAFE', risk: 'low', stale: true },
     ]);
     const approve = view.agent.approve;
-    expect(approve).toMatchObject({ state: 'active', risk: 'medium', reason: null, coveredCount: 2, totalCount: 4 });
-    expect(approve?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#1', 'acme/app#3']);
-    expect(approve?.leftOut.map((pr) => [pr.prKey, pr.reason])).toEqual([
-      ['acme/app#2', 'look_closer'],
-      ['acme/app#4', 'rechecking'],
+    expect(approve).toMatchObject({ state: 'active', risk: 'low', reason: null, coveredCount: 1, totalCount: 4, prCount: 4, naming: 'one' });
+    expect(approve?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#1']);
+    expect(approve?.leftOut.map((pr) => [pr.prKey, pr.reason, pr.waitsOn])).toEqual([
+      ['acme/app#2', 'look_closer', null],
+      ['acme/app#3', 'layer_below', 'acme/app#2'],
+      ['acme/app#4', 'layer_below', 'acme/app#2'],
     ]);
     const topic = topicAgentOffers([view]).approve;
-    expect(topic?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#1', 'acme/app#3']);
-    expect(topic).toMatchObject({ state: 'active', coveredCount: 2, totalCount: 4 });
+    expect(topic?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#1']);
+    expect(topic).toMatchObject({ state: 'active', coveredCount: 1, totalCount: 4, naming: 'one' });
   });
 
-  it('is greyed with nothing covered when no approvable PR is agent-safe, rechecking first', () => {
-    const approve = stackView([
-      { pr: reviewPr(1), verdict: 'LOOK_CLOSER', risk: 'low' },
+  it('is greyed on a stack whose base needs a look, with the base block as the reason', () => {
+    const view = stackView([
+      { pr: reviewPr(1), verdict: 'LOOK_CLOSER', risk: 'medium - worker loop' },
       { pr: reviewPr(2), verdict: 'LOOKS_SAFE', risk: 'high - auth' },
       { pr: reviewPr(3) },
+      { pr: reviewPr(4), verdict: 'LOOKS_SAFE', risk: 'low' },
+    ]);
+    const approve = view.agent.approve;
+    expect(approve).toMatchObject({ state: 'greyed', risk: null, reason: 'look_closer', coveredCount: 0, totalCount: 4, naming: 'none' });
+    expect(approve?.leftOut.map((pr) => pr.reason)).toEqual(['look_closer', 'layer_below', 'layer_below', 'layer_below']);
+    expect(topicAgentOffers([view]).approve).toMatchObject({ state: 'greyed', reason: 'look_closer', coveredCount: 0 });
+  });
+
+  it('is not held back by layers below that need no review from you: your own PR, one approved already', () => {
+    const approved = { ...reviewPr(2), reviewDecision: 'APPROVED' as const };
+    const approve = stackView([
+      { pr: makePr({ number: 1, author: viewer.login }), verdict: 'LOOK_CLOSER', risk: 'low' },
+      { pr: approved, verdict: 'LOOK_CLOSER', risk: 'low' },
+      { pr: reviewPr(3), verdict: 'LOOKS_SAFE', risk: 'low' },
     ]).agent.approve;
-    expect(approve).toMatchObject({ state: 'greyed', risk: null, reason: 'rechecking', coveredCount: 0, totalCount: 3 });
-    expect(approve?.covered).toEqual([]);
+    expect(approve).toMatchObject({ state: 'active', coveredCount: 1, totalCount: 1, prCount: 3, naming: 'one' });
+    expect(approve?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#3']);
+  });
+
+  it('names the base alone when the layers above are drafts, never "every"', () => {
+    const approve = stackView([
+      { pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low' },
+      { pr: { ...reviewPr(2), isDraft: true }, verdict: 'LOOK_CLOSER', risk: 'low' },
+      { pr: { ...reviewPr(3), isDraft: true } },
+    ]).agent.approve;
+    expect(approve).toMatchObject({ state: 'active', coveredCount: 1, totalCount: 1, prCount: 3, naming: 'one' });
+    const all = stackView([
+      { pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low' },
+      { pr: reviewPr(2), verdict: 'LOOKS_SAFE', risk: 'low' },
+    ]).agent.approve;
+    expect(all).toMatchObject({ coveredCount: 2, prCount: 2, naming: 'every' });
   });
 
   it('is greyed as look closer on a Look closer verdict', () => {
@@ -181,9 +210,11 @@ describe('agentApproveRefusal', () => {
     const view = stackView([
       { pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low' },
       { pr: reviewPr(2), verdict: 'LOOK_CLOSER', risk: 'low' },
+      { pr: reviewPr(3), verdict: 'LOOKS_SAFE', risk: 'low' },
     ]);
     expect(agentApproveRefusal('acme/app#1', [view], 'agent_tile')).toBeNull();
     expect(agentApproveRefusal('acme/app#2', [view], 'agent_tile')).toBe('the agent now says look closer');
+    expect(agentApproveRefusal('acme/app#3', [view], 'agent_tile')).toBe('a layer below it needs a look first');
   });
 });
 
