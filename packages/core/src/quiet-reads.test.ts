@@ -53,7 +53,6 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
     viewer,
     notYours: false,
     prFetchedAt: at(50),
-    now: at(60),
     ...overrides,
   };
 }
@@ -181,11 +180,9 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ pr: asked })).kind).toBe('mark');
   });
 
-  it('waits the grace period after the newest bot activity or thread update', () => {
-    expect(quietReadCheck(input({ now: at(40) }))).toEqual({ kind: 'skip', why: 'grace' });
-    const lateThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(55), unread: true });
-    expect(quietReadCheck(input({ thread: lateThread, prFetchedAt: at(56) }))).toEqual({ kind: 'skip', why: 'grace' });
-    expect(quietReadCheck(input({ now: at(41) })).kind).toBe('mark');
+  it('marks right away: no wait after the newest bot activity or thread update', () => {
+    const justNow = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(55), unread: true });
+    expect(quietReadCheck(input({ thread: justNow, events: [humanComment(5), botComment(55)], prFetchedAt: at(55) }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]'] });
   });
 });
 
@@ -195,7 +192,7 @@ describe('touchedReadCheck', () => {
   }
 
   // Read at 20 on GitHub; alice commented at 25 and 26; the viewer read them with Mark read in
-  // PostPile at 28 (writes locked, so GitHub still says 20) and approved from the CLI at 30. Now is 60.
+  // PostPile at 28 (writes locked, so GitHub still says 20) and approved from the CLI at 30.
   function touched(overrides: Partial<TouchedReadInput> = {}): TouchedReadInput {
     return {
       thread: makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: true }),
@@ -204,7 +201,6 @@ describe('touchedReadCheck', () => {
       userState: makeUserState({ prKey: pr.key, handledAt: at(28) }),
       viewer,
       prFetchedAt: at(50),
-      now: at(60),
       ...overrides,
     };
   }
@@ -256,15 +252,13 @@ describe('touchedReadCheck', () => {
     expect(touchedReadCheck(touched({ pr: merged, events }))).toEqual({ kind: 'mark', reason: 'replied' });
   });
 
-  it('tolerates bots after the touch on someone else PR, and waits the grace after them', () => {
+  it('tolerates bots after the touch on someone else PR', () => {
     const events = [humanComment(25), own('review_approved', 30), botComment(45)];
     expect(touchedReadCheck(touched({ events }))).toEqual({ kind: 'mark', reason: 'approved' });
-    expect(touchedReadCheck(touched({ events, now: at(50) }))).toEqual({ kind: 'skip', why: 'grace' });
   });
 
-  it('waits the grace period after the touch itself', () => {
-    expect(touchedReadCheck(touched({ now: at(39) }))).toEqual({ kind: 'skip', why: 'grace' });
-    expect(touchedReadCheck(touched({ now: at(41) })).kind).toBe('mark');
+  it('marks right after the touch, no wait', () => {
+    expect(touchedReadCheck(touched({ prFetchedAt: at(30) }))).toEqual({ kind: 'mark', reason: 'approved' });
   });
 
   it('blocks on an unseen merge without the user review unless the touch came after it', () => {
@@ -293,7 +287,7 @@ describe('judgedReadCheck', () => {
   const teammate = (minute: number, overrides: Partial<PrEvent> = {}) =>
     makeEvent({ id: `lyra-${minute}`, prKey: pr.key, kind: 'comment', actor: 'lyra', at: at(minute), summary: 'lyra commented', ...overrides });
 
-  // Read at 20; lyra commented at 30 and the agent judged it quiet; CI at 31. Now is 60.
+  // Read at 20; lyra commented at 30 and the agent judged it quiet; CI at 31.
   function judged(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
     return input({ events: [humanComment(5), teammate(30, { override: judgedQuiet }), ciResult(31)], ...overrides });
   }
@@ -338,7 +332,7 @@ describe('judgedReadCheck', () => {
     expect(judgedReadCheck(judged({ pr: own }))).toEqual({ kind: 'mark', actors: ['lyra', 'CI'] });
   });
 
-  it('keeps the safety checks: snapshot, a new move, grace', () => {
+  it('keeps the safety checks: snapshot, a new move', () => {
     expect(judgedReadCheck(judged({ prFetchedAt: at(30) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
     const request = makeTimelineItem({ actor: 'alice', subject: viewer.login, at: at(1) });
     const readied = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [request, makeTimelineItem({ id: 'rd', kind: 'ready_for_review', actor: 'alice', subject: null, at: at(30) })] });
@@ -346,18 +340,16 @@ describe('judgedReadCheck', () => {
     expect(judgedReadCheck(judged({ pr: readied, events: [ready] }))).toEqual({ kind: 'skip', why: 'your_move' });
     const asked = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [request] });
     expect(judgedReadCheck(judged({ pr: asked })).kind).toBe('mark');
-    expect(judgedReadCheck(judged({ now: at(40) }))).toEqual({ kind: 'skip', why: 'grace' });
     expect(judgedReadCheck(judged({ events: [humanComment(5)] }))).toEqual({ kind: 'skip', why: 'nothing_known' });
   });
 });
 
 describe('isClearableNonPr', () => {
-  it('clears releases and issues past the grace, never PRs or read threads', () => {
+  it('clears unread releases and issues right away, never PRs or read threads', () => {
     const release = { ...makeThreadFor(pr, { updatedAt: at(10) }), subjectType: 'Release', number: null };
-    expect(isClearableNonPr(release, at(21))).toBe(true);
-    expect(isClearableNonPr(release, at(15))).toBe(false);
-    expect(isClearableNonPr({ ...release, unread: false }, at(60))).toBe(false);
-    expect(isClearableNonPr(makeThreadFor(pr, { updatedAt: at(10) }), at(60))).toBe(false);
+    expect(isClearableNonPr(release)).toBe(true);
+    expect(isClearableNonPr({ ...release, unread: false })).toBe(false);
+    expect(isClearableNonPr(makeThreadFor(pr, { updatedAt: at(10) }))).toBe(false);
   });
 });
 
@@ -520,7 +512,7 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
       return event.sourceId === 'rm' ? { ...seen, override: judgedQuiet } : seen;
     });
     const thread = makeThreadFor(realPr, { lastReadAt, updatedAt: realPr.updatedAt, unread: true, reason: 'author' });
-    return { thread, pr: realPr, events, userState: null, viewer, notYours: false, prFetchedAt: day(30, 12), now: day(31) };
+    return { thread, pr: realPr, events, userState: null, viewer, notYours: false, prFetchedAt: day(30, 12) };
   }
 
   it('clears it: a new merge move asks nothing, and a stale nudge and CI are no finding', () => {

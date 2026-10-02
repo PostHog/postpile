@@ -146,14 +146,9 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     expect(h.writer.calls).toEqual([]);
   });
 
-  it('waits the grace period after the newest bot activity, then marks it on a later sync', async () => {
-    let now = new Date(new Date(at(30)).getTime() + 5 * 60_000);
+  it('marks it right away, a minute after the bot activity: no wait', async () => {
     const pr = alicePr();
-    const h = await synced(pr, { now: () => now });
-    expect(h.writer.calls).toEqual([]);
-
-    now = new Date(new Date(at(30)).getTime() + 11 * 60_000);
-    await h.engine.sync({ maxAgentCalls: 0 });
+    const h = await synced(pr, { now: () => new Date(new Date(at(30)).getTime() + 60_000) });
 
     expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);
   });
@@ -228,6 +223,52 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
+    expect(h.writer.calls).toEqual([]);
+  });
+});
+
+describe('Handled quietly: the live poll marks bot-only threads read in the cycle that stored them', () => {
+  /** alice's PR synced at minute 25 with its thread read; then a bot comments at 30, GitHub moves the thread, and the poll runs at 31. */
+  async function botCommentAfterSync(options: HarnessOptions = {}): Promise<{ h: Harness; pr: Pr }> {
+    let now = new Date(at(25));
+    const before = alicePr({ comments: [], updatedAt: at(15) });
+    const h = makeHarness({ ...options, now: () => now });
+    h.reader.addPr(before, makeThreadFor(before, { reason: 'subscribed', lastReadAt: at(20), updatedAt: at(15), unread: false }));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const pr = alicePr();
+    h.reader.addPr(pr, threadFor(pr));
+    h.reader.etag = 'etag-2';
+    now = new Date(at(31));
+    return { h, pr };
+  }
+
+  it('marks it read on GitHub in the same cycle, logged with origin quiet', async () => {
+    const { h, pr } = await botCommentAfterSync();
+
+    const cycle = await h.engine.pollOnce();
+
+    expect(cycle).toMatchObject({ kind: 'done', notModified: false, prsUpdated: 1 });
+    expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);
+    expect(quietRows(h)).toEqual([expect.objectContaining({ prKey: pr.key, detail: 'only bot activity since your last read: github-actions[bot]' })]);
+    expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(false);
+  });
+
+  it('does nothing while GitHub writes are locked', async () => {
+    const { h } = await botCommentAfterSync({ writesEnabled: false });
+
+    await h.engine.pollOnce();
+
+    expect(h.writer.calls).toEqual([]);
+    expect(quietRows(h)).toEqual([]);
+  });
+
+  it('runs no pass on a cycle that stored nothing new: the next change or full sync picks it up', async () => {
+    const h = await synced(alicePr(), { writesEnabled: false });
+    await h.engine.setGitHubWrites(true);
+
+    const cycle = await h.engine.pollOnce();
+
+    expect(cycle).toMatchObject({ kind: 'done', notModified: true });
     expect(h.writer.calls).toEqual([]);
   });
 });

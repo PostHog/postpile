@@ -107,18 +107,12 @@ export class SyncRun {
   /**
    * After the digest (the events agent judged the new quiet activity), on
    * fresh threads and snapshots, with every event and read time of this sync
-   * counted. The hourly auto sync is also what comes back after the grace
-   * period.
+   * counted. The live poll runs the same pass after each cycle that stored a
+   * change.
    */
   private async handleQuietly(errors: string[]): Promise<void> {
-    const quiet = await this.quietReads.run();
+    const quiet = await this.quietReads.run('sync');
     errors.push(...quiet.errors);
-    if (quiet.marked.length > 0) {
-      this.log(`sync: handled quietly: ${quiet.marked.length} threads marked read on GitHub (only bots, you acted after it, or nothing that needs you since you last looked)`);
-    }
-    if (quiet.otherMarked.length > 0) {
-      this.log(`sync: handled quietly: ${quiet.otherMarked.length} notifications that are not PRs marked read on GitHub`);
-    }
   }
 
   /**

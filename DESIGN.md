@@ -3218,10 +3218,11 @@ These stay unread until you deal with them, also after the PR merged and a
 teammate reviewed. Not clearance evidence either: an agent NOT_YOURS, age,
 merged or closed state, an old handled mark or approval.
 
-The existing safety checks stay: fresh and complete snapshot, the 10-minute
-grace after the newest activity, the writes lock (locked: the thread stays
-unread in PostPile), the guarded re-read of the thread before the write, and an
-action-log entry ("Handled quietly").
+The existing safety checks stay: fresh and complete snapshot, the writes
+lock (locked: the thread stays unread in PostPile), the guarded re-read of
+the thread before the write, and an action-log entry ("Handled quietly").
+The 10-minute grace after the newest activity was removed 2026-10-02
+("Handled quietly" rule 5).
 
 **Notifications that are not PRs** (releases, issues): PostPile marks them read
 on GitHub by itself for now. Julian: "People who use PostPile (for example, to
@@ -3276,16 +3277,18 @@ finished topics included.
   newest unread thread first). One it leaves out of its answer gets a quiet
   override "nothing here needs you"; one it raises goes through the raised
   ping path. The budget caps the calls as before.
-- Releases and issues: `isClearableNonPr` (unread, past the grace), marked
+- Releases and issues: `isClearableNonPr` (unread; past the grace until
+  2026-10-02), marked
   by `QuietReads` with detail "not a pull request", in the action log and
   the debug view, not under Handled quietly.
 - Retire gate needs every thread read; `reviveUnreadTopics` runs after the
   retire step of the full sync and in every poll that moved the inbox. The
   full sync reads the unread state its quiet reads left, so a failed or
   capped write brings the topic back. The poll skips a thread the quiet
-  reads would clear by rule (`clearableByRule`, the grace set aside) while
-  writes are on, so a deploy bot on a merged PR does not reopen its topic
-  for three days; the next full sync clears it or brings the topic back.
+  reads would clear by rule (`clearableByRule`) while writes are on, so a
+  deploy bot on a merged PR does not reopen its topic for three days; the
+  poll's own quiet reads clear it at the end of the cycle (since
+  2026-10-02), else the next full sync clears it or brings the topic back.
   The quiet reads moved before the retire step and share one budget of
   `QUIET_READS_PER_RUN` threads, PR threads first.
 - The click's local thread read is put back (undo, parked, not taken) only
@@ -3788,8 +3791,8 @@ Merging or closing counts only when the viewer did it.
 
    Built as core `touchedReadCheck` (`quiet-reads.ts`), run by `QuietReads`
    when the bot-only check says no, same write path (snapshot freshness,
-   thread read again right before, origin `quiet`, grace, at most
-   `QUIET_READS_PER_RUN`). Details the build settled:
+   thread read again right before, origin `quiet`, at most
+   `QUIET_READS_PER_RUN`; the grace until 2026-10-02). Details the build settled:
    - The touch here is a review or a comment (`READING_TOUCH_KINDS`): no
      push, and no merge or close either, for the same reason.
    - "Unread" is every event by someone else after `last_read_at`, or every
@@ -3799,8 +3802,9 @@ Merging or closing counts only when the viewer did it.
      queue follow most approvals), on the viewer's own open PR too. Until
      2026-10-01 a bot's review there kept the thread unread, and until
      2026-09-29 so did any bot on a merged or closed own PR ("Own merged PRs
-     clear on GitHub too" in "Actions act on what you look at"). The grace
-     counts from the newest of the touch, those bots and the thread's update.
+     clear on GitHub too" in "Actions act on what you look at"). Until
+     2026-10-02 the grace counted from the newest of the touch, those bots
+     and the thread's update.
    - No unseen loud news on the PR (until 2026-09-30: the tile must not be
      unread, which since "GitHub unread is PostPile unread" it always is
      while its thread is). Whose turn is not checked: every event before
@@ -3924,9 +3928,9 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    refreshes every thread but can leave a PR's snapshot stale (its PR cap, a
    failed fetch); a human comment after the snapshot would then be missing
    and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
-   Not "fetched in this very sync": a PR fetched while its bot activity was
-   still inside the grace period is not fetched again until it moves, and
-   the snapshot from then still covers the thread. A snapshot cut off at
+   Not "fetched in this very sync": a PR fetched earlier is not fetched
+   again until it moves, and the snapshot from then still covers the
+   thread. A snapshot cut off at
    the query's caps covers only when what fell off is older than the read
    (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
 2. *(Removed 2026-10-01: no bot finding on the user's own open PR.)* A
@@ -3949,9 +3953,22 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    any `you` blocked). Until 2026-09-30 this read "the PR's tile is not unread";
    since "GitHub unread is PostPile unread" a tile is unread while its
    thread is, so that check would block every quiet read.
-5. *Grace.* 10 minutes (`QUIET_GRACE_MS`) after the newer of the newest
-   bot event and the thread's `updated_at` (a bot push can carry an older
-   commit date), so a person answering the bot right away still counts.
+5. *(Removed 2026-10-02: grace.)* PostPile waited 10 minutes
+   (`QUIET_GRACE_MS`) after the newer of the newest bot event and the
+   thread's `updated_at`, so a person answering the bot right away still
+   counted. It dates from when PostPile kept its own unread state apart
+   from GitHub's. Since "GitHub unread is PostPile unread" a thread is just
+   read or unread, and what the grace guarded is covered: a snapshot older
+   than the thread's update leaves it (rule 1), the thread is read again
+   right before the write and left when it moved (the write below), and a
+   person's reply after the mark makes GitHub mark the thread unread again.
+   Owner decision: drop it. It held bot-only threads unread for up to an
+   hour, because the pass then ran only in the full sync. The real case: a
+   quiet read at 06:19, trunk-io edited its merge queue comment at 06:22
+   (an @mention, so GitHub notified again), and the thread stayed unread
+   until the owner opened it at 06:25. The same goes for the grace of the
+   acted-after rule, the judged rule and notifications that are not PRs.
+   The number stays so references to the other rules hold.
 6. *Lock open.* Only while GitHub writes are unlocked. Locked, nothing
    happens and nothing piles up as a pending write.
 
@@ -3959,9 +3976,18 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
 hourly auto sync), after the digest and before the retire step (since
 2026-09-30: what PostPile clears no longer holds a finished topic). The full sync has
 just fetched the inbox and every moved PR, so threads, events and read times
-are fresh, and the hourly auto sync is also what comes back once a grace
-period ran out. The live poll only fetches what moved and would need its own
-timer for the grace, so it is left out. At most 50 threads per sync
+are fresh. Since 2026-10-02 also at the end of every live poll cycle that
+stored a change (the inbox or read list moved, or a PR was fetched;
+`PollRun`), after the pings, on the threads and PR snapshots the cycle just
+stored. A cycle with nothing new runs no pass: the stored state is what the
+last pass saw, and re-reading threads it left would only cost requests.
+PRs the poll did not fetch keep their older snapshot and wait on rule 1
+until the next change or full sync. The pass is part of the poll cycle, so
+it never runs beside the full sync or itself: the engine blocks a cycle
+while a sync runs, and a sync waits for the running cycle. The judged rule
+needs the events agent's judgement of people's quiet activity (full sync,
+topic catch-up); the next pass after it picks the thread up. Before, the live poll was left out because it would have
+needed its own timer for the grace. At most 50 threads per run
 (`QUIET_READS_PER_RUN`).
 
 **The write**: each thread is read again right before (`GET
@@ -4153,8 +4179,10 @@ have no glance yet get a glance catch-up run right after the ping decisions
 (see "Glance catch-up" below). Sets, stack layers and fact verification stay
 with the full sync, which still finds the new events through the event log
 and walks stacks and verifies facts for the PRs the poll fetched (meta
-`poll_fetched_since_sync`). Never marks anything read (on GitHub or locally,
-beyond what the full sync already does for threads that left the inbox).
+`poll_fetched_since_sync`). Marks nothing read (on GitHub or locally,
+beyond what the full sync already does for threads that left the inbox),
+except through the quiet reads at the end of a cycle that stored a change
+(since 2026-10-02, "Handled quietly" › Where it runs).
 
 **Decision** (`PingDecider`), one per PR thread with new events, rules first:
 
@@ -5397,7 +5425,8 @@ Later the same day, from the next runs:
   rows while the tracked PR is not done: the layer for its news, the
   tracked PR for itself. Julian: keep.
 - The quiet-read grace counts from the newest activity, human or bot (the
-  touch, the bots after it, the thread's update). Kept as built.
+  touch, the bots after it, the thread's update). Kept as built. (The grace
+  was removed 2026-10-02.)
 - The ping side of the raised-automation rule: the "only automation" row
   of the ping table counts automation at its rule's loudness only. A bot
   event raised to loud (agent or user) goes on like a person's loud event:
@@ -5464,7 +5493,7 @@ for it, tier, done, unseen count, ping class and text, quiet reads and
 Look closer ping; the tile, read and topic catalogues use the oracles too
 (tile state, offers, the read plan, a board without a viewer). An exact oracle covers liveness as
 well as safety: an addressed ask on an open unsnoozed tile pings, bot-only
-activity past the grace gets a quiet read, nothing unseen stays in a
+activity gets a quiet read, nothing unseen stays in a
 read's scope. Answering is a metamorphic check: a comment by the viewer
 clears Reply, the answered-changes Re-review and Needs reply (a re-review
 a pending request asks for stays). The generator also makes re-requests
