@@ -12,6 +12,7 @@ import {
   repoOfPr,
   repoOverview,
   tileRepoLabels,
+  topicRepoLine,
   viewerOrgs,
   withQuietRepo,
   type RepoSettings,
@@ -85,6 +86,46 @@ describe('repo labels', () => {
   it('falls back to the base repo org without viewer teams, and labels nothing without a base', () => {
     expect(tileRepoLabels(['acme/infra#1'], 'acme/app', [])).toEqual({ tile: 'infra', prs: [null] });
     expect(tileRepoLabels(['acme/infra#1'], null, ORGS)).toEqual({ tile: null, prs: [null] });
+  });
+});
+
+describe('topicRepoLine', () => {
+  const picked = (scope: string): RepoSettings => ({ scope, quiet: [] });
+
+  it('shows the main repo and counts the other repos', () => {
+    expect(topicRepoLine(['acme/app#1', 'acme/app#2', 'acme/infra#3', 'other/tools#4'], DEFAULT_REPO_SETTINGS, ORGS)).toEqual({
+      label: 'app',
+      otherRepos: 2,
+      repos: ['acme/app', 'acme/infra', 'other/tools'],
+      offScope: false,
+      pickedLabel: null,
+      pickedPrs: 0,
+    });
+  });
+
+  it('says when the picked repo holds only a few of the PRs', () => {
+    const one = topicRepoLine(['acme/infra#1', 'acme/infra#2', 'acme/app#3'], picked('acme/app'), ORGS);
+    expect(one).toMatchObject({ label: 'infra', offScope: true, pickedLabel: 'app', pickedPrs: 1 });
+    const two = topicRepoLine(['acme/infra#1', 'acme/infra#2', 'acme/infra#3', 'acme/app#4', 'acme/app#5'], picked('acme/app'), ORGS);
+    expect(two).toMatchObject({ label: 'infra', offScope: true, pickedPrs: 2 });
+  });
+
+  it('matches the picked repo ignoring case and lets it win a tie', () => {
+    expect(topicRepoLine(['Acme/App#1', 'acme/infra#2'], picked('acme/app'), ORGS)).toMatchObject({
+      label: 'App',
+      repos: ['Acme/App', 'acme/infra'],
+      offScope: false,
+      pickedPrs: 1,
+    });
+    expect(topicRepoLine(['acme/infra#1', 'acme/app#2'], picked('ACME/APP'), ORGS)).toMatchObject({ label: 'app', offScope: false });
+  });
+
+  it('is not off scope when the topic has no PR in the picked repo', () => {
+    expect(topicRepoLine(['acme/infra#1'], picked('acme/app'), ORGS)).toMatchObject({ label: 'infra', offScope: false, pickedPrs: 0 });
+  });
+
+  it('is null for a topic without PRs', () => {
+    expect(topicRepoLine([], DEFAULT_REPO_SETTINGS, ORGS)).toBeNull();
   });
 });
 

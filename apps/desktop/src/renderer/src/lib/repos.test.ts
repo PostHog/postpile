@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RepoOverview } from '@postpile/core';
-import { countTitle, scopeLabel, shortRepo, topicCount } from './repos.ts';
+import type { RepoOverview, TopicRepoLine } from '@postpile/core';
+import { countTitle, scopeLabel, shortRepo, topicCount, topicRepoTitle } from './repos.ts';
 
 function overview(scope: string | null): RepoOverview {
   const repos = ['a/one', 'a/two'];
@@ -15,7 +15,7 @@ describe('repo menu', () => {
   it('labels the button', () => {
     expect(scopeLabel(undefined)).toBe('All repos');
     expect(scopeLabel(overview(null))).toBe('All repos');
-    expect(scopeLabel(overview('a/two'))).toBe('two');
+    expect(scopeLabel(overview('a/two'))).toBe('Only two');
     expect(shortRepo('acme/app')).toBe('app');
   });
 
@@ -25,5 +25,14 @@ describe('repo menu', () => {
     expect(countTitle(2, null)).toBe('2 topics');
     expect(topicCount(1)).toBe('1 topic');
     expect(topicCount(6)).toBe('6 topics');
+  });
+
+  it('words the topic repo hover', () => {
+    const line: TopicRepoLine = { label: 'infra', otherRepos: 1, repos: ['acme/infra', 'acme/app'], offScope: false, pickedLabel: null, pickedPrs: 0 };
+    expect(topicRepoTitle(line)).toBe('Most of its PRs are in acme/infra; also in acme/app');
+    expect(topicRepoTitle({ ...line, otherRepos: 0, repos: ['acme/infra'] })).toBe('Most of its PRs are in acme/infra');
+    const off = { ...line, offScope: true, pickedLabel: 'app', pickedPrs: 1 };
+    expect(topicRepoTitle(off)).toBe('Listed because 1 PR is in app; most of its PRs are in infra');
+    expect(topicRepoTitle({ ...off, pickedPrs: 2 })).toBe('Listed because 2 PRs are in app; most of its PRs are in infra');
   });
 });

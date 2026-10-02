@@ -2,6 +2,18 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Added
+
+- The topic header shows the topic's repo on the "Owned by" line, with "+2" when its PRs touch other repos. With one repo picked in the title bar, a topic that is listed for a PR or two but mostly lives in another repo says "mostly in infra" in yellow, and the hover says why it is listed.
+- The repo button has an × that goes back to All repos in one click.
+
+### Changed
+
+- With one repo picked, the repo button reads "Only app" in blue, the same look as a narrowing "Topics with" filter, so a narrowed list is hard to miss.
+- "All repos" in the repo menu is marked Recommended, with a short note: dealt-with topics hide on their own, so the full list stays short.
+
 ## 0.15.0 (2026-10-02)
 
 ### Added
