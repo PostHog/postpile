@@ -1,5 +1,5 @@
 import type { SearchResult, TopicListItem } from '@postpile/core';
-import { sidebarBuckets } from './queues.ts';
+import { hiddenAsDealt, sidebarBuckets } from './queues.ts';
 import { areaFolds, otherTopicsGroups } from './sidebar.ts';
 
 /** What the search bar lets through. Null means no filter: the query is empty or has no answer yet. */
@@ -45,7 +45,7 @@ export function sidebarOrder(items: TopicListItem[]): TopicListItem[] {
  * hides it. Then the kept one (what was on screen for this pick and these
  * filters, so an approve or a refetch that drops it from the filter does
  * not move the view), else the first shown one in sidebar order. `shown` is
- * null when nothing narrows the list. Without a pick, the sidebar's first topic.
+ * null when nothing narrows the list. Without a pick, the sidebar's first listed topic.
  */
 export function visibleTopic(
   items: TopicListItem[],
@@ -55,7 +55,9 @@ export function visibleTopic(
 ): TopicListItem | null {
   const picked = items.find((item) => item.topic.id === pickedId) ?? null;
   if (!shown) {
-    return picked ?? sidebarOrder(items)[0] ?? null;
+    // The first row the sidebar lists: a topic behind a "+ N dealt with" line only when every one is.
+    const order = sidebarOrder(items);
+    return picked ?? order.find((item) => !hiddenAsDealt(item)) ?? order[0] ?? null;
   }
   if (picked && shown.includes(picked)) {
     return picked;

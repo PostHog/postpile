@@ -91,6 +91,11 @@ function changesRequestedFirst(items: TopicListItem[]): TopicListItem[] {
  */
 const DEALT_SECTIONS: TopicSection[] = ['you_drive', 'team_owns', 'other_work'];
 
+/** A dealt-with topic in an owner section: it waits behind the section's "+ N dealt with" line while nothing narrows the list. */
+export function hiddenAsDealt(item: TopicListItem): boolean {
+  return item.quiet && DEALT_SECTIONS.includes(item.section);
+}
+
 /** The bucket key of a section's dealt-with topics, also its fold key. */
 export function dealtKey(section: TopicSection): string {
   return `dealt:${section}`;
@@ -114,20 +119,25 @@ export function sidebarBuckets(items: TopicListItem[], hideDealt: boolean): Buck
       return [{ key: section, items: ordered }];
     }
     return [
-      { key: section, items: ordered.filter((item) => !item.quiet) },
-      { key: dealtKey(section), items: ordered.filter((item) => item.quiet) },
+      { key: section, items: ordered.filter((item) => !hiddenAsDealt(item)) },
+      { key: dealtKey(section), items: ordered.filter(hiddenAsDealt) },
     ];
   });
 }
 
+/** The topics of the bucket with this key, none when it is not there. */
+function itemsOf(buckets: Bucket<TopicListItem>[], key: string): TopicListItem[] {
+  return buckets.find((bucket) => bucket.key === key)?.items ?? [];
+}
+
 /** The topics of one section in the buckets, none when it is not there. */
 export function bucketItems(buckets: Bucket<TopicListItem>[], section: TopicSection): TopicListItem[] {
-  return buckets.find((bucket) => bucket.key === section)?.items ?? [];
+  return itemsOf(buckets, section);
 }
 
 /** A section's dealt-with topics in the buckets, none when nothing is hidden. */
 export function dealtItems(buckets: Bucket<TopicListItem>[], section: TopicSection): TopicListItem[] {
-  return buckets.find((bucket) => bucket.key === dealtKey(section))?.items ?? [];
+  return itemsOf(buckets, dealtKey(section));
 }
 
 /** A sidebar row's topic id, for `holdPlace`. */
