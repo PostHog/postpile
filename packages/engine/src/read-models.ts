@@ -22,8 +22,6 @@ import {
   buildTileView,
   topicAgentOffers,
   compareInSection,
-  driverRelation,
-  homeTeamsOf,
   eventView,
   topicMove,
   isPrInQuietRepo,
@@ -78,11 +76,9 @@ import {
   type TopicDetail,
   openInDealtWith,
   topicPrRollup,
-  topicSection,
+  topicSectionOf,
   type TopicListItem,
-  type TopicPlacement,
   type TopicQueues,
-  type TopicSection,
   type Viewer,
   type ViewerView,
   boardShapeEvents,
@@ -367,18 +363,6 @@ export class ReadModels {
     return boardShapeEvents(listed.filter(({ tiles }) => this.isListed(tiles, settings)));
   }
 
-  /** The topic's sidebar section, for the row and the breadcrumb alike. */
-  private sectionOf(topic: Topic, queues: TopicQueues, moves: number, placement: TopicPlacement | null, viewer: Viewer | null): TopicSection {
-    return topicSection({
-      retired: topic.status === 'retired',
-      queues,
-      moves,
-      driver: driverRelation(topic.driver, viewer),
-      placement,
-      homeTeams: viewer ? homeTeamsOf(viewer) : [],
-    });
-  }
-
   listTopics(scope?: ListScope): TopicListItem[] {
     const board = this.board();
     const topics = board.topics();
@@ -431,7 +415,7 @@ export class ReadModels {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
         queues,
-        section: this.sectionOf(topic, queues, urgency.yourMoves.length, placement, viewer),
+        section: topicSectionOf({ topic, queues, moves: urgency.yourMoves.length, placement, viewer }),
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
@@ -527,7 +511,7 @@ export class ReadModels {
       archive: this.archiveBox(board, topic),
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, prs),
-      section: this.sectionOf(topic, queues, yourMoves.length, placement, viewer),
+      section: topicSectionOf({ topic, queues, moves: yourMoves.length, placement, viewer }),
       memoryUpdating: this.memoryUpdating(isUnsorted ? null : topicId),
     };
   }

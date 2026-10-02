@@ -79,9 +79,7 @@ import type {
   TopicArchiveBox,
   TopicDetail,
   TopicListItem,
-  TopicPlacement,
   TopicQueues,
-  TopicSection,
   UserPrState,
   TeamRole,
   TeamRolesView,
@@ -112,8 +110,6 @@ import {
   snoozeWrites,
   eventView,
   compareInSection,
-  homeTeamsOf,
-  driverRelation,
   actionTrail,
   cleanupCutoff,
   cleanupLook,
@@ -156,7 +152,7 @@ import {
   topicPeople,
   openInDealtWith,
   topicPrRollup,
-  topicSection,
+  topicSectionOf,
   topicQueues,
   topicUrgency,
   topicYourMoves,
@@ -494,19 +490,6 @@ export class FakeEngine implements EngineService {
 
   private viewer(): Viewer {
     return { login: this.data.viewer, teams: this.data.viewerTeams, homeTeams: this.data.viewerHomeTeams, teamMembers: this.data.viewerTeamMembers };
-  }
-
-  /** The topic's sidebar section, the engine's rule. */
-  private sectionOf(topic: Topic, queues: TopicQueues, moves: number, placement: TopicPlacement | null): TopicSection {
-    const viewer = this.viewer();
-    return topicSection({
-      retired: topic.status === 'retired',
-      queues,
-      moves,
-      driver: driverRelation(topic.driver, viewer),
-      placement,
-      homeTeams: homeTeamsOf(viewer),
-    });
   }
 
   private prsByKey(): Map<PrKey, Pr> {
@@ -914,7 +897,7 @@ export class FakeEngine implements EngineService {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
         queues,
-        section: this.sectionOf(topic, queues, urgency.yourMoves.length, placement),
+        section: topicSectionOf({ topic, queues, moves: urgency.yourMoves.length, placement, viewer }),
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
@@ -1023,7 +1006,7 @@ export class FakeEngine implements EngineService {
       archive: this.archiveBox(topic, tiles),
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
-      section: this.sectionOf(topic, this.topicQueuesOf(topicTiles), yourMoves.length, placement),
+      section: topicSectionOf({ topic, queues: this.topicQueuesOf(topicTiles), moves: yourMoves.length, placement, viewer: this.viewer() }),
       memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
     };
   }

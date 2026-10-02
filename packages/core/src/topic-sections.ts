@@ -5,29 +5,10 @@
 // sidebar row, the topic header's breadcrumb and telemetry.
 import { isOwnTeam } from './mentions.ts';
 import { personRelation, type PersonRelation, type TopicQueues } from './topic-queues.ts';
-import type { RankedTopic } from './topic-urgency.ts';
-import { compareTopicUrgency } from './topic-urgency.ts';
-import type { Viewer } from './types.ts';
+import { homeTeamsOf } from './team-roles.ts';
+import { compareTopicUrgency, type RankedTopic, type TopicMove } from './topic-urgency.ts';
+import type { Topic, Viewer } from './types.ts';
 import type { TopicPlacement } from './views.ts';
-
-/**
- * needs_reply, changes_requested, to_review, team_mentioned: the asks, as
- * the PR tiers of the same name. you_drive: the viewer drives it.
- * team_owns: a teammate drives it, or nobody does and a home team owns it.
- * other_work: someone outside the home teams drives it, or nobody does and
- * another team owns it. other_topics: FYI, and topics nothing places yet.
- * archive: retired.
- */
-export type TopicSection =
-  | 'needs_reply'
-  | 'changes_requested'
-  | 'to_review'
-  | 'team_mentioned'
-  | 'you_drive'
-  | 'team_owns'
-  | 'other_work'
-  | 'other_topics'
-  | 'archive';
 
 /**
  * The section order, as a type: the renderer imports types only, so its
@@ -45,6 +26,16 @@ export type TopicSectionOrder = readonly [
   'other_topics',
   'archive',
 ];
+
+/**
+ * needs_reply, changes_requested, to_review, team_mentioned: the asks, as
+ * the PR tiers of the same name. you_drive: the viewer drives it.
+ * team_owns: a teammate drives it, or nobody does and a home team owns it.
+ * other_work: someone outside the home teams drives it, or nobody does and
+ * another team owns it. other_topics: FYI, and topics nothing places yet.
+ * archive: retired.
+ */
+export type TopicSection = TopicSectionOrder[number];
 
 /** Top to bottom, as the sidebar lists them. */
 export const TOPIC_SECTION_ORDER: TopicSectionOrder = [
@@ -96,10 +87,8 @@ function holdsYours(byYou: number, moves: number): boolean {
  * teammate drives it. An ask was checked before.
  */
 function staysFyi(input: SectionInput): boolean {
-  if (input.placement?.relation !== 'fyi' || holdsYours(input.queues.byYou, input.moves)) {
-    return false;
-  }
-  return input.driver !== 'you' && input.driver !== 'team';
+  const drivenByUs = input.driver === 'you' || input.driver === 'team';
+  return input.placement?.relation === 'fyi' && !holdsYours(input.queues.byYou, input.moves) && !drivenByUs;
 }
 
 /**
@@ -145,10 +134,32 @@ export function topicSection(input: SectionInput): TopicSection {
   return ownerSection(input.placement?.ownerTeam ?? null, input.homeTeams);
 }
 
+/** What the read models know about a topic when they place it. */
+export interface TopicSectionSource {
+  topic: Pick<Topic, 'status' | 'driver'>;
+  queues: Pick<TopicQueues, 'tiers' | 'byYou'>;
+  moves: number;
+  placement: Pick<TopicPlacement, 'relation' | 'ownerTeam'> | null;
+  /** Null before the first sync stored one: then nobody is a teammate and no team is home. */
+  viewer: Viewer | null;
+}
+
+/** `topicSection` for a stored topic, its driver as the agent named it: the engine and FakeEngine both place topics through this. */
+export function topicSectionOf(source: TopicSectionSource): TopicSection {
+  return topicSection({
+    retired: source.topic.status === 'retired',
+    queues: source.queues,
+    moves: source.moves,
+    driver: driverRelation(source.topic.driver, source.viewer),
+    placement: source.placement,
+    homeTeams: source.viewer ? homeTeamsOf(source.viewer) : [],
+  });
+}
+
 /** The fields `compareInSection` reads; `TopicListItem` has them all. */
 export interface SectionRankedTopic extends RankedTopic {
   queues: Pick<TopicQueues, 'byYou'>;
-  yourMoves: unknown[];
+  yourMoves: TopicMove[];
 }
 
 /**

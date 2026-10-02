@@ -428,9 +428,9 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1940, title: 'Release desktop 2.3', author: 'mae', state: 'OPEN',
       size: [30, 10, 4], checks: 'PENDING', openedHoursAgo: 30, reviews: [['koa', 'APPROVED']],
     }),
-    // Added for the sidebar's queue sections: your own PRs (My PRs), a team
-    // mention (Team mentioned), a bot bump (Other topics) and a merged PR with
-    // news on it (unread, but calm).
+    // Added for the sidebar's sections: your own PRs, a team mention (Team
+    // mentioned), a bot bump (Other topics, FYI) and a merged PR with news on
+    // it (unread, but calm).
     samplePr(clock, {
       number: 1945, title: 'Cap CI shard retries at 2', author: SAMPLE_VIEWER, state: 'OPEN', draft: true,
       size: [14, 6, 2], checks: 'SUCCESS', openedHoursAgo: 8, reviewerUsers: ['lyra'],
@@ -576,7 +576,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     // Agent PRs: a coding agent's GitHub App opens them on someone's behalf
     // and assigns that person, who owns the PR. #1970 is the viewer's own
-    // (Your PR, My PRs, waiting on lyra); #1972 belongs to three teammates,
+    // (Your PR, waiting on lyra); #1972 belongs to three teammates,
     // so the platform team request on it is the viewer's (For you).
     samplePr(clock, {
       number: 1970, title: 'Check that billing migrations stay state-only', author: SAMPLE_AGENT, assignees: [SAMPLE_VIEWER], state: 'OPEN',

@@ -212,24 +212,6 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
   );
 }
 
-/**
- * Section title: colored dot and label. No count: a PR count read like
- * an unread count, and how many PRs a queue holds does not matter.
- */
-function SectionHeader(props: { section: TopicSection }) {
-  const look = sectionLook(props.section);
-  return (
-    // The dot sits in the row's leading slot column, so the label lands on the same x as the topic names.
-    <span
-      data-flip-key={`section:${props.section}`}
-      className={`flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}
-    >
-      <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />
-      {look.label}
-    </span>
-  );
-}
-
 /** The fold chevron, in the leading slot: pointing down while open. */
 function FoldChevron(props: { open: boolean }) {
   return (
@@ -241,8 +223,11 @@ function FoldChevron(props: { open: boolean }) {
   );
 }
 
-/** "· 4 unread · 1 urgent" after a folded header's label. */
-function FoldedSummary(props: { text: string }) {
+/** "· 4 unread · 1 urgent" after a folded header's label; nothing while open or with nothing to say. */
+function FoldedSummary(props: { open: boolean; text: string | undefined }) {
+  if (props.open || !props.text) {
+    return null;
+  }
   return <span className="ml-[5px] text-[10.5px] font-medium tracking-normal text-hint normal-case">{props.text}</span>;
 }
 
@@ -257,26 +242,44 @@ function GroupHeader(props: { label: string; open: boolean; onToggle: () => void
     <button type="button" data-flip-key={props.flipKey} aria-expanded={props.open} onClick={props.onToggle} className="flex items-center px-2 py-1 text-left">
       <FoldChevron open={props.open} />
       <span className={size}>{props.label}</span>
-      {!props.open && props.summary && <FoldedSummary text={props.summary} />}
+      <FoldedSummary open={props.open} text={props.summary} />
     </button>
   );
 }
 
-/** A section title that folds (Other work): the chevron in the leading slot, then the dot and label as on `SectionHeader`. */
-function FoldingSectionHeader(props: { section: TopicSection; open: boolean; onToggle: () => void; summary: string }) {
+/** How a section header folds (Other work): open or not, the toggle, and what a folded header says. */
+interface SectionFold {
+  open: boolean;
+  onToggle: () => void;
+  summary: string;
+}
+
+/**
+ * Section title: colored dot and label. No count: a PR count read like an
+ * unread count, and how many PRs a queue holds does not matter. With `fold`
+ * it is a button with the chevron in the leading slot and, folded, says what
+ * is unread inside.
+ */
+function SectionHeader(props: { section: TopicSection; fold?: SectionFold }) {
   const look = sectionLook(props.section);
+  const text = `flex items-center pt-1.5 pr-2 pb-1 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`;
+  const dot = <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />;
+  if (!props.fold) {
+    // The dot sits in the row's leading slot column, so the label lands on the same x as the topic names.
+    return (
+      <span data-flip-key={`section:${props.section}`} className={`${text} pl-3`}>
+        {dot}
+        {look.label}
+      </span>
+    );
+  }
+  const { open, onToggle, summary } = props.fold;
   return (
-    <button
-      type="button"
-      data-flip-key={`section:${props.section}`}
-      aria-expanded={props.open}
-      onClick={props.onToggle}
-      className={`flex items-center pt-1.5 pr-2 pb-1 pl-2 text-left text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}
-    >
-      <FoldChevron open={props.open} />
-      <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />
+    <button type="button" data-flip-key={`section:${props.section}`} aria-expanded={open} onClick={onToggle} className={`${text} pl-2 text-left`}>
+      <FoldChevron open={open} />
+      {dot}
       {look.label}
-      {!props.open && props.summary && <FoldedSummary text={props.summary} />}
+      <FoldedSummary open={open} text={summary} />
     </button>
   );
 }
@@ -377,7 +380,7 @@ const TEXT_COLUMN = 'pr-2.5 pl-[22px]';
 /** Fold keys: "other_work", "area:<name>" and "more" inside it, "fyi", "finished". */
 type FoldKey = string;
 
-/** The sections listed flat, without folds: the asks, You drive and Your team owns (short lists). */
+/** The sections listed flat, without folds: the asks, You drive and Your team owns (short lists), in `SECTION_ORDER`. */
 const FLAT_SECTIONS: TopicSection[] = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned', 'you_drive', 'team_owns'];
 
 /**
@@ -451,8 +454,10 @@ export function TopicSidebar(props: TopicSidebarProps) {
       </div>
     );
   };
-  // FYI starts folded and opens while anything narrows the list, as before.
+  // FYI starts folded and opens while the search or the queue filter narrows, as before; Other work's
+  // folds only open for the search, since their default already looks at what the queue filter left.
   const fyiOpen = isOpen('fyi', false, narrowed);
+  const finishedOpen = isOpen('finished', false, false);
   return (
     <nav ref={navRef} aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
@@ -478,7 +483,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       })}
       {otherWork.length > 0 && (
         <div className="flex flex-col gap-1">
-          <FoldingSectionHeader section="other_work" open={otherWorkOpen} onToggle={() => toggle('other_work', otherWorkOpen)} summary={foldedSummary(otherWork)} />
+          <SectionHeader section="other_work" fold={{ open: otherWorkOpen, onToggle: () => toggle('other_work', otherWorkOpen), summary: foldedSummary(otherWork) }} />
           {otherWorkOpen ? (
             areaFolds(otherWork).map(areaFold)
           ) : (
@@ -506,8 +511,8 @@ export function TopicSidebar(props: TopicSidebarProps) {
       {/* Search and the queue filters cover live topics only, so the drawer steps aside while they narrow. */}
       {!narrowed && (
         <FinishedDrawer
-          open={isOpen('finished', false, false)}
-          onToggle={() => toggle('finished', isOpen('finished', false, false))}
+          open={finishedOpen}
+          onToggle={() => toggle('finished', finishedOpen)}
           activeTopicId={props.activeTopicId}
           onSelect={props.onSelect}
         />

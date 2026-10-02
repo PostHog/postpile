@@ -54,7 +54,7 @@ export function otherTopicsGroups(items: TopicListItem[]): OtherTopicsGroups {
   };
 }
 
-/** The viewer's open PR or a move of theirs is in the topic. */
+/** The viewer's open PR or a move of theirs is in the topic: core's `holdsYours` (the renderer imports types only). */
 function holdsYours(item: TopicListItem): boolean {
   return item.queues.byYou > 0 || item.yourMoves.length > 0;
 }

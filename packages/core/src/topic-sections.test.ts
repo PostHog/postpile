@@ -183,7 +183,7 @@ describe('compareInSection', () => {
     urgentUnreadTiles: extra.urgent ?? 0,
     unreadTiles: extra.unread ?? 0,
     queues: { byYou: extra.byYou ?? 0 },
-    yourMoves: Array.from({ length: extra.moves ?? 0 }, () => ({})),
+    yourMoves: Array.from({ length: extra.moves ?? 0 }, () => ({ move: 'review' as const, text: 'Review' })),
   });
 
   it("puts the viewer's open PR or move first, then unread, then the urgency order", () => {
