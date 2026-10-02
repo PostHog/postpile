@@ -8,6 +8,7 @@
 // functions. DESIGN.md "Repo scope and quiet repos".
 import { parsePrKey } from './keys.ts';
 import type { PrKey } from './types.ts';
+import type { TopicRepoLine } from './views.ts';
 
 /** Kept in meta, changed from the repo menu. Repo names are "owner/name" as GitHub gives them. */
 export interface RepoSettings {
@@ -116,22 +117,37 @@ export function isTopicInScope(topicPrKeys: PrKey[], settings: RepoSettings): bo
   return topicPrKeys.some((key) => sameName(repoOfPr(key), scope));
 }
 
-/** The repo with most of the topic's PRs; a tie goes to the one seen first. Null without PRs. */
-export function mainRepoOf(topicPrKeys: PrKey[]): string | null {
-  const counts = new Map<string, { repo: string; prs: number }>();
-  for (const key of new Set(topicPrKeys)) {
+interface RepoCount {
+  repo: string;
+  prs: number;
+}
+
+/** Each repo of the PRs with how many it holds, first seen first. A key listed twice counts once. */
+function repoCounts(prKeys: PrKey[]): RepoCount[] {
+  const counts = new Map<string, RepoCount>();
+  for (const key of new Set(prKeys)) {
     const repo = repoOfPr(key);
     const entry = counts.get(repo.toLowerCase()) ?? { repo, prs: 0 };
     entry.prs += 1;
     counts.set(repo.toLowerCase(), entry);
   }
-  let main: { repo: string; prs: number } | null = null;
-  for (const entry of counts.values()) {
+  return [...counts.values()];
+}
+
+/** The repo with most PRs; a tie goes to `preferred` when it is one of them, else to the one seen first. */
+function mostPrs(counts: RepoCount[], preferred?: RepoCount): RepoCount | null {
+  let main: RepoCount | null = null;
+  for (const entry of counts) {
     if (main === null || entry.prs > main.prs) {
       main = entry;
     }
   }
-  return main?.repo ?? null;
+  return preferred !== undefined && preferred.prs === main?.prs ? preferred : main;
+}
+
+/** The repo with most of the topic's PRs; a tie goes to the one seen first. Null without PRs. */
+export function mainRepoOf(topicPrKeys: PrKey[]): string | null {
+  return mostPrs(repoCounts(topicPrKeys))?.repo ?? null;
 }
 
 /** ["acme/team-platform"] -> ["acme"]: the orgs a repo label leaves out. Works on repo names too. */
@@ -144,6 +160,11 @@ export function viewerOrgs(teams: string[]): string[] {
     }
   }
   return orgs;
+}
+
+/** The orgs a label leaves out: the viewer's, or without any the base repo's org, so the label stays short. */
+function homeOrgsOf(orgs: string[], baseRepo: string): string[] {
+  return orgs.length > 0 ? orgs : viewerOrgs([baseRepo]);
 }
 
 /** "acme/infra" -> "infra" when acme is one of the viewer's orgs, else the full name. */
@@ -163,6 +184,30 @@ export function labelBaseRepo(topicPrKeys: PrKey[], settings: RepoSettings): str
   return settings.scope ?? mainRepoOf(topicPrKeys);
 }
 
+/**
+ * The repo on an opened topic's owner line: its main repo (`mainRepoOf`),
+ * how many others it touches, and whether it is listed under the picked
+ * repo only for a few PRs while most sit elsewhere ("mostly in infra").
+ * On a tie the picked repo is the main one, since "mostly in" would not be
+ * true. `orgs` is `viewerOrgs`, with the same fallback as `tileRepoLabels`.
+ * Null for a topic without PRs.
+ */
+export function topicRepoLine(topicPrKeys: PrKey[], settings: RepoSettings, orgs: string[]): TopicRepoLine | null {
+  const counts = repoCounts(topicPrKeys);
+  const scope = settings.scope;
+  const picked = scope === null ? undefined : counts.find((entry) => sameName(entry.repo, scope));
+  const main = mostPrs(counts, picked);
+  if (main === null) {
+    return null;
+  }
+  const homeOrgs = homeOrgsOf(orgs, main.repo);
+  return {
+    label: repoLabel(main.repo, homeOrgs),
+    repos: [main, ...counts.filter((entry) => entry !== main)].map((entry) => ({ repo: entry.repo, prs: entry.prs })),
+    offScope: picked !== undefined && picked !== main ? { pickedLabel: repoLabel(picked.repo, homeOrgs), pickedPrs: picked.prs } : null,
+  };
+}
+
 /** A tile's repo labels: on the tile or on single PR rows (same order as `prKeys`), null where none shows. */
 export interface TileRepoLabels {
   tile: string | null;
@@ -180,7 +225,7 @@ export function tileRepoLabels(prKeys: PrKey[], baseRepo: string | null, orgs: s
   if (baseRepo === null || prKeys.length === 0) {
     return none;
   }
-  const homeOrgs = orgs.length > 0 ? orgs : viewerOrgs([baseRepo]);
+  const homeOrgs = homeOrgsOf(orgs, baseRepo);
   const repos = prKeys.map(repoOfPr);
   const first = repos[0]!;
   if (repos.every((repo) => sameName(repo, first))) {

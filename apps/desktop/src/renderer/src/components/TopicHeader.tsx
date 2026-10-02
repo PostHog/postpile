@@ -16,6 +16,7 @@ import { MemoryLine } from './MemoryLine.tsx';
 import { RelationLine } from './RelationLine.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
 import { TopicLessons } from './TopicLessons.tsx';
+import { TopicRepo } from './TopicRepo.tsx';
 import { YourMoveChip } from './YourMoveChip.tsx';
 
 /** Your role in the topic as a noun (2026-09-29): "You review" read like an order next to "lyra drives". */
@@ -175,7 +176,7 @@ function PrCountPill(props: { detail: TopicDetail }) {
 
 /** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists), what the user told the agent and the lessons waiting for a decision. */
 export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[] }) {
-  const { topic, pendingProposals, dossier, placement, driver } = props.detail;
+  const { topic, pendingProposals, dossier, placement, driver, repoLine } = props.detail;
   const actions = useActions();
   // Only a whole-topic catch-up rewrites the dossier; a glance-only refresh on look does not (server decides).
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.memoryUpdating });
@@ -210,7 +211,19 @@ export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[
       </div>
       {placement && (
         <div className="mt-1.5">
-          <RelationLine placement={placement} topicId={topic.id} dossierVersion={dossier?.dossier.relation ? dossier.version : null} updating={updating} />
+          <RelationLine
+            placement={placement}
+            repo={repoLine}
+            topicId={topic.id}
+            dossierVersion={dossier?.dossier.relation ? dossier.version : null}
+            updating={updating}
+          />
+        </div>
+      )}
+      {/* Without a placement there is no owner line, but the repo still shows in its spot. */}
+      {!placement && repoLine && (
+        <div className="mt-1.5 text-[11.5px] leading-normal">
+          <TopicRepo line={repoLine} />
         </div>
       )}
       {topic.summary && <p className="mt-4 max-w-[600px] text-[13.5px] leading-[1.6] tracking-[-0.003em] text-pretty text-ink-2">{topic.summary}</p>}
