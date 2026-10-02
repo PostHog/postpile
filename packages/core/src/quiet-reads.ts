@@ -104,8 +104,8 @@ export interface QuietReadInput {
  * can be fresher than the snapshot, and a person's comment missing from it.
  * A snapshot cut off at the caps covers only as far back as each capped
  * list reaches, or where paging completed the list (`snapshotCoversSince`;
- * since 2026-09-30, paging since 2026-10-02); before, it never did, and 48
- * of 130 unread PR threads on real data could never clear.
+ * since 2026-09-30, paging since 2026-10-02); before, it never did, and
+ * threads on bot-heavy PRs could never clear.
  */
 function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetchedAt'>, since: IsoTime | null): boolean {
   if (!snapshotCoversSince(input.pr, since)) {

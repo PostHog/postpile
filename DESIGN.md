@@ -4445,9 +4445,9 @@ removed or answered no longer asks anything.
 **Capped snapshots** (Decided 2026-10-02). Bot-heavy PRs stayed unread for
 days: review bots post dozens of reviews and threads, the query keeps the
 newest 50 of each, and the kept ones started after the user's last read. Every quiet read skipped them as
-`stale_snapshot`. The case that showed it was PostHog/posthog#99069: reviews
-and review threads both at 50, the oldest kept review two days after the
-last read, so no rule could ever clear the thread.
+`stale_snapshot`. Example: acme/app#1234, where review bots posted more than
+50 reviews and more than 50 review threads, the oldest kept review two days
+after the last read, so no rule could ever clear the thread.
 
 - **Paging.** When a fetched PR's snapshot hits a cap and its thread is
   unread, PostPile fetches older pages of the capped lists until they reach
@@ -4483,10 +4483,10 @@ last read, so no rule could ever clear the thread.
   help. Skipped PRs, the pages each PR took and lists still short go to the
   sync log; a failed request ends the pass and the PR keeps its unpaged
   snapshot.
-- **Real data** (2026-10-02): 13 of 737 stored snapshots hit a cap, none
-  with an unread thread that day. Paging every capped list to its end
-  would take 1 to 4 pages, except one PR's timeline (381 items, about 6);
-  #99069 takes 2 (15 older reviews, 4 older threads).
+- **Expected cost** (illustrative numbers): few PRs hit a cap at all, and
+  paging a capped list to its end usually takes a handful of pages, e.g.
+  acme/app#1234 would take 2 (15 older reviews, 4 older threads); a very
+  long timeline can need more than the budget.
 
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide

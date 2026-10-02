@@ -4,7 +4,7 @@ import type { Store } from '@postpile/store';
 import { errorText } from './errors.ts';
 import type { GitHubQuota } from './github-quota.ts';
 
-/** Older pages per capped list per PR, and over all of one PR's threads' comments. Enough for every capped list but one on real data (2026-10-02). */
+/** Older pages per capped list per PR, and over all of one PR's threads' comments. Enough for most capped lists; a very long timeline can need more (2026-10-02). */
 export const CAP_FILL_PAGES = 5;
 /** PRs paged per full sync. */
 export const CAP_FILL_SYNC_PRS = 10;

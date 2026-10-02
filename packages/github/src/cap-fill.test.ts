@@ -73,7 +73,7 @@ describe('fillCappedLists', () => {
   });
 
   it('pages only the threads when the kept reviews already reach back to the read, and the snapshot then covers it', async () => {
-    // A merged PR read at minute 50, a deploy bot's comment edit after: the 50 kept reviews start at minute 40,
+    // A merged PR read at minute 50, a bot's comment edit after: the 50 kept reviews start at minute 40,
     // before the read, but threads carry no time, so they cover only once paged to the end.
     const pr = cappedPr();
     const fake = new FakeFetch([page([rawThread('RT-old', 15)], false, 'threads-51')]);
