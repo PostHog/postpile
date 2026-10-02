@@ -1,5 +1,5 @@
 import type { DraftCommentInput } from '../service.ts';
-import { contextBlock, fullDetail, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, viewerLine } from './shared.ts';
+import { contextBlock, fullDetail, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prDetails, viewerLine } from './shared.ts';
 
 /** "Ask <person>": who the comment speaks to, what to ask, and its shape. */
 function askLines(person: string, intent: string): { audience: string; shape: string } {
@@ -13,13 +13,17 @@ function askLines(person: string, intent: string): { audience: string; shape: st
   };
 }
 
-/** A review note (Approve with comment, Comment review): addressed to nobody, the engine says what it is for. */
+/**
+ * A review note (Approve with comment, Comment review): addressed to nobody, the engine says what it is for.
+ * Unlike an ask, nobody asked about CI here, and older glance notes may still carry stale CI status: NO_CI_RULE.
+ */
 function reviewNoteLines(intent: string): { audience: string; shape: string } {
   return {
     audience: `The comment is the body of the user's review, addressed to nobody in particular.\n${intent}`,
     shape: `Write it the way the user would, as plain sentences: active voice, present tense, each under 25 words.
 No hedging ("I think", "it seems", "just"), no idioms, no em dashes, no greeting, no sign-off, no headings or
-bullets. Keep real identifiers and file paths, in backticks.`,
+bullets. Keep real identifiers and file paths, in backticks.
+${NO_CI_RULE}`,
   };
 }
 
