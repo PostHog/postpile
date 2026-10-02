@@ -7,7 +7,7 @@ import { standingApprovals } from '../approvals.ts';
 import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
-import { isNewYourMove, judgedReadCheck, quietReadCheck, touchedReadCheck, type JudgedReadCheck, type QuietReadCheck } from '../quiet-reads.ts';
+import { isNewYourMove, judgedReadCheck, quietReadCheck, requestGoneReadCheck, touchedReadCheck, type JudgedReadCheck, type QuietReadCheck } from '../quiet-reads.ts';
 import { ownedByTeammate, requestedTeam, reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
 import { isRoutingTeam } from '../team-roles.ts';
 import { actedAfterSeeing } from '../saw-before-acting.ts';
@@ -216,6 +216,8 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
     const judged = judgedReadCheck(input);
     labels.push(judged.kind === 'mark' ? 'judged-read:mark' : `judged-read:${judged.why}`);
     labels.push(...ownPrQuietLabels(board, key, pr, quiet, judged));
+    const requestGone = requestGoneReadCheck(input);
+    labels.push(requestGone.kind === 'mark' ? 'request-gone-read:mark' : `request-gone-read:${requestGone.why}`);
   }
   if (prWhoseTurn({ pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer }).kind === 'them') {
     labels.push('pr-turn:them');
@@ -442,6 +444,8 @@ export const REQUIRED_LABELS: readonly string[] = [
   'judged-read:asks_you',
   'judged-read:not_judged',
   'judged-read:never_looked',
+  'request-gone-read:mark',
+  'request-gone-read:not_judged',
   'shape:done PR with an unread thread',
   'shape:unread with only quiet news',
   'shape:loud news on a read tile',

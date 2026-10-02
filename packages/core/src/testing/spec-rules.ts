@@ -11,7 +11,7 @@ import type { LookCloserPing } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
 import type { PingRuleClass } from '../pings.ts';
 import type { PrTier } from '../pr-tier.ts';
-import type { JudgedReadCheck, OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
+import type { JudgedReadCheck, OpenedReadCheck, QuietReadCheck, RequestGoneReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
 import type { WhyCode } from '../why-here.ts';
@@ -28,6 +28,8 @@ import {
   isRoutedTeam,
   isRoutingTeam,
   isViewerLogin,
+  isViewerRequestEvent,
+  latestViewerRequestAt,
   mentionsOnlyRoutingTeams,
   namedOwner,
   newestTouch,
@@ -959,6 +961,67 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
     return { kind: 'skip', why: 'unseen_merge' };
   }
   if (expectedNewMove(input, since)) {
+    return { kind: 'skip', why: 'your_move' };
+  }
+  return { kind: 'mark', actors: actorNames(after) };
+}
+
+/**
+ * "Handled quietly" › Review requests that no longer stand (2026-10-02): a
+ * thread GitHub has unread, never read, there for a review request, whose
+ * request no longer stands: nothing pending for the viewer or any of their
+ * teams, or only a team request someone took. Since the newest request of
+ * the viewer or their team: something by someone else, every person's
+ * activity left below loud by the agent, nothing loud; no ask of theirs
+ * besides the requests since then or unseen; no unseen loud news besides
+ * the requests; plus the safety checks: fresh complete snapshot, no
+ * unseen merge without their review, no move of theirs new since the
+ * request. Liveness too: all of that holds, so it marks.
+ */
+export function expectedRequestGoneRead(input: QuietReadSpecInput): RequestGoneReadCheck {
+  const { thread, pr, viewer } = input;
+  if (!thread.unread) {
+    return { kind: 'skip', why: 'not_unread' };
+  }
+  if (thread.lastReadAt !== null) {
+    return { kind: 'skip', why: 'was_read' };
+  }
+  if (thread.reason !== 'review_requested') {
+    return { kind: 'skip', why: 'not_requested' };
+  }
+  const requestAt = latestViewerRequestAt(pr, viewer, input.events);
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, requestAt)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
+  }
+  if (requestAt === null) {
+    return { kind: 'skip', why: 'no_request' };
+  }
+  const pending = pendingRequest(pr, viewer);
+  const takenSinceRequest = pending === 'team_taken' && teamTakers(pr, viewer, requestAt).length > 0;
+  if (pending !== null && !takenSinceRequest) {
+    return { kind: 'skip', why: 'request_stands' };
+  }
+  const others = othersEvents(input);
+  const after = others.filter((event) => event.at > requestAt);
+  if (after.length === 0) {
+    return { kind: 'skip', why: 'nothing_known' };
+  }
+  const isRequest = (event: PrEvent) => isViewerRequestEvent(pr, viewer, event);
+  if (others.some((event) => !isRequest(event) && (event.at > requestAt || event.seenAt === null) && isAskEvent(pr, viewer, event))) {
+    return { kind: 'skip', why: 'asks_you' };
+  }
+  const unseenLoud = input.events.some((event) => isUnseenLoudEvent(event) && !isRequest(event));
+  if (unseenLoud || after.some((event) => effectiveLoudnessOf(event) === 'loud')) {
+    return { kind: 'skip', why: 'unseen_loud' };
+  }
+  const people = after.filter((event) => !isAutomationEvent(pr, viewer, event));
+  if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
+    return { kind: 'skip', why: 'not_judged' };
+  }
+  if (input.events.some(isUnseenMergeWithoutViewer)) {
+    return { kind: 'skip', why: 'unseen_merge' };
+  }
+  if (expectedNewMove(input, requestAt)) {
     return { kind: 'skip', why: 'your_move' };
   }
   return { kind: 'mark', actors: actorNames(after) };

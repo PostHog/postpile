@@ -3408,6 +3408,8 @@ the PR, is one of:
 
 Never clearable by itself: a review request to you or your team, a mention, a
 team mention, a question or reply to you, an unseen merge without your review.
+(Since 2026-10-02 a never-opened request that no longer stands may clear, see
+"Handled quietly" › Review requests that no longer stand.)
 These stay unread until you deal with them, also after the PR merged and a
 teammate reviewed. Not clearance evidence either: an agent NOT_YOURS, age,
 merged or closed state, an old handled mark or approval.
@@ -4394,6 +4396,45 @@ team request, a stale-PR bot nudged and CI ran) still stays unread: on Sep
 2026-09-30: only new moves that ask something block (reply, review,
 re-review, address changes); merging an approved PR of theirs never does,
 so the real case clears.
+
+**Review requests that no longer stand** (Decided 2026-10-02). Every
+other rule skips a thread GitHub never saw read (`never_read`, no
+`last_read_at`), so a review request the user never opened stayed unread
+for good, even after it stopped asking anything. The real case (PostHog
+#99069): a bot asked the user's home team and two other teams for a review
+on Sep 12; the thread (reason `review_requested`) was never opened. Later
+the home team's request was removed (pending were only the two other
+teams), and everything since was the author answering review bots, plus
+bot comments; the events agent had judged the replies quiet. The thread
+stayed unread for days. Owner decision: such a thread may clear once the
+request no longer stands. Core `requestGoneReadCheck`, all of these:
+
+- GitHub has it unread, never read, and its reason is `review_requested`.
+  Never-read threads for anything else (a mention, an assignment, the
+  author) keep the `never_read` skip.
+- No request of the user or any of their teams is pending: removed, or
+  answered by them or a teammate (`reviewRequest` is null or `team_taken`).
+  A pending personal or team request keeps it unread as before.
+- Since the newest request of the user or their team (the boundary of the
+  rule), something by someone else happened, and all of it is automation
+  or a person's activity the events agent judged below loud, the standard
+  of the judged rule. A removal by a person, or a teammate's review,
+  counts as a person's activity and waits for the agent like any other.
+- No ask since the request or still unseen (`isAskOfViewer`), no loud
+  news since, no unseen loud news on the PR besides the requests
+  themselves (a team request a teammate answered stays loud by its rule,
+  and it is what this rule reads), no unseen merge without the user's
+  review, no move of theirs new since the request (`isNewYourMove`).
+- The snapshot covers the thread (`snapshotCoversThread`, cut-off lists
+  vouch only for what fell off before the request).
+
+Log detail "review request no longer stands, nothing that needs you since:
+greptile-apps[bot], paul"; Handled quietly says "request gone, nothing for
+you from greptile-apps, paul". Runs with the other rules in the full sync
+and the live poll pass (engine `QuietReads`). This narrows "Never clearable
+by itself: a review request to you or your team" in "GitHub unread is
+PostPile unread": a request that still stands never clears; one that was
+removed or answered no longer asks anything.
 
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide
