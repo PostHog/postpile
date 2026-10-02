@@ -4815,8 +4815,11 @@ except through the quiet reads at the end of a cycle that stored a change
   them in the cycle that finds the thread unread, fetched again or not; a
   cycle that fetched nothing, or got a 304 because a full sync read the
   change first, still decides while something waits. A full sync hands its
-  new events on read threads over too (`keepReadNews`), since it can be
-  the one that stores the reply first. Events
+  fresh new events over too (`keepSyncedNews`), on read and unread threads,
+  since it can be the one that stores the reply first and takes the inbox
+  change the poll would have seen; they are decided by the poll cycle
+  right after the sync. Not on the first sync into an empty store, which is
+  a baseline like the poll's first look. Events
   that go stale or seen drop out, and a thread read on github.com stays
   read, so nothing waits forever.
 - `pingRule` in core classes the events: `bot` (bot-only), `muted`, `quiet`,

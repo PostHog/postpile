@@ -24,7 +24,7 @@ export interface RunDeps {
   glancePings?: GlancePings;
   /** Pings for events the events agent raised to loud after the poll decided them; the poll hands them to the Mac. */
   raisedPings?: RaisedPings;
-  /** The poll's decider: a full sync hands it new events on read threads (`keepReadNews`). */
+  /** The poll's decider: a full sync hands it its fresh new events (`keepSyncedNews`). */
   pingDecider?: PingDecider;
   /** One call per topic: dossier and first glance batch together (POSTPILE_TOPIC_DIGEST=1). Missing: off. */
   topicDigest?: boolean;

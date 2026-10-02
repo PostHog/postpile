@@ -334,6 +334,36 @@ describe('Engine.pollOnce', () => {
     expect(cycle.pings.map((ping) => ping.title)).toEqual(['@bob asks about the cache key']);
   });
 
+  it('pings a reply a full sync stored on an already unread thread, on the 304 after it', async () => {
+    let clock = NOW;
+    const h = makeHarness({ now: () => clock });
+    const pr = await syncedPr(h, 1);
+    withActivity(h, pr, mention(pr), 'etag-2');
+    clock = new Date('2026-09-02T12:05:00.000Z');
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.runner.answer('ping_decision', { decisions: [{ id: 'thread-1', ping: true, title: '@bob asks about the cache key', body: 'On #1.', reason: 'direct question' }] });
+    clock = new Date('2026-09-02T12:05:30.000Z');
+
+    const cycle = await h.engine.pollOnce();
+
+    expect(cycle).toMatchObject({ kind: 'done', notModified: true });
+    if (cycle.kind !== 'done') throw new Error('expected a done cycle');
+    expect(cycle.pings.map((ping) => ping.title)).toEqual(['@bob asks about the cache key']);
+  });
+
+  it('keeps nothing from the first sync into an empty store', async () => {
+    const h = makeHarness({ now: () => new Date('2026-09-02T12:05:00.000Z') });
+    const pr = reviewRequestedPr(1);
+    const next = { ...pr, ...mention(pr), updatedAt: LATER };
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER }));
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const cycle = await h.engine.pollOnce();
+
+    expect(cycle).toMatchObject({ kind: 'done', pings: [] });
+    expect(h.runner.promptsFor('ping_decision')).toEqual([]);
+  });
+
   it('pings a reply once GitHub marks its thread unread, a cycle after the poll stored it', async () => {
     let clock = NOW;
     const h = makeHarness({ now: () => clock });

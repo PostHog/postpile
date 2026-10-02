@@ -90,7 +90,8 @@ function newestFirst(events: PrEvent[]): PrEvent[] {
  */
 export class PingDecider {
   /**
-   * Fresh events the poll stored while their thread was read, per PR. GitHub
+   * Fresh events not decided yet, per PR: the poll stored them while their
+   * thread was read, or a full sync stored them (`keepSyncedNews`). GitHub
    * often marks a thread unread a cycle after the event shows up on the PR,
    * most of all right after the viewer's own comment made it read; by then
    * the event is no longer new and the PR is not fetched again, so the reply
@@ -280,17 +281,18 @@ export class PingDecider {
   }
 
   /**
-   * A full sync's new events on read threads wait like the poll's: the sync
-   * can store a reply first and take the inbox change (shared ETag) the poll
-   * would have seen. Decides nothing; the next poll cycle does.
+   * A full sync's fresh new events wait for the poll's decision like the
+   * poll's own (`waitingForUnread`): the sync can store a reply first and
+   * take the inbox change (shared ETag) the poll would have seen, whether
+   * GitHub already marked the thread unread or does so later. Decides
+   * nothing; the next poll cycle does.
    */
-  keepReadNews(prKeys: PrKey[], newEventIds: string[]): void {
+  keepSyncedNews(prKeys: PrKey[], newEventIds: string[]): void {
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
     const cutoff = new Date(this.deps.now().getTime() - PING_FRESH_MS).toISOString();
     const news = new Set(newEventIds);
     for (const key of prKeys) {
-      const thread = board.threads.get(key);
-      if (!thread || thread.unread) {
+      if (!board.threads.has(key)) {
         continue;
       }
       const kept = this.waitingForUnread.get(key);
@@ -299,7 +301,7 @@ export class PingDecider {
     }
   }
 
-  /** Some read thread's news waits to be decided once GitHub marks it unread: worth a decision even when the poll fetched nothing. */
+  /** Some news waits for a decision (a read thread, or a full sync's): worth one even when the poll fetched nothing. */
   hasWaiting(): boolean {
     return this.waitingForUnread.size > 0;
   }
