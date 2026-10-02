@@ -1520,7 +1520,7 @@ export class FakeEngine implements EngineService {
     return { body: `@${person} ${question}${context}` };
   }
 
-  /** Canned review notes: the approve one leans on the glance's risk line when the sample has one. */
+  /** Canned review notes, one per kind. */
   async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
     this.refuseWithoutAgent();
     if (kind === 'comment') {
