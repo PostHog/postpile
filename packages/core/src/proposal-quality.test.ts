@@ -139,6 +139,7 @@ describe('isSizeOrStateOnlyMergeReason', () => {
     expect(isSizeOrStateOnlyMergeReason('Both topics are small and finished.')).toBe(true);
     expect(isSizeOrStateOnlyMergeReason('Both are small dependency-maintenance topics in Dev tooling with merged PRs and nothing open.')).toBe(true);
     expect(isSizeOrStateOnlyMergeReason('Both are winding-down auth topics driven by alice.')).toBe(true);
+    expect(isSizeOrStateOnlyMergeReason('Both topics are in the same finished state.')).toBe(true);
   });
 
   it('keeps reasons that say what the PRs share, even next to a size word', () => {

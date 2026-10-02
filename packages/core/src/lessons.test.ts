@@ -100,14 +100,19 @@ describe('reviewNow', () => {
     expect(reviewNow(stored, prWith({ ...cutOff, reviews: [] }), viewer)).toEqual({ kind: 'same' });
     // The newest 50 reach back before the review: then it really is gone.
     expect(reviewNow(stored, prWith({ ...cutOff, capHits: [{ list: 'reviews', nodes: 50, oldestAt: at(20) }], reviews: [] }), viewer)).toEqual({ kind: 'deleted' });
-    // Inline comments may be cut off: their absence is no edit, a changed body still is.
+    // Inline comments may be cut off when a comment list hit its cap: their absence is no edit, a changed body still is.
+    const commentsCut = { truncated: true, capHits: [{ list: 'thread_comments', nodes: 100, oldestAt: null }] } satisfies Partial<Pr>;
     const withComment = { ...stored, comments: [{ id: 'c-gone', path: 'x.ts', body: 'first' }] };
-    expect(reviewNow(withComment, prWith(cutOff), viewer)).toEqual({ kind: 'same' });
+    expect(reviewNow(withComment, prWith(commentsCut), viewer)).toEqual({ kind: 'same' });
+    // Capped only on commits: the comment lists are whole, so a missing comment was deleted.
+    const commitsOnly = { truncated: true, capHits: [{ list: 'commits', nodes: 100, oldestAt: at(1) }] } satisfies Partial<Pr>;
+    expect(reviewNow(withComment, prWith(commitsOnly), viewer).kind).toBe('edited');
+    expect(reviewNow(stored, prWith({ ...commitsOnly, reviews: [] }), viewer)).toEqual({ kind: 'deleted' });
     // A comment the capped snapshot still holds is compared: its edit counts.
     const visible = makeComment({ id: 'c-seen', author: viewer.login, kind: 'review_comment', path: 'y.ts', body: 'edited', createdAt: at(25) });
     const storedVisible = { ...stored, comments: [{ id: 'c-seen', path: 'y.ts', body: 'original' }] };
-    expect(reviewNow(storedVisible, prWith({ ...cutOff, comments: [visible] }), viewer)).toMatchObject({ kind: 'edited', review: { comments: [{ id: 'c-seen', body: 'edited' }] } });
-    expect(reviewNow(withComment, prWith({ ...cutOff, reviews: [{ ...changes, body: 'new body' }] }), viewer)).toMatchObject({ kind: 'edited', review: { body: 'new body', comments: [{ body: 'first' }] } });
+    expect(reviewNow(storedVisible, prWith({ ...commentsCut, comments: [visible] }), viewer)).toMatchObject({ kind: 'edited', review: { comments: [{ id: 'c-seen', body: 'edited' }] } });
+    expect(reviewNow(withComment, prWith({ ...commentsCut, reviews: [{ ...changes, body: 'new body' }] }), viewer)).toMatchObject({ kind: 'edited', review: { body: 'new body', comments: [{ body: 'first' }] } });
   });
 
   it('counts an edited inline comment as an edit', () => {
