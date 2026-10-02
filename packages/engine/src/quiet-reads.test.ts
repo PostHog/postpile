@@ -146,7 +146,7 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     expect(h.writer.calls).toEqual([]);
   });
 
-  it('marks it right away, a minute after the bot activity: no wait (grace removed 2026-10-02)', async () => {
+  it('marks it right away, a minute after the bot activity: no wait', async () => {
     const pr = alicePr();
     const h = await synced(pr, { now: () => new Date(new Date(at(30)).getTime() + 60_000) });
 

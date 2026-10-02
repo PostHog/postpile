@@ -180,7 +180,7 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ pr: asked })).kind).toBe('mark');
   });
 
-  it('marks right away: no wait after the newest bot activity or thread update (grace removed 2026-10-02)', () => {
+  it('marks right away: no wait after the newest bot activity or thread update', () => {
     const justNow = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(55), unread: true });
     expect(quietReadCheck(input({ thread: justNow, events: [humanComment(5), botComment(55)], prFetchedAt: at(55) }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]'] });
   });

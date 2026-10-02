@@ -119,7 +119,7 @@ export class QuietReads {
   private otherCandidates(): QuietCandidate[] {
     return this.store.notifications
       .list()
-      .filter((thread) => isClearableNonPr(thread))
+      .filter(isClearableNonPr)
       .map((thread) => ({ thread, prKey: null, detail: quietReasonDetail('not_pr') }));
   }
 
@@ -154,6 +154,10 @@ export class QuietReads {
 
   async run(origin: 'sync' | 'poll'): Promise<QuietReadsResult> {
     if (!this.writes.enabled()) {
+      return NOTHING_DONE;
+    }
+    // Every rule skips a read thread (not_unread), so with nothing unread there is nothing to load a board for.
+    if (!this.store.notifications.list().some((thread) => thread.unread)) {
       return NOTHING_DONE;
     }
     const nowIso = this.now().toISOString();
