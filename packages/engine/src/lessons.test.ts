@@ -66,7 +66,7 @@ async function requestChangesAfter(g: (pr: Pr) => Glance): Promise<Scene> {
 }
 
 function lessonsFor(h: Harness, prKey: string) {
-  return h.store.lessons.listPendingForPr(prKey);
+  return h.store.lessons.listFollowingReviewForPr(prKey);
 }
 
 describe('lessons from change requests', () => {
@@ -112,6 +112,27 @@ describe('lessons from change requests', () => {
     const gone: Pr = { ...edited, updatedAt: '2026-09-02T12:25:00.000Z', reviews: [] };
     await onGitHub(h, gone, '2026-09-02T12:25:00.000Z');
     expect(h.store.lessons.get(first!.id)).toMatchObject({ status: 'withdrawn' });
+  });
+});
+
+describe('joined lessons follow their review', () => {
+  it('restarts a joined lesson whose review was edited, and withdraws one whose review is gone', async () => {
+    const { h, pr, reviewed, setClock } = await requestChangesAfter((p) => glance(p));
+    const [lesson] = lessonsFor(h, pr.key);
+    const open = h.store.lessons.add({ ...lesson!, review: null, source: 'taught', note: 'x', text: LINE, status: 'open' });
+    h.store.lessons.setWritten(lesson!.id, { text: '', why: 'same as the open one', status: 'joined', joinedId: open.id });
+    expect((await h.engine.getLesson(open.id))?.reviews).toBe(1);
+
+    setClock('2026-09-02T12:10:00.000Z');
+    const edited: Pr = { ...reviewed, updatedAt: '2026-09-02T12:05:00.000Z', comments: [{ ...inline, body: 'and drop the cloud/ import too' }] };
+    await onGitHub(h, edited, '2026-09-02T12:05:00.000Z');
+    expect(h.store.lessons.get(lesson!.id)).toMatchObject({ status: 'new', joinedId: null });
+
+    h.store.lessons.setWritten(lesson!.id, { text: '', why: '', status: 'joined', joinedId: open.id });
+    setClock('2026-09-02T12:30:00.000Z');
+    await onGitHub(h, { ...edited, updatedAt: '2026-09-02T12:25:00.000Z', reviews: [] }, '2026-09-02T12:25:00.000Z');
+    expect(h.store.lessons.get(lesson!.id)?.status).toBe('withdrawn');
+    expect((await h.engine.getLesson(open.id))?.reviews).toBe(0);
   });
 });
 

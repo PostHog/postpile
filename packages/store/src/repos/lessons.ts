@@ -40,6 +40,8 @@ function toLesson(row: LessonRow): Lesson {
 }
 
 const PENDING = "status IN ('new', 'open')";
+/** Still follow their review: pending ones, and those that joined an open line (they count as its evidence). */
+const FOLLOWS_REVIEW = "status IN ('new', 'open', 'joined')";
 
 /** Lessons from the user's pushback. One row per change request (review_id is unique), or per taught note. */
 export class LessonRepo {
@@ -78,9 +80,9 @@ export class LessonRepo {
     return { ...lesson, id };
   }
 
-  /** Waiting on the agent or the user, for one PR. */
-  listPendingForPr(prKey: PrKey): Lesson[] {
-    return all<LessonRow>(this.db, `SELECT * FROM lesson WHERE pr_key = ? AND ${PENDING} ORDER BY id`, prKey).map(toLesson);
+  /** Waiting on the agent or the user, or joined to an open line, for one PR: what still follows its review. */
+  listFollowingReviewForPr(prKey: PrKey): Lesson[] {
+    return all<LessonRow>(this.db, `SELECT * FROM lesson WHERE pr_key = ? AND ${FOLLOWS_REVIEW} ORDER BY id`, prKey).map(toLesson);
   }
 
   /** Waiting on the agent or the user, everywhere. */
@@ -147,11 +149,11 @@ export class LessonRepo {
     );
   }
 
-  /** The source review was edited: the candidate starts over from the new text. */
+  /** The source review was edited: the candidate starts over from the new text, a joined one too (it may say something else now). */
   restartFromReview(id: number, review: LessonReview): void {
     run(
       this.db,
-      `UPDATE lesson SET review_json = ?, text = '', why = '', joined_id = NULL, status = 'new' WHERE id = ? AND ${PENDING}`,
+      `UPDATE lesson SET review_json = ?, text = '', why = '', joined_id = NULL, status = 'new' WHERE id = ? AND ${FOLLOWS_REVIEW}`,
       JSON.stringify(review),
       id,
     );
@@ -161,8 +163,13 @@ export class LessonRepo {
     run(this.db, 'UPDATE lesson SET topic_id = ? WHERE id = ?', topicId, id);
   }
 
-  /** The user's decision or a withdrawal. Only a pending lesson can be decided; returns false when it was not. */
+  /** The user's decision. Only a pending lesson can be decided; returns false when it was not. */
   decide(id: number, status: LessonStatus, why: string, at: string): boolean {
     return run(this.db, `UPDATE lesson SET status = ?, why = CASE WHEN ? = '' THEN why ELSE ? END, decided_at = ? WHERE id = ? AND ${PENDING}`, status, why, why, at, id) > 0;
+  }
+
+  /** Its source is gone: withdrawn, a joined one too, so it stops counting as evidence. */
+  withdraw(id: number, why: string, at: string): void {
+    run(this.db, `UPDATE lesson SET status = 'withdrawn', why = ?, decided_at = ? WHERE id = ? AND ${FOLLOWS_REVIEW}`, why, at, id);
   }
 }

@@ -52,12 +52,13 @@ export class LessonKeeper {
   }
 
   /**
-   * A pending lesson follows its review: an edit (body or inline comments)
-   * starts the candidate over from the new text, a deleted or dismissed
-   * review withdraws it. What the user already decided stays as it is.
+   * A pending lesson, or one that joined an open line, follows its review:
+   * an edit (body or inline comments) starts the candidate over from the
+   * new text, a deleted or dismissed review withdraws it. What the user
+   * already decided stays as it is.
    */
   private revalidate(pr: Pr, viewer: Viewer, at: IsoTime): void {
-    for (const lesson of this.store.lessons.listPendingForPr(pr.key)) {
+    for (const lesson of this.store.lessons.listFollowingReviewForPr(pr.key)) {
       if (lesson.review === null) {
         continue;
       }
@@ -65,7 +66,7 @@ export class LessonKeeper {
       if (now.kind === 'edited') {
         this.store.lessons.restartFromReview(lesson.id, now.review);
       } else if (now.kind === 'deleted') {
-        this.store.lessons.decide(lesson.id, 'withdrawn', 'The review it came from was deleted or dismissed.', at);
+        this.store.lessons.withdraw(lesson.id, 'The review it came from was deleted or dismissed.', at);
       }
     }
   }
@@ -87,7 +88,7 @@ export class LessonKeeper {
         continue;
       }
       if (!active.has(lesson.topicId)) {
-        this.store.lessons.decide(lesson.id, 'withdrawn', 'Its topic is no longer active.', at);
+        this.store.lessons.withdraw(lesson.id, 'Its topic is no longer active.', at);
       }
     }
   }

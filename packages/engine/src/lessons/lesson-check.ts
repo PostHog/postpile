@@ -28,7 +28,7 @@ export function checkOpenLesson(store: Store, id: number, at: string): LessonChe
     return { ok: false, message: 'The review it came from was edited. The line is written again on the next sync.' };
   }
   if (now.kind === 'deleted') {
-    store.lessons.decide(lesson.id, 'withdrawn', 'The review it came from was deleted or dismissed.', at);
+    store.lessons.withdraw(lesson.id, 'The review it came from was deleted or dismissed.', at);
     return { ok: false, message: 'The review it came from was deleted or dismissed, so the lesson was withdrawn.' };
   }
   return { ok: true, lesson };

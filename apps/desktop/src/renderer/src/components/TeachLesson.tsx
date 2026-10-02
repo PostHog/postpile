@@ -22,6 +22,8 @@ export function TeachLesson(props: { prKey: PrKey }) {
   // The same lesson also waits in its topic (maybe one it moved to after a sync); once decided anywhere, it is gone here too.
   const current = useLesson(lesson?.id ?? null);
   const stillOpen = lesson !== null && current.data !== null;
+  // The fresh copy once loaded: after a sync moved the lesson into a topic, "Remember in this topic" works.
+  const shown = current.data ?? lesson;
 
   async function submit() {
     const answer = await actions.teachLesson(props.prKey, note);
@@ -66,10 +68,10 @@ export function TeachLesson(props: { prKey: PrKey }) {
 
   return (
     <div className="flex flex-col gap-2">
-      {lesson && stillOpen ? (
+      {shown && stillOpen ? (
         <>
           {result?.reply && <p className="px-3 text-[11.5px] text-ink-2">{result.reply}</p>}
-          <LessonCard lesson={lesson} onDecided={() => setResult(null)} />
+          <LessonCard lesson={shown} onDecided={() => setResult(null)} />
         </>
       ) : (
         <>

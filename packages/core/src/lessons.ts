@@ -1,5 +1,6 @@
 import { glanceRiskLevel } from './glance-risk.ts';
 import { sameLogin } from './mentions.ts';
+import { cutSnapshotCovers } from './quiet-reads.ts';
 import type { Glance, IsoTime, Pr, PrEvent, PrKey, Review, Viewer } from './types.ts';
 
 // Lessons: what the agent should check next time, learned from the user's
@@ -200,14 +201,25 @@ function sameReviewText(a: LessonReview, b: LessonReview): boolean {
 /**
  * The stored review against the PR as it is now: unchanged, edited (body or
  * inline comments) or deleted. An edited source makes a new candidate; a
- * deleted one withdraws it.
+ * deleted one withdraws it. A capped snapshot only counts what it surely
+ * holds: a review it may have cut off is not deleted, and inline comments
+ * it may have cut off are not an edit.
  */
 export function reviewNow(stored: LessonReview, pr: Pr, viewer: Viewer): { kind: 'same' } | { kind: 'edited'; review: LessonReview } | { kind: 'deleted' } {
+  // A snapshot cut off at the query's caps (a busy PR) may leave out an old review or its inline comments.
+  const cut = pr.truncated === true;
   const review = pr.reviews.find((candidate) => candidate.id === stored.id);
-  if (!review || review.state !== 'CHANGES_REQUESTED') {
+  if (!review) {
+    return cut && !cutSnapshotCovers(pr, stored.submittedAt) ? { kind: 'same' } : { kind: 'deleted' };
+  }
+  if (review.state !== 'CHANGES_REQUESTED') {
     return { kind: 'deleted' };
   }
   const current = lessonReview(pr, review, viewer);
+  if (cut) {
+    // Missing inline comments prove nothing here: only the body can show an edit, and the stored comments stay.
+    return review.body === stored.body ? { kind: 'same' } : { kind: 'edited', review: { ...current, comments: stored.comments } };
+  }
   return sameReviewText(stored, current) ? { kind: 'same' } : { kind: 'edited', review: current };
 }
 

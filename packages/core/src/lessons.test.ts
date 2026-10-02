@@ -94,6 +94,18 @@ describe('reviewNow', () => {
     expect(reviewNow(stored, prWith({ reviews: [{ ...changes, state: 'DISMISSED' }] }), viewer)).toEqual({ kind: 'deleted' });
   });
 
+  it('trusts a capped snapshot only for what it surely holds', () => {
+    const cutOff = { truncated: true, capHits: [{ list: 'reviews', nodes: 50, oldestAt: at(40) }] } satisfies Partial<Pr>;
+    // The review fell past the reviews cap: not deleted.
+    expect(reviewNow(stored, prWith({ ...cutOff, reviews: [] }), viewer)).toEqual({ kind: 'same' });
+    // The newest 50 reach back before the review: then it really is gone.
+    expect(reviewNow(stored, prWith({ ...cutOff, capHits: [{ list: 'reviews', nodes: 50, oldestAt: at(20) }], reviews: [] }), viewer)).toEqual({ kind: 'deleted' });
+    // Inline comments may be cut off: their absence is no edit, a changed body still is.
+    const withComment = { ...stored, comments: [{ path: 'x.ts', body: 'first' }] };
+    expect(reviewNow(withComment, prWith(cutOff), viewer)).toEqual({ kind: 'same' });
+    expect(reviewNow(withComment, prWith({ ...cutOff, reviews: [{ ...changes, body: 'new body' }] }), viewer)).toMatchObject({ kind: 'edited', review: { body: 'new body', comments: [{ body: 'first' }] } });
+  });
+
   it('counts an edited inline comment as an edit', () => {
     const comment = makeComment({ id: 'c1', author: viewer.login, kind: 'review_comment', path: 'x.ts', body: 'first', createdAt: at(20) });
     const pr = prWith({ comments: [comment] });
