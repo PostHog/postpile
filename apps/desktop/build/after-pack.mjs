@@ -1,11 +1,8 @@
-// electron-builder afterPack hook: runs on the packed app, before signing, so
-// the signature covers the bundle as it ships.
-//
-// Removes SwiftShader, Chromium's software Vulkan (about 16 MB). Chromium only
-// loads it for WebGL without a usable GPU, and only with
-// --enable-unsafe-swiftshader. The PostPile window draws plain HTML and CSS: no
-// WebGL, no canvas. Without a GPU (or with --disable-gpu) Chromium composites
-// in software, which needs no SwiftShader either.
+// electron-builder afterPack hook: removes SwiftShader (Chromium's software
+// Vulkan). Runs before signing so the signature covers the trimmed bundle.
+// Chromium only loads SwiftShader for WebGL without a usable GPU, and only
+// with --enable-unsafe-swiftshader. The window has no WebGL or canvas, and
+// without a GPU Chromium composites in software, which does not need it.
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';

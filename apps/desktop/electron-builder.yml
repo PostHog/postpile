@@ -30,12 +30,12 @@ files:
   # workflow, never shipped inside the app.
   - "!**/*.map"
 asar: true
-# The UI is English only. Electron ships Chromium's strings for about 220
-# locales (an .lproj folder each, about 50 MB unpacked); only en stays. Side
-# effect: Chromium's locale is en-US, so the few dates and times formatted
-# with the default locale use the US format, like the ones that ask for en-US.
+# The UI is English only. Electron ships Chromium's strings for every locale
+# (an .lproj folder each, unpacked); only en stays. Side effect: Chromium's
+# locale is en-US, so the few dates and times formatted with the default
+# locale use the US format, like the ones that ask for en-US.
 electronLanguages: [en]
-# Drops SwiftShader (16 MB) before signing; see the file for why the app
+# Drops SwiftShader before signing; see the file for why the app
 # doesn't need it.
 afterPack: ./build/after-pack.mjs
 # The MCP launcher (see the file). Lands in Contents/Resources, executable,
