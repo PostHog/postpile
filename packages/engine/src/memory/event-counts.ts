@@ -1,5 +1,9 @@
-import { isMemoryNoise, isMemoryTrigger, type PrKey } from '@postpile/core';
+import { isMemoryNoise, isMemoryTrigger, type PrEvent, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
+
+function countSince(store: Store, prKeys: PrKey[], afterSeq: number, keep: (event: PrEvent) => boolean): number {
+  return store.eventLog.listSince(prKeys, afterSeq).filter((entry) => keep(entry.event)).length;
+}
 
 /**
  * Trigger events (`memoryRole`) of these PRs logged after afterSeq: what
@@ -7,10 +11,10 @@ import type { Store } from '@postpile/store';
  * never makes memory look out of date.
  */
 export function triggersSince(store: Store, prKeys: PrKey[], afterSeq: number): number {
-  return store.eventLog.listSince(prKeys, afterSeq).filter((entry) => isMemoryTrigger(entry.event)).length;
+  return countSince(store, prKeys, afterSeq, isMemoryTrigger);
 }
 
 /** Events of these PRs logged after afterSeq that are not noise: what "N new events since you last looked" counts. */
 export function activitySince(store: Store, prKeys: PrKey[], afterSeq: number): number {
-  return store.eventLog.listSince(prKeys, afterSeq).filter((entry) => !isMemoryNoise(entry.event)).length;
+  return countSince(store, prKeys, afterSeq, (event) => !isMemoryNoise(event));
 }

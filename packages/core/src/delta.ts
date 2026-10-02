@@ -88,7 +88,7 @@ export function joinedMembers(
  */
 function skipToSeq(fresh: LoggedEvent[], cursorSeq: number): number {
   let seq = cursorSeq;
-  for (const entry of fresh) {
+  for (const entry of [...fresh].sort(bySeq)) {
     if (!isMemoryNoise(entry.event)) {
       break;
     }
@@ -106,7 +106,7 @@ function skipToSeq(fresh: LoggedEvent[], cursorSeq: number): number {
  */
 export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
   const members = new Set(input.memberKeys);
-  const fresh = input.logged.filter((entry) => entry.seq > input.cursorSeq && members.has(entry.event.prKey)).sort(bySeq);
+  const fresh = input.logged.filter((entry) => entry.seq > input.cursorSeq && members.has(entry.event.prKey));
   const toSeq = fresh.reduce((max, entry) => Math.max(max, entry.seq), input.cursorSeq);
   const joined = joinedMembers(input.memberKeys, input.memberSince, input.previous);
   const joinedKeys = new Set(joined);
