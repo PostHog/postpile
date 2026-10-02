@@ -32,7 +32,7 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}, sect
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,
-    yourMoves: [], unseenMergeTiles: 0,
+    yourMoves: [], unseenMergeTiles: 0, quiet: false,
     queues,
     section,
     people: [],

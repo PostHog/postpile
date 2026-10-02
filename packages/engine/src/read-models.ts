@@ -77,6 +77,7 @@ import {
   openInDealtWith,
   topicPrRollup,
   topicDriverView,
+  topicQuiet,
   topicSectionOf,
   type TopicListItem,
   type TopicQueues,
@@ -403,6 +404,8 @@ export class ReadModels {
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
       const placement = isUnsortedTopic(topic.id) ? null : placementOf(this.store, topic, latest);
+      const section = topicSectionOf({ topic, driverPick: driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer });
+      const unseenMergeTiles = tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length;
       items.push({
         topic,
         placement,
@@ -415,9 +418,10 @@ export class ReadModels {
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
         yourMoves: urgency.yourMoves,
-        unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
+        unseenMergeTiles,
         queues,
-        section: topicSectionOf({ topic, driverPick: driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer }),
+        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, yourMoves: urgency.yourMoves, unseenMergeTiles }),
+        section,
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,

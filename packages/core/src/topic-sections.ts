@@ -138,6 +138,28 @@ export function topicSection(input: SectionInput): TopicSection {
   return openAsk(input.queues) ?? sectionBelowAsks(input);
 }
 
+/** What `topicQuiet` reads off a list item. */
+export interface QuietInput {
+  section: TopicSection;
+  unreadTiles: number;
+  yourMoves: TopicMove[];
+  unseenMergeTiles: number;
+}
+
+/**
+ * The sidebar row is dimmed because nothing waits on the viewer: no unread
+ * tile, no move of theirs (the "Merge, it is approved" move included, which
+ * never makes a topic urgent but still shows its chip), no merge without
+ * their review they have not seen, and the topic is not in an ask section.
+ * The Archive is never dimmed, it is its own context.
+ */
+export function topicQuiet(input: QuietInput): boolean {
+  if (input.section === 'archive' || ASK_TIERS.includes(input.section as (typeof ASK_TIERS)[number])) {
+    return false;
+  }
+  return input.unreadTiles === 0 && input.yourMoves.length === 0 && input.unseenMergeTiles === 0;
+}
+
 /** What the read models know about a topic when they place it. */
 export interface TopicSectionSource {
   /** `driver` is the automatic driver, refreshed each sync. */

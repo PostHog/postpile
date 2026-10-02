@@ -155,6 +155,7 @@ import {
   openInDealtWith,
   topicPrRollup,
   topicDriverView,
+  topicQuiet,
   topicSectionOf,
   topicQueues,
   topicUrgency,
@@ -888,6 +889,8 @@ export class FakeEngine implements EngineService {
       const queues = this.topicQueuesOf(tiles);
       const prRollup = topicPrRollup(tiles, prs.map(({ pr }) => pr));
       const placement = this.memory.placement(topic);
+      const section = topicSectionOf({ topic, driverPick: this.driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer });
+      const unseenMergeTiles = views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length;
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
@@ -900,9 +903,10 @@ export class FakeEngine implements EngineService {
         openTiles: views.filter((view) => view.state.kind === 'open').length,
         totalTiles: views.length,
         yourMoves: urgency.yourMoves,
-        unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
+        unseenMergeTiles,
         queues,
-        section: topicSectionOf({ topic, driverPick: this.driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer }),
+        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, yourMoves: urgency.yourMoves, unseenMergeTiles }),
+        section,
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,

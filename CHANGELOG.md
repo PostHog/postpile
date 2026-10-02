@@ -17,6 +17,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Inside each section, topics with your open PR or your move come first, then unread ones.
 - Other work folds by area, single-topic areas under "More". It starts open when it holds your PR, your move or something unread, else folded; folded, urgent unread topics stay visible and the header counts what is unread.
 - Topics without a dossier and without a known driver sit in Other topics with a "not sorted yet" mark. The Needs you, Your team and Routed to you groups inside Other topics are gone; FYI stays.
+- Sidebar rows where nothing waits on you are dimmed, so unread rows and rows with a your-move chip stand out. The selected row and search results stay as they were.
 - "Ask <owner>" opens in the same small popover as the review notes instead of a strip under the action bar. It works as before: pick the person, say what to ask, draft, edit, post.
 
 ### Fixed

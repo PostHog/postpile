@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyTierCounts } from './topic-queues.ts';
 import { effectiveDriver, OUTSIDE_DRIVER, TEAM_DRIVER } from './topic-driver.ts';
-import { compareInSection, topicDriverView, topicSection, type TopicSection } from './topic-sections.ts';
+import { compareInSection, topicDriverView, topicQuiet, topicSection, type TopicSection } from './topic-sections.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { TopicRelation } from './memory.ts';
 import type { Viewer } from './types.ts';
@@ -256,5 +256,30 @@ describe('compareInSection', () => {
     const yourMove = topic('your move', { moves: 1, unread: 1, urgent: 1 });
     const sorted = [quiet, calm, urgent, yourPr, yourMove].sort(compareInSection).map((entry) => entry.name);
     expect(sorted).toEqual(['your move', 'your PR', 'urgent', 'calm', 'quiet']);
+  });
+});
+
+describe('topicQuiet', () => {
+  const move = (kind: 'review' | 'merge') => ({ move: kind, text: kind === 'merge' ? 'Merge, it is approved' : 'Review' });
+  const row = { section: 'you_drive' as TopicSection, unreadTiles: 0, yourMoves: [] as ReturnType<typeof move>[], unseenMergeTiles: 0 };
+
+  const table: [string, Partial<typeof row>, boolean][] = [
+    ['an unread tile keeps the row loud', { unreadTiles: 1 }, false],
+    ['a your-move chip keeps the row loud', { yourMoves: [move('review')] }, false],
+    ['the approved-merge move keeps the row loud, though it is not urgent', { yourMoves: [move('merge')] }, false],
+    ['a merge without your review you have not seen keeps the row loud', { unseenMergeTiles: 1 }, false],
+    ['an ask section keeps the row loud', { section: 'needs_reply' }, false],
+    ['changes requested keeps the row loud', { section: 'changes_requested' }, false],
+    ['to review keeps the row loud', { section: 'to_review' }, false],
+    ['team mentioned keeps the row loud', { section: 'team_mentioned' }, false],
+    ['the Archive is never dimmed', { section: 'archive' }, false],
+    ['all dealt with in You drive', {}, true],
+    ['all dealt with in Your team owns', { section: 'team_owns' }, true],
+    ['all dealt with in Other work', { section: 'other_work' }, true],
+    ['all dealt with in Other topics', { section: 'other_topics' }, true],
+  ];
+
+  it.each(table)('%s', (_sentence, extra, quiet) => {
+    expect(topicQuiet({ ...row, ...extra })).toBe(quiet);
   });
 });
