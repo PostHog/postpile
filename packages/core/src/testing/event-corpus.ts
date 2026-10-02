@@ -45,16 +45,22 @@ export interface CorpusEntry {
 
 // --- Bodies -----------------------------------------------------------------
 
-const TRUNK_MARKER = '<!-- trunk-merge-queue-status -->';
+// Trunk's sticky comment as trunk writes it (DESIGN.md "Merge queue"): the
+// marker, then one status line that replaces the last; an en space after the
+// emoji. Only the first one, before submitting, has the merge checkbox.
+const TRUNK_MARKER = '<!-- Trunk Merge -->';
 const TRUNK_HEADER = 'Merging to `master` in this repository is managed by Trunk.';
+const TRUNK_CHECKBOX = 'To merge this pull request, check the box to the left or comment `/trunk merge` below.';
 
 function trunkBody(state: string): string {
-  return `${TRUNK_MARKER}\n${TRUNK_HEADER}\n\n${state}`;
+  return `${TRUNK_MARKER}\n${state}`;
 }
 
-const TRUNK_NOT_SUBMITTED = trunkBody(
-  '- [ ] To merge this pull request, check the box to the left or comment `/trunk merge` below.\n\nAfter your PR is submitted to the merge queue, this comment will be updated with its status.',
-);
+function trunkOffer(box: '[ ]' | '[x]'): string {
+  return trunkBody(`${TRUNK_HEADER}\n\n<!-- Start PR Submit Checkbox -->\n- ${box} <!-- End PR Submit Checkbox -->${TRUNK_CHECKBOX}`);
+}
+
+const TRUNK_NOT_SUBMITTED = trunkOffer('[ ]');
 
 /** Trunk's sticky comment as it was posted, before any edit. */
 function trunkSticky(): Comment {
@@ -140,32 +146,45 @@ export const CORPUS = {
   trunkSubmitted: {
     says: 'trunk-io edits its comment: "✨ Submitted to Merge by @viewer"',
     before: [{ comment: trunkSticky() }],
-    adds: trunkEdit('- [x] ✨ Submitted to Merge by @viewer'),
+    adds: trunkEdit('✨\u2002Submitted to Merge by Viewer Example (@viewer). It will be added to the merge queue once all branch protection rules pass.'),
   },
   trunkWaiting: {
     says: 'trunk-io edits its comment: "⏳ Waiting to start tests"',
     before: [{ comment: trunkSticky() }],
-    adds: trunkEdit('- [x] ✨ Submitted to Merge by @viewer\n\n⏳ Waiting to start tests'),
+    adds: trunkEdit('⏳\u2002Waiting to start tests on this pull request - [details](https://app.trunk.io/acme/merge/app/4411)'),
   },
   trunkTesting: {
     says: 'trunk-io edits its comment: "🧪 Running tests on this pull request (testing on PR #4412)"',
     before: [{ comment: trunkSticky() }],
-    adds: trunkEdit('- [x] ✨ Submitted to Merge by @viewer\n\n🧪 Running tests on this pull request (testing on PR #4412)'),
+    adds: trunkEdit('🧪\u2002Running tests on this pull request (testing on PR [#4412](https://github.com/acme/app/pull/4412)) - [details](https://app.trunk.io/acme/merge/app/4411).'),
   },
   trunkMergedComment: {
     says: 'trunk-io edits its comment: "😎 Merged successfully"',
     before: [{ comment: trunkSticky() }],
-    adds: trunkEdit('😎 Merged successfully - [details](https://app.trunk.io/acme/merge/app/4411)'),
+    adds: trunkEdit('😎\u2002Merged successfully - [details](https://app.trunk.io/acme/merge/app/4411).'),
   },
   trunkRemoved: {
-    says: 'trunk-io edits its comment: "🚫 removed from the merge queue because tests failed"',
+    says: 'trunk-io edits its comment: "🚫 removed from the merge queue because it waited too long to become mergeable"',
     before: [{ comment: trunkSticky() }],
-    adds: trunkEdit('🚫 This PR was removed from the merge queue because the tests failed on the batch. See [details](https://app.trunk.io/acme/merge/app/4411).'),
+    adds: trunkEdit(
+      "🚫\u2002This pull request was removed from the merge queue because it was waiting to become mergeable for too long (for example: missing required approvals or checks, or a merge conflict). Submit it again once it's ready to merge.",
+    ),
   },
   trunkStackFailed: {
-    says: 'trunk-io edits its comment: "Stacked PR 4410 failed testing in the merge queue"',
+    says: 'trunk-io comments: "Stacked PR 4410 failed testing in the merge queue"',
     before: [{ comment: trunkSticky() }],
-    adds: trunkEdit('🚫 Stacked PR 4410 failed testing in the merge queue, so this PR was removed as well.'),
+    adds: [
+      comment(
+        'c-trunk-stack',
+        'trunk-io[bot]',
+        'Stacked PR [4410](https://github.com/acme/app/pull/4410) failed testing in the merge queue. Please investigate the failure and re-submit the stack.',
+      ),
+    ],
+  },
+  trunkStackCancelled: {
+    says: 'trunk-io comments: "Stacked PR 4410 was cancelled: a user cancelled it"',
+    before: [{ comment: trunkSticky() }],
+    adds: [comment('c-trunk-cancel', 'trunk-io[bot]', 'Stacked PR [4410](https://github.com/acme/app/pull/4410) was cancelled: a user cancelled it.')],
   },
   trunkTestBadge: {
     says: 'trunk-io posts its Test Analytics badge comment',
@@ -173,7 +192,7 @@ export const CORPUS = {
       comment(
         'c-trunk-tests',
         'trunk-io[bot]',
-        '## Trunk Test Analytics\n\n![2 flaky tests](https://img.shields.io/badge/flaky-2-yellow) 412 tests ran, 2 flaky, 0 quarantined.',
+        '<!-- Trunk Test Analytics -->\n<sub>\n\n![2 flaky tests](https://img.shields.io/badge/flaky-2-yellow) 412 tests ran, 2 flaky, 0 quarantined.\n</sub>',
       ),
     ],
   },
@@ -195,7 +214,7 @@ export const CORPUS = {
   viewerTicksTrunkBox: {
     says: "the viewer ticks the merge box in trunk-io's comment (an edit by the viewer)",
     before: [{ comment: trunkSticky() }],
-    adds: [{ comment: { ...trunkSticky(), body: trunkBody('- [x] To merge this pull request, check the box to the left.'), lastEditedAt: CORPUS_AT, editor: 'viewer' } }],
+    adds: [{ comment: { ...trunkSticky(), body: trunkOffer('[x]'), lastEditedAt: CORPUS_AT, editor: 'viewer' } }],
   },
   githubQueueRemoves: {
     says: "GitHub's merge queue removes the PR",

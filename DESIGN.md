@@ -895,7 +895,7 @@ core `event-roles.ts`), first match wins:
 | anything a person did, the viewer included | trigger |
 | a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval, pushes; Look closer even when turned down | trigger |
 | automation: deploy, merge queue add/remove, a comment edit (the original already counted; edits are status refreshes) | noise |
-| a merge queue bot's comment (`isMergeQueueBot`: trunk-io, mergify): "managed by Trunk", submitted, testing, merged, kicked out, test badges | noise |
+| a merge queue bot's comment (`isMergeQueueBot`: trunk-io, mergify): "managed by Trunk", submitted, testing, merged, kicked out, test badges | noise (kicked out of the queue on the viewer's own PR is loud, so the first row makes it a trigger; see "Merge queue") |
 | any other automation, a bot's approval aside: review bots (coderabbitai, chatgpt-codex-connector, greptile-apps, copilot-pull-request-reviewer, stamphog, veria-ai, posthog-security-review-bot), github-actions comments, dependabot comments | ride_along |
 
 - *noise*: never in a prompt, never starts an update, never counted as

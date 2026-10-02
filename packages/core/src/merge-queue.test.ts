@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { isTrunkBot } from './bots.ts';
+import { memoryRole, type MemoryRole } from './event-roles.ts';
 import { at, makeComment, makePr } from './fixtures.ts';
-import { mergeQueueFailureAt, mergeQueueState } from './merge-queue.ts';
-import type { Comment } from './types.ts';
+import { mergeQueueFailureAt, mergeQueueState, type MergeQueueStep } from './merge-queue.ts';
+import { CORPUS, CORPUS_SCENARIOS, corpusEvents, type CorpusEntryName, type CorpusScenarioName } from './testing/event-corpus.ts';
+import type { Comment, Loudness } from './types.ts';
 
 // Trunk's status lines as seen in the field, with invented names and numbers.
 // Trunk puts an en space (U+2002) after its emoji.
@@ -135,5 +138,32 @@ describe('mergeQueueFailureAt', () => {
     expect(mergeQueueFailureAt(resubmitted, at(20))).toBeNull();
     const merged = makePr({ state: 'MERGED', comments: [trunk(STACK_FAILED, 20)] });
     expect(mergeQueueFailureAt(merged, at(20))).toBeNull();
+  });
+});
+
+describe('the Trunk corpus entries', () => {
+  // Each Trunk comment of the event corpus: the queue state it leaves, and
+  // what its event is. Only a failure on the viewer's own PR is loud, and loud
+  // is a memory trigger; every other queue status stays noise.
+  const rows: [CorpusEntryName, CorpusScenarioName, MergeQueueStep | null, Loudness, MemoryRole][] = [
+    ['trunkSticky', 'ownOpen', null, 'quiet', 'noise'],
+    ['trunkSubmitted', 'ownOpen', 'submitted', 'quiet', 'noise'],
+    ['trunkWaiting', 'ownOpen', 'waiting', 'quiet', 'noise'],
+    ['trunkTesting', 'ownOpen', 'testing', 'quiet', 'noise'],
+    ['trunkRemoved', 'ownOpen', 'failed', 'loud', 'trigger'],
+    ['trunkStackFailed', 'ownOpen', 'failed', 'loud', 'trigger'],
+    ['trunkRemoved', 'reviewing', 'failed', 'quiet', 'noise'],
+    ['trunkStackCancelled', 'ownOpen', null, 'quiet', 'noise'],
+    ['trunkMergedComment', 'merged', null, 'quiet', 'noise'],
+    ['trunkTestBadge', 'reviewing', null, 'quiet', 'noise'],
+  ];
+
+  it.each(rows)('%s on %s: queue %s, %s, %s', (entry, scenario, state, loudness, role) => {
+    const corpus = corpusEvents(CORPUS_SCENARIOS[scenario].pr, CORPUS[entry]);
+    expect(mergeQueueState(corpus.pr)?.state ?? null).toBe(state);
+    const event = corpus.added.find((candidate) => isTrunkBot(candidate.actor));
+    expect(event).toBeDefined();
+    expect(event!.ruleLoudness).toBe(loudness);
+    expect(memoryRole(event!)).toBe(role);
   });
 });
