@@ -404,6 +404,8 @@ export type AgentCallKind =
   | 'instructions_change'
   /** "Recheck" on one memory line, asked by the user. */
   | 'memory_recheck'
+  /** Candidate lines from the user's pushback on glances (lessons.ts). */
+  | 'lesson_write'
   /** Should new activity from the fast poll ping the Mac? One call per poll cycle. */
   | 'ping_decision'
   /** The daily "what you're working on" digest from local Claude Code data. */

@@ -6,6 +6,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Added
 
+- When you request changes on a PR whose assessment said Looks safe (or rated it low risk), PostPile turns your review into a line it could check next time, such as "When core imports from ee/, say Look closer". The topic shows it under "Remember for future assessments?": keep it for the topic, add it to your instructions (you see the diff first), or dismiss it. Nothing changes until you pick. Reviews with nothing reusable in them, like nits, give no line.
+- "Teach future assessments" under a PR's assessment: say what it should check next time, and PostPile offers the same three choices.
 - "<login> drives" on the topic header is now a menu: pick You, a teammate, Your team or Someone outside your team, and the topic moves to that section at once. Each item shows where the topic would go. The pick sticks until you change it or choose Reset to automatic; new activity never lifts it, and the agent's topic memory follows it. Local only, nothing goes to GitHub.
 - The agent can name your team as the driver of a standing topic that your team keeps up with nobody leading the current wave, so such topics sit under Your team owns instead of under whoever led one wave.
 - Approve on the PR pane is split: the main part approves right away as before, the speech-bubble segment opens "Approve with comment" with a short review note the agent drafts for you to edit.
@@ -13,6 +15,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- Topic and rule suggestions in the Inbox are fewer and need a real reason. A merge has to say what the topics share and what you gain; "both are small" or "both are finished" no longer count. Rules only come from corrections where you said something in words, not from bare "Wrong topic" clicks. A suggestion you rejected is not asked again, and suggestions about topics that were since retired or archived are withdrawn instead of waiting in the Inbox.
 - Sidebar sections now say whose topic it is, not whose PRs it holds. Below the asks (Needs reply, Changes you requested, To review, Team mentioned) topics sit under You drive, Your team owns or Other work, by who drives them; the owner team only decides when nobody is known to drive a topic. My PRs and Team's PRs are gone, so your own project no longer lands under Team's PRs because a teammate has a PR in it. The "Topics with any PR | my PRs | team PRs" switch still finds your PRs in any section.
 - Inside each section, topics with your open PR or your move come first, then unread ones.
 - Other work folds by area, single-topic areas under "More". It starts open when it holds your PR, your move or something unread, else folded; folded, urgent unread topics stay visible and the header counts what is unread.

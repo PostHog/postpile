@@ -38,7 +38,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   shared with the setup sweep step),
   `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
-  (`useInstructions`, `useInstructionsChat`), `sources.ts`
+  (`useInstructions`, `useInstructionsChat`), `lessons.ts`
+  (`useLessons(topicId)`, a topic's open lessons; key `lessons(topicId)`,
+  `lessonsAll` refreshes every topic's after a teach), `sources.ts`
   (`useMemorySources`, only enabled while a "Why?" panel is open), `debug.ts`
   (`useDebugNotifications`, the notifications debug pane), `quiet.ts`
   (`useHandledQuietly`, the "Handled quietly" list), `writes.ts`
@@ -175,6 +177,17 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   the scope. A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
+- Lessons (DESIGN.md "Lessons from your reviews") are local, not on the
+  `GithubWrite` list. `keepLessonForTopic` and `dismissLesson` go through
+  `run` (toast, refetch of everything: lessons, tailoring, instructions).
+  `proposeInstructionsFromLesson` writes nothing: its proposal shows in an
+  `InstructionsProposalCard` under the lesson and saves through
+  `saveInstructions` like a chat one (accepting closes the lesson); a reply
+  without a proposal is shown there as text, not a toast. `teachLesson` is
+  one agent call; its reply (nothing reusable, agent off, failed call) is
+  shown under the glance. Fire both only from a click. Proposal cards are
+  keyed with `proposalKey` (`lib/instructions.ts`): a proposal has a chat
+  message or a lesson as its source, never both.
 - Topic proposals come from consolidation or, through the MCP server, from
   an outside agent (`source: 'agent'`, `client`). Say who suggested an
   outside one wherever it shows: the Inbox card's meta line
@@ -356,7 +369,16 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
-  `InstructionsProposalCard` (tile chat and the instructions view),
+  `InstructionsProposalCard` (tile chat, the instructions view and under a
+  lesson; `onDone(accepted)`),
+  `LessonCard` (one lesson: "Remember for future assessments?", the line,
+  `lessonSource` / `earlierAssessmentText` from `lib/lessons.ts`, then
+  Remember in this topic / Use across topics… / Dismiss; neutral grey, never
+  coral, honey or accent), used by `TopicLessons` (under the topic header's
+  "You told the agent" line, renders nothing without open lessons) and
+  `TeachLesson` ("Teach future assessments" under the verdict explanation in
+  `GlanceCard`, only with a glance; keyed by PR; hides its lesson once it
+  left the topic's open list),
   `WorkContextSection` (instructions pane only),
   `RelationBadge` (in `pills.tsx`).
   Something used in three places goes here; two call

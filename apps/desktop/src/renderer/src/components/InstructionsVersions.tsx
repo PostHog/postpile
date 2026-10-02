@@ -9,6 +9,9 @@ function originText(version: InstructionsVersionView): string {
   if (version.origin === 'chat') {
     return version.sourceText ? `From chat: “${version.sourceText}”` : 'From chat';
   }
+  if (version.origin === 'lesson') {
+    return version.sourceText ? `From a lesson: “${version.sourceText}”` : 'From a lesson';
+  }
   if (version.origin === 'setup') {
     return 'Accepted in setup';
   }

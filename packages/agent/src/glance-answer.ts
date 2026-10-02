@@ -108,6 +108,7 @@ export function mapGlanceAnswer(answer: GlanceBatchAnswer, input: GlanceBatchInp
       inputHash: stamp.inputHash(item),
       model: stamp.model,
       createdAt: stamp.createdAt,
+      headOid: item.pr.headOid,
     });
   }
   const missing = keys.filter((key) => !done.has(key));

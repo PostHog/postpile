@@ -23,6 +23,7 @@ import type { Store } from '@postpile/store';
 import { writeReadPlan } from './actions/local-change.ts';
 import { CAP_FILL_POLL_PRS, CAP_FILL_SYNC_PRS, CapFiller } from './cap-fill.ts';
 import { errorText } from './errors.ts';
+import { LessonKeeper } from './lessons/lesson-keeper.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
 import type { GitHubQuota } from './github-quota.ts';
@@ -122,6 +123,7 @@ interface Candidate {
  */
 export class GitHubSync {
   private readonly layers: StackLayerFinder;
+  private readonly lessons: LessonKeeper;
   private readonly teamMembers: TeamMembers;
   private readonly teamRoles: TeamRoleKeeper;
   /** PRs reconciled with GitHub's read time or the viewer's last touch during the current run; taken by run() and poll(). */
@@ -147,6 +149,7 @@ export class GitHubSync {
     private readonly queuedThreads: () => ReadonlySet<string> = () => new Set(),
   ) {
     this.layers = new StackLayerFinder(reader, now);
+    this.lessons = new LessonKeeper(store, now);
     this.teamMembers = new TeamMembers(store, reader, now);
     this.teamRoles = new TeamRoleKeeper(store, reader, now, quota, textLog);
   }
@@ -479,6 +482,7 @@ export class GitHubSync {
       }
       // Whatever came before the user's own last action was seen by them, however they acted.
       this.markSeenBeforeTouch(pr, this.store.events.listForPr(pr.key), viewer);
+      this.lessons.afterStorePr(pr, created, viewer);
       return created;
     });
   }

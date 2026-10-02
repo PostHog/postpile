@@ -115,20 +115,32 @@ const memoryTargetQuery = z.union([
     .transform((query) => ({ kind: 'dossier_line' as const, topicId: query.topic, version: query.version, path: query.path })),
 ]);
 
-const instructionsProposal = z.object({
-  baseVersion: z.number().int().positive().nullable(),
-  baseText: z.string(),
-  text: z.string(),
-  summary: z.string(),
-  sourceChatMessageId: z.number().int().positive(),
-  dossiersToRefresh: z.number().int().min(0),
-});
+/** A proposal comes from one of the user's chat messages or from a lesson they chose to use across topics: exactly one source. */
+const instructionsProposal = z
+  .object({
+    baseVersion: z.number().int().positive().nullable(),
+    baseText: z.string(),
+    text: z.string(),
+    summary: z.string(),
+    sourceChatMessageId: z.number().int().positive().nullable().default(null),
+    sourceLessonId: z.number().int().positive().nullable().default(null),
+    dossiersToRefresh: z.number().int().min(0),
+  })
+  .refine((proposal) => (proposal.sourceChatMessageId === null) !== (proposal.sourceLessonId === null), {
+    message: 'a proposal needs exactly one source: sourceChatMessageId or sourceLessonId',
+  });
 
 const instructionsDecision = z.object({ proposal: instructionsProposal, text: z.string() });
 
 const proposeInstructionsBody = z.object({
   sourceChatMessageId: z.number().int().positive(),
 });
+
+/** "acme/app#4521". */
+const prKeyBody = z.string().regex(/^[^/\s]+\/[^/\s#]+#[1-9]\d*$/, 'prKey must look like owner/repo#number');
+
+/** "Teach future assessments". The engine answers an over-long note itself, in words; this only stops abuse. */
+const teachLessonBody = z.object({ prKey: prKeyBody, note: z.string().max(10_000) });
 
 const setupSection = z.object({ heading: z.string().max(200), body: z.string().max(20_000) });
 
@@ -163,6 +175,14 @@ function prKeyFromParams(params: { owner: string; repo: string; number: string }
     throw new BadRequestError(`invalid PR number: ${params.number}`);
   }
   return prKey({ repo: `${params.owner}/${params.repo}`, number });
+}
+
+function lessonIdFromParam(value: string): number {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new BadRequestError(`invalid lesson id: ${value}`);
+  }
+  return id;
 }
 
 function isClientError(error: Error): boolean {
@@ -360,6 +380,20 @@ export function createApp(
   app.post('/api/instructions/proposals', async (c) => {
     const body = proposeInstructionsBody.parse(await c.req.json());
     return c.json(await engine.proposeInstructions(body.sourceChatMessageId));
+  });
+
+  // Lessons from the user's pushback (DESIGN.md "Lessons from your reviews"). Local only, never GitHub writes.
+  // Teach and propose-instructions are one agent call each; nothing reaches instructions.md before saveInstructions.
+  app.get('/api/topics/:id/lessons', async (c) => c.json(await engine.getLessons(c.req.param('id'))));
+  app.get('/api/lessons/:id', async (c) => c.json(await engine.getLesson(lessonIdFromParam(c.req.param('id')))));
+  app.post('/api/lessons/teach', async (c) => {
+    const body = teachLessonBody.parse(await c.req.json());
+    return c.json(await engine.teachLesson(body.prKey, body.note));
+  });
+  app.post('/api/lessons/:id/keep-topic', async (c) => c.json(await engine.keepLessonForTopic(lessonIdFromParam(c.req.param('id')))));
+  app.post('/api/lessons/:id/dismiss', async (c) => c.json(await engine.dismissLesson(lessonIdFromParam(c.req.param('id')))));
+  app.post('/api/lessons/:id/propose-instructions', async (c) => {
+    return c.json(await engine.proposeInstructionsFromLesson(lessonIdFromParam(c.req.param('id'))));
   });
 
   // "What you're working on": agent-written from local Claude Code notes, local only.

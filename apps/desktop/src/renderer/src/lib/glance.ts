@@ -63,7 +63,8 @@ export function glanceStateText(input: GlanceStateInput): GlanceStateText {
   }
 }
 
-const VERDICT_WORDS: Record<Verdict, string> = { LOOKS_SAFE: 'Looks safe', LOOK_CLOSER: 'Look closer', NOT_YOURS: 'Not yours' };
+/** The verdict as the app words it everywhere: "Looks safe", "Look closer", "Not yours". */
+export const VERDICT_WORDS: Record<Verdict, string> = { LOOKS_SAFE: 'Looks safe', LOOK_CLOSER: 'Look closer', NOT_YOURS: 'Not yours' };
 
 /** The whole glance as one claim, for "Recheck this assessment". */
 export function glanceClaim(glance: Glance): string {

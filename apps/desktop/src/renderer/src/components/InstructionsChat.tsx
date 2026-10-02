@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { InstructionsProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useInstructionsChat } from '../api/instructions.ts';
+import { proposalKey } from '../lib/instructions.ts';
 import { Button } from './Button.tsx';
 import { InstructionsProposalCard } from './InstructionsProposalCard.tsx';
 
@@ -35,7 +36,7 @@ export function InstructionsChat() {
           {message.text}
         </p>
       ))}
-      {proposal && <InstructionsProposalCard key={proposal.sourceChatMessageId} proposal={proposal} onDone={() => setProposal(null)} />}
+      {proposal && <InstructionsProposalCard key={proposalKey(proposal)} proposal={proposal} onDone={() => setProposal(null)} />}
       <form
         className="flex gap-1.5"
         onSubmit={(event) => {

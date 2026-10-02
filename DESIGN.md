@@ -1166,21 +1166,69 @@ Input (`ConsolidationInput`): every active topic with its latest dossier,
 open/total PR counts and last activity; groups of active facts sharing a
 slot (subject + predicate for per_subject, predicate + object for
 per_object, subject + predicate + object otherwise, so "alice works on #1"
-and "#2" are not duplicates); the newest 60 feedback entries across topics;
-decided rule and topic proposals (so nothing is proposed twice).
+and "#2" are not duplicates); the newest 60 feedback entries across topics
+(a click without a note shows as "(no note: a bare click)"); rule and topic
+proposals the user accepted or rejected (so nothing is proposed twice).
+Withdrawn ones are left out: the user never said no to them.
 
 Output and what happens:
 
 | output | effect |
 |---|---|
-| `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1. Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
+| `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1, plus no repeat of a rejected one (below). Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
 | `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
-| `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
+| `rules` | filed as pending `rule_proposal` rows when the evidence holds (below). Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
 | `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no human activity for 2 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
 
 Also deterministic, in the same run: retire topics that pass the gate and
 whose dossier status is `finished`. Dossier versions are pruned on every
 dossier save, not here.
+
+**Proposals must earn their interruption** (2026-10-02). Every proposal
+asks the user to read and decide, and the user stopped clicking them: rules
+came from bare "Wrong topic" clicks, merges said "both are small" or "both
+are finished", reasons read "placeholder", and most pending ones named
+topics already retired. The bar, deterministic where it can be
+(`proposal-quality.ts` in core):
+
+- **A real reason.** A topic proposal, area merge or rule whose reason is
+  empty, under 15 characters, or a placeholder ("placeholder", "TBD",
+  "n/a", "...", "reason", ...) is dropped when the answer is mapped
+  (`isJunkReason`). A merge whose reason rests on size or lifecycle alone
+  ("small", "finished", "winding down", "nothing open") with no word for
+  what the PRs share ("same", "serve", "series", "rollout", "blocker", ...)
+  is dropped too (`isSizeOrStateOnlyMergeReason`): the prompt forbids it,
+  this catches an answer that says it anyway.
+- **No rule from bare clicks.** A rule cites at least two shown feedback
+  ids, and at least one of them states a preference in words: a worded
+  kind (tailoring kept or once, memory wrong / forget / confirmed / fixed,
+  work-context forget) or a `not_mine` / `not_related` / `wrong_topic`
+  click with a typed note. A bare click only moved a PR; `unmute` notes are
+  GitHub text, not the user's (`ruleHasWordedEvidence`). The prompt says
+  the same and never to invent topic-boundary rules from clicks.
+- **No merge for size or state.** The prompt asks a merge to say how the
+  PRs serve the same goal and what the user gains; "both are small",
+  "both are finished", "winding down" are no reasons. Finished topics are
+  retirement's job. The prompt says no proposals at all is the usual,
+  expected answer.
+- **No repeat of a "no".** A topic change equivalent to a rejected one is
+  not filed: a merge of the same two topics in either direction, a
+  rename of the same topic to the rejected name (another name may come up
+  once the topic changed), a split of the same topic
+  moving one of the same PRs, an area fold of the same two areas either
+  way (`repeatsRejectedChange`). A rule whose text matches a decided one
+  (case, spacing and closing punctuation aside, `ruleTextKey`) is not filed.
+- **Withdrawn when stale.** A pending topic proposal naming a topic that is
+  no longer active (retired, archived or gone, on either side of a merge),
+  and a pending rule scoped to such a topic, gets status `withdrawn` with
+  `decided_at`. It runs whenever a topic leaves the sidebar
+  (`changeTopicStatus`) and at the end of every full sync, no agent call
+  (`withdrawStaleProposals`). Accepting a merge records the decision first,
+  so the accepted merge itself is never withdrawn by the archive it causes.
+  Withdrawn proposals are not pending (Inbox, topic), are not fed to
+  consolidation as decided, never block the same idea later, and the MCP
+  `topic` read says "withdrawn ... not a rejection". `status` is TEXT, so
+  the new value needed no migration.
 
 ### Cost accounting
 
@@ -1322,21 +1370,97 @@ restores a confirmed fact's check state, or restores a relation override.
 The undo map is in memory, like the mark-read queue. The relation "Wrong"
 (with the real relation) stays as it was; it is a choice, not a claim.
 
+**Lessons from your reviews** (2026-10-02, with a second opinion from
+another model). Some glances miss: the user requests changes on a PR the
+glance called safe, or sees a problem in the diff the glance did not name.
+The app should learn what the user pushes back on, but a review is
+evidence, and only accepting a lesson gives it authority. So a miss becomes
+a candidate line in the topic, and nothing reaches a prompt until the user
+picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
+(migration 025, which also adds `pr_glance.head_oid` and
+`instructions_version.source_lesson_id`).
+
+- **Possible misses** (`possibleMisses`, deterministic, in `storePr` through
+  `LessonKeeper`, before the glance can be written again and replace the
+  verdict): the viewer's new `review_changes_requested` on a PR whose stored
+  glance was written before the review, on the same head commit when both
+  are known (a review on newer code judged code the glance never saw), with
+  a mismatch: `safety` (LOOKS_SAFE), `risk` (LOOK_CLOSER with a `low` risk)
+  or `relevance` (NOT_YOURS). A real Look closer is no miss, and an approval
+  on a Look closer PR is not counted: the user may well have looked closer
+  first. One lesson per review id (unique), status `new`.
+- **Structured evidence**: what the glance said (verdict, risk, for you,
+  does, time, head) and the review: body plus the user's inline comments
+  written after their previous review and up to this one (GitHub does not
+  link them to the review in our snapshot; a change request often says
+  everything inline). Nothing is clipped in storage.
+- **The source moves**: every `storePr` compares pending lessons with the
+  review now (`reviewNow`). An edited body or inline comment starts the
+  candidate over (`new`, line cleared); a deleted or dismissed review
+  withdraws it. `checkOpenLesson` repeats the check right before the user's
+  decision lands. On a capped snapshot a missing review only counts as
+  deleted when the reviews list reaches back to it, and a missing inline
+  comment only when the comment lists are complete (`capHitCoversSince`);
+  otherwise the stored text stands.
+- **Writing the line** (`lesson_write`, sonnet, one call per topic for up to
+  8 new lessons, in the sync's digest after topics, `LessonWriter`): the
+  review, inline comments, PR line and earlier glance are fenced as GitHub
+  text (the user wrote the review, but it can quote anyone); the call runs
+  without tools like every call. The answer is per lesson: a line "When
+  <condition>, <what to check or how to judge>" of at most 200 chars that
+  the user's words support, or null for nits, empty reviews and one-offs
+  (`none`), or `sameAs` an open line in the topic (`joined`, shown there as
+  one more review). A line equal to one the user dismissed (words compared,
+  `repeatsDismissed`) reads as none; dismissed lines also go into the
+  prompt. One miss is enough to offer a line; repeats are more evidence,
+  not consent.
+- **The topic marker** ("Remember for future assessments?"): the topic's
+  open lessons with "From your review on #4521 · Earlier assessment: Looks
+  safe" and three choices. "Remember in this topic" appends the line to the
+  topic's tailoring (logged as `tailoring_kept`), which every later prompt
+  for the topic reads. "Use across topics…" asks
+  `proposeInstructionsFromLesson` for the instructions with that one line
+  added: the prompt gets the chosen line and the review fenced as context,
+  and the engine drops any answer that changes or removes an existing line
+  or adds more than 4 lines / 600 chars (`onlyAddsLesson`). The user sees
+  the usual line diff (Accept, Edit inline, Reject); an accepted one is
+  saved with origin `lesson` and `sourceLessonId`, the lesson turns
+  `kept_all`. A hand edit in the diff is the user's own and is not
+  checked. "Dismiss" drops the line for good.
+- **"Teach future assessments"** in the detail pane, under the glance's
+  verdict: "What should it check next time?" The note is the user's own
+  words (not fenced); `teachLesson` stores a `taught` lesson with the
+  current glance and writes its line right away (capped at 30 per rolling
+  24h), then shows it with the same three choices. A wording like
+  "Disagree", "Wrong" or "Why?" was rejected: the user reads those as
+  asking for an explanation, not as changing what the agent does next time.
+- **Lifecycle**: a pending lesson whose topic retires, is archived or
+  deleted is withdrawn at the next digest (`LessonKeeper.sweep`); one noted
+  while its PR was unsorted moves to the PR's topic once it has one.
+  Statuses: new, open, none, joined, kept_topic, kept_all, dismissed,
+  withdrawn.
+
+Unaccepted lessons never reach a prompt: no feedback row, no dossier input,
+no glance context. The dossier still reads the review itself as an ordinary
+event.
+
 **Instructions changes via chat.** Tile chat returns a lasting point
 without a scope; the user picks it: "Keep for this topic" stores tailoring,
 "Just this once" only logs it, "Keep for all topics" calls
 `proposeInstructionsChange`, which gets only the current text and the
-user's own message (never GitHub text), is told the user chose all topics,
+user's own message (never GitHub text; a lesson's proposal is the one
+exception, see "Lessons from your reviews"), is told the user chose all topics,
 and returns the full new text plus a summary. The UI shows it as a line
 diff: Accept, Edit inline, Reject. The general chat in "Your instructions"
 always goes to the same call. When that call finds no change, the point
 stays on screen so it can still go to the topic. Proposals must cite a
-stored user chat message (`sourceChatMessageId`); the engine refuses
-anything else.
+stored user chat message (`sourceChatMessageId`) or an open lesson
+(`sourceLessonId`); the engine refuses anything else.
 
 **Versions** (`instructions_version`, migration 004): `version`, `text`,
 `summary`, `origin` (`chat` / `outside`), `source_chat_message_id`,
-`created_at` (origin `setup` for the setup flow's Accept). The file stays the source of truth. `InstructionsHistory`
+`created_at` (origin `setup` for the setup flow's Accept; origin `lesson`
+with `source_lesson_id`, migration 025, for a lesson used across topics). The file stays the source of truth. `InstructionsHistory`
 reads it on every prompt context and stores a text that differs from the
 newest version as "Edited outside the app" (the first one as "Found on
 disk"), so every prompt knows its instructions version. Saving checks the
@@ -1768,8 +1892,9 @@ the PR's title; PRs in the same request that belong together share the new
 name. No cap and no deferral (dropped 2026-09-29: the cap and the
 "unsorted" answer left PRs lingering in Unsorted until a consolidation the
 desktop app never ran, and deferred lone PRs never met in one request).
-Small topics are consolidation's job: it proposes merging 1-2 PR topics
-into a bigger one. Migration 015 deleted the old `topic_deferred:*` meta
+Small topics are consolidation's job: it proposes merging one into a bigger
+topic when its PRs serve that topic's goal; size alone is no reason
+(2026-10-02, "Proposals must earn their interruption"). Migration 015 deleted the old `topic_deferred:*` meta
 rows.
 
 ## Actions act on what you look at

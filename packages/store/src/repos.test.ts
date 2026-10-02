@@ -468,8 +468,8 @@ describe('ChatRepo', () => {
 describe('InstructionsRepo', () => {
   it('numbers versions and lists them newest first', () => {
     expect(store.instructions.latest()).toBeNull();
-    const first = store.instructions.add({ text: 'a', summary: 'Found on disk', origin: 'outside', sourceChatMessageId: null, createdAt: at(0) });
-    const second = store.instructions.add({ text: 'a\nb', summary: 'Added b', origin: 'chat', sourceChatMessageId: 7, createdAt: at(1) });
+    const first = store.instructions.add({ text: 'a', summary: 'Found on disk', origin: 'outside', sourceChatMessageId: null, sourceLessonId: null, createdAt: at(0) });
+    const second = store.instructions.add({ text: 'a\nb', summary: 'Added b', origin: 'chat', sourceChatMessageId: 7, sourceLessonId: null, createdAt: at(1) });
     expect([first.version, second.version]).toEqual([1, 2]);
     expect(store.instructions.latest()).toEqual(second);
     expect(store.instructions.get(1)?.origin).toBe('outside');

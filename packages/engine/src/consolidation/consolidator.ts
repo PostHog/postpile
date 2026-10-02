@@ -117,8 +117,9 @@ export class Consolidator {
   /** Facts and feedback go with the first chunk only, so a merge or rule is never proposed twice in one run. */
   private inputs(topics: ConsolidationTopic[]): ConsolidationInput[] {
     const { store } = this.deps;
+    // Only the user's own decisions: a withdrawn proposal is not a "no".
     const decidedTopicProposals = [...store.topics.list().flatMap((topic) => store.proposals.listForTopic(topic.id)), ...store.proposals.listAreaMerges()]
-      .filter((proposal) => proposal.status !== 'pending');
+      .filter((proposal) => proposal.status === 'accepted' || proposal.status === 'rejected');
     const shared = {
       decidedRules: store.ruleProposals.listDecided(DECIDED_RULES_IN_PROMPT),
       decidedTopicProposals,

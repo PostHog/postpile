@@ -9,6 +9,8 @@ import { SetGrouper } from './set-grouping.ts';
 import { TopicAssigner } from './topic-assignment.ts';
 import { TopicTidy } from './topic-tidy.ts';
 import { refreshDriversAndRoles } from './topic-roles.ts';
+import { LessonKeeper } from '../lessons/lesson-keeper.ts';
+import { LessonWriter } from '../lessons/lesson-writer.ts';
 
 /** Stands in for the dossier job when a sync leaves it out: nothing to wait for. */
 const NO_DOSSIERS: DossierRun = {
@@ -44,6 +46,18 @@ export class Digester {
     return jobs.includes(job) ? this.phases.time(phase, work) : Promise.resolve();
   }
 
+  /**
+   * Lessons from the user's pushback, after the topics settled: withdraw
+   * those whose topic is gone, then write the lines of new ones. Reads no
+   * other job's output.
+   */
+  private async writeLessons(): Promise<void> {
+    const { store, agent, contexts, viewer, budget, errors, now } = this.deps;
+    new LessonKeeper(store, now).sweep();
+    const writer = new LessonWriter(store, agent, contexts, viewer);
+    errors.push(...(await writer.writeNew(() => budget.take('lesson_write'))));
+  }
+
   async run(jobs: AgentJob[]): Promise<void> {
     // Once after an upgrade that changed how topics are cut, before the assignment places the PRs it split out.
     await this.job(jobs, 'topics', 'topics', async () => {
@@ -68,10 +82,11 @@ export class Digester {
     // After the dossiers: a dossier's driver wins over the most frequent author.
     const roles = dossiers.done.then(() => refreshDriversAndRoles(this.deps));
     const events = this.job(jobs, 'events', 'events', () => new EventBatchClassifier(this.deps).run());
+    const lessons = jobs.includes('dossiers') ? this.writeLessons() : Promise.resolve();
     const glances = this.job(jobs, 'glances', 'glances', () => new GlanceBatchWriter(this.deps).run(dossiers));
     // After the glances: a set keeps PRs of similar risk, and the risk comes from the glance. After the
     // dossiers too: a topic digest may carry the topic's set changes.
     const sets = Promise.all([glances, dossiersDone]).then(() => this.job(jobs, 'sets', 'sets', () => new SetGrouper(this.deps).run()));
-    await Promise.all([dossiersDone, facts, roles, sets, events, glances]);
+    await Promise.all([dossiersDone, facts, roles, sets, events, glances, lessons]);
   }
 }

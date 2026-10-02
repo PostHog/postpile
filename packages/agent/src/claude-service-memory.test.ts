@@ -460,6 +460,7 @@ describe('RunnerAgentService.glanceBatch', () => {
         inputHash: glanceItemInputHash(input, input.items[0]!),
         model: 'claude-sonnet-5-5',
         createdAt: NOW,
+        headOid: input.items[0]!.pr.headOid,
       },
     ]);
     expect(result.missing).toEqual(['acme/app#2', 'acme/app#3']);
@@ -603,27 +604,27 @@ describe('RunnerAgentService.consolidate', () => {
     const { runner, service } = setup();
     runner.answer('consolidation', {
       topicProposals: [
-        { kind: 'rename', topicId: 't1', name: 'depot', reason: 'same name' },
-        { kind: 'rename', topicId: 't1', name: 'CI on Depot', reason: 'clearer' },
-        { kind: 'merge', topicId: 't2', intoTopicId: 't1', reason: 'same work' },
-        { kind: 'merge', topicId: 't2', intoTopicId: 'nope', reason: 'invented' },
-        { kind: 'split', topicId: 't1', name: 'Docker', prKeys: ['acme/app#2', 'acme/app#9'], reason: 'separate' },
-        { kind: 'split', topicId: 't1', name: 'Ghost', prKeys: ['acme/app#9'], reason: 'unknown PRs' },
+        { kind: 'rename', topicId: 't1', name: 'depot', reason: 'Only the case of the name differs.' },
+        { kind: 'rename', topicId: 't1', name: 'CI on Depot', reason: 'The work moved from runners to CI.' },
+        { kind: 'merge', topicId: 't2', intoTopicId: 't1', reason: 'Both carry the Depot rollout; apart, its blocker is hidden.' },
+        { kind: 'merge', topicId: 't2', intoTopicId: 'nope', reason: 'Merges into a topic that was never shown.' },
+        { kind: 'split', topicId: 't1', name: 'Docker', prKeys: ['acme/app#2', 'acme/app#9'], reason: 'The Docker image work is its own goal.' },
+        { kind: 'split', topicId: 't1', name: 'Ghost', prKeys: ['acme/app#9'], reason: 'Only names PRs that were never shown.' },
       ],
       areaMerges: [
-        { from: 'CI & tests', into: 'CI', reason: 'same area' },
-        { from: 'CI & tests', into: 'Dev env', reason: 'folded twice' },
-        { from: 'Ghost', into: 'CI', reason: 'unknown area' },
+        { from: 'CI & tests', into: 'CI', reason: 'Both names mean the CI pipeline.' },
+        { from: 'CI & tests', into: 'Dev env', reason: 'The same area folded a second time.' },
+        { from: 'Ghost', into: 'CI', reason: 'An area that was never shown.' },
       ],
       factMerges: [
         { keepId: 'f1', dropIds: ['f2', 'f3'], reason: 'same' },
         { keepId: 'f9', dropIds: ['f4'], reason: 'unknown keep' },
       ],
       rules: [
-        { text: 'Frontend PRs are never mine', topicId: null, evidenceFeedbackIds: [1, 2, 99], reason: 'said twice' },
-        { text: 'Once is not a pattern', topicId: null, evidenceFeedbackIds: [3], reason: 'once' },
-        { text: 'skip docs  PRs', topicId: null, evidenceFeedbackIds: [1, 2], reason: 'already rejected' },
-        { text: 'Topic rule', topicId: 'nope', evidenceFeedbackIds: [1, 2], reason: 'unknown topic' },
+        { text: 'Frontend PRs are never mine', topicId: null, evidenceFeedbackIds: [1, 2, 99], reason: 'You said so on two frontend PRs.' },
+        { text: 'Once is not a pattern', topicId: null, evidenceFeedbackIds: [3], reason: 'Only one correction behind it.' },
+        { text: 'skip docs  PRs.', topicId: null, evidenceFeedbackIds: [1, 2], reason: 'The user rejected this one already.' },
+        { text: 'Topic rule', topicId: 'nope', evidenceFeedbackIds: [1, 2], reason: 'A topic that was never shown.' },
       ],
       finished: [
         { topicId: 't2', reason: 'all merged' },
@@ -634,14 +635,44 @@ describe('RunnerAgentService.consolidate', () => {
     const result = await service.consolidate(input);
 
     expect(result.topicProposals).toEqual([
-      { kind: 'rename', topicId: 't1', name: 'CI on Depot', reason: 'clearer' },
-      { kind: 'merge', topicId: 't2', intoTopicId: 't1', reason: 'same work' },
-      { kind: 'split', topicId: 't1', name: 'Docker', prKeys: ['acme/app#2'], reason: 'separate' },
+      { kind: 'rename', topicId: 't1', name: 'CI on Depot', reason: 'The work moved from runners to CI.' },
+      { kind: 'merge', topicId: 't2', intoTopicId: 't1', reason: 'Both carry the Depot rollout; apart, its blocker is hidden.' },
+      { kind: 'split', topicId: 't1', name: 'Docker', prKeys: ['acme/app#2'], reason: 'The Docker image work is its own goal.' },
     ]);
-    expect(result.areaMerges).toEqual([{ from: 'CI & tests', into: 'CI', reason: 'same area' }]);
+    expect(result.areaMerges).toEqual([{ from: 'CI & tests', into: 'CI', reason: 'Both names mean the CI pipeline.' }]);
     expect(result.factMerges).toEqual([{ keepId: 'f1', dropIds: ['f2'], reason: 'same' }]);
-    expect(result.ruleIdeas).toEqual([{ text: 'Frontend PRs are never mine', topicId: null, evidenceFeedbackIds: [1, 2], reason: 'said twice' }]);
+    expect(result.ruleIdeas).toEqual([{ text: 'Frontend PRs are never mine', topicId: null, evidenceFeedbackIds: [1, 2], reason: 'You said so on two frontend PRs.' }]);
     expect(result.finishedTopics).toEqual([{ topicId: 't2', reason: 'all merged' }]);
+  });
+
+  it('drops proposals with a placeholder or too short reason', async () => {
+    const { runner, service } = setup();
+    runner.answer('consolidation', {
+      topicProposals: [
+        { kind: 'merge', topicId: 't2', intoTopicId: 't1', reason: 'placeholder' },
+        { kind: 'rename', topicId: 't1', name: 'CI on Depot', reason: 'clearer' },
+      ],
+      areaMerges: [{ from: 'CI & tests', into: 'CI', reason: '' }],
+      rules: [{ text: 'Frontend PRs are never mine', topicId: null, evidenceFeedbackIds: [1, 2], reason: 'TBD' }],
+    });
+
+    const result = await service.consolidate(input);
+
+    expect(result).toMatchObject({ topicProposals: [], areaMerges: [], ruleIdeas: [] });
+  });
+
+  it('builds no rule from bare clicks: one cited correction must be in words', async () => {
+    const { runner, service } = setup();
+    const clicks = [makeFeedback({ id: 1, kind: 'wrong_topic', note: '' }), makeFeedback({ id: 2, kind: 'wrong_topic', note: '' }), makeFeedback({ id: 3, kind: 'wrong_topic', note: 'billing PRs go to Payments' })];
+    const rule = { text: 'Only put a PR in Depot if it touches runners', topicId: 't1', reason: 'You moved PRs out of Depot twice.' };
+    runner.answer('consolidation', { rules: [{ ...rule, evidenceFeedbackIds: [1, 2] }] });
+    runner.answer('consolidation', { rules: [{ ...rule, evidenceFeedbackIds: [1, 3] }] });
+
+    const bare = await service.consolidate({ ...input, feedback: clicks });
+    const worded = await service.consolidate({ ...input, feedback: clicks });
+
+    expect(bare.ruleIdeas).toEqual([]);
+    expect(worded.ruleIdeas.map((idea) => idea.evidenceFeedbackIds)).toEqual([[1, 3]]);
   });
 
   it('makes no call with nothing to look at', async () => {

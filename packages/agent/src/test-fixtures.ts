@@ -195,6 +195,7 @@ export const fullContext: PromptContext = {
     summary: 'Added CI cost',
     origin: 'chat',
     sourceChatMessageId: 11,
+    sourceLessonId: null,
     createdAt: '2026-09-01T08:00:00Z',
   },
   tailoring: 'Flag anything that touches the cache keys.',

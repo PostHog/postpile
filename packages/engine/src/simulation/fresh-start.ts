@@ -28,6 +28,7 @@ export const WIPED_TABLES: Record<string, string> = {
   chat_message: 'chats on old tiles',
   topic_proposal: 'proposals about old topics',
   rule_proposal: 'rules distilled from old feedback',
+  lesson: 'lessons about old glances and topics',
   pr_set_change: 'set membership history of old sets',
   pr_set_member: 'agent-grouped sets',
   pr_set: 'agent-grouped sets',

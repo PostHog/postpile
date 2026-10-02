@@ -14,9 +14,10 @@ function refreshNote(count: number): string {
 /**
  * A proposed change to the user's general instructions: summary, line diff,
  * Accept / Edit / Reject. Nothing is written until Accept. When the file changed on disk meanwhile,
- * the server sends the change back rebased and the card shows that instead.
+ * the server sends the change back rebased and the card shows that instead. Used in tile chat, the
+ * instructions view and under a lesson's "Use across topics…"; `onDone` says whether it was accepted.
  */
-export function InstructionsProposalCard(props: { proposal: InstructionsProposal; onDone: () => void }) {
+export function InstructionsProposalCard(props: { proposal: InstructionsProposal; onDone: (accepted: boolean) => void }) {
   const actions = useActions();
   const [proposal, setProposal] = useState(props.proposal);
   const [editing, setEditing] = useState(false);
@@ -26,7 +27,7 @@ export function InstructionsProposalCard(props: { proposal: InstructionsProposal
   async function accept() {
     const result = await actions.saveInstructions({ proposal, text });
     if (result?.ok) {
-      props.onDone();
+      props.onDone(true);
     } else if (result?.rebased) {
       setProposal(result.rebased);
       setText(result.rebased.text);
@@ -60,7 +61,7 @@ export function InstructionsProposalCard(props: { proposal: InstructionsProposal
         <Button disabled={busy} onClick={() => setEditing(!editing)}>
           {editing ? 'Show diff' : 'Edit'}
         </Button>
-        <Button disabled={busy} onClick={props.onDone}>
+        <Button disabled={busy} onClick={() => props.onDone(false)}>
           Reject
         </Button>
       </div>

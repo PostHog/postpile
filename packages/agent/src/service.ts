@@ -10,6 +10,10 @@ import type {
   Glance,
   InstructionsVersion,
   IsoTime,
+  LessonGlance,
+  LessonMismatch,
+  LessonReview,
+  LessonSource,
   Loudness,
   MemoryRecheckOutcome,
   MemorySource,
@@ -227,6 +231,46 @@ export interface InstructionsChangeReply {
   reply: string;
   /** Null when the message does not ask for a change across all topics, or the answer was unusable. */
   change: InstructionsChange | null;
+}
+
+/** One lesson the agent writes a line for: a change request on a PR the glance let through, or a taught note. */
+export interface LessonWriteItem {
+  id: number;
+  pr: Pr;
+  source: LessonSource;
+  mismatch: LessonMismatch | null;
+  glance: LessonGlance | null;
+  review: LessonReview | null;
+  /** Taught lessons: the user's own words. */
+  note: string;
+}
+
+/** Lessons of one topic (or of unsorted PRs), with what the user already has and turned down. */
+export interface LessonWriteInput {
+  topic: Topic | null;
+  items: LessonWriteItem[];
+  /** Lines already waiting for the user in this topic; a new item may join one. */
+  open: { id: number; text: string }[];
+  /** Lines the user dismissed, newest first. */
+  dismissed: string[];
+  viewer: Viewer;
+  context: PromptContext;
+}
+
+/** text null: no lesson. sameAs: the open lesson it repeats. Ids the model was not given are dropped. */
+export interface LessonWriteAnswer {
+  id: number;
+  text: string | null;
+  sameAs: number | null;
+  why: string;
+}
+
+/** "Use across topics" on a lesson: instructions with that one line added. */
+export interface LessonInstructionsInput {
+  instructions: string;
+  lesson: string;
+  /** The PR and the review the lesson came from, as plain text; fenced in the prompt. */
+  evidence: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -616,6 +660,10 @@ export interface AgentService {
   consolidate(input: ConsolidationInput): Promise<ConsolidationResult>;
   /** One line, asked by the user. A fix that changes nothing reads as holds. */
   recheckMemory(input: MemoryRecheckInput): Promise<MemoryRecheckAnswer>;
+  /** Candidate lines from the user's pushback, one answer per item at most. */
+  writeLessons(input: LessonWriteInput): Promise<LessonWriteAnswer[]>;
+  /** A proposed instructions text with one chosen lesson added. Nothing is written here. */
+  proposeInstructionsFromLesson(input: LessonInstructionsInput): Promise<InstructionsChangeReply>;
   /** Ping or not, per item. Items the answer skipped or invented are left out; the engine falls back to rules for them. */
   decidePings(input: PingDecisionInput): Promise<PingDecisionAnswer[]>;
   /** The daily digest of local Claude Code notes. Unknown topic ids and source ids are dropped, forgotten threads too. */

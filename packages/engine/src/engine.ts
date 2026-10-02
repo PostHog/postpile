@@ -32,6 +32,7 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  LessonView,
   LivePollStatus,
   MacNotification,
   McpConnectFrom,
@@ -64,6 +65,7 @@ import type {
   TeamRole,
   TeamRolesView,
   ToolsView,
+  TeachLessonResult,
   TopicDetail,
   TopicListItem,
   TopicProposalKind,
@@ -113,6 +115,7 @@ import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { failed } from './actions/results.ts';
 import { setTopicDriver } from './actions/driver-pick.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
+import { LessonActions } from './actions/lesson-actions.ts';
 import { PrActions } from './actions/pr-actions.ts';
 import { MemoryActions } from './actions/memory-actions.ts';
 import { ProposalActions } from './actions/proposal-actions.ts';
@@ -272,6 +275,7 @@ export class Engine implements EngineService {
   private readonly memorySources: MemorySourcesReads;
   private readonly rechecker: MemoryRechecker;
   private readonly instructions: InstructionsActions;
+  private readonly lessons: LessonActions;
   private readonly syncRun: SyncRun;
   private readonly consolidationRun: ConsolidationRun;
   private readonly pollRun: PollRun;
@@ -360,6 +364,7 @@ export class Engine implements EngineService {
     this.memorySources = new MemorySourcesReads(store, now);
     this.rechecker = new MemoryRechecker(store, deps.agent, contexts, this.memorySources, now);
     this.instructions = new InstructionsActions(store, history, proposer, now);
+    this.lessons = new LessonActions(store, deps.agent, contexts, this.chats, now, agentOff);
     const decider = new PingDecider({
       store,
       agent: deps.agent,
@@ -1296,6 +1301,34 @@ export class Engine implements EngineService {
 
   proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposalReply> {
     return this.instructions.propose(sourceChatMessageId);
+  }
+
+  async proposeInstructionsFromLesson(lessonId: number): Promise<InstructionsProposalReply> {
+    const off = this.toolHealth.agentOffReason();
+    if (off !== null) {
+      return { reply: off, proposal: null };
+    }
+    return this.instructions.proposeFromLesson(lessonId);
+  }
+
+  async getLessons(topicId: string): Promise<LessonView[]> {
+    return this.lessons.list(topicId);
+  }
+
+  async getLesson(lessonId: number): Promise<LessonView | null> {
+    return this.lessons.get(lessonId);
+  }
+
+  teachLesson(prKey: PrKey, note: string): Promise<TeachLessonResult> {
+    return this.lessons.teach(prKey, note);
+  }
+
+  async keepLessonForTopic(lessonId: number): Promise<ActionResult> {
+    return this.lessons.keepForTopic(lessonId);
+  }
+
+  async dismissLesson(lessonId: number): Promise<ActionResult> {
+    return this.lessons.dismiss(lessonId);
   }
 
   async saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {

@@ -15,6 +15,7 @@ import {
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { retireFinishedTopics } from './consolidation/retire.ts';
+import { withdrawStaleProposals } from './consolidation/withdraw.ts';
 import { reviveRetiredTopics, reviveUnreadTopics } from './consolidation/revive.ts';
 import type { DigestDeps, DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
@@ -226,6 +227,7 @@ export class SyncRun {
       await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried: false });
       report.topicsRetired = retireFinishedTopics(store, now().toISOString());
       reviveUnreadTopics(store, now().toISOString(), false);
+      withdrawStaleProposals(store, now().toISOString());
     } catch (error) {
       errors.push(`digest: ${errorText(error)}`);
       this.log(`digest: failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
@@ -296,6 +298,8 @@ export class SyncRun {
       // A finished topic never holds a thread unread on GitHub.
       // After the quiet reads, from the unread state they left: a failed or capped write brings the topic back.
       reviveUnreadTopics(store, now().toISOString(), false);
+      // Cheap, no agent call: catches proposals about topics that left the sidebar by any path.
+      withdrawStaleProposals(store, now().toISOString());
     } catch (error) {
       crashed = true;
       errors.push(`sync: ${errorText(error)}`);

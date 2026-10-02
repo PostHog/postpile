@@ -114,7 +114,9 @@ describe('accepting a topic proposal', () => {
     changeTopicStatus(h.store, 'other', 'archive', '2026-09-02T12:00:00.000Z');
 
     expect((await h.engine.decideTopicProposal('gone', true)).message).toBe(`Can't accept: ${lone.key} left the topic since. Nothing changed; reject it instead.`);
-    expect((await h.engine.decideTopicProposal('merge', true)).message).toContain('the topic to merge into is no longer active');
+    // Archiving the target withdrew the merge already: nothing left to accept.
+    expect(h.store.proposals.get('merge')?.status).toBe('withdrawn');
+    expect((await h.engine.decideTopicProposal('merge', true)).message).toBe('already withdrawn');
     h.store.memberships.assign({ prKey: lone.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: '2026-09-02T12:00:00.000Z' });
     expect((await h.engine.decideTopicProposal('all', true)).message).toContain('no PR would stay behind');
     expect(h.store.memberships.get(bottom.key)?.topicId).toBe('depot');

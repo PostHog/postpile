@@ -40,6 +40,7 @@ import type {
   SkippedTile,
   SnoozeCondition,
   SyncReport,
+  TeachLessonResult,
   TeamRole,
   TeamRolesView,
   TeamRoleView,
@@ -231,6 +232,22 @@ export interface Actions {
   proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposal | null>;
   /** Accepts a proposal: writes instructions.md. Local, not a GitHub write. */
   saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult | null>;
+  /**
+   * "Teach future assessments": one agent call that turns the user's note
+   * into a lesson, which then waits in the topic like one from a review.
+   * Local, not a GitHub write. Null when the request itself failed (toast).
+   */
+  teachLesson(prKey: PrKey, note: string): Promise<TeachLessonResult | null>;
+  /** "Remember in this topic": the lesson's line joins the topic's tailoring. Local. Returns whether it was kept. */
+  keepLessonForTopic(lessonId: number): Promise<boolean>;
+  /** "Dismiss" on a lesson: not offered again. Local. */
+  dismissLesson(lessonId: number): Promise<boolean>;
+  /**
+   * "Use across topics…": one agent call, nothing written. The proposal goes
+   * through saveInstructions like any other; a reply without one is shown
+   * where the user clicked, not as a toast. Null when the request failed.
+   */
+  proposeInstructionsFromLesson(lessonId: number): Promise<InstructionsProposalReply | null>;
   /** "Refresh" on "What you're working on": one agent call over local notes, can take a minute. */
   refreshWorkContext(): Promise<void>;
   /** "Forget" on a digest thread. Local only; the toast offers Undo. */
@@ -713,6 +730,27 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function teachLesson(prKey: PrKey, note: string): Promise<TeachLessonResult | null> {
+    try {
+      const result = await withBusy(`teach:${prKey}`, () => request<TeachLessonResult>('POST', '/api/lessons/teach', { prKey, note }));
+      // A new lesson waits in its topic's marker too.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.lessonsAll });
+      return result;
+    } catch (error) {
+      show('error', `Could not teach the lesson: ${errorText(error)}`);
+      return null;
+    }
+  }
+
+  async function proposeInstructionsFromLesson(lessonId: number): Promise<InstructionsProposalReply | null> {
+    try {
+      return await withBusy(`lesson:${lessonId}`, () => request<InstructionsProposalReply>('POST', `/api/lessons/${lessonId}/propose-instructions`));
+    } catch (error) {
+      show('error', `Could not propose a change: ${errorText(error)}`);
+      return null;
+    }
+  }
+
   async function refreshWorkContext(): Promise<void> {
     try {
       // Shows "running" right away: the view is refetched while the sweep works.
@@ -887,6 +925,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     instructionsChat,
     proposeInstructions,
     saveInstructions,
+    teachLesson,
+    // run() refetches everything: the topic's lessons, its tailoring and the instructions.
+    keepLessonForTopic: (lessonId) => run(`lesson:${lessonId}`, null, () => request('POST', `/api/lessons/${lessonId}/keep-topic`)),
+    dismissLesson: (lessonId) => run(`lesson:${lessonId}`, null, () => request('POST', `/api/lessons/${lessonId}/dismiss`)),
+    proposeInstructionsFromLesson,
     refreshWorkContext,
     forgetWorkThread: (input) =>
       run(`forget:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/forget', input)),
