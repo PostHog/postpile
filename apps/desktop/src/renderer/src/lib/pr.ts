@@ -1,5 +1,4 @@
 import type { Checks, MergeQueueStep, Pr, PrIcon, PrStatus, Review, TileStack } from '@postpile/core';
-import { stackPlaceLabel, stackPlaces } from './stacks.ts';
 import { prNumber } from './tiles.ts';
 import { sinceLabel } from './time.ts';
 
@@ -255,15 +254,14 @@ export function stackQueueWord(prKey: string, prs: { key: string; status: PrStat
   if (mergeQueueWord(own.status, now)) {
     return null;
   }
-  const places = stackPlaces(stacks);
-  for (const aboveKey of stack.prKeys.slice(stack.prKeys.indexOf(prKey) + 1)) {
+  for (let index = stack.prKeys.indexOf(prKey) + 1; index < stack.prKeys.length; index++) {
+    const aboveKey = stack.prKeys[index]!;
     const above = prs.find((pr) => pr.key === aboveKey);
     const queue = above ? mergeQueueWord(above.status, now) : null;
-    const place = places.get(aboveKey);
-    if (queue?.kind === 'merge_queue' && place) {
+    if (queue?.kind === 'merge_queue') {
       return {
         kind: 'merge_queue',
-        text: `Merge queue: with ${stackPlaceLabel(place)}`,
+        text: `Merge queue: with ${index + 1}/${stack.prKeys.length}`,
         title: `Merges with #${prNumber(aboveKey)}, which is in the merge queue (${queue.title})`,
       };
     }
