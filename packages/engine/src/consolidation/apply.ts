@@ -1,5 +1,5 @@
 import type { AreaMerge, ConsolidationResult, ConsolidationTopicProposal, RuleIdea } from '@postpile/agent';
-import { cleanTopicName, hasEmptyTopicName, type TopicProposal } from '@postpile/core';
+import { cleanTopicName, hasEmptyTopicName, repeatsRejectedChange, ruleTextKey, type TopicProposal } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { ProposalActions } from '../actions/proposal-actions.ts';
 import { Board } from '../board.ts';
@@ -32,8 +32,9 @@ function normalized(text: string): string {
   return text.trim().toLowerCase();
 }
 
+/** Filed before and still standing: pending, accepted or rejected. A withdrawn one may come back. */
 function sameIdea(filed: TopicProposal, idea: ConsolidationTopicProposal): boolean {
-  if (filed.kind !== idea.kind) {
+  if (filed.kind !== idea.kind || filed.topicId !== idea.topicId || filed.status === 'withdrawn') {
     return false;
   }
   if (idea.kind === 'merge') {
@@ -97,12 +98,14 @@ export class ConsolidationApplier {
     if (this.store.topics.get(idea.topicId)?.status !== 'active') {
       return;
     }
-    if (this.store.proposals.listForTopic(idea.topicId).some((filed) => sameIdea(filed, idea))) {
+    // A merge's target holds the merges the other way round, so a "no" to either direction counts.
+    const filed = [...this.store.proposals.listForTopic(idea.topicId), ...(idea.kind === 'merge' ? this.store.proposals.listForTopic(idea.intoTopicId) : [])];
+    if (filed.some((earlier) => sameIdea(earlier, idea))) {
       return;
     }
     const proposal = toTopicProposal(idea, at);
     // Nothing left of the name after cleaning: a blank topic or a rename to nothing is no proposal.
-    if (hasEmptyTopicName(proposal)) {
+    if (hasEmptyTopicName(proposal) || repeatsRejectedChange(proposal, filed)) {
       return;
     }
     this.store.proposals.add(proposal);
@@ -114,13 +117,13 @@ export class ConsolidationApplier {
     this.counts.topicProposalsFiled += 1;
   }
 
-  /** Never the same fold twice, so a rejected one stays rejected. */
+  /** Never the same fold twice, and never the reverse of a rejected one, so a rejected one stays rejected. */
   private fileAreaMerge(merge: AreaMerge, at: string): void {
-    const filed = this.store.proposals.listAreaMerges().some((p) => p.fromArea === merge.from && p.name === merge.into);
-    if (filed) {
+    const filed = this.store.proposals.listAreaMerges();
+    if (filed.some((p) => p.fromArea === merge.from && p.name === merge.into)) {
       return;
     }
-    this.store.proposals.add({
+    const proposal: TopicProposal = {
       id: newProposalId(),
       kind: 'area_merge',
       topicId: null,
@@ -134,7 +137,11 @@ export class ConsolidationApplier {
       decidedAt: null,
       source: 'consolidation',
       client: null,
-    });
+    };
+    if (repeatsRejectedChange(proposal, filed)) {
+      return;
+    }
+    this.store.proposals.add(proposal);
     this.counts.topicProposalsFiled += 1;
   }
 
@@ -153,9 +160,13 @@ export class ConsolidationApplier {
     }
   }
 
+  /** Never the same text twice (pending, accepted or rejected), never for a topic that left the sidebar. */
   private fileRule(idea: RuleIdea, known: Set<string>, at: string): void {
-    const key = normalized(idea.text);
+    const key = ruleTextKey(idea.text);
     if (known.has(key)) {
+      return;
+    }
+    if (idea.topicId !== null && this.store.topics.get(idea.topicId)?.status !== 'active') {
       return;
     }
     known.add(key);
@@ -182,7 +193,7 @@ export class ConsolidationApplier {
     const at = this.now().toISOString();
     const knownRules = new Set(
       [...this.store.ruleProposals.listPending(), ...this.store.ruleProposals.listDecided(DECIDED_RULES_CHECKED)].map(
-        (rule) => normalized(rule.text),
+        (rule) => ruleTextKey(rule.text),
       ),
     );
     this.store.transaction(() => {

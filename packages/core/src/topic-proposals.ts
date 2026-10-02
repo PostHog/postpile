@@ -10,8 +10,11 @@ export const OUTSIDE_PROPOSAL_DAYS = 14;
 
 const DAY_MS = 24 * 3600_000;
 
-/** What became of a proposal; `expired` only for outside ones left pending too long. */
-export type ProposalOutcome = 'pending' | 'accepted' | 'rejected' | 'expired';
+/**
+ * What became of a proposal; `expired` only for outside ones left pending
+ * too long, `withdrawn` when a topic it names stopped being active.
+ */
+export type ProposalOutcome = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
 
 /** When an outside proposal expires; null for consolidation's, which wait for the user. */
 export function proposalExpiresAt(proposal: TopicProposal): IsoTime | null {

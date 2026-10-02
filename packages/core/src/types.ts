@@ -458,7 +458,11 @@ export interface TopicMembership {
 
 /** split: move prKeys out of topicId into a new topic called name. One proposal per new part. */
 export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split' | 'area_merge';
-export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
+/**
+ * withdrawn: the app took it back because a topic it names is no longer
+ * active. Not the user's decision, so it never reads as a rejection.
+ */
+export type ProposalStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
 /**
  * Who filed a topic proposal: the consolidation job, an outside agent through
  * the MCP server (propose_topic_change), or the one-time topic tidy after an

@@ -13,6 +13,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- Topic and rule suggestions in the Inbox are fewer and need a real reason. A merge has to say what the topics share and what you gain; "both are small" or "both are finished" no longer count. Rules only come from corrections where you said something in words, not from bare "Wrong topic" clicks. A suggestion you rejected is not asked again, and suggestions about topics that were since retired or archived are withdrawn instead of waiting in the Inbox.
 - Sidebar sections now say whose topic it is, not whose PRs it holds. Below the asks (Needs reply, Changes you requested, To review, Team mentioned) topics sit under You drive, Your team owns or Other work, by who drives them; the owner team only decides when nobody is known to drive a topic. My PRs and Team's PRs are gone, so your own project no longer lands under Team's PRs because a teammate has a PR in it. The "Topics with any PR | my PRs | team PRs" switch still finds your PRs in any section.
 - Inside each section, topics with your open PR or your move come first, then unread ones.
 - Other work folds by area, single-topic areas under "More". It starts open when it holds your PR, your move or something unread, else folded; folded, urgent unread topics stay visible and the header counts what is unread.

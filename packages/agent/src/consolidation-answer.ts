@@ -1,3 +1,4 @@
+import { isJunkReason, ruleHasWordedEvidence, ruleTextKey } from '@postpile/core';
 import type { z } from 'zod';
 import type { consolidationOutput } from './schemas.ts';
 import type { AreaMerge, ConsolidationInput, ConsolidationResult, ConsolidationTopicProposal, FactMerge, RuleIdea } from './service.ts';
@@ -16,7 +17,8 @@ function toTopicProposals(answer: ConsolidationAnswer['topicProposals'], input: 
   const proposals: ConsolidationTopicProposal[] = [];
   for (const proposal of answer) {
     const source = topics.get(proposal.topicId);
-    if (!source) {
+    // The user reads the reason to decide; a placeholder or a few words give them nothing.
+    if (!source || isJunkReason(proposal.reason)) {
       continue;
     }
     if (proposal.kind === 'rename') {
@@ -63,18 +65,26 @@ function toFactMerges(answer: ConsolidationAnswer['factMerges'], input: Consolid
   return merges;
 }
 
+/**
+ * A rule needs MIN_RULE_EVIDENCE shown corrections, at least one of them in
+ * the user's words (a note, a kept tailoring, a forgotten line): bare "Wrong
+ * topic" clicks move PRs, they don't ask for a standing rule.
+ */
 function toRuleIdeas(answer: ConsolidationAnswer['rules'], input: ConsolidationInput): RuleIdea[] {
   const topicIds = new Set(input.topics.map((entry) => entry.topic.id));
   const feedbackIds = new Set(input.feedback.map((f) => f.id));
-  const decided = new Set(input.decidedRules.map((rule) => normalized(rule.text)));
+  const decided = new Set(input.decidedRules.map((rule) => ruleTextKey(rule.text)));
   const ideas: RuleIdea[] = [];
   for (const rule of answer) {
     const evidence = [...new Set(rule.evidenceFeedbackIds.filter((id) => feedbackIds.has(id)))];
     const topicOk = rule.topicId === null || topicIds.has(rule.topicId);
-    if (!topicOk || evidence.length < MIN_RULE_EVIDENCE || decided.has(normalized(rule.text))) {
+    if (!topicOk || evidence.length < MIN_RULE_EVIDENCE || decided.has(ruleTextKey(rule.text))) {
       continue;
     }
-    decided.add(normalized(rule.text));
+    if (!ruleHasWordedEvidence(evidence, input.feedback) || isJunkReason(rule.reason)) {
+      continue;
+    }
+    decided.add(ruleTextKey(rule.text));
     ideas.push({ text: rule.text, topicId: rule.topicId, evidenceFeedbackIds: evidence, reason: rule.reason });
   }
   return ideas;
@@ -86,7 +96,7 @@ function toAreaMerges(answer: ConsolidationAnswer['areaMerges'], input: Consolid
   const folded = new Set<string>();
   const merges: AreaMerge[] = [];
   for (const merge of answer) {
-    if (!areas.has(merge.from) || !areas.has(merge.into) || merge.from === merge.into || folded.has(merge.from)) {
+    if (!areas.has(merge.from) || !areas.has(merge.into) || merge.from === merge.into || folded.has(merge.from) || isJunkReason(merge.reason)) {
       continue;
     }
     folded.add(merge.from);
@@ -95,7 +105,10 @@ function toAreaMerges(answer: ConsolidationAnswer['areaMerges'], input: Consolid
   return merges;
 }
 
-/** Drops everything that names a topic, fact, area or feedback entry the prompt did not show. */
+/**
+ * Drops everything that names a topic, fact, area or feedback entry the
+ * prompt did not show, and every proposal or rule without a real reason.
+ */
 export function mapConsolidationAnswer(answer: ConsolidationAnswer, input: ConsolidationInput): ConsolidationResult {
   const topicIds = new Set(input.topics.map((entry) => entry.topic.id));
   const finished = new Map<string, { topicId: string; reason: string }>();
