@@ -79,15 +79,21 @@ export function ruleTextKey(text: string): string {
 
 export type TopicChangeShape = Pick<TopicProposal, 'kind' | 'topicId' | 'intoTopicId' | 'name' | 'fromArea' | 'prKeys'>;
 
+/** A topic name compared for repeats: case and spacing aside. */
+function nameKey(name: string | null): string {
+  return (name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function samePair(a1: string | null, a2: string | null, b1: string | null, b2: string | null): boolean {
   return (a1 === b1 && a2 === b2) || (a1 === b2 && a2 === b1);
 }
 
 /**
  * The same change in spirit, whatever the wording: a merge of the same two
- * topics in either direction, the same two areas folded either way, any
- * rename of the same topic, a split of the same topic that moves one of the
- * same PRs.
+ * topics in either direction, the same two areas folded either way, a
+ * rename of the same topic to the same name, a split of the same topic that
+ * moves one of the same PRs. A rejected rename only rules out that name: the
+ * topic may change enough to deserve another one.
  */
 function sameChangeAnyDirection(change: TopicChangeShape, filed: TopicChangeShape): boolean {
   if (change.kind !== filed.kind) {
@@ -105,7 +111,7 @@ function sameChangeAnyDirection(change: TopicChangeShape, filed: TopicChangeShap
   if (change.kind === 'split') {
     return change.prKeys.some((key) => filed.prKeys.includes(key));
   }
-  return change.kind === 'rename';
+  return change.kind === 'rename' && nameKey(change.name) === nameKey(filed.name);
 }
 
 /** The user rejected an equivalent change before: don't ask again. */

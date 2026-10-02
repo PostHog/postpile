@@ -93,12 +93,13 @@ describe('repeats of rejected proposals', () => {
     expect(repeatsRejectedChange(topicProposal({}), [topicProposal({ status: 'withdrawn' })])).toBe(false);
   });
 
-  it('suppresses any rename of a topic whose rename was rejected, and splits that move the same PRs', () => {
+  it('suppresses a rename to the rejected name, and splits that move the same PRs', () => {
     const rejected = [
       topicProposal({ kind: 'rename', topicId: 'billing', intoTopicId: null, name: 'Invoices', status: 'rejected' }),
       topicProposal({ id: 'p2', kind: 'split', topicId: 'billing', intoTopicId: null, name: 'Tax', prKeys: ['acme/app#4'], status: 'rejected' }),
     ];
-    expect(repeatsRejectedChange(topicProposal({ kind: 'rename', intoTopicId: null, name: 'Invoice rollout' }), rejected)).toBe(true);
+    expect(repeatsRejectedChange(topicProposal({ kind: 'rename', intoTopicId: null, name: ' invoices ' }), rejected)).toBe(true);
+    expect(repeatsRejectedChange(topicProposal({ kind: 'rename', intoTopicId: null, name: 'Invoice rollout' }), rejected)).toBe(false);
     expect(repeatsRejectedChange(topicProposal({ kind: 'rename', topicId: 'search', intoTopicId: null, name: 'Invoices' }), rejected)).toBe(false);
     expect(repeatsRejectedChange(topicProposal({ kind: 'split', intoTopicId: null, name: 'VAT', prKeys: ['acme/app#4', 'acme/app#5'] }), rejected)).toBe(true);
     expect(repeatsRejectedChange(topicProposal({ kind: 'split', intoTopicId: null, name: 'VAT', prKeys: ['acme/app#5'] }), rejected)).toBe(false);

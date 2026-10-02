@@ -1208,8 +1208,9 @@ topics already retired. The bar, deterministic where it can be
   retirement's job. The prompt says no proposals at all is the usual,
   expected answer.
 - **No repeat of a "no".** A topic change equivalent to a rejected one is
-  not filed: a merge of the same two topics in either direction, any
-  rename of a topic whose rename was rejected, a split of the same topic
+  not filed: a merge of the same two topics in either direction, a
+  rename of the same topic to the rejected name (another name may come up
+  once the topic changed), a split of the same topic
   moving one of the same PRs, an area fold of the same two areas either
   way (`repeatsRejectedChange`). A rule whose text matches a decided one
   (case, spacing and closing punctuation aside, `ruleTextKey`) is not filed.
