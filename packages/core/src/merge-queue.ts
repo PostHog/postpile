@@ -156,11 +156,12 @@ function stateOf(status: StatusComment | undefined, pr: Pr): MergeQueueState | n
 /**
  * The PR's place in the Trunk merge queue, from the newest trunk status
  * comment. Null for a PR that is not open, not submitted, merged, cancelled
- * by a user, or whose newest status trunk words in a way this file does not
+ * by a user, a draft (a stale failure on a PR converted to draft is
+ * ignored), or whose newest status trunk words in a way this file does not
  * know. A push after a failure keeps it failed until trunk says otherwise.
  */
 export function mergeQueueState(pr: Pr): MergeQueueState | null {
-  if (pr.state !== 'OPEN') {
+  if (pr.state !== 'OPEN' || pr.isDraft) {
     return null;
   }
   return stateOf(statusComments(pr).at(-1), pr);
@@ -173,7 +174,7 @@ export function mergeQueueState(pr: Pr): MergeQueueState | null {
  * reads it for trunk's events on the viewer's own PR.
  */
 export function mergeQueueFailureAt(pr: Pr, at: IsoTime): MergeQueueState | null {
-  if (pr.state !== 'OPEN') {
+  if (pr.state !== 'OPEN' || pr.isDraft) {
     return null;
   }
   const statuses = statusComments(pr);

@@ -133,6 +133,12 @@ describe('mergeQueueFailureAt', () => {
     expect(mergeQueueFailureAt(pr, at(25))).toBeNull();
   });
 
+  it('is null on a draft, even right after the failure', () => {
+    const pr = makePr({ isDraft: true, comments: [trunk(STACK_FAILED, 20)] });
+    expect(mergeQueueFailureAt(pr, at(20))).toBeNull();
+    expect(mergeQueueState(pr)).toBeNull();
+  });
+
   it('is gone once the PR is back in the queue or merged', () => {
     const resubmitted = makePr({ comments: [trunk(STACK_FAILED, 20), trunk(SUBMITTED, 30)] });
     expect(mergeQueueFailureAt(resubmitted, at(20))).toBeNull();

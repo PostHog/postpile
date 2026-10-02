@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeTimelineItem, makeUserState, singleTile, viewer } from './fixtures.ts';
 import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
+import { mergeQueueFailureAt, mergeQueueState } from './merge-queue.ts';
+import { prStatus } from './pr-status.ts';
 import { isMergeApprovedMove, NO_TURN, whoseTurn, YOUR_MOVE_ORDER, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
@@ -332,6 +334,14 @@ describe('whoseTurn: on your own PR', () => {
       const turn = single({ ...approved, comments: [testing, failed] });
       expect(turn).toEqual({ kind: 'you', move: 'merge', who: null, what: 'Re-submit to the merge queue: tests failed', prKey: own.key });
       expect(isMergeApprovedMove(turn)).toBe(true);
+    });
+
+    it('ignores a stale queue failure once the PR is converted to draft', () => {
+      const draft = { ...approved, isDraft: true, comments: [testing, failed] };
+      expect(single(draft).what).not.toContain('merge queue');
+      expect(prStatus(draft)).toMatchObject({ lifecycle: 'draft', mergeQueue: null, icon: 'draft' });
+      expect(mergeQueueState(draft)).toBeNull();
+      expect(mergeQueueFailureAt(draft, at(9))).toBeNull();
     });
 
     it("waits on the queue on someone else's PR too, even after you approved it", () => {

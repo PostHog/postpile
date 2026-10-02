@@ -181,7 +181,7 @@ function trunkStatuses(pr: Pr): { at: IsoTime; step: Omit<SpecQueueStep, 'at'> |
 /** Where an open PR stands in Trunk's queue: what trunk's newest comment says. */
 export function specMergeQueue(pr: Pr): SpecQueueStep | null {
   const newest = trunkStatuses(pr).at(-1);
-  return pr.state === 'OPEN' && newest?.step ? { ...newest.step, at: newest.at } : null;
+  return pr.state === 'OPEN' && !pr.isDraft && newest?.step ? { ...newest.step, at: newest.at } : null;
 }
 
 /** Trunk's comment or edit at `at` took the PR from anything else to failed, and it is failed still. */
