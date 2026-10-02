@@ -26,8 +26,8 @@ export interface MergeQueueState {
   testingOn: PrKey | null;
 }
 
-/** What one trunk comment says: a queue step, out of the queue (not submitted, merged, cancelled), or text nobody knows. */
-type TrunkLine = { kind: 'step'; step: MergeQueueStep; reason: string | null; testingOn: number | null } | { kind: 'out' } | { kind: 'unknown' };
+/** What one trunk comment says: a queue step, or out of the queue (not submitted, merged, cancelled, or text nobody knows). */
+type TrunkLine = { kind: 'step'; step: MergeQueueStep; reason: string | null; testingOn: number | null } | { kind: 'out' };
 
 /** A status comment of trunk's and when it said it. */
 interface StatusComment {
@@ -129,7 +129,7 @@ function trunkLine(body: string): TrunkLine {
   if ((match = line.match(/^Stacked PR \[\d+\]\([^)]*\) was returned to waiting: (.+?)\./))) {
     return step('failed', match[1] === 'this pull request was pushed to' ? 'pushed to while queued' : match[1]!);
   }
-  return { kind: 'unknown' };
+  return { kind: 'out' };
 }
 
 /** Trunk's status comments, oldest first, each at its last edit (else when posted). */
@@ -173,14 +173,14 @@ export function mergeQueueState(pr: Pr): MergeQueueState | null {
  * reads it for trunk's events on the viewer's own PR.
  */
 export function mergeQueueFailureAt(pr: Pr, at: IsoTime): MergeQueueState | null {
-  const now = mergeQueueState(pr);
-  if (now === null || now.state !== 'failed') {
+  if (pr.state !== 'OPEN') {
     return null;
   }
   const statuses = statusComments(pr);
+  const now = stateOf(statuses.at(-1), pr);
   const then = stateOf(statuses.filter((status) => status.at <= at).at(-1), pr);
   const before = stateOf(statuses.filter((status) => status.at < at).at(-1), pr);
-  if (then === null || then.since !== at || then.state !== 'failed' || before?.state === 'failed') {
+  if (now?.state !== 'failed' || then === null || then.since !== at || then.state !== 'failed' || before?.state === 'failed') {
     return null;
   }
   return then;

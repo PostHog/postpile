@@ -103,13 +103,15 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus })
 
 /** Under the branch line of a PR the merge queue took out: "Failed (tests failed)", in red, the full story in the tooltip. */
 function QueueFailure(props: { status: PrStatus }) {
-  const word = mergeQueueWord(props.status, new Date(), true);
+  const now = useNow();
+  const word = mergeQueueWord(props.status, now);
   if (word?.kind !== 'merge_queue_failed') {
     return null;
   }
+  const reason = props.status.mergeQueue?.reason;
   return (
     <span title={word.title} className="truncate text-[11px] font-medium text-status-bad">
-      {word.text.replace('Merge queue: ', '')}
+      {reason ? `Failed (${reason})` : 'Failed'}
     </span>
   );
 }

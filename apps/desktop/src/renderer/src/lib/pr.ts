@@ -1,4 +1,5 @@
 import type { Checks, MergeQueueStep, Pr, PrIcon, PrStatus, Review } from '@postpile/core';
+import { prNumber } from './tiles.ts';
 import { sinceLabel } from './time.ts';
 
 const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
@@ -198,7 +199,7 @@ function mergeQueueTitle(status: PrStatus, now: Date): string {
     case 'waiting':
       return `In the merge queue since ${since}, tests not started yet`;
     case 'testing':
-      return `In the merge queue, testing${queue.testingOn ? ` on #${queue.testingOn.split('#')[1]}` : ''} since ${since}`;
+      return `In the merge queue, testing${queue.testingOn ? ` on #${prNumber(queue.testingOn)}` : ''} since ${since}`;
     case 'failed':
       return `Removed from the merge queue at ${since}${queue.reason ? `: ${queue.reason}` : ''}. Re-submit it to merge.`;
   }

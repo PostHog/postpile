@@ -72,7 +72,7 @@ const REVIEW: Record<Pr['reviewDecision'], PrReviewStatus | null> = {
  * Trunk's queue the red one. A draft never enters a queue; merged and
  * closed show as they are.
  */
-export function prIcon(life: PrLifecycle, mergeQueue: MergeQueueState | null): PrIcon {
+function prIcon(life: PrLifecycle, mergeQueue: MergeQueueState | null): PrIcon {
   if (life !== 'open' && life !== 'queued') {
     return life;
   }

@@ -84,10 +84,10 @@ const RE_REVIEW = 'to re-review';
 export const MERGE_APPROVED_MOVE = 'Merge, it is approved';
 
 /** The viewer's own PR sits in the merge queue: nobody's move but the queue's. */
-export const MERGE_QUEUE_WAIT = 'Waiting on the merge queue';
+const MERGE_QUEUE_WAIT = 'Waiting on the merge queue';
 
 /** The move on the viewer's own PR the merge queue took out; the reason follows. */
-export const MERGE_QUEUE_RESUBMIT = 'Re-submit to the merge queue';
+const MERGE_QUEUE_RESUBMIT = 'Re-submit to the merge queue';
 
 export const NO_TURN: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 

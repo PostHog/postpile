@@ -63,8 +63,7 @@ function topicStateOf(counts: TopicPrStateCounts): TopicPrState | null {
   if (counts.open > 0 || counts.merge_queue > 0) {
     return 'open';
   }
-  const rest: TopicPrState[] = ['draft', 'merged', 'closed'];
-  return rest.find((candidate) => counts[candidate] > 0) ?? null;
+  return TOPIC_PR_STATE_ORDER.slice(3).find((candidate) => counts[candidate] > 0) ?? null;
 }
 
 /**
