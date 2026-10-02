@@ -4400,8 +4400,10 @@ the sync retries it. Local, agent calls only, not on the `GithubWrite` list.
 **Out of date wording** (2026-09-29, the renderer's `lib/staleness.ts`):
 one wording everywhere for "not up to date". While a full sync runs
 (`useActions().syncing`) or a catch-up run writes for the PR or topic
-(`glanceState` `writing` on the PR, or on any PR of the topic for the
-dossier), every note says "updating": the tile's verdict chip "· updating",
+(`glanceState` `writing` on the PR for its glance; `TopicDetail` /
+`PrDetail.memoryUpdating` for the dossier and facts, set only by a
+whole-topic run, never by a glance-only refresh on look), every note says
+"updating": the tile's verdict chip "· updating",
 the stale verdict box "Updating now: a new assessment is being written.",
 the dossier's "Updating now: 3 newer events.", a stale memory badge
 "updating · PR moved since" and its "Why?" check "Updating now: PR moved
@@ -4419,6 +4421,79 @@ end; `useLivePoll` refetches everything when it moves, so a tile flips from
 **Fake mode**: `FakeCatchUp` walks the first sample PR without a glance
 queued -> writing -> ready (4s + 6s) once the renderer first reads the live
 status, and marks the second one failed so Retry can be tried.
+
+## Glance refresh on look
+
+Decided 2026-10-01: a stale glance is rewritten when the user looks at the
+PR. Quiet news (an author push, bot comments, CI) does not trigger a
+catch-up, so a stale glance waited up to an hour for the full sync, also
+while the user was looking at that very PR. Owner: the hourly sync is too
+slow when they are looking at the PR. The cost stays low because only
+opened PRs with a stale glance refresh. Automatic, not a button: "No
+manual refresh per PR or topic" (2026-09-29) still holds.
+
+**Trigger** (renderer, `useGlanceLook` in `DetailPane`, `GlanceLookTimer`):
+the PR stays in the detail pane for the opened-mark dwell
+(`OPENED_READ_DELAY_MS`, 1.5s) while the window is visible, and
+`wantsGlanceRefresh` holds: `glanceStale`, no `glanceRefreshBlock`, and
+`glanceState` not `writing` or `queued`. Clicking through PRs asks nothing.
+Once per open: re-renders and refetches ask nothing more; a glance that
+turns stale later in the same open asks then. The renderer only asks
+(`POST /api/prs/:owner/:repo/:number/glance/look`,
+`useActions().refreshGlanceOnLook`, quiet, local, not on the `GithubWrite`
+list); the engine decides.
+
+**Engine** (`Engine.refreshGlanceOnLook`, answers `GlanceLookResult`), in
+order: `blocked` while the agent is off, catch-up is off
+(`POSTPILE_CATCHUP_CAP=0`, or `POSTPILE_MAX_AGENT_CALLS=0` in dev) or the
+daily catch-up cap is spent: no call, the existing wording stays.
+`deferred` while a full sync or consolidation runs: the renderer asks only
+once per open, so the engine keeps the look and asks again when that run
+ends (consolidation writes no glances; after a sync the re-check usually
+finds it `current`). `current` when `TopicCatchUp.needsGlance` finds the
+stored input hash still matching (or the PR gets no glance): no call. Else
+`CatchUpQueue.requestGlance`:
+
+- `covered` when a run for its topic is queued (whole-topic, or a glance
+  run for this PR): it starts later and sees the PR as it is now.
+- `queued` behind any run already going for the topic, whole-topic or
+  glance-only: a going run may have read its inputs before the PR changed.
+  The follow-up checks the hash again, so it makes no call when the going
+  run wrote a current glance. A whole-topic follow-up queued meanwhile wins
+  and covers it.
+- `started`: a glance-only run (`TopicCatchUp.runGlances`), still one run
+  per topic at a time, so it never writes beside the topic's own run.
+
+**Run**: the glance batch path of a sync (`GlanceBatchWriter.run` with
+`TopicScope.prKeys`): the same prompt, inputs, store writes and
+`onGlancesStored`, so Look closer pings behave as for any new glance. The
+topic's dossier is used as it is, never rewritten here. The writer checks
+the hash again before it calls. Budget: `2 * ceil(PRs / 18)` per run plus
+the daily `CatchUpCap`, so it counts against the 300 a day. Calls land in
+`catchup:<topic>:glance:<time>`; the log says `catch-up <topic> glance
+<pr>: ...` for the request and the run. No `catch_up_ran` event: that one
+counts whole-topic runs.
+
+**State and wording**: while the run goes, `CatchUpQueue.stateOf(topic,
+pr)` is `running` for that PR only (a whole-topic run still counts for every
+PR of the topic), so `glanceState` is `writing` and the stale verdict box
+says "Updating now: a new assessment is being written." and the tile chip
+"· updating", with no renderer logic of its own. Memory notes (dossier,
+facts) read `memoryUpdating` instead, which only a whole-topic run sets
+(`stateOf(topic)` without a PR): a glance-only run rewrites no memory, so
+stale memory keeps saying "out of date". The run's start and end
+move `catchUpChanges`, so the refreshed glance arrives with the normal
+refetch. `glanceRefreshBlock` (`glanceRefreshBlockOf` in core, on
+`PrSummary`, `TileVerdict` and `PrDetail`) says when a look cannot refresh:
+`no_glance`, `agent_off`, `catch_up_off`, `daily_cap`. Only then the stale
+note keeps "A new assessment will be written on the next sync." (tooltip
+"The next sync writes a new one."); otherwise it says "A new assessment is
+written when you stay on this PR." (tooltip "Opening the PR writes a new
+one.").
+
+**Fake mode**: `FakeEngine.refreshGlanceOnLook` rewrites the stale sample
+glance (#1904) through `FakeCatchUp.refreshOnLook`: writing, then a canned
+current glance.
 
 ## Auto sync
 

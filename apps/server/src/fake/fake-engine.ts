@@ -122,7 +122,10 @@ import {
   scopedSettings,
   type ListScope,
   isTracked,
+  glanceRefreshBlockOf,
   glanceStateOf,
+  type GlanceLookResult,
+  type GlanceRefreshBlock,
   type GlanceState,
   labelBaseRepo,
   tileRepoLabels,
@@ -432,23 +435,33 @@ export class FakeEngine implements EngineService {
     return this.catchUp.gapOf(prKey);
   }
 
-  /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen. */
+  /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen, until refresh on look rewrites it. */
   private isGlanceStale(prKey: PrKey): boolean {
-    return STALE_SAMPLE_GLANCES.has(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
+    return STALE_SAMPLE_GLANCES.has(prKey) && !this.catchUp.wrote(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
+  }
+
+  /** Open and tracked in a tile: the PR should have a glance. */
+  private wantsGlance(prKey: PrKey): boolean {
+    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+    const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
+    return pr?.state === 'OPEN' && tracked;
   }
 
   /** Same rule as the engine. */
   private glanceStateOfPr(prKey: PrKey): GlanceState {
-    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
-    const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
     return glanceStateOf({
       hasGlance: this.data.glances.some((glance) => glance.prKey === prKey),
       stale: this.isGlanceStale(prKey),
-      wanted: pr?.state === 'OPEN' && tracked,
+      wanted: this.wantsGlance(prKey),
       gap: this.glanceGapOf(prKey),
       agentOff: this.toolStatus.agentOff() !== null,
       catchUp: this.catchUp.stateOf(prKey),
     });
+  }
+
+  /** Same rule as the engine; sample data has no daily cap, so catch-up is always on. */
+  private glanceRefreshBlockOfPr(prKey: PrKey): GlanceRefreshBlock | null {
+    return glanceRefreshBlockOf({ wanted: this.wantsGlance(prKey), agentOff: this.toolStatus.agentOff() !== null, catchUpOff: false, dailyCapSpent: false });
   }
 
   /** Sample PRs count as fetched SAMPLE_FETCH_AGE_MS before the engine started, until a fake refresh moves them. */
@@ -595,6 +608,7 @@ export class FakeEngine implements EngineService {
           glanceStale: this.isGlanceStale(pr.key),
           glanceGap: this.glanceGapOf(pr.key),
           glanceState: this.glanceStateOfPr(pr.key),
+          glanceRefreshBlock: this.glanceRefreshBlockOfPr(pr.key),
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
@@ -987,6 +1001,7 @@ export class FakeEngine implements EngineService {
       archive: this.archiveBox(topic, tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
       section: topicSection(this.topicQueuesOf(topicTiles)),
+      memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
     };
   }
 
@@ -1109,6 +1124,8 @@ export class FakeEngine implements EngineService {
       glanceStale: this.isGlanceStale(prKey),
       glanceGap: this.glanceGapOf(prKey),
       glanceState: this.glanceStateOfPr(prKey),
+      glanceRefreshBlock: this.glanceRefreshBlockOfPr(prKey),
+      memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(this.data.membership.get(prKey) ?? '')),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
@@ -1811,6 +1828,25 @@ export class FakeEngine implements EngineService {
       return fail(`${prKey} is not synced yet.`);
     }
     return this.catchUp.retry(prKey);
+  }
+
+  /** The real engine's order over sample data: a stale sample glance looked at is rewritten by the fake catch-up. */
+  async refreshGlanceOnLook(prKey: PrKey): Promise<GlanceLookResult> {
+    if (this.toolStatus.agentOff() !== null) {
+      return { outcome: 'blocked' };
+    }
+    if (!this.data.prs.some((pr) => pr.key === prKey)) {
+      return { outcome: 'skipped' };
+    }
+    if (this.syncing !== null) {
+      // Asked again once the fake sync ends, like the engine does.
+      void this.syncing.catch(() => {}).then(() => this.refreshGlanceOnLook(prKey));
+      return { outcome: 'deferred' };
+    }
+    if (!this.isGlanceStale(prKey)) {
+      return { outcome: 'current' };
+    }
+    return { outcome: this.catchUp.refreshOnLook(prKey) };
   }
 
   /** Sample data never changes on GitHub; one poll cycle (debounced) keeps the flow the same as the real engine. */

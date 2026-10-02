@@ -30,6 +30,7 @@ function rowInput(spec: RowSpec, state: TileState): PrSummaryInput {
     glance,
     glanceStale: spec.stale ?? false,
     glanceGap: null,
+    glanceRefreshBlock: null,
     glanceState: glance ? 'ready' : 'queued',
     quietRepo: false,
     repoLabel: null,

@@ -59,6 +59,7 @@ function tileView(input: BoardInput): TileView {
       glance: notYours.has(pr.key) ? { verdict: 'NOT_YOURS', forYou: 'Routed to lyra.', risk: 'low' } : null,
       glanceStale: false,
       glanceGap: null,
+      glanceRefreshBlock: null,
       glanceState: 'none',
       quietRepo: false,
       repoLabel: null,

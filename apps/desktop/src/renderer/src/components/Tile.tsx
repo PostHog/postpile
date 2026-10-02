@@ -262,7 +262,14 @@ export function Tile(props: TileProps) {
                 Draft
               </span>
             )}
-            <VerdictPill verdict={verdict?.verdict ?? null} stale={verdict?.glanceStale} updating={glanceUpdating} greyed={done} missing={glanceText} />
+            <VerdictPill
+              verdict={verdict?.verdict ?? null}
+              stale={verdict?.glanceStale}
+              updating={glanceUpdating}
+              waitsForSync={verdict?.glanceRefreshBlock !== null}
+              greyed={done}
+              missing={glanceText}
+            />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}
             {view.quietRepo && (

@@ -23,7 +23,7 @@ import type {
 } from './types.ts';
 import type { ActivityList } from './activity.ts';
 import type { TileAfterRead } from './after-read.ts';
-import type { GlanceState } from './glance-state.ts';
+import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
@@ -185,6 +185,8 @@ export interface PrSummary {
   glanceGap: GlanceGap | null;
   /** Where the glance stands (`glanceStateOf`): ready, queued, writing, failed, agent_off, capped or none. */
   glanceState: GlanceState;
+  /** Why a stale glance waits for the next sync instead of being rewritten when the PR is opened (`glanceRefreshBlockOf`); null when opening it does. */
+  glanceRefreshBlock: GlanceRefreshBlock | null;
   unseenLoudEvents: number;
   /** The PR's notification thread is unread on GitHub: its tile is unread, and the PR keeps a mark button even when done. */
   unreadOnGitHub: boolean;
@@ -304,6 +306,7 @@ export interface TileVerdict {
   glanceStale: boolean;
   glanceGap: GlanceGap | null;
   glanceState: GlanceState;
+  glanceRefreshBlock: GlanceRefreshBlock | null;
 }
 
 /** "pending: mark read on GitHub" on a tile. */
@@ -347,6 +350,12 @@ export interface TopicDetail {
   prRollup: TopicPrStateSummary;
   /** The sidebar section, as on the list item (`topicSection`): the breadcrumb's label. */
   section: PrTier | null;
+  /**
+   * A whole-topic catch-up run is going: it rewrites the dossier, so memory
+   * notes say "Updating now". A glance-only refresh (refresh on look) does
+   * not count: it touches no memory.
+   */
+  memoryUpdating: boolean;
 }
 
 export interface EventView {
@@ -373,6 +382,14 @@ export interface PrDetail {
   glanceGap: GlanceGap | null;
   /** Where the glance stands (`glanceStateOf`); failed offers Retry. */
   glanceState: GlanceState;
+  /**
+   * Why a stale glance waits for the next sync instead of being rewritten
+   * once the PR stays open (`glanceRefreshBlockOf`, DESIGN.md "Glance
+   * refresh on look"); null when looking at it rewrites it.
+   */
+  glanceRefreshBlock: GlanceRefreshBlock | null;
+  /** A whole-topic catch-up run for the PR's topic is going: it rewrites the PR's facts. Not for a glance-only refresh. */
+  memoryUpdating: boolean;
   userState: UserPrState | null;
   /** The viewer's standing approval (`viewerApproval`): app record or GitHub, any commit. Null when none. */
   viewerApproval: ViewerApproval | null;
@@ -511,6 +528,19 @@ export interface PrApproveResult {
  */
 export interface BatchApproveResult extends ActionResult {
   results: PrApproveResult[];
+}
+
+/**
+ * What a look at a PR with a stale glance did (DESIGN.md "Glance refresh on
+ * look"). started or queued: a glance-only catch-up run writes it, the
+ * renderer refetches for "Updating now". covered: a run for its topic is
+ * queued anyway. current: the glance is up to date (or the PR gets none), no
+ * call. blocked: the agent or catch-up is off, or the daily cap is spent.
+ * deferred: a full sync or consolidation runs; the look is asked again once
+ * it ends. skipped: the PR is not synced. Nothing to show either way.
+ */
+export interface GlanceLookResult {
+  outcome: 'started' | 'queued' | 'covered' | 'current' | 'blocked' | 'deferred' | 'skipped';
 }
 
 /**

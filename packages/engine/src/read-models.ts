@@ -9,6 +9,7 @@ import {
   type TopicProposal,
   scopedSettings,
   type ListScope,
+  glanceRefreshBlockOf,
   glanceStateOf,
   activityList,
   whatsNew,
@@ -48,6 +49,7 @@ import {
   type FinishedTopic,
   type CatchUpRunState,
   type GlanceGap,
+  type GlanceRefreshBlock,
   type GlanceState,
   type NotificationDebugRow,
   HANDLED_QUIETLY_DAYS,
@@ -116,13 +118,16 @@ function compareTopics(a: TopicListItem, b: TopicListItem): number {
   return a.topic.name.localeCompare(b.topic.name);
 }
 
-/** What the glance state needs from outside the store: the agent switch and the catch-up runs. */
+/** What the glance state needs from outside the store: the agent switch, the catch-up runs and the daily catch-up cap. */
 export interface GlanceStatusSource {
   agentOff(): boolean;
-  catchUp(topicId: string | null): CatchUpRunState;
+  /** A run for the PR's topic, or a glance-only run for the PR itself. Without a prKey: whole-topic runs only. */
+  catchUp(topicId: string | null, prKey: PrKey | null): CatchUpRunState;
+  /** The daily catch-up cap: 0 (catch-up off), or spent in its 24h window. */
+  catchUpCap(): { off: boolean; spent: boolean };
 }
 
-const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null };
+const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null, catchUpCap: () => ({ off: true, spent: false }) };
 
 /** Builds the API read models. Every call loads a fresh Board, so state is always derived. */
 export class ReadModels {
@@ -147,8 +152,19 @@ export class ReadModels {
       wanted: parts.wanted.has(key),
       gap: parts.gap,
       agentOff: this.glanceStatus.agentOff(),
-      catchUp: this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null),
+      catchUp: this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null, key),
     });
+  }
+
+  /** A whole-topic catch-up runs for the topic (null: Unsorted): its dossier and facts are being rewritten. */
+  private memoryUpdating(topicId: string | null): boolean {
+    return this.glanceStatus.catchUp(topicId, null) === 'running';
+  }
+
+  /** Whether looking at the PR rewrites a stale glance, or why not (`glanceRefreshBlockOf`). */
+  private glanceRefreshBlock(key: PrKey, wanted: Set<PrKey>): GlanceRefreshBlock | null {
+    const cap = this.glanceStatus.catchUpCap();
+    return glanceRefreshBlockOf({ wanted: wanted.has(key), agentOff: this.glanceStatus.agentOff(), catchUpOff: cap.off, dailyCapSpent: cap.spent });
   }
 
   private board(): Board {
@@ -241,6 +257,7 @@ export class ReadModels {
           glanceStale: stale.has(pr.key),
           glanceGap: gap,
           glanceState: this.glanceState(board, pr.key, { hasGlance: glance !== null, stale: stale.has(pr.key), gap, wanted }),
+          glanceRefreshBlock: this.glanceRefreshBlock(pr.key, wanted),
           quietRepo: isPrInQuietRepo(pr.key, settings),
           repoLabel: repoLabels[index] ?? null,
           tileUnread,
@@ -487,6 +504,7 @@ export class ReadModels {
       archive: this.archiveBox(board, topic),
       prRollup: topicPrRollup(topicTiles, prs),
       section: topicSection(queues),
+      memoryUpdating: this.memoryUpdating(isUnsorted ? null : topicId),
     };
   }
 
@@ -549,6 +567,7 @@ export class ReadModels {
     const news = whatsNew(pr, board.events.get(key) ?? [], viewer);
     const stale = this.staleGlances(board, [key]).has(key);
     const gap = this.glanceGap(key, glance !== null);
+    const wanted = glanceTargetKeys(board);
     return {
       pr,
       fetchedAt: this.store.prs.fetchedAt(key),
@@ -558,7 +577,9 @@ export class ReadModels {
       glance,
       glanceStale: stale,
       glanceGap: gap,
-      glanceState: this.glanceState(board, key, { hasGlance: glance !== null, stale, gap, wanted: glanceTargetKeys(board) }),
+      glanceState: this.glanceState(board, key, { hasGlance: glance !== null, stale, gap, wanted }),
+      glanceRefreshBlock: this.glanceRefreshBlock(key, wanted),
+      memoryUpdating: this.memoryUpdating(board.memberships.get(key)?.topicId ?? null),
       userState: board.userStates.get(key) ?? null,
       viewerApproval: viewerApproval(pr, board.userStates.get(key) ?? null, loadViewer(this.store)?.login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),

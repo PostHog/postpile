@@ -100,8 +100,8 @@ export function PrBody(props: PrBodyProps) {
   const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
   const viewerLogin = useViewer().data?.login ?? null;
   const assigned = assigneeLine(pr.author, pr.assignees ?? [], viewerLogin);
-  // A catch-up run on the PR's topic shows as its glance writing; facts get rewritten by it too.
-  const updating = updatingNow({ syncing, writing: props.detail.glanceState === 'writing' });
+  // A whole-topic catch-up rewrites the facts; a glance-only refresh on look does not (server decides).
+  const updating = updatingNow({ syncing, writing: props.detail.memoryUpdating });
   return (
     // 22px pane edge: boxes and rows run from here; lines of text start 12px in (px-3), at 34.
     <div className="pane-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto pl-[22px] pr-[12px] pt-[18px] pb-6">

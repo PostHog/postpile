@@ -89,11 +89,11 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
  * dashed, the verdict word with "out of date" (or "updating"), one line
  * saying so, and the old advice folded behind "Show old assessment".
  */
-function StaleVerdictBox(props: { title: string; lines: AssessmentLine[]; updating: boolean; showOld: boolean; onToggle: () => void }) {
+function StaleVerdictBox(props: { title: string; lines: AssessmentLine[]; updating: boolean; waitsForSync: boolean; showOld: boolean; onToggle: () => void }) {
   return (
     <div className={`flex flex-col gap-2 rounded-box px-3 pt-[11px] pb-3 ${STALE_BOX.box}`}>
       <BoxTitle title={props.title} tag={`· ${staleWord(props.updating)}`} />
-      <span className="text-[12.5px] leading-[1.45] text-ink-2">{staleGlanceNote(props.updating)}</span>
+      <span className="text-[12.5px] leading-[1.45] text-ink-2">{staleGlanceNote(props.updating, props.waitsForSync)}</span>
       {props.showOld && props.lines.map((line) => <MarkedLine key={`${line.mark}${line.text}`} line={line} tone={STALE_BOX.mark} />)}
       <button type="button" aria-expanded={props.showOld} onClick={props.onToggle} className="self-start text-[11.5px] text-accent hover:underline">
         {props.showOld ? 'Hide old assessment' : 'Show old assessment'}
@@ -158,7 +158,14 @@ export function GlanceCard(props: GlanceCardProps) {
       {view && (
         <div className="flex flex-col gap-2.5">
           {glanceStale ? (
-            <StaleVerdictBox title={view.title} lines={view.lines} updating={updating} showOld={showOld} onToggle={() => setOldShownFor(showOld ? null : prKey)} />
+            <StaleVerdictBox
+              title={view.title}
+              lines={view.lines}
+              updating={updating}
+              waitsForSync={props.detail.glanceRefreshBlock !== null}
+              showOld={showOld}
+              onToggle={() => setOldShownFor(showOld ? null : prKey)}
+            />
           ) : (
             <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} />
           )}

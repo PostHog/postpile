@@ -21,7 +21,7 @@ import { isTracked } from './provenance.ts';
 import { isPrDone, TILE_STATE_ORDER } from './tiles.ts';
 import { memberTier, ownerRelation, tileTier } from './topic-queues.ts';
 import type { Glance, IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
-import type { GlanceState } from './glance-state.ts';
+import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { GlanceGap, PrFacts, PrSummary, TilePendingWrite, TileVerdict, TileView } from './views.ts';
 import { whatsNew } from './whats-new.ts';
 import { NO_TURN, prWhoseTurn, unansweredAsk, whoseTurn } from './whose-turn.ts';
@@ -40,6 +40,7 @@ export interface PrSummaryInput {
   glanceStale: boolean;
   glanceGap: GlanceGap | null;
   glanceState: GlanceState;
+  glanceRefreshBlock: GlanceRefreshBlock | null;
   quietRepo: boolean;
   repoLabel: string | null;
   /** The tile is unread, so the primary action may be Mark read. */
@@ -98,6 +99,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     forYou: input.glance?.forYou ?? null,
     glanceGap: input.glanceGap,
     glanceState: input.glanceState,
+    glanceRefreshBlock: input.glanceRefreshBlock,
     // A found PR never counts as unread; its events are there for whose turn and memory.
     unseenLoudEvents: member.provenance.kind === 'found' ? 0 : events.filter(isUnseenLoud).length,
     unreadOnGitHub: input.unreadOnGitHub,
@@ -169,7 +171,7 @@ function verdictRank(pr: PrSummary): number {
 }
 
 function tileVerdictOf(pr: PrSummary): TileVerdict {
-  return { prKey: pr.key, verdict: pr.verdict, glanceStale: pr.glanceStale, glanceGap: pr.glanceGap, glanceState: pr.glanceState };
+  return { prKey: pr.key, verdict: pr.verdict, glanceStale: pr.glanceStale, glanceGap: pr.glanceGap, glanceState: pr.glanceState, glanceRefreshBlock: pr.glanceRefreshBlock };
 }
 
 /**

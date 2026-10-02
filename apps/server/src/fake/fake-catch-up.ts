@@ -14,11 +14,16 @@ type Phase = 'queued' | 'writing';
  * Stand-in for the glance catch-up on the sample data, so the UI states can
  * be checked: once a UI watches (the first live status read), one PR without
  * a glance goes queued -> writing -> ready over a few seconds, and another one reads as failed, so Retry can be
- * tried (it walks the same way). No agent; the glance is canned.
+ * tried (it walks the same way). A stale sample glance looked at goes
+ * writing -> ready (refresh on look). No agent; the glance is canned.
  */
 export class FakeCatchUp {
   private readonly phases = new Map<PrKey, Phase>();
   private readonly failed = new Set<PrKey>();
+  /** PRs whose glance this fake wrote: a stale sample glance is current after its refresh. */
+  private readonly written = new Set<PrKey>();
+  /** Writing for a refresh on look: a glance-only run, no memory rewritten. */
+  private readonly glanceOnly = new Set<PrKey>();
   private changeCount = 0;
   private seeded = false;
 
@@ -66,19 +71,25 @@ export class FakeCatchUp {
     setTimeout(step, ms);
   }
 
+  /** Writing for writingMs, then the canned glance replaces whatever the PR had. */
+  private write(prKey: PrKey): void {
+    this.phases.set(prKey, 'writing');
+    this.changeCount += 1;
+    this.after(this.options.writingMs, () => {
+      const others = this.data.glances.filter((glance) => glance.prKey !== prKey);
+      this.data.glances.splice(0, this.data.glances.length, ...others, this.cannedGlance(prKey));
+      this.written.add(prKey);
+      this.glanceOnly.delete(prKey);
+      this.phases.delete(prKey);
+      this.changeCount += 1;
+    });
+  }
+
   private run(prKey: PrKey): void {
     this.failed.delete(prKey);
     this.phases.set(prKey, 'queued');
     this.changeCount += 1;
-    this.after(this.options.queuedMs, () => {
-      this.phases.set(prKey, 'writing');
-      this.changeCount += 1;
-      this.after(this.options.writingMs, () => {
-        this.data.glances.push(this.cannedGlance(prKey));
-        this.phases.delete(prKey);
-        this.changeCount += 1;
-      });
-    });
+    this.after(this.options.queuedMs, () => this.write(prKey));
   }
 
   /** Once: the first PR without a glance catches up, the second one reads as failed. */
@@ -125,6 +136,26 @@ export class FakeCatchUp {
     }
     this.run(prKey);
     return { ok: true, message: 'Writing the glance…', undoToken: null };
+  }
+
+  /** A stale glance looked at: rewritten right away, unless a run for the PR is going. */
+  refreshOnLook(prKey: PrKey): 'started' | 'covered' {
+    if (this.phases.has(prKey)) {
+      return 'covered';
+    }
+    this.glanceOnly.add(prKey);
+    this.write(prKey);
+    return 'started';
+  }
+
+  /** One of these PRs is being written by a stand-in whole-topic run (not a refresh on look): its memory counts as updating. */
+  memoryUpdating(prKeys: PrKey[]): boolean {
+    return prKeys.some((key) => this.phases.get(key) === 'writing' && !this.glanceOnly.has(key));
+  }
+
+  /** The PR's glance was written by this fake, so it is current. */
+  wrote(prKey: PrKey): boolean {
+    return this.written.has(prKey);
   }
 
   changes(): number {

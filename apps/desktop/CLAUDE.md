@@ -224,6 +224,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   never "the next sync picks it up". Only a failed glance gets a button:
   Retry (`useActions().retryGlance`, local, not on the `GithubWrite`
   list). No manual refresh per PR or topic (decided 2026-09-29).
+  Refresh on look is automatic, not a button (2026-10-01): `useGlanceLook`
+  in `DetailPane` asks `useActions().refreshGlanceOnLook` once per open
+  after the 1.5s dwell when the glance is stale; the server decides, and
+  the words come from `glanceState` and `glanceRefreshBlock`. Its timer
+  (`lib/glance-look.ts`) is its own, apart from the opened mark's.
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the action bar right under the assessment boxes.
 - The detail pane acts on the selected PR, the tile footer on the tile
@@ -242,10 +247,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   team's review request, unsubscribes and marks the PR done. It asks once
   in a small popover and has no undo. Never the primary.
 - "Not up to date" has one wording (`lib/staleness.ts`): "updating" while
-  `useActions().syncing` or a catch-up writes (`glanceState` `writing`),
-  else "out of date". Never write "stale" or "Sync to refresh" in the UI.
-  `MemoryLine` and `WhyPanel` take `updating` from their caller (topic or
-  PR state via `updatingNow`); don't read `syncing` alone there.
+  `useActions().syncing` or a catch-up writes (`glanceState` `writing`
+  for a glance; `memoryUpdating` on the topic or PR for dossier and facts,
+  since a glance-only refresh rewrites no memory), else "out of date".
+  Never write "stale" or "Sync to refresh" in the UI. `MemoryLine` and
+  `WhyPanel` take `updating` from their caller (topic or PR state via
+  `updatingNow`); don't read `syncing` alone there.
   A stale glance shows `StaleVerdictBox` (grey, dashed) with the advice
   folded behind "Show old assessment".
 

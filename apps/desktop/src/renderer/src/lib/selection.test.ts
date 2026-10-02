@@ -50,6 +50,7 @@ function pr(key: string): PrSummary {
     glanceStale: false,
     forYou: null,
     glanceGap: null,
+    glanceRefreshBlock: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
     unreadOnGitHub: false,

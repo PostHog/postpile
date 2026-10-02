@@ -399,6 +399,10 @@ export function createApp(
   app.post('/api/prs/:owner/:repo/:number/glance/retry', async (c) => {
     return c.json(await engine.retryGlance(prKeyFromParams(c.req.param())));
   });
+  // A stale glance looked at in the detail pane: a glance-only catch-up for the PR when still behind. Agent calls only, never a GitHub write.
+  app.post('/api/prs/:owner/:repo/:number/glance/look', async (c) => {
+    return c.json(await engine.refreshGlanceOnLook(prKeyFromParams(c.req.param())));
+  });
   // headOid: the head commit the renderer showed; the approval is pinned to it or refused.
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
     const body = z.object({ headOid: z.string().min(1).max(100) }).parse(await c.req.json());

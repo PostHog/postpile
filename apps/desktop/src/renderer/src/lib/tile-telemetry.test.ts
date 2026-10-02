@@ -24,6 +24,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     glanceStale: false,
     forYou: 'for you',
     glanceGap: null,
+    glanceRefreshBlock: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
     unreadOnGitHub: false,
