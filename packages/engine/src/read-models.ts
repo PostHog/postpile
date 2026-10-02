@@ -121,8 +121,8 @@ function compareTopics(a: TopicListItem, b: TopicListItem): number {
 /** What the glance state needs from outside the store: the agent switch, the catch-up runs and the daily catch-up cap. */
 export interface GlanceStatusSource {
   agentOff(): boolean;
-  /** A run for the PR's topic, or a glance-only run for the PR itself. */
-  catchUp(topicId: string | null, prKey: PrKey): CatchUpRunState;
+  /** A run for the PR's topic, or a glance-only run for the PR itself. Without a prKey: whole-topic runs only. */
+  catchUp(topicId: string | null, prKey: PrKey | null): CatchUpRunState;
   /** The daily catch-up cap: 0 (catch-up off), or spent in its 24h window. */
   catchUpCap(): { off: boolean; spent: boolean };
 }
@@ -154,6 +154,11 @@ export class ReadModels {
       agentOff: this.glanceStatus.agentOff(),
       catchUp: this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null, key),
     });
+  }
+
+  /** A whole-topic catch-up runs for the topic (null: Unsorted): its dossier and facts are being rewritten. */
+  private memoryUpdating(topicId: string | null): boolean {
+    return this.glanceStatus.catchUp(topicId, null) === 'running';
   }
 
   /** Whether looking at the PR rewrites a stale glance, or why not (`glanceRefreshBlockOf`). */
@@ -499,6 +504,7 @@ export class ReadModels {
       archive: this.archiveBox(board, topic),
       prRollup: topicPrRollup(topicTiles, prs),
       section: topicSection(queues),
+      memoryUpdating: this.memoryUpdating(isUnsorted ? null : topicId),
     };
   }
 
@@ -573,6 +579,7 @@ export class ReadModels {
       glanceGap: gap,
       glanceState: this.glanceState(board, key, { hasGlance: glance !== null, stale, gap, wanted }),
       glanceRefreshBlock: this.glanceRefreshBlock(key, wanted),
+      memoryUpdating: this.memoryUpdating(board.memberships.get(key)?.topicId ?? null),
       userState: board.userStates.get(key) ?? null,
       viewerApproval: viewerApproval(pr, board.userStates.get(key) ?? null, loadViewer(this.store)?.login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),

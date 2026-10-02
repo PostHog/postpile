@@ -350,6 +350,12 @@ export interface TopicDetail {
   prRollup: TopicPrStateSummary;
   /** The sidebar section, as on the list item (`topicSection`): the breadcrumb's label. */
   section: PrTier | null;
+  /**
+   * A whole-topic catch-up run is going: it rewrites the dossier, so memory
+   * notes say "Updating now". A glance-only refresh (refresh on look) does
+   * not count: it touches no memory.
+   */
+  memoryUpdating: boolean;
 }
 
 export interface EventView {
@@ -382,6 +388,8 @@ export interface PrDetail {
    * refresh on look"); null when looking at it rewrites it.
    */
   glanceRefreshBlock: GlanceRefreshBlock | null;
+  /** A whole-topic catch-up run for the PR's topic is going: it rewrites the PR's facts. Not for a glance-only refresh. */
+  memoryUpdating: boolean;
   userState: UserPrState | null;
   /** The viewer's standing approval (`viewerApproval`): app record or GitHub, any commit. Null when none. */
   viewerApproval: ViewerApproval | null;
@@ -526,13 +534,13 @@ export interface BatchApproveResult extends ActionResult {
  * What a look at a PR with a stale glance did (DESIGN.md "Glance refresh on
  * look"). started or queued: a glance-only catch-up run writes it, the
  * renderer refetches for "Updating now". covered: a run for its topic is
- * going or queued anyway. current: the glance is up to date (or the PR gets
- * none), no call. blocked: the agent or catch-up is off, or the daily cap is
- * spent. skipped: a full sync or consolidation runs and covers it, or the PR
- * is not synced. Nothing to show either way.
+ * queued anyway. current: the glance is up to date (or the PR gets none), no
+ * call. blocked: the agent or catch-up is off, or the daily cap is spent.
+ * deferred: a full sync or consolidation runs; the look is asked again once
+ * it ends. skipped: the PR is not synced. Nothing to show either way.
  */
 export interface GlanceLookResult {
-  outcome: 'started' | 'queued' | 'covered' | 'current' | 'blocked' | 'skipped';
+  outcome: 'started' | 'queued' | 'covered' | 'current' | 'blocked' | 'deferred' | 'skipped';
 }
 
 /**

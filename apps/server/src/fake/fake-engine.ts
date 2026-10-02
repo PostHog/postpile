@@ -1001,6 +1001,7 @@ export class FakeEngine implements EngineService {
       archive: this.archiveBox(topic, tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
       section: topicSection(this.topicQueuesOf(topicTiles)),
+      memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
     };
   }
 
@@ -1124,6 +1125,7 @@ export class FakeEngine implements EngineService {
       glanceGap: this.glanceGapOf(prKey),
       glanceState: this.glanceStateOfPr(prKey),
       glanceRefreshBlock: this.glanceRefreshBlockOfPr(prKey),
+      memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(this.data.membership.get(prKey) ?? '')),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
@@ -1833,8 +1835,13 @@ export class FakeEngine implements EngineService {
     if (this.toolStatus.agentOff() !== null) {
       return { outcome: 'blocked' };
     }
-    if (this.syncing !== null || !this.data.prs.some((pr) => pr.key === prKey)) {
+    if (!this.data.prs.some((pr) => pr.key === prKey)) {
       return { outcome: 'skipped' };
+    }
+    if (this.syncing !== null) {
+      // Asked again once the fake sync ends, like the engine does.
+      void this.syncing.catch(() => {}).then(() => this.refreshGlanceOnLook(prKey));
+      return { outcome: 'deferred' };
     }
     if (!this.isGlanceStale(prKey)) {
       return { outcome: 'current' };

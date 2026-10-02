@@ -6,7 +6,11 @@
 export interface UpdatingInput {
   /** A full sync runs (`useActions().syncing`, any sync, also background ones). */
   syncing: boolean;
-  /** A catch-up run on the topic is writing (`glanceState === 'writing'` on the PR or a PR of the topic). */
+  /**
+   * A catch-up run is writing: for a glance, `glanceState === 'writing'` on
+   * the PR (also a glance-only refresh on look); for memory (dossier,
+   * facts), the server's `memoryUpdating` (whole-topic runs only).
+   */
   writing: boolean;
 }
 

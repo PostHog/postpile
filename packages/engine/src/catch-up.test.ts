@@ -177,6 +177,9 @@ describe('Engine.refreshGlanceOnLook', () => {
 
     expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'started' });
     expect(await glanceState(h, pr.key)).toBe('writing');
+    // A glance-only run rewrites no memory: the dossier and facts do not read as updating.
+    expect((await h.engine.getPr(pr.key))?.memoryUpdating).toBe(false);
+    expect((await h.engine.getTopic('depot'))?.memoryUpdating).toBe(false);
 
     await vi.waitFor(async () => expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false));
     expect(await glanceState(h, pr.key)).toBe('ready');
@@ -225,22 +228,36 @@ describe('Engine.refreshGlanceOnLook', () => {
     expect(catchUpRunIds(h)).toEqual([]);
   });
 
-  it('adds no run while a catch-up for its topic is going or queued', async () => {
+  it('queues the PR behind a topic run already going, which read it before it changed', async () => {
     const { h, pr } = await syncedTopic();
     askViewer(h, pr, 'c1', 'etag-2');
     const release = h.agent.holdDossier('depot');
     await h.engine.pollOnce();
-    // The topic's catch-up runs (its dossier call is held); its glance step comes after the dossier.
+    // The topic's catch-up runs (its dossier call is held) and has read its glance inputs already.
     await vi.waitFor(() => expect(h.agent.dossierInputs).toHaveLength(2));
-    makeGlanceStale(h, pr.key);
-    expect(await glanceState(h, pr.key)).toBe('writing');
-
-    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'covered' });
+    expect((await h.engine.getTopic('depot'))?.memoryUpdating).toBe(true);
+    expect((await h.engine.getPr(pr.key))?.memoryUpdating).toBe(true);
+    // An author push lands meanwhile: the run's snapshot is behind it.
+    const current = h.store.prs.get(pr.key)!;
+    h.store.prs.upsert({ ...current, headOid: 'pushed-after-the-run-started' }, NOW.toISOString());
+    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'queued' });
 
     release();
-    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
-    await vi.waitFor(async () => expect(await glanceState(h, pr.key)).toBe('ready'));
-    // Only the topic's own run: no glance-only run was added.
-    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:\d/)]);
+    // The topic run stores a glance from its old snapshot; the glance follow-up rewrites it.
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:\d/), expect.stringMatching(/^catchup:depot:glance:/)]));
+    await vi.waitFor(async () => expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false));
+    expect(h.agent.glanceInputs.at(-1)?.items[0]?.pr.headOid).toBe('pushed-after-the-run-started');
+  });
+
+  it('asks again once a consolidation that was running ends', async () => {
+    const { h, pr } = await syncedTopic();
+    makeGlanceStale(h, pr.key);
+
+    const consolidating = h.engine.consolidate();
+    expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'deferred' });
+    await consolidating;
+
+    await vi.waitFor(async () => expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false));
+    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:glance:/)]);
   });
 });

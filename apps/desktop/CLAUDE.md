@@ -247,10 +247,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   team's review request, unsubscribes and marks the PR done. It asks once
   in a small popover and has no undo. Never the primary.
 - "Not up to date" has one wording (`lib/staleness.ts`): "updating" while
-  `useActions().syncing` or a catch-up writes (`glanceState` `writing`),
-  else "out of date". Never write "stale" or "Sync to refresh" in the UI.
-  `MemoryLine` and `WhyPanel` take `updating` from their caller (topic or
-  PR state via `updatingNow`); don't read `syncing` alone there.
+  `useActions().syncing` or a catch-up writes (`glanceState` `writing`
+  for a glance; `memoryUpdating` on the topic or PR for dossier and facts,
+  since a glance-only refresh rewrites no memory), else "out of date".
+  Never write "stale" or "Sync to refresh" in the UI. `MemoryLine` and
+  `WhyPanel` take `updating` from their caller (topic or PR state via
+  `updatingNow`); don't read `syncing` alone there.
   A stale glance shows `StaleVerdictBox` (grey, dashed) with the advice
   folded behind "Show old assessment".
 

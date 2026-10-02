@@ -99,18 +99,19 @@ export class CatchUpQueue {
   }
 
   /**
-   * One PR's glance only (refresh on look). Covered when a whole-topic run
-   * for its topic is going or queued, or a glance run for this PR is: that
-   * run writes it. Queued behind a glance run for another PR of the topic.
+   * One PR's glance only (refresh on look). Covered when a run for its topic
+   * is queued (whole-topic, or a glance run for this PR): that run starts
+   * later and sees the PR as it is now. A run already going may have read
+   * its inputs before the PR changed, so the PR is queued behind it; the
+   * follow-up checks the input hash again and makes no call when the going
+   * run wrote a current glance.
    */
   requestGlance(topicId: string | null, prKey: PrKey): GlanceRequest {
     const key = keyOf(topicId);
-    const run = this.running.get(key);
-    const runCovers = run !== undefined && (run.prKeys === null || run.prKeys.includes(prKey));
-    if (runCovers || this.queued.has(key) || this.queuedGlances.get(key)?.has(prKey)) {
+    if (this.queued.has(key) || this.queuedGlances.get(key)?.has(prKey)) {
       return 'covered';
     }
-    if (run) {
+    if (this.running.has(key)) {
       const glances = this.queuedGlances.get(key) ?? new Set<PrKey>();
       glances.add(prKey);
       this.queuedGlances.set(key, glances);
@@ -127,7 +128,7 @@ export class CatchUpQueue {
   /**
    * Running wins over queued. A whole-topic run counts for every PR of the
    * topic, a glance-only run only for its own PRs. Without a prKey: the
-   * topic's whole-topic state.
+   * topic's whole-topic state, the one that rewrites its dossier and facts.
    */
   stateOf(topicId: string | null, prKey: PrKey | null = null): CatchUpRunState {
     const key = keyOf(topicId);

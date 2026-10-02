@@ -294,6 +294,8 @@ export class Engine implements EngineService {
   private readonly catchUpCap: CatchUpCap;
   private readonly catchUps: CatchUpQueue;
   private readonly topicCatchUp: TopicCatchUp;
+  /** Stale glances looked at while a full sync or consolidation ran; asked again when it ends. */
+  private readonly deferredLooks = new Set<PrKey>();
   private readonly github: GitHubSync;
   private readonly quietReads: QuietReads;
   private readonly telemetry: Telemetry;
@@ -649,6 +651,7 @@ export class Engine implements EngineService {
           this.syncsDone += 1;
           this.summarizePings();
           this.autoSync?.reschedule(backlog);
+          this.askDeferredLooks();
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
           void this.livePoller?.runCycle();
         });
@@ -672,6 +675,7 @@ export class Engine implements EngineService {
         .then(() => this.consolidationRun.run(options))
         .finally(() => {
           this.consolidating = null;
+          this.askDeferredLooks();
         });
     }
     return this.consolidating;
@@ -780,13 +784,27 @@ export class Engine implements EngineService {
     return { ok: true, message, undoToken: null };
   }
 
+  /** Looks that came in during a full sync or consolidation, asked again once it ended (`refreshGlanceOnLook` re-checks everything). */
+  private askDeferredLooks(): void {
+    const keys = [...this.deferredLooks];
+    this.deferredLooks.clear();
+    for (const key of keys) {
+      void this.refreshGlanceOnLook(key).catch((error: unknown) => (this.deps.syncLog ?? console.log)(`catch-up glance ${key}: ${errorText(error)}`));
+    }
+  }
+
   async refreshGlanceOnLook(prKey: PrKey): Promise<GlanceLookResult> {
     const { store, now } = this.deps;
     if (this.toolHealth.agentOffReason() !== null || this.catchUpCap.perDay === 0 || this.catchUpCap.remaining() === 0) {
       return { outcome: 'blocked' };
     }
-    if (this.syncing || this.consolidating || !store.prs.get(prKey)) {
+    if (!store.prs.get(prKey)) {
       return { outcome: 'skipped' };
+    }
+    if (this.syncing || this.consolidating) {
+      // The renderer asks once per open: keep the look and ask again when the run ends (the sync may have written it by then).
+      this.deferredLooks.add(prKey);
+      return { outcome: 'deferred' };
     }
     if (!this.topicCatchUp.needsGlance(prKey)) {
       return { outcome: 'current' };

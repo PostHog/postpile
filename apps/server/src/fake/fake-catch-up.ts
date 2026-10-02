@@ -22,6 +22,8 @@ export class FakeCatchUp {
   private readonly failed = new Set<PrKey>();
   /** PRs whose glance this fake wrote: a stale sample glance is current after its refresh. */
   private readonly written = new Set<PrKey>();
+  /** Writing for a refresh on look: a glance-only run, no memory rewritten. */
+  private readonly glanceOnly = new Set<PrKey>();
   private changeCount = 0;
   private seeded = false;
 
@@ -77,6 +79,7 @@ export class FakeCatchUp {
       const others = this.data.glances.filter((glance) => glance.prKey !== prKey);
       this.data.glances.splice(0, this.data.glances.length, ...others, this.cannedGlance(prKey));
       this.written.add(prKey);
+      this.glanceOnly.delete(prKey);
       this.phases.delete(prKey);
       this.changeCount += 1;
     });
@@ -140,8 +143,14 @@ export class FakeCatchUp {
     if (this.phases.has(prKey)) {
       return 'covered';
     }
+    this.glanceOnly.add(prKey);
     this.write(prKey);
     return 'started';
+  }
+
+  /** One of these PRs is being written by a stand-in whole-topic run (not a refresh on look): its memory counts as updating. */
+  memoryUpdating(prKeys: PrKey[]): boolean {
+    return prKeys.some((key) => this.phases.get(key) === 'writing' && !this.glanceOnly.has(key));
   }
 
   /** The PR's glance was written by this fake, so it is current. */

@@ -118,15 +118,16 @@ describe('CatchUpQueue', () => {
     expect(lines).toEqual(['catch-up depot: failed: boom']);
   });
 
-  it("runs one PR's glance alone, and folds it into a topic run going or queued", async () => {
+  it("runs one PR's glance alone, and folds it into a queued topic run", async () => {
     const { queue, runs } = heldQueue();
 
     expect(queue.requestGlance('depot', 'acme/app#1')).toBe('started');
-    expect(queue.requestGlance('depot', 'acme/app#1')).toBe('covered');
     expect(queue.stateOf('depot', 'acme/app#1')).toBe('running');
-    // Another PR of the topic is not being written.
+    // Another PR of the topic is not being written, and the topic's memory is not either.
     expect(queue.stateOf('depot', 'acme/app#2')).toBeNull();
+    expect(queue.stateOf('depot')).toBeNull();
     expect(queue.requestGlance('depot', 'acme/app#2')).toBe('queued');
+    expect(queue.requestGlance('depot', 'acme/app#2')).toBe('covered');
     expect(queue.stateOf('depot', 'acme/app#2')).toBe('queued');
     // A whole-topic follow-up covers the queued glance and every later one.
     expect(queue.request('depot')).toBe('queued');
@@ -135,6 +136,17 @@ describe('CatchUpQueue', () => {
     runs[0]!.finish();
     await settle();
     expect(runs.map((run) => run.prKeys)).toEqual([['acme/app#1'], null]);
-    expect(queue.requestGlance('depot', 'acme/app#2')).toBe('covered');
+  });
+
+  it('queues a glance behind a topic run already going: that run may have read the PR before it changed', async () => {
+    const { queue, runs } = heldQueue();
+    queue.request('depot');
+
+    expect(queue.requestGlance('depot', 'acme/app#1')).toBe('queued');
+    expect(queue.requestGlance('depot', 'acme/app#1')).toBe('covered');
+
+    runs[0]!.finish();
+    await settle();
+    expect(runs.map((run) => run.prKeys)).toEqual([null, ['acme/app#1']]);
   });
 });

@@ -4400,8 +4400,10 @@ the sync retries it. Local, agent calls only, not on the `GithubWrite` list.
 **Out of date wording** (2026-09-29, the renderer's `lib/staleness.ts`):
 one wording everywhere for "not up to date". While a full sync runs
 (`useActions().syncing`) or a catch-up run writes for the PR or topic
-(`glanceState` `writing` on the PR, or on any PR of the topic for the
-dossier), every note says "updating": the tile's verdict chip "· updating",
+(`glanceState` `writing` on the PR for its glance; `TopicDetail` /
+`PrDetail.memoryUpdating` for the dossier and facts, set only by a
+whole-topic run, never by a glance-only refresh on look), every note says
+"updating": the tile's verdict chip "· updating",
 the stale verdict box "Updating now: a new assessment is being written.",
 the dossier's "Updating now: 3 newer events.", a stale memory badge
 "updating · PR moved since" and its "Why?" check "Updating now: PR moved
@@ -4445,15 +4447,20 @@ list); the engine decides.
 order: `blocked` while the agent is off, catch-up is off
 (`POSTPILE_CATCHUP_CAP=0`, or `POSTPILE_MAX_AGENT_CALLS=0` in dev) or the
 daily catch-up cap is spent: no call, the existing wording stays.
-`skipped` while a full sync or consolidation runs (it covers the PR).
-`current` when `TopicCatchUp.needsGlance` finds the stored input hash still
-matching (or the PR gets no glance): no call. Else
+`deferred` while a full sync or consolidation runs: the renderer asks only
+once per open, so the engine keeps the look and asks again when that run
+ends (consolidation writes no glances; after a sync the re-check usually
+finds it `current`). `current` when `TopicCatchUp.needsGlance` finds the
+stored input hash still matching (or the PR gets no glance): no call. Else
 `CatchUpQueue.requestGlance`:
 
-- `covered` when a whole-topic run for its topic is going or queued, or a
-  glance run for this PR is: that run writes it. No second run.
-- `queued` behind a glance-only run for another PR of the same topic; a
-  whole-topic follow-up queued meanwhile wins and covers it.
+- `covered` when a run for its topic is queued (whole-topic, or a glance
+  run for this PR): it starts later and sees the PR as it is now.
+- `queued` behind any run already going for the topic, whole-topic or
+  glance-only: a going run may have read its inputs before the PR changed.
+  The follow-up checks the hash again, so it makes no call when the going
+  run wrote a current glance. A whole-topic follow-up queued meanwhile wins
+  and covers it.
 - `started`: a glance-only run (`TopicCatchUp.runGlances`), still one run
   per topic at a time, so it never writes beside the topic's own run.
 
@@ -4471,7 +4478,10 @@ counts whole-topic runs.
 pr)` is `running` for that PR only (a whole-topic run still counts for every
 PR of the topic), so `glanceState` is `writing` and the stale verdict box
 says "Updating now: a new assessment is being written." and the tile chip
-"· updating", with no renderer logic of its own. The run's start and end
+"· updating", with no renderer logic of its own. Memory notes (dossier,
+facts) read `memoryUpdating` instead, which only a whole-topic run sets
+(`stateOf(topic)` without a PR): a glance-only run rewrites no memory, so
+stale memory keeps saying "out of date". The run's start and end
 move `catchUpChanges`, so the refreshed glance arrives with the normal
 refetch. `glanceRefreshBlock` (`glanceRefreshBlockOf` in core, on
 `PrSummary`, `TileVerdict` and `PrDetail`) says when a look cannot refresh:

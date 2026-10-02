@@ -173,11 +173,10 @@ function PrCountPill(props: { detail: TopicDetail }) {
 
 /** Breadcrumb, name, who drives, the dossier (or the plain summary before one exists) and what the user told the agent. */
 export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[] }) {
-  const { topic, tiles, pendingProposals, dossier, placement } = props.detail;
+  const { topic, pendingProposals, dossier, placement } = props.detail;
   const actions = useActions();
-  // A catch-up run on the topic updates the dossier too; a PR of the topic writing its glance says one is going.
-  const writing = tiles.some((view) => view.prs.some((pr) => pr.glanceState === 'writing'));
-  const updating = updatingNow({ syncing: actions.syncing, writing });
+  // Only a whole-topic catch-up rewrites the dossier; a glance-only refresh on look does not (server decides).
+  const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.memoryUpdating });
   const crumbs = breadcrumbs(props.detail);
   return (
     <div className="flex flex-col">
