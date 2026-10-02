@@ -7,7 +7,7 @@ import { loadViewer } from '../viewer-meta.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
-import { reviewNoteIntent } from './review-note.ts';
+import { reviewNoteGlanceNotes, reviewNoteIntent } from './review-note.ts';
 
 /** Why an approval is refused when the stored head moved past the one on screen. */
 export const NEW_COMMITS_SINCE_LOOKED = 'New commits since you looked; take another look';
@@ -86,6 +86,7 @@ export class PrActions {
     if (pr.headOid !== headOid) {
       return failed(NEW_COMMITS_SINCE_LOOKED);
     }
+    const previousReviewAt = this.viewerReviewAt(key);
     try {
       if ((await this.writes.commentReviewPr(pr.ref, body, pr.headOid, { origin: 'tile', prKey: key })) === 'off') {
         return failed('GitHub writes are off (lock in the footer): nothing was posted');
@@ -96,26 +97,40 @@ export class PrActions {
     // Mark read first: what the refresh brings in is news the user has not seen.
     const batch = this.readMarker.markRead(prReadScope(key, true), { kind: 'approved' }, { origin: 'tile', tileId: null });
     await this.refreshPr(key);
-    this.mirrorReview(key, pr.headOid, body);
+    this.mirrorReview(key, pr.headOid, body, previousReviewAt);
     return { ...ok('Comment review posted'), settleToken: batch.token };
+  }
+
+  /** When the viewer's newest review of the stored head was submitted, or null without one. */
+  private viewerReviewAt(key: PrKey): string | null {
+    const stored = this.store.prs.get(key);
+    const viewer = loadViewer(this.store);
+    return stored && viewer ? (viewerHeadReview(stored, viewer)?.submittedAt ?? null) : null;
   }
 
   /**
    * GitHub took the comment review; when the stored snapshot does not show a
-   * review by the viewer on that head yet (the refresh failed or GitHub
-   * lagged), it adds one, so the PR no longer reads as waiting for the
-   * viewer's review until the next sync brings GitHub's copy.
+   * review by the viewer newer than the one before the write (the refresh
+   * failed or GitHub lagged), it adds one and drops the viewer's pending
+   * personal request, like GitHub does on answering. An earlier review on the
+   * same head (say CHANGES_REQUESTED) must not count as this one. The next
+   * sync brings GitHub's copy.
    */
-  private mirrorReview(key: PrKey, headOid: string, body: string): void {
+  private mirrorReview(key: PrKey, headOid: string, body: string, previousReviewAt: string | null): void {
     const stored = this.store.prs.get(key);
     const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
     const viewer = loadViewer(this.store);
-    if (!stored || !fetchedAt || !viewer || stored.headOid !== headOid || viewerHeadReview(stored, viewer) !== null) {
+    if (!stored || !fetchedAt || !viewer || stored.headOid !== headOid) {
+      return;
+    }
+    const latest = viewerHeadReview(stored, viewer);
+    if (latest !== null && (previousReviewAt === null || latest.submittedAt > previousReviewAt)) {
       return;
     }
     const at = this.now().toISOString();
     const review = { id: `local-review-${at}`, author: viewer.login, state: 'COMMENTED' as const, body, submittedAt: at, commitOid: headOid };
-    this.store.prs.upsert({ ...stored, reviews: [...stored.reviews, review] }, fetchedAt);
+    const reviewerUsers = stored.reviewerUsers.filter((login) => login.toLowerCase() !== viewer.login.toLowerCase());
+    this.store.prs.upsert({ ...stored, reviews: [...stored.reviews, review], reviewerUsers }, fetchedAt);
   }
 
   /** Unsubscribes from the PR's thread; says what happened, never throws. */
@@ -182,14 +197,14 @@ export class PrActions {
   }
 
   /** One draft through the agent, with the instructions and work context of the PR's topic. Never sent by the agent. */
-  private async draftComment(key: PrKey, person: string | null, intent: string): Promise<{ body: string }> {
+  private async draftComment(key: PrKey, person: string | null, intent: string, notes: string[] = []): Promise<{ body: string }> {
     const pr = this.store.prs.get(key);
     const viewer = loadViewer(this.store);
     if (!pr || !viewer) {
       throw new Error(`${key} is not in the store yet; run a sync first`);
     }
     const topicId = this.store.memberships.get(key)?.topicId ?? null;
-    return this.agent.draftComment({ pr, viewer, person, intent, context: this.contexts.forTopic(topicId) });
+    return this.agent.draftComment({ pr, viewer, person, intent, notes, context: this.contexts.forTopic(topicId) });
   }
 
   draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {
@@ -198,7 +213,7 @@ export class PrActions {
 
   /** The draft for the review note popover (Approve with comment, Comment review): addressed to nobody, fed the glance. */
   draftReviewNote(key: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
-    return this.draftComment(key, null, reviewNoteIntent(kind, this.store.glances.get(key)));
+    return this.draftComment(key, null, reviewNoteIntent(kind), reviewNoteGlanceNotes(this.store.glances.get(key)));
   }
 
   async sendComment(key: PrKey, body: string): Promise<ActionResult> {

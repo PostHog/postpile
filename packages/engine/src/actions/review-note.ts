@@ -16,16 +16,19 @@ const VERDICT_WORDS: Record<Verdict, string> = {
   NOT_YOURS: 'not yours to review',
 };
 
+/** The behavioural instruction for `agent.draftComment`: what the note is for. Trusted text only. */
+export function reviewNoteIntent(kind: ReviewNoteKind): string {
+  return WHAT_TO_WRITE[kind];
+}
+
 /**
- * The intent for `agent.draftComment` behind the detail pane's review note
- * popover: what the note is for, plus what the agent's glance already said
- * about the PR (may be from an older head), so the draft does not start from
- * nothing.
+ * What the agent's glance already said about the PR (may be from an older
+ * head), so the draft does not start from nothing. The fields can echo
+ * PR-author text, so these lines travel as fenced notes, never in the intent.
  */
-export function reviewNoteIntent(kind: ReviewNoteKind, glance: Glance | null): string {
+export function reviewNoteGlanceNotes(glance: Glance | null): string[] {
   if (glance === null) {
-    return WHAT_TO_WRITE[kind];
+    return [];
   }
-  const known = [`Does: ${glance.does}`, `Verdict: ${VERDICT_WORDS[glance.verdict]}`, `Risk: ${glance.risk}`];
-  return `${WHAT_TO_WRITE[kind]}\nWhat PostPile's earlier read of this PR said (a summary, may predate the newest commits):\n${known.join('\n')}`;
+  return [`Does: ${glance.does}`, `Verdict: ${VERDICT_WORDS[glance.verdict]}`, `Risk: ${glance.risk}`];
 }

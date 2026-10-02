@@ -1,5 +1,5 @@
 import type { DraftCommentInput } from '../service.ts';
-import { contextBlock, fullDetail, GITHUB_DATA_RULE, jsonOnly, prDetails, viewerLine } from './shared.ts';
+import { contextBlock, fullDetail, GITHUB_DATA_RULE, githubData, jsonOnly, prDetails, viewerLine } from './shared.ts';
 
 /** "Ask <person>": who the comment speaks to, what to ask, and its shape. */
 function askLines(person: string, intent: string): { audience: string; shape: string } {
@@ -21,6 +21,14 @@ function reviewNoteLines(intent: string): { audience: string; shape: string } {
   };
 }
 
+/** Earlier-read lines for the draft, fenced like other GitHub-derived text. Empty without notes. */
+function notesBlock(notes: string[]): string {
+  if (notes.length === 0) {
+    return '';
+  }
+  return `\nWhat PostPile's earlier read of this PR said (a summary, may predate the newest commits):\n${githubData(notes.join('\n'))}\n`;
+}
+
 /** "Ask <person>" or a review note: a PR comment the user edits before it is sent. Never sent by the agent. */
 export function draftCommentPrompt(input: DraftCommentInput): string {
   const intent = input.intent.trim();
@@ -30,7 +38,7 @@ ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}
 ${lines.audience}
-
+${notesBlock(input.notes ?? [])}
 The pull request:
 ${prDetails(input.pr, input.viewer, fullDetail)}
 

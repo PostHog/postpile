@@ -2583,16 +2583,19 @@ any review ask; on top of that:
   they have not seen"), blocked while writes are locked (never a pending
   write), logged as `comment_review`, followed by the same mark-read as
   approve (events seen, not handled: the review answers the ask). The PR is
-  refetched; when the snapshot does not show the review yet, PostPile adds
-  a COMMENTED review by the viewer on that head to the stored PR, so
+  refetched; when the snapshot does not show a review by the viewer newer
+  than the one before the write (an earlier review on the same head does not
+  count), PostPile adds a COMMENTED review to the stored PR and drops the
+  viewer's pending personal request, as GitHub does, so
   `reviewedHead` (tiers, whose turn) sees the viewer reviewed until the next
   sync brings GitHub's copy. The move goes back to the author.
 - Review note drafts (2026-10-02): `PrActions.draftReviewNote(key, kind)`
   reuses `agent.draftComment` (call kind `draft_comment`, no new kind) with
   `person: null` (a note addressed to nobody) and an intent per kind:
   approve, what was checked and why it is fine; comment, observations
-  without approving or asking for changes. The intent carries the glance's
-  Does / Verdict / Risk lines when there is a glance, and the usual context
+  without approving or asking for changes. The glance's Does / Verdict /
+  Risk lines travel as fenced `notes` (untrusted, they can echo PR text),
+  never in the intent, and the usual context
   (instructions and work context), so `instructions.md` can steer the tone.
 - One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
   Comment review and "Ask <owner>" share one popover under the button that
