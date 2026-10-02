@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrStatus, Review } from '@postpile/core';
 import { at, makePr } from '@postpile/core/fixtures';
-import { approvedText, checkCounts, checksNote, ICON_WORDS, mergeQueueWord, mergeStatus, reviewRows, reviewWord, rowStateWord } from './pr.ts';
+import { approvedText, checkCounts, checksNote, ICON_WORDS, mergeQueueWord, mergeStatus, reviewRows, reviewWord, rowStateWord, stackQueueWord } from './pr.ts';
 
 function review(author: string, state: Review['state'], minutes: number): Review {
   return { id: `${author}-${minutes}`, author, state, body: '', submittedAt: at(minutes), commitOid: null };
@@ -120,5 +120,34 @@ describe('merge queue words', () => {
     expect(rowStateWord(failed, now)?.title).toContain(': tests failed');
     expect(mergeQueueWord(failed, now, true)?.text).toBe('Merge queue: Failed (tests failed)');
     expect(mergeQueueWord(open, now)).toBeNull();
+  });
+});
+
+describe('stack queue word', () => {
+  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], mergeQueue: null, icon: 'open' };
+  const queued: PrStatus = { ...open, icon: 'merge_queue', mergeQueue: { state: 'submitted', since: at(28), reason: null, testingOn: null } };
+  const failed: PrStatus = { ...open, icon: 'merge_queue_failed', mergeQueue: { state: 'failed', since: at(28), reason: 'tests failed', testingOn: null } };
+  const stacks = [{ id: 'stack:acme/app#1861', prKeys: ['acme/app#1861', 'acme/app#1862', 'acme/app#1863'] }];
+  const now = new Date(at(60));
+  const layers = (a: PrStatus, b: PrStatus, c: PrStatus) => [
+    { key: 'acme/app#1861', status: a },
+    { key: 'acme/app#1862', status: b },
+    { key: 'acme/app#1863', status: c },
+  ];
+
+  it('labels the layers below a queued layer, nothing else', () => {
+    const word = stackQueueWord('acme/app#1861', layers(open, open, queued), stacks, now);
+    expect(word).toMatchObject({ kind: 'merge_queue', text: 'Merge queue: with 3/3' });
+    expect(word?.title).toContain('Merges with #1863, which is in the merge queue (Submitted to the merge queue');
+    // The lowest queued layer above wins.
+    expect(stackQueueWord('acme/app#1861', layers(open, queued, queued), stacks, now)?.text).toBe('Merge queue: with 2/3');
+    // The queue took the top layer out: back to the normal word.
+    expect(stackQueueWord('acme/app#1861', layers(open, open, failed), stacks, now)).toBeNull();
+    // A queued layer below this one does not take it along, and the queued layer keeps its own word.
+    expect(stackQueueWord('acme/app#1863', layers(queued, open, open), stacks, now)).toBeNull();
+    expect(stackQueueWord('acme/app#1863', layers(open, open, queued), stacks, now)).toBeNull();
+    // Drafts and merged layers keep their word.
+    expect(stackQueueWord('acme/app#1861', layers({ ...open, lifecycle: 'draft', icon: 'draft' }, open, queued), stacks, now)).toBeNull();
+    expect(stackQueueWord('acme/app#1861', layers({ ...open, lifecycle: 'merged', icon: 'merged' }, open, queued), stacks, now)).toBeNull();
   });
 });

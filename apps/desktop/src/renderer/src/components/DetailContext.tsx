@@ -1,4 +1,5 @@
 import type { TileView } from '@postpile/core';
+import { stackQueueWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
 import { kindParts, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon } from './icons.tsx';
@@ -45,6 +46,7 @@ export function DetailContext(props: DetailContextProps) {
   const count = view.prs.length;
   const several = count > 1;
   const places = stackPlaces(view.tile.stacks);
+  const now = new Date();
   const kind = kindParts(view);
   const index = Math.max(
     view.prs.findIndex((pr) => pr.key === props.prKey),
@@ -94,6 +96,7 @@ export function DetailContext(props: DetailContextProps) {
               grouped
               showForWhom={!sameForWhom(pr.forWhom, view.forWhom)}
               stackPlace={places.get(pr.key) ?? null}
+              stackQueue={stackQueueWord(pr.key, view.prs, view.tile.stacks, now)}
               showTitle
               unread={view.unreadPrKeys.includes(pr.key)}
               selected={pr.key === props.prKey}

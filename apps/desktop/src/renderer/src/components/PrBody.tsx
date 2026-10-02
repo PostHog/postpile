@@ -12,7 +12,7 @@ import { Avatar } from './Avatar.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { NewSinceBox } from './NewSinceBox.tsx';
-import { ICON_WORDS, mergeQueueWord, reviewWord } from '../lib/pr.ts';
+import { ICON_WORDS, mergeQueueWord, reviewWord, stackQueueWord, type StateWord } from '../lib/pr.ts';
 import { type StackPlace, stackPlaces } from '../lib/stacks.ts';
 import { BranchArrowIcon, ExternalIcon, PrStateIcon } from './icons.tsx';
 import { StackMark, StateWordLabel } from './pills.tsx';
@@ -72,12 +72,13 @@ const ICON_TEXT_TONES: Record<PrIcon, string> = {
  * when; the reason of a failure gets its own line (`QueueFailure`). No CI
  * (only in the facts).
  */
-function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus }) {
+function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus; stackQueue: StateWord | null }) {
   const { pr, status } = props;
   const now = useNow();
   const queue = mergeQueueWord(status, now);
   const words = queue ?? ICON_WORDS[status.icon];
-  const review = queue ? null : reviewWord(status);
+  // A higher layer's queue says so in place of the review, like on the PR's row.
+  const review = queue ? null : (props.stackQueue ?? reviewWord(status));
   return (
     <div className="flex items-center gap-2.5">
       <span title={words.title} className={`flex min-w-0 items-center gap-2 text-[12.5px] font-semibold ${ICON_TEXT_TONES[status.icon]}`}>
@@ -129,7 +130,7 @@ export function PrBody(props: PrBodyProps) {
     // 22px pane edge: boxes and rows run from here; lines of text start 12px in (px-3), at 34.
     <div className="pane-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto pl-[22px] pr-[12px] pt-[18px] pb-6">
       <div className="flex flex-col gap-[5px] px-3">
-        <StateLine pr={pr} status={props.detail.status} />
+        <StateLine pr={pr} status={props.detail.status} stackQueue={stackQueueWord(pr.key, props.view.prs, props.view.tile.stacks, new Date())} />
         <div className="flex items-start gap-2">
           {/* The mark sits on the title's first line: 18px tag, nudged to its center. */}
           {place && (

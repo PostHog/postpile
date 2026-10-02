@@ -1,7 +1,7 @@
 import type { PrSummary } from '@postpile/core';
 import { useViewer } from '../api/viewer.ts';
 import { assigneeLine } from '../lib/assignees.ts';
-import { ICON_WORDS, mergeQueueWord, rowStateWord } from '../lib/pr.ts';
+import { ICON_WORDS, mergeQueueWord, rowStateWord, type StateWord } from '../lib/pr.ts';
 import type { StackPlace } from '../lib/stacks.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { AssignedTo } from './AssignedTo.tsx';
@@ -23,6 +23,8 @@ interface PrRowProps {
   showForWhom: boolean;
   /** Where the PR sits in a GitHub stack; null for a lone PR (no mark). */
   stackPlace: StackPlace | null;
+  /** A higher layer is in the merge queue and takes this one along (`stackQueueWord`); shown in place of the review word. */
+  stackQueue: StateWord | null;
   /** Off on a single-PR tile: the tile's heading already is the PR's title. */
   showTitle: boolean;
   /** The PR is unread (core `TileView.unreadPrKeys`): coral dot hanging in the row's left padding. */
@@ -70,7 +72,7 @@ function titleLook(props: PrRowProps, greyed: boolean): string {
  * icon in a 20px slot, number, the stack mark for a stack layer
  * ("1/3"), title (not on a single-PR tile, whose heading is the title), then
  * the state word (review state, or the DRAFT chip, Merged, Closed, the
- * merge queue in place of the review), open
+ * merge queue in place of the review, also a higher layer's queue: "Merge queue: with 3/3"), open
  * threads and the author, then "assigned to" when someone else is assigned
  * (an agent PR a bot opened for a person names that person). No CI here: checks only show in the detail
  * pane's facts. Drafts and closed layers sit on a grey row so they stay in
@@ -86,9 +88,9 @@ export function PrRow(props: PrRowProps) {
   // Grouped rows sit 3px inside their box, a lone row 1px (the box's border): 2px more padding puts the icon at the same x.
   const shape = props.grouped ? 'rounded-pr-row px-3' : 'px-3.5';
   const now = new Date();
-  const word = rowStateWord(pr.status, now);
+  const word = props.stackQueue ?? rowStateWord(pr.status, now);
   // In the merge queue the icon's tooltip says where it stands, like the word.
-  const iconTitle = mergeQueueWord(pr.status, now)?.title ?? ICON_WORDS[pr.status.icon].title;
+  const iconTitle = (props.stackQueue ?? mergeQueueWord(pr.status, now))?.title ?? ICON_WORDS[pr.status.icon].title;
   const viewerLogin = useViewer().data?.login ?? null;
   const assigned = assigneeLine(pr.author, pr.assignees, viewerLogin);
   // The detail pane's list (an @container) keeps its titles readable when the pane is narrow: below 480px

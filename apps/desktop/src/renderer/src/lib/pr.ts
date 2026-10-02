@@ -1,4 +1,4 @@
-import type { Checks, MergeQueueStep, Pr, PrIcon, PrStatus, Review } from '@postpile/core';
+import type { Checks, MergeQueueStep, Pr, PrIcon, PrStatus, Review, TileStack } from '@postpile/core';
 import { prNumber } from './tiles.ts';
 import { sinceLabel } from './time.ts';
 
@@ -235,4 +235,36 @@ export function rowStateWord(status: PrStatus, now: Date): StateWord | null {
     return { kind: 'draft', text: 'Draft', title: ICON_WORDS.draft.title };
   }
   return mergeQueueWord(status, now) ?? reviewWord(status);
+}
+
+/**
+ * An open stack layer whose queue is a higher layer's: the top branch holds
+ * the lower commits, so queueing layer 3 merges layers 1 and 2 with it. The
+ * word is "Merge queue: with 3/3" (the lowest queued layer above), in place
+ * of the review word. Null for drafts, merged or closed layers, a layer that
+ * is in the queue itself (its own word wins), or when the queued layer
+ * above failed: the layer falls back to its normal word.
+ */
+export function stackQueueWord(prKey: string, prs: { key: string; status: PrStatus }[], stacks: TileStack[], now: Date): StateWord | null {
+  const own = prs.find((pr) => pr.key === prKey);
+  const stack = stacks.find((candidate) => candidate.prKeys.includes(prKey));
+  if (!own || !stack || own.status.lifecycle === 'merged' || own.status.lifecycle === 'closed' || own.status.lifecycle === 'draft') {
+    return null;
+  }
+  if (mergeQueueWord(own.status, now)) {
+    return null;
+  }
+  for (let index = stack.prKeys.indexOf(prKey) + 1; index < stack.prKeys.length; index++) {
+    const aboveKey = stack.prKeys[index]!;
+    const above = prs.find((pr) => pr.key === aboveKey);
+    const queue = above ? mergeQueueWord(above.status, now) : null;
+    if (queue?.kind === 'merge_queue') {
+      return {
+        kind: 'merge_queue',
+        text: `Merge queue: with ${index + 1}/${stack.prKeys.length}`,
+        title: `Merges with #${prNumber(aboveKey)}, which is in the merge queue (${queue.title})`,
+      };
+    }
+  }
+  return null;
 }
