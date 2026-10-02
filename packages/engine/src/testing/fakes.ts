@@ -14,10 +14,12 @@ import type {
   ViewerTeamSize,
 } from '@postpile/core';
 import type { RendererExceptionProps } from '@postpile/core';
+import { capHitCoversSince, type IsoTime } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
   BranchPr,
+  CapFill,
   GitHubReader,
   PartialPrs,
   GitHubWriter,
@@ -198,6 +200,18 @@ export class FakeReader implements GitHubReader {
     const prs = await this.fetchPrs(refs.filter((ref) => !failing.includes(ref)));
     const errors = failing.map((ref) => `1 PRs from ${ref.repo}#${ref.number}: GitHub PR batch query failed: Something went wrong`);
     return { prs, errors };
+  }
+
+  /** What fillCappedLists answers per PR: the snapshot with its older pages merged in. A PR missing here gains nothing. */
+  filledPrs = new Map<PrKey, Pr>();
+  /** Every fillCappedLists call as [PR key, since]. */
+  fillCalls: [PrKey, IsoTime | null][] = [];
+
+  async fillCappedLists(pr: Pr, since: IsoTime | null): Promise<CapFill> {
+    this.fillCalls.push([pr.key, since]);
+    const filled = this.filledPrs.get(pr.key) ?? pr;
+    const short = (filled.capHits ?? []).filter((hit) => !capHitCoversSince(hit, since)).map((hit) => hit.list);
+    return { pr: filled, pages: filled === pr ? 0 : 1, short };
   }
 
   async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {

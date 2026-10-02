@@ -25,6 +25,7 @@ import type {
   RawCheckContext,
   RawComment,
   RawCommit,
+  RawConnection,
   RawEdit,
   RawPullRequest,
   RawRequestedReviewer,
@@ -213,21 +214,21 @@ function toThread(raw: RawReviewThread): ReviewThread {
   return { id: raw.id, path: raw.path, isResolved: raw.isResolved, comments };
 }
 
+/** Submitted review bodies with text, as comments. */
+function reviewBodyComments(reviews: RawReview[]): Comment[] {
+  return reviews.filter((review) => !isPending(review) && review.body.trim() !== '').map(toReviewBodyComment);
+}
+
+function oldestFirst(comments: Comment[]): Comment[] {
+  return comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 /**
  * The flat list of every authored body: issue comments, non-empty submitted
  * review bodies, and inline review comments. Oldest first.
  */
 function allComments(raw: RawPullRequest, threads: ReviewThread[]): Comment[] {
-  const comments = raw.comments.nodes.map(toIssueComment);
-  for (const review of raw.reviews.nodes) {
-    if (!isPending(review) && review.body.trim() !== '') {
-      comments.push(toReviewBodyComment(review));
-    }
-  }
-  for (const thread of threads) {
-    comments.push(...thread.comments);
-  }
-  return comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return oldestFirst([...raw.comments.nodes.map(toIssueComment), ...reviewBodyComments(raw.reviews.nodes), ...threads.flatMap((thread) => thread.comments)]);
 }
 
 function toCommit(raw: RawCommit): Commit {
@@ -312,13 +313,6 @@ function cutOff(list: { totalCount?: number; nodes: unknown[] }): boolean {
   return list.totalCount !== undefined && list.totalCount > list.nodes.length;
 }
 
-/**
- * Every activity list the query caps (queries.ts): the last 50 reviews, 60
- * comments, 50 review threads (and the first 30 comments of each), 50
- * commits and 60 timeline items. Past any cap an event never arrives (a
- * human comment followed by 60 bot comments), so the snapshot is flagged
- * and no quiet mark-read trusts it.
- */
 /** The oldest of the times, null for none. */
 function oldestOf(times: string[]): string | null {
   return times.length === 0 ? null : isoTime(times.toSorted()[0]!);
@@ -329,26 +323,54 @@ function hitCap(list: { totalCount?: number; nodes: unknown[] }, cap: number): b
   return list.nodes.length >= cap && cutOff(list);
 }
 
+function reviewTime(review: RawReview): string {
+  return review.submittedAt ?? review.createdAt;
+}
+
+/** A newest-N list's cap hit: the oldest item it came back with, and the cursor of the page before it (only when the query asked for one). */
+function olderListHit(list: CapHit['list'], connection: RawConnection<unknown>, times: string[] | null): CapHit {
+  const hit: CapHit = { list, nodes: connection.nodes.length, oldestAt: times === null ? null : oldestOf(times) };
+  if (connection.pageInfo !== undefined) {
+    hit.cursor = connection.pageInfo.startCursor ?? null;
+  }
+  return hit;
+}
+
+/** The cap hits of threads whose comments came back full at the first-N cap, each with its thread and the cursor after its last comment. */
+function threadCommentHits(threads: RawReviewThread[]): CapHit[] {
+  return threads
+    .filter((thread) => hitCap(thread.comments, QUERY_CAPS.threadComments))
+    .map((thread) => {
+      const hit: CapHit = { list: 'thread_comments', nodes: thread.comments.nodes.length, oldestAt: null, threadId: thread.id };
+      if (thread.comments.pageInfo !== undefined) {
+        hit.cursor = thread.comments.pageInfo.endCursor ?? null;
+      }
+      return hit;
+    });
+}
+
 /**
- * The capped lists that hit their cap, read from the raw answer before any
- * node is dropped (draft-only threads, draft comments, timeline items not
- * read), with how many nodes came back and the oldest of them. Core decides
- * from these whether a cut snapshot still covers an unread interval
- * (`cutSnapshotCovers`).
+ * Every activity list the query caps (queries.ts): the last 50 reviews, 60
+ * comments, 50 review threads (and the first 30 comments of each), 50
+ * commits and 60 timeline items. Past any cap an event never arrives (a
+ * human comment followed by 60 bot comments). This records which lists hit
+ * their cap, read from the raw answer before any node is dropped
+ * (draft-only threads, draft comments, timeline items not read), with how
+ * many nodes came back, the oldest of them and the cursor to page on.
+ * Core decides from these how far back the snapshot reaches
+ * (`snapshotCoversSince`); cap-fill.ts pages older items in.
  */
 function capHits(raw: RawPullRequest): CapHit[] {
   const hits: CapHit[] = [];
-  const add = (list: CapHit['list'], connection: { totalCount?: number; nodes: unknown[] }, cap: number, times: string[] | null) => {
+  const add = (list: CapHit['list'], connection: RawConnection<unknown>, cap: number, times: string[] | null) => {
     if (hitCap(connection, cap)) {
-      hits.push({ list, nodes: connection.nodes.length, oldestAt: times === null ? null : oldestOf(times) });
+      hits.push(olderListHit(list, connection, times));
     }
   };
-  add('reviews', raw.reviews, QUERY_CAPS.reviews, raw.reviews.nodes.map((review) => review.submittedAt ?? review.createdAt));
+  add('reviews', raw.reviews, QUERY_CAPS.reviews, raw.reviews.nodes.map(reviewTime));
   add('comments', raw.comments, QUERY_CAPS.comments, raw.comments.nodes.map((comment) => comment.createdAt));
   add('review_threads', raw.reviewThreads, QUERY_CAPS.reviewThreads, null);
-  for (const thread of raw.reviewThreads.nodes) {
-    add('thread_comments', thread.comments, QUERY_CAPS.threadComments, null);
-  }
+  hits.push(...threadCommentHits(raw.reviewThreads.nodes));
   add('commits', raw.commits, QUERY_CAPS.commits, raw.commits.nodes.map((node) => node.commit.committedDate));
   add('timeline', raw.timelineItems, QUERY_CAPS.timeline, raw.timelineItems.nodes.map((item) => item.createdAt));
   return hits;
@@ -407,4 +429,122 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     truncated: isTruncated(raw),
     capHits: capHits(raw),
   };
+}
+
+/**
+ * One more page of a capped list (cap-fill.ts): for a newest-N list the
+ * page before the oldest one the snapshot has, for a thread's comments the
+ * page after its newest.
+ */
+export type OlderPage =
+  | { list: 'reviews'; page: RawConnection<RawReview> }
+  | { list: 'comments'; page: RawConnection<RawComment> }
+  | { list: 'review_threads'; page: RawConnection<RawReviewThread> }
+  | { list: 'commits'; page: RawConnection<RawCommit> }
+  | { list: 'timeline'; page: RawConnection<RawTimelineItem> }
+  | { list: 'thread_comments'; thread: RawReviewThread };
+
+/** `added` items the list does not have yet (by id), in their order. */
+function notIn<T>(list: T[], added: T[], idOf: (item: T) => string): T[] {
+  const known = new Set(list.map(idOf));
+  return added.filter((item) => !known.has(idOf(item)));
+}
+
+/** The snapshot's comments plus the new ones, oldest first. */
+function withComments(comments: Comment[], added: Comment[]): Comment[] {
+  return oldestFirst([...comments, ...notIn(comments, added, (comment) => comment.id)]);
+}
+
+/**
+ * A newest-N list's hit after one more older page: its nodes added, the
+ * oldest item now, the cursor before the page, and complete once GitHub
+ * says there is no page before it.
+ */
+function olderPageHit(hit: CapHit, page: RawConnection<unknown>, times: string[] | null): CapHit {
+  const oldestAt = times === null ? null : oldestOf(hit.oldestAt === null ? times : [...times, hit.oldestAt]);
+  return { ...hit, nodes: hit.nodes + page.nodes.length, oldestAt, cursor: page.pageInfo?.startCursor ?? null, complete: page.pageInfo?.hasPreviousPage === false };
+}
+
+/** The snapshot's cap hits with the one `list` hit moved on by the page, plus any new ones. */
+function capHitsAfter(pr: Pr, list: CapHit['list'], page: RawConnection<unknown>, times: string[] | null, added: CapHit[] = []): CapHit[] {
+  const hits = (pr.capHits ?? []).map((hit) => (hit.list === list ? olderPageHit(hit, page, times) : hit));
+  return [...hits, ...added];
+}
+
+/** A thread's comments page added to the snapshot: new comments after the ones it has, its hit moved past them. */
+function addThreadComments(pr: Pr, raw: RawReviewThread): Pr {
+  const paged = toThread(raw);
+  const known = pr.threads.find((thread) => thread.id === paged.id);
+  const added = known === undefined ? paged.comments : notIn(known.comments, paged.comments, (comment) => comment.id);
+  let threads = pr.threads;
+  if (known !== undefined) {
+    threads = pr.threads.map((thread) => (thread === known ? { ...thread, comments: [...thread.comments, ...added] } : thread));
+  } else if (paged.comments.length > 0) {
+    threads = [...pr.threads, paged];
+  }
+  const pageInfo = raw.comments.pageInfo;
+  const capHits = (pr.capHits ?? []).map((hit) =>
+    hit.list === 'thread_comments' && hit.threadId === raw.id
+      ? { ...hit, nodes: hit.nodes + raw.comments.nodes.length, cursor: pageInfo?.endCursor ?? null, complete: pageInfo?.hasNextPage === false }
+      : hit,
+  );
+  return { ...pr, threads, comments: withComments(pr.comments, added), capHits };
+}
+
+/**
+ * Adds one more page of a capped list to the snapshot, normalized exactly
+ * like the PR query and without repeats (by id, commits by oid), and moves
+ * the list's cap hit: further back, or complete. Threads on an older page
+ * whose comments hit their own cap bring new thread_comments hits.
+ */
+export function addOlderPage(pr: Pr, older: OlderPage): Pr {
+  switch (older.list) {
+    case 'reviews': {
+      const nodes = older.page.nodes;
+      return {
+        ...pr,
+        reviews: [...notIn(pr.reviews, nodes.map(toReview), (review) => review.id), ...pr.reviews],
+        comments: withComments(pr.comments, reviewBodyComments(nodes)),
+        capHits: capHitsAfter(pr, 'reviews', older.page, nodes.map(reviewTime)),
+      };
+    }
+    case 'comments': {
+      const nodes = older.page.nodes;
+      return {
+        ...pr,
+        comments: withComments(pr.comments, nodes.map(toIssueComment)),
+        capHits: capHitsAfter(pr, 'comments', older.page, nodes.map((comment) => comment.createdAt)),
+      };
+    }
+    case 'review_threads': {
+      const threads = notIn(pr.threads, older.page.nodes.map(toThread), (thread) => thread.id).filter((thread) => thread.comments.length > 0);
+      const threadIdsWithHits = new Set((pr.capHits ?? []).map((hit) => hit.threadId));
+      const newHits = threadCommentHits(older.page.nodes).filter((hit) => !threadIdsWithHits.has(hit.threadId));
+      return {
+        ...pr,
+        threads: [...threads, ...pr.threads],
+        comments: withComments(pr.comments, threads.flatMap((thread) => thread.comments)),
+        capHits: capHitsAfter(pr, 'review_threads', older.page, null, newHits),
+      };
+    }
+    case 'commits': {
+      const nodes = older.page.nodes;
+      return {
+        ...pr,
+        commits: [...notIn(pr.commits, nodes.map(toCommit), (commit) => commit.oid), ...pr.commits],
+        capHits: capHitsAfter(pr, 'commits', older.page, nodes.map((node) => node.commit.committedDate)),
+      };
+    }
+    case 'timeline': {
+      const nodes = older.page.nodes;
+      const items = nodes.map(toTimelineItem).filter((item) => item !== null);
+      return {
+        ...pr,
+        timeline: [...notIn(pr.timeline, items, (item) => item.id), ...pr.timeline],
+        capHits: capHitsAfter(pr, 'timeline', older.page, nodes.map((item) => item.createdAt)),
+      };
+    }
+    case 'thread_comments':
+      return addThreadComments(pr, older.thread);
+  }
 }

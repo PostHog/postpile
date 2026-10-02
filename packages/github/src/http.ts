@@ -47,6 +47,16 @@ export interface GraphQLResult<T> {
   errors: GraphQLErrorItem[];
 }
 
+/**
+ * A GraphQL answer without data. GitHub reports its GraphQL rate limit as a
+ * 200 with an error of type RATE_LIMITED, so that one is marked as a limit.
+ */
+export function graphqlFailure(what: string, errors: GraphQLErrorItem[]): GitHubError {
+  const first = errors[0];
+  const rateLimited = first?.type === 'RATE_LIMITED';
+  return new GitHubError(`GitHub ${what} failed: ${first?.message ?? 'no data'}`, 200, { rateLimited, retryAfterSeconds: null });
+}
+
 export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;

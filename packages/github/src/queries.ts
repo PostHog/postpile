@@ -1,4 +1,4 @@
-import type { PrRef } from '@postpile/core';
+import type { CappedList, PrRef } from '@postpile/core';
 import type { BranchLookup } from './reader.ts';
 
 // Limits per PR. Picked so 12 aliased PRs stay well inside GitHub's node
@@ -52,16 +52,38 @@ const BASE_REF_CHANGES =
   'baseRefChanges: timelineItems(last: 10, itemTypes: [BASE_REF_CHANGED_EVENT, AUTOMATIC_BASE_CHANGE_SUCCEEDED_EVENT]) { nodes { ' +
   '... on BaseRefChangedEvent { previousRefName } ... on AutomaticBaseChangeSucceededEvent { oldBase } } }';
 
-const FRAGMENTS = `
-fragment actor on Actor { __typename login }
+const ACTOR_FRAGMENT = 'fragment actor on Actor { __typename login }';
 
-fragment reviewer on RequestedReviewer {
+const REVIEWER_FRAGMENT = `fragment reviewer on RequestedReviewer {
   __typename
   ... on User { login }
   ... on Team { slug organization { login } }
-}
+}`;
 
-fragment comment on Comment { author { ...actor } body createdAt lastEditedAt updatedAt editor { ...actor } }
+const COMMENT_FRAGMENT = 'fragment comment on Comment { author { ...actor } body createdAt lastEditedAt updatedAt editor { ...actor } }';
+
+// The node selections of the capped lists, shared by the PR query and the
+// older-page queries (cap-fill.ts), so paged-in items normalize the same.
+const REVIEW_NODE = 'id state url submittedAt createdAt ...comment commit { oid }';
+const COMMENT_NODE = 'id url ...comment';
+const THREAD_COMMENT_NODE = 'id url state ...comment';
+/** A thread's first comments; the end cursor lets cap-fill.ts page on past the cap. */
+const THREAD_COMMENTS = `comments(first: ${QUERY_CAPS.threadComments}) { totalCount pageInfo { hasNextPage endCursor } nodes { ${THREAD_COMMENT_NODE} } }`;
+const THREAD_NODE = `id path isResolved ${THREAD_COMMENTS}`;
+const COMMIT_NODE = 'commit { oid messageHeadline committedDate author { name user { login } } committer { name user { login } } }';
+const TIMELINE_NODE = `__typename
+      ... on ReviewRequestedEvent { id createdAt actor { ...actor } requestedReviewer { ...reviewer } }
+      ... on ReviewRequestRemovedEvent { id createdAt actor { ...actor } requestedReviewer { ...reviewer } }
+      ${simpleTimelineSelections}`;
+/** Where the newest-N page starts, so cap-fill.ts can ask for the page before it. */
+const OLDER_PAGE_INFO = 'pageInfo { hasPreviousPage startCursor }';
+
+const FRAGMENTS = `
+${ACTOR_FRAGMENT}
+
+${REVIEWER_FRAGMENT}
+
+${COMMENT_FRAGMENT}
 
 fragment prData on PullRequest {
   number title url body state isDraft
@@ -75,19 +97,10 @@ fragment prData on PullRequest {
   labels(first: 20) { nodes { name } }
   files(first: 100) { nodes { path additions deletions } }
   reviewRequests(first: 30) { nodes { requestedReviewer { ...reviewer } } }
-  reviews(last: ${QUERY_CAPS.reviews}) {
-    totalCount
-    nodes { id state url submittedAt createdAt ...comment commit { oid } }
-  }
-  comments(last: ${QUERY_CAPS.comments}) { totalCount nodes { id url ...comment } }
-  reviewThreads(last: ${QUERY_CAPS.reviewThreads}) {
-    totalCount
-    nodes { id path isResolved comments(first: ${QUERY_CAPS.threadComments}) { totalCount nodes { id url state ...comment } } }
-  }
-  commits(last: ${QUERY_CAPS.commits}) {
-    totalCount
-    nodes { commit { oid messageHeadline committedDate author { name user { login } } committer { name user { login } } } }
-  }
+  reviews(last: ${QUERY_CAPS.reviews}) { totalCount ${OLDER_PAGE_INFO} nodes { ${REVIEW_NODE} } }
+  comments(last: ${QUERY_CAPS.comments}) { totalCount ${OLDER_PAGE_INFO} nodes { ${COMMENT_NODE} } }
+  reviewThreads(last: ${QUERY_CAPS.reviewThreads}) { totalCount ${OLDER_PAGE_INFO} nodes { ${THREAD_NODE} } }
+  commits(last: ${QUERY_CAPS.commits}) { totalCount ${OLDER_PAGE_INFO} nodes { ${COMMIT_NODE} } }
   headCommit: commits(last: 1) {
     nodes { commit { statusCheckRollup {
       state
@@ -100,14 +113,53 @@ fragment prData on PullRequest {
   }
   timelineItems(last: ${QUERY_CAPS.timeline}, itemTypes: [${TIMELINE_TYPES.join(', ')}]) {
     totalCount
+    ${OLDER_PAGE_INFO}
     nodes {
-      __typename
-      ... on ReviewRequestedEvent { id createdAt actor { ...actor } requestedReviewer { ...reviewer } }
-      ... on ReviewRequestRemovedEvent { id createdAt actor { ...actor } requestedReviewer { ...reviewer } }
-      ${simpleTimelineSelections}
+      ${TIMELINE_NODE}
     }
   }
 }`;
+
+/** The capped lists that keep the newest N, paged backwards from the oldest page's start cursor. */
+export type OlderList = Exclude<CappedList, 'thread_comments'>;
+
+/** Per list: the connection with its page size and `before:` cursor, the node selection, the fragments it uses (GitHub rejects unused ones). */
+const OLDER_LISTS: Record<OlderList, { connection: string; node: string; fragments: string[] }> = {
+  reviews: { connection: `reviews(last: ${QUERY_CAPS.reviews}, before: $cursor)`, node: REVIEW_NODE, fragments: [ACTOR_FRAGMENT, COMMENT_FRAGMENT] },
+  comments: { connection: `comments(last: ${QUERY_CAPS.comments}, before: $cursor)`, node: COMMENT_NODE, fragments: [ACTOR_FRAGMENT, COMMENT_FRAGMENT] },
+  review_threads: {
+    connection: `reviewThreads(last: ${QUERY_CAPS.reviewThreads}, before: $cursor)`,
+    node: THREAD_NODE,
+    fragments: [ACTOR_FRAGMENT, COMMENT_FRAGMENT],
+  },
+  commits: { connection: `commits(last: ${QUERY_CAPS.commits}, before: $cursor)`, node: COMMIT_NODE, fragments: [] },
+  timeline: {
+    connection: `timelineItems(last: ${QUERY_CAPS.timeline}, before: $cursor, itemTypes: [${TIMELINE_TYPES.join(', ')}])`,
+    node: TIMELINE_NODE,
+    fragments: [ACTOR_FRAGMENT, REVIEWER_FRAGMENT],
+  },
+};
+
+/** One older page of one capped list of one PR, aliased `page`, selected exactly like the PR query. Variables: owner, name, number, cursor. */
+export function buildOlderPageQuery(list: OlderList): string {
+  const spec = OLDER_LISTS[list];
+  return `query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+    page: ${spec.connection} { ${OLDER_PAGE_INFO} nodes { ${spec.node} } }
+  } }
+}
+${spec.fragments.join('\n')}`;
+}
+
+/** The next page of one review thread's comments, after its end cursor. Variables: id, cursor. */
+export const THREAD_COMMENTS_PAGE_QUERY = `query($id: ID!, $cursor: String) {
+  node(id: $id) { ... on PullRequestReviewThread {
+    id path isResolved
+    comments(first: ${QUERY_CAPS.threadComments}, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { ${THREAD_COMMENT_NODE} } }
+  } }
+}
+${ACTOR_FRAGMENT}
+${COMMENT_FRAGMENT}`;
 
 export function batchAlias(index: number): string {
   return `p${index}`;
