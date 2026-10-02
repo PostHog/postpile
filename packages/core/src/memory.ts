@@ -259,6 +259,12 @@ export interface Dossier {
   /** Sources of status and statusNote together. */
   statusSources?: LineSources;
   people: DossierPerson[];
+  /**
+   * The viewer's home team drives this standing topic and nobody leads the
+   * current wave (2026-10-02): no person has the driver role then. Stored
+   * as the topic's driver TEAM_DRIVER. Optional: older versions have none.
+   */
+  driverTeam?: boolean;
   openQuestions: DossierQuestion[];
   /** Oldest first. PRs that roll off are folded into `earlier`. */
   timeline: DossierPrEntry[];

@@ -4,6 +4,7 @@ import { ActionLogRepo } from './repos/action-log.ts';
 import { AgentCallRepo } from './repos/agent-calls.ts';
 import { ChatRepo } from './repos/chat.ts';
 import { CursorRepo } from './repos/cursors.ts';
+import { DriverPickRepo } from './repos/driver-picks.ts';
 import { DossierRepo } from './repos/dossiers.ts';
 import { EventLogRepo } from './repos/event-log.ts';
 import { EventRepo } from './repos/events.ts';
@@ -35,6 +36,7 @@ export class Store {
   readonly events: EventRepo;
   readonly userPrStates: UserPrStateRepo;
   readonly topics: TopicRepo;
+  readonly driverPicks: DriverPickRepo;
   readonly memberships: TopicMembershipRepo;
   readonly proposals: TopicProposalRepo;
   readonly sets: PrSetRepo;
@@ -64,6 +66,7 @@ export class Store {
     this.events = new EventRepo(db);
     this.userPrStates = new UserPrStateRepo(db);
     this.topics = new TopicRepo(db);
+    this.driverPicks = new DriverPickRepo(db);
     this.memberships = new TopicMembershipRepo(db);
     this.proposals = new TopicProposalRepo(db);
     this.sets = new PrSetRepo(db);

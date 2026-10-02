@@ -38,6 +38,7 @@ import type { ReviewRequest } from './review-request.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { ViewerApproval } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
+import type { DriverKind } from './topic-driver.ts';
 import type { TopicSection } from './topic-sections.ts';
 import type { TopicMove } from './topic-urgency.ts';
 import type { TilePerson } from './tile-people.ts';
@@ -324,8 +325,37 @@ export interface TilePendingWrite {
   error: string | null;
 }
 
+/** One item of the header's driver menu. */
+export interface DriverChoice {
+  /** What `setTopicDriver` takes for it: a login, TEAM_DRIVER or OUTSIDE_DRIVER. */
+  value: string;
+  kind: DriverKind;
+  /** The person's login for you and person; null for the team and someone outside. */
+  login: string | null;
+  /** Where the topic sits with this driver once no ask holds (`sectionBelowAsks`). */
+  section: TopicSection;
+  /** The driver in effect now, picked or automatic. */
+  current: boolean;
+}
+
+/** The header's "<login> drives" button and its menu (`topicDriverView`). */
+export interface TopicDriverView {
+  /** Who drives now (the pick, else the automatic driver); null when nobody is known. */
+  kind: DriverKind | null;
+  /** The driver's login for you and person. */
+  login: string | null;
+  /** The user picked the driver ("set by you"); Reset to automatic shows only then. */
+  picked: boolean;
+  /** The ask section that holds the topic whatever the driver, while the ask lasts; null when none does. */
+  heldByAsk: TopicSection | null;
+  /** You, each teammate, Your team, Someone outside your team. */
+  choices: DriverChoice[];
+}
+
 export interface TopicDetail {
   topic: Topic;
+  /** Who drives and the driver menu; null for Unsorted. */
+  driver: TopicDriverView | null;
   placement: TopicPlacement | null;
   tiles: TileView[];
   /** The viewer's moves on live tiles, most urgent first (`topicYourMoves`): the header's chip, same as the sidebar row's. */

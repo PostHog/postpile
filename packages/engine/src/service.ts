@@ -331,6 +331,12 @@ export interface EngineService {
   /** "Archive now" on a topic with nothing left; refused while anything is open or unread. */
   archiveTopic(topicId: string): Promise<ActionResult>;
   /**
+   * The header's driver menu: a value from `TopicDetail.driver.choices`, or
+   * null for Reset to automatic. Moves the topic at once and stands until
+   * changed; new events never lift it. Local, not a GitHub write.
+   */
+  setTopicDriver(topicId: string, driver: string | null): Promise<ActionResult>;
+  /**
    * "Forget" on a care, or accepting a recheck outcome: drop (kind wrong),
    * holds (confirm) or fix. A fact changes right away; every correction is
    * logged as feedback, so the topic's next dossier update sees it. Local

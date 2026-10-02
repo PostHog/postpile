@@ -83,6 +83,7 @@ import {
   agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
+  driverKind,
   emptyAgentCallStats,
   normalizeRepoScope,
   OFF_POLL_STATUS,
@@ -109,6 +110,7 @@ import { OutsideProposals } from './agent-requests/topic-change.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { failed } from './actions/results.ts';
+import { setTopicDriver } from './actions/driver-pick.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
 import { PrActions } from './actions/pr-actions.ts';
 import { MemoryActions } from './actions/memory-actions.ts';
@@ -1231,6 +1233,17 @@ export class Engine implements EngineService {
     }
     this.telemetry.capture('topic_archived', {});
     return { ok: true, message: 'Moved to the Archive', undoToken: null };
+  }
+
+  async setTopicDriver(topicId: string, driver: string | null): Promise<ActionResult> {
+    const { store } = this.deps;
+    const result = setTopicDriver(store, topicId, driver, this.deps.now().toISOString());
+    if (result.ok) {
+      const kind = driver === null ? 'automatic' : driverKind(driver, loadViewer(store));
+      // Only teammates are offered by name, so a named person is one.
+      this.telemetry.capture('driver_set', { kind: kind === 'person' ? 'teammate' : kind });
+    }
+    return result;
   }
 
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {

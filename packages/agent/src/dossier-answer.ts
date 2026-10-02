@@ -180,6 +180,8 @@ function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, 
     statusNote: withoutMetaLead(answer.statusNote),
     statusSources: lineSources(answer.statusRefs, refs, sameStatus ? previous.statusSources : undefined),
     people: answer.people.map((p) => ({ login: login(p.login), role: p.role, note: p.note })),
+    // The team drives only while nobody does: a named driver is the clearer answer.
+    driverTeam: answer.driverTeam && !answer.people.some((p) => p.role === 'driver'),
     openQuestions: toQuestions(answer.openQuestions, input, refs),
     timeline: toTimeline(answer.timeline, input, refs),
     earlier: answer.earlier,

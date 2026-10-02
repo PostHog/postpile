@@ -33,6 +33,7 @@ function dossierInput(context: PromptContext): DossierUpdateInput {
     staleFacts: [],
     chatTurns: [],
     relationSignals: { relation: null, ownerTeam: null, whyYou: '', notes: [] },
+    driverPick: null,
     areas: [],
     currentArea: null,
     viewer,

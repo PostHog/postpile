@@ -10,6 +10,7 @@ import { sectionLook } from '../lib/sections.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
 import { DossierPanel } from './DossierPanel.tsx';
+import { DriverMenu } from './DriverMenu.tsx';
 import { ChevronIcon, PrStateIcon, QuoteIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
 import { RelationLine } from './RelationLine.tsx';
@@ -171,9 +172,9 @@ function PrCountPill(props: { detail: TopicDetail }) {
   );
 }
 
-/** Breadcrumb, name, who drives, the dossier (or the plain summary before one exists) and what the user told the agent. */
+/** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists) and what the user told the agent. */
 export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[] }) {
-  const { topic, pendingProposals, dossier, placement } = props.detail;
+  const { topic, pendingProposals, dossier, placement, driver } = props.detail;
   const actions = useActions();
   // Only a whole-topic catch-up rewrites the dossier; a glance-only refresh on look does not (server decides).
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.memoryUpdating });
@@ -195,17 +196,13 @@ export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <h1 className="text-[22px] leading-[1.2] font-[650] tracking-[-0.024em] text-balance">{topic.name}</h1>
         <span className="flex gap-1">
-          {topic.driver && topic.userRole !== 'driver' && (
-            <span className={`${pill} pr-2 pl-[3px]`}>
-              <Avatar login={topic.driver} size="xxs" />
-              <span>
-                <span className="font-[550] text-ink">{topic.driver}</span> drives
-              </span>
+          {driver && <DriverMenu topicId={topic.id} driver={driver} />}
+          {/* "You drive" already says the role. */}
+          {topic.userRole !== 'driver' && driver?.kind !== 'you' && (
+            <span className={`${pill} px-2`} title="Your role in this topic">
+              {ROLE_LABELS[topic.userRole]}
             </span>
           )}
-          <span className={`${pill} px-2`} title="Your role in this topic">
-            {ROLE_LABELS[topic.userRole]}
-          </span>
           <PrCountPill detail={props.detail} />
         </span>
         <YourMoveChip moves={props.detail.yourMoves} />

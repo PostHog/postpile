@@ -4,11 +4,12 @@
 // drive it. The engine and FakeEngine call the same function for the
 // sidebar row, the topic header's breadcrumb and telemetry.
 import { isOwnTeam } from './mentions.ts';
-import { personRelation, type PersonRelation, type TopicQueues } from './topic-queues.ts';
+import { driverKind, driverLogin, driverPickValues, driverRelation, effectiveDriver } from './topic-driver.ts';
+import type { PersonRelation, TopicQueues } from './topic-queues.ts';
 import { homeTeamsOf } from './team-roles.ts';
 import { compareTopicUrgency, type RankedTopic, type TopicMove } from './topic-urgency.ts';
 import type { Topic, Viewer } from './types.ts';
-import type { TopicPlacement } from './views.ts';
+import type { DriverChoice, TopicDriverView, TopicPlacement } from './views.ts';
 
 /**
  * The section order, as a type: the renderer imports types only, so its
@@ -53,6 +54,10 @@ export const TOPIC_SECTION_ORDER: TopicSectionOrder = [
 /** The PR tiers that ask something of the viewer, most urgent first. `mine` and `team` say whose PR it is, not what it asks. */
 const ASK_TIERS = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned'] as const;
 
+function isAsk(section: TopicSection): boolean {
+  return (ASK_TIERS as readonly TopicSection[]).includes(section);
+}
+
 export interface SectionInput {
   /** The topic retired: it sits in the Archive. */
   retired: boolean;
@@ -61,19 +66,15 @@ export interface SectionInput {
   moves: number;
   /**
    * Who drives the topic, as it relates to the viewer; null when nobody is
-   * known. Today `driverRelation(topic.driver, viewer)`; a driver the user
-   * picks ("Your team", "Someone outside your team") passes its relation here.
+   * known. The user's pick when there is one, else the automatic driver
+   * (`effectiveDriver`): "Your team" reads as team, "Someone outside your
+   * team" as other.
    */
   driver: PersonRelation | null;
   /** The dossier's relation and owner team; null until the topic has a dossier. */
   placement: Pick<TopicPlacement, 'relation' | 'ownerTeam'> | null;
   /** The viewer's home teams (`homeTeamsOf`). */
   homeTeams: string[];
-}
-
-/** How the topic's driver relates to the viewer: teammates are members of any home team (`Viewer.teamMembers`). */
-export function driverRelation(driver: string | null, viewer: Viewer | null): PersonRelation | null {
-  return driver === null ? null : personRelation(driver, viewer);
 }
 
 /** The viewer's open PR or a move of theirs is in the topic. */
@@ -105,20 +106,14 @@ function ownerSection(ownerTeam: string | null, homeTeams: string[]): TopicSecti
 }
 
 /**
- * First match wins: retired -> Archive; an open ask -> its section; FYI
- * without stronger evidence -> Other topics; the viewer drives -> You
- * drive; a teammate drives -> Your team owns; someone else drives -> Other
- * work; nobody known -> by the owner team, Other topics when that is
- * unknown too (a topic without a dossier: "not sorted yet").
+ * Where the topic sits once no ask holds, retired or not: FYI without
+ * stronger evidence -> Other topics; the viewer drives -> You drive; a
+ * teammate (or the team) drives -> Your team owns; someone else drives ->
+ * Other work; nobody known -> by the owner team, Other topics when that is
+ * unknown too (a topic without a dossier: "not sorted yet"). The driver
+ * menu shows it next to each choice.
  */
-export function topicSection(input: SectionInput): TopicSection {
-  if (input.retired) {
-    return 'archive';
-  }
-  const ask = ASK_TIERS.find((tier) => input.queues.tiers[tier] > 0);
-  if (ask) {
-    return ask;
-  }
+export function sectionBelowAsks(input: SectionInput): TopicSection {
   if (staysFyi(input)) {
     return 'other_topics';
   }
@@ -134,9 +129,24 @@ export function topicSection(input: SectionInput): TopicSection {
   return ownerSection(input.placement?.ownerTeam ?? null, input.homeTeams);
 }
 
+/** First match wins: retired -> Archive; an open ask -> its section; else `sectionBelowAsks`. */
+export function topicSection(input: SectionInput): TopicSection {
+  if (input.retired) {
+    return 'archive';
+  }
+  const ask = ASK_TIERS.find((tier) => input.queues.tiers[tier] > 0);
+  if (ask) {
+    return ask;
+  }
+  return sectionBelowAsks(input);
+}
+
 /** What the read models know about a topic when they place it. */
 export interface TopicSectionSource {
+  /** `driver` is the automatic driver, refreshed each sync. */
   topic: Pick<Topic, 'status' | 'driver'>;
+  /** The user's pick from the header's driver menu; null: automatic. */
+  driverPick: string | null;
   queues: Pick<TopicQueues, 'tiers' | 'byYou'>;
   moves: number;
   placement: Pick<TopicPlacement, 'relation' | 'ownerTeam'> | null;
@@ -144,16 +154,42 @@ export interface TopicSectionSource {
   viewer: Viewer | null;
 }
 
-/** `topicSection` for a stored topic, its driver as the agent named it: the engine and FakeEngine both place topics through this. */
-export function topicSectionOf(source: TopicSectionSource): TopicSection {
-  return topicSection({
+/** The resolver's input for the topic with `driver` (a stored driver value) driving it. */
+function sectionInputOf(source: TopicSectionSource, driver: string | null): SectionInput {
+  return {
     retired: source.topic.status === 'retired',
     queues: source.queues,
     moves: source.moves,
-    driver: driverRelation(source.topic.driver, source.viewer),
+    driver: driverRelation(driver, source.viewer),
     placement: source.placement,
     homeTeams: source.viewer ? homeTeamsOf(source.viewer) : [],
-  });
+  };
+}
+
+/** `topicSection` for a stored topic, the user's driver pick over the automatic one: the engine and FakeEngine both place topics through this. */
+export function topicSectionOf(source: TopicSectionSource): TopicSection {
+  const driver = effectiveDriver(source.driverPick, source.topic.driver, source.viewer);
+  return topicSection(sectionInputOf(source, driver.value));
+}
+
+/** The header's driver label and its menu, each choice with the section it moves the topic to (below the asks). */
+export function topicDriverView(source: TopicSectionSource): TopicDriverView {
+  const driver = effectiveDriver(source.driverPick, source.topic.driver, source.viewer);
+  const choices: DriverChoice[] = driverPickValues(source.viewer).map((value) => ({
+    value,
+    kind: driverKind(value, source.viewer),
+    login: driverLogin(value),
+    section: sectionBelowAsks(sectionInputOf(source, value)),
+    current: value === driver.value,
+  }));
+  const section = topicSection(sectionInputOf(source, driver.value));
+  return {
+    kind: driver.value === null ? null : driverKind(driver.value, source.viewer),
+    login: driverLogin(driver.value),
+    picked: driver.picked,
+    heldByAsk: isAsk(section) ? section : null,
+    choices,
+  };
 }
 
 /** The fields `compareInSection` reads; `TopicListItem` has them all. */

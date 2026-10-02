@@ -429,6 +429,19 @@ describe('FakeEngine queues', () => {
     expect((await engine.getTopic('topic-cache-warmer'))?.section).toBe('archive');
   });
 
+  it('moves a topic by the driver picked in the header and back on reset', async () => {
+    const engine = new FakeEngine();
+    const sectionOf = async (id: string) => (await engine.listTopics()).find((item) => item.topic.id === id)?.section;
+
+    expect((await engine.setTopicDriver('topic-usage-exports', ':team')).ok).toBe(true);
+    expect(await sectionOf('topic-usage-exports')).toBe('team_owns');
+    expect((await engine.getTopic('topic-usage-exports'))?.driver).toMatchObject({ kind: 'team', picked: true });
+    expect((await engine.setTopicDriver('topic-usage-exports', 'stranger')).ok).toBe(false);
+
+    await engine.setTopicDriver('topic-usage-exports', null);
+    expect(await sectionOf('topic-usage-exports')).toBe('other_work');
+  });
+
   it("lists topics with your open PR or move first inside a section, then unread ones", async () => {
     const topics = await new FakeEngine().listTopics();
     const otherWork = topics.filter((item) => item.section === 'other_work').map((item) => item.topic.id);

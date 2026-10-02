@@ -56,6 +56,7 @@ const dossierInput: DossierUpdateInput = {
   staleFacts: [],
   chatTurns: [],
   relationSignals: { relation: null, ownerTeam: null, whyYou: 'review requested', notes: [] },
+  driverPick: null,
   areas: [{ name: AREA_NAME, topics: 2 }],
   currentArea: AREA_NAME,
   viewer,
