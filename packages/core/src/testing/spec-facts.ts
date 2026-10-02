@@ -151,17 +151,23 @@ export function saysDeploy(body: string): boolean {
 /** A step in Trunk's queue as the spec reads it, and when trunk said it. */
 export interface SpecQueueStep {
   state: 'submitted' | 'testing' | 'failed';
-  /** failed: why ("tests failed"); null for the other steps. */
+  /** failed: why ("tests failed"), null when trunk gives none; null for the other steps. */
   reason: string | null;
   at: IsoTime;
 }
 
-/** What each trunk body says: a step, or nothing (the offer, cancelled by a user, merged, a line nobody knows). */
+/**
+ * What each trunk body says: a step, or nothing (the offer, cancelled by a
+ * user, merged, a line nobody knows). A stack testing reads as testing; a
+ * ❌ line in words nobody knows is failed, with no reason to give.
+ */
 const TRUNK_STEPS: Record<TrunkText, Omit<SpecQueueStep, 'at'> | null> = {
   offer: null,
   submitted: { state: 'submitted', reason: null },
   testing: { state: 'testing', reason: null },
+  stack_testing: { state: 'testing', reason: null },
   failed: { state: 'failed', reason: 'tests failed' },
+  emoji_failed: { state: 'failed', reason: null },
   cancelled: null,
   merged: null,
   garbage: null,

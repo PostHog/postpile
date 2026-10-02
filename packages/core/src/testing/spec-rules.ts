@@ -181,7 +181,8 @@ function queueTurn(input: TurnInput): ExpectedTurn | null {
   const { pr, viewer } = input;
   const queue = specMergeQueue(pr);
   if (queue?.state === 'failed') {
-    return viewerOwns(pr, viewer) ? you('merge', `Re-submit to the merge queue: ${queue.reason}`) : them(namedOwner(pr), `to re-submit to the merge queue: ${queue.reason}`);
+    const because = queue.reason === null ? '' : `: ${queue.reason}`;
+    return viewerOwns(pr, viewer) ? you('merge', `Re-submit to the merge queue${because}`) : them(namedOwner(pr), `to re-submit to the merge queue${because}`);
   }
   if (queue !== null || inGitHubQueue(pr)) {
     return { kind: 'them', who: null, what: 'Waiting on the merge queue' };

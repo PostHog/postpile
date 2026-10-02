@@ -48,10 +48,11 @@ export type AutomationItem = 'queued' | 'unqueued' | 'deployed';
 
 /**
  * What trunk-io[bot] says about its merge queue (DESIGN "Merge queue"):
- * the merge offer, submitted, testing, failed (tests), cancelled by a user,
- * merged, or a line nobody knows.
+ * the merge offer, submitted, testing (a PR, or a stack on a stack layer),
+ * failed (tests), failed in a wording only its ❌ tells, cancelled by a
+ * user, merged, or a line nobody knows.
  */
-export type TrunkText = 'offer' | 'submitted' | 'testing' | 'failed' | 'cancelled' | 'merged' | 'garbage';
+export type TrunkText = 'offer' | 'submitted' | 'testing' | 'stack_testing' | 'failed' | 'emoji_failed' | 'cancelled' | 'merged' | 'garbage';
 
 /** One thing that happened on the PR, in order. Steps GitHub would not allow are skipped when the PR is built. */
 export type StepSpec =
@@ -286,7 +287,7 @@ const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
       // Failures most: a loud one needs the viewer's own open PR as well.
       text: fc.oneof(
         { weight: 3, arbitrary: fc.constant<TrunkText>('failed') },
-        { weight: 2, arbitrary: fc.constantFrom<TrunkText>('submitted', 'testing') },
+        { weight: 2, arbitrary: fc.constantFrom<TrunkText>('submitted', 'testing', 'stack_testing', 'emoji_failed') },
         { weight: 1, arbitrary: fc.constantFrom<TrunkText>('offer', 'cancelled', 'merged', 'garbage') },
       ),
       sticky: fc.boolean(),

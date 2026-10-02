@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- A stack layer in the Trunk merge queue showed as not queued while Trunk tested the stack ("Running tests on this stack"). Trunk status lines in a wording PostPile does not know yet are now read by their emoji, so a PR keeps its queue state when Trunk rewords a message.
+
 ## 0.14.1 (2026-10-02)
 
 ### Added
