@@ -510,6 +510,8 @@ export interface PingRuleView {
   reason: string;
   whoseTurn: WhoseTurn;
   why: WhyCode;
+  /** A person answers the user's own comment or review of the last two hours (`isLiveConversation`): it pings whatever the answer says. */
+  conversation: boolean;
 }
 
 /**

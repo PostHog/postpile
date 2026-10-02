@@ -61,7 +61,7 @@ function promptsWith(context: PromptContext): Record<string, string> {
           dossierBrief: '',
           glance: null,
           events: [makeEvent()],
-          rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply', prKey: pr.key }, why: '@' },
+          rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply', prKey: pr.key }, why: '@', conversation: false },
           template: { title: 't', body: 'b' },
         },
       ],

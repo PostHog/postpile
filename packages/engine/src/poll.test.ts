@@ -263,6 +263,52 @@ describe('Engine.pollOnce', () => {
     expect(h.store.meta.get('poll_fetched_since_sync')).toBe(polled);
   });
 
+  it('pings a reply in a live conversation even when the agent says no', async () => {
+    const h = makeHarness();
+    const pr = await syncedPr(h, 1);
+    const own = makeComment({ id: 'own', author: viewer.login, body: 'Why the retry here?', createdAt: '2026-09-02T11:00:00.000Z' });
+    const answer = makeComment({ id: 'answer', author: 'bob', body: `@${viewer.login} it covers the flaky upload, nothing else`, createdAt: FRESH });
+    withActivity(h, pr, { comments: [own, answer] }, 'etag-2');
+    h.runner.answer('ping_decision', { decisions: [{ id: 'thread-1', ping: false, title: '', body: '', reason: 'asks nothing' }] });
+
+    const cycle = await h.engine.pollOnce();
+
+    if (cycle.kind !== 'done') throw new Error('expected a done cycle');
+    expect(cycle.pings.map((ping) => ping.target.prKey)).toEqual([pr.key]);
+    expect(h.runner.promptsFor('ping_decision')[0]).toContain('Live conversation');
+    expect(h.store.pingDecisions.listRecent(1)[0]).toMatchObject({ ping: true, source: 'agent', reason: 'live conversation, pings anyway; agent: asks nothing' });
+  });
+
+  it('pings a reply once GitHub marks its thread unread, a cycle after the poll stored it', async () => {
+    let clock = NOW;
+    const h = makeHarness({ now: () => clock });
+    const pr = await syncedPr(h, 1);
+    // The viewer's own comment left the thread read; the reply is on the PR before GitHub flips it.
+    const next = withActivity(h, pr, mention(pr), 'etag-2');
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER, unread: false }));
+    clock = new Date('2026-09-02T12:05:00.000Z');
+    const first = await h.engine.pollOnce();
+    if (first.kind !== 'done') throw new Error('expected a done cycle');
+    expect(first.decisions).toEqual([]);
+
+    // Within the minute, so the freshness check does not fetch it either.
+    clock = new Date('2026-09-02T12:05:30.000Z');
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER, unread: true }));
+    h.reader.etag = 'etag-3';
+    h.runner.answer('ping_decision', { decisions: [{ id: 'thread-1', ping: true, title: '@bob asks about the cache key', body: 'On #1.', reason: 'direct question' }] });
+    const fetchesBefore = h.reader.fetchedRefs.length;
+    const second = await h.engine.pollOnce();
+
+    if (second.kind !== 'done') throw new Error('expected a done cycle');
+    expect(h.reader.fetchedRefs.length).toBe(fetchesBefore);
+    expect(second.pings.map((ping) => ping.title)).toEqual(['@bob asks about the cache key']);
+
+    // Decided once: the next change brings no second ping for the same reply.
+    h.reader.etag = 'etag-4';
+    const third = await h.engine.pollOnce();
+    expect(third).toMatchObject({ kind: 'done', pings: [] });
+  });
+
   it('records ping_decision calls under the poll run', async () => {
     const h = makeHarness();
     const pr = await syncedPr(h, 1);

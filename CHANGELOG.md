@@ -2,6 +2,16 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.16.0 (unreleased)
+
+### Fixed
+
+- A reply that came in right after you commented on a PR often gave no Mac notification: GitHub still showed the thread as read when PostPile picked up the reply, and later it was no longer new. PostPile now keeps such replies and notifies once GitHub marks the thread unread.
+
+### Changed
+
+- When someone mentions you, replies or asks you something within two hours of your own comment or review on a PR, you always get a Mac notification. The agent still writes the text but can no longer drop it because the reply "asks nothing".
+
 ## 0.15.0 (2026-10-02)
 
 ### Added

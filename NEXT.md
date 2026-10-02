@@ -1145,6 +1145,11 @@ the app meanwhile.
   archive or GitHub's Done; not while the search or a PR filter is on, never
   the selected topic. Dimming alone (quiet rows) still took space and
   clicks. Dealt with is not Archive.
+- **Answers in a live conversation always ping** (2026-10-02, DESIGN.md
+  "Live poll and Mac pings" › Decision): a person's mention, reply or
+  question within two hours of your own comment or review pings, and the
+  agent only words it. Replies that landed while GitHub still showed the
+  thread as read are decided once it turns unread.
 - **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
   PRs never ask for a review"): Approve on the PR pane is split (approve
   now, or with an agent-drafted note); "Comment review" posts a COMMENT

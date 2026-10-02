@@ -73,7 +73,7 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
             createdAt: '2026-09-02T09:00:00Z',
           },
           events: [ciEvent, mention],
-          rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: failing.key }, why: '@' },
+          rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: failing.key }, why: '@', conversation: false },
           template: { title: 'bob mentioned you', body: 'can you look at the cache key?' },
         },
       ],

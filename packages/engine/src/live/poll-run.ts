@@ -102,8 +102,14 @@ export class PollRun {
     if (!inbox.notModified) {
       reviveUnreadTopics(store, now().toISOString(), this.writesOn());
     }
-    if (inbox.notModified || !inbox.viewer || inbox.fetchedPrKeys.length === 0) {
-      return { ...done, prsUpdated: 0, decisions: [], pings: [], errors: [] };
+    const nothing = { ...done, prsUpdated: 0, decisions: [], pings: [], errors: [] };
+    if (inbox.notModified || !inbox.viewer) {
+      return nothing;
+    }
+    // A thread GitHub marked unread after the poll stored its events brings no fetch, only a decision (`PingDecider.decide`).
+    const fetchedAny = inbox.fetchedPrKeys.length > 0;
+    if (!fetchedAny && !this.decider.hasWaiting()) {
+      return nothing;
     }
     const errors: string[] = [];
     const startedAt = now().toISOString();
@@ -111,7 +117,7 @@ export class PollRun {
     try {
       reviveRetiredTopics(store, inbox.newEventIds, startedAt);
       // Without the agent new PRs wait in Unsorted for a sync with it; the rules still ping.
-      if (this.deps.agentOff() === null) {
+      if (fetchedAny && this.deps.agentOff() === null) {
         try {
           await this.assignTopics(inbox.fetchedPrKeys, inbox.viewer, stats, errors);
         } catch (error) {
@@ -124,7 +130,7 @@ export class PollRun {
       }
       const decided = await this.decider.decide(inbox.fetchedPrKeys, inbox.newEventIds, inbox.viewer);
       // After the pings: they are the time-critical part and go first in the agent queue.
-      if (this.deps.agentOff() === null) {
+      if (fetchedAny && this.deps.agentOff() === null) {
         this.requestCatchUps(inbox.fetchedPrKeys, inbox.newEventIds);
       }
       return {

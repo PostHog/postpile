@@ -34,8 +34,11 @@ function itemSection(item: PingDecisionItem): string {
   if (item.glance) {
     lines.push(`Earlier read of the PR: ${item.glance.verdict}. ${githubData(clip(item.glance.forYou, 300))}`);
   }
+  lines.push(`Rules: ${item.rule.loudness} (${item.rule.reason}), why it reached them: ${item.rule.why}, ${turnLine(item)}`);
+  if (item.rule.conversation) {
+    lines.push('Live conversation: a person answers what the user said on this PR in the last two hours. It always pings; write the text.');
+  }
   lines.push(
-    `Rules: ${item.rule.loudness} (${item.rule.reason}), why it reached them: ${item.rule.why}, ${turnLine(item)}`,
     `New activity, newest first:\n${githubData(`${prLine(item.pr)}\n${withoutCi(item.events).map(eventLine).join('\n')}`)}`,
     // The template quotes the comment, so it is GitHub text too.
     `Default notification:\n${githubData(`title: ${item.template.title}\nbody: ${item.template.body.replaceAll('\n', ' / ')}`)}`,

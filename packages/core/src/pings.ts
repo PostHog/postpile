@@ -8,6 +8,7 @@ import { editMentionOf } from './events.ts';
 import type { GitHubQuotaView } from './github-quota.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isRoutedTeamRequestEvent } from './glance-pings.ts';
+import { lastTouch, type TouchKind } from './last-touch.ts';
 import { effectiveLoudness, raisedToLoud } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
@@ -233,6 +234,28 @@ export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean 
   }
   const subject = reviewRequestTarget(event, pr);
   return subject !== null && sameLogin(subject, viewer.login);
+}
+
+/** How long after the viewer's own comment or review a person's answer counts as a live conversation. */
+export const CONVERSATION_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+/** The viewer said something on the PR: a comment, a thread reply or a review. An approval or a push is not talking. */
+const TALKING_TOUCHES: readonly TouchKind[] = ['comment', 'review', 'changes_request'];
+
+/**
+ * A person answering the viewer while they talk on the PR (2026-10-02): a
+ * mention, reply or question from a human, at most two hours after the
+ * viewer's own comment or review there. It always pings: the agent words
+ * the notification but cannot veto it, since a reply that "asks nothing"
+ * is still the answer the viewer waits for. `events` are all of the PR's
+ * events, the viewer's own included.
+ */
+export function isLiveConversation(event: PrEvent, pr: Pr, events: PrEvent[], viewer: Viewer): boolean {
+  if (!PERSONAL_ASK_KINDS.includes(event.kind) || event.isBot) {
+    return false;
+  }
+  const touch = lastTouch(pr, events, viewer, { before: event.at, kinds: TALKING_TOUCHES });
+  return touch !== null && Date.parse(event.at) - Date.parse(touch.at) <= CONVERSATION_WINDOW_MS;
 }
 
 function ruleFrom(pingClass: PingRuleClass, event: PrEvent): PingRule {
