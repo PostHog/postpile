@@ -5,6 +5,7 @@ import { useNextAutoSyncAt } from '../api/live.ts';
 import { glanceStateText } from '../lib/glance.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
+import { stackQueueWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
 import { kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -129,6 +130,7 @@ function PrRows(props: TileProps & { done: boolean }) {
   const { view } = props;
   const grouped = view.prs.length > 1;
   const places = stackPlaces(view.tile.stacks);
+  const now = new Date();
   // Grouped rows sit 3px inside the box, so its edge can be an inset ring; a lone row would cover one.
   // PrRow pads a lone row 2px more, so the state icon lands at the same x in both.
   const box = grouped
@@ -144,6 +146,7 @@ function PrRows(props: TileProps & { done: boolean }) {
           grouped={grouped}
           showForWhom={grouped && !sameForWhom(pr.forWhom, view.forWhom)}
           stackPlace={places.get(pr.key) ?? null}
+          stackQueue={stackQueueWord(pr.key, view.prs, view.tile.stacks, now)}
           showTitle={grouped}
           unread={view.unreadPrKeys.includes(pr.key)}
           selected={props.selected && pr.key === props.selectedPrKey}

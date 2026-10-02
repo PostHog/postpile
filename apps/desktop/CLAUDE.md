@@ -399,7 +399,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   Octicons merge-queue icon in `--pending` amber while queued and red once
   the queue took it out; the word from `ICON_WORDS` as its title). A queued
   PR's row shows `mergeQueueWord` ("Merge queue: Testing") in place of the
-  review word. Review state: `StateWordLabel` with a
+  review word, and so do the open layers below a queued layer of the same
+  stack (`stackQueueWord`, "Merge queue: with 3/3"): the top branch holds
+  their commits, so they merge with it. Review state: `StateWordLabel` with a
   `StateWord` from `reviewWord` / `rowStateWord` (`lib/pr.ts`). Never a CI
   icon or word outside `PrFacts`.
 - Icons carry words: a lone icon gets a `title` (and `aria-label` when it
