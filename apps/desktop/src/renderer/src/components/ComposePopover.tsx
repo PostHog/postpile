@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { PrKey, ReviewNoteKind } from '@postpile/core';
-import { useActions } from '../api/actions.tsx';
+import { useActions, type Actions } from '../api/actions.tsx';
 import type { GithubWrite } from '../lib/guard.ts';
 import { useDismiss } from '../lib/use-dismiss.ts';
 import { Button, type ButtonVariant } from './Button.tsx';
@@ -16,6 +16,12 @@ interface ComposeMode {
   write: GithubWrite;
   /** Hover text of the submit button while the write is allowed. */
   submitTitle: string;
+  /** The send's busy key prefix, as `useActions` names it (`<prefix>:<prKey>`). */
+  busy: string;
+  /** Sends the note; true when it went out. */
+  send: (actions: Actions, note: { prKey: PrKey; headOid: string; body: string }) => Promise<boolean>;
+  /** Approve is optimistic (the pane shows "Approved" at once), so the popover closes on click, not after. */
+  closesOnClick: boolean;
 }
 
 const MODES: Record<ComposeKind, ComposeMode> = {
@@ -26,6 +32,12 @@ const MODES: Record<ComposeKind, ComposeMode> = {
     variant: 'safe',
     write: 'approve',
     submitTitle: 'Approves on GitHub with this note. Cannot be undone.',
+    busy: 'approve',
+    send: async (actions, note) => {
+      await actions.approve(note.prKey, note.headOid, note.body);
+      return true;
+    },
+    closesOnClick: true,
   },
   comment: {
     title: 'Comment review',
@@ -34,6 +46,9 @@ const MODES: Record<ComposeKind, ComposeMode> = {
     variant: 'primary',
     write: 'commentReview',
     submitTitle: 'Posts a comment-only review on GitHub, on the commit you see. Cannot be undone.',
+    busy: 'commentReview',
+    send: (actions, note) => actions.commentReview(note.prKey, note.headOid, note.body),
+    closesOnClick: false,
   },
   ask: {
     title: 'Ask about this PR',
@@ -42,6 +57,9 @@ const MODES: Record<ComposeKind, ComposeMode> = {
     variant: 'primary',
     write: 'comment',
     submitTitle: 'Posts this comment on the PR',
+    busy: 'comment',
+    send: (actions, note) => actions.sendComment(note.prKey, note.body),
+    closesOnClick: false,
   },
 };
 
@@ -71,8 +89,7 @@ function ComposePopover(props: ComposePopoverProps) {
   const [person, setPerson] = useState(props.askPerson ?? '');
   const [intent, setIntent] = useState('');
   const drafting = actions.isBusy(`ask:${props.prKey}`);
-  const busyKeys: Record<ComposeKind, string> = { approve: `approve:${props.prKey}`, comment: `commentReview:${props.prKey}`, ask: `comment:${props.prKey}` };
-  const sending = actions.isBusy(busyKeys[props.kind]);
+  const sending = actions.isBusy(`${mode.busy}:${props.prKey}`);
   // StrictMode runs the effect twice on mount; one draft is enough (a ref survives that remount).
   const drafted = useRef(false);
 
@@ -88,10 +105,12 @@ function ComposePopover(props: ComposePopoverProps) {
 
   // Under a button near the window's right edge (Ask), the popover moves left to stay inside.
   const dialog = useRef<HTMLDivElement>(null);
-  const [shift, setShift] = useState(0);
   useLayoutEffect(() => {
-    const right = dialog.current?.getBoundingClientRect().right ?? 0;
-    setShift(Math.max(right - (window.innerWidth - 16), 0));
+    const element = dialog.current;
+    const overflow = element ? element.getBoundingClientRect().right - (window.innerWidth - 16) : 0;
+    if (element && overflow > 0) {
+      element.style.transform = `translateX(-${overflow}px)`;
+    }
   }, []);
   // The pane scrolls; bring the whole popover into view on open and once the draft filled it.
   const filled = body !== null;
@@ -110,14 +129,10 @@ function ComposePopover(props: ComposePopoverProps) {
     if (body === null) {
       return;
     }
-    if (props.kind === 'approve') {
-      // Optimistic: the pane shows "Approved" right away, so the popover goes too.
+    if (mode.closesOnClick) {
       props.onClose();
-      await actions.approve(props.prKey, props.headOid, body);
-      return;
     }
-    const sent = props.kind === 'comment' ? await actions.commentReview(props.prKey, props.headOid, body) : await actions.sendComment(props.prKey, body);
-    if (sent) {
+    if (await mode.send(actions, { prKey: props.prKey, headOid: props.headOid, body })) {
       props.onClose();
     }
   }
@@ -127,7 +142,6 @@ function ComposePopover(props: ComposePopoverProps) {
       ref={dialog}
       role="dialog"
       aria-label={mode.title}
-      style={shift > 0 ? { transform: `translateX(-${shift}px)` } : undefined}
       className="absolute top-full left-0 z-20 mt-1 flex w-[380px] max-w-[calc(100vw-32px)] flex-col gap-2.5 rounded-tile bg-surface p-4 shadow-menu"
     >
       <div className="flex flex-col gap-0.5">
@@ -176,15 +190,18 @@ function ComposePopover(props: ComposePopoverProps) {
 }
 
 interface ComposeAnchorProps extends Omit<ComposePopoverProps, 'kind'> {
-  /** The open popover's kind when it belongs under these buttons, else null. */
-  open: ComposeKind | null;
+  /** The compose popover open in the pane, if any. */
+  compose: ComposeKind | null;
+  /** The kinds whose popover opens under these buttons. */
+  kinds: ComposeKind[];
   children: ReactNode;
 }
 
 /** Buttons with the compose popover under them. A pointer down outside both, or Escape, closes it. */
 export function ComposeAnchor(props: ComposeAnchorProps) {
   const root = useRef<HTMLDivElement>(null);
-  const { open, children, ...popover } = props;
+  const { compose, kinds, children, ...popover } = props;
+  const open = compose !== null && kinds.includes(compose) ? compose : null;
   useDismiss(open !== null, props.onClose, root);
   return (
     <div ref={root} className="relative flex items-center gap-1.5">

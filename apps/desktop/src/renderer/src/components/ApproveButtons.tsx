@@ -29,7 +29,8 @@ interface ApproveButtonsProps {
   leads: boolean;
   /** The compose popover open in the pane, if any. */
   compose: ComposeKind | null;
-  onCompose: (kind: ComposeKind | null) => void;
+  onToggleCompose: (kind: ComposeKind) => void;
+  onCloseCompose: () => void;
 }
 
 /**
@@ -58,10 +59,8 @@ export function ApproveButtons(props: ApproveButtonsProps) {
   // A locked lock blocks the notes before the agent drafts one that cannot be sent.
   const approveBlocked = actions.blockedReason('approve');
   const reviewBlocked = actions.blockedReason('commentReview');
-  const toggle = (kind: ComposeKind) => props.onCompose(props.compose === kind ? null : kind);
-  const open = props.compose === 'approve' || props.compose === 'comment' ? props.compose : null;
   return (
-    <ComposeAnchor open={open} prKey={pr.key} headOid={pr.headOid} onClose={() => props.onCompose(null)}>
+    <ComposeAnchor compose={props.compose} kinds={['approve', 'comment']} prKey={pr.key} headOid={pr.headOid} onClose={props.onCloseCompose}>
       <div className="flex">
         <Button
           variant={variant}
@@ -90,7 +89,7 @@ export function ApproveButtons(props: ApproveButtonsProps) {
           aria-label="Approve with comment"
           aria-expanded={props.compose === 'approve'}
           title={approveBlocked ?? 'Approve with comment: the agent drafts a short review note you edit first'}
-          onClick={() => toggle('approve')}
+          onClick={() => props.onToggleCompose('approve')}
         >
           <ChatIcon />
         </Button>
@@ -100,7 +99,7 @@ export function ApproveButtons(props: ApproveButtonsProps) {
         disabled={reviewBlocked !== null || actions.isBusy(`commentReview:${pr.key}`)}
         aria-expanded={props.compose === 'comment'}
         title={reviewBlocked ?? COMMENT_REVIEW_TITLE}
-        onClick={() => toggle('comment')}
+        onClick={() => props.onToggleCompose('comment')}
       >
         Comment review
       </Button>

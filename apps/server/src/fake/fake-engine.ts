@@ -1168,7 +1168,7 @@ export class FakeEngine implements EngineService {
   // EngineService: actions
   // -------------------------------------------------------------------------
 
-  async approve(prKey: PrKey, headOid: string, _body = ''): Promise<ActionResult> {
+  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     if (!pr) {
       return fail(`no PR ${prKey}`);

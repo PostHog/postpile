@@ -65,6 +65,8 @@ export function ActionBar(props: ActionBarProps) {
   const offers = props.view.offers.pane[pr.key] ?? ONLY_OPEN;
   const [recheckOpen, setRecheckOpen] = useState(false);
   const [compose, setCompose] = useState<ComposeKind | null>(null);
+  const toggleCompose = (kind: ComposeKind) => setCompose(compose === kind ? null : kind);
+  const closeCompose = () => setCompose(null);
   const lead = leadSlot(offers.lead);
   const variantOf = (slot: Slot) => (lead === slot ? 'primary' : 'secondary');
   const glance = props.detail.glance;
@@ -81,15 +83,17 @@ export function ActionBar(props: ActionBarProps) {
   const openedMark = opened.prKey === pr.key ? opened.marked : null;
   const markRead = () => (onePr && row ? actions.markPrRead(tileId, pr.key, row.afterRead) : actions.markRead(tileId, props.view.afterRead));
   const slots: Record<Slot, ReactNode> = {
-    approve: offers.approve && <ApproveButtons detail={props.detail} leads={lead === 'approve'} compose={compose} onCompose={setCompose} />,
+    approve: offers.approve && (
+      <ApproveButtons detail={props.detail} leads={lead === 'approve'} compose={compose} onToggleCompose={toggleCompose} onCloseCompose={closeCompose} />
+    ),
     open: offers.open && (
       <a href={pr.url} target="_blank" rel="noreferrer" title="Open the PR on github.com" className={buttonClasses(variantOf('open'), 'md')}>
         Open on GitHub
       </a>
     ),
     ask: offers.ask && (
-      <ComposeAnchor open={compose === 'ask' ? 'ask' : null} prKey={pr.key} headOid={pr.headOid} askPerson={askPerson} onClose={() => setCompose(null)}>
-        <Button size="md" aria-expanded={compose === 'ask'} onClick={() => setCompose(compose === 'ask' ? null : 'ask')}>
+      <ComposeAnchor compose={compose} kinds={['ask']} prKey={pr.key} headOid={pr.headOid} askPerson={askPerson} onClose={closeCompose}>
+        <Button size="md" aria-expanded={compose === 'ask'} onClick={() => toggleCompose('ask')}>
           Ask {askPerson}
         </Button>
       </ComposeAnchor>
