@@ -1523,15 +1523,13 @@ export class FakeEngine implements EngineService {
     return { body: `@${person} ${question}${context}` };
   }
 
-  /** Canned review notes: the approve one leans on the glance's risk line when the sample has one. */
+  /** Canned review notes, one per kind. */
   async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
     this.refuseWithoutAgent();
-    const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
     if (kind === 'comment') {
-      return { body: 'Read through the change; left no blockers. The retry path could use a test before this merges.' };
+      return { body: 'The retry path in `sync.ts` has no test. It needs one before this merges.' };
     }
-    const risk = glance ? ` ${glance.risk}` : '';
-    return { body: `Checked the diff and the CI run; the change stays inside its module.${risk}` };
+    return { body: 'No blockers. A test for the retry limit can follow.' };
   }
 
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
