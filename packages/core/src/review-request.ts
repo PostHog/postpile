@@ -134,9 +134,12 @@ export function ownedByTeammate(pr: Pr, viewer: Viewer): boolean {
  * are on one of the viewer's home teams. Until the member list has been
  * fetched (`teamMembers` missing) any other reviewer counts.
  */
-function teammateReviews(pr: Pr, viewer: Viewer): Review[] {
+function teammateReviews(pr: Pr, viewer: Viewer, since: IsoTime | null = null): Review[] {
   const members = viewer.teamMembers;
   return pr.reviews.filter((review) => {
+    if (since !== null && review.submittedAt <= since) {
+      return false;
+    }
     if (review.state === 'PENDING' || sameLogin(review.author, viewer.login) || isPrOwner(pr, review.author) || isBot(review.author)) {
       return false;
     }
@@ -160,9 +163,9 @@ function uniqueAuthors(reviews: Review[]): string[] {
  * an approval or a change request counts; a comment alone does not cover
  * it. On anyone else's PR any review counts.
  */
-function homeTeamTakenBy(pr: Pr, viewer: Viewer): string[] {
+function homeTeamTakenBy(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const byTeammate = ownedByTeammate(pr, viewer);
-  const covering = teammateReviews(pr, viewer).filter(
+  const covering = teammateReviews(pr, viewer, since).filter(
     (review) => !byTeammate || review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED',
   );
   return uniqueAuthors(covering);
@@ -174,9 +177,10 @@ function homeTeamTakenBy(pr: Pr, viewer: Viewer): string[] {
  * routing team's members are not known, so anyone's review of the head
  * takes its request (2026-09-30).
  */
-function headReviewers(pr: Pr, viewer: Viewer): string[] {
+function headReviewers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const reviews = pr.reviews.filter(
     (review) =>
+      (since === null || review.submittedAt > since) &&
       review.state !== 'PENDING' &&
       review.state !== 'DISMISSED' &&
       review.commitOid === pr.headOid &&
@@ -229,11 +233,12 @@ function routingOwedMore(home: ReviewRequest, routing: ReviewRequest): boolean {
 /**
  * Who picked up the team request, each once, in review order: teammates
  * for a home team (see `homeTeamTakenBy`), anyone who reviewed the head for
- * a routing team.
+ * a routing team. With `since` only reviews submitted after that time
+ * count: a team asked again after a teammate's review is open again.
  */
-export function teamRequestTakenBy(pr: Pr, viewer: Viewer): string[] {
-  const home = homeTeamPending(pr, viewer) ? homeTeamTakenBy(pr, viewer) : [];
-  const routing = routingTeamPending(pr, viewer) ? headReviewers(pr, viewer) : [];
+export function teamRequestTakenBy(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
+  const home = homeTeamPending(pr, viewer) ? homeTeamTakenBy(pr, viewer, since) : [];
+  const routing = routingTeamPending(pr, viewer) ? headReviewers(pr, viewer, since) : [];
   const logins = [...home];
   for (const login of routing) {
     if (!logins.some((known) => sameLogin(known, login))) {

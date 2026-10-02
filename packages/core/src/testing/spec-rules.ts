@@ -997,7 +997,8 @@ export function expectedRequestGoneRead(input: QuietReadSpecInput): RequestGoneR
     return { kind: 'skip', why: 'no_request' };
   }
   const pending = pendingRequest(pr, viewer);
-  if (pending !== null && pending !== 'team_taken') {
+  const takenSinceRequest = pending === 'team_taken' && teamTakers(pr, viewer, requestAt).length > 0;
+  if (pending !== null && !takenSinceRequest) {
     return { kind: 'skip', why: 'request_stands' };
   }
   const others = othersEvents(input);

@@ -25,7 +25,7 @@ import { isOwnEvent, lastTouch, READING_TOUCH_KINDS, type TouchKind } from './la
 import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
 import { isViewerSubject } from './mentions.ts';
 import { eventsAsOf, prAsOf, userStateAsOf } from './pr-as-of.ts';
-import { reviewRequest, reviewRequestTarget } from './review-request.ts';
+import { reviewRequest, reviewRequestTarget, teamRequestTakenBy } from './review-request.ts';
 import { sawEverythingBefore } from './saw-before-acting.ts';
 import type { CappedList, EventKind, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
@@ -490,7 +490,9 @@ export function requestGoneReadCheck(input: QuietReadInput): RequestGoneReadChec
     return { kind: 'skip', why: 'no_request' };
   }
   const request = reviewRequest(pr, viewer);
-  if (request !== null && request !== 'team_taken') {
+  // A team asked again after a teammate's review stands: only a review after the newest request took it.
+  const taken = request === 'team_taken' && teamRequestTakenBy(pr, viewer, requestAt).length > 0;
+  if (request !== null && !taken) {
     return { kind: 'skip', why: 'request_stands' };
   }
   const others = events.filter((event) => !isOwnEvent(event, viewer));

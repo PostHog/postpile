@@ -646,6 +646,17 @@ describe('requestGoneReadCheck', () => {
     expect(requestGoneReadCheck(facade(answered))).toEqual({ kind: 'mark', actors: ['greptile-apps[bot]', 'lyra', 'paul'] });
   });
 
+  it("leaves it when the team was asked again after a teammate's older review", () => {
+    const asked = (reviewAt: string, askedAgainAt: string) =>
+      facadePr({
+        reviewerTeams: [home],
+        timeline: [request(home, 'rq-devex'), makeTimelineItem({ id: 'rq-again', actor: 'assign-bot[bot]', subject: home, at: askedAgainAt })],
+        reviews: [makeReview({ id: 'r-lyra', author: 'lyra', state: 'APPROVED', submittedAt: reviewAt })],
+      });
+    expect(requestGoneReadCheck(facade(asked(day(13), day(14, 6))))).toEqual({ kind: 'skip', why: 'request_stands' });
+    expect(requestGoneReadCheck(facade(asked(day(14, 13), day(13))))).toEqual({ kind: 'mark', actors: ['greptile-apps[bot]', 'lyra', 'paul'] });
+  });
+
   it('leaves it for a person the events agent has not judged quiet', () => {
     expect(requestGoneReadCheck(facade(facadePr(), { unjudged: 'c-paul' }))).toEqual({ kind: 'skip', why: 'not_judged' });
   });

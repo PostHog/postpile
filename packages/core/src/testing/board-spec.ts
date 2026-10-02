@@ -429,18 +429,20 @@ const requestGonePrSpecArb: fc.Arbitrary<PrSpec> = fc
     byBot: fc.boolean(),
     answer: fc.constantFrom('unrequest', 'approve', 'comment'),
     reReview: fc.boolean(),
+    askedAgain: sometimes(1, 4),
     more: fc.array(stepArb, { maxLength: 3 }),
     end: endArb,
     judged: sometimes(3, 1),
     staleSnapshot: sometimes(1, 6),
   })
-  .map(({ target, byBot, answer, reReview, more, ...picked }) => {
+  .map(({ target, byBot, answer, reReview, askedAgain, more, ...picked }) => {
     const answers: Record<typeof answer, StepSpec> = {
       unrequest: { kind: 'unrequest', target },
       approve: { kind: 'review', by: 'teammate', state: 'APPROVED', body: null },
       comment: { kind: 'review', by: 'teammate', state: 'COMMENTED', body: 'plain' },
     };
-    const steps: StepSpec[] = [{ kind: 'request', target, byBot }, answers[answer], ...(reReview ? RE_REVIEW_STEPS : []), ...more];
+    const askAgain: StepSpec[] = askedAgain ? [{ kind: 'request', target, byBot: false }] : [];
+    const steps: StepSpec[] = [{ kind: 'request', target, byBot }, answers[answer], ...askAgain, ...(reReview ? RE_REVIEW_STEPS : []), ...more];
     return { ...QUIET_PR, steps, ...picked };
   });
 
