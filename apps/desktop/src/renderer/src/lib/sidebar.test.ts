@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Topic, TopicListItem, TopicPlacement } from '@postpile/core';
-import { areaFolds, foldedSummary, isNotSorted, otherTopicsGroups, rowsWhileFolded, startsOpen } from './sidebar.ts';
+import { bucketItems, dealtItems, sidebarBuckets } from './queues.ts';
+import { allDealtNote, areaFolds, dealtLineLabel, foldedSummary, isNotSorted, otherTopicsGroups, otherWorkStartsOpen, rowsWhileFolded, startsOpen } from './sidebar.ts';
 
 function topic(id: string, area: string | null): Topic {
   const at = '2026-09-27T00:00:00.000Z';
@@ -14,6 +15,7 @@ interface Extra {
   urgent?: number;
   byYou?: number;
   moves?: number;
+  quiet?: boolean;
 }
 
 function item(id: string, extra: Extra = {}): TopicListItem {
@@ -30,7 +32,8 @@ function item(id: string, extra: Extra = {}): TopicListItem {
     openTiles: 0,
     totalTiles: 1,
     yourMoves: Array.from({ length: extra.moves ?? 0 }, () => ({ move: 'review' as const, text: 'Review' })),
-    unseenMergeTiles: 0, quiet: false,
+    unseenMergeTiles: 0,
+    quiet: extra.quiet ?? false,
     queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 1 }, byYou: extra.byYou ?? 0, byTeam: 0, changesAddressed: 0 },
     section: 'other_work',
     people: [],
@@ -87,5 +90,37 @@ describe('Other work folds', () => {
     expect(foldedSummary(items)).toBe('· 2 unread · 1 urgent');
     expect(foldedSummary([item('calm', { unread: 1 })])).toBe('· 1 unread');
     expect(foldedSummary([item('quiet')])).toBe('');
+  });
+});
+
+describe('dealt-with topics', () => {
+  it('say how many hide behind the line, and when a whole section is dealt with', () => {
+    expect(dealtLineLabel(3, false)).toBe('+ 3 dealt with');
+    expect(dealtLineLabel(3, true)).toBe('Hide 3 dealt with');
+    expect(allDealtNote([], [item('a', { quiet: true }), item('b', { quiet: true })])).toBe('· all 2 dealt with');
+    expect(allDealtNote([item('news', { unread: 1 })], [item('a', { quiet: true })])).toBe('');
+    expect(allDealtNote([], [])).toBe('');
+  });
+
+  it('keep only the selected topic while the line is folded', () => {
+    const dealt = [item('a', { quiet: true }), item('b', { quiet: true })];
+    expect(ids(rowsWhileFolded(dealt))).toEqual([]);
+    expect(ids(rowsWhileFolded(dealt, 'b'))).toEqual(['b']);
+  });
+
+  it('leave the area folds of Other work, so a fold with nothing left goes and areas count listed topics only', () => {
+    const buckets = sidebarBuckets(
+      [item('ci-a', { area: 'CI', unread: 1 }), item('ci-b', { area: 'CI', quiet: true }), item('bill-a', { area: 'Billing', quiet: true }), item('bill-b', { area: 'Billing', quiet: true }), item('sdk', { area: 'SDK', unread: 1 })],
+      true,
+    );
+    expect(areaFolds(bucketItems(buckets, 'other_work')).map((fold) => [fold.label, ids(fold.items)])).toEqual([['More', ['ci-a', 'sdk']]]);
+    expect(ids(dealtItems(buckets, 'other_work'))).toEqual(['ci-b', 'bill-a', 'bill-b']);
+  });
+
+  it("open Other work by the listed topics only, and keep it open while the selected topic is behind the line", () => {
+    const dealt = [item('mine-done', { quiet: true, byYou: 1 })];
+    expect(otherWorkStartsOpen([], dealt, null)).toBe(false);
+    expect(otherWorkStartsOpen([item('news', { unread: 1 })], dealt, null)).toBe(true);
+    expect(otherWorkStartsOpen([], dealt, 'mine-done')).toBe(true);
   });
 });

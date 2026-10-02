@@ -3892,25 +3892,61 @@ sits under Your team owns. Real case: Egress, where the agent named
 pauldambra, who led one wave. Picked up at each topic's next dossier
 update; no one-time tidy. A manual pick beats it like any automatic driver.
 
-## Quiet rows (2026-10-02)
+## Dealt-with topics leave the list (2026-10-02)
 
-Sidebar topic rows where nothing waits on the viewer are dimmed, so the rows
-that need something (unread, or a your-move chip like "Merge" or "Address
-changes") stand out. Like read and unread channels in Slack, one step
-further. Why: owner, looking at the new sections: "whew, everything looks
-dealt with". Read rows that still need the viewer should not look the same as
-rows that are done.
+PostPile is an inbox-clearing tool. A topic where nothing waits on the viewer
+is dealt with, and like Gmail's archive, Superhuman's Done or GitHub
+notifications' Done it leaves the list until something new arrives. Why:
+owner, looking at the new sections: "whew, everything looks dealt with", and
+clicking a dealt-with topic only to find nothing to do is unsatisfying. This
+grew out of dimming those rows (quiet rows, same day): dimmed rows still took
+the space and the clicks.
+
+Dealt with is not Archive. Archive means the topic is over (every PR merged
+or closed, then quiet days); a dealt-with topic is still live, with open PRs
+that need nothing from the viewer right now, and comes back with the next news.
 
 **Rule** (`topicQuiet` in core `topic-sections.ts`, shipped as
-`TopicListItem.quiet`; the engine and FakeEngine fill it, the renderer only
-styles it): quiet when the topic has no unread tile, no your-move (the same
-`yourMoves` the chip shows, so "Merge, it is approved" counts although it
-never makes a topic urgent), no unseen merge without the viewer's review, and
-it sits in no ask section (Needs reply, Changes you requested, To review,
-Team mentioned). Archive rows are never quiet: the drawer is its own context.
+`TopicListItem.quiet`; the engine and FakeEngine fill it): quiet when the
+topic has no unread tile, no your-move (the same `yourMoves` the chip shows,
+so "Merge, it is approved" counts although it never makes a topic urgent), no
+unseen merge without the viewer's review, and it sits in no ask section
+(Needs reply, Changes you requested, To review, Team mentioned). Archive rows
+are never quiet: the drawer is its own context.
 
-**Look.** Name and summary in the faint ink, faces and the PR state icon at
-45% opacity, hover brings the name back to the read ink. The selected row is
+**Where they go** (renderer layout, `sidebarBuckets` with `hideDealt` in
+`lib/queues.ts`, labels in `lib/sidebar.ts`): in the owner sections (You
+drive, Your team owns, Other work) quiet topics leave the list. Each such
+section ends with one muted line "+ N dealt with" that opens them as dimmed
+rows and reads "Hide N dealt with" while open; folded by default, as a
+session fold like the others. A section where every topic is dealt with
+shows only its header with "· all N dealt with" and the line. In Other work
+the quiet topics come out of the area folds and gather behind the
+section's one line at its end; area folds count and show the rest only (a
+fold with nothing left goes). Other work's own default (open for your PR,
+move or unread) and its urgent rows while folded look at the rest only.
+
+**Not hidden:**
+
+- The ask sections (a topic there is never quiet), Other topics with FYI,
+  and the Archive.
+- The selected topic. It holds its place until the selection moves (the
+  held place of "Actions act on what you look at"): a topic that turns quiet
+  while selected stays in its spot and slides behind the line once the
+  selection moves; one picked from behind the line stays there, also when
+  the line folds. The quiet topics have their own held-place bucket per
+  section, so this needs no special case.
+- Everything while the search or a "my PRs" / "team PRs" filter is on:
+  filters are for finding things, so quiet rows show in place, dimmed.
+
+A hidden topic that gets news (unread, a your-move, an ask) is not quiet any
+more and comes back to its section; the usual slide covers it. Unread
+counts, the footer totals and "N topics without your PRs are hidden" stay as
+they were: a dealt-with topic is not hidden by the filter.
+
+**Look.** Quiet rows (behind the open line, and in place while filtering):
+name and summary in the faint ink, faces and the PR state icon at 45%
+opacity, hover brings the name back to the read ink. The selected row is
 never dimmed, and nothing is dimmed while the search filters.
 
 ## Tiles hold still (2026-10-01)

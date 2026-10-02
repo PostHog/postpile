@@ -491,7 +491,16 @@ folds (`areaFolds`, "More" for single-topic areas), their default
 (`rowsWhileFolded`, urgent unread) and its header summary; the selected topic counts like an urgent row (a fold holding it stays open, a folded one keeps its row); Other topics
 splits into unplaced rows ("not sorted yet" without a dossier) and the FYI
 fold. The queue filters still match a topic by any PR. Fold choices are
-local UI state for the session; FYI and the Archive start folded. The Archive drawer (retired topics, `useFinishedTopics`) hides while search
+local UI state for the session; FYI and the Archive start folded.
+Dealt-with topics (core `quiet`) leave You drive, Your team owns and Other
+work (DESIGN.md "Dealt-with topics leave the list"): `sidebarBuckets(items,
+hideDealt)` puts them in a `dealt:<section>` bucket after their section
+(`dealtItems`), so `useHeldPlace` keeps a selected row that turns quiet or
+gets news; `DealtLine` ("+ N dealt with", `dealtLineLabel`, fold key
+`dealtKey`) opens them, folded it keeps only the selected one
+(`rowsWhileFolded`), `allDealtNote` marks an all-dealt header, and Other
+work's default is `otherWorkStartsOpen`. `hideDealt` is off while the
+search or a queue filter narrows. The Archive drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so
 `App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The "Topics with
 any PR | my PRs | team PRs" switch (`QueueFilters`) is plain UI state in

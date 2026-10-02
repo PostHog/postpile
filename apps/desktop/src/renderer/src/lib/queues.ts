@@ -84,22 +84,60 @@ function changesRequestedFirst(items: TopicListItem[]): TopicListItem[] {
 }
 
 /**
+ * The owner sections whose dealt-with topics (core's `quiet`) leave the list
+ * for a "+ N dealt with" line (DESIGN.md "Dealt-with topics leave the
+ * list"). The asks never hold a quiet topic; Other topics and the Archive
+ * keep theirs.
+ */
+const DEALT_SECTIONS: TopicSection[] = ['you_drive', 'team_owns', 'other_work'];
+
+/** A dealt-with topic in an owner section: it waits behind the section's "+ N dealt with" line while nothing narrows the list. */
+export function hiddenAsDealt(item: TopicListItem): boolean {
+  return item.quiet && DEALT_SECTIONS.includes(item.section);
+}
+
+/** The bucket key of a section's dealt-with topics, also its fold key. */
+export function dealtKey(section: TopicSection): string {
+  return `dealt:${section}`;
+}
+
+/**
  * Each topic once, in the section core put it in (`TopicListItem.section`):
  * every section in order, empty ones too, so a held row has its list to sit
  * in (`holdPlace`). The Archive is left out: its drawer lists retired
  * topics. Topics keep the API order (core's order inside a section), except
- * that Changes you requested lists addressed ones first.
+ * that Changes you requested lists addressed ones first. With `hideDealt`,
+ * an owner section's quiet topics go to their own bucket right after it
+ * (`dealtKey`), so the held place also keeps a row that turns quiet, or gets
+ * news, while it is selected.
  */
-export function sidebarBuckets(items: TopicListItem[]): Bucket<TopicListItem>[] {
-  return SECTION_ORDER.filter((section) => section !== 'archive').map((section) => {
+export function sidebarBuckets(items: TopicListItem[], hideDealt: boolean): Bucket<TopicListItem>[] {
+  return SECTION_ORDER.filter((section) => section !== 'archive').flatMap((section) => {
     const inSection = items.filter((item) => item.section === section);
-    return { key: section, items: section === 'changes_requested' ? changesRequestedFirst(inSection) : inSection };
+    const ordered = section === 'changes_requested' ? changesRequestedFirst(inSection) : inSection;
+    if (!hideDealt || !DEALT_SECTIONS.includes(section)) {
+      return [{ key: section, items: ordered }];
+    }
+    return [
+      { key: section, items: ordered.filter((item) => !hiddenAsDealt(item)) },
+      { key: dealtKey(section), items: ordered.filter(hiddenAsDealt) },
+    ];
   });
+}
+
+/** The topics of the bucket with this key, none when it is not there. */
+function itemsOf(buckets: Bucket<TopicListItem>[], key: string): TopicListItem[] {
+  return buckets.find((bucket) => bucket.key === key)?.items ?? [];
 }
 
 /** The topics of one section in the buckets, none when it is not there. */
 export function bucketItems(buckets: Bucket<TopicListItem>[], section: TopicSection): TopicListItem[] {
-  return buckets.find((bucket) => bucket.key === section)?.items ?? [];
+  return itemsOf(buckets, section);
+}
+
+/** A section's dealt-with topics in the buckets, none when nothing is hidden. */
+export function dealtItems(buckets: Bucket<TopicListItem>[], section: TopicSection): TopicListItem[] {
+  return itemsOf(buckets, dealtKey(section));
 }
 
 /** A sidebar row's topic id, for `holdPlace`. */
