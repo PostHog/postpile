@@ -39,7 +39,6 @@ import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedF
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { toolsNotice } from './lib/tools.ts';
-import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
@@ -367,7 +366,7 @@ export function App() {
               onSelect={(topicId) => {
                 const item = items.find((candidate) => candidate.topic.id === topicId);
                 if (item) {
-                  sendTelemetry('topic_opened', { section: topicTelemetrySection(item.queues) });
+                  sendTelemetry('topic_opened', { section: item.section });
                 }
                 go({ pane: 'topic', topicId, tileId: null, prKey: null });
               }}

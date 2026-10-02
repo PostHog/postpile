@@ -1753,9 +1753,9 @@ work it is.
   its area. Consolidation sees areas and live tile counts; it may propose
   `area_merge` (topic_proposal with `from_area`, applied on accept) and
   splits for topics that keep more than 12 live tiles.
-- **UI**: inside the sidebar's "Other topics" section (see "Queue
-  sections") the groups are Needs you (any relation) / Your team (by area)
-  / Routed to you / FYI, the last two folded by default. The topic header
+- **UI**: the relation no longer picks a sidebar group (since 2026-10-02,
+  see "Ownership sections"): only FYI keeps its fold inside Other topics.
+  The relation chip stays on the header. The topic header
   says "Owned by X · you're here because Y". Tiles: snoozed and done folded
   into one row each.
 
@@ -2120,7 +2120,7 @@ counted as a teammate's.
   `__typename` and login, normalizes it like the PR fetch (`actorLogin`)
   and asks `isBotAuthor`, the same rule `prOwners` uses, so automation on a
   user account (renovate) counts and a deleted author does not. Its reason
-  reads "agent PR assigned to you" (AU, "Your PR", My PRs). A hit a
+  reads "agent PR assigned to you" (AU, "Your PR", the my PRs filter). A hit a
   person opened is found as `assigned`, "assigned to you": code AS, so
   "For you" like an `assign` notification, but the author still owns it
   (tier by author and requests: team for a teammate's PR, To review with a
@@ -2659,7 +2659,8 @@ got 57% of his reviews through the team's request. 46 of 236 org members
 are in no team. So each of the viewer's teams gets a role:
 
 - **home**: behaves as every team did before. Members are teammates
-  (`teamMembers`, Team's PRs, the Team filter, faces in the sea team pill).
+  (`teamMembers`, the `team` tier, the team PRs filter, Your team owns,
+  faces in the sea team pill).
   A home team request on a teammate's PR is `team_for_you`; the sea "For
   <slug>" chip and band; human mentions of it are loud.
 - **routing**: only its review requests and mentions matter. Members are
@@ -2669,7 +2670,8 @@ are in no team. So each of the viewer's teams gets a role:
   `team_for_you`. Taken once anyone but the author and bots reviewed the
   head. Neutral "For <slug>" chip, no band. Its mentions are FYI (quiet,
   `ruleLoudness` row "routing team mention"), so they never ask.
-- **No home team is valid**: no teammates, nothing in Team's PRs, the Team
+- **No home team is valid**: no teammates, no `team` tier, Your team owns
+  stays empty, the Team
   filter hides (`ViewerView.homeTeams` empty), no teammate faces. For
   people like the engineer above that is "teams off".
 - **Bot-made review requests count like human ones** (as before, see "A
@@ -2741,11 +2743,11 @@ review on someone else's PR asks for changes, drafts included; added
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
 A personal request and a team request on a teammate's PR (see whose turn)
 are `to_review` and checked before `team` (2026-09-28): a review owed to a
-teammate is a review, not "Team's PRs". A teammate's PR whose team request
+teammate is a review, not the `team` tier. A teammate's PR whose team request
 another teammate covered stays `team`; routed team requests stay
 `to_review` after the authorship checks. A routing team's open request on
 a teammate's PR is `to_review` too, before `team` (2026-09-30): a review
-owed, not Team's PRs. Without a home team nothing is `team`. Inside To review the topic column
+owed, not `team`. Without a home team nothing is `team`. Inside To review the topic column
 puts "For you" tiles (personal and teammate team requests) before routed
 team requests (`tilesInTierOrder` in the renderer).
 Addressed your changes (see whose turn) is `changes_requested` (was
@@ -2776,7 +2778,7 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   information uses `--hint` (#666b79: 5.3:1 on white, 4.7:1 on the
   sidebar): the why-here line ("Owner not known · you're here because…"),
   out-of-date notes, "Dossier v3", people's roles, the sidebar's fold
-  labels (Routed to you, FYI, Finished), "Earlier activity", empty-state
+  labels (area folds, More, FYI, Archive), "Earlier activity", empty-state
   lines, stale memory lines and hover actions (Why?, Recheck, Wrong,
   Forget). Faint stays for decoration: separators, chevrons, the quote
   mark, ages next to a louder line, done tiles. Light theme only; there is
@@ -2878,18 +2880,17 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
 The sidebar lists topics under ghatchup's PR queues (mockup "B with
 avatars and filters", QueuesB2).
 
-- **Sections**, in order: Needs reply, Changes you requested, My PRs,
-  Team's PRs, To review, Team mentioned (one per `prTier`), then Other
-  topics. Each lists topics, not PRs, and **each topic once in the whole
-  sidebar** (2026-09-29): in the highest section where it has a PR, with
-  that section's count on the row; a mixed topic follows the work, so your
-  own PR never lifts it (since 2026-10-01, see "Topics with: the sidebar
-  filter"). Other topics holds topics with only
-  `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
-  Routed, FYI; Routed and FYI folded). The "Topics with" switch (any PR,
-  my PRs, team PRs) matches a topic by any of its PRs. Section tint: honey
-  for reply, changes and review, ink for mine, sea for team and team
-  mentioned, grey for other.
+- **Sections**, in order (since 2026-10-02, see "Ownership sections"):
+  Needs reply, Changes you requested, To review, Team mentioned (the asks,
+  one per ask tier), then You drive, Your team owns, Other work, Other
+  topics, and the Archive drawer. Each lists topics, not PRs, and **each
+  topic once in the whole sidebar** (2026-09-29), in the section core gives
+  it (`topicSection`). Until 2026-10-02 My PRs and Team's PRs were sections
+  too, and a topic sat in the highest tier any PR other than the viewer's
+  own gave it. The "Topics with" switch (any PR, my PRs, team PRs) matches
+  a topic by any of its PRs. Section tint: honey for reply, changes and
+  review, ink for You drive, sea for Your team owns and Team mentioned,
+  grey for Other work and Other topics.
   History: until 2026-09-29 a topic sat in every section where it had a PR
   of that tier. That came with the picked mockup (QueuesB2, 2026-09-28) as a
   side effect of per-PR sections over per-topic rows, not as a decision;
@@ -2905,12 +2906,13 @@ avatars and filters", QueuesB2).
   2026-09-30); rows still waiting on the author follow, quiet. The topic column does the same with the section's tiles
   (your move first, `tilesInTierOrder`). Before, only the
   addressed case had a section (To review), and a change request the author
-  had not touched fell to Team's PRs or Other topics.
-- **Authorship**: the viewer's own PR (`prOwners`: also a bot's PR assigned
-  to them, 2026-09-30) stays under My PRs whatever area or
-  team the code belongs to; only Needs reply ranks above it (as in
-  ghatchup). An area is a label for where the code lives and never moves a
-  topic between sections.
+  had not touched fell to Team's PRs or Other topics (both gone since).
+- **Authorship** no longer picks a section (2026-10-02): who drives the
+  topic does. The viewer's own PR (`prOwners`: also a bot's PR assigned to
+  them, 2026-09-30) sorts its topic first inside whatever section it sits
+  in, and the my PRs filter finds it. An area is a label for where the code
+  lives and never moves a topic between sections; only Other work folds by
+  area.
 - **Archive drawer** (2026-09-29 as "Finished", renamed 2026-10-01): under
   the sections, a folded "Archive" group header lists retired topics that
   still take new PRs (`takesNewPrs`: projects for 30 days, standing topics
@@ -3015,8 +3017,8 @@ avatars and filters", QueuesB2).
   merged; 2 need review, 1 approved".
 - **Breadcrumb = sidebar section** (`TopicDetail.section`, 2026-10-01):
   "Topics › To review › area", with the section's label and coloured dot as
-  the sidebar draws them; Other topics for a topic without a section,
-  Finished for a retired one. It used to say "Needs you" or "Quiet" from
+  the sidebar draws them; Archive for a retired one (core gives `archive`
+  since 2026-10-02). It used to say "Needs you" or "Quiet" from
   `TopicGroup`, which only matches a subgroup inside Other topics.
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
@@ -3702,14 +3704,14 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
   without a home team, as before. Reply and Review are gone: the Needs reply
   and To review sections are those.
 - **The sections stay while it narrows**: the switch says which topics,
-  the sections still say what needs you. Under "team PRs" a topic can sit
-  under To review or Team's PRs, by what it asks of you.
-- **A mixed topic follows the work** (`topicSection` in core, on
-  `TopicListItem.section` and `TopicDetail.section` since 2026-10-01; it was
-  `topicSectionTier` in the renderer): its section is the
-  highest any PR other than your own gives it; My PRs only when nothing else
-  in it asks for a section. Your PR next to a teammate's review request puts
-  the topic under To review; next to FYI PRs only, it stays under My PRs.
+  the sections still say what needs you and whose topic it is. Under "team
+  PRs" a topic can sit under To review or Your team owns, by what it asks
+  of you and who drives it.
+- **A mixed topic follows the work** (2026-10-01, replaced 2026-10-02 by
+  "Ownership sections"): a topic's section was the highest tier any PR
+  other than your own gave it, My PRs only when nothing else asked for one.
+  It let a teammate's plain PR pull the viewer's own project under Team's
+  PRs.
 - **What it hid is said**: "11 topics without your PRs are hidden · Show
   all" under the sections. Other topics narrow with it; Finished steps
   aside, as with search (finished topics have no open PRs).
@@ -3719,6 +3721,85 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
   no row chips, no banners.
 - Usage telemetry keeps `queue_filter_changed`; its `filter` is now `mine`,
   `team` or `none`.
+
+## Ownership sections (2026-10-02)
+
+**The problem.** Sections came from PR tiers: a topic sat under the highest
+tier any PR other than the viewer's own gave it (`topicSection` of
+2026-10-01), so "My PRs" and "Team's PRs" said whose PRs a topic held, not
+whose topic it was. Real case: the viewer drives "Visual review flakiness
+triage tooling" (the header said "you're here because you drive it"), has an
+open PR in it, and a teammate has one open PR in it (tier `team`, which asks
+nothing of the viewer). The topic sat under Team's PRs. The rule was
+lopsided as well: a teammate-driven topic with the viewer's PR sat under
+Team's PRs, another team's topic with the viewer's PR under My PRs.
+
+**The data** (owner's DB, 107 active topics, every one with a driver): the
+viewer drives 25, a teammate 11, someone outside the team 71 (54 of them
+reached the viewer as routed reviews). 12 topics held the viewer's open
+PR, 5 of them driven by others.
+
+**Precedence** (`topicSection` in core `topic-sections.ts`, first match
+wins; the engine, FakeEngine, the row, the breadcrumb and telemetry read the
+same value):
+
+1. Retired: Archive.
+2. An open ask, most urgent first: Needs reply, Changes you requested (any
+   open change request, addressed or not), To review, Team mentioned, as
+   the PR tiers of the same name. An ask pulls a topic up only while it is
+   current; once it clears the topic goes back to its owner section. `mine`
+   and `team` tiers ask nothing and pull nothing up.
+3. FYI (the dossier's relation) without stronger evidence: Other topics,
+   FYI fold. Stronger is the viewer's open PR or move, or the viewer or a
+   teammate driving it.
+4. The viewer drives it: **You drive**.
+5. A teammate drives it (a member of any home team, `Viewer.teamMembers`):
+   **Your team owns**.
+6. Someone else drives it: **Other work**.
+7. Nobody known to drive it: the owner team. Any home team: Your team owns;
+   another known team: Other work; unknown: Other topics.
+
+The driver comes in as a relation (`driverRelation(topic.driver, viewer)`),
+so the driver picker (next PR: You, a teammate, Your team, Someone outside
+your team, Reset) can pass the user's choice instead of the agent's.
+
+**The owner team is only a fallback.** Codex's review (gpt-6.1-sol) pointed
+out how weak the signal is: `relationSignals` names the viewer's first home
+team as owner as soon as the viewer wrote a PR in the topic or drives it.
+So driver beats owner team: Alerting V2 (driven outside the team) and
+Hogland observability leave Your team owns for Other work, and a
+teammate-driven topic owned by another team (Python 3.14 upgrade soak)
+stays under Your team owns. The owner team counts as home when it is any
+of the home teams, not only the first.
+
+**No dossier yet.** A real ask or a known driver places the topic as above
+(without a dossier the sync names the most frequent PR author as driver).
+With neither it goes to Other topics with a small, muted "not sorted yet"
+marker. "Involved" is positive evidence only: the viewer's open PR or
+move, a known driver, an owner team, or a team or routed relation; a
+missing relation does not count. A topic with a dossier but no driver and
+no owner team also stays in Other topics, without the marker.
+
+**Inside a section** core orders the topics (`compareInSection`): the
+viewer's open PR or move first, then unread ones, then the urgency order as
+before. Changes you requested still lists re-reviews first.
+
+**Folds.** You drive and Your team owns are short lists without folds.
+Other work folds and folds by area: areas with two or more topics get a
+fold, alphabetically; single-topic areas and topics without an area gather
+under "More". Other work and each area fold start open when they hold the
+viewer's open PR, a move of theirs or an unread topic, else folded; a
+manual fold is kept for the session. While folded, urgent (coral) unread
+rows stay visible under the header and the header says "· 4 unread · 1
+urgent". The defaults are worked out on the topics the "Topics with"
+switch leaves, so the switch no longer opens these folds; the search still
+opens every fold. FYI and the Archive start folded as before.
+
+**What stays.** The "Topics with any PR | my PRs | team PRs" switch
+answers "where are my PRs" across all sections; sections answer "whose
+topic is this". Section names read as sentences and never say "PRs". The
+header's relation chip (team / routed / FYI) stays and still says why the
+topic reached the viewer.
 
 ## Tiles hold still (2026-10-01)
 
@@ -4969,7 +5050,7 @@ topic names are never event props.
    it at most once an hour after a sync or a poll cycle, window end kept in
    meta `pings_summarized_at`; nothing when every count is 0, the first call
    only starts the clock; no per-notification events), `search_used` (throttled, query length bucket only),
-   `queue_filter_changed`, `topic_opened` (section), `topic_archived` ("Archive
+   `queue_filter_changed`, `topic_opened` (section: core's `TopicSection`, since 2026-10-02 `you_drive`, `team_owns`, `other_work`, `other_topics` instead of `my_prs`, `team_prs`, `other`), `topic_archived` ("Archive
    now" on a topic with nothing left), `update_pill_clicked`
    (the title bar pill opened) / `update_later_clicked`, `update_bar_shown`
    (releases_behind capped at 10, hours_behind rounded; once per app run) /

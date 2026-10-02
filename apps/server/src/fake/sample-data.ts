@@ -49,6 +49,13 @@ const TOPIC = {
   warmer: 'topic-cache-warmer',
   sdk: 'topic-sdk-uploads',
   runners: 'topic-runner-images',
+  quarantine: 'topic-flaky-quarantine',
+  egress: 'topic-egress-allowlist',
+  replayStorage: 'topic-replay-storage',
+  replayPlayer: 'topic-replay-player',
+  usageExports: 'topic-usage-exports',
+  alertPresets: 'topic-alert-presets',
+  docsSearch: 'topic-docs-search',
 };
 
 // Trunk's status comment as trunk-io[bot] edits it (DESIGN.md "Merge queue"): an en space after the emoji.
@@ -154,6 +161,75 @@ function buildTopics(clock: SampleClock): Topic[] {
       tailoring: '',
       driver: SAMPLE_VIEWER,
       userRole: 'driver',
+    }),
+    // The ownership sections (DESIGN.md "Ownership sections"): sol, a teammate, drives it and you have a PR in it, so Your team owns.
+    sampleTopic(clock, {
+      id: TOPIC.quarantine,
+      area: 'CI',
+      name: 'Flaky test quarantine',
+      summary: 'sol moves known flaky tests into a quarantine job that never blocks a merge. Your PR adds the retry report.',
+      tailoring: '',
+      driver: 'sol',
+      userRole: 'stakeholder',
+    }),
+    // A standing topic of your team with no single driver: the owner team places it under Your team owns.
+    sampleTopic(clock, {
+      id: TOPIC.egress,
+      area: 'Networking',
+      name: 'Egress allowlist',
+      summary: 'Outbound hosts the CI runners may reach. Changes come in one at a time.',
+      tailoring: '',
+      driver: null,
+      userRole: 'watcher',
+      kind: 'standing',
+    }),
+    // Other work: driven outside your team. Two Replay topics share an area fold; the rest gather under More.
+    sampleTopic(clock, {
+      id: TOPIC.replayStorage,
+      area: 'Replay',
+      name: 'Replay storage tiering',
+      summary: 'pia moves recordings older than 30 days to cold storage. A question about CI disk space came up.',
+      tailoring: '',
+      driver: 'pia',
+      userRole: 'watcher',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.replayPlayer,
+      area: 'Replay',
+      name: 'Replay player memory',
+      summary: 'gus trims the player buffer so long recordings stop crashing the tab.',
+      tailoring: '',
+      driver: 'pia',
+      userRole: 'watcher',
+    }),
+    // omar drives it; the owner signal says your team only because you wrote a PR here, so it stays Other work.
+    sampleTopic(clock, {
+      id: TOPIC.usageExports,
+      area: 'Billing',
+      name: 'Usage report exports',
+      summary: 'omar adds CSV exports for usage reports. Your PR moves the export job onto the shared runners.',
+      tailoring: '',
+      driver: 'omar',
+      userRole: 'stakeholder',
+    }),
+    sampleTopic(clock, {
+      id: TOPIC.alertPresets,
+      area: 'Alerting',
+      name: 'Alert threshold presets',
+      summary: 'gus adds presets for common alert thresholds.',
+      tailoring: '',
+      driver: 'gus',
+      userRole: 'watcher',
+    }),
+    // No dossier and no driver yet: Other topics, "not sorted yet".
+    sampleTopic(clock, {
+      id: TOPIC.docsSearch,
+      area: null,
+      name: 'Docs search index',
+      summary: '',
+      tailoring: '',
+      driver: null,
+      userRole: 'watcher',
     }),
     // Every PR merged and quiet for 2 days: a sync moved it to the Archive drawer.
     {
@@ -418,6 +494,39 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       size: [2, 9, 3], checks: 'SUCCESS', openedHoursAgo: 6, reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 2]],
       comments: [{ id: 'issuecomment-1978-trunk', author: 'trunk-io[bot]', body: TRUNK_WAITING, hoursAgo: 1.8, editedHoursAgo: 0.2 }],
     }),
+    // The ownership sections' samples.
+    samplePr(clock, {
+      number: 1980, title: 'Run quarantined tests in their own job', author: 'sol', state: 'OPEN',
+      size: [64, 12, 3], checks: 'SUCCESS', openedHoursAgo: 10,
+    }),
+    samplePr(clock, {
+      number: 1981, title: 'Report retries of quarantined tests', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [48, 4, 2], checks: 'PENDING', openedHoursAgo: 4, reviewerUsers: ['sol'],
+    }),
+    samplePr(clock, {
+      number: 1982, title: 'Allow the Depot cache host', author: 'nell', state: 'OPEN',
+      size: [3, 0, 1], checks: 'SUCCESS', openedHoursAgo: 9,
+    }),
+    samplePr(clock, {
+      number: 1984, title: 'Move recordings older than 30 days to cold storage', author: 'pia', state: 'OPEN',
+      size: [210, 40, 9], checks: 'SUCCESS', openedHoursAgo: 28,
+    }),
+    samplePr(clock, {
+      number: 1985, title: 'Cap the replay player buffer', author: 'gus', state: 'OPEN',
+      size: [40, 18, 2], checks: 'SUCCESS', openedHoursAgo: 50,
+    }),
+    samplePr(clock, {
+      number: 1986, title: 'Run usage exports on the shared runners', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [12, 6, 2], checks: 'SUCCESS', openedHoursAgo: 7, reviewerUsers: ['omar'],
+    }),
+    samplePr(clock, {
+      number: 1987, title: 'Add alert threshold presets', author: 'gus', state: 'OPEN',
+      size: [90, 5, 4], checks: 'SUCCESS', openedHoursAgo: 40,
+    }),
+    samplePr(clock, {
+      number: 1988, title: 'Rebuild the docs search index nightly', author: 'tove', state: 'OPEN',
+      size: [22, 3, 2], checks: 'SUCCESS', openedHoursAgo: 3,
+    }),
     samplePr(clock, {
       number: 1974, title: 'Pin the Linux runner image', author: SAMPLE_VIEWER, state: 'MERGED',
       size: [8, 8, 2], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 5, reviews: [['rowan', 'APPROVED', '', undefined, 7]],
@@ -621,6 +730,25 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 1972, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested @team-platform', hoursAgo: 3, rule: 'loud' },
     ]),
+    ...sampleEvents(clock, 1980, [
+      { kind: 'comment', actor: 'sol', text: 'commented: "quarantine job is green on master"', hoursAgo: 8, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 1982, [
+      { kind: 'comment', actor: 'nell', text: 'commented: "needed for the cache warm-up"', hoursAgo: 9, rule: 'quiet', seen: true },
+    ]),
+    // Unread with an open PR and loud news: urgent, so the row stays visible while Other work is folded.
+    ...sampleEvents(clock, 1984, [
+      { kind: 'comment', actor: 'pia', text: 'commented: "does CI need more disk for the cold-storage tests?"', hoursAgo: 0.5, rule: 'loud' },
+    ]),
+    ...sampleEvents(clock, 1985, [
+      { kind: 'comment', actor: 'gus', text: 'commented: "buffer capped at 50 MB"', hoursAgo: 30, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 1987, [
+      { kind: 'comment', actor: 'gus', text: 'commented: "presets ship behind a flag"', hoursAgo: 20, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 1988, [
+      { kind: 'comment', actor: 'tove', text: 'commented: "index build takes 4 minutes"', hoursAgo: 2, rule: 'quiet' },
+    ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
       { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 26, rule: 'loud' },
@@ -805,6 +933,14 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1955)}`, 'nell wants your review on the Playwright pin', [
       found(1955, 'review_requested', 'review requested from you'),
     ]),
+    sampleTile(TOPIC.quarantine, 'single', `pr:${sampleKey(1980)}`, 'sol runs quarantined tests apart', [pinged(1980, 'subscribed')]),
+    sampleTile(TOPIC.quarantine, 'single', `pr:${sampleKey(1981)}`, 'Your retry report waits on sol', [found(1981, 'own_open', 'your open PR')]),
+    sampleTile(TOPIC.egress, 'single', `pr:${sampleKey(1982)}`, 'nell allows the Depot cache host', [pinged(1982, 'subscribed')]),
+    sampleTile(TOPIC.replayStorage, 'single', `pr:${sampleKey(1984)}`, 'pia asks about CI disk for cold storage', [pinged(1984, 'subscribed')]),
+    sampleTile(TOPIC.replayPlayer, 'single', `pr:${sampleKey(1985)}`, 'Replay player buffer capped', [pinged(1985, 'subscribed')]),
+    sampleTile(TOPIC.usageExports, 'single', `pr:${sampleKey(1986)}`, 'Your export runner change waits on omar', [found(1986, 'own_open', 'your open PR')]),
+    sampleTile(TOPIC.alertPresets, 'single', `pr:${sampleKey(1987)}`, 'Alert threshold presets', [pinged(1987, 'subscribed')]),
+    sampleTile(TOPIC.docsSearch, 'single', `pr:${sampleKey(1988)}`, 'Nightly docs search index', [pinged(1988, 'subscribed')]),
     sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(1970)}`, 'Your agent PR guards the billing migrations', [pinged(1970, 'assign')]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1972)}`, "Rowan's agent PR drops unused devbox env vars", [
       pinged(1972, 'review_requested'),

@@ -79,7 +79,9 @@ import type {
   TopicArchiveBox,
   TopicDetail,
   TopicListItem,
+  TopicPlacement,
   TopicQueues,
+  TopicSection,
   UserPrState,
   TeamRole,
   TeamRolesView,
@@ -109,7 +111,9 @@ import {
   archiveEndsAt,
   snoozeWrites,
   eventView,
-  compareTopicUrgency,
+  compareInSection,
+  homeTeamsOf,
+  driverRelation,
   actionTrail,
   cleanupCutoff,
   cleanupLook,
@@ -492,6 +496,19 @@ export class FakeEngine implements EngineService {
     return { login: this.data.viewer, teams: this.data.viewerTeams, homeTeams: this.data.viewerHomeTeams, teamMembers: this.data.viewerTeamMembers };
   }
 
+  /** The topic's sidebar section, the engine's rule. */
+  private sectionOf(topic: Topic, queues: TopicQueues, moves: number, placement: TopicPlacement | null): TopicSection {
+    const viewer = this.viewer();
+    return topicSection({
+      retired: topic.status === 'retired',
+      queues,
+      moves,
+      driver: driverRelation(topic.driver, viewer),
+      placement,
+      homeTeams: homeTeamsOf(viewer),
+    });
+  }
+
   private prsByKey(): Map<PrKey, Pr> {
     return new Map(this.data.prs.map((pr) => [pr.key, pr]));
   }
@@ -857,7 +874,7 @@ export class FakeEngine implements EngineService {
     );
   }
 
-  /** Same urgency rule and order as the engine; ties keep the sample's order. */
+  /** Same sections and order as the engine; ties keep the sample's order. */
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     // A first run without gh: nothing synced yet, so the empty state shows.
     if (this.toolStatus.neverSynced()) {
@@ -882,10 +899,11 @@ export class FakeEngine implements EngineService {
       const prs = this.topicPrs(tiles);
       const queues = this.topicQueuesOf(tiles);
       const prRollup = topicPrRollup(tiles, prs.map(({ pr }) => pr));
+      const placement = this.memory.placement(topic);
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
-        placement: this.memory.placement(topic),
+        placement,
         group: urgency.needsYou ? 'needs_you' : 'quiet',
         unreadTiles: urgency.unreadTiles,
         unreadPrs: urgency.unreadPrs,
@@ -896,13 +914,13 @@ export class FakeEngine implements EngineService {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
         queues,
-        section: topicSection(queues),
+        section: this.sectionOf(topic, queues, urgency.yourMoves.length, placement),
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
       };
     });
-    return items.sort(compareTopicUrgency);
+    return items.sort(compareInSection);
   }
 
   async listRepos(): Promise<RepoOverview> {
@@ -988,11 +1006,13 @@ export class FakeEngine implements EngineService {
     }
     const tiles = this.topicTileViews(topicId);
     const topicTiles = this.tilesOfTopic(topicId);
+    const placement = this.memory.placement(topic);
+    const yourMoves = topicYourMoves(tiles);
     return {
       topic,
-      placement: this.memory.placement(topic),
+      placement,
       tiles,
-      yourMoves: topicYourMoves(tiles),
+      yourMoves,
       groupYourMoves: yourMovesByGroup(tiles),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       setChanges: [],
@@ -1003,7 +1023,7 @@ export class FakeEngine implements EngineService {
       archive: this.archiveBox(topic, tiles),
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
-      section: topicSection(this.topicQueuesOf(topicTiles)),
+      section: this.sectionOf(topic, this.topicQueuesOf(topicTiles), yourMoves.length, placement),
       memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
     };
   }

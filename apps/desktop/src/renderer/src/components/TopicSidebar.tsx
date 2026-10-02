@@ -1,15 +1,15 @@
 import { useRef, useState, type ReactNode } from 'react';
-import type { PrTier, TopicListItem, TopicPerson, ViewerView } from '@postpile/core';
+import type { TopicListItem, TopicPerson, TopicSection, ViewerView } from '@postpile/core';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
-import { layoutBuckets, layoutFromBuckets, queueLayout, queueRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { bucketItems, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { stateMix } from '../lib/pr-mix.ts';
 import { sectionLook } from '../lib/sections.ts';
-import { sidebarGroups } from '../lib/sidebar.ts';
+import { areaFolds, foldedSummary, isNotSorted, otherTopicsGroups, rowsWhileFolded, startsOpen, type AreaFold } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { teamPill } from '../lib/faces.ts';
@@ -117,6 +117,15 @@ function UnseenMergeChip(props: { count: number }) {
   );
 }
 
+/** "not sorted yet" in small muted words: the topic has no dossier yet, so nothing tells whose it is (Other topics only). */
+function NotSortedMark() {
+  return (
+    <span title="No dossier yet, so PostPile cannot tell whose topic it is" className="shrink-0 text-[9.5px] font-medium whitespace-nowrap text-faint">
+      not sorted yet
+    </span>
+  );
+}
+
 /**
  * The fixed leading column of a topic row, 14px with its gap: line one holds
  * the unread dot, line two stays empty. The name and the summary start right
@@ -144,8 +153,12 @@ function PrStateMark(props: { item: TopicListItem }) {
   );
 }
 
-/** One topic: name, faces and the unread bubble, then a one-line summary with the your-move ("Reply +2") and "merged without you" chips at its end. */
-function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; flipGroup: string }) {
+/**
+ * One topic: name, faces and the unread bubble, then a one-line summary with
+ * the your-move ("Reply +2") and "merged without you" chips at its end, and
+ * the "not sorted yet" mark when asked for.
+ */
+function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; flipGroup: string; notSorted?: boolean }) {
   const { item } = props;
   // Active: the white lift of the selected PR row. Unread: bold ink name, the bubble and a warm row with a faint honey ring. Read: regular, quieter.
   const unread = unreadLook(item) !== null;
@@ -191,6 +204,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
           </span>
           <YourMoveChip moves={item.yourMoves} />
           {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
+          {props.notSorted && <NotSortedMark />}
           <PrStateMark item={item} />
         </span>
       </span>
@@ -199,15 +213,15 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
 }
 
 /**
- * Queue section title: colored dot and label. No count: a PR count read like
+ * Section title: colored dot and label. No count: a PR count read like
  * an unread count, and how many PRs a queue holds does not matter.
  */
-function SectionHeader(props: { tier: PrTier | 'other' }) {
-  const look = sectionLook(props.tier);
+function SectionHeader(props: { section: TopicSection }) {
+  const look = sectionLook(props.section);
   return (
     // The dot sits in the row's leading slot column, so the label lands on the same x as the topic names.
     <span
-      data-flip-key={`section:${props.tier}`}
+      data-flip-key={`section:${props.section}`}
       className={`flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}
     >
       <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />
@@ -216,17 +230,53 @@ function SectionHeader(props: { tier: PrTier | 'other' }) {
   );
 }
 
-/** A section title that folds its topics away. The chevron takes the topic rows' leading slot, so the label starts on the topic names' x. */
-function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; flipKey: string }) {
+/** The fold chevron, in the leading slot: pointing down while open. */
+function FoldChevron(props: { open: boolean }) {
+  return (
+    <LeadSlot>
+      <span className={`flex text-faint ${props.open ? '' : '-rotate-90'}`}>
+        <ChevronIcon />
+      </span>
+    </LeadSlot>
+  );
+}
+
+/** "· 4 unread · 1 urgent" after a folded header's label. */
+function FoldedSummary(props: { text: string }) {
+  return <span className="ml-[5px] text-[10.5px] font-medium tracking-normal text-hint normal-case">{props.text}</span>;
+}
+
+/**
+ * A section title that folds its topics away. The chevron takes the topic
+ * rows' leading slot, so the label starts on the topic names' x. Folded, it
+ * says what is unread inside (`summary`).
+ */
+function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; flipKey: string; summary?: string }) {
   const size = props.small ? 'text-[10.5px] font-medium text-hint' : 'text-[11px] font-semibold tracking-[0.04em] text-hint';
   return (
     <button type="button" data-flip-key={props.flipKey} aria-expanded={props.open} onClick={props.onToggle} className="flex items-center px-2 py-1 text-left">
-      <LeadSlot>
-        <span className={`flex text-faint ${props.open ? '' : '-rotate-90'}`}>
-          <ChevronIcon />
-        </span>
-      </LeadSlot>
+      <FoldChevron open={props.open} />
       <span className={size}>{props.label}</span>
+      {!props.open && props.summary && <FoldedSummary text={props.summary} />}
+    </button>
+  );
+}
+
+/** A section title that folds (Other work): the chevron in the leading slot, then the dot and label as on `SectionHeader`. */
+function FoldingSectionHeader(props: { section: TopicSection; open: boolean; onToggle: () => void; summary: string }) {
+  const look = sectionLook(props.section);
+  return (
+    <button
+      type="button"
+      data-flip-key={`section:${props.section}`}
+      aria-expanded={props.open}
+      onClick={props.onToggle}
+      className={`flex items-center pt-1.5 pr-2 pb-1 pl-2 text-left text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`}
+    >
+      <FoldChevron open={props.open} />
+      <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />
+      {look.label}
+      {!props.open && props.summary && <FoldedSummary text={props.summary} />}
     </button>
   );
 }
@@ -324,15 +374,11 @@ interface TopicSidebarProps {
 /** Plain lines in the list (filter, hidden topics, errors) start on the topic names' x: a row's 8px padding plus its 14px leading slot. */
 const TEXT_COLUMN = 'pr-2.5 pl-[22px]';
 
-/** Section keys for the fold state: "team", "routed", "fyi", "finished", or "area:<name>". */
-type SectionKey = string;
+/** Fold keys: "other_work", "area:<name>" and "more" inside it, "fyi", "finished". */
+type FoldKey = string;
 
-/**
- * Inside Other topics, Routed and FYI start folded: they are other teams'
- * work. Topics that need you never hide in them, they are listed under
- * "Needs you" whatever their relation. The Archive starts folded too.
- */
-const FOLDED_BY_DEFAULT: SectionKey[] = ['routed', 'fyi', 'finished'];
+/** The sections listed flat, without folds: the asks, You drive and Your team owns (short lists). */
+const FLAT_SECTIONS: TopicSection[] = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned', 'you_drive', 'team_owns'];
 
 /**
  * "11 topics without your PRs are hidden · Show all", under the sections
@@ -369,29 +415,44 @@ function FilterHint(props: { topics: number; tiles: number; onClear: () => void 
 }
 
 export function TopicSidebar(props: TopicSidebarProps) {
-  const [folded, setFolded] = useState<SectionKey[]>(FOLDED_BY_DEFAULT);
+  // The user's own fold choices this session; a fold without one follows its default.
+  const [foldChoices, setFoldChoices] = useState<Map<FoldKey, boolean>>(() => new Map());
   const tools = useTools().data;
   const filter = props.filter;
-  const narrowed = filter !== null || props.queueFilter !== null;
+  const searching = filter !== null;
+  const narrowed = searching || props.queueFilter !== null;
   // The open topic keeps its row while a tile in it stays selected ("Marked when you move on"); when it moves, rows slide.
   const navRef = useRef<HTMLElement>(null);
   useFlip(navRef, { landed: false });
-  const layout = layoutFromBuckets(useHeldPlace(props.selectedTileId, props.activeTopicId, layoutBuckets(queueLayout(props.shown)), queueRowId));
-  const groups = sidebarGroups(layout.other);
-  // While filtering every fold is open, so no match hides in one.
-  const isOpen = (key: SectionKey) => narrowed || !folded.includes(key);
-  const toggle = (key: SectionKey) => setFolded(isOpen(key) ? [...folded, key] : folded.filter((entry) => entry !== key));
-  const topicItem = (item: TopicListItem, group: string) => (
-    <TopicItem key={item.topic.id} item={item} flipGroup={group} active={item.topic.id === props.activeTopicId} onSelect={() => props.onSelect(item.topic.id)} />
+  const buckets = useHeldPlace(props.selectedTileId, props.activeTopicId, sidebarBuckets(props.shown), topicRowId);
+  const otherWork = bucketItems(buckets, 'other_work');
+  const otherTopics = otherTopicsGroups(bucketItems(buckets, 'other_topics'));
+  // `forcedOpen`: while the search filters, no match hides in a fold.
+  const isOpen = (key: FoldKey, openByDefault: boolean, forcedOpen: boolean) => forcedOpen || (foldChoices.get(key) ?? openByDefault);
+  const toggle = (key: FoldKey, open: boolean) => setFoldChoices(new Map(foldChoices).set(key, !open));
+  const topicItem = (item: TopicListItem, group: string, notSorted = false) => (
+    <TopicItem
+      key={item.topic.id}
+      item={item}
+      flipGroup={group}
+      notSorted={notSorted}
+      active={item.topic.id === props.activeTopicId}
+      onSelect={() => props.onSelect(item.topic.id)}
+    />
   );
-  const otherItems = (items: TopicListItem[], group: string) => items.map((item) => topicItem(item, group));
-  const group = (key: SectionKey, label: string, items: TopicListItem[], children: ReactNode) =>
-    items.length === 0 ? null : (
-      <div key={key} className="flex flex-col gap-px">
-        <GroupHeader small label={label} open={isOpen(key)} onToggle={() => toggle(key)} flipKey={`group:${key}`} />
-        {isOpen(key) && children}
+  // Other work and its area folds open by what they hold (`startsOpen`, over the topics the queue filter left); folded, urgent unread rows stay.
+  const otherWorkOpen = isOpen('other_work', startsOpen(otherWork), searching);
+  const areaFold = (fold: AreaFold) => {
+    const open = isOpen(fold.key, startsOpen(fold.items), searching);
+    return (
+      <div key={fold.key} className="flex flex-col gap-px">
+        <GroupHeader small label={fold.label} open={open} onToggle={() => toggle(fold.key, open)} flipKey={`group:${fold.key}`} summary={foldedSummary(fold.items)} />
+        {(open ? fold.items : rowsWhileFolded(fold.items)).map((item) => topicItem(item, fold.key))}
       </div>
     );
+  };
+  // FYI starts folded and opens while anything narrows the list, as before.
+  const fyiOpen = isOpen('fyi', false, narrowed);
   return (
     <nav ref={navRef} aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
@@ -406,43 +467,50 @@ export function TopicSidebar(props: TopicSidebarProps) {
           {tools && !tools.canSync ? 'No topics yet. Sync starts once gh works.' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'}
         </p>
       )}
-      {layout.sections.map((section) => (
-        <div key={section.tier} className="flex flex-col gap-px">
-          <SectionHeader tier={section.tier} />
-          {section.rows.map((row) => topicItem(row.item, section.tier))}
+      {FLAT_SECTIONS.map((section) => {
+        const items = bucketItems(buckets, section);
+        return items.length === 0 ? null : (
+          <div key={section} className="flex flex-col gap-px">
+            <SectionHeader section={section} />
+            {items.map((item) => topicItem(item, section))}
+          </div>
+        );
+      })}
+      {otherWork.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <FoldingSectionHeader section="other_work" open={otherWorkOpen} onToggle={() => toggle('other_work', otherWorkOpen)} summary={foldedSummary(otherWork)} />
+          {otherWorkOpen ? (
+            areaFolds(otherWork).map(areaFold)
+          ) : (
+            <div className="flex flex-col gap-px">{rowsWhileFolded(otherWork).map((item) => topicItem(item, 'other_work'))}</div>
+          )}
         </div>
-      ))}
+      )}
       {props.queueFilter && props.hiddenByQueueFilter > 0 && (
         <HiddenByFilter filter={props.queueFilter} hidden={props.hiddenByQueueFilter} onShowAll={() => props.onQueueFilter(null)} />
       )}
-      {layout.other.length > 0 && (
+      {(otherTopics.unplaced.length > 0 || otherTopics.fyi.length > 0) && (
         <div className="flex flex-col gap-1">
-          <SectionHeader tier="other" />
-          {group('needs', 'Needs you', groups.needsYou, otherItems(groups.needsYou, 'needs'))}
-          {group(
-            'team',
-            'Your team',
-            groups.team.flatMap((entry) => entry.items),
-            groups.team.map((entry) => (
-              <div key={entry.area} className="flex flex-col gap-px">
-                <GroupHeader
-                  small
-                  label={entry.area}
-                  open={isOpen(`area:${entry.area}`)}
-                  onToggle={() => toggle(`area:${entry.area}`)}
-                  flipKey={`group:area:${entry.area}`}
-                />
-                {isOpen(`area:${entry.area}`) && otherItems(entry.items, `area:${entry.area}`)}
-              </div>
-            )),
+          <SectionHeader section="other_topics" />
+          {otherTopics.unplaced.length > 0 && (
+            <div className="flex flex-col gap-px">{otherTopics.unplaced.map((item) => topicItem(item, 'other_topics', isNotSorted(item)))}</div>
           )}
-          {group('routed', 'Routed to you', groups.routed, otherItems(groups.routed, 'routed'))}
-          {group('fyi', 'FYI', groups.fyi, otherItems(groups.fyi, 'fyi'))}
+          {otherTopics.fyi.length > 0 && (
+            <div className="flex flex-col gap-px">
+              <GroupHeader small label="FYI" open={fyiOpen} onToggle={() => toggle('fyi', fyiOpen)} flipKey="group:fyi" />
+              {fyiOpen && otherTopics.fyi.map((item) => topicItem(item, 'fyi'))}
+            </div>
+          )}
         </div>
       )}
       {/* Search and the queue filters cover live topics only, so the drawer steps aside while they narrow. */}
       {!narrowed && (
-        <FinishedDrawer open={isOpen('finished')} onToggle={() => toggle('finished')} activeTopicId={props.activeTopicId} onSelect={props.onSelect} />
+        <FinishedDrawer
+          open={isOpen('finished', false, false)}
+          onToggle={() => toggle('finished', isOpen('finished', false, false))}
+          activeTopicId={props.activeTopicId}
+          onSelect={props.onSelect}
+        />
       )}
       {/*
         The list fades out at the bottom instead of stopping at a hard edge. Sticky, so it stays at

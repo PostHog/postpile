@@ -114,7 +114,7 @@ describe('server routes over the fake engine', () => {
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
     expect(repos.scope).toBeNull();
     expect(repos.repos.map((entry) => [entry.repo, entry.topics])).toEqual([
-      ['acme/app', 7],
+      ['acme/app', 14],
       ['acme/python-sdk', 2],
       ['acme/desktop', 1],
       ['acme/infra', 1],
