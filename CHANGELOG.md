@@ -13,6 +13,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - With one repo picked, the repo button reads "Only app" in blue, the same look as a narrowing "Topics with" filter, so a narrowed list is hard to miss.
 - "All repos" in the repo menu is marked Recommended, with a short note: dealt-with topics hide on their own, so the full list stays short.
+- The notes the agent drafts for Approve with comment and Comment review are one or two sentences. They no longer retell what the PR does or list what was checked; they say what the author does not know yet, like a risk to watch or a follow-up, or just one short line when there is nothing to add.
 
 ## 0.15.0 (2026-10-02)
 

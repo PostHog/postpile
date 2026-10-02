@@ -1158,6 +1158,10 @@ the app meanwhile.
   review on the seen head, to answer a review request without being the
   approval that clears the PR. Ask, both notes share one compose popover.
   Tiles and the agent's Approve stay without a body.
+- **Review note drafts say only what the author lacks** (2026-10-02,
+  DESIGN.md "Review note drafts"): one or two sentences, never a retelling
+  of the change or a list of what was checked. The first drafts restated
+  the PR back to its author.
 - **Ownership sections** (2026-10-02, DESIGN.md "Ownership sections"):
   below the asks, topics sit under You drive, Your team owns or Other work
   by who drives them; the owner team only places a topic without a known

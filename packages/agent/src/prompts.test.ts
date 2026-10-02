@@ -111,6 +111,14 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
     expect(NO_CI_RULE).toContain('may still mention CI status: it is stale, ignore it');
   });
 
+  // A review note goes out under the user's name and its glance notes may predate the rule.
+  it('keeps CI status out of review notes but not out of asks', () => {
+    const note = draftCommentPrompt({ pr: failing, viewer, person: null, intent: 'The user is approving this PR.', notes: ['For the user: Hold approval until CI is green.'], context: fullContext });
+    expect(note).toContain(NO_CI_RULE);
+    const ask = draftCommentPrompt({ pr: failing, viewer, person: 'bob', intent: 'why is CI red?', context: fullContext });
+    expect(ask).not.toContain(NO_CI_RULE);
+  });
+
   it('never lets a recheck affirm a CI claim', () => {
     expect(prompts.recheck).toContain('A line that is only about CI status is "drop"');
     expect(prompts.recheck).toContain('Never "holds" for a CI claim.');
