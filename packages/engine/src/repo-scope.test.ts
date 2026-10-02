@@ -61,7 +61,7 @@ describe('repo scope', () => {
 
     // All repos: compared against the topic's main repo (most PRs).
     expect(await labels()).toEqual({ [main.key]: null, [second.key]: null, [other.key]: 'infra' });
-    expect((await h.engine.getTopic('mixed'))?.repoLine).toEqual({ label: 'app', repos: ['acme/app', OTHER_REPO], offScope: null });
+    expect((await h.engine.getTopic('mixed'))?.repoLine).toEqual({ label: 'app', repos: [{ repo: 'acme/app', prs: 2 }, { repo: OTHER_REPO, prs: 1 }], offScope: null });
 
     await h.engine.setRepoScope(OTHER_REPO);
     expect(await labels()).toEqual({ [main.key]: 'app', [second.key]: 'app', [other.key]: null });

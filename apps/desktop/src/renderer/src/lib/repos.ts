@@ -23,13 +23,27 @@ export function countTitle(topics: number, prs: number | null): string {
   return prs === null ? topicText : `${topicText}, ${prs} PR${prs === 1 ? '' : 's'}`;
 }
 
-/** The hover on the topic header's repo: why an off-scope topic is listed, else where its PRs are. */
+function prCount(prs: number): string {
+  return `${prs} PR${prs === 1 ? '' : 's'}`;
+}
+
+/** The hover on the topic header's repo: why an off-scope topic is listed, else where its PRs are, as counts. */
 export function topicRepoTitle(line: TopicRepoLine): string {
+  const [main, ...others] = line.repos;
+  if (main === undefined) {
+    return '';
+  }
   if (line.offScope) {
     const { pickedLabel, pickedPrs } = line.offScope;
-    const prs = pickedPrs === 1 ? '1 PR is' : `${pickedPrs} PRs are`;
-    return `Listed because ${prs} in ${pickedLabel}; most of its PRs are in ${line.label}`;
+    const verb = pickedPrs === 1 ? 'is' : 'are';
+    const rest = others
+      .filter((entry) => entry.repo !== pickedLabel && shortRepo(entry.repo) !== pickedLabel)
+      .map((entry) => shortRepo(entry.repo));
+    const also = rest.length > 0 ? `; also in ${rest.join(', ')}` : '';
+    return `Listed because ${prCount(pickedPrs)} ${verb} in ${pickedLabel}; ${prCount(main.prs)} ${main.prs === 1 ? 'is' : 'are'} in ${line.label}${also}`;
   }
-  const [main, ...others] = line.repos;
-  return others.length === 0 ? `Most of its PRs are in ${main}` : `Most of its PRs are in ${main}; also in ${others.join(', ')}`;
+  if (others.length === 0) {
+    return main.prs === 1 ? '1 PR, in ' + shortRepo(main.repo) : `${main.prs} PRs, all in ${shortRepo(main.repo)}`;
+  }
+  return `PRs: ${line.repos.map((entry) => `${entry.prs} in ${shortRepo(entry.repo)}`).join(', ')}`;
 }

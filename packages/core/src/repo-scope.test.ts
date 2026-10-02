@@ -95,14 +95,21 @@ describe('topicRepoLine', () => {
   it('shows the main repo with every repo it touches', () => {
     expect(topicRepoLine(['acme/app#1', 'acme/app#2', 'acme/infra#3', 'other/tools#4'], DEFAULT_REPO_SETTINGS, ORGS)).toEqual({
       label: 'app',
-      repos: ['acme/app', 'acme/infra', 'other/tools'],
+      repos: [
+        { repo: 'acme/app', prs: 2 },
+        { repo: 'acme/infra', prs: 1 },
+        { repo: 'other/tools', prs: 1 },
+      ],
       offScope: null,
     });
   });
 
   it('says when the picked repo holds only a few of the PRs', () => {
     const one = topicRepoLine(['acme/infra#1', 'acme/infra#2', 'acme/app#3'], picked('acme/app'), ORGS);
-    expect(one).toEqual({ label: 'infra', repos: ['acme/infra', 'acme/app'], offScope: { pickedLabel: 'app', pickedPrs: 1 } });
+    expect(one).toEqual({ label: 'infra', repos: [
+        { repo: 'acme/infra', prs: 2 },
+        { repo: 'acme/app', prs: 1 },
+      ], offScope: { pickedLabel: 'app', pickedPrs: 1 } });
     const two = topicRepoLine(['acme/infra#1', 'acme/infra#2', 'acme/infra#3', 'acme/app#4', 'acme/app#5'], picked('acme/app'), ORGS);
     expect(two?.offScope).toEqual({ pickedLabel: 'app', pickedPrs: 2 });
   });
@@ -110,7 +117,10 @@ describe('topicRepoLine', () => {
   it('matches the picked repo ignoring case and lets it win a tie', () => {
     expect(topicRepoLine(['Acme/App#1', 'acme/infra#2'], picked('acme/app'), ORGS)).toEqual({
       label: 'App',
-      repos: ['Acme/App', 'acme/infra'],
+      repos: [
+        { repo: 'Acme/App', prs: 1 },
+        { repo: 'acme/infra', prs: 1 },
+      ],
       offScope: null,
     });
     expect(topicRepoLine(['acme/infra#1', 'acme/app#2'], picked('ACME/APP'), ORGS)).toMatchObject({ label: 'app', offScope: null });

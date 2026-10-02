@@ -203,7 +203,7 @@ export function topicRepoLine(topicPrKeys: PrKey[], settings: RepoSettings, orgs
   const homeOrgs = homeOrgsOf(orgs, main.repo);
   return {
     label: repoLabel(main.repo, homeOrgs),
-    repos: [main, ...counts.filter((entry) => entry !== main)].map((entry) => entry.repo),
+    repos: [main, ...counts.filter((entry) => entry !== main)].map((entry) => ({ repo: entry.repo, prs: entry.prs })),
     offScope: picked !== undefined && picked !== main ? { pickedLabel: repoLabel(picked.repo, homeOrgs), pickedPrs: picked.prs } : null,
   };
 }

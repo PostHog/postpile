@@ -358,10 +358,10 @@ export interface TopicDriverView {
 export interface TopicRepoLine {
   /** Short name of the repo with most of the topic's PRs ("infra", or "owner/name" outside the viewer's orgs). */
   label: string;
-  /** Full names of every repo the topic touches, the main one first: the hover, and "+2" for the others. */
-  repos: string[];
+  /** Every repo the topic touches with its PR count, the main one first: the hover, and "+2" for the others. */
+  repos: { repo: string; prs: number }[];
   /**
-   * A repo is picked, the topic has PRs in it, but most of its PRs are
+   * A repo is picked, the topic has PRs in it, but more of its PRs are
    * elsewhere: "mostly in infra". The picked repo's short name and how many
    * of the topic's PRs sit in it, for the hover. Null otherwise.
    */
