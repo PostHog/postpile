@@ -465,10 +465,9 @@ function olderPageHit(hit: CapHit, page: RawConnection<unknown>, times: string[]
   return { ...hit, nodes: hit.nodes + page.nodes.length, oldestAt, cursor: page.pageInfo?.startCursor ?? null, complete: page.pageInfo?.hasPreviousPage === false };
 }
 
-/** The snapshot's cap hits with the one `list` hit moved on by the page, plus any new ones. */
-function capHitsAfter(pr: Pr, list: CapHit['list'], page: RawConnection<unknown>, times: string[] | null, added: CapHit[] = []): CapHit[] {
-  const hits = (pr.capHits ?? []).map((hit) => (hit.list === list ? olderPageHit(hit, page, times) : hit));
-  return [...hits, ...added];
+/** The snapshot's cap hits with the one `list` hit moved on by the page. */
+function capHitsAfter(pr: Pr, list: CapHit['list'], page: RawConnection<unknown>, times: string[] | null): CapHit[] {
+  return (pr.capHits ?? []).map((hit) => (hit.list === list ? olderPageHit(hit, page, times) : hit));
 }
 
 /** A thread's comments page added to the snapshot: new comments after the ones it has, its hit moved past them. */
@@ -524,7 +523,7 @@ export function addOlderPage(pr: Pr, older: OlderPage): Pr {
         ...pr,
         threads: [...threads, ...pr.threads],
         comments: withComments(pr.comments, threads.flatMap((thread) => thread.comments)),
-        capHits: capHitsAfter(pr, 'review_threads', older.page, null, newHits),
+        capHits: [...capHitsAfter(pr, 'review_threads', older.page, null), ...newHits],
       };
     }
     case 'commits': {

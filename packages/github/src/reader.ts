@@ -1,4 +1,4 @@
-import type { ActivityPr, CappedList, IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
+import type { ActivityPr, IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
 import type { FoundRef } from './found.ts';
 
 export interface PartialPrs {
@@ -13,8 +13,6 @@ export interface CapFill {
   pr: Pr;
   /** Pages fetched, all lists together. */
   pages: number;
-  /** Capped lists that still stop short of `since`: their page limit ran out. */
-  short: CappedList[];
 }
 
 export interface NotificationConditions {
@@ -119,9 +117,9 @@ export interface GitHubReader {
    * Older pages of a fetched PR's capped lists (`Pr.capHits`), one GraphQL
    * request per page, until each list reaches back to `since` (null: its
    * end; review threads and a thread's comments always to their end) or ran
-   * `maxPages` pages (`maxPages` over all threads' comments). The items are
-   * normalized like fetchPrs and merged in without repeats. Throws on a
-   * failed request.
+   * `maxPages` pages (`maxPages` over all threads' comments); once a list
+   * stays short the rest is left. The items are normalized like fetchPrs
+   * and merged in without repeats. Throws on a failed request.
    */
   fillCappedLists(pr: Pr, since: IsoTime | null, maxPages: number): Promise<CapFill>;
 

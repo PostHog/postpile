@@ -1,5 +1,5 @@
 import { at, makePr, makeReview } from '@postpile/core/fixtures';
-import type { Pr } from '@postpile/core';
+import { snapshotCoversSince, type Pr } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { GitHubClient } from './client.ts';
 import { FakeFetch, fakeTokens } from './fake-fetch.ts';
@@ -49,7 +49,6 @@ describe('fillCappedLists', () => {
     const cursors = fake.requests.map((request) => (request.body as { variables: { cursor: string } }).variables.cursor);
     expect(cursors).toEqual(['reviews-50', 'reviews-100', 'threads-50']);
     expect(fill.pages).toBe(3);
-    expect(fill.short).toEqual([]);
     expect(fill.pr.reviews.map((review) => review.id)).toEqual(['R-10', 'R-25', 'R-30', 'R-kept']);
     expect(fill.pr.reviews.find((review) => review.id === 'R-30')?.author).toBe('review-bot[bot]');
     expect(fill.pr.threads.map((thread) => thread.id)).toEqual(['RT-old']);
@@ -60,13 +59,29 @@ describe('fillCappedLists', () => {
     ]);
   });
 
-  it('stops at the page limit and reports the list as short of the read', async () => {
-    const fake = new FakeFetch([page([rawReview('R-30', 30)], true, 'reviews-100'), page([rawThread('RT-old', 15)], false, 'threads-51')]);
+  it('stops at the page limit, and pages no other list once one stays short of the read', async () => {
+    const fake = new FakeFetch([page([rawReview('R-30', 30)], true, 'reviews-100')]);
 
     const fill = await new GitHubClient(fakeTokens, fake.fn).fillCappedLists(cappedPr(), at(20), 1);
 
-    expect(fake.requests).toHaveLength(2);
-    expect(fill.short).toEqual(['reviews']);
-    expect(fill.pr.capHits?.[0]).toMatchObject({ list: 'reviews', oldestAt: at(30), cursor: 'reviews-100', complete: false });
+    expect(fake.requests).toHaveLength(1);
+    expect(fill.pages).toBe(1);
+    expect(fill.pr.capHits).toEqual([
+      { list: 'reviews', nodes: 51, oldestAt: at(30), cursor: 'reviews-100', complete: false },
+      { list: 'review_threads', nodes: 50, oldestAt: null, cursor: 'threads-50' },
+    ]);
+  });
+
+  it('pages only the threads when the kept reviews already reach back to the read, and the snapshot then covers it', async () => {
+    // A merged PR read at minute 50, a deploy bot's comment edit after: the 50 kept reviews start at minute 40,
+    // before the read, but threads carry no time, so they cover only once paged to the end.
+    const pr = cappedPr();
+    const fake = new FakeFetch([page([rawThread('RT-old', 15)], false, 'threads-51')]);
+
+    const fill = await new GitHubClient(fakeTokens, fake.fn).fillCappedLists(pr, at(50), 5);
+
+    expect(snapshotCoversSince(pr, at(50))).toBe(false);
+    expect(fake.requests.map((request) => (request.body as { variables: { cursor: string } }).variables.cursor)).toEqual(['threads-50']);
+    expect(snapshotCoversSince(fill.pr, at(50))).toBe(true);
   });
 });

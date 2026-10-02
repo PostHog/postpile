@@ -14,7 +14,7 @@ import type {
   ViewerTeamSize,
 } from '@postpile/core';
 import type { RendererExceptionProps } from '@postpile/core';
-import { capHitCoversSince, type IsoTime } from '@postpile/core';
+import type { IsoTime } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
@@ -210,8 +210,7 @@ export class FakeReader implements GitHubReader {
   async fillCappedLists(pr: Pr, since: IsoTime | null): Promise<CapFill> {
     this.fillCalls.push([pr.key, since]);
     const filled = this.filledPrs.get(pr.key) ?? pr;
-    const short = (filled.capHits ?? []).filter((hit) => !capHitCoversSince(hit, since)).map((hit) => hit.list);
-    return { pr: filled, pages: filled === pr ? 0 : 1, short };
+    return { pr: filled, pages: filled === pr ? 0 : 1 };
   }
 
   async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {

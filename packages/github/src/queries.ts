@@ -140,6 +140,9 @@ const OLDER_LISTS: Record<OlderList, { connection: string; node: string; fragmen
   },
 };
 
+/** The newest-N lists in the order cap-fill.ts pages them. */
+export const OLDER_LIST_ORDER = Object.keys(OLDER_LISTS) as OlderList[];
+
 /** One older page of one capped list of one PR, aliased `page`, selected exactly like the PR query. Variables: owner, name, number, cursor. */
 export function buildOlderPageQuery(list: OlderList): string {
   const spec = OLDER_LISTS[list];

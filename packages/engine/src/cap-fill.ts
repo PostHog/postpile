@@ -1,4 +1,4 @@
-import { needsOlderPages, type NotificationThread, type Pr, type PrKey } from '@postpile/core';
+import { capHitCoversSince, needsOlderPages, type IsoTime, type NotificationThread, type Pr, type PrKey } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { errorText } from './errors.ts';
@@ -14,6 +14,11 @@ export const CAP_FILL_POLL_PRS = 3;
 interface Wanted {
   pr: Pr;
   thread: NotificationThread;
+}
+
+/** The capped lists that still stop short of `since`, each named once. */
+function shortLists(pr: Pr, since: IsoTime | null): string[] {
+  return [...new Set((pr.capHits ?? []).filter((hit) => !capHitCoversSince(hit, since)).map((hit) => hit.list))];
 }
 
 /**
@@ -60,10 +65,6 @@ export class CapFiller {
       return fetched;
     }
     const keys = (items: Wanted[]) => items.map((item) => item.pr.key).join(', ');
-    if (!this.quota.allowsBackground()) {
-      this.textLog(`${this.origin}: older pages skipped, GitHub quota low: ${keys(wanted)}`);
-      return fetched;
-    }
     const picked = wanted.slice(0, this.left);
     const skipped = wanted.slice(picked.length);
     this.left -= picked.length;
@@ -71,12 +72,18 @@ export class CapFiller {
       this.textLog(`${this.origin}: older pages skipped for ${skipped.length} PRs over the budget: ${keys(skipped)}`);
     }
     const filled = new Map(fetched);
-    for (const { pr, thread } of picked) {
+    for (const [index, { pr, thread }] of picked.entries()) {
+      // Checked before each PR: the pages of the ones before may have used up the quota.
+      if (!this.quota.allowsBackground()) {
+        this.textLog(`${this.origin}: older pages skipped, GitHub quota low: ${keys(picked.slice(index))}`);
+        break;
+      }
       const since = thread.lastReadAt ?? 'the start';
       try {
         const fill = await this.reader.fillCappedLists(pr, thread.lastReadAt, CAP_FILL_PAGES);
         filled.set(pr.key, fill.pr);
-        const outcome = fill.short.length === 0 ? `covers since ${since}` : `still short of ${since}: ${fill.short.join(', ')}`;
+        const short = shortLists(fill.pr, thread.lastReadAt);
+        const outcome = short.length === 0 ? `covers since ${since}` : `still short of ${since}: ${short.join(', ')}`;
         this.textLog(`${this.origin}: ${pr.key} paged ${fill.pages} older pages, ${outcome}`);
       } catch (error) {
         this.textLog(`${this.origin}: older pages for ${pr.key} failed, the rest wait for the next fetch: ${errorText(error)}`);

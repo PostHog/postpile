@@ -624,7 +624,12 @@ export class GitHubSync {
     return newEventIds;
   }
 
-  /** Pages older items into this run's fetched PRs that need them (CapFiller), at most `budget` PRs per run. */
+  /**
+   * Pages older items into this run's fetched PRs that need them (CapFiller),
+   * at most `budget` PRs per run. Found PRs and stack layers are left out:
+   * they are fetched for tiles and stacks, and a PR whose thread moves comes
+   * through the main fetch.
+   */
   private capFiller(origin: 'sync' | 'poll', budget: number): CapFiller {
     return new CapFiller(this.reader, this.store, this.quota, origin, budget, this.textLog);
   }
@@ -677,8 +682,7 @@ export class GitHubSync {
       saveViewer(this.store, viewer);
     }
     const fetchedAt = this.now().toISOString();
-    const fetchedOnly = refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, Pr>();
-    const fetched = await this.capFiller('poll', CAP_FILL_POLL_PRS).fill(fetchedOnly);
+    const fetched = await this.capFiller('poll', CAP_FILL_POLL_PRS).fill(refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, Pr>());
     const newEventIds = this.storeAll(fetched, viewer, fetchedAt);
     this.rememberPolled([...fetched.keys()]);
     const readOnGitHub = this.takeReadOnGitHub();
