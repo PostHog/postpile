@@ -143,11 +143,11 @@ interface Crumb {
 /**
  * Topics › section › area. The section is the one the sidebar lists the topic
  * under (core's `TopicDetail.section`), with the same label and dot; a retired
- * topic sits in the Finished drawer instead.
+ * topic sits in the Archive drawer instead.
  */
 function breadcrumbs(detail: TopicDetail): Crumb[] {
   const look = sectionLook(detail.section);
-  const crumbs: Crumb[] = [detail.topic.status === 'retired' ? { label: 'Finished', dot: null } : { label: look.label, dot: look.dot }];
+  const crumbs: Crumb[] = [detail.topic.status === 'retired' ? { label: 'Archive', dot: null } : { label: look.label, dot: look.dot }];
   if (detail.placement?.area) {
     crumbs.push({ label: detail.placement.area, dot: null });
   }

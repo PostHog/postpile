@@ -134,7 +134,7 @@ function buildTopics(clock: SampleClock): Topic[] {
       driver: 'koa',
       userRole: 'reviewer',
     }),
-    // Every PR merged and quiet for 3 days: a sync retired it, so it only shows in the Finished drawer.
+    // Every PR merged and quiet for 2 days: a sync moved it to the Archive drawer.
     {
       ...sampleTopic(clock, {
         id: TOPIC.warmer,

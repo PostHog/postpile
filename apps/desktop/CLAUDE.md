@@ -29,7 +29,7 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 ## Data: typed query hooks, types from core
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,
-  `useFinishedTopics` for the sidebar's Finished drawer),
+  `useFinishedTopics` for the sidebar's Archive drawer),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
   `viewer.ts` (`useViewer`, login, teammates and home teams for the filter
   buttons; no home team hides Team, `visibleQueueFilters`),
@@ -476,8 +476,8 @@ Needs you, Your team by area, Routed, FYI). Each topic sits once, in its
 section core gives it (`TopicListItem.section`, `topicSection`); the
 topic header's breadcrumb reads the same field on `TopicDetail` and the same
 label and dot (`lib/sections.ts`). The queue filters still match it by
-any PR. Fold state is local UI state; Routed, FYI and Finished start
-folded. The Finished drawer (retired topics, `useFinishedTopics`) hides while search
+any PR. Fold state is local UI state; Routed, FYI and the Archive start
+folded. The Archive drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so
 `App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The "Topics with
 any PR | my PRs | team PRs" switch (`QueueFilters`) is plain UI state in

@@ -325,6 +325,7 @@ export function createApp(
     return c.json(await engine.decideTailoring(c.req.param('id'), body.text, body.keep));
   });
   app.post('/api/topics/:id/seen', async (c) => c.json(await engine.markTopicSeen(c.req.param('id'))));
+  app.post('/api/topics/:id/archive', async (c) => c.json(await engine.archiveTopic(c.req.param('id'))));
   app.get('/api/proposals', async (c) => c.json(await engine.listProposals()));
   app.post('/api/proposals/:id', async (c) => {
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());

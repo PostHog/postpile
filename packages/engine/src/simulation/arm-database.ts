@@ -87,7 +87,7 @@ export class ArmDatabase {
    *
    * A topic new here is one the leader's assignment created this round
    * (every earlier one came over in an earlier round), so it is created the
-   * same way (`newTopic`), with the leader's id, name and time: active, as
+   * same way (`newTopic`), with the leader's id, name, time and kind: active, as
    * the leader's digest saw it. The leader's row is not copied: its dossiers
    * already wrote summary, area, driver and role into it, and those are this
    * arm's to write. Its status is the leader's after the round's retire step,
@@ -100,7 +100,7 @@ export class ArmDatabase {
     store.transaction(() => {
       for (const topic of leader.topics) {
         if (store.topics.get(topic.id) === null) {
-          store.topics.create(newTopic(topic.id, topic.name, topic.createdAt));
+          store.topics.create(newTopic(topic.id, topic.name, topic.createdAt, topic.kind));
         }
       }
       for (const membership of leader.memberships) {

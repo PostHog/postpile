@@ -407,8 +407,21 @@ export interface PullIn {
 
 export type UserRole = 'driver' | 'reviewer' | 'stakeholder' | 'watcher';
 
-/** archived: merged away, never comes back. retired: finished, comes back when a new PR joins. */
+/**
+ * archived: merged away, never comes back. retired: nothing left to do, so
+ * it left the sidebar for the Archive drawer; comes back when a new PR joins
+ * or a thread turns unread. The app says "Archive" for retired topics; code
+ * keeps "retired" because "archived" already means merged away.
+ */
 export type TopicStatus = 'active' | 'archived' | 'retired';
+
+/**
+ * project: one goal with a finish line ("Move CI to a new provider").
+ * standing: a standard kept up for months with no finish line ("Migration
+ * safety"); PRs arrive in waves. The kind decides how long a retired topic
+ * still takes new PRs (`takesNewPrs`).
+ */
+export type TopicKind = 'project' | 'standing';
 
 export interface Topic {
   /** Stable id, never reused. Renames keep the id. */
@@ -423,6 +436,8 @@ export interface Topic {
   driver: string | null;
   userRole: UserRole;
   status: TopicStatus;
+  /** Agent-set when the topic is made or tidied; the user can change it. */
+  kind: TopicKind;
   /** When it retired; null unless retired. Only `nextTopicStatus` sets it. */
   retiredAt: IsoTime | null;
   /** Broad area the topic sits in ("CI", "Dev env"), agent-assigned. Null until the first dossier update. */

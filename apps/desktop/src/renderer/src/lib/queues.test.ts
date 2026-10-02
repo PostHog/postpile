@@ -20,7 +20,7 @@ type Tiers = Partial<Record<PrTier, number>>;
 
 /** A topic with these PRs per tier, in the section core gives it (`topicSection`). */
 function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): TopicListItem {
-  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
+  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', kind: 'project', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
   const queues = { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0, changesAddressed: 0 };
   return {
     topic,

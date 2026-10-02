@@ -136,7 +136,7 @@ export function App() {
   // (2026-10-01). It holds while the user stays in that topic under the same filters.
   const [revealed, setRevealed] = useState<KeptView | null>(null);
   const revealedNow = revealedFor(revealed, nav.current, currentFilterKey);
-  // A topic picked in the Finished drawer is not in the list, so it opens by id.
+  // A topic picked in the Archive drawer is not in the list, so it opens by id.
   // Search and the queue filters cover live topics only: while they narrow, their first match shows.
   // A revealed topic the list does not hold (another repo, finished) opens by id the same way.
   const pickedFinishedId = nav.current.topicId !== null && finishedIds.has(nav.current.topicId) ? nav.current.topicId : null;

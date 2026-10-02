@@ -11,6 +11,7 @@ import type {
   FactCandidate,
   IsoTime,
   LineSources,
+  TopicKind,
 } from '@postpile/core';
 import type { z } from 'zod';
 import type { DossierRefs } from './dossier-refs.ts';
@@ -257,6 +258,8 @@ function toArea(area: string | null): string | null {
 export interface MappedDossierAnswer {
   dossier: Dossier;
   area: string | null;
+  /** The kind the answer judged the topic to be; null keeps it. */
+  topicKind: TopicKind | null;
   flags: DossierFlag[];
   facts: FactCandidate[];
   closeFacts: FactClose[];
@@ -270,6 +273,7 @@ export function mapDossierAnswer(answer: DossierAnswer, input: DossierUpdateInpu
   return {
     dossier: toDossier(answer.dossier, input, refs, now),
     area: toArea(answer.area),
+    topicKind: answer.topicKind,
     flags: toFlags(answer.flags, memberKeys),
     facts: toCandidates(answer.facts, input.topic.id, refs),
     closeFacts,

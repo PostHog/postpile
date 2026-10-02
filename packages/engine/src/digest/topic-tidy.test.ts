@@ -1,9 +1,11 @@
 import type { Pr } from '@postpile/core';
-import { at } from '@postpile/core/fixtures';
+import { at, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
 import { topicWithPrs } from '../testing/topics.ts';
+import { changeTopicStatus } from '../topic-status.ts';
+import { saveViewer } from '../viewer-meta.ts';
 import { TOPIC_GRAIN_KEY, TOPIC_GRAIN_VERSION } from './topic-tidy.ts';
 
 // The topic tidy runs once after an upgrade that changed how topics are cut
@@ -160,5 +162,91 @@ describe('topic tidy after an upgrade', () => {
 
     expect(h.store.memberships.get(bottom.key)?.topicId).toBe('stack-topic');
     expect(h.store.memberships.get(top.key)?.topicId).toBe('stack-topic');
+  });
+
+  it('sorts topics into kinds and renames one named after a step, recording the rename', async () => {
+    const { h } = tidyHarness();
+    h.runner.answer('topic_tidy', {
+      renames: [{ topicId: 'repo-conventions', name: 'Migration safety', reason: 'it holds the whole standard' }],
+      kinds: [{ topicId: 'repo-conventions', kind: 'standing' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.topics.get('repo-conventions')).toMatchObject({ name: 'Migration safety', kind: 'standing' });
+    expect(h.store.topics.get('review-app-polling')?.kind).toBe('project');
+    const [recorded] = h.store.proposals.listForTopic('repo-conventions');
+    expect(recorded).toMatchObject({ kind: 'rename', name: 'Migration safety', status: 'accepted', source: 'upgrade' });
+  });
+
+  it('shows the agent topics in the Archive and brings one back when PRs join it', async () => {
+    const { h, prs } = tidyHarness();
+    changeTopicStatus(h.store, 'review-app-packaging', 'retire', at(1));
+    h.runner.answer('topic_tidy', {
+      merges: [{ fromTopicIds: ['review-app-polling'], intoTopicId: 'review-app-packaging', name: 'Desktop review app', reason: 'one app' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.runner.promptsFor('topic_tidy')[0]).toContain('topic id review-app-packaging: "review-app-packaging" (project, 1 PR, in the Archive)');
+    expect(h.store.memberships.get(prs[0]!.key)?.topicId).toBe('review-app-packaging');
+    expect(h.store.topics.get('review-app-packaging')?.status).toBe('active');
+  });
+
+  it('gives a new topic from a split the kind the answer names', async () => {
+    const { h, prs } = tidyHarness();
+    h.runner.answer('topic_tidy', {
+      splits: [{ topicId: 'repo-conventions', prKeys: [prs[3]!.key], intoTopicId: null, newName: 'Code ownership', newKind: 'standing', reason: 'a standard' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    const topicId = h.store.memberships.get(prs[3]!.key)?.topicId;
+    expect(h.store.topics.get(topicId!)).toMatchObject({ name: 'Code ownership', kind: 'standing' });
+  });
+
+  it('runs first in a full sync, before the GitHub fetch, so the cover goes up at once', async () => {
+    const { h } = tidyHarness();
+    saveViewer(h.store, viewer);
+    const fetchesAtTidy: number[] = [];
+    const run = h.runner.run.bind(h.runner);
+    h.runner.run = (request) => {
+      if (request.purpose === 'topic_tidy') {
+        fetchesAtTidy.push(h.reader.notificationCalls);
+      }
+      return run(request);
+    };
+    h.runner.answer('topic_tidy', {});
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(fetchesAtTidy).toEqual([0]);
+  });
+
+  it('tries once per sync: a failed call before the fetch is not repeated by the digest', async () => {
+    const { h } = tidyHarness();
+    saveViewer(h.store, viewer);
+    h.runner.answer('topic_tidy', 'not json');
+
+    const report = await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.runner.promptsFor('topic_tidy')).toHaveLength(1);
+    expect(report.errors.some((line) => line.startsWith('topic tidy'))).toBe(true);
+    expect(h.store.meta.get(TOPIC_GRAIN_KEY)).toBeNull();
+  });
+
+  it('shows the agent a topic archived long ago that would still be on offer as a standing topic', async () => {
+    const day = 24 * 60;
+    const h = makeHarness({ topicTidyDue: true, now: () => new Date(at(70 * day)) });
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
+    placedByAgent(h, 'migration-safety', [prs[0]!]);
+    placedByAgent(h, 'other', [prs[1]!]);
+    changeTopicStatus(h.store, 'migration-safety', 'retire', at(10 * day));
+    h.runner.answer('topic_tidy', { kinds: [{ topicId: 'migration-safety', kind: 'standing' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.runner.promptsFor('topic_tidy')[0]).toContain('topic id migration-safety:');
+    expect(h.store.topics.get('migration-safety')?.kind).toBe('standing');
   });
 });

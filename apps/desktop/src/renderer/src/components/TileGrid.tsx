@@ -1,5 +1,6 @@
 import { useRef, type ReactNode } from 'react';
 import { TopicActions } from './AgentActions.tsx';
+import { TopicArchiveBox } from './TopicArchiveBox.tsx';
 import type { TileGroup, TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { gridGroups } from '../lib/queues.ts';
 import { useFlip } from '../lib/use-flip.ts';
@@ -22,7 +23,7 @@ interface TileGridProps {
   showYourMove: boolean;
 }
 
-/** Group names on screen. "Dealt with" is the tile state `done`; a finished topic stays "Finished". */
+/** Group names on screen. "Dealt with" is the tile state `done`; a topic with nothing left goes to the Archive. */
 const GROUP_LABELS: Record<TileGroup, string> = { unread: 'Unread', open: 'Open', dealt_with: 'Dealt with' };
 
 function TileCount(props: { count: number }) {
@@ -188,6 +189,7 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
           </span>
         </div>
         <TopicActions detail={props.detail} />
+        <TopicArchiveBox detail={props.detail} />
       </div>
       {tiles.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">

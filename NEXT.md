@@ -1092,6 +1092,20 @@ the app meanwhile.
   unread dot fades out. "Marks read when you leave" and "Keep unread" are
   gone. The opened mark now goes through the mark-read queue, so it no
   longer shows under Handled quietly.
+- **Project and standing topics** (2026-10-01, DESIGN.md "Topic kinds"):
+  `topic.kind` is `project` or `standing`; the agent picks it, the grain 3
+  tidy sorts existing topics. Projects in the Archive take follow-ups for 30
+  days; standing topics retire only after 6 months with no new PR (user's
+  rule). No third kind (research: incidents are short projects, chores are
+  single tiles). The kind is the agent's: no user switch, no proposals; a
+  dossier update may correct it. A finished project's afterlife (others
+  extending it) starts a standing topic instead of converting the project.
+  Ownership: routed PRs join the standing topic that keeps their standard.
+- **The Archive** (2026-10-01, DESIGN.md "Topic status"): a topic with
+  nothing left goes after 2 days without human activity (bots don't count);
+  "Archive now" in a box in the topic's action row, at the Approve height,
+  skips the wait (user picked the box over a header button or a sidebar row
+  action). "Finished" drawer renamed "Archive"; code keeps `retired`.
 - **Bots on your own open PR clear quietly too** (2026-10-01, DESIGN.md
   "Handled quietly" rule 2, removed): a bot's review or inline comment no
   longer keeps your own open PR unread. Owner: "I never care about bot

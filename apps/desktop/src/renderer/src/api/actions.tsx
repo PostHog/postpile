@@ -191,6 +191,8 @@ export interface Actions {
   sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
+  /** "Archive now" on a topic with nothing left. Local, not a GitHub write. */
+  archiveTopic(topicId: string): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null>;
   /** Returns true when the comment went out. */
@@ -505,6 +507,19 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function archiveTopic(topicId: string): Promise<void> {
+    try {
+      const path = `/api/topics/${encodeURIComponent(topicId)}/archive`;
+      const result = await withBusy(`archiveTopic:${topicId}`, () => request<ActionResult>('POST', path));
+      show(result.ok ? 'ok' : 'error', result.message);
+      // The Archive list first: a topic in neither list makes the view fall back to another topic and pin it.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.finishedTopics });
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not archive the topic: ${errorText(error)}`);
+    }
+  }
+
   async function markOpenedRead(prKey: PrKey): Promise<OpenedReadResult | null> {
     if (writeBlockedReason('openedRead', writes) !== null) {
       return null;
@@ -803,6 +818,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     connectMcp: (from) => run('mcp:connect', null, () => request('POST', '/api/mcp-connection', { from })),
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),
     markTopicSeen,
+    archiveTopic,
     markOpenedRead,
     draftAsk,
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),

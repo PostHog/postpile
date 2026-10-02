@@ -256,6 +256,10 @@ export class DossierUpdater {
       });
       store.topics.updateSummary(topicId, result.dossier.summary, result.inputHash, at);
       store.topics.setArea(topicId, this.areaFor(input, result.area), at);
+      // The agent's call, applied without asking (the user left the kind to the agent).
+      if (result.topicKind !== null && result.topicKind !== input.topic.kind) {
+        store.topics.setKind(topicId, result.topicKind, at);
+      }
       store.cursors.advance({ kind: 'digest', scope: topicId, seq: input.delta.toSeq, dossierVersion: version, updatedAt: at });
       store.meta.set(contextHashKey(topicId), dossierContextHash(input.context));
       store.dossiers.prune(topicId, DOSSIER_VERSIONS_KEPT);

@@ -1,6 +1,8 @@
 import {
   isLiveProposal,
-  isRetiredSince,
+  archiveEndsAt,
+  lastJoinAt,
+  takesNewPrs,
   OUTSIDE_PROPOSAL_DAYS,
   proposalOutcome,
   proposalOutcomeAt,
@@ -20,7 +22,6 @@ import {
   topicAgentOffers,
   compareTopicUrgency,
   eventView,
-  FINISHED_TOPICS_MS,
   topicMove,
   isPrInQuietRepo,
   isQuietTile,
@@ -67,6 +68,8 @@ import {
   type SearchResult,
   type Tile,
   type TileView,
+  type Topic,
+  type TopicArchiveBox,
   type TopicDetail,
   topicPrRollup,
   topicSection,
@@ -80,6 +83,7 @@ import {
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
+import { RetireGate } from './consolidation/retire-gate.ts';
 import { debugNotificationRows, quietReadViews } from './debug-notifications.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { GlanceInputs, glanceTargetKeys } from './glance-inputs.ts';
@@ -399,17 +403,23 @@ export class ReadModels {
     return items.sort(compareTopics);
   }
 
-  /** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. Ignores the repo scope. */
+  /**
+   * The sidebar's Archive drawer: retired topics that still take new PRs
+   * (`takesNewPrs`), newest first. Ignores the repo scope.
+   */
   listFinishedTopics(): FinishedTopic[] {
-    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
-    const finished = this.store.topics.list().filter((topic) => isRetiredSince(topic, since));
-    return finished
-      .map((topic) => ({
+    const now = this.now();
+    return this.store.topics
+      .list()
+      .filter((topic) => topic.status === 'retired')
+      .map((topic) => ({ topic, memberships: this.store.memberships.listForTopic(topic.id) }))
+      .filter(({ topic, memberships }) => takesNewPrs(topic, lastJoinAt(memberships), now))
+      .map(({ topic, memberships }) => ({
         id: topic.id,
         name: topic.name,
         area: topic.area,
         retiredAt: topic.retiredAt ?? topic.updatedAt,
-        prCount: this.store.memberships.listForTopic(topic.id).length,
+        prCount: memberships.length,
       }))
       .sort((a, b) => b.retiredAt.localeCompare(a.retiredAt));
   }
@@ -437,6 +447,19 @@ export class ReadModels {
     return [...decided, ...expired].sort((a, b) => (proposalOutcomeAt(b, now) ?? '').localeCompare(proposalOutcomeAt(a, now) ?? ''));
   }
 
+  /** The Archive box under the Tiles count (`TopicArchiveBox`); never for Unsorted. */
+  private archiveBox(board: Board, topic: Topic): TopicArchiveBox | null {
+    if (topic.id === UNSORTED_TOPIC_ID) {
+      return null;
+    }
+    if (topic.status === 'retired') {
+      const until = archiveEndsAt(topic, lastJoinAt(this.store.memberships.listForTopic(topic.id)));
+      return until !== null && topic.retiredAt !== null ? { state: 'archived', at: topic.retiredAt, until } : null;
+    }
+    const at = topic.status === 'active' ? new RetireGate(board).archivesAt(topic.id) : null;
+    return at === null ? null : { state: 'ready', at };
+  }
+
   getTopic(topicId: string): TopicDetail | null {
     const now = this.now().toISOString();
     const board = this.board();
@@ -461,6 +484,7 @@ export class ReadModels {
       decidedProposals: isUnsorted ? [] : this.decidedProposals(topicId, now),
       dossier: isUnsorted ? null : this.memory.dossierView(topicId, board.prs),
       agent: topicAgentOffers(tiles),
+      archive: this.archiveBox(board, topic),
       prRollup: topicPrRollup(topicTiles, prs),
       section: topicSection(queues),
     };

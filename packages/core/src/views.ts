@@ -119,10 +119,15 @@ export interface TopicListItem {
   prStateCounts: TopicPrStateCounts;
 }
 
-/** The sidebar's Finished drawer lists topics retired this recently. */
-export const FINISHED_TOPICS_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * The box under a topic's Tiles count (DESIGN "The Archive"). ready: nothing
+ * is left in the topic; it moves to the Archive by itself at `at` (the next
+ * full sync once that has passed), or now with "Archive now". archived: in
+ * the Archive since `at`; it takes new PRs until `until`, then retires for good.
+ */
+export type TopicArchiveBox = { state: 'ready'; at: IsoTime } | { state: 'archived'; at: IsoTime; until: IsoTime };
 
-/** A retired topic in the sidebar's Finished drawer. */
+/** A retired topic in the sidebar's Archive drawer (code says "finished" for the drawer's list). */
 export interface FinishedTopic {
   id: string;
   name: string;
@@ -332,6 +337,8 @@ export interface TopicDetail {
   dossier: DossierView | null;
   /** The header's ✨ Approve and ✨ "Mark N read" (`topicAgentOffers`), from the tiles above. */
   agent: TopicAgentOffers;
+  /** The Archive box in the same row; null while something in the topic is open or unread. */
+  archive: TopicArchiveBox | null;
   /**
    * The header's PR pill (`topicPrState` over each PR of the tiles once): the
    * same state as the sidebar row's icon, every PR counted (found and
@@ -408,10 +415,10 @@ export interface SyncOptions {
  * (see DESIGN.md › Sync flow › Scheduling), so each timing is the wall time
  * from that step's start to its end, not a slice of the total.
  */
-export type SyncPhase = 'fetch' | 'tidy' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
+export type SyncPhase = 'tidy' | 'fetch' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
 
 /** In the order a sync starts them. */
-export const SYNC_PHASES: SyncPhase[] = ['fetch', 'tidy', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
+export const SYNC_PHASES: SyncPhase[] = ['tidy', 'fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
 
 /** Milliseconds per phase that ran. */
 export type SyncPhaseTimings = Partial<Record<SyncPhase, number>>;
