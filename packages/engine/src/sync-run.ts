@@ -280,6 +280,8 @@ export class SyncRun {
     this.live = { startedAt, phases, budget, stats: report.agentCallStats };
     try {
       const tidyTried = await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
+      // The first sync into an empty store is a baseline: none of it is news to ping about.
+      const firstLook = store.notifications.list().length === 0;
       const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? SYNC_MAX_PRS));
       report.notificationsNotModified = fetched.notModified;
       report.threads = fetched.threads;
@@ -289,6 +291,10 @@ export class SyncRun {
       report.prsFound = fetched.prsFound;
       report.newEvents = fetched.newEventIds.length;
       errors.push(...fetched.errors);
+      // A reply the sync stored first pings through the next poll cycle, once its thread is unread.
+      if (!firstLook) {
+        this.deps.pingDecider?.keepSyncedNews(fetched.fetchedPrKeys, fetched.newEventIds);
+      }
 
       await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried });
       // Before the retire step: what PostPile clears by itself no longer holds a finished topic.

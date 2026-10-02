@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
-import { isPersonalPing, pingClickTarget, pingRule, pingTemplate, type PrPlace } from './pings.ts';
+import { isLiveConversation, isPersonalPing, pingClickTarget, pingRule, pingTemplate, type PrPlace } from './pings.ts';
 import type { EventKind, Loudness, Pr, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
@@ -226,6 +226,36 @@ describe('isPersonalPing', () => {
   it('skips team mentions and other kinds', () => {
     expect(isPersonalPing(makeEvent({ id: 't', kind: 'team_mention' }), pr, viewer)).toBe(false);
     expect(isPersonalPing(makeEvent({ id: 'c', kind: 'review_changes_requested' }), pr, viewer)).toBe(false);
+  });
+});
+
+describe('isLiveConversation', () => {
+  const pr = makePr();
+  const ownComment = makeEvent({ id: 'own', kind: 'comment', actor: viewer.login, at: '2026-09-02T10:00:00.000Z' });
+  const reply = (at: string, overrides = {}) => makeEvent({ id: 'reply', kind: 'reply_to_user', actor: 'bob', at, ...overrides });
+
+  it('counts a person answering within two hours of the viewer talking on the PR', () => {
+    const answer = reply('2026-09-02T11:30:00.000Z');
+    expect(isLiveConversation(answer, pr, [ownComment, answer], viewer)).toBe(true);
+    const mention = reply('2026-09-02T12:00:00.000Z', { kind: 'mention' });
+    expect(isLiveConversation(mention, pr, [ownComment, mention], viewer)).toBe(true);
+  });
+
+  it('does not count an answer later than two hours, from a bot, or without the viewer talking first', () => {
+    const late = reply('2026-09-02T12:00:01.000Z');
+    expect(isLiveConversation(late, pr, [ownComment, late], viewer)).toBe(false);
+    const bot = reply('2026-09-02T10:30:00.000Z', { actor: 'helper[bot]', isBot: true });
+    expect(isLiveConversation(bot, pr, [ownComment, bot], viewer)).toBe(false);
+    const alone = reply('2026-09-02T10:30:00.000Z');
+    expect(isLiveConversation(alone, pr, [alone], viewer)).toBe(false);
+  });
+
+  it('needs words from the viewer: an approval alone is not talking, and a plain comment is no answer', () => {
+    const approval = makeEvent({ id: 'ok', kind: 'review_approved', actor: viewer.login, at: '2026-09-02T10:00:00.000Z' });
+    const answer = reply('2026-09-02T10:30:00.000Z');
+    expect(isLiveConversation(answer, pr, [approval, answer], viewer)).toBe(false);
+    const plain = makeEvent({ id: 'plain', kind: 'comment', actor: 'bob', at: '2026-09-02T10:30:00.000Z' });
+    expect(isLiveConversation(plain, pr, [ownComment, plain], viewer)).toBe(false);
   });
 });
 

@@ -76,7 +76,7 @@ const prompts: Record<string, string> = {
         dossierBrief: '',
         glance: null,
         events: [event],
-        rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: pr.key }, why: '@' },
+        rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: pr.key }, why: '@', conversation: false },
         template: { title: 'bob mentioned you', body: 'can you look?' },
       },
     ],

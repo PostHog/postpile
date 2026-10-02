@@ -9,6 +9,7 @@ import { NO_FOCUS, type GitHubSync, type PollFocus } from '../github-sync.ts';
 import { emptyFactCounts } from '../memory/fact-writer.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { RunDeps } from '../run-deps.ts';
+import { loadViewer } from '../viewer-meta.ts';
 import type { QuietReads } from '../writes/quiet-reads.ts';
 import type { PingDecider } from './ping-decider.ts';
 import type { PollCycle } from './poll-cycle.ts';
@@ -102,8 +103,16 @@ export class PollRun {
     if (!inbox.notModified) {
       reviveUnreadTopics(store, now().toISOString(), this.writesOn());
     }
-    if (inbox.notModified || !inbox.viewer || inbox.fetchedPrKeys.length === 0) {
-      return { ...done, prsUpdated: 0, decisions: [], pings: [], errors: [] };
+    const nothing = { ...done, prsUpdated: 0, decisions: [], pings: [], errors: [] };
+    // A thread GitHub marked unread after the poll stored its events brings no fetch, only a decision
+    // (`PingDecider.decide`), and a 304 when a full sync read the change first: what waits is decided anyway.
+    const fetchedAny = !inbox.notModified && inbox.fetchedPrKeys.length > 0;
+    if (!fetchedAny && !this.decider.hasWaiting()) {
+      return nothing;
+    }
+    const viewer = inbox.viewer ?? loadViewer(store);
+    if (!viewer) {
+      return nothing;
     }
     const errors: string[] = [];
     const startedAt = now().toISOString();
@@ -111,9 +120,9 @@ export class PollRun {
     try {
       reviveRetiredTopics(store, inbox.newEventIds, startedAt);
       // Without the agent new PRs wait in Unsorted for a sync with it; the rules still ping.
-      if (this.deps.agentOff() === null) {
+      if (fetchedAny && this.deps.agentOff() === null) {
         try {
-          await this.assignTopics(inbox.fetchedPrKeys, inbox.viewer, stats, errors);
+          await this.assignTopics(inbox.fetchedPrKeys, viewer, stats, errors);
         } catch (error) {
           errors.push(`topics: ${errorText(error)}`);
         }
@@ -122,9 +131,9 @@ export class PollRun {
       if (inbox.firstLook) {
         return { ...done, prsUpdated: inbox.fetchedPrKeys.length, decisions: [], pings: [], errors };
       }
-      const decided = await this.decider.decide(inbox.fetchedPrKeys, inbox.newEventIds, inbox.viewer);
+      const decided = await this.decider.decide(inbox.fetchedPrKeys, inbox.newEventIds, viewer);
       // After the pings: they are the time-critical part and go first in the agent queue.
-      if (this.deps.agentOff() === null) {
+      if (fetchedAny && this.deps.agentOff() === null) {
         this.requestCatchUps(inbox.fetchedPrKeys, inbox.newEventIds);
       }
       return {

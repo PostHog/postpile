@@ -4804,6 +4804,24 @@ except through the quiet reads at the end of a cycle that stored a change
 - Only unseen events from this poll and at most 30 minutes old
   (`PING_FRESH_MS`) count; the first look at an empty store is a baseline and
   decides nothing.
+- Unread a cycle late (2026-10-02): a thread that is still read when the poll
+  stores its events is no candidate, and GitHub often marks it unread a
+  cycle later, most of all right after the viewer's own comment made it
+  read. By then the events are no longer new and the PR is not fetched
+  again, so the answer to that comment never pinged (two such replies in
+  the real ping log, one 7 minutes after the viewer's comment). The decider
+  keeps the fresh unseen events of read threads
+  (`PingDecider.waitingForUnread`, in memory like the throttle) and decides
+  them in the cycle that finds the thread unread, fetched again or not; a
+  cycle that fetched nothing, or got a 304 because a full sync read the
+  change first, still decides while something waits. A full sync hands its
+  fresh new events over too (`keepSyncedNews`), on read and unread threads,
+  since it can be the one that stores the reply first and takes the inbox
+  change the poll would have seen; they are decided by the poll cycle
+  right after the sync. Not on the first sync into an empty store, which is
+  a baseline like the poll's first look. Events
+  that go stale or seen drop out, and a thread read on github.com stays
+  read, so nothing waits forever.
 - `pingRule` in core classes the events: `bot` (bot-only), `muted`, `quiet`,
   `not_addressed` (loud, but not aimed at the user in person: a comment or
   approval on their PR, merged without their review) or `addressed` (mention,
@@ -4836,7 +4854,18 @@ except through the quiet reads at the end of a cycle that stored a change
   instructions, topic tailoring, dossier brief, glance, the new events (fenced
   as `<github_data>`), rule loudness and reason, whose turn and the why-here
   code. Answer per item (zod): `{ id, ping, title, body, reason }`. The agent
-  may veto or rephrase, never add. The call takes seconds, so right before a
+  may veto or rephrase, never add.
+- Live conversation (2026-10-02, `isLiveConversation`): a mention, reply or
+  question from a person at most two hours (`CONVERSATION_WINDOW_MS`) after
+  the viewer's own comment or review on the PR (an approval or a push alone
+  is not talking) always pings, whichever of the item's events leads it
+  (a newer team mention must not hide the reply), and the notification is
+  about the reply: its template text and the Dock bounce come from it. The agent writes the text but cannot veto
+  it: it used to drop such answers as "asks nothing", which is still the
+  answer the viewer waits for. The item says "Live conversation" in the
+  prompt; a veto is stored as a ping with the reason "live conversation,
+  pings anyway; agent: …" and the template text when the agent wrote none.
+  "You already replied" still keeps it quiet. The call takes seconds, so right before a
   ping goes out the thread must still be unread and one of its events still
   unseen; a PR read meanwhile does not ping.
 - Fallback when the call fails, skips an item, or the daily cap is spent
