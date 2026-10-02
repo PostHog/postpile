@@ -354,11 +354,27 @@ export interface TopicDriverView {
   choices: DriverChoice[];
 }
 
+/** The repo on the topic header's owner line (`topicRepoLine`). */
+export interface TopicRepoLine {
+  /** Short name of the repo with most of the topic's PRs ("infra", or "owner/name" outside the viewer's orgs). */
+  label: string;
+  /** Every repo the topic touches with its PR count, the main one first: the hover, and "+2" for the others. */
+  repos: { repo: string; prs: number }[];
+  /**
+   * A repo is picked, the topic has PRs in it, but more of its PRs are
+   * elsewhere: "mostly in infra". The picked repo's short name and how many
+   * of the topic's PRs sit in it, for the hover. Null otherwise.
+   */
+  offScope: { pickedLabel: string; pickedPrs: number } | null;
+}
+
 export interface TopicDetail {
   topic: Topic;
   /** Who drives and the driver menu; null for Unsorted. */
   driver: TopicDriverView | null;
   placement: TopicPlacement | null;
+  /** The topic's repo on the owner line; null without PRs and for Unsorted. */
+  repoLine: TopicRepoLine | null;
   tiles: TileView[];
   /** The viewer's moves on live tiles, most urgent first (`topicYourMoves`): the header's chip, same as the sidebar row's. */
   yourMoves: TopicMove[];

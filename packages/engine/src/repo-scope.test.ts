@@ -61,9 +61,12 @@ describe('repo scope', () => {
 
     // All repos: compared against the topic's main repo (most PRs).
     expect(await labels()).toEqual({ [main.key]: null, [second.key]: null, [other.key]: 'infra' });
+    expect((await h.engine.getTopic('mixed'))?.repoLine).toEqual({ label: 'app', repos: [{ repo: 'acme/app', prs: 2 }, { repo: OTHER_REPO, prs: 1 }], offScope: null });
 
     await h.engine.setRepoScope(OTHER_REPO);
     expect(await labels()).toEqual({ [main.key]: 'app', [second.key]: 'app', [other.key]: null });
+    // Listed for its one infra PR, but it mostly lives in app.
+    expect((await h.engine.getTopic('mixed'))?.repoLine?.offScope).toEqual({ pickedLabel: 'infra', pickedPrs: 1 });
   });
 
   it('reads an old multi-selection: one repo stays chosen, several become all repos', async () => {

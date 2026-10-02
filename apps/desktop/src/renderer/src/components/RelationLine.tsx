@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { TopicPlacement, TopicRelation } from '@postpile/core';
+import type { TopicPlacement, TopicRelation, TopicRepoLine } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { relationLabel } from '../lib/sidebar.ts';
 import { RelationBadge } from './pills.tsx';
+import { TopicRepo } from './TopicRepo.tsx';
 import { WhyPanel } from './WhyPanel.tsx';
 
 const OTHER_RELATIONS: Record<TopicRelation, TopicRelation[]> = {
@@ -17,11 +18,17 @@ function lineText(placement: TopicPlacement): string {
 }
 
 /**
- * "Owned by X · you're here because Y" with the relation badge, "Why?" and
- * the correction: "Wrong" offers the other two relations. A correction holds
- * until something new happens in the topic.
+ * "[repo] · Owned by X · you're here because Y" with the relation badge,
+ * "Why?" and the correction: "Wrong" offers the other two relations. A
+ * correction holds until something new happens in the topic.
  */
-export function RelationLine(props: { placement: TopicPlacement; topicId: string; dossierVersion: number | null; updating: boolean }) {
+export function RelationLine(props: {
+  placement: TopicPlacement;
+  repo: TopicRepoLine | null;
+  topicId: string;
+  dossierVersion: number | null;
+  updating: boolean;
+}) {
   const actions = useActions();
   const [whyOpen, setWhyOpen] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -39,6 +46,12 @@ export function RelationLine(props: { placement: TopicPlacement; topicId: string
         <p className="min-w-0 flex-1 select-text">
           <RelationBadge relation={placement.relation} />
           <span className="pl-[7px]">
+            {props.repo && (
+              <>
+                <TopicRepo line={props.repo} />
+                <span className="px-[5px] text-ghost">·</span>
+              </>
+            )}
             {placement.ownerTeam ? (
               <>
                 Owned by <span className="text-ink-2">{placement.ownerTeam}</span>

@@ -1112,6 +1112,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Repo on the owner line, loud narrowed menu** (2026-10-02, DESIGN.md
+  "Repo scope and quiet repos"): the topic's main repo is plain mono text
+  with a book glyph on the "Owned by" line, honey "mostly in X" when the
+  picked repo holds only some of its PRs. Rejected: a repo pill in the
+  header's pill row and a square outlined tag (more grey pill soup). The
+  narrowed repo button is accent filled with an ×; the menu tints only the
+  "Recommended" tag green, not the whole "All repos" row.
 - **Lessons, not silent learning** (2026-10-02, DESIGN.md "Lessons from your
   reviews"): a review is evidence, accepting a lesson is authority. Misses
   become candidate lines in the topic; nothing changes later glances until
