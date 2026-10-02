@@ -80,7 +80,7 @@ describe('lessons from change requests', () => {
         mismatch: 'safety',
         status: 'new',
         glance: expect.objectContaining({ verdict: 'LOOKS_SAFE', risk: 'low - small move', headOid: pr.headOid }),
-        review: expect.objectContaining({ id: 'r-me', body: '', comments: [{ path: 'core/x.ts', body: 'core must not import from ee/' }] }),
+        review: expect.objectContaining({ id: 'r-me', body: '', comments: [{ id: 'c-me', path: 'core/x.ts', body: 'core must not import from ee/' }] }),
       }),
     ]);
     // Unaccepted, it reaches no prompt context: no feedback row, nothing in the topic's tailoring.

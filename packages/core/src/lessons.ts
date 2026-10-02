@@ -40,6 +40,8 @@ export interface LessonGlance {
 
 /** One inline comment of the review, by the user. */
 export interface LessonComment {
+  /** GitHub's comment id, to tell an edited comment from one a capped snapshot left out. */
+  id: string;
   path: string | null;
   body: string;
 }
@@ -154,7 +156,7 @@ export function lessonReview(pr: Pr, review: Review, viewer: Viewer): LessonRevi
         comment.createdAt <= review.submittedAt &&
         (after === null || comment.createdAt > after),
     )
-    .map((comment) => ({ path: comment.path, body: comment.body }));
+    .map((comment) => ({ id: comment.id, path: comment.path, body: comment.body }));
   return { id: review.id, submittedAt: review.submittedAt, commitOid: review.commitOid, body: review.body, comments };
 }
 
@@ -191,11 +193,13 @@ export function possibleMisses(pr: Pr, newEvents: PrEvent[], glance: Glance | nu
   return misses;
 }
 
+/** Same body and the same inline comments (by id, path and text), in any order. */
 function sameReviewText(a: LessonReview, b: LessonReview): boolean {
   if (a.body !== b.body || a.comments.length !== b.comments.length) {
     return false;
   }
-  return a.comments.every((comment, index) => comment.path === b.comments[index]?.path && comment.body === b.comments[index]?.body);
+  const byId = new Map(b.comments.map((comment) => [comment.id, comment]));
+  return a.comments.every((comment) => byId.get(comment.id)?.path === comment.path && byId.get(comment.id)?.body === comment.body);
 }
 
 /**
@@ -217,8 +221,11 @@ export function reviewNow(stored: LessonReview, pr: Pr, viewer: Viewer): { kind:
   }
   const current = lessonReview(pr, review, viewer);
   if (cut) {
-    // Missing inline comments prove nothing here: only the body can show an edit, and the stored comments stay.
-    return review.body === stored.body ? { kind: 'same' } : { kind: 'edited', review: { ...current, comments: stored.comments } };
+    // A comment the cut left out proves nothing and keeps its stored text; one the snapshot holds is compared as usual.
+    const seen = new Set(current.comments.map((comment) => comment.id));
+    const kept = stored.comments.filter((comment) => !seen.has(comment.id));
+    const merged = { ...current, comments: [...kept, ...current.comments] };
+    return sameReviewText(stored, merged) ? { kind: 'same' } : { kind: 'edited', review: merged };
   }
   return sameReviewText(stored, current) ? { kind: 'same' } : { kind: 'edited', review: current };
 }

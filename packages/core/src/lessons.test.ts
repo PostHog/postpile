@@ -101,8 +101,12 @@ describe('reviewNow', () => {
     // The newest 50 reach back before the review: then it really is gone.
     expect(reviewNow(stored, prWith({ ...cutOff, capHits: [{ list: 'reviews', nodes: 50, oldestAt: at(20) }], reviews: [] }), viewer)).toEqual({ kind: 'deleted' });
     // Inline comments may be cut off: their absence is no edit, a changed body still is.
-    const withComment = { ...stored, comments: [{ path: 'x.ts', body: 'first' }] };
+    const withComment = { ...stored, comments: [{ id: 'c-gone', path: 'x.ts', body: 'first' }] };
     expect(reviewNow(withComment, prWith(cutOff), viewer)).toEqual({ kind: 'same' });
+    // A comment the capped snapshot still holds is compared: its edit counts.
+    const visible = makeComment({ id: 'c-seen', author: viewer.login, kind: 'review_comment', path: 'y.ts', body: 'edited', createdAt: at(25) });
+    const storedVisible = { ...stored, comments: [{ id: 'c-seen', path: 'y.ts', body: 'original' }] };
+    expect(reviewNow(storedVisible, prWith({ ...cutOff, comments: [visible] }), viewer)).toMatchObject({ kind: 'edited', review: { comments: [{ id: 'c-seen', body: 'edited' }] } });
     expect(reviewNow(withComment, prWith({ ...cutOff, reviews: [{ ...changes, body: 'new body' }] }), viewer)).toMatchObject({ kind: 'edited', review: { body: 'new body', comments: [{ body: 'first' }] } });
   });
 
