@@ -15,7 +15,7 @@ const QUIET_SAMPLES: { number: number; detail: string; hoursAgo: number }[] = [
   { number: 1904, detail: quietReadDetail(['trunk-io[bot]', 'CI']), hoursAgo: 2 },
   { number: 1911, detail: quietReasonDetail('approved'), hoursAgo: 3.5 },
   { number: 1934, detail: judgedReadDetail(['lyra', 'CI']), hoursAgo: 4 },
-  // After mergify queued it (1h ago) and the grace: the tile is done again.
+  // After mergify queued it (1h ago): the tile is done again.
   { number: 1899, detail: quietReadDetail(['renovate[bot]', 'mergify[bot]']), hoursAgo: 0.5 },
   { number: 1960, detail: quietReasonDetail('changes_requested'), hoursAgo: 29 },
   { number: 1921, detail: quietReadDetail(['renovate[bot]', 'CI']), hoursAgo: 50 },

@@ -184,28 +184,27 @@ describe('scenario: bot sticky comments edited on your own open PR', () => {
     return deriveEvents(pr, viewer, null).map((event) => (event.at <= lastReadAt ? { ...event, seenAt: lastReadAt } : event));
   }
 
-  function check(pr: Pr, now: string): QuietReadInput {
+  function check(pr: Pr): QuietReadInput {
     const thread = makeThreadFor(pr, { lastReadAt, updatedAt: pr.updatedAt, unread: true, reason: 'author' });
-    return { thread, pr, events: synced(pr), userState: null, viewer, notYours: false, prFetchedAt: pr.updatedAt, now };
+    return { thread, pr, events: synced(pr), userState: null, viewer, notYours: false, prFetchedAt: pr.updatedAt };
   }
 
-  it('clears it as bot-only activity once the grace ran out', () => {
+  it('clears it as bot-only activity right away', () => {
     const pr = ownPr(stickies);
-    expect(quietReadCheck(check(pr, at(195)))).toEqual({ kind: 'skip', why: 'grace' });
-    expect(quietReadCheck(check(pr, at(202)))).toEqual({ kind: 'mark', bots: ['posthog[bot]', 'coderabbitai[bot]', 'trunk-io[bot]', 'github-actions[bot]'] });
+    expect(quietReadCheck(check(pr))).toEqual({ kind: 'mark', bots: ['posthog[bot]', 'coderabbitai[bot]', 'trunk-io[bot]', 'github-actions[bot]'] });
     expect(pingRule(synced(pr).filter((event) => event.seenAt === null), pr, viewer, false).class).toBe('bot');
   });
 
   it('clears a bot inline review comment on your own open PR as bot-only activity (2026-10-01)', () => {
     const finding = makeComment({ id: 'new', kind: 'review_comment', threadId: 't9', path: 'cache.ts', author: 'coderabbitai[bot]', body: 'Potential issue: the key ignores the lockfile', createdAt: at(192) });
     const pr = ownPr([...stickies, finding], at(192));
-    expect(quietReadCheck(check(pr, at(210))).kind).toBe('mark');
+    expect(quietReadCheck(check(pr)).kind).toBe('mark');
   });
 
   it('keeps a person editing a comment to mention you unread and loud', () => {
     const ask = edited({ id: 'ask', author: 'lyra', editor: 'lyra', body: 'lgtm, @viewer can you drop the debug line?', createdAt: at(150), lastEditedAt: at(192) });
     const pr = ownPr([...stickies, ask], at(192));
-    const input = check(pr, at(240));
+    const input = check(pr);
     const edit = input.events.find((event) => event.sourceId === 'ask' && event.kind === 'comment_edited')!;
     expect(edit).toMatchObject({ ruleLoudness: 'loud', seenAt: null });
     expect(quietReadCheck(input)).toEqual({ kind: 'skip', why: 'human_activity' });

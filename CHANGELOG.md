@@ -8,6 +8,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - A topic whose tiles are all Dealt with but that still holds an open PR now says so after the Tiles count ("· 1 PR open"), with the PR named in the tooltip. Before, the Archive box stayed away without a reason.
 
+### Changed
+
+- Threads that came back unread only because of bots are marked read on the next live poll, usually within a minute. Before, PostPile waited 10 minutes after the last bot activity and then for the next sync, often up to an hour. Still only while GitHub writes are unlocked. The same goes for PRs you already dealt with, activity judged as not needing you, and releases and issues.
+
 ## 0.14.0 (2026-10-02)
 
 ### Added

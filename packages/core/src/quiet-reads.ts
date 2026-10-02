@@ -28,9 +28,6 @@ import { sawEverythingBefore } from './saw-before-acting.ts';
 import type { CappedList, EventKind, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
-/** How long after the newest bot activity PostPile waits, so a person who answers the bot right away still counts. */
-export const QUIET_GRACE_MS = 10 * 60_000;
-
 /** How far back the "Handled quietly" view looks. */
 export const HANDLED_QUIETLY_DAYS = 7;
 
@@ -79,9 +76,8 @@ export function botNames(events: PrEvent[]): string[] {
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
  * - unseen_loud: the PR has unseen loud news (an automation event the agent raised, the app's Look closer)
  * - your_move: whose turn is the user's, and it was not before their last read (`isNewYourMove`)
- * - grace: the newest activity is less than QUIET_GRACE_MS old
  */
-export type QuietSkip = 'not_unread' | 'never_read' | 'stale_snapshot' | 'human_activity' | 'unseen_merge' | 'unseen_loud' | 'your_move' | 'grace';
+export type QuietSkip = 'not_unread' | 'never_read' | 'stale_snapshot' | 'human_activity' | 'unseen_merge' | 'unseen_loud' | 'your_move';
 
 export type QuietReadCheck = { kind: 'mark'; bots: string[] } | { kind: 'skip'; why: QuietSkip };
 
@@ -95,7 +91,6 @@ export interface QuietReadInput {
   notYours: boolean;
   /** When the stored PR snapshot was fetched; null when unknown. */
   prFetchedAt: IsoTime | null;
-  now: IsoTime;
 }
 
 export interface SnapshotCoverInput {
@@ -194,11 +189,6 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
   if (isNewYourMove(input, thread.lastReadAt)) {
     return { kind: 'skip', why: 'your_move' };
   }
-  // Counted from the thread's own update too: a bot push can carry an older commit date.
-  const newest = [thread.updatedAt, ...botEvents.map((event) => event.at)].sort().at(-1) ?? thread.updatedAt;
-  if (new Date(input.now).getTime() - new Date(newest).getTime() < QUIET_GRACE_MS) {
-    return { kind: 'skip', why: 'grace' };
-  }
   return { kind: 'mark', bots: botNames(botEvents) };
 }
 
@@ -226,22 +216,12 @@ export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'repli
  * - activity_after: a person did something after the user's touch
  * - unseen_merge: a merge without the user's review came after their touch
  * - unseen_loud: the PR has unseen loud news
- * - grace: the touch or the newest activity is less than QUIET_GRACE_MS old
  */
-export type TouchedSkip =
-  | 'not_unread'
-  | 'stale_snapshot'
-  | 'no_touch'
-  | 'nothing_known'
-  | 'acted_without_seeing'
-  | 'activity_after'
-  | 'unseen_merge'
-  | 'unseen_loud'
-  | 'grace';
+export type TouchedSkip = 'not_unread' | 'stale_snapshot' | 'no_touch' | 'nothing_known' | 'acted_without_seeing' | 'activity_after' | 'unseen_merge' | 'unseen_loud';
 
 export type TouchedReadCheck = { kind: 'mark'; reason: TouchReason } | { kind: 'skip'; why: TouchedSkip };
 
-export type TouchedReadInput = Pick<QuietReadInput, 'thread' | 'pr' | 'events' | 'userState' | 'viewer' | 'prFetchedAt' | 'now'>;
+export type TouchedReadInput = Pick<QuietReadInput, 'thread' | 'pr' | 'events' | 'userState' | 'viewer' | 'prFetchedAt'>;
 
 /** The reason a reading touch gives; READING_TOUCH_KINDS only, so anything else is a comment. */
 function touchReason(kind: TouchKind): TouchReason {
@@ -296,10 +276,6 @@ export function touchedReadCheck(input: TouchedReadInput): TouchedReadCheck {
   }
   if (events.some(isUnseenLoud)) {
     return { kind: 'skip', why: 'unseen_loud' };
-  }
-  const newest = [thread.updatedAt, touch.at, ...late.map((event) => event.at)].sort().at(-1) ?? thread.updatedAt;
-  if (new Date(input.now).getTime() - new Date(newest).getTime() < QUIET_GRACE_MS) {
-    return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', reason: touchReason(touch.kind) };
 }
@@ -373,7 +349,6 @@ export function lastLookedAt(thread: NotificationThread, pr: Pr, events: PrEvent
  * - not_judged: a person's activity since that the events agent has not judged yet
  * - unseen_merge: a merge without the user's review they have not seen
  * - your_move: whose turn is the user's, and it was not when they last looked (`isNewYourMove`)
- * - grace: the newest activity is less than QUIET_GRACE_MS old
  */
 export type JudgedSkip =
   | 'not_unread'
@@ -385,8 +360,7 @@ export type JudgedSkip =
   | 'no_people'
   | 'not_judged'
   | 'unseen_merge'
-  | 'your_move'
-  | 'grace';
+  | 'your_move';
 
 /** `actors`: everyone since the user last looked, in order of first appearance, "CI" for actor-less events. */
 export type JudgedReadCheck = { kind: 'mark'; actors: string[] } | { kind: 'skip'; why: JudgedSkip };
@@ -397,7 +371,7 @@ export type JudgedReadCheck = { kind: 'mark'; actors: string[] } | { kind: 'skip
  * activity the events agent judged as not needing them, with no ask among it
  * (DESIGN.md "GitHub unread is PostPile unread", 2026-09-30). The same
  * safety checks as the bot-only rule: fresh complete snapshot, no unseen
- * merge, no new move of theirs, the grace. Agent
+ * merge, no new move of theirs. Agent
  * NOT_YOURS, age, merged or closed, an old handled mark or approval are not
  * evidence here.
  */
@@ -436,26 +410,18 @@ export function judgedReadCheck(input: QuietReadInput): JudgedReadCheck {
   if (isNewYourMove(input, since)) {
     return { kind: 'skip', why: 'your_move' };
   }
-  const newest = [thread.updatedAt, since, ...after.map((event) => event.at)].sort().at(-1) ?? thread.updatedAt;
-  if (new Date(input.now).getTime() - new Date(newest).getTime() < QUIET_GRACE_MS) {
-    return { kind: 'skip', why: 'grace' };
-  }
   return { kind: 'mark', actors: botNames(after) };
 }
 
-/** Later than any grace: `clearableByRule` sets the grace aside. */
-const AFTER_EVERY_GRACE = '9999-12-31T23:59:59.999Z';
-
 /**
- * The quiet reads would mark this PR thread read once its grace is over:
- * only bots since the last read, the user acted after it, or everything
- * since they last looked judged quiet. A retired topic comes back only for
- * a thread that is not (`reviveUnreadTopics`): bot-only noise the next full
- * sync clears brings nothing back.
+ * The quiet reads would mark this PR thread read: only bots since the last
+ * read, the user acted after it, or everything since they last looked
+ * judged quiet. A retired topic comes back only for a thread that is not
+ * (`reviveUnreadTopics`): bot-only noise the quiet reads clear brings
+ * nothing back.
  */
 export function clearableByRule(input: QuietReadInput): boolean {
-  const afterGrace = { ...input, now: AFTER_EVERY_GRACE };
-  return quietReadCheck(afterGrace).kind === 'mark' || touchedReadCheck(afterGrace).kind === 'mark' || judgedReadCheck(afterGrace).kind === 'mark';
+  return quietReadCheck(input).kind === 'mark' || touchedReadCheck(input).kind === 'mark' || judgedReadCheck(input).kind === 'mark';
 }
 
 /**
@@ -576,14 +542,11 @@ export function clickedReadNotice(check: ClickedReadCheck): string {
  * A notification that is not a PR (a release, an issue, a discussion):
  * PostPile shows none of them, so it marks them read on GitHub by itself
  * (DESIGN.md "GitHub unread is PostPile unread": "People who use PostPile
- * expect PostPile to clear all of this"), after the same grace as the other
- * quiet reads. Nothing else is checked: nothing in the app could show it.
+ * expect PostPile to clear all of this"). Nothing else is checked: nothing
+ * in the app could show it.
  */
-export function isClearableNonPr(thread: NotificationThread, now: IsoTime): boolean {
-  if (!thread.unread || thread.subjectType === 'PullRequest') {
-    return false;
-  }
-  return new Date(now).getTime() - new Date(thread.updatedAt).getTime() >= QUIET_GRACE_MS;
+export function isClearableNonPr(thread: NotificationThread): boolean {
+  return thread.unread && thread.subjectType !== 'PullRequest';
 }
 
 /** One tile that holds the opened PR, as far as the "opened in PostPile" rule cares. */

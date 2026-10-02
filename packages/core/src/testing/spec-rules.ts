@@ -709,14 +709,6 @@ export function expectedLookCloserText(pr: Pr, team: string, firstSentence: stri
 // Quiet reads
 // ---------------------------------------------------------------------------
 
-/** Ten minutes after the newest activity, so a person answering the bot right away still counts. */
-const GRACE_MS = 10 * 60_000;
-
-function withinGrace(now: IsoTime, times: IsoTime[]): boolean {
-  const newest = times.toSorted().at(-1)!;
-  return new Date(now).getTime() - new Date(newest).getTime() < GRACE_MS;
-}
-
 /**
  * A snapshot cut off at the query's caps still holds everything since
  * `since` when it carries the raw cap evidence and every list that hit its
@@ -750,7 +742,6 @@ export interface QuietReadSpecInput {
   /** The PR's glance says NOT_YOURS. */
   notYours: boolean;
   prFetchedAt: IsoTime | null;
-  now: IsoTime;
 }
 
 /**
@@ -794,7 +785,7 @@ function actorNames(events: PrEvent[]): string[] {
  * turned unread only because of automation, on a fresh complete snapshot,
  * no unseen merge without their
  * review, no unseen loud news on the PR, no move of theirs new since the
- * read, and past the grace. Whether the tile
+ * read. Whether the tile
  * is unread never matters: its thread is unread, so it always is. Liveness
  * too: all of that holds, so it marks.
  */
@@ -823,9 +814,6 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (expectedNewMove(input, readAt)) {
     return { kind: 'skip', why: 'your_move' };
   }
-  if (withinGrace(input.now, [thread.updatedAt, ...since.map((event) => event.at)])) {
-    return { kind: 'skip', why: 'grace' };
-  }
   return { kind: 'mark', bots: actorNames(since) };
 }
 
@@ -841,7 +829,7 @@ const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_request
  * unread event, having read every person's event before it (a read between
  * the event and the touch, 2026-09-30) (bots after it are fine), on a
  * fresh complete snapshot, no unseen merge without their review after the
- * touch, no unseen loud news on the PR, and past the grace.
+ * touch, no unseen loud news on the PR.
  */
 export function expectedTouchedRead(input: QuietReadSpecInput): TouchedReadCheck {
   const { thread, pr, viewer } = input;
@@ -872,9 +860,6 @@ export function expectedTouchedRead(input: QuietReadSpecInput): TouchedReadCheck
   }
   if (input.events.some(isUnseenLoudEvent)) {
     return { kind: 'skip', why: 'unseen_loud' };
-  }
-  if (withinGrace(input.now, [thread.updatedAt, touch.at, ...late.map((event) => event.at)])) {
-    return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', reason: TOUCH_REASONS[touch.kind]! };
 }
@@ -918,7 +903,7 @@ export function lastLooked(thread: NotificationThread, pr: Pr, viewer: Viewer): 
  * the events agent (or the user) left below loud, with no ask among it and
  * no loud news; at least one person, else the bot-only and acted-after
  * rules decide. Plus the safety checks: fresh complete snapshot, no unseen merge without their
- * review, no move of theirs new since they last looked, past the grace. Liveness too: all of that holds, so it marks.
+ * review, no move of theirs new since they last looked. Liveness too: all of that holds, so it marks.
  */
 export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   const { thread, pr, viewer } = input;
@@ -954,9 +939,6 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   }
   if (expectedNewMove(input, since)) {
     return { kind: 'skip', why: 'your_move' };
-  }
-  if (withinGrace(input.now, [thread.updatedAt, since, ...after.map((event) => event.at)])) {
-    return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', actors: actorNames(after) };
 }

@@ -54,7 +54,7 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Handled quietly</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
-          PR threads PostPile marked read on GitHub for you, only while GitHub writes are unlocked. After a full sync: threads you had read that came back
+          PR threads PostPile marked read on GitHub for you, only while GitHub writes are unlocked. As soon as a sync or the live poll sees them: threads you had read that came back
           only because of bots (CI, merge queues, review and deploy bots; never while something is your move or new for you),
           threads where you reviewed or replied after everything unread, from the gh CLI, GitHub Mobile or an agent, and threads where everything since
           you last looked is bots or people the agent judged as not needing you. And PRs you opened here while nothing was asked of you. Never a review

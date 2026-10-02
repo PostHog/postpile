@@ -227,22 +227,16 @@ export const pingsMatchTheSpec: Invariant = {
   },
 };
 
-/** A day after now: past every grace. */
-function dayLater(now: string): string {
-  return new Date(new Date(now).getTime() + 24 * 60 * 60_000).toISOString();
-}
-
 /**
  * The quiet mark-reads follow the spec's skip lists (DESIGN "Handled
  * quietly", "You already dealt with it", "GitHub unread is PostPile
- * unread"), and mark when nothing on them holds: bot-only activity past the
- * grace on someone else's PR gets read, and so does a person's activity the
- * agent judged as not needing the viewer. Checked now and a day later.
- * Whether the tile is unread is no input any more: a thread unread on GitHub
+ * unread"), and mark when nothing on them holds: bot-only activity on
+ * someone else's PR gets read, and so does a person's activity the agent
+ * judged as not needing the viewer. Whether the tile is unread is no input any more: a thread unread on GitHub
  * always makes it so.
  */
 export const quietReadsMatchTheSpec: Invariant = {
-  name: 'quiet reads skip for the spec reasons and mark when none holds (bots only past the grace, acted after, judged by the agent)',
+  name: 'quiet reads skip for the spec reasons and mark when none holds (bots only, acted after, judged by the agent)',
   check(board, views) {
     for (const [key, thread] of board.threads) {
       const holding = holdingViews(views, key);
@@ -250,28 +244,25 @@ export const quietReadsMatchTheSpec: Invariant = {
         continue;
       }
       const pr = prOf(board, key);
-      for (const now of [board.now, dayLater(board.now)]) {
-        const input = {
-          thread,
-          pr,
-          events: eventsOf(board, key),
-          userState: board.userStates.get(key) ?? null,
-          viewer: board.viewer,
-          notYours: board.notYours.has(key),
-          prFetchedAt: board.prFetchedAt.get(key) ?? null,
-          now,
-        };
-        const quietCheck = quietReadCheck(input);
-        const expectedQuiet = JSON.stringify(expectedQuietRead(input));
-        ensure(JSON.stringify(quietCheck) === expectedQuiet, `${key}: bot-only read ${JSON.stringify(quietCheck)}, expected ${expectedQuiet}`);
-        const touchedCheck = touchedReadCheck(input);
-        const expectedTouched = JSON.stringify(expectedTouchedRead(input));
-        ensure(JSON.stringify(touchedCheck) === expectedTouched, `${key}: acted-after read ${JSON.stringify(touchedCheck)}, expected ${expectedTouched}`);
-        const judgedCheck = judgedReadCheck(input);
-        const expectedJudged = JSON.stringify(expectedJudgedRead(input));
-        ensure(JSON.stringify(judgedCheck) === expectedJudged, `${key}: judged read ${JSON.stringify(judgedCheck)}, expected ${expectedJudged}`);
-        quietDetailsReadBack(key, quietCheck, touchedCheck, judgedCheck);
-      }
+      const input = {
+        thread,
+        pr,
+        events: eventsOf(board, key),
+        userState: board.userStates.get(key) ?? null,
+        viewer: board.viewer,
+        notYours: board.notYours.has(key),
+        prFetchedAt: board.prFetchedAt.get(key) ?? null,
+      };
+      const quietCheck = quietReadCheck(input);
+      const expectedQuiet = JSON.stringify(expectedQuietRead(input));
+      ensure(JSON.stringify(quietCheck) === expectedQuiet, `${key}: bot-only read ${JSON.stringify(quietCheck)}, expected ${expectedQuiet}`);
+      const touchedCheck = touchedReadCheck(input);
+      const expectedTouched = JSON.stringify(expectedTouchedRead(input));
+      ensure(JSON.stringify(touchedCheck) === expectedTouched, `${key}: acted-after read ${JSON.stringify(touchedCheck)}, expected ${expectedTouched}`);
+      const judgedCheck = judgedReadCheck(input);
+      const expectedJudged = JSON.stringify(expectedJudgedRead(input));
+      ensure(JSON.stringify(judgedCheck) === expectedJudged, `${key}: judged read ${JSON.stringify(judgedCheck)}, expected ${expectedJudged}`);
+      quietDetailsReadBack(key, quietCheck, touchedCheck, judgedCheck);
     }
   },
 };

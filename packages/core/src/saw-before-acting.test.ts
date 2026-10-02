@@ -75,9 +75,9 @@ describe('scenario: marking a PR ready right after a comment', () => {
     return events;
   }
 
-  function touched(pr: Pr, events: PrEvent[], lastReadAt: IsoTime | null, now = time(59)) {
+  function touched(pr: Pr, events: PrEvent[], lastReadAt: IsoTime | null) {
     const thread = makeThreadFor(pr, { lastReadAt, updatedAt: pr.updatedAt, unread: true, reason: 'author' });
-    return touchedReadCheck({ thread, pr, events, userState: null, viewer, prFetchedAt: pr.updatedAt, now: new Date(new Date(now).getTime() + 15 * 60_000).toISOString() });
+    return touchedReadCheck({ thread, pr, events, userState: null, viewer, prFetchedAt: pr.updatedAt });
   }
 
   it('(a) lyra comments at 12:35:25, the viewer marks ready at 12:35:31 without a read: not done, not cleared', () => {

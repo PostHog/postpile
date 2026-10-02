@@ -204,7 +204,6 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
       viewer: board.viewer,
       notYours: board.notYours.has(key),
       prFetchedAt: board.prFetchedAt.get(key) ?? null,
-      now: board.now,
     };
     const quiet = quietReadCheck(input);
     const touched = touchedReadCheck(input);

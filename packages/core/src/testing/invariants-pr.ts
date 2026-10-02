@@ -97,7 +97,6 @@ function quietInput(board: PropertyBoard, key: PrKey, thread: NotificationThread
     viewer: board.viewer,
     notYours: board.notYours.has(key),
     prFetchedAt: board.prFetchedAt.get(key) ?? null,
-    now: board.now,
   };
 }
 

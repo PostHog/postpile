@@ -99,7 +99,6 @@ describe('toPr: pending reviews', () => {
       userState: null,
       viewer,
       prFetchedAt: '2026-09-21T00:00:00.000Z',
-      now: '2026-09-21T00:00:00.000Z',
     });
     expect(check).toEqual({ kind: 'skip', why: 'no_touch' });
   });
@@ -169,7 +168,6 @@ describe('toPr: truncation', () => {
         viewer,
         notYours: false,
         prFetchedAt: '2026-09-21T00:00:00.000Z',
-        now: '2026-09-21T00:00:00.000Z',
       });
 
     expect(pr.truncated).toBe(true);
