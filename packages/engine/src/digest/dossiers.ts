@@ -156,16 +156,17 @@ export class DossierUpdater {
   }
 
   /**
-   * A delta with nothing to read (only CI results or muted events after the
-   * cursor) still moves the digest cursor past them. Without it every sync
-   * would read the same history again. The dossier version stays.
+   * A delta that starts no update still moves the digest cursor past the
+   * noise in it (CI, muted events, bot status refreshes), up to the first
+   * ride-along event (`TopicDelta.skipToSeq`). Without it every sync would
+   * read the same history again. The dossier version stays.
    */
-  private skipPast(topicId: string, cursorSeq: number, toSeq: number, previous: DossierVersion | null): void {
-    if (toSeq <= cursorSeq) {
+  private skipPast(topicId: string, cursorSeq: number, skipToSeq: number, previous: DossierVersion | null): void {
+    if (skipToSeq <= cursorSeq) {
       return;
     }
     const at = this.deps.now().toISOString();
-    this.deps.store.cursors.advance({ kind: 'digest', scope: topicId, seq: toSeq, dossierVersion: previous?.version ?? null, updatedAt: at });
+    this.deps.store.cursors.advance({ kind: 'digest', scope: topicId, seq: skipToSeq, dossierVersion: previous?.version ?? null, updatedAt: at });
   }
 
   private input(topic: Topic): DossierUpdateInput | null {
@@ -209,7 +210,7 @@ export class DossierUpdater {
     const storedRelation = previous?.dossier.relation?.kind;
     const relationOutdated = signals.relation !== null && storedRelation !== undefined && storedRelation !== signals.relation;
     if (isEmptyDelta(delta) && !contextChanged && !relationOutdated) {
-      this.skipPast(topic.id, cursorSeq, delta.toSeq, previous);
+      this.skipPast(topic.id, cursorSeq, delta.skipToSeq, previous);
       return null;
     }
     return {

@@ -173,6 +173,7 @@ export function makeDelta(overrides: Partial<TopicDelta> = {}): TopicDelta {
     topicId: 'topic-1',
     fromSeq: 40,
     toSeq: 45,
+    skipToSeq: 45,
     events: [],
     omittedEvents: 0,
     joinedPrKeys: [],

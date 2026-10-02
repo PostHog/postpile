@@ -52,6 +52,7 @@ export * from './dossier.ts';
 export * from './fact-rules.ts';
 export * from './verify.ts';
 export * from './delta.ts';
+export * from './event-roles.ts';
 export * from './glance-batches.ts';
 export * from './glance-state.ts';
 export * from './agent-calls.ts';

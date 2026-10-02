@@ -13,6 +13,7 @@ import {
   type PrKey,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
+import { activitySince, triggersSince } from './event-counts.ts';
 import { factViews } from './fact-world.ts';
 
 /** Enough recent topic feedback to find every correction made since the latest version. */
@@ -57,7 +58,7 @@ export class MemoryReads {
     const world = { prs, memberKeys: new Set(memberKeys), now: this.now().toISOString() };
     const seen = store.cursors.get('seen', topicId);
     const changedFacts = seen ? store.facts.query({ topicId, changedSince: seen.updatedAt, includeClosed: true }) : [];
-    const newEvents = seen ? store.eventLog.countSince(memberKeys, seen.seq) : 0;
+    const newEvents = seen ? activitySince(store, memberKeys, seen.seq) : 0;
     const corrections = this.correctionsSince(topicId, latest.createdAt);
     return {
       version: latest.version,
@@ -66,7 +67,7 @@ export class MemoryReads {
       flags: latest.flags,
       staleClaims: verifyDossier(latest.dossier, world),
       changesSinceSeen: topicChangesSince(seen, latest, changedFacts, newEvents),
-      eventsBehind: store.eventLog.countSince(memberKeys, latest.throughSeq),
+      eventsBehind: triggersSince(store, memberKeys, latest.throughSeq),
       // One extra version, so the oldest shown one has something to compare against.
       history: dossierVersionNotes(store.dossiers.listVersions(topicId, DOSSIER_HISTORY_SHOWN + 1)),
       correctedClaims: this.correctedClaims(corrections),

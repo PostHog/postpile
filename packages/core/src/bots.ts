@@ -23,6 +23,16 @@ export function isBot(login: string): boolean {
   return login === '' || botLogin.test(login);
 }
 
+// Merge queue bots post and keep editing one status comment per PR ("managed
+// by Trunk", submitted, testing, merged, kicked out) plus test badges. The
+// merge or close itself is a timeline event; the comments only report on it.
+const mergeQueueBotLogin = /^(trunk-io|mergify)(\[bot\])?$/i;
+
+/** A merge queue bot: its comments are status reports, never news for topic memory (`memoryRole`). */
+export function isMergeQueueBot(login: string): boolean {
+  return mergeQueueBotLogin.test(login);
+}
+
 export function isMachineComment(comment: Pick<Comment, 'author' | 'body'>): boolean {
   return isBot(comment.author) || botBody.test(comment.body);
 }

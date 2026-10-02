@@ -1,6 +1,7 @@
 import { EVENTS_PER_PR_IN_RECHECK, PRS_IN_RECHECK, type AgentService } from '@postpile/agent';
 import {
   findDossierLine,
+  isMemoryNoise,
   type Fact,
   type MemoryRecheckRequest,
   type MemoryRecheckResult,
@@ -97,9 +98,11 @@ export class MemoryRechecker {
     const topic = topicId ? this.store.topics.get(topicId) : null;
     const sources = this.sourcesFor(request);
     const prs = this.prsFor(request, fact, topic?.id ?? null);
+    // Noise goes before the cut: ten trunk status edits must not push out what people said.
     const events = prs.flatMap((pr) =>
       this.store.events
         .listForPr(pr.key)
+        .filter((event) => !isMemoryNoise(event))
         .sort((a, b) => b.at.localeCompare(a.at))
         .slice(0, EVENTS_PER_PR_IN_RECHECK),
     );

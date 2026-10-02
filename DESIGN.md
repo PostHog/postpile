@@ -648,7 +648,8 @@ migration.
 - **seen cursor** per topic: moved by `markTopicSeen(topicId)`, which stores
   the current max `seq` and the current dossier version. `getTopic` builds
   `changesSinceSeen` from it: `recentChanges` entries newer than the cursor,
-  facts recorded or closed after it, and the count of new events.
+  facts recorded or closed after it, and the count of new events that are
+  not noise (see "Event roles").
 - **consolidate cursor**: time and `seq` of the last consolidation run, used
   to decide when the next one is due.
 - **classify cursor** per topic (and `unsorted`): how far the event second
@@ -783,8 +784,8 @@ stale facts and claims, and topic feedback. It:
 
 - adds `joinedHistory`: log entries of joined members at or below the
   cursor (`joinedMembers` decides who joined)
-- drops muted events and CI results ("CI is not a signal"), keeps bots
-  (the prompt compacts them to counts)
+- drops noise (see "Event roles": muted, CI, bot status refreshes), keeps
+  ride-along bots (the prompt compacts them to counts)
 - caps at `DELTA_LIMITS.maxEvents` (120) with at most 15 per PR, newest
   kept; the rest are only counted in `omittedEvents`
 - sets `toSeq` to the highest `seq` after the cursor, capped or not, so
@@ -798,7 +799,66 @@ stale facts and claims, and topic feedback. It:
   once
 - keeps feedback newer than the previous version as `newFeedback`
 
-`isEmptyDelta` = no dossier update for that topic.
+`isEmptyDelta` = no dossier update for that topic: no trigger event and
+nothing else new. The digest then skips to `skipToSeq`: past the noise
+right after the cursor, never past a ride-along event, which waits for the
+next real update.
+
+### Event roles
+
+Decided 2026-10-02. On the owner's real database the dossier updates were
+the biggest agent cost (234 updates, about $13). Of 207 new versions, 49
+had only bot events since the previous one: 27 were real state changes
+(trunk-io merging or closing), 18 pure noise (bot comment edits, deploy
+statuses, merge queue status comments) and 4 only review bot comments. The
+delta dropped only CI and muted events. Separately, "Out of date: 1 newer
+event not in the dossier yet" counted every logged event, CI and bot edits
+included, even ones the digest had already skipped past (skipping moves the
+digest cursor, not the dossier's `throughSeq`): trunk-io editing its merge
+queue comment made a fresh dossier look out of date.
+
+**The rule.** Every event has one role for topic memory (`memoryRole`,
+core `event-roles.ts`), first match wins:
+
+| Event | Role |
+| --- | --- |
+| effective loudness loud (incl. the app's Look closer, an event the agent raised) | trigger |
+| muted (by rule, agent or user), CI result | noise |
+| anything a person did, the viewer included | trigger |
+| a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval, pushes; Look closer even when turned down | trigger |
+| automation: deploy, merge queue add/remove, a comment edit (the original already counted; edits are status refreshes) | noise |
+| a merge queue bot's comment (`isMergeQueueBot`: trunk-io, mergify): "managed by Trunk", submitted, testing, merged, kicked out, test badges | noise |
+| any other automation, a bot's approval aside: review bots (coderabbitai, chatgpt-codex-connector, greptile-apps, copilot-pull-request-reviewer, stamphog, veria-ai, posthog-security-review-bot), github-actions comments, dependabot comments | ride_along |
+
+- *noise*: never in a prompt, never starts an update, never counted as
+  newer.
+- *ride_along*: in the prompt when something else starts an update, never
+  starts one alone. Their findings already feed the per-PR glance. More
+  than `DELTA_LIMITS.maxEvents` of them waiting does start one, so they
+  cannot pile up without bound.
+- *trigger*: starts an update, counts as a newer event.
+
+Loudness and quiet reads are untouched: roles answer what memory reads,
+loudness answers what needs the viewer.
+
+**Where it applies.** The topic delta (noise out, ride-along alone is
+empty and keeps the cursor before it); "Out of date: N newer events" and
+the MCP topic text (`eventsBehind`: triggers after `throughSeq`); "since
+you last looked: N new events" (no noise); the user's relation correction
+holds until a trigger arrives (`placementOf`); the ping decision item and
+the memory recheck drop noise before their per-PR event cut, so a burst of
+status edits cannot push out what people said. Left as they were: the
+catch-up trigger and topic revive read loud events only (loud is never
+noise), the events agent only sees loud events, pushes after approval and
+people's quiet activity (never noise unless muted, which it skips), and the
+glance hash already leaves bot comments and bot reviews out.
+
+The corpus in `packages/core/src/testing/event-corpus.ts` holds real bot
+logins with realistic bodies and invented people; `event-roles.test.ts`
+pins per example whether it is automation, its loudness, its role, whether
+it reaches the dossier prompt alone or with a trigger, whether it counts as
+newer, and its quiet read outcome. `packages/engine/src/bot-noise.test.ts`
+runs a sequence of it through the real digest.
 
 ### Dossier
 
@@ -4451,7 +4511,9 @@ since" (the topic's or PR's updating state is passed into `MemoryLine`,
 "paused while syncing". When nothing runs: "out of date" ("· out of date",
 "Out of date: 3 newer events not in the dossier yet.", "Out of date: PR
 moved since" in "Why?"). "Stale"
-and "Sync to refresh it" are gone from the UI.
+and "Sync to refresh it" are gone from the UI. "Newer events" counts trigger
+events only (2026-10-02, see "Event roles"): a bot refreshing its status
+comment or a CI result never makes the dossier look out of date.
 
 **Refresh**: `LivePollStatus.catchUpChanges` grows on every queue, start and
 end; `useLivePoll` refetches everything when it moves, so a tile flips from
