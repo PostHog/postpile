@@ -1,4 +1,4 @@
-import { isJunkReason, ruleHasWordedEvidence, ruleTextKey } from '@postpile/core';
+import { isJunkReason, isSizeOrStateOnlyMergeReason, ruleHasWordedEvidence, ruleTextKey } from '@postpile/core';
 import type { z } from 'zod';
 import type { consolidationOutput } from './schemas.ts';
 import type { AreaMerge, ConsolidationInput, ConsolidationResult, ConsolidationTopicProposal, FactMerge, RuleIdea } from './service.ts';
@@ -26,7 +26,8 @@ function toTopicProposals(answer: ConsolidationAnswer['topicProposals'], input: 
         proposals.push(proposal);
       }
     } else if (proposal.kind === 'merge') {
-      if (proposal.intoTopicId !== proposal.topicId && topics.has(proposal.intoTopicId)) {
+      // The prompt says size or a finished state is no reason; this catches an answer that says it anyway.
+      if (proposal.intoTopicId !== proposal.topicId && topics.has(proposal.intoTopicId) && !isSizeOrStateOnlyMergeReason(proposal.reason)) {
         proposals.push(proposal);
       }
     } else {

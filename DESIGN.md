@@ -1194,7 +1194,11 @@ topics already retired. The bar, deterministic where it can be
 - **A real reason.** A topic proposal, area merge or rule whose reason is
   empty, under 15 characters, or a placeholder ("placeholder", "TBD",
   "n/a", "...", "reason", ...) is dropped when the answer is mapped
-  (`isJunkReason`).
+  (`isJunkReason`). A merge whose reason rests on size or lifecycle alone
+  ("small", "finished", "winding down", "nothing open") with no word for
+  what the PRs share ("same", "serve", "series", "rollout", "blocker", ...)
+  is dropped too (`isSizeOrStateOnlyMergeReason`): the prompt forbids it,
+  this catches an answer that says it anyway.
 - **No rule from bare clicks.** A rule cites at least two shown feedback
   ids, and at least one of them states a preference in words: a worded
   kind (tailoring kept or once, memory wrong / forget / confirmed / fixed,

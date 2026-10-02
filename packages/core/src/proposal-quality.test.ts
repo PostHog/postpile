@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   feedbackStatesPreference,
   isJunkReason,
+  isSizeOrStateOnlyMergeReason,
   repeatsRejectedChange,
   ruleHasWordedEvidence,
   ruleTextKey,
@@ -130,5 +131,19 @@ describe('stale proposals', () => {
   it('withdraws topic rules of inactive topics, never global ones', () => {
     const pending = [ruleProposal({ id: 'global' }), ruleProposal({ id: 'live', topicId: 'billing' }), ruleProposal({ id: 'gone', topicId: 'payments' })];
     expect(staleRuleProposalIds(pending, isActive)).toEqual(['gone']);
+  });
+});
+
+describe('isSizeOrStateOnlyMergeReason', () => {
+  it('flags reasons that rest on size or a finished state alone', () => {
+    expect(isSizeOrStateOnlyMergeReason('Both topics are small and finished.')).toBe(true);
+    expect(isSizeOrStateOnlyMergeReason('Both are small dependency-maintenance topics in Dev tooling with merged PRs and nothing open.')).toBe(true);
+    expect(isSizeOrStateOnlyMergeReason('Both are winding-down auth topics driven by alice.')).toBe(true);
+  });
+
+  it('keeps reasons that say what the PRs share, even next to a size word', () => {
+    expect(isSizeOrStateOnlyMergeReason('Small topic, but its PR is layer 19 of the same series as the pipeline platform.')).toBe(false);
+    expect(isSizeOrStateOnlyMergeReason('The property tests pin down the rules the refactor consolidated, so they serve the same goal.')).toBe(false);
+    expect(isSizeOrStateOnlyMergeReason('They implement one rollout; apart, the remaining blocker is hidden.')).toBe(false);
   });
 });

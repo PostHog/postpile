@@ -29,6 +29,22 @@ export function isJunkReason(reason: string): boolean {
   return PLACEHOLDER_REASONS.has(plain) || plain.includes('placeholder') || plain.includes('lorem ipsum');
 }
 
+/** Size or lifecycle words: what a merge reason may mention, but never rest on. */
+const SIZE_OR_STATE = /\b(small|tiny|single[- ]pr|one[- ]pr|few prs|finished|winding[- ]down|wound[- ]down|done|all (?:their |the )?prs? (?:are )?merged|nothing open|no open prs?|inactive|stale)\b/;
+
+/** Words that name what the PRs share: a goal, a series, a dependency. */
+const SHARED_WORK = /\b(same|serve|serves|serving|goal|together|part of|series|rollout|layer|stack|blocker|blocks|blocked|depends|follow[- ]up|continues|one project|single project|overlap|overlaps|duplicate|split from)\b/;
+
+/**
+ * A merge reason that rests on size or lifecycle alone ("Both topics are
+ * small and finished"): no word says what the PRs share. Finished topics
+ * are retirement's job, and two small topics are not one goal.
+ */
+export function isSizeOrStateOnlyMergeReason(reason: string): boolean {
+  const plain = plainReason(reason);
+  return SIZE_OR_STATE.test(plain) && !SHARED_WORK.test(plain);
+}
+
 /**
  * What a feedback row says about the user's wishes:
  * - words: the note holds a line the user wrote, kept or asked to forget.
