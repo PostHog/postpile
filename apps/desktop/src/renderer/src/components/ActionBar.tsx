@@ -1,12 +1,10 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import type { PaneLead, PaneOffers, PrDetail, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { useViewer } from '../api/viewer.ts';
-import { approveButton, approveStateGlyphs, type ApproveButtonInput, type ApproveButtonLook } from '../lib/approve.ts';
-import { ageLabel } from '../lib/time.ts';
-import { useNow } from '../lib/use-now.ts';
+import { ApproveButtons } from './ApproveButtons.tsx';
 import { Button, buttonClasses } from './Button.tsx';
-import { ChatIcon, Glyph } from './icons.tsx';
+import { ComposeAnchor, type ComposeKind } from './ComposePopover.tsx';
+import { ChatIcon } from './icons.tsx';
 import { MarkButton, OpenedMarkNote } from './MarkButton.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';
 import { RemoveTeamButton } from './RemoveTeamButton.tsx';
@@ -20,19 +18,7 @@ interface ActionBarProps {
   detail: PrDetail;
   view: TileView;
   chatOpen: boolean;
-  onAsk: () => void;
   onToggleChat: () => void;
-}
-
-/** What Approve does, why it is blocked, or that you already approved, for the hover title. */
-function approveTitle(input: ApproveButtonInput, look: ApproveButtonLook, blocked: string | null, now: Date): string {
-  const action = blocked ?? 'Approves on GitHub right away. Cannot be undone.';
-  const approvedAt = input.approval?.at ?? null;
-  if (!look.viewerApproved || !approvedAt) {
-    return action;
-  }
-  const after = look.headMoved ? '; commits came after, but your approval still counts' : '';
-  return `You already approved ${ageLabel(approvedAt, now)} ago${after}. Approving again is harmless. ${action}`;
 }
 
 /** Only Open, for a PR the tile has no row for (it left the tile since the pane opened). */
@@ -64,35 +50,25 @@ function leadSlot(lead: PaneLead): Slot {
 /**
  * Approve, open, ask, mark read, snooze, chat. Which buttons show and which
  * one leads come from core (`TileView.offers.pane`, `paneOffers`); this only
- * lays them out. The lead is the one ink button and sits first. Approve's
- * label and look come from `approveButton` ("Approve as well", outlined
- * "Approve draft" / "Approve again"). On a stack or set (`scope: 'pr'`)
+ * lays them out. The lead is the one ink button and sits first. Approve is
+ * split (`ApproveButtons`: approve now, or with a note) with "Comment
+ * review" next to it. Ask, Approve with comment and Comment review share one
+ * compose popover, one open at a time. On a stack or set (`scope: 'pr'`)
  * everything acts on the selected PR; on a single-PR tile the buttons behave
  * as the tile's. A done tile or PR offers only Open on GitHub.
  */
 export function ActionBar(props: ActionBarProps) {
   const actions = useActions();
   const opened = useOpenedReadState();
-  const now = useNow();
   const { pr } = props.detail;
   const tileId = props.view.tile.id;
   const offers = props.view.offers.pane[pr.key] ?? ONLY_OPEN;
   const [recheckOpen, setRecheckOpen] = useState(false);
-  const viewer = useViewer();
-  const approveInput: ApproveButtonInput = {
-    isDraft: pr.isDraft,
-    viewerLogin: viewer.data?.login ?? null,
-    reviews: pr.reviews,
-    approval: props.detail.viewerApproval,
-    headOid: pr.headOid,
-  };
-  const approve = approveButton(approveInput);
-  // The click shows the approval right away (lib/optimistic.ts); until the server confirmed, the button just says so.
-  const approving = actions.isBusy(`approve:${pr.key}`);
+  const [compose, setCompose] = useState<ComposeKind | null>(null);
+  const toggleCompose = (kind: ComposeKind) => setCompose(compose === kind ? null : kind);
+  const closeCompose = () => setCompose(null);
   const lead = leadSlot(offers.lead);
   const variantOf = (slot: Slot) => (lead === slot ? 'primary' : 'secondary');
-  // Approve leads in green (--safe), the colour of the "Approved" state it produces; every other lead is ink.
-  const approveVariant = lead === 'approve' ? 'safe' : 'secondary';
   const glance = props.detail.glance;
   const onePr = offers.scope === 'pr';
   const pending = offers.pendingWrite;
@@ -108,23 +84,7 @@ export function ActionBar(props: ActionBarProps) {
   const markRead = () => (onePr && row ? actions.markPrRead(tileId, pr.key, row.afterRead) : actions.markRead(tileId, props.view.afterRead));
   const slots: Record<Slot, ReactNode> = {
     approve: offers.approve && (
-      <Button
-        variant={approveVariant}
-        size="md"
-        disabled={approving}
-        title={approveTitle(approveInput, approve, actions.blockedReason('approve'), now)}
-        onClick={() => void actions.approve(pr.key, pr.headOid)}
-      >
-        {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}
-        <span className="mr-px flex items-center gap-[3px] opacity-75">
-          {approveStateGlyphs(props.detail.status.lifecycle, pr.reviewDecision, props.detail.agentApprovers).map((part) => (
-            <span key={part.glyph} role="img" aria-label={part.title} title={part.title} className="flex">
-              <Glyph glyph={part.glyph} size={11} strokeWidth={1.8} />
-            </span>
-          ))}
-        </span>
-        {approving ? (approve.viewerApproved ? 'Approved' : 'Approving…') : approve.label}
-      </Button>
+      <ApproveButtons detail={props.detail} leads={lead === 'approve'} compose={compose} onToggleCompose={toggleCompose} onCloseCompose={closeCompose} />
     ),
     open: offers.open && (
       <a href={pr.url} target="_blank" rel="noreferrer" title="Open the PR on github.com" className={buttonClasses(variantOf('open'), 'md')}>
@@ -132,9 +92,11 @@ export function ActionBar(props: ActionBarProps) {
       </a>
     ),
     ask: offers.ask && (
-      <Button size="md" onClick={props.onAsk}>
-        Ask {askPerson}
-      </Button>
+      <ComposeAnchor compose={compose} kinds={['ask']} prKey={pr.key} headOid={pr.headOid} askPerson={askPerson} onClose={closeCompose}>
+        <Button size="md" aria-expanded={compose === 'ask'} onClick={() => toggleCompose('ask')}>
+          Ask {askPerson}
+        </Button>
+      </ComposeAnchor>
     ),
     // After the open marked the PR the note takes the button's place, also once core offers no mark button (the PR is done).
     mark: openedMark ? (

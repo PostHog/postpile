@@ -12,7 +12,7 @@ import type { BatchOrigin, MarkReadQueue, PendingBatch } from '../mark-read-queu
 import type { ActionLog } from '../writes/action-log.ts';
 import { NO_LOCAL_CHANGE, putBackLocalChange, readThreadsLocally, writeReadPlan } from './local-change.ts';
 
-/** The causes that go through the undo queue: a button (tile, PR, Not mine, debug view, Remove team), approve's follow-up, or an open that stayed through the dwell. */
+/** The causes that go through the undo queue: a button (tile, PR, Not mine, debug view, Remove team), approve's or a comment review's follow-up, or an open that stayed through the dwell. */
 export type QueuedReadCause = { kind: 'button' } | { kind: 'approved' } | { kind: 'opened' };
 
 export const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending write after the undo window';

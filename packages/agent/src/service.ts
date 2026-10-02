@@ -172,10 +172,12 @@ export interface EventOverrideProposal {
 export interface DraftCommentInput {
   pr: Pr;
   viewer: Viewer;
-  /** Login of the person being asked. */
-  person: string;
-  /** What the user wants to ask, in their own words. May be empty. */
+  /** Login of the person being asked. Null for a review note, addressed to nobody in particular. */
+  person: string | null;
+  /** What the user wants to ask, in their own words, or what the review note is for. May be empty for an ask. */
   intent: string;
+  /** Untrusted background lines (e.g. an earlier glance). Rendered inside the GitHub data fence, never as instructions. */
+  notes?: string[];
   context: PromptContext;
 }
 

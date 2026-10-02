@@ -16,6 +16,8 @@ export interface GitHubWriter {
   markAllReadBefore(lastReadAt: IsoTime): Promise<void>;
   /** Approves exactly `commitOid`, the head the user looked at, not whatever the head is now. */
   approvePr(ref: PrRef, body: string, commitOid: string): Promise<void>;
+  /** A review with event COMMENT on exactly `commitOid`: a review without an approval. `body` is required. */
+  commentReviewPr(ref: PrRef, body: string, commitOid: string): Promise<void>;
   commentOnPr(ref: PrRef, body: string): Promise<void>;
   /** Removes the review request of one team (`teamSlug`, no org) from the PR. Everyone on the team stops being asked. */
   removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void>;

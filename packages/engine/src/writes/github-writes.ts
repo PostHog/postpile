@@ -51,7 +51,7 @@ export class GitHubWrites {
     this.log.record({ action: enabled ? 'writes_on' : 'writes_off', origin: 'footer', outcome: 'local' });
     const message = enabled
       ? 'GitHub writes on: mark-read and approvals reach GitHub'
-      : 'GitHub writes locked: mark-reads wait as pending writes, approve and comment are blocked';
+      : 'GitHub writes locked: mark-reads wait as pending writes, approve, comment review and comment are blocked';
     return { ok: true, message };
   }
 
@@ -93,6 +93,10 @@ export class GitHubWrites {
 
   approvePr(ref: PrRef, body: string, commitOid: string, context: WriteContext): Promise<WriteResult> {
     return this.send('approve', context, () => this.writeSwitch.writer().approvePr(ref, body, commitOid));
+  }
+
+  commentReviewPr(ref: PrRef, body: string, commitOid: string, context: WriteContext): Promise<WriteResult> {
+    return this.send('comment_review', context, () => this.writeSwitch.writer().commentReviewPr(ref, body, commitOid));
   }
 
   commentOnPr(ref: PrRef, body: string, context: WriteContext): Promise<WriteResult> {

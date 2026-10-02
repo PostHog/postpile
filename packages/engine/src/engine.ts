@@ -8,6 +8,7 @@ import type {
   ApprovePrRequest,
   BatchApproveResult,
   PrApproveResult,
+  ReviewNoteKind,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -1026,8 +1027,8 @@ export class Engine implements EngineService {
     return this.chats.getChat(tileId);
   }
 
-  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
-    const result = await this.prActions.approve(prKey, headOid);
+  async approve(prKey: PrKey, headOid: string, body = ''): Promise<ActionResult> {
+    const result = await this.prActions.approve(prKey, headOid, body);
     if (result.ok) {
       // The single approve runs from the detail pane's action bar (CLAUDE.md
       // "Approve is final"); the agent-backed ones go through approveMany.
@@ -1145,12 +1146,20 @@ export class Engine implements EngineService {
     return this.tiles.unsnooze(tileId);
   }
 
+  commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult> {
+    return this.prActions.commentReview(prKey, headOid, body);
+  }
+
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }> {
     return this.prActions.draftAsk(prKey, person, intent);
   }
 
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
+    return this.prActions.draftReviewNote(prKey, kind);
+  }
+
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
-    // The only caller is AskComposer (apps/desktop/src/renderer/src/components/AskComposer.tsx).
+    // The only caller is the Ask mode of the detail pane's compose popover (renderer components/ComposePopover.tsx).
     const result = await this.prActions.sendComment(prKey, body);
     if (result.ok) {
       this.telemetry.capture('ask_sent', {});

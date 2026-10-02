@@ -2562,6 +2562,49 @@ any review ask; on top of that:
   never did. Drafts get an outlined "Approve draft"; draft wins over "as
   well", since not-ready is the bigger caveat and the review glyph already
   shows the approvals.
+- Approve is split on the PR pane (Decided 2026-10-02, `ApproveButtons` in
+  the renderer). The main part approves right away with no body, as before.
+  A narrow right segment with a speech-bubble icon opens "Approve with
+  comment": the agent drafts a one- or two-line note on open ("Drafting…",
+  then an editable textarea), and "Approve with comment" sends the approval
+  with that body (`PrActions.approve(key, headOid, body)`, the same head
+  check). Only the PR pane has it; tiles, the agent's "Approve stack" and the
+  topic's Approve keep approving without a body.
+- **Comment review** (Decided 2026-10-02): an outlined button next to
+  Approve, never the lead, shown wherever Approve is (`PaneOffers.approve`:
+  someone else's open PR, drafts included, not on a done PR). It posts a
+  GitHub review with event `COMMENT` (`POST
+  repos/{repo}/pulls/{n}/reviews`, `commit_id` = the head on screen, body
+  required, so the post button is disabled while the note is empty). Why it
+  exists: it answers a review request (yours or your team's) without being
+  the one who clears the PR for merging, since branch protection does not
+  count a COMMENT review as an approval. Same rules as Approve: refused
+  without a GitHub call when the stored head moved ("nobody reviews commits
+  they have not seen"), blocked while writes are locked (never a pending
+  write), logged as `comment_review`, followed by the same mark-read as
+  approve (events seen, not handled: the review answers the ask). The PR is
+  refetched; when the snapshot does not show a review by the viewer newer
+  than the one before the write (an earlier review on the same head does not
+  count), PostPile adds a COMMENTED review to the stored PR and drops the
+  viewer's pending personal request, as GitHub does, so
+  `reviewedHead` (tiers, whose turn) sees the viewer reviewed until the next
+  sync brings GitHub's copy. The move goes back to the author.
+- Review note drafts (2026-10-02): `PrActions.draftReviewNote(key, kind)`
+  reuses `agent.draftComment` (call kind `draft_comment`, no new kind) with
+  `person: null` (a note addressed to nobody) and an intent per kind:
+  approve, what was checked and why it is fine; comment, observations
+  without approving or asking for changes. The glance's Does / Verdict /
+  Risk lines travel as fenced `notes` (untrusted, they can echo PR text),
+  never in the intent, and the usual context
+  (instructions and work context), so `instructions.md` can steer the tone.
+- One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
+  Comment review and "Ask <owner>" share one popover under the button that
+  opened it (surface, rounded-tile, shadow-menu; title, one-line hint,
+  textarea, Cancel and the primary action), one open at a time. Ask keeps its
+  extras inside it: the person field (default the PR owner) and the optional
+  question with "Draft", then the editable draft and "Post comment" (a plain
+  PR comment through `sendComment`, as before). It replaced the Ask composer
+  that opened as a strip under the action bar.
 - Tiles whose tracked PRs are all yours carry a neutral "Your PR" marker
   (the own/ink look of the AU badge, in words) next to the kind label.
 - News on your own PR that asks nothing of you (a bot, a finished review;
@@ -5086,7 +5129,7 @@ topic names are never event props.
    props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,
-   `ask_sent` (AskComposer's send), `chat_message_sent`, `mac_ping_shown` /
+   `ask_sent` (the Ask popover's send), `chat_message_sent`, `mac_ping_shown` /
    `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
    withheld_agent, pinged_glance (Look closer on routed reviews),
    handled_quietly: counts since the last summary, from
@@ -5875,8 +5918,10 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
 | `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` |
-| `POST /api/prs/:owner/:repo/:number/approve` | `approve()` |
+| `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?}` | `approve()` (body: "Approve with comment") |
+| `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body}` | `commentReview()` (event COMMENT; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |
+| `POST /api/prs/:owner/:repo/:number/draft-review-note` `{kind}` | `draftReviewNote()` (kind `approve` or `comment`; agent only) |
 | `POST /api/prs/:owner/:repo/:number/comment` `{body}` | `sendComment()` |
 | `POST /api/prs/:owner/:repo/:number/opened` | `markOpenedRead()` (opened in the detail pane; `{marked}`: thread marked read or PR handled) |
 | `POST /api/prs/:owner/:repo/:number/remove-team-request` `{team}` | `removeTeamRequest()` (final; refused while locked) |

@@ -47,6 +47,7 @@ import type {
   PrDetail,
   PrKey,
   RepoOverview,
+  ReviewNoteKind,
   SearchResult,
   SetupAcceptRequest,
   SetupAcceptResult,
@@ -263,9 +264,16 @@ export interface EngineService {
   /**
    * Immediate and final: GitHub approvals cannot be undone. `headOid` is the
    * head commit the user looked at; a different stored head refuses the
-   * approval without calling GitHub.
+   * approval without calling GitHub. `body`: the note from "Approve with
+   * comment", empty for none.
    */
-  approve(prKey: PrKey, headOid: string): Promise<ActionResult>;
+  approve(prKey: PrKey, headOid: string, body?: string): Promise<ActionResult>;
+  /**
+   * "Comment review": a GitHub review with event COMMENT and `body` (required),
+   * pinned to `headOid` with the same head check as approve. Answers a review
+   * request without approving. Final; refused while GitHub writes are locked.
+   */
+  commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult>;
   /**
    * Agent-assisted Approve (a tile's or the topic's ✨ Approve, DESIGN.md
    * "Agent-assisted actions"): each PR through `approve` with its head guard,
@@ -315,6 +323,8 @@ export interface EngineService {
 
   /** Agent drafts a comment asking `person` something; the user edits it before sendComment. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }>;
+  /** Agent drafts the one- or two-line note for "Approve with comment" or "Comment review"; the user edits it first. */
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }>;
   sendComment(prKey: PrKey, body: string): Promise<ActionResult>;
 
   giveFeedback(input: FeedbackInput): Promise<ActionResult>;

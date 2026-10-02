@@ -29,16 +29,31 @@ export class GitHubWriteClient implements GitHubWriter {
   }
 
   /**
+   * https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request
    * Visible to everyone on the PR; only a dismissal walks it back.
    * commit_id pins the review to the commit the user saw. Without it GitHub
-   * approves the current head, which may include pushes made after the last sync.
+   * reviews the current head, which may include pushes made after the last sync.
    */
-  async approvePr(ref: PrRef, body: string, commitOid: string): Promise<void> {
-    const payload: { event: string; commit_id: string; body?: string } = { event: 'APPROVE', commit_id: commitOid };
-    if (body.trim() !== '') {
+  private async postReview(ref: PrRef, event: 'APPROVE' | 'COMMENT', commitOid: string, body: string | null): Promise<void> {
+    const payload: { event: string; commit_id: string; body?: string } = { event, commit_id: commitOid };
+    if (body !== null) {
       payload.body = body;
     }
     await this.http.requestOk('POST', `repos/${ref.repo}/pulls/${ref.number}/reviews`, { body: payload });
+  }
+
+  /** An empty body sends none. */
+  async approvePr(ref: PrRef, body: string, commitOid: string): Promise<void> {
+    await this.postReview(ref, 'APPROVE', commitOid, body.trim() === '' ? null : body);
+  }
+
+  /**
+   * A review with event COMMENT: answers a review request without approving,
+   * and branch protection does not count it as an approval. GitHub requires
+   * the body for this event.
+   */
+  async commentReviewPr(ref: PrRef, body: string, commitOid: string): Promise<void> {
+    await this.postReview(ref, 'COMMENT', commitOid, body);
   }
 
   /** A top-level PR comment. PR conversations are issue comments in the REST API. */

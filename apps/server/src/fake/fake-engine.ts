@@ -74,6 +74,7 @@ import type {
   ApprovePrRequest,
   BatchApproveResult,
   PrApproveResult,
+  ReviewNoteKind,
   ToolsView,
   Topic,
   TopicArchiveBox,
@@ -1189,6 +1190,37 @@ export class FakeEngine implements EngineService {
     return ok(`fake: approved ${prKey} locally, nothing sent to GitHub`);
   }
 
+  /**
+   * Like PrActions.commentReview, in memory: the head check, then a COMMENTED
+   * review by the viewer on the head and the PR's events seen, like after an
+   * approval. Nothing leaves the process.
+   */
+  async commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
+    const pr = this.data.prs[index];
+    if (!pr) {
+      return fail(`${prKey} is not an open PR in the sample`);
+    }
+    if (body.trim() === '') {
+      return fail('A comment review needs a note');
+    }
+    if (pr.headOid !== headOid) {
+      return fail(NEW_COMMITS_SINCE_LOOKED);
+    }
+    if (!this.writes.isEnabled()) {
+      this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
+      return fail('GitHub writes are off (lock in the footer): nothing was posted');
+    }
+    this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
+    const at = this.timestamp();
+    const review = { id: `local-review-${this.newId()}`, author: this.data.viewer, state: 'COMMENTED' as const, body, submittedAt: at, commitOid: pr.headOid };
+    this.data.prs[index] = { ...pr, reviews: [...pr.reviews, review] };
+    for (const event of this.eventsOf(prKey)) {
+      event.seenAt ??= at;
+    }
+    return ok(`fake: comment review kept locally on ${prKey}, nothing sent to GitHub`);
+  }
+
   /** Like the engine's approveMany: each PR through the fake approve, reported per PR, no undo. */
   async approveMany(prs: ApprovePrRequest[], from: AgentActionFrom): Promise<BatchApproveResult> {
     if (prs.length === 0) {
@@ -1475,6 +1507,17 @@ export class FakeEngine implements EngineService {
     const question = intent || 'could you say a bit more about this change?';
     const context = glance ? `\n\n${glance.forYou}` : '';
     return { body: `@${person} ${question}${context}` };
+  }
+
+  /** Canned review notes: the approve one leans on the glance's risk line when the sample has one. */
+  async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
+    this.refuseWithoutAgent();
+    const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
+    if (kind === 'comment') {
+      return { body: 'Read through the change; left no blockers. The retry path could use a test before this merges.' };
+    }
+    const risk = glance ? ` ${glance.risk}` : '';
+    return { body: `Checked the diff and the CI run; the change stays inside its module.${risk}` };
   }
 
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {

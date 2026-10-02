@@ -334,7 +334,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
   title; the activity list then shows only earlier events),
-  `AgentFacts`, `ActivityTimeline`, `ActionBar` (+ `RemoveTeamButton`), `AskComposer`, `TileChat`),
+  `AgentFacts`, `ActivityTimeline`, `ActionBar` (+ `RemoveTeamButton`, `ApproveButtons` (split Approve and Comment review), `ComposePopover` (Approve with comment, Comment review and Ask share it)), `TileChat`),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
