@@ -8,6 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - ✨ Approve on a stack goes from the base up: a layer is only offered when no layer below it needs a closer look. The confirm list says what the others wait on ("waits on #109499"). When the button approves one PR out of several it names it ("Approve #109533"), and "Approve stack" shows only when it approves the whole stack. If a lower layer fails to approve, the layers above it are skipped.
 - Bot reviews and bot comments in review threads on your own open PR no longer keep it unread. They clear quietly like other bot activity; failing checks and unresolved threads still show up on the PR.
+- Opening a PR marks it read as soon as the 1.5s fill completes, instead of later when you move on. The button then says "✓ Marked read" with an Undo link for a few seconds, and the unread dot fades out. The tile and its topic row stay put until you pick something else, then slide to their new place. Tiles a sync moves slide too. "Marks read when you leave" and the "Keep unread" X are gone, and these marks no longer show under Handled quietly.
 
 ## 0.13.3 (2026-10-01)
 

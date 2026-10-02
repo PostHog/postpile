@@ -31,6 +31,8 @@ interface TileProps {
   /** The PR open in the detail pane, when this tile is selected. */
   selectedPrKey: string | null;
   onSelect: (prKey: string) => void;
+  /** The group the grid shows the tile in (a held tile can sit outside its core group), for the slide when it moves (`useFlip`). */
+  shownGroup: string;
 }
 
 /**
@@ -217,6 +219,8 @@ export function Tile(props: TileProps) {
 
   return (
     <article
+      data-flip-key={`tile:${tile.id}`}
+      data-flip-group={props.shownGroup}
       onClick={onTileClick}
       className={`relative flex min-w-0 cursor-pointer flex-col rounded-tile ${background} ${frameClasses(props, draft)}`}
     >

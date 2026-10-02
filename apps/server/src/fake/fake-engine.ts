@@ -164,7 +164,6 @@ import {
   prAfterMarkRead,
   ownTeamRequests,
   teamSlug,
-  quietReasonDetail,
   quietReasonFromDetail,
   HANDLED_QUIETLY_DAYS,
   parsePrKey,
@@ -264,6 +263,8 @@ const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 
 /** How long before start the sample PRs count as fetched. */
 const SAMPLE_FETCH_AGE_MS = 4 * 60_000;
+
+const NOT_OPENED: OpenedReadResult = { marked: false, undoToken: null, undoUntil: null };
 
 function ok(message: string, undoToken: string | null = null): ActionResult {
   return { ok: true, message, undoToken };
@@ -1328,30 +1329,34 @@ export class FakeEngine implements EngineService {
   }
 
   /**
-   * Like QuietReads.markOpened, in memory: when a mark-read of that PR would
-   * leave it done, the sample thread turns read (if it is unread) and the PR
-   * is handled, its events seen.
+   * Like OpenedReads.markOpened, in memory: when a mark-read of that PR would
+   * leave it done, the PR is marked read like the pane's Mark read (its own
+   * batch and undo token), unless nothing would change.
    */
   async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
     this.writes.settle();
     if (!this.writes.isEnabled()) {
-      return { marked: false };
+      return NOT_OPENED;
     }
-    const input = this.openedReadInput(prKey);
-    const thread = input.thread;
-    const check = openedReadCheck(input);
-    if (check.kind === 'skip' || thread === null) {
-      return { marked: false };
+    const check = openedReadCheck(this.openedReadInput(prKey));
+    if (check.kind === 'skip') {
+      return NOT_OPENED;
     }
-    if (check.kind === 'mark') {
-      this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
+    if (check.kind === 'handle' && !this.readChangesAnything(prKey)) {
+      return NOT_OPENED;
     }
-    const change = this.readSample(prReadScope(prKey, true), { kind: 'opened' });
-    const handled = change.eventIds.length > 0 || change.handledPrKeys.length > 0;
-    if (check.kind === 'handle' && handled) {
-      this.writes.record({ action: 'mark_read', origin: 'quiet', outcome: 'local', threadId: thread.id, prKey, detail: 'no unread GitHub thread' });
-    }
-    return { marked: check.kind === 'mark' || handled };
+    const marked = this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
+    const batch = this.batches.find((candidate) => candidate.token === marked.undoToken);
+    const undoUntil = batch ? new Date(batch.queuedAt + UNDO_WINDOW_MS).toISOString() : null;
+    return { marked: true, undoToken: marked.undoToken, undoUntil };
+  }
+
+  /** Whether a read of the PR changes anything in the sample: unseen events, or not handled yet. */
+  private readChangesAnything(prKey: PrKey): boolean {
+    const scope = prReadScope(prKey, true);
+    const userStates = new Map([[prKey, this.data.userStates.find((state) => state.prKey === prKey) ?? null]]);
+    const plan = planRead({ scope, cause: { kind: 'opened' }, events: this.eventsByKey(scope.prKeys), userStates, at: this.timestamp() });
+    return plan.change.eventIds.length > 0 || plan.change.handledKeys.length > 0;
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {

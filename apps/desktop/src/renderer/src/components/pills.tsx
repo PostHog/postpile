@@ -23,10 +23,21 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
  * with loud news, an unseen Look closer event), and on a topic with unread
  * PRs. It means exactly "unread", so the dots add up to GitHub's unread
  * count. What is seen but still owed is the honey "Your move" instead.
+ *
+ * It stays mounted when the PR turns read and fades and shrinks out over
+ * 500ms (2026-10-01, "Marked when the dwell ends"), so the mark the user just
+ * caused is seen to happen; instant with reduced motion.
  */
-export function UnreadDot(props: { className?: string }) {
+export function UnreadDot(props: { shown: boolean; className?: string }) {
+  const look = props.shown ? 'scale-100 opacity-100' : 'scale-30 opacity-0';
   return (
-    <span role="img" aria-label="Unread" title="Unread" className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft ${props.className ?? ''}`} />
+    <span
+      role={props.shown ? 'img' : undefined}
+      aria-label={props.shown ? 'Unread' : undefined}
+      aria-hidden={props.shown ? undefined : true}
+      title={props.shown ? 'Unread' : undefined}
+      className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft transition-[opacity,scale] duration-500 ease-out motion-reduce:transition-none ${look} ${props.className ?? ''}`}
+    />
   );
 }
 

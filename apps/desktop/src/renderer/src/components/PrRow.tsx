@@ -101,7 +101,7 @@ export function PrRow(props: PrRowProps) {
     >
       {/* The icon sits centered in a 20px slot (the detail header's kind icon has the same); the dot hangs left of it, in the padding. */}
       <span className="relative flex shrink-0 px-[3px]">
-        {props.unread && <UnreadDot className="absolute top-1/2 -left-2 -translate-y-1/2" />}
+        <UnreadDot shown={props.unread} className="absolute top-1/2 -left-2 -translate-y-1/2" />
         <PrStateIcon lifecycle={lifecycle} title={LIFECYCLE_WORDS[lifecycle].title} />
       </span>
       <span className="shrink-0 font-mono text-[11px] text-hint">#{prNumber(pr.key)}</span>

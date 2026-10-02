@@ -1082,6 +1082,16 @@ the app meanwhile.
 
 ## Decided
 
+- **Marked when the dwell ends** (2026-10-01, DESIGN.md "Actions act on
+  what you look at" › "Marked when the dwell ends", supersedes "Marked when
+  you move on"): the opened mark fires when the 1.5s fill completes, and
+  the button says "✓ Marked read" with an Undo (the mark-read undo window).
+  Owner: "it bothers me more that it doesn't act than the reshuffle would".
+  The tile and its topic row still hold their place until the selection
+  moves, then slide there (FLIP, 420ms) and the tile lights up briefly; the
+  unread dot fades out. "Marks read when you leave" and "Keep unread" are
+  gone. The opened mark now goes through the mark-read queue, so it no
+  longer shows under Handled quietly.
 - **Bots on your own open PR clear quietly too** (2026-10-01, DESIGN.md
   "Handled quietly" rule 2, removed): a bot's review or inline comment no
   longer keeps your own open PR unread. Owner: "I never care about bot
@@ -1232,7 +1242,8 @@ the app meanwhile.
   and marks the PR done (confirm once, no undo, blocked while locked);
   moving read routed requests down on their own was turned down. Also the
   same day: the opened mark fires when you move on (dwell arms, leaving
-  fires), and the selected tile and its topic row keep their place until
+  fires; superseded 2026-10-01: it fires when the dwell ends, with an
+  Undo), and the selected tile and its topic row keep their place until
   the selection moves. DESIGN.md "Actions act on what you look at".
 
 - **UI fixes from the screen review (2026-09-29)**: Julian signed off on ten

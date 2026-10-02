@@ -1737,7 +1737,9 @@ not taken; instead the user asked for a PR button: "an unassign team button
   them in memory; tests for the engine flow (success, request removal
   fails, unsubscribe fails, locked) and the renderer visibility rule.
 
-**Marked when you move on** (decided 2026-09-29, after the build above).
+**Marked when you move on** (decided 2026-09-29, after the build above;
+superseded 2026-10-01 by "Marked when the dwell ends" below: the mark now
+fires when the dwell ends, the held place stays).
 Julian, clicking through PostPile: "when clicking through much stuff in
 PostPile, now auto-mark status read, which is a bit jarring because the
 status changes while I look at it ... It almost feels like the agent
@@ -1772,7 +1774,9 @@ updates it while I'm looking at it."
   PostPile can show".
 - The mark button says "Done for now" (was "Mark done"; "Mark read" stays).
   The action is still `mark_done`; only the label changed.
-- The opened-in-PostPile mark shows itself: while the 1.5s dwell runs the
+- Superseded 2026-10-01 ("Marked when the dwell ends" below): the fill
+  stays, "Marks read when you leave" and "Keep unread" are gone.
+  The opened-in-PostPile mark shows itself: while the 1.5s dwell runs the
   button fills left to right (a CSS width transition over
   `OPENED_READ_DELAY_MS`); when full it reads "Marks read when you leave"
   (or "Marks done when you leave", matching the label) with a check, and a
@@ -1785,6 +1789,50 @@ updates it while I'm looking at it."
   retry, and a read elsewhere, interleaved. They found no bug: the stored
   thread is never unread mid-retry, an undo leaves a row GitHub has moved on,
   and a stale undo token cannot touch a later click.
+
+**Marked when the dwell ends** (decided 2026-10-01, supersedes "Marked
+when you move on" and the "Marks read when you leave" part of "Unseen dots
+and a visible auto-mark"). Julian, after living with the deferred mark: "it
+bothers me more that it doesn't act than the reshuffle would". The deferred
+mark read as a promise that sometimes did not fire, and nothing visible
+happened when it did. Chosen from a clickable mockup:
+
+- The opened mark fires when the 1.5s fill completes, while the PR is still
+  on screen, with the same guards as before (`PrSummary.openedRead`,
+  `opensMarkRead`, the server's `openedReadCheck`, writes unlocked).
+  Clicking through faster than the dwell still marks nothing. Once per
+  open. The dwell still needs the window visible and focused (hidden during
+  it, it starts over); after it, hiding or leaving the window changes
+  nothing.
+- The button then reads "✓ Marked read" (or "✓ Done for now", matching the
+  label) in soft green, with an Undo link next to it while the undo window
+  is open. It replaces the "Keep unread" X, and "Marks read when you leave"
+  is gone. The note stays after the PR turned done, when core offers no
+  mark button any more.
+- Undo uses the mark-read queue like every clicked mark-read. The opened
+  mark used to be a quiet, immediate GitHub write; GitHub has no
+  mark-unread, so an Undo needs the write deferred. It is now its own batch
+  (origin `detail`, read cause `opened`) with an undo token and the
+  queue's own expiry (`OpenedReadResult.undoToken`, `undoUntil`; the
+  button hides Undo at that time, not a fresh 6s from the answer, Codex
+  review on PR #75): the PR is seen and handled here right
+  away, the thread goes to GitHub after `UNDO_WINDOW_MS`. Undo inside the
+  window puts it all back and nothing reaches GitHub; the open does not arm
+  again. Side effects: the opened mark no longer shows under Handled
+  quietly (it is visible now; older rows still read "opened in PostPile"),
+  and a lock closed inside the window parks it as a pending write, like any
+  mark-read.
+- The coral dot on the PR row and on the topic row fades and shrinks out
+  over 500ms instead of vanishing.
+- The held place does not change: the selected tile and its topic row keep
+  their place until the selection moves ("only once I move"). Then the move
+  animates (FLIP, `useFlip`): every tile, group heading and topic row that
+  moved slides from its old place over 420ms (`cubic-bezier(.2,.7,.2,1)`),
+  and a tile that changed group gets a soft `--accent-soft` tint that fades
+  out over 1.1s. Moves a sync causes (a tile changing group while not
+  selected, topic rows re-sorting) slide the same way. Only a change of
+  order or group slides; new text or a resize does not. With reduced motion
+  there is no slide and no tint.
 
 **Built as** (2026-09-29):
 
@@ -1805,11 +1853,14 @@ updates it while I'm looking at it."
   A done PR that still has unseen news or a thread unread on GitHub keeps
   the tile from being done, so it keeps its dot until it is read.
 - Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
-- Marked when you move on: `OpenedReadTimer` in the renderer's
-  `lib/opened-read.ts` (the dwell arms, `leave()` / `hidden()` fire,
-  `setWanted` keeps `opensMarkRead` current) driven by `useOpenedRead`
-  (leaves when the PR changes or the pane closes, `visibilitychange`,
-  window `blur` / `focus`). The held place is `holdPlace` in
+- Marked when the dwell ends (2026-10-01; was "Marked when you move on"):
+  `OpenedReadTimer` in the renderer's `lib/opened-read.ts` (the dwell end
+  fires, `setWanted` keeps `opensMarkRead` current, `undo()` hands back
+  the token inside the window, phases in `OpenedReadPhase`) driven by
+  `useOpenedRead` (a new open when the PR changes, `visibilitychange` and
+  window `blur` / `focus` pause the dwell only); `OpenedMarkNote` in
+  `MarkButton.tsx`; the slide is `useFlip` (`lib/use-flip.ts`, pure part
+  `lib/flip.ts`) on `TileGrid` and `TopicSidebar`. The held place is `holdPlace` in
   `lib/hold-place.ts` with `useHeldPlace` (the place taken when the
   selection starts): `TileGrid` holds the selected tile across its Unread,
   Open and Dealt with groups,
@@ -1817,7 +1868,8 @@ updates it while I'm looking at it."
   Other topics (`layoutBuckets` / `layoutFromBuckets` in `lib/queues.ts`)
   while its selected tile stays selected.
 - Opened in PostPile: core `openedReadCheck` (per PR), engine
-  `QuietReads.markOpened`, renderer `opensMarkRead`; see "You already dealt
+  `OpenedReads.markOpened` (was `QuietReads.markOpened` until 2026-10-01),
+  renderer `opensMarkRead`; see "You already dealt
   with it" part 3. When GitHub has the thread read already, only the
   PostPile side runs (PR handled, a local log row).
 - Re-reviewer: core `reReviewAsked` (`changes-answered.ts`), used by
@@ -3280,8 +3332,9 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
 - **No toggle.** The All / Unread buttons, "switching to Unread deselects",
   the filter-aware auto pick and the "show All" empty text are gone.
 - **Selection:** the selected tile keeps its place (`useHeldPlace`, now over
-  the three groups); a tile moves groups after a mark or when you leave it
-  (the move-on mark), shown once the selection moves on. Its look changes
+  the three groups); a tile moves groups after a mark (a click, or the
+  opened mark when the dwell ends), shown once the selection moves on, with
+  a slide (2026-10-01, "Marked when the dwell ends"). Its look changes
   right away.
 - **Wording:** "Dealt with" labels tiles wherever the app names the group
   (tile grid, counts, MCP `[PR, dealt with]` tile lines, the dev CLI); the
@@ -3708,28 +3761,30 @@ Merging or closing counts only when the viewer did it.
    since 2026-09-29, before it was the whole tile's `afterRead.done`), no
    tile holding it is snoozed, and only while writes are unlocked. It
    mirrors what github.com does on a visit, limited to cases where it
-   cannot hide a to-do. Also listed under Handled quietly ("opened in
-   PostPile") when the thread was unread on GitHub. A visit on github.com
+   cannot hide a to-do. Until 2026-10-01 also listed under Handled quietly
+   ("opened in PostPile") when the thread was unread on GitHub; since then
+   it is a visible mark with an Undo and not a quiet one. A visit on github.com
    keeps its old effect (events seen, no `handledAt`): PostPile cannot
    check the conditions at the moment of the visit.
 
    Built as `POST /api/prs/:owner/:repo/:number/opened` ->
-   `EngineService.markOpenedRead` -> `QuietReads.markOpened`, with the rule
+   `EngineService.markOpenedRead` -> `OpenedReads.markOpened`, with the rule
    in core `openedReadCheck`. Details the build settled:
    - "Opened" means the PR stayed in the detail pane for 1.5s
      (`OPENED_READ_DELAY_MS`, renderer `useOpenedRead` with
      `OpenedReadTimer`) while the window was visible, so clicking through
-     tiles marks nothing. Since 2026-09-29 that only arms the open: the
-     mark goes out when the user moves on (another PR or tile, the pane
-     closed, the window hidden or blurred), see "Actions act on what you
-     look at" › Marked when you move on. Hidden before that, the wait starts over when the
+     tiles marks nothing. From 2026-09-29 that only armed the open and the
+     mark went out when the user moved on; since 2026-10-01 it goes out
+     when the dwell ends, with an Undo, see "Actions act on what you look
+     at" › Marked when the dwell ends. Hidden before that, the wait starts over when the
      window is visible again with the same PR open (Codex review on PR #10:
      the open used to be dropped). The first tile
      the app shows by itself counts too: it is on screen. One request per
      open; re-renders and refetches of the same PR send nothing.
    - The renderer asks only when the opened PR's `afterRead.done`, the
      tile is not snoozed and the lock is open (`openedRead` on the
-     `GithubWrite` list, blocked while locked, never a pending write); the
+     `GithubWrite` list, blocked while locked; only a lock closed inside the
+     undo window parks it as a pending write, since 2026-10-01); the
      engine checks again (core `openedReadCheck`: a thread, a tile, none
      snoozed, the PR done after a mark-read of it), plus, for an unread
      thread, a snapshot at least as fresh as the thread (the user cannot
@@ -3751,11 +3806,17 @@ Merging or closing counts only when the viewer did it.
      skip on the server logs one line with the reason.
    - A thread GitHub has read already (an earlier open, a github.com visit)
      gets only the PostPile side: the PR is handled, a `local` action log
-     row (origin `quiet`, detail "no unread GitHub thread") is written,
-     nothing reaches GitHub or shows under Handled quietly. This is the
+     row (origin `detail` since 2026-10-01, was `quiet`; detail "no unread
+     GitHub thread") is written, nothing reaches GitHub or shows under
+     Handled quietly. When nothing would change (seen and handled already)
+     the open marks nothing and has no undo. This is the
      case from "Actions act on what you look at": a PR an earlier open had
      read on GitHub still held its set open.
-   - The write is the sync's quiet mark-read: thread read again right
+   - Since 2026-10-01 the write is a queued mark-read like the pane's
+     Mark read (`ReadMarker`, cause `opened`, origin `detail`, its own
+     batch and undo token, sent after the undo window, a moved thread
+     decided again by `ClickedReadRetry`). Until then it was the sync's
+     quiet mark-read: thread read again right
      before, origin `quiet`, detail "opened in PostPile", no undo window,
      thread and events up to its update mirrored as read. Then the PR is
      handled (every event seen, `handledAt`), so it is done, and the tile
@@ -3842,7 +3903,7 @@ sync report and the next sync tries again. The sync log says how many.
 list over the middle and detail columns: the quiet mark-reads that reached
 GitHub in the last 7 days (`HANDLED_QUIETLY_DAYS`), newest first, with
 repo#number, title, why ("only trunk-io, CI", "you approved after it",
-"opened in PostPile"; the other reasons are in "You already dealt with it")
+"opened in PostPile" for rows from before 2026-10-01; the other reasons are in "You already dealt with it")
 and when (`GET /api/handled-quietly`,
 `EngineService.handledQuietly`, read from the action log). A click opens the
 tile when one holds the PR. Quiet on purpose: no coral, the count is faint

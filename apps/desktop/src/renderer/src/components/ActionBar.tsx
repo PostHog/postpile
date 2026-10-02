@@ -7,13 +7,14 @@ import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button, buttonClasses } from './Button.tsx';
 import { ChatIcon, Glyph } from './icons.tsx';
-import { MarkButton } from './MarkButton.tsx';
+import { MarkButton, OpenedMarkNote } from './MarkButton.tsx';
 import { RecheckDialog } from './RecheckDialog.tsx';
 import { RemoveTeamButton } from './RemoveTeamButton.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { markReadNote } from '../lib/guard.ts';
 import { glanceClaim } from '../lib/glance.ts';
 import { removeTeamButtons } from '../lib/team-request.ts';
+import { useOpenedReadState } from '../lib/use-opened-read.ts';
 
 interface ActionBarProps {
   detail: PrDetail;
@@ -76,6 +77,7 @@ function leadSlot(lead: PaneLead): Slot {
  */
 export function ActionBar(props: ActionBarProps) {
   const actions = useActions();
+  const opened = useOpenedReadState();
   const now = useNow();
   const { pr } = props.detail;
   const tileId = props.view.tile.id;
@@ -107,6 +109,7 @@ export function ActionBar(props: ActionBarProps) {
   const row = props.view.prs.find((candidate) => candidate.key === pr.key);
   // The PR's owner: its author, or the person a bot opened it for.
   const askPerson = row?.facts.owners[0] ?? pr.author;
+  const openedMark = opened.prKey === pr.key ? opened.marked : null;
   const markRead = () => (onePr && row ? actions.markPrRead(tileId, pr.key, row.afterRead) : actions.markRead(tileId, props.view.afterRead));
   const slots: Record<Slot, ReactNode> = {
     approve: offers.approve && (
@@ -138,15 +141,20 @@ export function ActionBar(props: ActionBarProps) {
         Ask {askPerson}
       </Button>
     ),
-    mark: offers.markLabel && (
-      <MarkButton
-        prKey={pr.key}
-        variant={variantOf('mark')}
-        label={offers.markLabel}
-        title={markReadTitle}
-        disabled={pending !== null || actions.isBusy(onePr ? `markPr:${tileId}:${pr.key}` : `markRead:${tileId}`)}
-        onClick={() => void markRead()}
-      />
+    // After the open marked the PR the note takes the button's place, also once core offers no mark button (the PR is done).
+    mark: openedMark ? (
+      <OpenedMarkNote mark={openedMark} onUndo={opened.undo} />
+    ) : (
+      offers.markLabel && (
+        <MarkButton
+          prKey={pr.key}
+          variant={variantOf('mark')}
+          label={offers.markLabel}
+          title={markReadTitle}
+          disabled={pending !== null || actions.isBusy(onePr ? `markPr:${tileId}:${pr.key}` : `markRead:${tileId}`)}
+          onClick={() => void markRead()}
+        />
+      )
     ),
     // One "Remove <team>" per team of yours still asked on this PR; never the lead.
     removeTeam: removeTeamButtons(offers.removeTeams).map((button) => (
