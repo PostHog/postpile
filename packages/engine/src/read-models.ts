@@ -420,7 +420,7 @@ export class ReadModels {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles,
         queues,
-        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, yourMoves: urgency.yourMoves, unseenMergeTiles }),
+        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, moves: urgency.yourMoves.length, unseenMergeTiles }),
         section,
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,

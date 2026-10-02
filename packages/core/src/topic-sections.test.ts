@@ -260,13 +260,12 @@ describe('compareInSection', () => {
 });
 
 describe('topicQuiet', () => {
-  const move = (kind: 'review' | 'merge') => ({ move: kind, text: kind === 'merge' ? 'Merge, it is approved' : 'Review' });
-  const row = { section: 'you_drive' as TopicSection, unreadTiles: 0, yourMoves: [] as ReturnType<typeof move>[], unseenMergeTiles: 0 };
+  const row = { section: 'you_drive' as TopicSection, unreadTiles: 0, moves: 0, unseenMergeTiles: 0 };
 
   const table: [string, Partial<typeof row>, boolean][] = [
     ['an unread tile keeps the row loud', { unreadTiles: 1 }, false],
-    ['a your-move chip keeps the row loud', { yourMoves: [move('review')] }, false],
-    ['the approved-merge move keeps the row loud, though it is not urgent', { yourMoves: [move('merge')] }, false],
+    ['a your-move chip keeps the row loud', { moves: 1 }, false],
+    ['the approved-merge move keeps the row loud, though it is not urgent', { moves: 1 }, false],
     ['a merge without your review you have not seen keeps the row loud', { unseenMergeTiles: 1 }, false],
     ['an ask section keeps the row loud', { section: 'needs_reply' }, false],
     ['changes requested keeps the row loud', { section: 'changes_requested' }, false],

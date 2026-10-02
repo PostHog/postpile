@@ -905,7 +905,7 @@ export class FakeEngine implements EngineService {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles,
         queues,
-        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, yourMoves: urgency.yourMoves, unseenMergeTiles }),
+        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, moves: urgency.yourMoves.length, unseenMergeTiles }),
         section,
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,

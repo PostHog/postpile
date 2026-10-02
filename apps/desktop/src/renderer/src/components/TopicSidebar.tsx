@@ -59,8 +59,8 @@ function UnreadBubble(props: { item: TopicListItem }) {
   );
 }
 
-/** Quiet rows (`TopicListItem.quiet`): the faces and the PR state icon step back. */
-const QUIET_ICONS = 'opacity-45';
+/** Quiet rows (`data-quiet` on the row button): the faces and the PR state icon step back. */
+const QUIET_ICONS = 'group-data-quiet:opacity-45';
 
 /** The row's background decides the face rings: they cut the overlaps in the row's own color. */
 type RowTone = 'active' | 'unread' | 'read';
@@ -77,11 +77,11 @@ const FACE_RINGS: Record<RowTone, string> = {
  * people icon first); the other authors follow outside it as plain avatars,
  * overlapping like the faces inside (the first one onto the pill's edge).
  */
-function FaceStack(props: { people: TopicPerson[]; tone: RowTone; dim: boolean }) {
+function FaceStack(props: { people: TopicPerson[]; tone: RowTone }) {
   const ring = FACE_RINGS[props.tone];
   const pill = teamPill(props.people);
   return (
-    <span className={`flex shrink-0 items-center ${props.dim ? QUIET_ICONS : ''}`}>
+    <span className={`flex shrink-0 items-center ${QUIET_ICONS}`}>
       {pill.ours.length > 0 && (
         <span title={pill.title} className="flex h-[22px] items-center rounded-full bg-sea-soft pr-0.5 pl-1.5 text-sea-ink inset-ring inset-ring-sea-ring">
           <PeopleIcon size={11} />
@@ -144,14 +144,14 @@ function LeadSlot(props: { children?: ReactNode }) {
  * the queue, else open, draft, merged, closed). The only place the per-state
  * counts show, as the tooltip.
  */
-function PrStateMark(props: { item: TopicListItem; dim: boolean }) {
+function PrStateMark(props: { item: TopicListItem }) {
   const { prState, prStateCounts } = props.item;
   if (prState === null) {
     return null;
   }
   // A 16px box, as wide as the smallest unread bubble above it, so the icon ends on the bubble's right edge.
   return (
-    <span className={`flex min-w-4 shrink-0 items-center justify-end ${props.dim ? QUIET_ICONS : ''}`}>
+    <span className={`flex min-w-4 shrink-0 items-center justify-end ${QUIET_ICONS}`}>
       <PrStateIcon state={prState} size={11} title={stateMix(prStateCounts)} />
     </span>
   );
@@ -191,6 +191,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; searching: boo
       data-flip-group={props.flipGroup}
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
+      data-quiet={dim ? '' : undefined}
       className={`group flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
     >
       <span className="flex w-full min-w-0 items-center">
@@ -200,7 +201,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; searching: boo
         <span className="flex min-w-0 flex-1 items-center gap-[7px]">
           <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>
           <span className="ml-auto" />
-          <FaceStack people={item.people} tone={tone} dim={dim} />
+          <FaceStack people={item.people} tone={tone} />
           <UnreadBubble item={item} />
         </span>
       </span>
@@ -214,7 +215,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; searching: boo
           <YourMoveChip moves={item.yourMoves} />
           {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
           {props.notSorted && <NotSortedMark />}
-          <PrStateMark item={item} dim={dim} />
+          <PrStateMark item={item} />
         </span>
       </span>
     </button>

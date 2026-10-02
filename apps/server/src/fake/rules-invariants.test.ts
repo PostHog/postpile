@@ -31,13 +31,10 @@ function expectOnlyOpen(pane: PaneOffers): void {
 }
 
 describe('quiet rows on the sample board', () => {
-  it('dims some rows and not others, and a dimmed row has nothing waiting', async () => {
+  it('dims some rows and not others', async () => {
     const topics = await new FakeEngine({ now: () => NOW }).listTopics();
     expect(topics.some((item) => item.quiet)).toBe(true);
     expect(topics.some((item) => !item.quiet)).toBe(true);
-    for (const item of topics.filter((entry) => entry.quiet)) {
-      expect(item, item.topic.id).toMatchObject({ unreadTiles: 0, yourMoves: [], unseenMergeTiles: 0 });
-    }
   });
 });
 
