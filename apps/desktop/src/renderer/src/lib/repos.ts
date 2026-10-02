@@ -26,8 +26,9 @@ export function countTitle(topics: number, prs: number | null): string {
 /** The hover on the topic header's repo: why an off-scope topic is listed, else where its PRs are. */
 export function topicRepoTitle(line: TopicRepoLine): string {
   if (line.offScope) {
-    const prs = line.pickedPrs === 1 ? '1 PR is' : `${line.pickedPrs} PRs are`;
-    return `Listed because ${prs} in ${line.pickedLabel}; most of its PRs are in ${line.label}`;
+    const { pickedLabel, pickedPrs } = line.offScope;
+    const prs = pickedPrs === 1 ? '1 PR is' : `${pickedPrs} PRs are`;
+    return `Listed because ${prs} in ${pickedLabel}; most of its PRs are in ${line.label}`;
   }
   const [main, ...others] = line.repos;
   return others.length === 0 ? `Most of its PRs are in ${main}` : `Most of its PRs are in ${main}; also in ${others.join(', ')}`;

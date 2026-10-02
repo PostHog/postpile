@@ -1006,6 +1006,7 @@ export class FakeEngine implements EngineService {
     }
     const tiles = this.topicTileViews(topicId);
     const topicTiles = this.tilesOfTopic(topicId);
+    const prKeys = this.topicPrKeys(topicId);
     const placement = this.memory.placement(topic);
     const yourMoves = topicYourMoves(tiles);
     const sectionSource = {
@@ -1020,7 +1021,7 @@ export class FakeEngine implements EngineService {
       topic,
       driver: topicDriverView(sectionSource),
       placement,
-      repoLine: topicRepoLine(this.topicPrKeys(topicId), this.repoSettings, viewerOrgs(this.data.viewerTeams)),
+      repoLine: topicRepoLine(prKeys, this.repoSettings, viewerOrgs(this.data.viewerTeams)),
       tiles,
       yourMoves,
       groupYourMoves: yourMovesByGroup(tiles),
@@ -1034,7 +1035,7 @@ export class FakeEngine implements EngineService {
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
       section: topicSectionOf(sectionSource),
-      memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
+      memoryUpdating: this.catchUp.memoryUpdating(prKeys),
     };
   }
 

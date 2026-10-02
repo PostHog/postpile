@@ -358,16 +358,14 @@ export interface TopicDriverView {
 export interface TopicRepoLine {
   /** Short name of the repo with most of the topic's PRs ("infra", or "owner/name" outside the viewer's orgs). */
   label: string;
-  /** How many other repos the topic's PRs sit in: the "+2" after the name. */
-  otherRepos: number;
-  /** Full names of every repo the topic touches, the main one first, for the hover. */
+  /** Full names of every repo the topic touches, the main one first: the hover, and "+2" for the others. */
   repos: string[];
-  /** A repo is picked, the topic has PRs in it, but most of its PRs are elsewhere: "mostly in infra". */
-  offScope: boolean;
-  /** Short name of the repo picked in the title bar menu; null under "All repos". */
-  pickedLabel: string | null;
-  /** The topic's PRs in the picked repo; 0 under "All repos". */
-  pickedPrs: number;
+  /**
+   * A repo is picked, the topic has PRs in it, but most of its PRs are
+   * elsewhere: "mostly in infra". The picked repo's short name and how many
+   * of the topic's PRs sit in it, for the hover. Null otherwise.
+   */
+  offScope: { pickedLabel: string; pickedPrs: number } | null;
 }
 
 export interface TopicDetail {

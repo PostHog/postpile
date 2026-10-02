@@ -28,11 +28,10 @@ describe('repo menu', () => {
   });
 
   it('words the topic repo hover', () => {
-    const line: TopicRepoLine = { label: 'infra', otherRepos: 1, repos: ['acme/infra', 'acme/app'], offScope: false, pickedLabel: null, pickedPrs: 0 };
+    const line: TopicRepoLine = { label: 'infra', repos: ['acme/infra', 'acme/app'], offScope: null };
     expect(topicRepoTitle(line)).toBe('Most of its PRs are in acme/infra; also in acme/app');
-    expect(topicRepoTitle({ ...line, otherRepos: 0, repos: ['acme/infra'] })).toBe('Most of its PRs are in acme/infra');
-    const off = { ...line, offScope: true, pickedLabel: 'app', pickedPrs: 1 };
-    expect(topicRepoTitle(off)).toBe('Listed because 1 PR is in app; most of its PRs are in infra');
-    expect(topicRepoTitle({ ...off, pickedPrs: 2 })).toBe('Listed because 2 PRs are in app; most of its PRs are in infra');
+    expect(topicRepoTitle({ ...line, repos: ['acme/infra'] })).toBe('Most of its PRs are in acme/infra');
+    expect(topicRepoTitle({ ...line, offScope: { pickedLabel: 'app', pickedPrs: 1 } })).toBe('Listed because 1 PR is in app; most of its PRs are in infra');
+    expect(topicRepoTitle({ ...line, offScope: { pickedLabel: 'app', pickedPrs: 2 } })).toBe('Listed because 2 PRs are in app; most of its PRs are in infra');
   });
 });
