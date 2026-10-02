@@ -4477,10 +4477,12 @@ last read, so no rule could ever clear the thread.
 - **Budgets** (engine `cap-fill.ts`): at most 5 pages per list per PR (and 5
   over all of one PR's threads' comments, `CAP_FILL_PAGES`), 10 PRs per
   full sync (`CAP_FILL_SYNC_PRS`), 3 per poll (`CAP_FILL_POLL_PRS`), newest
-  thread first, nothing while the GitHub quota is low
-  (`allowsBackground`). Skipped PRs, the pages each PR took and lists still
-  short go to the sync log; a failed request ends the pass and the PR keeps
-  its unpaged snapshot.
+  thread first, nothing while the GitHub quota is low (`allowsBackground`,
+  checked before each PR). A list still short of the read after its pages
+  ends that PR's paging: coverage needs every list, so the rest could not
+  help. Skipped PRs, the pages each PR took and lists still short go to the
+  sync log; a failed request ends the pass and the PR keeps its unpaged
+  snapshot.
 - **Real data** (2026-10-02): 13 of 737 stored snapshots hit a cap, none
   with an unread thread that day. Paging every capped list to its end
   would take 1 to 4 pages, except one PR's timeline (381 items, about 6);
