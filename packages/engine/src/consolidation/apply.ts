@@ -105,6 +105,10 @@ export class ConsolidationApplier {
     if (this.store.topics.get(idea.topicId)?.status !== 'active') {
       return;
     }
+    // The target may have been archived or merged away while the call ran; such a merge could never be accepted.
+    if (idea.kind === 'merge' && this.store.topics.get(idea.intoTopicId)?.status !== 'active') {
+      return;
+    }
     // A merge's target holds the merges the other way round, so a "no" to either direction counts.
     const filed = [...this.store.proposals.listForTopic(idea.topicId), ...(idea.kind === 'merge' ? this.store.proposals.listForTopic(idea.intoTopicId) : [])];
     if (filed.some((earlier) => sameIdea(earlier, idea))) {
