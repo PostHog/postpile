@@ -7,6 +7,14 @@ export interface PartialPrs {
   errors: string[];
 }
 
+/** What paging one PR's capped lists back brought (`GitHubReader.fillCappedLists`). */
+export interface CapFill {
+  /** The snapshot with the older items merged in and its cap hits moved on. */
+  pr: Pr;
+  /** Pages fetched, all lists together. */
+  pages: number;
+}
+
 export interface NotificationConditions {
   etag: string | null;
   lastModified: string | null;
@@ -104,6 +112,16 @@ export interface GitHubReader {
    * listed and the other batches still count.
    */
   fetchPrsPartial(refs: PrRef[]): Promise<PartialPrs>;
+
+  /**
+   * Older pages of a fetched PR's capped lists (`Pr.capHits`), one GraphQL
+   * request per page, until each list reaches back to `since` (null: its
+   * end; review threads and a thread's comments always to their end) or ran
+   * `maxPages` pages (`maxPages` over all threads' comments); once a list
+   * stays short the rest is left. The items are normalized like fetchPrs
+   * and merged in without repeats. Throws on a failed request.
+   */
+  fillCappedLists(pr: Pr, since: IsoTime | null, maxPages: number): Promise<CapFill>;
 
   /**
    * Open and merged same-repo PRs per lookup (a few newest each), answers in

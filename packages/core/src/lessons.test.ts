@@ -104,6 +104,9 @@ describe('reviewNow', () => {
     const commentsCut = { truncated: true, capHits: [{ list: 'thread_comments', nodes: 100, oldestAt: null }] } satisfies Partial<Pr>;
     const withComment = { ...stored, comments: [{ id: 'c-gone', path: 'x.ts', body: 'first' }] };
     expect(reviewNow(withComment, prWith(commentsCut), viewer)).toEqual({ kind: 'same' });
+    // Paging reached the end of the comment list: a missing comment was deleted.
+    const pagedIn = { truncated: true, capHits: [{ list: 'thread_comments', nodes: 140, oldestAt: null, complete: true }] } satisfies Partial<Pr>;
+    expect(reviewNow(withComment, prWith(pagedIn), viewer).kind).toBe('edited');
     // Capped only on commits: the comment lists are whole, so a missing comment was deleted.
     const commitsOnly = { truncated: true, capHits: [{ list: 'commits', nodes: 100, oldestAt: at(1) }] } satisfies Partial<Pr>;
     expect(reviewNow(withComment, prWith(commitsOnly), viewer).kind).toBe('edited');

@@ -1,6 +1,6 @@
 import { glanceRiskLevel } from './glance-risk.ts';
 import { sameLogin } from './mentions.ts';
-import { cutSnapshotCovers } from './quiet-reads.ts';
+import { capHitCoversSince } from './snapshot-coverage.ts';
 import type { CappedList, Glance, IsoTime, Pr, PrEvent, PrKey, Review, Viewer } from './types.ts';
 
 // Lessons: what the agent should check next time, learned from the user's
@@ -194,15 +194,16 @@ export function possibleMisses(pr: Pr, newEvents: PrEvent[], glance: Glance | nu
 }
 
 /**
- * One of these lists came back full, so items past it may be missing. A
+ * One of these lists hit its cap and does not reach back to `since` (or is
+ * not complete, `capHitCoversSince`), so items of it may be missing. A
  * truncated snapshot stored before cap hits were recorded may have cut
  * anything.
  */
-function listMayBeCut(pr: Pr, lists: CappedList[]): boolean {
+function listMayBeCut(pr: Pr, lists: CappedList[], since: IsoTime | null): boolean {
   if (pr.truncated !== true) {
     return false;
   }
-  return pr.capHits === undefined || pr.capHits.some((hit) => lists.includes(hit.list));
+  return pr.capHits === undefined || pr.capHits.some((hit) => lists.includes(hit.list) && !capHitCoversSince(hit, since));
 }
 
 /** Same body and the same inline comments (by id, path and text), in any order. */
@@ -225,14 +226,15 @@ export function reviewNow(stored: LessonReview, pr: Pr, viewer: Viewer): { kind:
   // A snapshot cut off at the query's caps (a busy PR) may leave out an old review or its inline comments.
   const review = pr.reviews.find((candidate) => candidate.id === stored.id);
   if (!review) {
-    const reviewsCut = listMayBeCut(pr, ['reviews']) && !cutSnapshotCovers(pr, stored.submittedAt);
+    const reviewsCut = listMayBeCut(pr, ['reviews'], stored.submittedAt);
     return reviewsCut ? { kind: 'same' } : { kind: 'deleted' };
   }
   if (review.state !== 'CHANGES_REQUESTED') {
     return { kind: 'deleted' };
   }
   const current = lessonReview(pr, review, viewer);
-  if (listMayBeCut(pr, ['comments', 'review_threads', 'thread_comments'])) {
+  // Where the inline comments start is not stored, so only a complete comment list vouches.
+  if (listMayBeCut(pr, ['comments', 'review_threads', 'thread_comments'], null)) {
     // A comment the cut left out proves nothing and keeps its stored text; one the snapshot holds is compared as usual.
     const seen = new Set(current.comments.map((comment) => comment.id));
     const kept = stored.comments.filter((comment) => !seen.has(comment.id));

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThreadFor, makeTimelineItem, makeUserState, viewer } from './fixtures.ts';
 import {
+  awaitsJudgement,
   botNames,
   botOnlySinceRead,
   actorsFromQuietDetail,
@@ -18,12 +19,14 @@ import {
   quietReadDetail,
   quietReasonDetail,
   quietReasonFromDetail,
+  requestGoneReadCheck,
+  requestGoneReadDetail,
   touchedReadCheck,
   type ClickedReadInput,
   type QuietReadInput,
   type TouchedReadInput,
 } from './quiet-reads.ts';
-import type { Pr, PrEvent } from './types.ts';
+import type { Pr, PrEvent, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 const pr = makePr({ number: 7, author: 'alice' });
@@ -571,5 +574,97 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
     expect(isNewYourMove(input, lastReadAt)).toBe(true);
     expect(judgedReadCheck(input).kind).toBe('skip');
     expect(quietReadCheck(input).kind).toBe('skip');
+  });
+});
+
+// The real case of 2026-10-02 (names and repo invented): a bot asked the
+// viewer's home team and two other teams for a review on an outsider's PR.
+// The viewer never opened the thread. The author removed the home team's
+// request, then only answered review bots, and the events agent judged those
+// replies quiet. The request no longer stands, so the thread clears.
+describe('requestGoneReadCheck', () => {
+  const day = (date: number, hour = 12) => new Date(Date.UTC(2026, 8, date, hour)).toISOString();
+  const home = 'acme/team-devex';
+  const devexViewer: Viewer = { login: 'viewer', teams: [home], homeTeams: [home], teamMembers: ['lyra'] };
+  const judgedQuiet = { loudness: 'quiet' as const, reason: 'nothing here needs you', by: 'agent' as const };
+  const request = (subject: string, id: string) => makeTimelineItem({ id, actor: 'assign-bot[bot]', subject, at: day(12) });
+
+  function facadePr(extra: Partial<Pr> = {}): Pr {
+    return makePr({
+      number: 990,
+      author: 'paul',
+      reviewerTeams: ['acme/team-desktop', 'acme/team-data-tools'],
+      timeline: [
+        request(home, 'rq-devex'),
+        request('acme/team-desktop', 'rq-desktop'),
+        request('acme/team-data-tools', 'rq-data'),
+        makeTimelineItem({ id: 'rm-devex', kind: 'review_request_removed', actor: 'assign-bot[bot]', subject: home, at: day(13) }),
+      ],
+      comments: [
+        makeComment({ id: 'c-bot', author: 'greptile-apps[bot]', body: 'Two findings in the facade.', createdAt: day(14) }),
+        makeComment({ id: 'c-paul', author: 'paul', body: 'Fixed both, thanks.', createdAt: day(15) }),
+      ],
+      updatedAt: day(15),
+      ...extra,
+    });
+  }
+
+  /** The sync: the events agent left every person's quiet activity quiet, unless `unjudged` names its source. */
+  function facade(pr: Pr, options: { unjudged?: string; prFetchedAt?: string } = {}): QuietReadInput {
+    const events = deriveEvents(pr, devexViewer, null).map((event) =>
+      awaitsJudgement(event, pr, devexViewer) && event.sourceId !== options.unjudged ? { ...event, override: judgedQuiet } : event,
+    );
+    const thread = makeThreadFor(pr, { reason: 'review_requested', lastReadAt: null, updatedAt: pr.updatedAt, unread: true });
+    return { thread, pr, events, userState: null, viewer: devexViewer, notYours: false, prFetchedAt: options.prFetchedAt ?? day(16) };
+  }
+
+  it('marks a never-opened thread once the request is removed and only bots and quiet replies came since', () => {
+    const input = facade(facadePr());
+    expect(quietReadCheck(input)).toEqual({ kind: 'skip', why: 'never_read' });
+    expect(requestGoneReadCheck(input)).toEqual({ kind: 'mark', actors: ['assign-bot[bot]', 'greptile-apps[bot]', 'paul'] });
+    const detail = requestGoneReadDetail(['greptile-apps[bot]', 'paul']);
+    expect(detail).toBe('review request no longer stands, nothing that needs you since: greptile-apps[bot], paul');
+    expect(quietReasonFromDetail(detail)).toBe('request_gone');
+    expect(actorsFromQuietDetail(detail)).toEqual(['greptile-apps[bot]', 'paul']);
+    // A snapshot older than the thread's update leaves it.
+    expect(requestGoneReadCheck(facade(facadePr(), { prFetchedAt: day(14) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+  });
+
+  it('leaves it while the team request is pending, or the personal one', () => {
+    const teamPending = facadePr({ reviewerTeams: [home, 'acme/team-desktop'], timeline: [request(home, 'rq-devex')] });
+    expect(requestGoneReadCheck(facade(teamPending))).toEqual({ kind: 'skip', why: 'request_stands' });
+    const personal = facadePr({ reviewerUsers: [devexViewer.login], timeline: [...facadePr().timeline, request(devexViewer.login, 'rq-me')] });
+    expect(requestGoneReadCheck(facade(personal))).toEqual({ kind: 'skip', why: 'request_stands' });
+  });
+
+  it("marks it once a teammate's review answered the team request", () => {
+    const answered = facadePr({
+      reviewerTeams: [home],
+      timeline: [request(home, 'rq-devex')],
+      reviews: [makeReview({ id: 'r-lyra', author: 'lyra', state: 'APPROVED', submittedAt: day(14) })],
+    });
+    expect(requestGoneReadCheck(facade(answered))).toEqual({ kind: 'mark', actors: ['greptile-apps[bot]', 'lyra', 'paul'] });
+  });
+
+  it("leaves it when the team was asked again after a teammate's older review", () => {
+    const asked = (reviewAt: string, askedAgainAt: string) =>
+      facadePr({
+        reviewerTeams: [home],
+        timeline: [request(home, 'rq-devex'), makeTimelineItem({ id: 'rq-again', actor: 'assign-bot[bot]', subject: home, at: askedAgainAt })],
+        reviews: [makeReview({ id: 'r-lyra', author: 'lyra', state: 'APPROVED', submittedAt: reviewAt })],
+      });
+    expect(requestGoneReadCheck(facade(asked(day(13), day(14, 6))))).toEqual({ kind: 'skip', why: 'request_stands' });
+    expect(requestGoneReadCheck(facade(asked(day(14, 13), day(13))))).toEqual({ kind: 'mark', actors: ['greptile-apps[bot]', 'lyra', 'paul'] });
+  });
+
+  it('leaves it for a person the events agent has not judged quiet', () => {
+    expect(requestGoneReadCheck(facade(facadePr(), { unjudged: 'c-paul' }))).toEqual({ kind: 'skip', why: 'not_judged' });
+  });
+
+  it('leaves other never-read threads alone, a mention among them', () => {
+    const input = facade(facadePr());
+    const mention = { ...input.thread, reason: 'mention' as const };
+    expect(requestGoneReadCheck({ ...input, thread: mention })).toEqual({ kind: 'skip', why: 'not_requested' });
+    expect(requestGoneReadCheck({ ...input, thread: { ...input.thread, lastReadAt: day(12, 13) } })).toEqual({ kind: 'skip', why: 'was_read' });
   });
 });

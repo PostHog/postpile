@@ -62,12 +62,30 @@ export interface RawReview extends RawEdit {
   commit: { oid: string } | null;
 }
 
+/**
+ * Where a page of a connection starts and ends. The newest-N lists ask for
+ * the start (hasPreviousPage, startCursor), a thread's comments for the end
+ * (hasNextPage, endCursor). Missing in fixtures written before it was asked for.
+ */
+export interface RawPageInfo {
+  hasPreviousPage?: boolean;
+  startCursor?: string | null;
+  hasNextPage?: boolean;
+  endCursor?: string | null;
+}
+
+/** A capped connection. totalCount and pageInfo are missing in fixtures written before they were asked for. */
+export interface RawConnection<T> {
+  totalCount?: number;
+  pageInfo?: RawPageInfo;
+  nodes: T[];
+}
+
 export interface RawReviewThread {
   id: string;
   path: string;
   isResolved: boolean;
-  /** Missing in fixtures written before it was asked for. */
-  comments: { totalCount?: number; nodes: RawComment[] };
+  comments: RawConnection<RawComment>;
 }
 
 export interface RawCommit {
@@ -134,15 +152,13 @@ export interface RawPullRequest {
   labels: { nodes: { name: string }[] };
   files: { nodes: { path: string; additions: number; deletions: number }[] } | null;
   reviewRequests: { nodes: { requestedReviewer: RawRequestedReviewer | null }[] };
-  // totalCount on the capped activity lists is missing in fixtures written before it was asked for.
-  reviews: { totalCount?: number; nodes: RawReview[] };
-  comments: { totalCount?: number; nodes: RawComment[] };
-  /** totalCount is missing in fixtures written before it was asked for. */
-  reviewThreads: { totalCount?: number; nodes: RawReviewThread[] };
-  commits: { totalCount?: number; nodes: RawCommit[] };
+  reviews: RawConnection<RawReview>;
+  comments: RawConnection<RawComment>;
+  reviewThreads: RawConnection<RawReviewThread>;
+  commits: RawConnection<RawCommit>;
   /** commits(last: 1) again, only for the head commit's check rollup. */
   headCommit: { nodes: { commit: { statusCheckRollup: RawStatusCheckRollup | null } }[] };
-  timelineItems: { totalCount?: number; nodes: RawTimelineItem[] };
+  timelineItems: RawConnection<RawTimelineItem>;
 }
 
 /** A PR node from a branch lookup (queries.ts buildBranchQuery). */
@@ -187,3 +203,13 @@ export interface RawViewerTeams {
 
 /** The freshness check: updatedAt per aliased PR, null where the token cannot see the repo or the PR is gone. */
 export type RawUpdatedAtResponse = Record<string, { pullRequest: { updatedAt: string } | null } | null>;
+
+/** An older-page query's answer (queries.ts buildOlderPageQuery): the page of one list, null where the PR is not visible. */
+export interface RawOlderPageResponse<T> {
+  repository: { pullRequest: { page: RawConnection<T> } | null } | null;
+}
+
+/** The thread-comments page query's answer: null when the thread is gone or not visible. */
+export interface RawThreadCommentsResponse {
+  node: RawReviewThread | null;
+}

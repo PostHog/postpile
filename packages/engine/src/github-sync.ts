@@ -21,6 +21,7 @@ import {
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { writeReadPlan } from './actions/local-change.ts';
+import { CAP_FILL_POLL_PRS, CAP_FILL_SYNC_PRS, CapFiller } from './cap-fill.ts';
 import { errorText } from './errors.ts';
 import { LessonKeeper } from './lessons/lesson-keeper.ts';
 import { StackLayerFinder } from './stack-layers.ts';
@@ -140,7 +141,7 @@ export class GitHubSync {
     private readonly now: () => Date,
     private readonly log: ActionLog,
     private readonly pendingWrites: PendingWrites,
-    quota: GitHubQuota,
+    private readonly quota: GitHubQuota,
     private readonly textLog: (line: string) => void = () => {},
     /** Threads a clicked mark-read is deciding again (ClickedReadRetry): the inbox leaves their rows alone meanwhile. */
     private readonly heldThreads: ReadonlySet<string> = new Set(),
@@ -452,11 +453,15 @@ export class GitHubSync {
    * Writes the snapshot and its events. Returns the ids of events that are new.
    * Every event goes to the event log, not only the new ones: the log ignores
    * ids it has, and this also picks up events stored before the log existed.
+   * `fetchedAt` is when the fetch started, where paging older items
+   * (CapFiller) sits between fetch and store: the snapshot must not look
+   * newer than what it holds, or a thread updated meanwhile would look
+   * covered by it.
    */
-  private storePr(pr: Pr, viewer: Viewer): string[] {
+  private storePr(pr: Pr, viewer: Viewer, fetchedAt: IsoTime = this.now().toISOString()): string[] {
     const at = this.now().toISOString();
     return this.store.transaction(() => {
-      this.store.prs.upsert(pr, at);
+      this.store.prs.upsert(pr, fetchedAt);
       const userState = this.store.userPrStates.get(pr.key);
       const events = deriveEvents(pr, viewer, userState);
       const created = this.store.events.upsertDerived(pr.key, events);
@@ -615,12 +620,22 @@ export class GitHubSync {
   }
 
   /** Writes snapshots and events. Returns the ids of new events on pinged PRs. */
-  private storeAll(fetched: Map<PrKey, Pr>, viewer: Viewer): string[] {
+  private storeAll(fetched: Map<PrKey, Pr>, viewer: Viewer, fetchedAt: IsoTime): string[] {
     const newEventIds: string[] = [];
     for (const pr of fetched.values()) {
-      newEventIds.push(...this.storePr(pr, viewer));
+      newEventIds.push(...this.storePr(pr, viewer, fetchedAt));
     }
     return newEventIds;
+  }
+
+  /**
+   * Pages older items into this run's fetched PRs that need them (CapFiller),
+   * at most `budget` PRs per run. Found PRs and stack layers are left out:
+   * they are fetched for tiles and stacks, and a PR whose thread moves comes
+   * through the main fetch.
+   */
+  private capFiller(origin: 'sync' | 'poll', budget: number): CapFiller {
+    return new CapFiller(this.reader, this.store, this.quota, origin, budget, this.textLog);
   }
 
   /**
@@ -670,8 +685,9 @@ export class GitHubSync {
       viewer = await this.reader.viewer();
       saveViewer(this.store, viewer);
     }
-    const fetched = refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, Pr>();
-    const newEventIds = this.storeAll(fetched, viewer);
+    const fetchedAt = this.now().toISOString();
+    const fetched = await this.capFiller('poll', CAP_FILL_POLL_PRS).fill(refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, Pr>());
+    const newEventIds = this.storeAll(fetched, viewer, fetchedAt);
     this.rememberPolled([...fetched.keys()]);
     const readOnGitHub = this.takeReadOnGitHub();
     return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds, readOnGitHub };
@@ -688,8 +704,11 @@ export class GitHubSync {
     const picked = candidates.slice(0, maxPrs);
     // A failed batch, found-PRs query or stack lookup should not cost the rest of the sync; the next sync tries again.
     const errors: string[] = [];
-    const fetched = await this.fetchPartial(picked.map((candidate) => candidate.ref), errors, 'PRs');
-    const newEventIds = this.storeAll(fetched, viewer);
+    // Before the quiet reads, older pages for PRs whose snapshot stops short of their unread thread's last read.
+    const capFiller = this.capFiller('sync', CAP_FILL_SYNC_PRS);
+    const fetchedAt = this.now().toISOString();
+    const fetched = await capFiller.fill(await this.fetchPartial(picked.map((candidate) => candidate.ref), errors, 'PRs'));
+    const newEventIds = this.storeAll(fetched, viewer, fetchedAt);
     // PRs whose thread did not move but GitHub has a newer updatedAt: approvals, merges, pushes.
     let movedRefs: PrRef[] = [];
     try {
@@ -697,9 +716,10 @@ export class GitHubSync {
     } catch (error) {
       errors.push(`freshness check: ${errorText(error)}`);
     }
-    for (const [key, pr] of await this.fetchPartial(movedRefs, errors, 'moved PRs')) {
+    const movedAt = this.now().toISOString();
+    for (const [key, pr] of await capFiller.fill(await this.fetchPartial(movedRefs, errors, 'moved PRs'))) {
       fetched.set(key, pr);
-      newEventIds.push(...this.storePr(pr, viewer));
+      newEventIds.push(...this.storePr(pr, viewer, movedAt));
     }
     // The poll fetched these already; they still get their stacks walked and facts verified here.
     const polled = this.polledPrs(fetched);

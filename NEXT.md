@@ -928,7 +928,7 @@ the app meanwhile.
   2m` from `GET /api/sync/progress`. The total is what the sync planned so
   far and grows (glances are planned as dossiers land).
 - Glance "missing or invalid in the answer" (two real PRs, one of them
-  posthog#107116): replaying posthog#107116 alone against Sonnet gave a
+  acme/app#1812): replaying acme/app#1812 alone against Sonnet gave a
   misspelled verdict (`LOOKS_SASAFE`, `LOOKS_SASE`) in 4 of 6 runs, once
   with the other fields cut to "placeholder", once as broken JSON. The
   strict enum dropped the entry on both attempts. Verdicts are now repaired
@@ -1131,6 +1131,20 @@ the app meanwhile.
   either direction; proposals about topics that left the sidebar are
   withdrawn, which is not a rejection. No proposals is the expected answer
   on most runs.
+- **Capped snapshots get older pages** (2026-10-02, DESIGN.md "Handled
+  quietly" › Capped snapshots): when a fetched PR's snapshot hits a query
+  cap and its thread is unread, the capped lists are paged back to the
+  thread's `last_read_at` (to the end for a never-read thread), then the
+  normal quiet-read rules apply. Coverage is one core helper
+  (`snapshotCoversSince(pr, since)`, each rule passes its own `since`);
+  review threads count only when complete. Budgets: 5 pages per list, 10
+  PRs per sync, 3 per poll, none while the quota is low.
+- **Dealt-with topics leave the list** (2026-10-02, DESIGN.md "Dealt-with
+  topics leave the list"): quiet topics in You drive, Your team owns and
+  Other work go behind one "+ N dealt with" line per section, like Gmail
+  archive or GitHub's Done; not while the search or a PR filter is on, never
+  the selected topic. Dimming alone (quiet rows) still took space and
+  clicks. Dealt with is not Archive.
 - **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
   PRs never ask for a review"): Approve on the PR pane is split (approve
   now, or with an agent-drafted note); "Comment review" posts a COMMENT
@@ -1201,7 +1215,7 @@ the app meanwhile.
   layer is covered only when no approvable layer below it needs a look;
   the layers above wait on it ("waits on #N"). Layers below that need no
   review (merged, draft, own, approved already, pulled in) don't block. One
-  covered PR out of several is named ("Approve #109533"); "Approve stack"
+  covered PR out of several is named ("Approve #2107"); "Approve stack"
   only when every PR on the tile is covered.
 - **One colour per meaning** (2026-10-01, DESIGN.md "Colour per meaning"):
   amber only for Look closer, Needs review neutral ink, queued merged

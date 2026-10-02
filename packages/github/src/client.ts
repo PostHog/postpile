@@ -10,8 +10,9 @@ import {
   type Viewer,
   type ViewerTeamSize,
 } from '@postpile/core';
-import { GitHubError, GitHubHttp, type FetchFn, type GraphQLErrorItem, type GraphQLResult } from './http.ts';
+import { GitHubHttp, graphqlFailure, type FetchFn, type GraphQLResult } from './http.ts';
 import { isoTime, toBranchPr, toPr } from './normalize.ts';
+import { fillCappedLists } from './cap-fill.ts';
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { activityPrs, buildActivityQuery, probeNotifications, readRepoFile, type RawActivityResponse } from './setup-reads.ts';
@@ -33,6 +34,7 @@ import {
   UPDATED_AT_BATCH_SIZE,
   type BranchLookup,
   type BranchPr,
+  type CapFill,
   type GitHubReader,
   type NotificationConditions,
   type NotificationsResult,
@@ -68,16 +70,6 @@ async function inParallel<T, R>(batches: T[], fn: (batch: T) => Promise<R>): Pro
   const workers = Math.min(MAX_PARALLEL_BATCHES, batches.length);
   await Promise.all(Array.from({ length: workers }, worker));
   return results;
-}
-
-/**
- * A GraphQL answer without data. GitHub reports its GraphQL rate limit as a
- * 200 with an error of type RATE_LIMITED, so that one is marked as a limit.
- */
-function graphqlFailure(what: string, errors: GraphQLErrorItem[]): GitHubError {
-  const first = errors[0];
-  const rateLimited = first?.type === 'RATE_LIMITED';
-  return new GitHubError(`GitHub ${what} failed: ${first?.message ?? 'no data'}`, 200, { rateLimited, retryAfterSeconds: null });
 }
 
 /** Real reader over REST (notifications) and GraphQL (viewer, PRs). */
@@ -169,6 +161,10 @@ export class GitHubClient implements GitHubReader {
       });
     const batches = await inParallel(chunk(refs, PR_BATCH_SIZE), fetchOrNote);
     return { prs: new Map(batches.flat().map((pr) => [pr.key, pr])), errors };
+  }
+
+  fillCappedLists(pr: Pr, since: IsoTime | null, maxPages: number): Promise<CapFill> {
+    return fillCappedLists(this.http, pr, since, maxPages);
   }
 
   /**

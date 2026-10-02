@@ -22,7 +22,7 @@ dossier update, consolidation), so all agents cut work at the same grain:
 
 - *Area*: the part of the product or codebase the work touches ("Hogland",
   "Data warehouse", "posthog-cli"), never the user's own field or team
-  ("Dev tooling" held 70 of 113 topics on real data and said nothing). A
+  ("Dev tooling" held most topics and said nothing). A
   label on topics, never a topic itself, a handful to about fifteen topics
   each. The dossier update replaces a catch-all area when it next writes the
   topic (still at most MAX_NEW_AREAS_PER_SYNC new areas per sync).
@@ -88,8 +88,8 @@ dossier relation's `ownerTeam`), and a PR that reaches the user through a
 team review request is judged by what that team keeps up: when it changes
 code of a standard a standing topic keeps (same owner team, same code), it
 joins that topic, also when it is a step of someone else's project. Routed
-PRs that fit no standing topic are placed as before. On a real database 35
-of 53 one-PR topics were routed reviews, so this is where ownership helps;
+PRs that fit no standing topic are placed as before. In a sample database over half
+of the one-PR topics were routed reviews, so this is where ownership helps;
 it never cuts topics by team on its own (a team owns many goals). Research
 (PARA, GTD, Linear, Jira, Shape Up) found no third lifecycle worth a kind:
 incidents behave like short projects, chores are single tiles.
@@ -1127,7 +1127,7 @@ stored and before a dossier goes into a glance prompt
   An answered prKey matches its batch key ignoring case and spaces when
   that still points at one PR.
 - Misspelled verdicts are repaired (`repairVerdict`): Sonnet reproducibly
-  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one real PR (PostHog/posthog#107116),
+  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one PR (acme/app#1812),
   which the strict enum rejected on both attempts. Only unambiguous
   spellings are read, and anything mentioning "close" wins, so a garbled
   answer never becomes "looks safe" by accident. The prompt asks for
@@ -1398,7 +1398,10 @@ picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
   review now (`reviewNow`). An edited body or inline comment starts the
   candidate over (`new`, line cleared); a deleted or dismissed review
   withdraws it. `checkOpenLesson` repeats the check right before the user's
-  decision lands.
+  decision lands. On a capped snapshot a missing review only counts as
+  deleted when the reviews list reaches back to it, and a missing inline
+  comment only when the comment lists are complete (`capHitCoversSince`);
+  otherwise the stored text stands.
 - **Writing the line** (`lesson_write`, sonnet, one call per topic for up to
   8 new lessons, in the sync's digest after topics, `LessonWriter`): the
   review, inline comments, PR line and earlier glance are fenced as GitHub
@@ -3530,6 +3533,8 @@ the PR, is one of:
 
 Never clearable by itself: a review request to you or your team, a mention, a
 team mention, a question or reply to you, an unseen merge without your review.
+(Since 2026-10-02 a never-opened request that no longer stands may clear, see
+"Handled quietly" › Review requests that no longer stand.)
 These stay unread until you deal with them, also after the PR merged and a
 teammate reviewed. Not clearance evidence either: an agent NOT_YOURS, age,
 merged or closed state, an old handled mark or approval.
@@ -3614,18 +3619,20 @@ finished topics included.
   unread PR threads on the day's real data) used to never clear.
   Normalizing (packages/github, caps in `QUERY_CAPS`) now records from the
   raw answer, before it drops any node, which lists came back full at their
-  cap with more on GitHub, with the node count and the oldest item
-  (`Pr.capHits`). Most capped lists keep the newest N (50 reviews, 60
-  comments, 50 commits, 60 timeline items), so a cut snapshot still covers
-  the unread interval when every list that hit its cap is one of those and
-  came back with an item at or before the rule's boundary (GitHub's read
-  time for bots only, the touch for "you acted after it", the last look for
-  the judged rule). Review threads never vouch: the 50 kept are the newest
-  by creation and each keeps its first 30 comments, so a reply past either
-  cap can come at any time. A snapshot stored before `capHits` existed never
-  vouches until it is fetched again. Core `cutSnapshotCovers` behind
-  `snapshotCoversThread`. A snapshot flagged while no list hit its cap
-  (GitHub counts items the query never returns) covers.
+  cap with more on GitHub, with the node count, the oldest item and the
+  cursor to page on (`Pr.capHits`). Most capped lists keep the newest N (50
+  reviews, 60 comments, 50 commits, 60 timeline items), so a cut snapshot
+  still covers the unread interval when every list that hit its cap is one
+  of those and came back with an item at or before the rule's boundary
+  (GitHub's read time for bots only, the touch for "you acted after it",
+  the last look for the judged rule, the newest review request of the
+  viewer for "request gone"). Review threads count only once complete: the
+  50 kept are the newest by creation and each keeps its first 30 comments,
+  so a reply past either cap can come at any time. A snapshot stored before
+  `capHits` existed never vouches until it is fetched again. A snapshot
+  flagged while no list hit its cap (GitHub counts items the query never
+  returns) covers. Since 2026-10-02 older pages of the capped lists get
+  fetched for unread threads ("Handled quietly" › Capped snapshots).
 
 ## Inbox cleanup
 
@@ -3782,7 +3789,7 @@ Owner decisions (2026-09-30):
   the same mistake.
 - **Approve labels** (owner, 2026-10-01; core decides `naming`, the
   renderer spells it). Exactly one PR covered out of several on the tile
-  (or the topic) names it: "Approve #109533", so "Low risk" can't read as a
+  (or the topic) names it: "Approve #2107", so "Low risk" can't read as a
   verdict on the PR the user is looking at. "Approve stack", "Approve 3
   PRs" on a set, or "Approve" on a single only when every PR on the tile is
   covered (`prCount`), so never over a draft or pulled-in layer. Else
@@ -3892,17 +3899,18 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
 **The problem.** Sections came from PR tiers: a topic sat under the highest
 tier any PR other than the viewer's own gave it (`topicSection` of
 2026-10-01), so "My PRs" and "Team's PRs" said whose PRs a topic held, not
-whose topic it was. Real case: the viewer drives "Visual review flakiness
+whose topic it was. Real case: the viewer drives "Snapshot
 triage tooling" (the header said "you're here because you drive it"), has an
 open PR in it, and a teammate has one open PR in it (tier `team`, which asks
 nothing of the viewer). The topic sat under Team's PRs. The rule was
 lopsided as well: a teammate-driven topic with the viewer's PR sat under
 Team's PRs, another team's topic with the viewer's PR under My PRs.
 
-**The data** (owner's DB, 107 active topics, every one with a driver): the
-viewer drives 25, a teammate 11, someone outside the team 71 (54 of them
-reached the viewer as routed reviews). 12 topics held the viewer's open
-PR, 5 of them driven by others.
+**The data** (an illustrative database, 100 active topics, every one with a
+driver): the viewer drives about a quarter, a teammate about a tenth,
+someone outside the team the rest (most of them reached the viewer as
+routed reviews). A handful of topics held the viewer's open PR, some of
+them driven by others.
 
 **Precedence** (`topicSection` in core `topic-sections.ts`, first match
 wins; the engine, FakeEngine, the row, the breadcrumb and telemetry read the
@@ -3933,9 +3941,9 @@ else the automatic driver (`effectiveDriver` in core `topic-driver.ts`, see
 **The owner team is only a fallback.** Codex's review (gpt-6.1-sol) pointed
 out how weak the signal is: `relationSignals` names the viewer's first home
 team as owner as soon as the viewer wrote a PR in the topic or drives it.
-So driver beats owner team: Alerting V2 (driven outside the team) and
-Hogland observability leave Your team owns for Other work, and a
-teammate-driven topic owned by another team (Python 3.14 upgrade soak)
+So driver beats owner team: Alerting rework (driven outside the team) and
+Tracing basics leave Your team owns for Other work, and a
+teammate-driven topic owned by another team (Python upgrade soak)
 stays under Your team owns. The owner team counts as home when it is any
 of the home teams, not only the first.
 
@@ -4007,28 +4015,64 @@ topic is standing (project topics drop it, after the answer's own
 `driverOf` in engine `digest/topic-roles.ts` stores it as the automatic
 driver `:team`, the same value as the picker's "Your team", so the topic
 sits under Your team owns. Real case: Egress, where the agent named
-pauldambra, who led one wave. Picked up at each topic's next dossier
+lyra, who led one wave. Picked up at each topic's next dossier
 update; no one-time tidy. A manual pick beats it like any automatic driver.
 
-## Quiet rows (2026-10-02)
+## Dealt-with topics leave the list (2026-10-02)
 
-Sidebar topic rows where nothing waits on the viewer are dimmed, so the rows
-that need something (unread, or a your-move chip like "Merge" or "Address
-changes") stand out. Like read and unread channels in Slack, one step
-further. Why: owner, looking at the new sections: "whew, everything looks
-dealt with". Read rows that still need the viewer should not look the same as
-rows that are done.
+PostPile is an inbox-clearing tool. A topic where nothing waits on the viewer
+is dealt with, and like Gmail's archive, Superhuman's Done or GitHub
+notifications' Done it leaves the list until something new arrives. Why:
+owner, looking at the new sections: "whew, everything looks dealt with", and
+clicking a dealt-with topic only to find nothing to do is unsatisfying. This
+grew out of dimming those rows (quiet rows, same day): dimmed rows still took
+the space and the clicks.
+
+Dealt with is not Archive. Archive means the topic is over (every PR merged
+or closed, then quiet days); a dealt-with topic is still live, with open PRs
+that need nothing from the viewer right now, and comes back with the next news.
 
 **Rule** (`topicQuiet` in core `topic-sections.ts`, shipped as
-`TopicListItem.quiet`; the engine and FakeEngine fill it, the renderer only
-styles it): quiet when the topic has no unread tile, no your-move (the same
-`yourMoves` the chip shows, so "Merge, it is approved" counts although it
-never makes a topic urgent), no unseen merge without the viewer's review, and
-it sits in no ask section (Needs reply, Changes you requested, To review,
-Team mentioned). Archive rows are never quiet: the drawer is its own context.
+`TopicListItem.quiet`; the engine and FakeEngine fill it): quiet when the
+topic has no unread tile, no your-move (the same `yourMoves` the chip shows,
+so "Merge, it is approved" counts although it never makes a topic urgent), no
+unseen merge without the viewer's review, and it sits in no ask section
+(Needs reply, Changes you requested, To review, Team mentioned). Archive rows
+are never quiet: the drawer is its own context.
 
-**Look.** Name and summary in the faint ink, faces and the PR state icon at
-45% opacity, hover brings the name back to the read ink. The selected row is
+**Where they go** (renderer layout, `sidebarBuckets` with `hideDealt` in
+`lib/queues.ts`, labels in `lib/sidebar.ts`): in the owner sections (You
+drive, Your team owns, Other work) quiet topics leave the list. Each such
+section ends with one muted line "+ N dealt with" that opens them as dimmed
+rows and reads "Hide N dealt with" while open; folded by default, as a
+session fold like the others. A section where every topic is dealt with
+shows only its header with "· all N dealt with" and the line. In Other work
+the quiet topics come out of the area folds and gather behind the
+section's one line at its end; area folds count and show the rest only (a
+fold with nothing left goes). Other work's own default (open for your PR,
+move or unread) and its urgent rows while folded look at the rest only.
+
+**Not hidden:**
+
+- The ask sections (a topic there is never quiet), Other topics with FYI,
+  and the Archive.
+- The selected topic. It holds its place until the selection moves (the
+  held place of "Actions act on what you look at"): a topic that turns quiet
+  while selected stays in its spot and slides behind the line once the
+  selection moves; one picked from behind the line stays there, also when
+  the line folds. The quiet topics have their own held-place bucket per
+  section, so this needs no special case.
+- Everything while the search or a "my PRs" / "team PRs" filter is on:
+  filters are for finding things, so quiet rows show in place, dimmed.
+
+A hidden topic that gets news (unread, a your-move, an ask) is not quiet any
+more and comes back to its section; the usual slide covers it. Unread
+counts, the footer totals and "N topics without your PRs are hidden" stay as
+they were: a dealt-with topic is not hidden by the filter.
+
+**Look.** Quiet rows (behind the open line, and in place while filtering):
+name and summary in the faint ink, faces and the PR state icon at 45%
+opacity, hover brings the name back to the read ink. The selected row is
 never dimmed, and nothing is dimmed while the search filters.
 
 ## Tiles hold still (2026-10-01)
@@ -4333,7 +4377,8 @@ Merging or closing counts only when the viewer did it.
      itself. When no list hit PostPile's own caps (empty `capHits`: only
      GitHub's total counted more), the detail pane missed nothing and the
      open marks. When our caps did cut something, it marks only if what
-     fell off is older than GitHub's read time (`cutSnapshotCovers`):
+     fell off is older than GitHub's read time, or paging completed the
+     list (`snapshotCoversSince`, "Handled quietly" › Capped snapshots):
      otherwise the pane the user looked at missed that activity too.
      Before, any truncated snapshot counted as stale, and about half of
      unread PRs (46 of 87, 43 with empty `capHits`) showed "Marks read when
@@ -4384,7 +4429,7 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    known event by someone else after the read counts as "don't know": left
    alone.
    The stored events only count when the PR snapshot was fetched at or
-   after the thread's `updated_at` (`snapshotCoversThread`). A sync
+   after the thread's `updated_at`. A sync
    refreshes every thread but can leave a PR's snapshot stale (its PR cap, a
    failed fetch); a human comment after the snapshot would then be missing
    and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
@@ -4392,7 +4437,10 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    again until it moves, and the snapshot from then still covers the
    thread. A snapshot cut off at
    the query's caps covers only when what fell off is older than the read
-   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
+   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built), or
+   once paging completed the list (`snapshotCoversSince`, since
+   2026-10-02, "Capped snapshots" below); else the rule skips with
+   `stale_snapshot`.
 2. *(Removed 2026-10-01: no bot finding on the user's own open PR.)* A
    bot's review, or its comment in a review thread, on the user's own open
    PR used to keep the thread unread, because it can mean work. Owner: "I
@@ -4516,6 +4564,91 @@ team request, a stale-PR bot nudged and CI ran) still stays unread: on Sep
 2026-09-30: only new moves that ask something block (reply, review,
 re-review, address changes); merging an approved PR of theirs never does,
 so the real case clears.
+
+**Review requests that no longer stand** (Decided 2026-10-02). Every
+other rule skips a thread GitHub never saw read (`never_read`, no
+`last_read_at`), so a review request the user never opened stayed unread
+for good, even after it stopped asking anything. The real case (acme/app
+#1812): a bot asked the user's home team and two other teams for a review
+on Sep 12; the thread (reason `review_requested`) was never opened. Later
+the home team's request was removed (pending were only the two other
+teams), and everything since was the author answering review bots, plus
+bot comments; the events agent had judged the replies quiet. The thread
+stayed unread for days. Owner decision: such a thread may clear once the
+request no longer stands. Core `requestGoneReadCheck`, all of these:
+
+- GitHub has it unread, never read, and its reason is `review_requested`.
+  Never-read threads for anything else (a mention, an assignment, the
+  author) keep the `never_read` skip.
+- No request of the user or any of their teams is pending: removed, or
+  answered by them or a teammate (`reviewRequest` is null or `team_taken`).
+  A pending personal or team request keeps it unread as before.
+- Since the newest request of the user or their team (the boundary of the
+  rule), something by someone else happened, and all of it is automation
+  or a person's activity the events agent judged below loud, the standard
+  of the judged rule. A removal by a person, or a teammate's review,
+  counts as a person's activity and waits for the agent like any other.
+- No ask since the request or still unseen (`isAskOfViewer`), no loud
+  news since, no unseen loud news on the PR besides the requests
+  themselves (a team request a teammate answered stays loud by its rule,
+  and it is what this rule reads), no unseen merge without the user's
+  review, no move of theirs new since the request (`isNewYourMove`).
+- The snapshot covers the thread (`snapshotCoversSince` from the request:
+  cut-off lists vouch only for what fell off before it, or once complete).
+
+Log detail "review request no longer stands, nothing that needs you since:
+greptile-apps[bot], paul"; Handled quietly says "request gone, nothing for
+you from greptile-apps, paul". Runs with the other rules in the full sync
+and the live poll pass (engine `QuietReads`). This narrows "Never clearable
+by itself: a review request to you or your team" in "GitHub unread is
+PostPile unread": a request that still stands never clears; one that was
+removed or answered no longer asks anything.
+
+**Capped snapshots** (Decided 2026-10-02). Bot-heavy PRs stayed unread for
+days: review bots post dozens of reviews and threads, the query keeps the
+newest 50 of each, and the kept ones started after the user's last read. Every quiet read skipped them as
+`stale_snapshot`. Example: acme/app#1234, where review bots posted more than
+50 reviews and more than 50 review threads, the oldest kept review two days
+after the last read, so no rule could ever clear the thread.
+
+- **Paging.** When a fetched PR's snapshot hits a cap and its thread is
+  unread, PostPile fetches older pages of the capped lists until they reach
+  back to the thread's `last_read_at` or GitHub has no more (core
+  `needsOlderPages`; a thread never read pages to the end). One GraphQL
+  request per page with `before:` cursors (`pageInfo { hasPreviousPage
+  startCursor }`, asked for in the PR query too); a thread whose comments
+  hit their cap pages forward with `after:`. Paged items are selected and
+  normalized exactly like the PR query and merged in by id
+  (packages/github `cap-fill.ts`, `addOlderPage` in `normalize.ts`). Each
+  list's cap hit moves back (`oldestAt`, `cursor`, `nodes`) or is marked
+  `complete`.
+- **Coverage.** One helper decides for every rule: core
+  `snapshotCoversSince(pr, since)`. A snapshot covers since a time when it
+  was not cut by our caps, or every capped list is complete or reaches back
+  to or before it (`capHitCoversSince`). Review threads and a thread's
+  comments have no usable time (`oldestAt` null): they cover only when
+  complete. Each rule passes its own `since` (read time, touch, last look,
+  newest review request); `null` means from the start, so only complete
+  lists count. The freshness check against the thread's `updated_at` stays
+  as it was. Whatever is still not covered keeps blocking the quiet reads.
+- **When.** In the full sync, between the PR fetch (and the moved-PR fetch)
+  and storing, so the stored snapshot (`prs.upsert`) and its derived events
+  include what came in, before the quiet reads; and in the live poll for
+  the PRs it fetched. The snapshot keeps the time the fetch started as its
+  fetch time, so a thread updated while paging ran does not look covered.
+- **Budgets** (engine `cap-fill.ts`): at most 5 pages per list per PR (and 5
+  over all of one PR's threads' comments, `CAP_FILL_PAGES`), 10 PRs per
+  full sync (`CAP_FILL_SYNC_PRS`), 3 per poll (`CAP_FILL_POLL_PRS`), newest
+  thread first, nothing while the GitHub quota is low (`allowsBackground`,
+  checked before each PR). A list still short of the read after its pages
+  ends that PR's paging: coverage needs every list, so the rest could not
+  help. Skipped PRs, the pages each PR took and lists still short go to the
+  sync log; a failed request ends the pass and the PR keeps its unpaged
+  snapshot.
+- **Expected cost** (illustrative numbers): few PRs hit a cap at all, and
+  paging a capped list to its end usually takes a handful of pages, e.g.
+  acme/app#1234 would take 2 (15 older reviews, 4 older threads); a very
+  long timeline can need more than the budget.
 
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide
@@ -5682,9 +5815,11 @@ Julian under "Open questions".
   past a cap never arrived while the freshness check still passed, and the
   bot-only read could clear an unread human reply (a human comment followed by
   60 bot comments). The query now also asks for the total count of each; a PR
-  with any list cut off is marked truncated, and `snapshotCoversThread` treats
-  it as not covering the thread (no bot-only, touched or opened mark-read on
-  GitHub for it).
+  with any list cut off is marked truncated, and the quiet reads treat it as
+  not covering the thread (no bot-only, touched or opened mark-read on
+  GitHub for it). Since refined: it covers as far back as each capped list
+  reaches, and older pages get fetched (`snapshotCoversSince`, "Handled
+  quietly" › Capped snapshots).
 - **The MCP process never writes, instructions included.** Reading a glance's
   freshness recorded a new instructions version when `instructions.md` had
   changed while the app was closed, and the read-only MCP process threw

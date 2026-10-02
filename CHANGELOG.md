@@ -20,11 +20,13 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Inside each section, topics with your open PR or your move come first, then unread ones.
 - Other work folds by area, single-topic areas under "More". It starts open when it holds your PR, your move or something unread, else folded; folded, urgent unread topics stay visible and the header counts what is unread.
 - Topics without a dossier and without a known driver sit in Other topics with a "not sorted yet" mark. The Needs you, Your team and Routed to you groups inside Other topics are gone; FYI stays.
-- Sidebar rows where nothing waits on you are dimmed, so unread rows and rows with a your-move chip stand out. The selected row and search results stay as they were.
+- Topics you have dealt with (nothing unread, no move of yours) leave You drive, Your team owns and Other work until something new comes in, like archiving in Gmail. Each of these sections ends with "+ N dealt with", which shows them dimmed; a section with nothing left says "all N dealt with". The selected topic stays put until you move on, and the search and the my PRs / team PRs filters still show everything. Archive stays for topics that are over.
 - "Ask <owner>" opens in the same small popover as the review notes instead of a strip under the action bar. It works as before: pick the person, say what to ask, draft, edit, post.
+- A review request you never opened no longer stays unread forever once it stops asking anything: when the request for you and your teams was removed or a teammate reviewed, and since then only bots and replies that don't need you came in, PostPile marks the thread read on GitHub and lists it under Handled quietly ("request gone"). A request that still stands stays unread as before.
 
 ### Fixed
 
+- PRs with lots of bot reviews no longer stay unread for days. When a PR has more reviews, comments or review threads than PostPile reads in one go and its notification is unread, PostPile now fetches the older ones back to your last read (a few pages per list, a handful of PRs per sync) and then checks it like any other PR. If the older pages still don't reach your last read, the PR stays unread as before.
 - A stack layer in the Trunk merge queue showed as not queued while Trunk tested the stack ("Running tests on this stack"). Trunk status lines in a wording PostPile does not know yet are now read by their emoji, so a PR keeps its queue state when Trunk rewords a message.
 
 ## 0.14.1 (2026-10-02)
@@ -48,7 +50,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- ✨ Approve on a stack goes from the base up: a layer is only offered when no layer below it needs a closer look. The confirm list says what the others wait on ("waits on #109499"). When the button approves one PR out of several it names it ("Approve #109533"), and "Approve stack" shows only when it approves the whole stack. If a lower layer fails to approve, the layers above it are skipped.
+- ✨ Approve on a stack goes from the base up: a layer is only offered when no layer below it needs a closer look. The confirm list says what the others wait on ("waits on #2104"). When the button approves one PR out of several it names it ("Approve #2107"), and "Approve stack" shows only when it approves the whole stack. If a lower layer fails to approve, the layers above it are skipped.
 - Bot reviews and bot comments in review threads on your own open PR no longer keep it unread. They clear quietly like other bot activity; failing checks and unresolved threads still show up on the PR.
 - Opening a PR marks it read as soon as the 1.5s fill completes, instead of later when you move on. The button then says "✓ Marked read" with an Undo link for a few seconds, and the unread dot fades out. The tile and its topic row stay put until you pick something else, then slide to their new place. Tiles a sync moves slide too. "Marks read when you leave" and the "Keep unread" X are gone, and these marks no longer show under Handled quietly.
 - Topics come in two kinds: projects, which have a finish line, and standing topics, which keep a standard up for months ("Migration safety"). A standing topic stays ready for its next PR for half a year after the last one joined; a finished project takes follow-ups for 30 days.

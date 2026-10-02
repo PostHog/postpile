@@ -6,7 +6,7 @@
 // can never move both sides of a check. Nothing here imports a rule module;
 // only `sameLogin` and the builder's names are shared.
 import { sameLogin } from '../mentions.ts';
-import type { Comment, IsoTime, Pr, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
+import type { Comment, IsoTime, Pr, PrEvent, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
 import type { CommentText, TrunkText } from './board-spec.ts';
 import { AUTOMATION_LOGINS, COMMENT_BODIES, MENTIONED_TEAMS, TRUNK_BODIES, TRUNK_LOGIN } from './build-board.ts';
 
@@ -314,6 +314,16 @@ export function requestSubjectOf(pr: Pr, event: { kind: string; sourceId: string
   return pr.timeline.find((item) => item.id === event.sourceId)?.subject ?? null;
 }
 
+/** A review request event naming the viewer or one of their teams, whoever made it. */
+export function isViewerRequestEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
+  return event.kind === 'review_requested' && asksViewer(viewer, requestSubjectOf(pr, event));
+}
+
+/** When the newest review request of the viewer or one of their teams came, null when none did. */
+export function latestViewerRequestAt(pr: Pr, viewer: Viewer, events: PrEvent[]): IsoTime | null {
+  return events.filter((event) => isViewerRequestEvent(pr, viewer, event)).map((event) => event.at).toSorted().at(-1) ?? null;
+}
+
 /** The viewer or their team was asked at some point: pending now, or in the timeline. */
 export function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
   const pending = [...pr.reviewerUsers, ...pr.reviewerTeams].some((subject) => asksViewer(viewer, subject));
@@ -326,12 +336,15 @@ export function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
  * the list is unknown). On a teammate's PR only an approval or a changes
  * request.
  */
-function homeTeamTakers(pr: Pr, viewer: Viewer): string[] {
+function homeTeamTakers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const teammatesPr = teammateOwns(pr, viewer);
   const takers: string[] = [];
   for (const review of pr.reviews) {
     const who = review.author;
     if (review.state === 'PENDING' || sameLogin(who, viewer.login) || isOwner(pr, who) || isAutomationLogin(who)) {
+      continue;
+    }
+    if (since !== null && review.submittedAt <= since) {
       continue;
     }
     if (viewer.teamMembers !== undefined && !isKnownTeammate(viewer, who)) {
@@ -352,11 +365,11 @@ function homeTeamTakers(pr: Pr, viewer: Viewer): string[] {
  * (not dismissed) other than the viewer, the author, the owners and
  * automation. Its members are not known, so anyone counts.
  */
-function headReviewers(pr: Pr, viewer: Viewer): string[] {
+function headReviewers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const takers: string[] = [];
   for (const review of pr.reviews) {
     const who = review.author;
-    const sent = review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid;
+    const sent = review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid && (since === null || review.submittedAt > since);
     const someoneElse = !sameLogin(who, viewer.login) && !sameLogin(who, pr.author) && !isOwner(pr, who) && !isAutomationLogin(who);
     if (sent && someoneElse && !takers.some((login) => sameLogin(login, who))) {
       takers.push(who);
@@ -374,9 +387,9 @@ function routingTeamPending(pr: Pr, viewer: Viewer): boolean {
 }
 
 /** Who picked up the viewer's pending team requests: teammates for a home team, anyone who reviewed the head for a routing team. */
-export function teamTakers(pr: Pr, viewer: Viewer): string[] {
-  const takers = homeTeamPending(pr, viewer) ? homeTeamTakers(pr, viewer) : [];
-  for (const who of routingTeamPending(pr, viewer) ? headReviewers(pr, viewer) : []) {
+export function teamTakers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
+  const takers = homeTeamPending(pr, viewer) ? homeTeamTakers(pr, viewer, since) : [];
+  for (const who of routingTeamPending(pr, viewer) ? headReviewers(pr, viewer, since) : []) {
     if (!takers.some((login) => sameLogin(login, who))) {
       takers.push(who);
     }

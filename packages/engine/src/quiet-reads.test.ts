@@ -1,6 +1,7 @@
 import type { Pr } from '@postpile/core';
 import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
+import { CAP_FILL_SYNC_PRS } from './cap-fill.ts';
 import { makeHarness, type Harness, type HarnessOptions } from './testing/fakes.ts';
 
 // alice's PR, read by the viewer at minute 20; a bot commented at minute 30.
@@ -367,6 +368,46 @@ describe('Handled quietly: the full sync marks threads read the viewer acted on 
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
+    expect(h.writer.calls).toEqual([]);
+  });
+});
+
+describe('Handled quietly: a capped snapshot gets its older pages before the quiet reads (2026-10-02)', () => {
+  const botReview = (id: string, minute: number) => makeReview({ id, author: 'review-bot[bot]', state: 'COMMENTED', submittedAt: at(minute) });
+
+  // The query kept the newest 50 reviews, all bots from minute 25 on: after the read at minute 20.
+  function cappedPr(number: number): Pr {
+    return alicePr({ number, reviews: [botReview(`r-new-${number}`, 25)], truncated: true, capHits: [{ list: 'reviews', nodes: 50, oldestAt: at(25), cursor: 'c-50' }] });
+  }
+
+  it('pages a capped PR back to the last read, stores what came in with its events, then marks the bot-only thread read', async () => {
+    const pr = cappedPr(5);
+    const paged: Pr = { ...pr, reviews: [botReview('r-old', 15), ...pr.reviews], capHits: [{ list: 'reviews', nodes: 51, oldestAt: at(15), cursor: null, complete: true }] };
+    const h = makeHarness();
+    h.reader.addPr(pr, threadFor(pr));
+    h.reader.filledPrs.set(pr.key, paged);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.reader.fillCalls).toEqual([[pr.key, at(20)]]);
+    expect(h.store.prs.get(pr.key)?.reviews.map((review) => review.id)).toEqual(['r-old', 'r-new-5']);
+    expect(h.store.events.listForPr(pr.key).some((event) => event.sourceId === 'r-old')).toBe(true);
+    expect(h.writer.calls).toEqual([`markThreadRead ${threadFor(pr).id}`]);
+  });
+
+  it('pages at most CAP_FILL_SYNC_PRS PRs per sync, newest thread first, and leaves the ones it could not cover unread', async () => {
+    const h = makeHarness();
+    for (let number = 1; number <= CAP_FILL_SYNC_PRS + 2; number += 1) {
+      const pr = cappedPr(number);
+      h.reader.addPr(pr, makeThreadFor(pr, { reason: 'subscribed', lastReadAt: at(20), updatedAt: at(30 + number), unread: true }));
+    }
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const paged = h.reader.fillCalls.map(([key]) => key);
+    expect(paged).toHaveLength(CAP_FILL_SYNC_PRS);
+    expect(paged).not.toContain('acme/app#1');
+    expect(paged).not.toContain('acme/app#2');
     expect(h.writer.calls).toEqual([]);
   });
 });

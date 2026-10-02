@@ -68,6 +68,16 @@ export function startsOpen(items: TopicListItem[], activeTopicId: string | null 
   return items.some((item) => holdsYours(item) || item.unreadTiles > 0 || item.topic.id === activeTopicId);
 }
 
+/**
+ * Other work's default while its dealt-with topics are hidden: `startsOpen`
+ * over the listed topics only, so a dealt-with topic holding your open PR
+ * does not open it; it stays open while the selected topic sits behind its
+ * dealt-with line.
+ */
+export function otherWorkStartsOpen(listed: TopicListItem[], dealt: TopicListItem[], activeTopicId: string | null): boolean {
+  return startsOpen(listed, activeTopicId) || dealt.some((item) => item.topic.id === activeTopicId);
+}
+
 /** The rows a folded fold keeps showing: urgent unread ones (coral) and the selected topic, so nothing urgent hides and the open row stays. */
 export function rowsWhileFolded(items: TopicListItem[], activeTopicId: string | null = null): TopicListItem[] {
   return items.filter((item) => unreadLook(item) === 'urgent' || item.topic.id === activeTopicId);
@@ -79,4 +89,14 @@ export function foldedSummary(items: TopicListItem[]): string {
   const urgent = items.filter((item) => unreadLook(item) === 'urgent').length;
   const parts = [unread > 0 ? `${unread} unread` : null, urgent > 0 ? `${urgent} urgent` : null];
   return parts.flatMap((part) => (part === null ? [] : [`· ${part}`])).join(' ');
+}
+
+/** "· all 3 dealt with" after a section header when every topic in it is dealt with; empty otherwise. */
+export function allDealtNote(listed: TopicListItem[], dealt: TopicListItem[]): string {
+  return listed.length === 0 && dealt.length > 0 ? `· all ${dealt.length} dealt with` : '';
+}
+
+/** The line at a section's end: "+ 3 dealt with" opens its dealt-with topics, "Hide 3 dealt with" folds them again. */
+export function dealtLineLabel(count: number, open: boolean): string {
+  return open ? `Hide ${count} dealt with` : `+ ${count} dealt with`;
 }

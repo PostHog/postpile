@@ -74,6 +74,7 @@ export * from './github-read.ts';
 export * from './inbox-cleanup.ts';
 export * from './pings.ts';
 export * from './quiet-reads.ts';
+export * from './snapshot-coverage.ts';
 export * from './work-context.ts';
 export * from './tile-view.ts';
 export * from './tile-groups.ts';

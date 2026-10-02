@@ -79,5 +79,10 @@ describe('visibleTopic', () => {
     expect(visibleTopic(items, 'loud', filterTopics(items, searchFilter(result({}))))).toBeNull();
     // API order starts with quiet-a; the sidebar puts the loud topic first.
     expect(visibleTopic(items, null, null)?.topic.id).toBe('loud');
+    // A dealt-with topic waits behind its line, so the first listed row wins, unless every topic is dealt with.
+    const dealt = { ...item('done', 0, 'you_drive'), quiet: true };
+    const listed = item('team', 1, 'team_owns');
+    expect(visibleTopic([dealt, listed], null, null)?.topic.id).toBe('team');
+    expect(visibleTopic([dealt], null, null)?.topic.id).toBe('done');
   });
 });

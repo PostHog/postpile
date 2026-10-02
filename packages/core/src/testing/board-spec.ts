@@ -408,9 +408,48 @@ const reviewGroupArb: fc.Arbitrary<GroupSpec> = fc.record({
   snooze: maybe(snoozeArb, 10),
 });
 
+/** Another reviewer asks for changes, the author pushes and asks again: a re-review request on the side. */
+const RE_REVIEW_STEPS: StepSpec[] = [
+  { kind: 'review', by: 'outsider', state: 'CHANGES_REQUESTED', body: null },
+  { kind: 'push', by: 'other', force: false },
+  { kind: 'rerequest' },
+];
+
+/**
+ * A review request the viewer never opened that no longer stands
+ * (DESIGN "Handled quietly" › Review requests that no longer stand): the
+ * viewer, their team or a routing team asked, then the request was removed
+ * or a teammate reviewed, then a little more activity, mostly judged by
+ * the events agent. The general generator reaches the clearable case on
+ * about one board in 4000.
+ */
+const requestGonePrSpecArb: fc.Arbitrary<PrSpec> = fc
+  .record({
+    target: fc.constantFrom<RequestTarget>('viewer', 'team', 'routing_team'),
+    byBot: fc.boolean(),
+    answer: fc.constantFrom('unrequest', 'approve', 'comment'),
+    reReview: fc.boolean(),
+    askedAgain: sometimes(1, 4),
+    more: fc.array(stepArb, { maxLength: 3 }),
+    end: endArb,
+    judged: sometimes(3, 1),
+    staleSnapshot: sometimes(1, 6),
+  })
+  .map(({ target, byBot, answer, reReview, askedAgain, more, ...picked }) => {
+    const answers: Record<typeof answer, StepSpec> = {
+      unrequest: { kind: 'unrequest', target },
+      approve: { kind: 'review', by: 'teammate', state: 'APPROVED', body: null },
+      comment: { kind: 'review', by: 'teammate', state: 'COMMENTED', body: 'plain' },
+    };
+    const askAgain: StepSpec[] = askedAgain ? [{ kind: 'request', target, byBot: false }] : [];
+    const steps: StepSpec[] = [{ kind: 'request', target, byBot }, answers[answer], ...askAgain, ...(reReview ? RE_REVIEW_STEPS : []), ...more];
+    return { ...QUIET_PR, steps, ...picked };
+  });
+
 const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
   { weight: 6, arbitrary: groupArb('single', 1, 1) },
   { weight: 3, arbitrary: reviewGroupArb },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant<GroupKind>('single'), prs: fc.tuple(requestGonePrSpecArb), snooze: fc.constant(null) }) },
   { weight: 4, arbitrary: groupArb('stack', 2, 4) },
   { weight: 4, arbitrary: groupArb('set', 2, 4) },
   { weight: 1, arbitrary: groupArb('set_with_stack', 2, 4) },
