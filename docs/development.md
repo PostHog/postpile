@@ -45,10 +45,30 @@ pnpm cli topic <id>
 pnpm cli pr owner/repo#123
 pnpm cli tools              # is gh and claude usable, and the fix if not
 
-pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
+pnpm server                 # HTTP API on 127.0.0.1:4870 with the background jobs, prints its token
 ```
 
 Dev runs use their own database: `pnpm desktop` (unpackaged Electron), `pnpm cli` and `pnpm server` run with `POSTPILE_PROFILE=dev`, which keeps data in `~/Library/Application Support/PostPile-dev` and instructions in `~/.config/postpile-dev` (seeded once with a copy of the real `instructions.md`). The title bar shows a DEV badge. To read the real database from the repo on purpose: `POSTPILE_PROFILE=default pnpm cli ...`.
+
+### Web
+
+To run PostPile in a browser instead of Electron:
+
+```
+pnpm web                    # API on 127.0.0.1:4870 + Vite dev server, opens the page
+POSTPILE_FAKE=1 pnpm web    # the same on sample data
+pnpm build:web              # static HTML, JS and CSS in apps/desktop/dist-web
+```
+
+`pnpm web` starts `pnpm server` with a fresh token (or `POSTPILE_TOKEN`) and the renderer's Vite dev server (`apps/desktop/vite.web.config.ts`) with hot reload, then opens `http://127.0.0.1:5173/?api=…&token=…`. Other environment variables go to the server as with `pnpm server`; `PORT` sets the API port. `BROWSER=none` keeps the page from opening.
+
+`pnpm server` serves the built UI itself at `http://127.0.0.1:4870/` once `pnpm build:web` has run (from `apps/desktop/dist-web`; `POSTPILE_WEB_ROOT` points elsewhere, empty turns it off). The page it serves carries the API token in a `<meta name="postpile-token">` tag and calls its own origin, so no query string is needed. The server answers only requests whose host is `127.0.0.1`, `localhost` or a `*.localhost` name (`http://postpile.localhost:4870` works in Chrome, Edge and Firefox without setup and keeps notifications, which need a secure context), so a DNS-rebinding page cannot read that token, and the page refuses to be framed. Without `POSTPILE_TOKEN` the standalone server keeps its token in `server-token` next to the database (mode 600), so open tabs keep working across restarts.
+
+The static files use relative paths, so any static host can serve `apps/desktop/dist-web` too. Such a page needs `?token=` (and `?api=http://127.0.0.1:<port>` when the port is not 4870). The API answers Chrome's private network preflight, so a page served from another origin can reach it.
+
+The packaged app runs the same server as `postpile browser`: the cask links `Contents/Resources/postpile` (from `apps/desktop/build/postpile`), which runs the app's own binary with `ELECTRON_RUN_AS_NODE=1` on `out/main/browser.js` (`apps/desktop/src/main/browser.ts`), like `postpile-mcp`. It serves the renderer build from `out/renderer` inside `app.asar`, logs to `~/Library/Logs/PostPile/browser.log`, waits while the app holds the database instead of exiting, and sets `AppConfig.install` to `app-browser`, so the update reminder says `postpile browser --restart`. `--at-login` writes `~/Library/LaunchAgents/com.posthog.postpile.browser.plist` (`RunAtLoad`, `KeepAlive`) and loads it with `launchctl bootstrap gui/<uid>`; `--stop` boots it out and removes it; `--restart` is `launchctl kickstart -k`. To try it from a build: `pnpm dist`, then `POSTPILE_FAKE=1 apps/desktop/dist/mac-arm64/PostPile.app/Contents/Resources/postpile browser`.
+
+`pnpm server` runs the same background jobs as the desktop app (`startBackgroundJobs` in `apps/server`): the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code through the MCP server. The live poll's pings go into a small in-memory feed (`PingFeed`, the newest 50) that the web UI reads every 5 seconds (`GET /api/pings?after=<id>`) and shows as browser notifications once the page has the permission (the footer's "pings: off · turn on" or "test ping" asks). A click asks `GET /api/pings/:id/target` where to go, like a Mac notification click (`pingClickTarget`). The tab has to be open; with none open, pings only show as unread tiles. The tab title carries the Dock badge's number, "(9) PostPile", from `GET /api/badge` (topics with an unread tile in every repo). Turn the jobs down the same way: `POSTPILE_POLL_SECONDS=0`, `POSTPILE_AUTO_SYNC_MINUTES=0` (or `POSTPILE_SYNC_ON_START=0`), `POSTPILE_MAX_AGENT_CALLS=0`.
 
 Only one process opens a database at a time (`postpile.lock` next to it). While the app runs, `pnpm cli topics --read-only` (also `topic`, `pr`) still reads; sync, poll and sweep refuse.
 
@@ -125,6 +145,6 @@ packages/agent    AgentRunner (claude CLI), prompts, answer schemas
 packages/engine   sync orchestration, live poll, work context sweep, EngineService
 packages/mcp      MCP server: reads over the engine, asks the running app for the rest
 apps/server       Hono JSON API over EngineService, plus the sample-data engine
-apps/desktop      Electron shell, Mac notifications, React UI
+apps/desktop      Electron shell, Mac notifications, React UI (also built for the web)
 apps/cli          dev CLI, plain text
 ```

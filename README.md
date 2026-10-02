@@ -112,6 +112,19 @@ brew upgrade --cask postpile
 
 Then quit and reopen PostPile. When a new version is out, the app shows "Update available" in the title bar, with the release notes and this command.
 
+### In the browser instead of the app
+
+The cask also installs a `postpile` command. `postpile browser` runs the app's local API, background sync, live poll and web UI in one process, with no window, so you can use PostPile in a browser tab instead:
+
+```
+postpile browser --at-login    # runs in the background now and at every login
+open http://postpile.localhost:4870
+```
+
+`postpile browser` alone runs it in the terminal until Ctrl-C. `postpile browser --stop` stops the background one and stops starting it at login. After `brew upgrade --cask postpile`, run `postpile browser --restart` and reload the page; the page's "Update available" reminder says so. Chrome, Edge and Firefox open `postpile.localhost` on their own; Safari needs the line `127.0.0.1 postpile.localhost` in `/etc/hosts`, or use `http://127.0.0.1:4870`.
+
+It uses the same data as the desktop app, and only one of them can open it at a time: quit the app first. If the app is open, `postpile browser` waits until it closes. Run `postpile browser --stop` before uninstalling the cask. Pings show as browser notifications while a PostPile tab is open: click "pings: off · turn on" in the status bar once to allow them, and allow your browser in System Settings › Notifications. A click opens the tile. The tab title shows how many topics have something unread, like the app's Dock badge. The server only listens on 127.0.0.1 and answers only requests for `127.0.0.1`, `localhost` or a `*.localhost` name; the page gets the API token from the server. Logs go to `~/Library/Logs/PostPile/browser.log`. `postpile-mcp` works with it like with the app.
+
 ## Ask PostPile from other agents
 
 PostPile ships an MCP server, so an agent working in your checkout can ask what PostPile knows about a PR before it acts: whose move it is, what changed since you looked, the agent glance, and the topic around it (goal, status, open questions, the other PRs and where each stands).

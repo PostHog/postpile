@@ -7,7 +7,7 @@ import { UpdatesOff } from './update-check.ts';
 import { appConfigFromEnv, autoSyncMinutesFromEnv, pollSecondsFromEnv, syncCallCapFromEnv } from './engine-from-env.ts';
 import { OFF_POLL_STATUS } from '@postpile/core';
 
-const CONFIG: AppConfig = { fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 };
+const CONFIG: AppConfig = { fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60, install: 'app' };
 
 function notImplemented(): never {
   throw new Error('not implemented');
@@ -198,11 +198,28 @@ describe('server app', () => {
     expect(approved).toBe(false);
   });
 
+  it('lets a hosted web page reach the loopback API through a private network preflight', async () => {
+    const app = createApp(fakeEngine({}), 'secret', CONFIG);
+    const preflight = await app.request('/api/config', {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://postpile.example',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': TOKEN_HEADER,
+        'access-control-request-private-network': 'true',
+      },
+    });
+    expect(preflight.headers.get('access-control-allow-private-network')).toBe('true');
+    const plain = await app.request('/api/config', { method: 'OPTIONS', headers: { origin: 'https://postpile.example', 'access-control-request-method': 'GET' } });
+    expect(plain.headers.get('access-control-allow-private-network')).toBeNull();
+    expect((await app.request('/api/config', { headers: { origin: 'https://postpile.example' } })).status).toBe(401);
+  });
+
   it('serves the app config behind the token', async () => {
     const app = createApp(fakeEngine({}), 'secret', CONFIG);
     expect((await app.request('/api/config')).status).toBe(401);
     const res = await app.request('/api/config', { headers: { [TOKEN_HEADER]: 'secret' } });
-    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
+    expect(await res.json()).toEqual({ fake: false, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60, install: 'app' });
   });
 
   it('applies the app call cap to a sync without one, and keeps an explicit cap', async () => {

@@ -716,7 +716,12 @@ export interface AppConfig {
    * POSTPILE_AUTO_SYNC_MINUTES, default 60; 0 turns it off.
    */
   autoSyncMinutes: number;
+  /** How this copy was installed, so the update reminder names the right upgrade steps. */
+  install: AppInstall;
 }
+
+/** app: the desktop app. app-browser: the same app's `postpile browser`. source: a repo checkout (`pnpm server`). */
+export type AppInstall = 'app' | 'app-browser' | 'source';
 
 /**
  * A lasting point in the user's message comes back for the user to place:

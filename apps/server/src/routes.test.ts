@@ -37,7 +37,7 @@ interface TestApp {
 
 /** Wraps the app so every request carries the token. */
 function appWithFake(engine: FakeEngine = new FakeEngine({ syncStepMs: 0 })): TestApp {
-  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
+  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60, install: 'app' });
   return {
     request: async (path, init = {}) => {
       const headers = { ...(init.headers as Record<string, string> | undefined), [TOKEN_HEADER]: TOKEN };
@@ -59,6 +59,14 @@ async function allRows(app: TestApp): Promise<TopicDetail['tiles'][number]['prs'
 }
 
 describe('server routes over the fake engine', () => {
+  it('counts topics with an unread tile across all repos for the badge', async () => {
+    const engine = new FakeEngine({ syncStepMs: 0 });
+    const app = appWithFake(engine);
+    const expected = (await engine.listTopics({ allRepos: true })).filter((item) => item.unreadTiles > 0).length;
+    expect(expected).toBeGreaterThan(0);
+    expect(await (await app.request('/api/badge')).json()).toEqual({ unreadTopics: expected });
+  });
+
   it('retries a failed glance: queued, writing, then ready', async () => {
     const app = appWithFake(new FakeEngine({ syncStepMs: 0, catchUpStepMs: 5 }));
     // The sample catch-up starts once a UI reads the live status.
@@ -169,7 +177,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('rechecks a memory line and validates the body', async () => {
-    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
+    const app = createApp(new FakeEngine({ recheckDelayMs: 0 }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60, install: 'app' });
     const headers = { [TOKEN_HEADER]: TOKEN, 'content-type': 'application/json' };
     const body = { factId: 'fact-rowan-drives', topicId: null, text: 'rowan drives it', target: { kind: 'fact', factId: 'fact-rowan-drives' } };
     const res = await app.request('/api/memory/recheck', { method: 'POST', headers, body: JSON.stringify(body) });

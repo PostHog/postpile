@@ -15,7 +15,7 @@ function reportLine(report: ConsolidationReport): string {
 }
 
 /**
- * The sleep-time job, run by the desktop app. Every 30 minutes it asks the
+ * The sleep-time job, run by the desktop app and the standalone server. Every 30 minutes it asks the
  * engine to consolidate with onlyIfDue: the engine decides whether it is due
  * (24h since the last run and a new dossier version since) and waits for a
  * running sync or poll first, so they never overlap. A run is logged, a

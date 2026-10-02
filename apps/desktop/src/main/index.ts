@@ -16,9 +16,8 @@ import {
   type Telemetry,
 } from '@postpile/engine';
 import type { MacNotification, McpLauncher } from '@postpile/core';
-import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, updateSourceFromEnv, type RunningServer } from '@postpile/server';
+import { appConfigFromEnv, engineFromEnv, isFake, startBackgroundJobs, startServer, updateSourceFromEnv, type BackgroundJobs, type RunningServer } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
-import { ConsolidationSchedule } from './consolidation-schedule.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
 import { ActiveDayReporter } from './active-day.ts';
 import { BoardWatcher } from './board-watcher.ts';
@@ -123,7 +122,7 @@ let engine: EngineService | null = null;
 let server: RunningServer | null = null;
 let mainWindow: BrowserWindow | null = null;
 let boardWatcher: BoardWatcher | null = null;
-let consolidationSchedule: ConsolidationSchedule | null = null;
+let backgroundJobs: BackgroundJobs | null = null;
 // Set by Cmd+Q (before-quit). Until then, closing the window only hides it on macOS.
 let quitting = false;
 // PRs opened on github.com from the app; refreshed when the window gets focus back.
@@ -356,7 +355,10 @@ async function start(): Promise<void> {
       dialog.showMessageBoxSync({
         type: 'warning',
         message: `PostPile is already running with this database (pid ${holder.pid}, ${holder.kind})`,
-        detail: `Started ${holder.startedAt}.\n${holder.databaseFile}\n\nQuit that one first, or wait until it is done.`,
+        detail:
+          holder.kind === 'server'
+            ? `PostPile for the browser has it (started ${holder.startedAt}).\n${holder.databaseFile}\n\nStop it first: postpile browser --stop in a terminal, or Ctrl-C where it runs.`
+            : `Started ${holder.startedAt}.\n${holder.databaseFile}\n\nQuit that one first, or wait until it is done.`,
         buttons: ['Quit'],
       });
       app.exit(1);
@@ -429,8 +431,7 @@ async function start(): Promise<void> {
   // window shows, once the app has settled.
   setTimeout(() => welcomeOnce(app.getPath('userData'), () => notifier.showWelcome()), 3000);
   // The fast notification poll runs as long as the app does, window open or not.
-  engine.startLivePoll({
-    intervalSeconds: pollSecondsFromEnv(process.env.POSTPILE_POLL_SECONDS),
+  backgroundJobs = startBackgroundJobs(engine, config, {
     onNotify: (notifications) => {
       if (notifier.show(notifications) === 'shown') {
         telemetry.capture('mac_ping_shown', { count: notifications.length });
@@ -438,30 +439,11 @@ async function start(): Promise<void> {
       }
     },
   });
-  // Agents on this Mac (Claude Code through postpile-mcp) leave requests in the
-  // data folder: re-read a PR from GitHub, or suggest a topic change for the
-  // Inbox. Only while the app runs; the MCP process says so when it does not.
-  engine.startAgentRequests();
-  // A background full sync every POSTPILE_AUTO_SYNC_MINUTES (default 60, 0 off),
-  // counted from the end of the last sync and capped like "Sync now". The
-  // engine skips it while a sync runs; the title bar shows it like any sync.
-  engine.startAutoSync({ minutes: config.autoSyncMinutes, maxAgentCalls: config.syncCallCap });
-  // "What you're working on": checked now and every 30 minutes, runs once a day from 06:00.
-  engine.startWorkContextSchedule();
-  // Consolidation (merge proposals, facts, retiring): checked every 30 minutes,
-  // runs when due, capped like a sync. The engine never lets it overlap a sync.
-  const service = engine;
-  consolidationSchedule = new ConsolidationSchedule((options) => service.consolidate(options), config.syncCallCap);
-  consolidationSchedule.start();
 }
 
 async function shutdown(): Promise<void> {
   try {
-    engine?.stopAgentRequests();
-    engine?.stopLivePoll();
-    engine?.stopAutoSync();
-    engine?.stopWorkContextSchedule();
-    consolidationSchedule?.stop();
+    backgroundJobs?.stop();
     // Queued mark-reads are sent, not dropped: the user meant to clear them.
     await engine?.flushPendingWrites();
     await engine?.close();

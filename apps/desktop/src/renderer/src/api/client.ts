@@ -1,10 +1,13 @@
 import type { PrKey } from '@postpile/core';
 
-// The desktop preload provides the API location and token. As a plain web page
-// (later) the query string or the default dev server is used instead.
+// The desktop preload provides the API location and token. A page served by
+// the API itself carries the token in a meta tag and calls its own origin.
+// Otherwise (the Vite dev server, a static host) the query string or the
+// default server is used.
 const params = new URLSearchParams(window.location.search);
-const baseUrl = window.postpile?.apiUrl || params.get('api') || 'http://127.0.0.1:4870';
-const token = window.postpile?.token || params.get('token') || '';
+const servedToken = document.querySelector<HTMLMetaElement>('meta[name="postpile-token"]')?.content ?? '';
+const baseUrl = window.postpile?.apiUrl || params.get('api') || (servedToken ? '' : 'http://127.0.0.1:4870');
+const token = window.postpile?.token || params.get('token') || servedToken;
 
 /** One JSON request against the local API. Non-2xx answers throw with the server's error text. */
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

@@ -186,6 +186,8 @@ describe('runningApp', () => {
     expect(runningApp(db)).toBeNull();
     writeLock(db, process.pid);
     expect(runningApp(db)?.pid).toBe(process.pid);
+    writeLock(db, process.pid, 'server');
+    expect(runningApp(db)?.kind).toBe('server');
     writeLock(db, process.pid, 'cli');
     expect(runningApp(db)).toBeNull();
     // A lock left by a crashed app: that pid is gone.

@@ -6,6 +6,12 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Added
 
+- PostPile runs in a browser too. `pnpm web` starts the local API and a dev server for the UI; `pnpm build:web` writes the UI as static files (`apps/desktop/dist-web`) for any static host, used with `pnpm server`. See docs/development.md › Web.
+- `postpile browser --at-login` (a new `postpile` command from the cask) runs PostPile in the background for the browser, at `http://postpile.localhost:4870`, now and at every login; `--stop` and `--restart` manage it. It is the app's own binary without a window, so it updates with `brew upgrade --cask postpile`. See README › In the browser instead of the app.
+- `pnpm server` serves the web UI itself at `/` (after `pnpm build:web`), with the token in the page, so no `?token=` link is needed, and keeps its token across restarts.
+- `pnpm server` runs the desktop app's background jobs: the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code.
+- In the browser, pings show as browser notifications while a PostPile tab is open. "pings: off · turn on" in the status bar asks for the permission; a click opens the tile, and opening a tile takes its pings back, like Mac notifications in the app.
+- In the browser, the tab title shows how many topics have something unread, "(9) PostPile", the same number as the app's Dock badge.
 - "<login> drives" on the topic header is now a menu: pick You, a teammate, Your team or Someone outside your team, and the topic moves to that section at once. Each item shows where the topic would go. The pick sticks until you change it or choose Reset to automatic; new activity never lifts it, and the agent's topic memory follows it. Local only, nothing goes to GitHub.
 - The agent can name your team as the driver of a standing topic that your team keeps up with nobody leading the current wave, so such topics sit under Your team owns instead of under whoever led one wave.
 - Approve on the PR pane is split: the main part approves right away as before, the speech-bubble segment opens "Approve with comment" with a short review note the agent drafts for you to edit.

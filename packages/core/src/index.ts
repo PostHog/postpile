@@ -72,6 +72,8 @@ export * from './repo-scope.ts';
 export * from './github-read.ts';
 export * from './inbox-cleanup.ts';
 export * from './pings.ts';
+export * from './ping-shelf.ts';
+export * from './badge.ts';
 export * from './quiet-reads.ts';
 export * from './snapshot-coverage.ts';
 export * from './work-context.ts';

@@ -1155,7 +1155,8 @@ stored and before a dossier goes into a glance prompt
 
 `consolidate(options)` on EngineService, CLI `consolidate [--if-due]
 [--max-agent-calls n]`, and the desktop app asks every 30 minutes
-(`ConsolidationSchedule` in the main process) with `onlyIfDue` and the sync
+(`ConsolidationSchedule` in apps/server, started with the other background
+jobs by the desktop main process and the standalone server) with `onlyIfDue` and the sync
 call cap. The engine waits for a running sync or poll first, so they never
 overlap; a run or a failure is logged, never thrown. Placing PRs is not its
 job: topic assignment places every PR itself. Due = 24h since the last run
@@ -4541,10 +4542,10 @@ and sample ping decisions
 ## Live poll and Mac pings
 
 Near-real-time pings on the Mac, only when they matter. Runs while the desktop
-app runs (window open or hidden); the CLI has `poll` for one cycle, the
-standalone server never starts it.
+app runs (window open or hidden) and while the standalone server behind the
+web UI runs (no Mac pings there); the CLI has `poll` for one cycle.
 
-**Poll** (`LivePoller` in engine `live/`, started by the desktop main process):
+**Poll** (`LivePoller` in engine `live/`, started by the desktop main process and the standalone server through `startBackgroundJobs`. The desktop shows the pings as Mac notifications; the standalone server keeps them in `PingFeed` (newest 50, ids in order) for the web UI, which polls `GET /api/pings?after=<id>` every 5s, starts at the newest id (no replay of older pings on load), and shows each as a browser notification once the page has the permission, which it only asks for from a click ("pings: off · turn on", "test ping"). A click goes through `pingClickTarget` (`GET /api/pings/:id/target`) like a Mac one; opening a tile closes its pings through the same `PingShelf` (core). Decided 2026-10-01):
 
 - `GET /notifications` every `POSTPILE_POLL_SECONDS` (default 60, 0 turns
   it off, window focus included) with the stored ETag / Last-Modified, shared
@@ -4806,8 +4807,10 @@ main, `BoardWatcher`):
   your-move tiles): "I see five topics with a dot, and that means these are
   open ... It's still my move, maybe, but I've looked at it. This clears the
   unread count in the app." Your move stays visible in the app, not on the
-  Dock. It is read from `listTopics({ allRepos: true })` (`unreadTiles`), no
-  rule is repeated in main. It is read at start, after each shown ping, when
+  Dock. It is read from `listTopics({ allRepos: true })` (`unreadTiles`,
+  counted by core's `unreadTopicCount`), no rule is repeated in main. The web
+  UI shows the same number in the tab title, "(9) PostPile" (`GET /api/badge`,
+  core's `tabTitle`, 2026-10-01), refetched whenever the other queries are. It is read at start, after each shown ping, when
   the live status moves (`changeCount`, which also counts every ended sync,
   `catchUpChanges`, `syncRunning`; checked every 5s) and after every non-read API request, which covers local
   actions (mark read, done, snooze, approve). Fake mode shows it too.
@@ -5551,10 +5554,12 @@ approve PRs, so it is never handed to other processes).
   the same way, so `pnpm cli mcp` with the fake server can try both tools.
 - Built (2026-09-29): `FileAgentRequests` (packages/mcp) and
   `AgentRequestInbox` (packages/engine/src/agent-requests, started by the
-  desktop main process through `startAgentRequests()`), the envelope and
+  desktop main process and the standalone server through
+  `startBackgroundJobs()`), the envelope and
   its zod check in core (`parseAgentRequest`). "Kind `app`" means the lock
-  kinds `packaged` and `dev` (`runningApp`): the CLI and the standalone
-  server never answer requests. The app claims a request by renaming it to
+  kinds `packaged`, `dev` and `server` (`runningApp`; the standalone server
+  behind the web UI runs the same background jobs since 2026-10-01): the
+  CLI never answers requests. The app claims a request by renaming it to
   `<uuid>.working`, so on its 20 s timeout the MCP process can withdraw a
   request nobody took ("nothing was done") or report one that is still
   running. Besides `fs.watch` the app rescans the folder every 5 s, since
@@ -6121,8 +6126,14 @@ preflight and does not know the token, so CORS stays open.
   `pnpm --filter @postpile/desktop exec install-electron` after a fresh `pnpm install` (only
   needed for `pnpm desktop`; `pnpm dist` downloads its own copy).
 - **Localhost API safety**: binds 127.0.0.1, and a token is always required (per launch in the
-  desktop app, per run in the standalone server) so web pages and other local processes cannot
-  drive approve/comment/mark-read.
+  desktop app; kept in `server-token` next to the database, mode 600, by the standalone server,
+  or `POSTPILE_TOKEN`) so web pages and other local processes cannot drive
+  approve/comment/mark-read. The standalone server also serves the web UI and writes the token
+  into that page (`<meta name="postpile-token">`); only same-origin code can read it, so every
+  request whose host is not `127.0.0.1`, `localhost` or a `*.localhost` name is refused (DNS
+  rebinding; no public DNS name can point at `.localhost`, browsers never look it up), and the
+  page sends `X-Frame-Options: DENY` (no clickjacking of Approve). Decided 2026-10-01 with
+  `postpile browser` (README › In the browser instead of the app).
 - **Paths**: `POSTPILE_CLAUDE_DIR` (default `~/.claude`) is what the work context sweep
   reads. Database at `~/Library/Application Support/PostPile/db.sqlite` on macOS
   (`$XDG_DATA_HOME/postpile/db.sqlite` elsewhere), instructions at

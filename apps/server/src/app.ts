@@ -11,7 +11,9 @@ import {
   RENDERER_TELEMETRY_EVENTS,
   rendererExceptionProps,
   TELEMETRY_EVENTS,
+  unreadTopicCount,
   type AppConfig,
+  type BadgeView,
   type TelemetryEventName,
 } from '@postpile/core';
 import { NoopTelemetry, type EngineService, type Telemetry } from '@postpile/engine';
@@ -19,6 +21,12 @@ import { UpdatesOff, type UpdateSource } from './update-check.ts';
 
 /** Every /api request must carry the server's token in this header. */
 export const TOKEN_HEADER = 'x-postpile-token';
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost']);
+
+export function isLoopbackHost(hostname: string): boolean {
+  return LOOPBACK_HOSTS.has(hostname) || hostname.endsWith('.localhost');
+}
 
 const snoozeCondition = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('someone_replies') }),
@@ -200,6 +208,18 @@ export function createApp(
   }
   const app = new Hono();
 
+  app.use('*', async (c, next) => {
+    if (!isLoopbackHost(new URL(c.req.url).hostname)) {
+      return c.json({ error: 'unknown host' }, 403);
+    }
+    await next();
+  });
+  app.use('/api/*', async (c, next) => {
+    await next();
+    if (c.req.method === 'OPTIONS' && c.req.header('access-control-request-private-network') === 'true') {
+      c.res.headers.set('access-control-allow-private-network', 'true');
+    }
+  });
   app.use('/api/*', cors({ origin: '*', allowHeaders: ['content-type', TOKEN_HEADER] }));
   app.use('/api/*', async (c, next) => {
     if (c.req.method !== 'OPTIONS' && c.req.header(TOKEN_HEADER) !== token) {
@@ -260,6 +280,10 @@ export function createApp(
   });
 
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
+  app.get('/api/badge', async (c) => {
+    const badge: BadgeView = { unreadTopics: unreadTopicCount(await engine.listTopics({ allRepos: true })) };
+    return c.json(badge);
+  });
   // The sidebar's Finished drawer. Before /api/topics/:id, which would take "finished" as an id.
   app.get('/api/topics/finished', async (c) => c.json(await engine.listFinishedTopics()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));

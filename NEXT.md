@@ -807,8 +807,21 @@ now".
   changed direction reads as what it started with. Forks are matched on
   identical first prompts. Forget matches threads by title; a reworded
   thread can come back. Session refs use local time of the machine.
-- Web app: not started. The renderer already talks HTTP and takes
-  `?api=...&token=...`, so it can be served on its own later.
+- Web app: `pnpm web` (dev mode: API plus Vite) and `pnpm build:web`
+  (static files in `apps/desktop/dist-web`) run the renderer in a browser
+  against `pnpm server`, found through `?api=...&token=...`. The server runs
+  the desktop app's background jobs (`startBackgroundJobs`: live poll, auto
+  sync, consolidation, work context schedule, MCP agent requests); only Mac
+  notifications are desktop-only. The server also serves the built UI at
+  `/` with the token in the page and keeps its token across restarts. The
+  app ships it as `postpile browser` (cask binary, `ELECTRON_RUN_AS_NODE`,
+  LaunchAgent for `--at-login`), at `http://postpile.localhost:4870`; a
+  separate Homebrew formula was built and dropped for this (2026-10-01): one
+  install, one update, no Homebrew node. Not tried for a full day on real
+  data yet, and `--at-login` only through tests (launchctl stubbed). Pings show as browser notifications while a tab is
+  open (server `PingFeed`, renderer `useWebPings`); with no tab open they
+  only show as unread tiles. The tab title carries the Dock badge's count,
+  "(9) PostPile" (`GET /api/badge`).
 
 - Stack completion follows base/head branches only. PRs linked from bodies
   or comments are not pulled in, and `subscribed` threads still count as
@@ -1130,6 +1143,15 @@ the app meanwhile.
   queue"): the queue icon replaces the git icon while a PR is in the merge
   queue, pending amber, red once the queue took it out, the merged icon
   back once merged. Also for GitHub's own queue (was a purple open icon).
+- **PostPile in the browser ships with the app** (2026-10-01): `postpile
+  browser` from the cask runs the app's own binary as Node (like
+  `postpile-mcp`), not a separate `postpile-server` Homebrew formula (built,
+  then dropped): one install and one update, no Homebrew node. Start at login
+  is a LaunchAgent (`--at-login`, `--stop`, `--restart`), since casks get no
+  `brew services`. The address is `http://postpile.localhost:4870`: browsers
+  resolve `*.localhost` themselves and treat it as a secure context, so
+  notifications work over plain HTTP; `.dev` and other custom names would
+  need DNS and TLS.
 - **Marked when the dwell ends** (2026-10-01, DESIGN.md "Actions act on
   what you look at" › "Marked when the dwell ends", supersedes "Marked when
   you move on"): the opened mark fires when the 1.5s fill completes, and
@@ -1646,7 +1668,7 @@ Desktop and server:
 
 ```
 pnpm desktop       # Electron dev mode, server in-process on a random port + token
-pnpm server        # standalone API on 127.0.0.1:4870, prints its token
+pnpm server        # standalone API on 127.0.0.1:4870 with the background jobs, prints its token
 ```
 
 The desktop app syncs once on start, on "Sync now" and every 60 minutes in the
@@ -1662,13 +1684,15 @@ mark-reads stay in the app:
 pnpm build                                 # electron-vite bundle into apps/desktop/out
 ```
 
-UI check in fake mode as a plain web page (no Electron):
+UI check in fake mode as a plain web page (no Electron), with hot reload:
 
 ```
-POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
-(cd apps/desktop/out/renderer && python3 -m http.server 5177)
-open 'http://127.0.0.1:5177/index.html?api=http://127.0.0.1:4877&token=devtok'
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm web
 ```
+
+For the built files instead: `pnpm build:web`, serve `apps/desktop/dist-web`
+(e.g. `python3 -m http.server 5177`) next to the `pnpm server` above and open
+`index.html?api=http://127.0.0.1:4877&token=devtok`.
 
 The renderer syncs on load. Against a real database that means real GitHub
 reads and agent calls; use a DB copy with `POSTPILE_READ_ONLY=1

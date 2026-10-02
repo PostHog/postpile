@@ -57,6 +57,7 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
    - The build log has a green "Upload source maps to PostHog" step, or the "POSTHOG_CLI_API_KEY is not set" warning. With the upload, the `postpile` release at the new version and its uploaded symbol sets show up in PostHog Error Tracking (project PostPile).
    - On a Mac: `brew update && brew install --cask posthog/tap/postpile` (or `brew upgrade --cask postpile`), open the app (for an ad-hoc release, clear the quarantine flag first as the caveats say). About PostPile shows the version, the status bar shows it too.
    - `brew audit --cask --tap posthog/tap postpile` has no errors worth fixing in the template.
+   - The browser version: quit the app, run `postpile browser` in a terminal, open `http://postpile.localhost:4870`; the status bar shows the new version. Ctrl-C stops it.
 
 ## Signing and notarization
 

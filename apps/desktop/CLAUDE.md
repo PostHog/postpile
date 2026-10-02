@@ -60,9 +60,20 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   30s while something is wrong, else every 5 min; "Check again" is
   `useActions().checkTools`),
   `update.ts` (`useUpdate`: the server's last update check, every minute;
+  the upgrade command and the line after it come from `upgradeSteps(AppConfig.install)`
+  in `lib/update.ts`: the app, the app's `postpile browser` or a source checkout;
   `lib/use-update-reminder.ts`: `useUpdateReminder` asks core's `updateUrgency`
   for none / pill / bar; "Later" is one shared snooze timestamp in
   localStorage, read by `UpdatePill` and `UpdateBar`),
+  `pings.ts` (`usePingFeed`: the standalone server's ping feed every 5s, also
+  in the background, only on the web page; `useWebPings` in `lib/use-web-pings.ts`
+  hands new pings to `webPinger` (`lib/web-pings.ts`, browser notifications over
+  core's `PingShelf`) and opens the tile a click asks `fetchPingTarget` for;
+  the permission is only ever asked from a click (`sendTestNotification`,
+  `WebPingsFooterItem`)),
+  `badge.ts` (`useBadge`: the Dock badge's number, topics with an unread tile
+  in every repo, web page only; `lib/use-tab-title.ts` puts it in the tab title
+  through core's `tabTitle`; no polling of its own, it refetches with the rest),
   `mcp.ts` (`useMcpConnection`: is PostPile's MCP server in Claude Code,
   refetched on window focus; the server runs `claude mcp get` at most every
   5 minutes),
@@ -344,6 +355,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   neutral, never coral; under 24h behind) + `UpdateBar` (full-width bar under
   the title bar from 24h behind, amber `--amber-*` tokens, never coral; mounted
   in `App.tsx`; Later drops back to the pill for 24h; `update_bar_shown` once per run),
+  `WebPingsFooterItem` ("pings: off · turn on" / "pings: blocked" in the footer, web page only, while
+  the browser has not granted notifications),
   `McpFooterItem` ("agents: not connected" in the footer, only while
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
@@ -583,8 +596,10 @@ stays on screen and listed (`KeptView`).
   page, and nothing secret goes into `additionalArguments`), plus the swipe and
   notification-click listeners and `sendTestNotification` (the footer's
   "test ping", through `useActions().sendTestNotification`). The first
-  launch shows a welcome notification (`main/welcome.ts`, flag in userData). As a plain web page the
-  renderer takes `?api=…&token=…` instead.
+  launch shows a welcome notification (`main/welcome.ts`, flag in userData). As a page served by
+  `pnpm server` (or the app's `postpile browser`, `main/browser.ts`) it reads the token from
+  `<meta name="postpile-token">` and calls its own origin; on any other web host it
+  takes `?api=…&token=…`. Never add an inline script to `index.html`: the CSP blocks it.
 - Packaging: `pnpm dist` (root) -> `apps/desktop/dist/mac-arm64/PostPile.app`,
   config in `electron-builder.yml`. Main must stay self-contained: keep
   runtime packages bundled by electron-vite (the desktop package has only
@@ -612,5 +627,6 @@ stays on screen and listed (`KeptView`).
   true for any running sync (`LivePollStatus.syncRunning`), so the title bar
   shows background syncs too; `lastSync` is the newer of this window's and
   the stored report (`newerReport`). The main process
-  runs the live poll (`engine.startLivePoll`) and shows Mac notifications
+  starts the live poll and the other background jobs (`startBackgroundJobs`
+  from `@postpile/server`, which `pnpm server` runs too) and shows Mac notifications
   (`main/mac-notifier.ts`); closing the window hides it on macOS, Cmd+Q quits.

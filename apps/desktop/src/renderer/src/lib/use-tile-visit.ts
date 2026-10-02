@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import type { TileView } from '@postpile/core';
+import { webPinger } from './web-pings.ts';
 
 /**
  * Tells the desktop app which tile the user opened, so its Mac pings leave
- * Notification Center (2026-10-01). Main does the matching by PR key; this
+ * Notification Center (2026-10-01); the web UI closes its browser pings the same way. Main does the matching by PR key; this
  * only says what is open. The caller passes the user's pick (a click on the
  * tile or one of its PRs, a ping click), not a tile the app picked on its
  * own: that one can change while nobody looks. `visits` grows with every
@@ -14,6 +15,7 @@ export function useTileVisit(view: TileView | null, visits: number): void {
   useEffect(() => {
     if (prKeys !== '') {
       window.postpile?.tileVisited?.(prKeys.split(' '));
+      webPinger.closeVisited(prKeys.split(' '));
     }
   }, [prKeys, visits]);
 }

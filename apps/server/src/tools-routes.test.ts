@@ -8,7 +8,7 @@ const TOKEN = 'test-token';
 
 function appWith(missingTools: FakeToolProblem[]) {
   const engine = new FakeEngine({ missingTools, setupStepMs: 0, syncStepMs: 0 });
-  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 });
+  const app = createApp(engine, TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60, install: 'app' });
   return async <T>(path: string, method = 'GET'): Promise<T> => {
     const response = await app.request(path, { method, headers: { [TOKEN_HEADER]: TOKEN } });
     return (await response.json()) as T;

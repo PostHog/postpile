@@ -25,6 +25,8 @@
     "cli": "POSTPILE_PROFILE=${POSTPILE_PROFILE:-dev} tsx apps/cli/src/main.ts",
     "server": "pnpm --filter @postpile/server start",
     "desktop": "pnpm --filter @postpile/desktop dev",
+    "web": "tsx scripts/web-dev.ts",
+    "build:web": "pnpm --filter @postpile/desktop build:web",
     "dist": "pnpm build && pnpm --filter @postpile/desktop dist",
     "screenshots": "tsx scripts/screenshots.ts"
   },

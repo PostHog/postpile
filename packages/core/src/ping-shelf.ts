@@ -3,7 +3,7 @@ import type { PrKey } from '@postpile/core';
 /** A delivered ping stays closable for a day; older ones have left Notification Center's banner long ago. */
 export const SHELF_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-/** The part of an Electron Notification the shelf needs. */
+/** The part of a notification (Electron's or the browser's) the shelf needs. */
 export interface Closable {
   close(): void;
 }
@@ -20,7 +20,8 @@ interface Shelved {
  * can be taken back from Notification Center: once none of its PRs is
  * unread anymore, or once the user opens the tile of one of them in the app.
  * Bounded by age; a ping clicked or closed in Notification Center is
- * dropped. No Electron import, so it is tested with plain objects.
+ * dropped. The desktop app shelves Mac notifications, the web UI browser ones;
+ * no Electron or DOM import, so it is tested with plain objects.
  */
 export class PingShelf {
   private shelved: Shelved[] = [];

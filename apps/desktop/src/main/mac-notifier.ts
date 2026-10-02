@@ -1,6 +1,5 @@
 import { app, Notification } from 'electron';
-import type { MacNotification, PrKey } from '@postpile/core';
-import { PingShelf, type Closable } from './ping-shelf.ts';
+import { PingShelf, type Closable, type MacNotification, type PrKey } from '@postpile/core';
 
 /**
  * Notifications keep their click handler only while referenced; a GC'd
