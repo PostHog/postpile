@@ -68,9 +68,6 @@ interface Candidate {
   tile: Tile | null;
 }
 
-/** Which of a PR's events count as news for this decision. */
-type IsNews = (event: PrEvent) => boolean;
-
 function newestFirst(events: PrEvent[]): PrEvent[] {
   return [...events].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
 }
@@ -130,7 +127,7 @@ export class PingDecider {
   }
 
   /** `keepReadNews`: the poll keeps the news of read threads for later (`waitingForUnread`). */
-  private candidates(board: Board, prKeys: PrKey[], isNews: (key: PrKey) => IsNews, viewer: Viewer, keepReadNews: boolean): Candidate[] {
+  private candidates(board: Board, prKeys: PrKey[], newEventIds: Set<string>, viewer: Viewer, keepReadNews: boolean): Candidate[] {
     const cutoff = new Date(this.deps.now().getTime() - PING_FRESH_MS).toISOString();
     const settings = loadRepoSettings(this.deps.store);
     const result: Candidate[] = [];
@@ -141,8 +138,7 @@ export class PingDecider {
         continue;
       }
       const allEvents = board.events.get(key) ?? [];
-      const news = isNews(key);
-      const events = allEvents.filter((e) => news(e) && e.seenAt === null && e.at >= cutoff);
+      const events = allEvents.filter((e) => newEventIds.has(e.id) && e.seenAt === null && e.at >= cutoff);
       if (!thread.unread) {
         if (keepReadNews) {
           this.waitForUnread(key, events);
@@ -157,7 +153,8 @@ export class PingDecider {
       // New human news wakes a snooze before the board is read, so a tile still snoozed here has nothing that should ping yet. An event the agent raises to loud later comes back through decideRaised.
       const snoozed = located.tile !== null && board.stateOf(located.tile).kind === 'snoozed';
       const rule = pingRule(events, pr, viewer, isPrInQuietRepo(key, settings), snoozed);
-      // Any of the events, not only the rule's: a newer review request must not hide the reply.
+      // Any of the events, not only the rule's: a newer review request must not hide the reply. Addressed
+      // first, so a reply the viewer already answered (quiet) or one on a draft stays out, as in pingRule.
       const conversation =
         rule.class === 'addressed' && events.some((e) => isAddressedToViewer(e, pr, viewer) && isLiveConversation(e, pr, allEvents, viewer));
       result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, conversation, ...located });
@@ -284,13 +281,10 @@ export class PingDecider {
    */
   async decide(prKeys: PrKey[], newEventIds: string[], viewer: Viewer): Promise<PingDecisions> {
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
-    const fresh = new Set(newEventIds);
+    // Event ids carry their PR key, so one flat set covers every PR.
+    const news = new Set([...newEventIds, ...[...this.waitingForUnread.values()].flatMap((ids) => [...ids])]);
     const keys = [...new Set([...prKeys, ...this.waitingForUnread.keys()])];
-    const isNews = (key: PrKey): IsNews => {
-      const waiting = this.waitingForUnread.get(key);
-      return (event) => fresh.has(event.id) || (waiting?.has(event.id) ?? false);
-    };
-    return this.decideCandidates(board, this.candidates(board, keys, isNews, viewer, true), viewer);
+    return this.decideCandidates(board, this.candidates(board, keys, news, viewer, true), viewer);
   }
 
   /** The thread pinged at or after `at`: the user already heard about this PR since then. */
@@ -321,6 +315,7 @@ export class PingDecider {
         prKeys.add(event.prKey);
       }
     }
-    return this.decideCandidates(board, this.candidates(board, [...prKeys], () => () => true, viewer, false), viewer);
+    const eventIds = [...prKeys].flatMap((key) => (board.events.get(key) ?? []).map((event) => event.id));
+    return this.decideCandidates(board, this.candidates(board, [...prKeys], new Set(eventIds), viewer, false), viewer);
   }
 }
