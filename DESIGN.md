@@ -1166,21 +1166,65 @@ Input (`ConsolidationInput`): every active topic with its latest dossier,
 open/total PR counts and last activity; groups of active facts sharing a
 slot (subject + predicate for per_subject, predicate + object for
 per_object, subject + predicate + object otherwise, so "alice works on #1"
-and "#2" are not duplicates); the newest 60 feedback entries across topics;
-decided rule and topic proposals (so nothing is proposed twice).
+and "#2" are not duplicates); the newest 60 feedback entries across topics
+(a click without a note shows as "(no note: a bare click)"); rule and topic
+proposals the user accepted or rejected (so nothing is proposed twice).
+Withdrawn ones are left out: the user never said no to them.
 
 Output and what happens:
 
 | output | effect |
 |---|---|
-| `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1. Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
+| `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1, plus no repeat of a rejected one (below). Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
 | `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
-| `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
+| `rules` | filed as pending `rule_proposal` rows when the evidence holds (below). Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
 | `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no human activity for 2 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
 
 Also deterministic, in the same run: retire topics that pass the gate and
 whose dossier status is `finished`. Dossier versions are pruned on every
 dossier save, not here.
+
+**Proposals must earn their interruption** (2026-10-02). Every proposal
+asks the user to read and decide, and the user stopped clicking them: rules
+came from bare "Wrong topic" clicks, merges said "both are small" or "both
+are finished", reasons read "placeholder", and most pending ones named
+topics already retired. The bar, deterministic where it can be
+(`proposal-quality.ts` in core):
+
+- **A real reason.** A topic proposal, area merge or rule whose reason is
+  empty, under 15 characters, or a placeholder ("placeholder", "TBD",
+  "n/a", "...", "reason", ...) is dropped when the answer is mapped
+  (`isJunkReason`).
+- **No rule from bare clicks.** A rule cites at least two shown feedback
+  ids, and at least one of them states a preference in words: a worded
+  kind (tailoring kept or once, memory wrong / forget / confirmed / fixed,
+  work-context forget) or a `not_mine` / `not_related` / `wrong_topic`
+  click with a typed note. A bare click only moved a PR; `unmute` notes are
+  GitHub text, not the user's (`ruleHasWordedEvidence`). The prompt says
+  the same and never to invent topic-boundary rules from clicks.
+- **No merge for size or state.** The prompt asks a merge to say how the
+  PRs serve the same goal and what the user gains; "both are small",
+  "both are finished", "winding down" are no reasons. Finished topics are
+  retirement's job. The prompt says no proposals at all is the usual,
+  expected answer.
+- **No repeat of a "no".** A topic change equivalent to a rejected one is
+  not filed: a merge of the same two topics in either direction, a
+  rename of the same topic to the rejected name (another name may come up
+  once the topic changed), a split of the same topic
+  moving one of the same PRs, an area fold of the same two areas either
+  way (`repeatsRejectedChange`). A rule whose text matches a decided one
+  (case, spacing and closing punctuation aside, `ruleTextKey`) is not filed.
+- **Withdrawn when stale.** A pending topic proposal naming a topic that is
+  no longer active (retired, archived or gone, on either side of a merge),
+  and a pending rule scoped to such a topic, gets status `withdrawn` with
+  `decided_at`. It runs whenever a topic leaves the sidebar
+  (`changeTopicStatus`) and at the end of every full sync, no agent call
+  (`withdrawStaleProposals`). Accepting a merge records the decision first,
+  so the accepted merge itself is never withdrawn by the archive it causes.
+  Withdrawn proposals are not pending (Inbox, topic), are not fed to
+  consolidation as decided, never block the same idea later, and the MCP
+  `topic` read says "withdrawn ... not a rejection". `status` is TEXT, so
+  the new value needed no migration.
 
 ### Cost accounting
 
@@ -1841,8 +1885,9 @@ the PR's title; PRs in the same request that belong together share the new
 name. No cap and no deferral (dropped 2026-09-29: the cap and the
 "unsorted" answer left PRs lingering in Unsorted until a consolidation the
 desktop app never ran, and deferred lone PRs never met in one request).
-Small topics are consolidation's job: it proposes merging 1-2 PR topics
-into a bigger one. Migration 015 deleted the old `topic_deferred:*` meta
+Small topics are consolidation's job: it proposes merging one into a bigger
+topic when its PRs serve that topic's goal; size alone is no reason
+(2026-10-02, "Proposals must earn their interruption"). Migration 015 deleted the old `topic_deferred:*` meta
 rows.
 
 ## Actions act on what you look at

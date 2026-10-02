@@ -59,11 +59,15 @@ export class RuleProposalRepo {
     ).map(toProposal);
   }
 
-  /** Accepted and rejected, newest first. Goes into the consolidation prompt so ideas are not proposed twice. */
+  /**
+   * Accepted and rejected, newest first. Goes into the consolidation prompt
+   * so ideas are not proposed twice. Withdrawn ones are left out: the app
+   * took those back, the user never said no.
+   */
   listDecided(limit: number): RuleProposal[] {
     return all<RuleProposalRow>(
       this.db,
-      "SELECT * FROM rule_proposal WHERE status != 'pending' ORDER BY decided_at DESC, id LIMIT ?",
+      "SELECT * FROM rule_proposal WHERE status IN ('accepted', 'rejected') ORDER BY decided_at DESC, id LIMIT ?",
       limit,
     ).map(toProposal);
   }

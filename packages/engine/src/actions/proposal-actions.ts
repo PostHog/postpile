@@ -102,10 +102,11 @@ export class ProposalActions {
       return failed(`Can't accept: ${stale}. Nothing changed; reject it instead.`);
     }
     this.store.transaction(() => {
+      // Decided first: an accepted merge archives its topic, which withdraws what is still pending there.
+      this.store.proposals.decide(proposalId, accept ? 'accepted' : 'rejected', at);
       if (accept) {
         this.applyAccepted(proposal, at);
       }
-      this.store.proposals.decide(proposalId, accept ? 'accepted' : 'rejected', at);
     });
     return ok(accept ? 'Accepted' : 'Rejected');
   }

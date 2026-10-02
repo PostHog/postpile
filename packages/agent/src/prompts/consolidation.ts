@@ -32,7 +32,8 @@ function factGroupBlock(group: Fact[], index: number): string {
 
 function feedbackLine(f: Feedback): string {
   const about = [f.topicId && `topic ${f.topicId}`, f.prKey].filter(Boolean).join(', ');
-  return `- #${f.id} ${f.createdAt.slice(0, 10)} ${f.kind}${about ? ` (${about})` : ''}: ${clip(f.note, 200)}`;
+  const note = f.note.trim() === '' ? '(no note: a bare click)' : clip(f.note, 200);
+  return `- #${f.id} ${f.createdAt.slice(0, 10)} ${f.kind}${about ? ` (${about})` : ''}: ${note}`;
 }
 
 function decidedRuleLine(rule: RuleProposal): string {
@@ -77,17 +78,25 @@ ${input.duplicateFacts.length === 0 ? '(none)' : githubData(input.duplicateFacts
 Recent corrections from the user, newest first:
 ${listOrNone(input.feedback.map(feedbackLine))}
 
-Rules the user already decided on (never propose these again):
+Rules the user already decided on (never propose these again, nor the same idea in other words):
 ${listOrNone(input.decidedRules.map(decidedRuleLine))}
 
-Topic changes the user already decided on (never propose these again):
+Topic changes the user already decided on (never propose these again; a rejected merge stays
+rejected in both directions, a rejected rename means the user keeps the name):
 ${input.decidedTopicProposals.length === 0 ? '(none)' : githubData(input.decidedTopicProposals.map(decidedTopicLine).join('\n'))}
+
+Every proposal interrupts the user, who has to read it and decide. Propose only what changes how
+they see their work; housekeeping is not worth it. Answering with no proposals at all is fine and
+expected on most runs.
 
 What to return, all optional; empty lists are the usual answer:
 - topicProposals: rename (the name no longer fits the work), merge (two topics serve the same goal;
-  topicId is merged into intoTopicId; also propose it for small topics of 1-2 PRs that serve a
-  bigger topic's goal, merging the small one into the bigger one; never merge topics only for
-  sharing an area), split (a topic fails the one-goal test: it holds two separate goals, or PRs
+  topicId is merged into intoTopicId; the reason says how their PRs serve that goal and what the
+  user gains from one topic, e.g. "both carry the billing rollout; apart, its remaining blocker is
+  hidden in the smaller one". Size and state are never a reason: "both are small", "both are
+  finished", "both are winding down" or "all PRs merged" do not justify a merge. Finished topics
+  are retired on their own (see finished), not merged. Never merge topics only for sharing an
+  area), split (a topic fails the one-goal test: it holds two separate goals, or PRs
   that neither serve its goal nor came out of that work; one entry per new part, named after that
   part's own goal, with the PR keys to move out, taken from that topic's pr lines; also propose
   one when a topic keeps more than 12 live tiles, along its natural parts). Small splits (a few
@@ -98,11 +107,16 @@ What to return, all optional; empty lists are the usual answer:
   list above.
 - factMerges: inside one duplicate group, facts that say the same thing. keepId = the best one,
   dropIds = the rest.
-- rules: a standing rule when the user corrected the same kind of thing several times. Write it
-  as the user would say it, one sentence. topicId null for a global rule, else the topic id.
-  evidenceFeedbackIds = the # ids of the corrections behind it (at least two).
+- rules: a standing rule only when the user said in words what they want, several times. Write
+  it as the user would say it, one sentence. topicId null for a global rule, else the topic id.
+  evidenceFeedbackIds = the # ids of the corrections behind it (at least two), and at least one of
+  them must carry the user's own words (a note, a kept tailoring, a forgotten line). A bare click
+  ("(no note: a bare click)") on not_mine, not_related or wrong_topic only moved one PR: it is no
+  ground for a rule, never invent topic-boundary rules ("Only put a PR in topic X if ...") from
+  such clicks.
 - finished: topics whose work looks done. The engine double-checks before retiring any.
-reason: one short sentence each, the user will read it.
+reason: one short sentence each that the user will read to decide: say what is true of the work
+and what the change gives them. Never a placeholder; a proposal without a real reason is dropped.
 ${NO_CI_RULE}
 ${jsonOnly(`{
   "topicProposals": [{"kind": "rename", "topicId": "...", "name": "...", "reason": "..."}, {"kind": "merge", "topicId": "...", "intoTopicId": "...", "reason": "..."}, {"kind": "split", "topicId": "...", "name": "...", "prKeys": ["owner/repo#1"], "reason": "..."}],

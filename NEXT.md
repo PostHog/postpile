@@ -16,6 +16,17 @@ now".
   future assessments" in the detail pane does the same from the user's own
   words. Edited reviews restart a candidate, deleted ones and retired
   topics withdraw it. Unaccepted lessons reach no prompt.
+- Proposal quality (2026-10-02, DESIGN.md "Consolidation" › "Proposals must
+  earn their interruption"): pending proposals naming a retired, archived
+  or gone topic (and topic rules scoped to one) turn `withdrawn` on every
+  full sync and whenever a topic leaves the sidebar; withdrawn is not a
+  rejection in the consolidation prompt or the repeat checks. Answers drop
+  proposals and rules with an empty, short or placeholder reason, rules
+  without one worded correction behind them, and topic changes or rules
+  the user already rejected (merges in either direction). The prompt asks
+  merges for the shared goal and the gain, rules no ground in bare clicks,
+  and says no proposals is the usual answer. No consolidation prompt
+  version constant exists (its answers are not cached), so none was bumped.
 - Merge queue state (2026-10-02, DESIGN.md "Merge queue"): `mergeQueueState`
   reads trunk-io[bot]'s status comment; the PR icon turns into the Octicons
   merge-queue icon (amber, red once failed) on rows, the detail header, the
@@ -1110,6 +1121,16 @@ the app meanwhile.
   additions only). Rejected: "Disagree" / "Wrong" / "Why?" affordances (read
   as asking for an explanation, not as teaching), writing misses straight
   into topic corrections, and global proposals after N misses.
+- **Proposals must earn their interruption** (2026-10-02, DESIGN.md
+  "Consolidation"): a proposal interrupts the user, so it needs a real
+  reason (no placeholders, at least 15 characters); a rule needs at least
+  one correction in the user's words, never only bare Not mine / Not
+  related / Wrong topic clicks; a merge says how the PRs serve one goal and
+  what the user gains, never "both small" or "both finished" (finished is
+  retirement's job); a rejected change is not asked again, a merge in
+  either direction; proposals about topics that left the sidebar are
+  withdrawn, which is not a rejection. No proposals is the expected answer
+  on most runs.
 - **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
   PRs never ask for a review"): Approve on the PR pane is split (approve
   now, or with an agent-drafted note); "Comment review" posts a COMMENT

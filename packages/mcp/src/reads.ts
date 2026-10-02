@@ -404,8 +404,10 @@ function proposalSourceWords(proposal: TopicProposal): string {
 function proposalLine(proposal: TopicProposal, topicId: string, name: (id: string | null) => string, now: string): string {
   const outcome = proposalOutcome(proposal, now);
   const when = outcome === 'pending' ? `pending since ${day(proposal.createdAt)}` : `${outcome} on ${day(proposalOutcomeAt(proposal, now) ?? proposal.createdAt)}`;
+  // Withdrawn is PostPile's doing, not the user's: say so, so it never reads as a "no".
+  const withdrawn = outcome === 'withdrawn' ? ' (a topic it named left the sidebar; not a rejection)' : '';
   const who = proposalSourceWords(proposal);
-  return `  ${when}: ${proposalWords(proposal, topicId, name, outcome)}, ${who}. Reason: ${proposal.reason}`;
+  return `  ${when}${withdrawn}: ${proposalWords(proposal, topicId, name, outcome)}, ${who}. Reason: ${proposal.reason}`;
 }
 
 /**

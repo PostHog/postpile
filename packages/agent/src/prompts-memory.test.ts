@@ -341,4 +341,20 @@ describe('consolidationPrompt', () => {
     expect(prompt).toContain(NO_CI_RULE);
     expect(prompt).toContain('- rejected: Skip docs PRs');
   });
+
+  it('marks bare clicks and sets the bar for proposals', () => {
+    const prompt = consolidationPrompt({
+      topics: [],
+      duplicateFacts: [],
+      feedback: [makeFeedback({ id: 4, kind: 'wrong_topic', note: '' })],
+      decidedRules: [],
+      decidedTopicProposals: [],
+      areas: [],
+      context: fullContext,
+    });
+    expect(prompt).toContain('- #4 2026-09-20 wrong_topic (topic topic-1, acme/app#9): (no note: a bare click)');
+    expect(prompt).toContain('Answering with no proposals at all is fine and\nexpected on most runs.');
+    expect(prompt).toContain('"both are small"');
+    expect(prompt).toContain('never invent topic-boundary rules');
+  });
 });
