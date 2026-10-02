@@ -226,7 +226,7 @@ export const dossierOutput = z.object({
     )
     .default([]),
   // The user's home team drives (a standing topic, nobody leads the wave). Kept only while no person is the driver.
-  driverTeam: z.boolean().catch(false).default(false),
+  driverTeam: z.boolean().catch(false),
   openQuestions: z.array(z.object({ text: text.min(1), askedBy: text.nullable().default(null), refs: refIds })).default([]),
   timeline: z.array(z.object({ prKey: text, role: text.default(''), refs: refIds })).default([]),
   earlier: text.default(''),

@@ -1,8 +1,9 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import type { DriverChoice, TopicDriverView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { choiceHelper, choiceLabel, driverLabel } from '../lib/driver.ts';
 import { sectionLook } from '../lib/sections.ts';
+import { useDismiss } from '../lib/use-dismiss.ts';
 import { Avatar } from './Avatar.tsx';
 import { CheckIcon, ChevronIcon } from './icons.tsx';
 
@@ -32,7 +33,8 @@ function ChoiceItem(props: { choice: DriverChoice; onPick: (value: string) => vo
  * drives: You, each teammate, Your team, Someone outside your team, each
  * with the section the topic moves to, and Reset to automatic once a pick
  * is set. A pick moves the topic at once and stands until changed (local
- * only). Escape closes, arrow keys, Home and End move between items.
+ * only). Escape or a click outside closes (`useDismiss`), arrow keys, Home
+ * and End move between items.
  */
 export function DriverMenu(props: { topicId: string; driver: TopicDriverView }) {
   const actions = useActions();
@@ -50,29 +52,27 @@ export function DriverMenu(props: { topicId: string; driver: TopicDriverView }) 
     return [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
   }
 
+  // Back to the button, so the keyboard keeps its place.
+  const close = useCallback(() => {
+    setOpen(false);
+    button.current?.focus();
+  }, []);
+  useDismiss(open, close, root);
+
   useEffect(() => {
     if (!open) {
       return;
     }
     const items = menuItems();
     (items.find((item) => item.getAttribute('aria-checked') === 'true') ?? items[0])?.focus();
-    function onPointerDown(event: PointerEvent) {
-      if (root.current && !root.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
     // The header scrolls with the pane; a fixed menu would float away, so it closes.
     function onScroll(event: Event) {
       if (!menu.current?.contains(event.target as Node)) {
         setOpen(false);
       }
     }
-    document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('scroll', onScroll, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('scroll', onScroll, true);
-    };
+    return () => document.removeEventListener('scroll', onScroll, true);
   }, [open]);
 
   function openMenu() {
@@ -83,17 +83,7 @@ export function DriverMenu(props: { topicId: string; driver: TopicDriverView }) 
     setOpen(true);
   }
 
-  function close() {
-    setOpen(false);
-    button.current?.focus();
-  }
-
   function onMenuKeyDown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
-      return;
-    }
     if (event.key === 'Tab') {
       setOpen(false);
       return;

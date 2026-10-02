@@ -541,11 +541,12 @@ export function ActionsProvider(props: { children: ReactNode }) {
       const path = `/api/topics/${encodeURIComponent(topicId)}/driver`;
       const result = await withBusy(`topicDriver:${topicId}`, () => request<ActionResult>('POST', path, { driver }));
       // The topic moving in the sidebar is the confirmation; only a refusal says something.
-      if (!result.ok) {
+      await refreshAll();
+      if (result.ok) {
+        setTopicMoves((count) => count + 1);
+      } else {
         show('error', result.message);
       }
-      await refreshAll();
-      setTopicMoves((count) => count + 1);
     } catch (error) {
       show('error', `Could not set the driver: ${errorText(error)}`);
     }

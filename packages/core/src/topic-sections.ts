@@ -54,8 +54,9 @@ export const TOPIC_SECTION_ORDER: TopicSectionOrder = [
 /** The PR tiers that ask something of the viewer, most urgent first. `mine` and `team` say whose PR it is, not what it asks. */
 const ASK_TIERS = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned'] as const;
 
-function isAsk(section: TopicSection): boolean {
-  return (ASK_TIERS as readonly TopicSection[]).includes(section);
+/** The most urgent ask a PR of the topic holds, null when none does. */
+function openAsk(queues: Pick<TopicQueues, 'tiers'>): TopicSection | null {
+  return ASK_TIERS.find((tier) => queues.tiers[tier] > 0) ?? null;
 }
 
 export interface SectionInput {
@@ -134,11 +135,7 @@ export function topicSection(input: SectionInput): TopicSection {
   if (input.retired) {
     return 'archive';
   }
-  const ask = ASK_TIERS.find((tier) => input.queues.tiers[tier] > 0);
-  if (ask) {
-    return ask;
-  }
-  return sectionBelowAsks(input);
+  return openAsk(input.queues) ?? sectionBelowAsks(input);
 }
 
 /** What the read models know about a topic when they place it. */
@@ -154,13 +151,13 @@ export interface TopicSectionSource {
   viewer: Viewer | null;
 }
 
-/** The resolver's input for the topic with `driver` (a stored driver value) driving it. */
-function sectionInputOf(source: TopicSectionSource, driver: string | null): SectionInput {
+/** The resolver's input for the topic with a driver of this relation. */
+function sectionInputOf(source: TopicSectionSource, driver: PersonRelation | null): SectionInput {
   return {
     retired: source.topic.status === 'retired',
     queues: source.queues,
     moves: source.moves,
-    driver: driverRelation(driver, source.viewer),
+    driver,
     placement: source.placement,
     homeTeams: source.viewer ? homeTeamsOf(source.viewer) : [],
   };
@@ -169,7 +166,7 @@ function sectionInputOf(source: TopicSectionSource, driver: string | null): Sect
 /** `topicSection` for a stored topic, the user's driver pick over the automatic one: the engine and FakeEngine both place topics through this. */
 export function topicSectionOf(source: TopicSectionSource): TopicSection {
   const driver = effectiveDriver(source.driverPick, source.topic.driver, source.viewer);
-  return topicSection(sectionInputOf(source, driver.value));
+  return topicSection(sectionInputOf(source, driver.relation));
 }
 
 /** The header's driver label and its menu, each choice with the section it moves the topic to (below the asks). */
@@ -179,15 +176,15 @@ export function topicDriverView(source: TopicSectionSource): TopicDriverView {
     value,
     kind: driverKind(value, source.viewer),
     login: driverLogin(value),
-    section: sectionBelowAsks(sectionInputOf(source, value)),
+    section: sectionBelowAsks(sectionInputOf(source, driverRelation(value, source.viewer))),
     current: value === driver.value,
   }));
-  const section = topicSection(sectionInputOf(source, driver.value));
   return {
     kind: driver.value === null ? null : driverKind(driver.value, source.viewer),
     login: driverLogin(driver.value),
     picked: driver.picked,
-    heldByAsk: isAsk(section) ? section : null,
+    // A retired topic sits in the Archive, asks or not.
+    heldByAsk: source.topic.status === 'retired' ? null : openAsk(source.queues),
     choices,
   };
 }

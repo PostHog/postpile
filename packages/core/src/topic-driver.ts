@@ -72,6 +72,14 @@ export function driverPickValues(viewer: Viewer | null): string[] {
   return [...people, TEAM_DRIVER, OUTSIDE_DRIVER];
 }
 
+/** Why `setTopicDriver` refuses a value the menu does not offer; null for one it does, or a reset (null). */
+export function driverPickRefusal(driver: string | null, viewer: Viewer | null): string | null {
+  if (driver === null || driverPickValues(viewer).includes(driver)) {
+    return null;
+  }
+  return 'Pick yourself, a teammate, your team or someone outside your team';
+}
+
 /** The driver in words for the CLI and MCP reads: a login, "the user's team", "someone outside the user's team", "unknown". */
 export function driverText(view: Pick<TopicDriverView, 'kind' | 'login' | 'picked'> | null): string {
   if (view === null || view.kind === null) {

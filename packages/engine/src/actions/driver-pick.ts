@@ -1,4 +1,4 @@
-import { driverPickValues, type ActionResult } from '@postpile/core';
+import { driverPickRefusal, type ActionResult } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { UNSORTED_TOPIC_ID } from '../board.ts';
 import { refreshTopicDriverAndRole } from '../digest/topic-roles.ts';
@@ -18,8 +18,9 @@ export function setTopicDriver(store: Store, topicId: string, driver: string | n
     return failed(`no topic ${topicId}`);
   }
   const viewer = loadViewer(store);
-  if (driver !== null && !driverPickValues(viewer).includes(driver)) {
-    return failed('Pick yourself, a teammate, your team or someone outside your team');
+  const refusal = driverPickRefusal(driver, viewer);
+  if (refusal !== null) {
+    return failed(refusal);
   }
   store.transaction(() => {
     if (driver === null) {

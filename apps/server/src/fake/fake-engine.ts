@@ -145,7 +145,7 @@ import {
   prStatus,
   prWhoseTurn,
   isReReviewMove,
-  driverPickValues,
+  driverPickRefusal,
   searchTopics,
   setIdFromTileId,
   threadPrKey,
@@ -1634,12 +1634,13 @@ export class FakeEngine implements EngineService {
     if (!this.data.topics.some((topic) => topic.id === topicId)) {
       return fail(`no topic ${topicId}`);
     }
+    const refusal = driverPickRefusal(driver, this.viewer());
+    if (refusal !== null) {
+      return fail(refusal);
+    }
     if (driver === null) {
       this.driverPicks.delete(topicId);
       return ok('Back to the automatic driver');
-    }
-    if (!driverPickValues(this.viewer()).includes(driver)) {
-      return fail('Pick yourself, a teammate, your team or someone outside your team');
     }
     this.driverPicks.set(topicId, driver);
     return ok('Driver set');

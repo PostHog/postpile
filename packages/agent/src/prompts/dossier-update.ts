@@ -1,4 +1,4 @@
-import { DOSSIER_LIMITS, OUTSIDE_DRIVER, TEAM_DRIVER } from '@postpile/core';
+import { DOSSIER_LIMITS, driverKind } from '@postpile/core';
 import type { Fact, PrEvent } from '@postpile/core';
 import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
@@ -142,19 +142,24 @@ function placementBlock(input: DossierUpdateInput): string {
   ]);
 }
 
+/** The line saying who the user set as the driver. */
+function driverPickLine(pick: string, viewer: DossierUpdateInput['viewer']): string {
+  const kind = driverKind(pick, viewer);
+  if (kind === 'team') {
+    return '- Their own team drives, no single person. Set driverTeam true and give nobody the driver role.';
+  }
+  if (kind === 'outside') {
+    return '- Someone outside their team drives (name not given). Never call the user or a teammate the driver.';
+  }
+  return `- @${pick} drives. Give ${pick} the driver role and nobody else.`;
+}
+
 /** The driver the user picked in the header: it stands over what the activity suggests. */
 function driverPickBlock(input: DossierUpdateInput): string {
-  const pick = input.driverPick;
-  if (pick === null) {
+  if (input.driverPick === null) {
     return '';
   }
-  let line = `- @${pick} drives. Give ${pick} the driver role and nobody else.`;
-  if (pick === TEAM_DRIVER) {
-    line = '- Their own team drives, no single person. Set driverTeam true and give nobody the driver role.';
-  } else if (pick === OUTSIDE_DRIVER) {
-    line = '- Someone outside their team drives (name not given). Never call the user or a teammate the driver.';
-  }
-  return block('Who drives, as the user set it (it stands, whatever the activity suggests):', [line]);
+  return block('Who drives, as the user set it (it stands, whatever the activity suggests):', [driverPickLine(input.driverPick, input.viewer)]);
 }
 
 function feedbackBlock(input: DossierUpdateInput): string {
