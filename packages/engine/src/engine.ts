@@ -1315,6 +1315,10 @@ export class Engine implements EngineService {
     return this.lessons.list(topicId);
   }
 
+  async getLesson(lessonId: number): Promise<LessonView | null> {
+    return this.lessons.get(lessonId);
+  }
+
   teachLesson(prKey: PrKey, note: string): Promise<TeachLessonResult> {
     return this.lessons.teach(prKey, note);
   }

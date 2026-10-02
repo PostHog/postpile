@@ -385,6 +385,7 @@ export function createApp(
   // Lessons from the user's pushback (DESIGN.md "Lessons from your reviews"). Local only, never GitHub writes.
   // Teach and propose-instructions are one agent call each; nothing reaches instructions.md before saveInstructions.
   app.get('/api/topics/:id/lessons', async (c) => c.json(await engine.getLessons(c.req.param('id'))));
+  app.get('/api/lessons/:id', async (c) => c.json(await engine.getLesson(lessonIdFromParam(c.req.param('id')))));
   app.post('/api/lessons/teach', async (c) => {
     const body = teachLessonBody.parse(await c.req.json());
     return c.json(await engine.teachLesson(body.prKey, body.note));

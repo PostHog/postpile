@@ -64,6 +64,7 @@ export class LessonWriter {
     if (items.length === 0) {
       return;
     }
+    // The prompt stays bounded; the check below reads every dismissal, so an old "no" still holds.
     const dismissed = this.store.lessons.listDismissedTexts(DISMISSED_IN_PROMPT);
     const open = topicId === null ? [] : this.store.lessons.listOpenForTopic(topicId).map((lesson) => ({ id: lesson.id, text: lesson.text }));
     const answers = await this.agent.writeLessons({
@@ -74,7 +75,7 @@ export class LessonWriter {
       viewer: this.viewer,
       context: this.contexts.forTopic(topicId),
     });
-    this.apply(answers, dismissed);
+    this.apply(answers, this.store.lessons.listAllDismissedTexts());
   }
 
   /** Every new lesson, grouped by topic. Returns the errors; one failed call never stops the others. */

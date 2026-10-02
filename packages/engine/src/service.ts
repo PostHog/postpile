@@ -377,6 +377,8 @@ export interface EngineService {
 
   /** The topic's open lessons ("Remember for future assessments?"), oldest first. */
   getLessons(topicId: string): Promise<LessonView[]>;
+  /** One open lesson, wherever it sits now (a taught lesson's PR may have moved to a topic since); null once decided. */
+  getLesson(lessonId: number): Promise<LessonView | null>;
   /** "Teach future assessments" on a PR: the agent turns the note into a candidate line right away. */
   teachLesson(prKey: PrKey, note: string): Promise<TeachLessonResult>;
   /** "Remember in this topic": the line goes into the topic's instructions. */

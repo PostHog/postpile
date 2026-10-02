@@ -128,7 +128,9 @@ describe('writing and deciding lessons', () => {
     const [view] = await h.engine.getLessons('t');
     expect(view).toMatchObject({ id: lesson!.id, text: LINE, earlierVerdict: 'LOOKS_SAFE', reviews: 1, prNumber: 1 });
 
+    expect(await h.engine.getLesson(lesson!.id)).toMatchObject({ id: lesson!.id, text: LINE });
     expect((await h.engine.keepLessonForTopic(lesson!.id)).ok).toBe(true);
+    expect(await h.engine.getLesson(lesson!.id)).toBeNull();
     expect(h.store.topics.get('t')?.tailoring).toBe(LINE);
     expect(h.store.lessons.get(lesson!.id)?.status).toBe('kept_topic');
     expect(await h.engine.getLessons('t')).toEqual([]);
@@ -148,6 +150,25 @@ describe('writing and deciding lessons', () => {
     expect(taught.lesson).toBeNull();
     expect(h.runner.promptsFor('lesson_write')[0]).toContain(`- ${LINE}`);
     expect(h.store.lessons.get(lesson!.id + 1)).toMatchObject({ status: 'none', source: 'taught' });
+  });
+
+  it('reads every dismissal for the check, not only the newest the prompt shows', async () => {
+    const { h, pr } = await requestChangesAfter((p) => glance(p));
+    const [lesson] = lessonsFor(h, pr.key);
+    h.store.lessons.setWritten(lesson!.id, { text: LINE, why: '', status: 'open', joinedId: null });
+    expect((await h.engine.dismissLesson(lesson!.id)).ok).toBe(true);
+    // Forty newer dismissals push the old one out of the prompt.
+    for (let index = 0; index < 40; index += 1) {
+      const filler = h.store.lessons.add({ ...lesson!, review: null, source: 'review', note: '', text: `When filler ${index}, look closer.`, status: 'open', decidedAt: null });
+      h.store.lessons.decide(filler.id, 'dismissed', '', `2026-09-03T00:${String(index).padStart(2, '0')}:00.000Z`);
+    }
+    h.runner.answer('lesson_write', { lessons: [{ id: 41 + lesson!.id, text: LINE, sameAs: null, why: '' }] });
+
+    const taught = await h.engine.teachLesson(pr.key, 'core should not import ee');
+
+    expect(h.runner.promptsFor('lesson_write')[0]).not.toContain(`- ${LINE}`);
+    expect(taught.lesson).toBeNull();
+    expect(h.store.lessons.get(41 + lesson!.id)).toMatchObject({ status: 'none' });
   });
 
   it('withdraws open lessons of a retired topic', async () => {

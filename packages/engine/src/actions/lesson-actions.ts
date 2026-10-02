@@ -49,6 +49,15 @@ export class LessonActions {
     };
   }
 
+  /** One lesson while it is open, wherever it sits now; null once decided, withdrawn or unknown. */
+  get(id: number): LessonView | null {
+    const lesson = this.store.lessons.get(id);
+    if (!lesson || lesson.status !== 'open') {
+      return null;
+    }
+    return this.view(lesson, this.store.lessons.joinedCounts([id]).get(id) ?? 0);
+  }
+
   /** The topic's open lessons, oldest first. */
   list(topicId: string): LessonView[] {
     const open = this.store.lessons.listOpenForTopic(topicId);

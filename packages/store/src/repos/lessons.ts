@@ -75,7 +75,7 @@ export class LessonRepo {
       lesson.createdAt,
       lesson.decidedAt,
     );
-    return { id, ...lesson };
+    return { ...lesson, id };
   }
 
   /** Waiting on the agent or the user, for one PR. */
@@ -105,6 +105,11 @@ export class LessonRepo {
       "SELECT text FROM lesson WHERE status = 'dismissed' AND text != '' ORDER BY decided_at DESC, id DESC LIMIT ?",
       limit,
     ).map((row) => row.text);
+  }
+
+  /** Every line the user ever dismissed. The "never again" check reads all of them, the prompt only the newest. */
+  listAllDismissedTexts(): string[] {
+    return all<{ text: string }>(this.db, "SELECT text FROM lesson WHERE status = 'dismissed' AND text != ''").map((row) => row.text);
   }
 
   /** How many lessons joined each of these, as extra evidence. */

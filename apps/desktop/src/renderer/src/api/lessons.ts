@@ -11,3 +11,12 @@ export function useLessons(topicId: string | null) {
     enabled: topicId !== null,
   });
 }
+
+/** One lesson while it is open, wherever it sits now; null once decided. Shares the lessons prefix, so decisions refresh it. */
+export function useLesson(id: number | null) {
+  return useQuery({
+    queryKey: queryKeys.lesson(id ?? 0),
+    queryFn: () => request<LessonView | null>('GET', `/api/lessons/${id ?? 0}`),
+    enabled: id !== null,
+  });
+}

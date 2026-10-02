@@ -1837,6 +1837,10 @@ export class FakeEngine implements EngineService {
     return { reply: 'Proposed.', proposal: this.instructions.proposalFromLesson(lesson) };
   }
 
+  async getLesson(lessonId: number): Promise<LessonView | null> {
+    return this.lessons.find(lessonId) ?? null;
+  }
+
   async getLessons(topicId: string): Promise<LessonView[]> {
     return this.lessons.open(topicId);
   }

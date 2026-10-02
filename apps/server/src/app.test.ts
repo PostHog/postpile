@@ -108,6 +108,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     saveInstructions: notImplemented,
     proposeInstructionsFromLesson: notImplemented,
     getLessons: notImplemented,
+    getLesson: notImplemented,
     teachLesson: notImplemented,
     keepLessonForTopic: notImplemented,
     dismissLesson: notImplemented,

@@ -54,7 +54,9 @@ describe('lesson routes', () => {
     const app = appWithFake();
     const before = (await app.get<TopicDetail>(`/api/topics/${DEPOT}`)).json.topic.tailoring;
     const [lesson] = await depotLessons(app);
+    expect((await app.get<LessonView | null>(`/api/lessons/${lesson?.id}`)).json).toMatchObject({ id: lesson?.id });
     expect((await app.post<ActionResult>(`/api/lessons/${lesson?.id}/dismiss`)).json).toMatchObject({ ok: true, message: 'Dismissed' });
+    expect((await app.get<LessonView | null>(`/api/lessons/${lesson?.id}`)).json).toBeNull();
     expect(await depotLessons(app)).toHaveLength(1);
     expect((await app.get<TopicDetail>(`/api/topics/${DEPOT}`)).json.topic.tailoring).toBe(before);
   });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { PrKey, TeachLessonResult } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { useLessons } from '../api/lessons.ts';
+import { useLesson } from '../api/lessons.ts';
 import { Button } from './Button.tsx';
 import { LessonCard } from './LessonCard.tsx';
 
@@ -19,9 +19,9 @@ export function TeachLesson(props: { prKey: PrKey }) {
   const [result, setResult] = useState<TeachLessonResult | null>(null);
   const busy = actions.isBusy(`teach:${props.prKey}`);
   const lesson = result?.lesson ?? null;
-  // The same lesson also waits in its topic; once decided there, it is gone here too.
-  const topicLessons = useLessons(lesson?.topicId ?? null);
-  const stillOpen = lesson !== null && (lesson.topicId === null || (topicLessons.data?.some((open) => open.id === lesson.id) ?? true));
+  // The same lesson also waits in its topic (maybe one it moved to after a sync); once decided anywhere, it is gone here too.
+  const current = useLesson(lesson?.id ?? null);
+  const stillOpen = lesson !== null && current.data !== null;
 
   async function submit() {
     const answer = await actions.teachLesson(props.prKey, note);

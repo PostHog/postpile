@@ -18,6 +18,7 @@ export const queryKeys = {
   /** Every topic's open lessons share the prefix, so a teach can refresh them all. */
   lessonsAll: ['lessons'] as const,
   lessons: (topicId: string) => ['lessons', topicId] as const,
+  lesson: (id: number) => ['lessons', 'one', id] as const,
   search: (query: string) => ['search', query] as const,
   pr: (prKey: string) => ['pr', prKey] as const,
   chat: (tileId: string) => ['chat', tileId] as const,
