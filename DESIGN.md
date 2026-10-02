@@ -3753,15 +3753,17 @@ same value):
    FYI fold. Stronger is the viewer's open PR or move, or the viewer or a
    teammate driving it.
 4. The viewer drives it: **You drive**.
-5. A teammate drives it (a member of any home team, `Viewer.teamMembers`):
+5. A teammate drives it (a member of any home team, `Viewer.teamMembers`),
+   or the team does ("Your team" picked, or the dossier's driverTeam):
    **Your team owns**.
-6. Someone else drives it: **Other work**.
+6. Someone else drives it, or "Someone outside your team" is picked:
+   **Other work**.
 7. Nobody known to drive it: the owner team. Any home team: Your team owns;
    another known team: Other work; unknown: Other topics.
 
-The driver comes in as a relation (`driverRelation(topic.driver, viewer)`),
-so the driver picker (next PR: You, a teammate, Your team, Someone outside
-your team, Reset) can pass the user's choice instead of the agent's.
+The driver comes in as a relation: the user's pick when there is one,
+else the automatic driver (`effectiveDriver` in core `topic-driver.ts`, see
+"Driver picker").
 
 **The owner team is only a fallback.** Codex's review (gpt-6.1-sol) pointed
 out how weak the signal is: `relationSignals` names the viewer's first home
@@ -3802,6 +3804,42 @@ answers "where are my PRs" across all sections; sections answer "whose
 topic is this". Section names read as sentences and never say "PRs". The
 header's relation chip (team / routed / FYI) stays and still says why the
 topic reached the viewer.
+
+**Driver picker** (decided 2026-10-02). "<login> drives" on the topic
+header is a button. Its menu ("Who drives this topic?") lists You, each
+teammate by name (`Viewer.teamMembers`), Your team ("Shared, no single
+driver"), Someone outside your team ("No name needed": nobody cares who
+inside another team drives), and Reset to automatic once a pick is set.
+Each item shows the section the topic moves to below the asks
+(`sectionBelowAsks`); while an ask holds the topic, the menu says it stays
+there until the ask clears. Picking moves the topic at once and the
+selection stays on it. The label then reads "You drive", "<login> drives",
+"Your team drives" or "Someone outside your team drives", with a small "set
+by you". The pick lives in its own table (`topic_driver_pick`, migration
+24) as a login, `:team` or `:outside` (colons never appear in GitHub
+logins), apart from `topic.driver`, which each sync's
+`refreshDriversAndRoles` keeps refreshing from the dossier or the PR
+authors. The pick always wins and no new event lifts it, unlike the
+relation "Wrong". The user's role follows the pick ("You" makes them the
+driver). The pick goes into the dossier prompt ("Who drives, as the user
+set it"), so the summary stops calling someone else the driver; the
+agent's own driver never moves a picked topic. "You" on another team's
+code is valid: the header keeps "Owned by <team>" from the owner signal
+and the relation chip as they are. Local only, never a GitHub write;
+telemetry `driver_set` carries the kind (you, teammate, team, outside,
+automatic), never a login.
+
+**Team as driver** (decided 2026-10-02). Standing topics often have no
+single driver: the home team keeps them up and different people lead each
+wave. The dossier agent may say so with `driverTeam: true` (and nobody in
+the driver role) when the user's own team keeps a standing topic up and
+nobody leads the current wave; not when one person clearly runs it. The
+parser keeps driverTeam only while no person has the driver role.
+`driverOf` in engine `digest/topic-roles.ts` stores it as the automatic
+driver `:team`, the same value as the picker's "Your team", so the topic
+sits under Your team owns. Real case: Egress, where the agent named
+pauldambra, who led one wave. Picked up at each topic's next dossier
+update; no one-time tidy. A manual pick beats it like any automatic driver.
 
 ## Tiles hold still (2026-10-01)
 
@@ -5052,7 +5090,7 @@ topic names are never event props.
    it at most once an hour after a sync or a poll cycle, window end kept in
    meta `pings_summarized_at`; nothing when every count is 0, the first call
    only starts the clock; no per-notification events), `search_used` (throttled, query length bucket only),
-   `queue_filter_changed`, `topic_opened` (section: core's `TopicSection`, since 2026-10-02 `you_drive`, `team_owns`, `other_work`, `other_topics` instead of `my_prs`, `team_prs`, `other`), `topic_archived` ("Archive
+   `queue_filter_changed`, `topic_opened` (section: core's `TopicSection`, since 2026-10-02 `you_drive`, `team_owns`, `other_work`, `other_topics` instead of `my_prs`, `team_prs`, `other`), `driver_set` (the header's driver menu: kind you / teammate / team / outside / automatic, never a login), `topic_archived` ("Archive
    now" on a topic with nothing left), `update_pill_clicked`
    (the title bar pill opened) / `update_later_clicked`, `update_bar_shown`
    (releases_behind capped at 10, hours_behind rounded; once per app run) /

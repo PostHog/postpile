@@ -4,6 +4,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Added
+
+- "<login> drives" on the topic header is now a menu: pick You, a teammate, Your team or Someone outside your team, and the topic moves to that section at once. Each item shows where the topic would go. The pick sticks until you change it or choose Reset to automatic; new activity never lifts it, and the agent's topic memory follows it. Local only, nothing goes to GitHub.
+- The agent can name your team as the driver of a standing topic that your team keeps up with nobody leading the current wave, so such topics sit under Your team owns instead of under whoever led one wave.
+
 ### Changed
 
 - Sidebar sections now say whose topic it is, not whose PRs it holds. Below the asks (Needs reply, Changes you requested, To review, Team mentioned) topics sit under You drive, Your team owns or Other work, by who drives them; the owner team only decides when nobody is known to drive a topic. My PRs and Team's PRs are gone, so your own project no longer lands under Team's PRs because a teammate has a PR in it. The "Topics with any PR | my PRs | team PRs" switch still finds your PRs in any section.
