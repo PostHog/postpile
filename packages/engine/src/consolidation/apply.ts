@@ -34,11 +34,18 @@ function normalized(text: string): string {
 
 /** Filed before and still standing: pending, accepted or rejected. A withdrawn one may come back. */
 function sameIdea(filed: TopicProposal, idea: ConsolidationTopicProposal): boolean {
-  if (filed.kind !== idea.kind || filed.topicId !== idea.topicId || filed.status === 'withdrawn') {
+  if (filed.kind !== idea.kind || filed.status === 'withdrawn') {
     return false;
   }
+  // A merge is about a pair of topics: B into A repeats A into B, so the Inbox never holds both directions.
   if (idea.kind === 'merge') {
-    return filed.intoTopicId === idea.intoTopicId;
+    return (
+      (filed.topicId === idea.topicId && filed.intoTopicId === idea.intoTopicId) ||
+      (filed.topicId === idea.intoTopicId && filed.intoTopicId === idea.topicId)
+    );
+  }
+  if (filed.topicId !== idea.topicId) {
+    return false;
   }
   return normalized(filed.name ?? '') === normalized(cleanTopicName(idea.name));
 }

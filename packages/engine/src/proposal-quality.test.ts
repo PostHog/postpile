@@ -125,6 +125,20 @@ describe('repeats of rejected proposals', () => {
     expect((await h.engine.listProposals()).topics).toEqual([]);
   });
 
+  it('files no reverse merge while the first direction is still pending', async () => {
+    const h = makeHarness();
+    twoTopics(h);
+    h.store.proposals.add(topicProposal({ id: 'pending' }));
+    h.agent.answerConsolidation(() => ({
+      topicProposals: [{ kind: 'merge', topicId: 'payments', intoTopicId: 'billing', reason: 'Both carry the invoice rollout.' }],
+    }));
+
+    const report = await h.engine.consolidate();
+
+    expect(report.topicProposalsFiled).toBe(0);
+    expect((await h.engine.listProposals()).topics.map((proposal) => proposal.id)).toEqual(['pending']);
+  });
+
   it('files a merge again after the earlier one was only withdrawn', async () => {
     const h = makeHarness();
     twoTopics(h);
