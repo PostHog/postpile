@@ -2,7 +2,7 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## Unreleased
+## 0.14.0 (2026-10-02)
 
 ### Added
 
@@ -14,7 +14,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Bot reviews and bot comments in review threads on your own open PR no longer keep it unread. They clear quietly like other bot activity; failing checks and unresolved threads still show up on the PR.
 - Opening a PR marks it read as soon as the 1.5s fill completes, instead of later when you move on. The button then says "✓ Marked read" with an Undo link for a few seconds, and the unread dot fades out. The tile and its topic row stay put until you pick something else, then slide to their new place. Tiles a sync moves slide too. "Marks read when you leave" and the "Keep unread" X are gone, and these marks no longer show under Handled quietly.
 - Topics come in two kinds: projects, which have a finish line, and standing topics, which keep a standard up for months ("Migration safety"). A standing topic stays ready for its next PR for half a year after the last one joined; a finished project takes follow-ups for 30 days.
-- After this update, PostPile tidies your topics once more: it sorts them into projects and standing topics, folds the pieces of one standard into one topic, and renames a topic named after one step of its goal. PRs you moved by hand stay where you put them.
+- After this update, PostPile tidies your topics once more: it sorts them into projects and standing topics, folds the pieces of one standard into one topic, and renames a topic named after one step of its goal. PRs you moved by hand stay where you put them. It runs as the first step of the first full sync, behind the sync overlay, and takes about a minute on a large database.
 - A topic with nothing left moves to the Archive 2 days after the last human activity (was 3 days of any activity). Deploy, CI and bot comments after a merge no longer keep it in the sidebar.
 - The sidebar's "Finished" drawer is now "Archive".
 - An out-of-date assessment is rewritten when you look at the PR: keep it open in the detail pane for a moment and it says "Updating now" instead of waiting up to an hour for the next sync. Only the PR you look at is rewritten, and it counts against the daily catch-up limit (`POSTPILE_CATCHUP_CAP`). The note says "next sync" only when that limit is spent or catch-up is off.
