@@ -405,6 +405,10 @@ describe('FakeEngine queues', () => {
     const depot = topics.find((item) => item.topic.id === 'topic-depot');
     expect(tiers.filter((tier) => (depot?.queues.tiers[tier] ?? 0) > 0)).toEqual(['needs_reply', 'team', 'to_review']);
     expect(depot?.people.map((person) => person.relation)).toEqual(['team', 'team', 'other']);
+    // The viewer drives runner images and a teammate's PR sits next to theirs: My PRs, not Team's PRs.
+    const runners = topics.find((item) => item.topic.id === 'topic-runner-images');
+    expect(runners?.queues.tiers).toMatchObject({ mine: 2, team: 1 });
+    expect(runners?.section).toBe('mine');
     expect(await new FakeEngine().getViewer()).toEqual({ login: 'you', teamMembers: ['lyra', 'nell', 'rowan', 'sol'], homeTeams: ['acme/team-platform'] });
   });
 

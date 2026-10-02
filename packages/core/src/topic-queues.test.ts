@@ -135,9 +135,11 @@ describe('topicSection', () => {
     expect(section({})).toBeNull();
   });
 
-  it('lets a mixed topic follow the work: your PR never pulls it above what other PRs ask', () => {
+  it('lets a mixed topic follow what it asks of you: an ask first, then your PR, then a teammate\'s', () => {
     expect(section({ mine: 2, to_review: 1 })).toBe('to_review');
-    expect(section({ mine: 1, team: 1 })).toBe('team');
+    expect(section({ mine: 1, team_mentioned: 1 })).toBe('team_mentioned');
+    expect(section({ mine: 1, team: 1 })).toBe('mine');
+    expect(section({ team: 2, rest: 1 })).toBe('team');
     expect(section({ mine: 3, rest: 2 })).toBe('mine');
   });
 });
