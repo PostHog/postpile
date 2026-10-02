@@ -164,7 +164,7 @@ function PrCountPill(props: { detail: TopicDetail }) {
   const title = prMixTitle(prRollup);
   return (
     <span className={`${pill} px-2`} title={title}>
-      {prRollup.state && <PrStateIcon lifecycle={prRollup.state} size={11} title={title} />}
+      {prRollup.state && <PrStateIcon state={prRollup.state} size={11} title={title} />}
       <span className="font-mono text-[10px] font-semibold tabular-nums">{prRollup.total}</span>
       <span className="text-hint">{prRollup.total === 1 ? 'PR' : 'PRs'}</span>
     </span>

@@ -8,7 +8,9 @@ import { isTracked } from './provenance.ts';
 import { ADDRESSED_KINDS, PERSONAL_ASK_KINDS } from './kinds.ts';
 import { lastTouch } from './last-touch.ts';
 import { sameLogin } from './mentions.ts';
+import { mergeQueueState } from './merge-queue.ts';
 import { isPrOwner, prOwner } from './pr-owners.ts';
+import { isQueued } from './pr-status.ts';
 import {
   changesRequestedBy,
   isApprovedByViewer,
@@ -32,7 +34,8 @@ export type WhoseTurnKind = 'you' | 'them' | 'none';
  * re_review: the author addressed your changes, or asked you again while
  * they stand. review: a review request, personal or for your team.
  * address_changes: threads or a change request on your own PR or draft.
- * merge: your PR is approved. CI is never a move
+ * merge: your PR is approved, or the merge queue took it out (re-submit
+ * it). CI is never a move
  * (DESIGN.md "CI is not a signal").
  */
 export type YourMove = 'reply' | 're_review' | 'review' | 'address_changes' | 'merge';
@@ -41,7 +44,11 @@ export type YourMove = 'reply' | 're_review' | 'review' | 'address_changes' | 'm
 export const YOUR_MOVE_ORDER: YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'merge'];
 
 interface TurnFields {
-  /** them: the login the move waits on. Null for you and none. */
+  /**
+   * them: the login the move waits on; null when it waits on the merge
+   * queue, and `what` says so whole ("Waiting on the merge queue"). Null
+   * for you and none.
+   */
   who: string | null;
   /**
    * you: the move ("Re-check 2 commits on #1850"). them: the rest of the
@@ -76,6 +83,12 @@ const RE_REVIEW = 'to re-review';
 /** The move on the viewer's own approved PR. It shows on the tile, but it is not urgent. */
 export const MERGE_APPROVED_MOVE = 'Merge, it is approved';
 
+/** The viewer's own PR sits in the merge queue: nobody's move but the queue's. */
+export const MERGE_QUEUE_WAIT = 'Waiting on the merge queue';
+
+/** The move on the viewer's own PR the merge queue took out; the reason follows. */
+export const MERGE_QUEUE_RESUBMIT = 'Re-submit to the merge queue';
+
 export const NO_TURN: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 
 const TURN_ORDER: Record<WhoseTurnKind, number> = { you: 0, them: 1, none: 2 };
@@ -103,6 +116,11 @@ function them(ctx: PrContext, who: string, what: string): WhoseTurn {
 function waitingOn(ctx: PrContext, who: string, more: number): WhoseTurn {
   const rest = [more > 0 ? `and ${more} more` : '', ctx.where.trim()].filter((part) => part !== '').join(' ');
   return { kind: 'them', who, what: rest, prKey: ctx.pr.key, lead: 'Waiting on' };
+}
+
+/** Own PR in the merge queue: waits on no person, so no `who`. */
+function waitingOnQueue(ctx: PrContext): WhoseTurn {
+  return { kind: 'them', who: null, what: `${MERGE_QUEUE_WAIT}${ctx.where}`, prKey: ctx.pr.key };
 }
 
 function plural(count: number, word: string): string {
@@ -239,8 +257,21 @@ function threadsViewerOpened(ctx: PrContext): number {
   return ctx.pr.threads.filter((thread) => !thread.isResolved && thread.comments[0] && isViewer(ctx, thread.comments[0].author)).length;
 }
 
+/**
+ * The merge queue decides first on the viewer's own PR (DESIGN.md "Merge
+ * queue"): failed in Trunk's queue is theirs to re-submit, with the reason;
+ * in Trunk's queue or GitHub's own it waits on the queue. Else threads,
+ * changes, reviewers, then merging an approved PR.
+ */
 function ownPrTurn(ctx: PrContext): WhoseTurn {
   const { pr } = ctx;
+  const queue = mergeQueueState(pr);
+  if (queue?.state === 'failed') {
+    return you(ctx, 'merge', queue.reason ? `${MERGE_QUEUE_RESUBMIT}: ${queue.reason}` : MERGE_QUEUE_RESUBMIT);
+  }
+  if (queue !== null || isQueued(pr)) {
+    return waitingOnQueue(ctx);
+  }
   const threads = threadsWaitingOnViewer(ctx);
   if (threads.count > 0) {
     return you(ctx, 'address_changes', `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
@@ -398,7 +429,11 @@ export function isReReviewMove(turn: WhoseTurn): boolean {
   return turn.kind === 'you' && turn.move === 're_review';
 }
 
-/** Your move, and it is only merging your own approved PR (multi-PR tiles add " on #n"). */
+/**
+ * Your move, and it is only merging your own approved PR or re-submitting
+ * it to the merge queue (multi-PR tiles add " on #n"). Shows on the tile,
+ * never urgent: the queue's failure is loud on its own (`LOUDNESS_TABLE`).
+ */
 export function isMergeApprovedMove(turn: WhoseTurn): boolean {
   return turn.kind === 'you' && turn.move === 'merge';
 }

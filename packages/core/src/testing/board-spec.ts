@@ -46,6 +46,13 @@ export type ReviewVerdict = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DI
 /** Automation on the timeline: the merge queue took the PR or dropped it, or a deploy ran. */
 export type AutomationItem = 'queued' | 'unqueued' | 'deployed';
 
+/**
+ * What trunk-io[bot] says about its merge queue (DESIGN "Merge queue"):
+ * the merge offer, submitted, testing, failed (tests), cancelled by a user,
+ * merged, or a line nobody knows.
+ */
+export type TrunkText = 'offer' | 'submitted' | 'testing' | 'failed' | 'cancelled' | 'merged' | 'garbage';
+
 /** One thing that happened on the PR, in order. Steps GitHub would not allow are skipped when the PR is built. */
 export type StepSpec =
   | { kind: 'request'; target: RequestTarget; byBot: boolean }
@@ -65,7 +72,9 @@ export type StepSpec =
   | { kind: 'push'; by: Person; force: boolean }
   | { kind: 'ready' }
   | { kind: 'to_draft' }
-  | { kind: 'automation'; item: AutomationItem };
+  | { kind: 'automation'; item: AutomationItem }
+  /** Trunk says `text`: edits its first comment on the PR when `sticky` and it has one, else posts a new comment. */
+  | { kind: 'trunk'; text: TrunkText; sticky: boolean };
 
 export type EndSpec = { kind: 'open' } | { kind: 'merged'; by: Person } | { kind: 'closed'; by: Person };
 
@@ -270,6 +279,19 @@ const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
   { weight: 1, arbitrary: fc.constant({ kind: 'ready' as const }) },
   { weight: 1, arbitrary: fc.constant({ kind: 'to_draft' as const }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant('automation' as const), item: fc.constantFrom<AutomationItem>('queued', 'unqueued', 'deployed') }) },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      kind: fc.constant('trunk' as const),
+      // Failures most: a loud one needs the viewer's own open PR as well.
+      text: fc.oneof(
+        { weight: 3, arbitrary: fc.constant<TrunkText>('failed') },
+        { weight: 2, arbitrary: fc.constantFrom<TrunkText>('submitted', 'testing') },
+        { weight: 1, arbitrary: fc.constantFrom<TrunkText>('offer', 'cancelled', 'merged', 'garbage') },
+      ),
+      sticky: fc.boolean(),
+    }),
+  },
 );
 
 const endArb: fc.Arbitrary<EndSpec> = fc.oneof(

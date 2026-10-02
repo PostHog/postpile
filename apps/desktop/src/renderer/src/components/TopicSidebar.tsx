@@ -127,8 +127,9 @@ function LeadSlot(props: { children?: ReactNode }) {
 }
 
 /**
- * The topic's PR state (core `prState`: open, else draft, else merged, else
- * closed). The only place the per-state counts show, as the tooltip.
+ * The topic's PR state (core `prState`: failed in the merge queue, all in
+ * the queue, else open, draft, merged, closed). The only place the per-state
+ * counts show, as the tooltip.
  */
 function PrStateMark(props: { item: TopicListItem }) {
   const { prState, prStateCounts } = props.item;
@@ -138,7 +139,7 @@ function PrStateMark(props: { item: TopicListItem }) {
   // A 16px box, as wide as the smallest unread bubble above it, so the icon ends on the bubble's right edge.
   return (
     <span className="flex min-w-4 shrink-0 items-center justify-end">
-      <PrStateIcon lifecycle={prState} size={11} title={stateMix(prStateCounts)} />
+      <PrStateIcon state={prState} size={11} title={stateMix(prStateCounts)} />
     </span>
   );
 }

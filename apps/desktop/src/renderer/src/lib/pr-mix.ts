@@ -2,12 +2,14 @@ import type { TopicPrStateCounts, TopicPrStateSummary } from '@postpile/core';
 
 const STATE_WORDS: [keyof TopicPrStateCounts, string][] = [
   ['open', 'open'],
+  ['merge_queue', 'in merge queue'],
+  ['merge_queue_failed', 'failed in merge queue'],
   ['draft', 'draft'],
   ['merged', 'merged'],
   ['closed', 'closed'],
 ];
 
-/** The lifecycle mix of core's state counts, most alive first: "3 open · 1 draft · 1 merged". Empty states are left out. */
+/** The state mix of core's counts, most alive first: "3 open · 1 in merge queue · 1 draft · 1 merged". Empty states are left out. */
 export function stateMix(counts: TopicPrStateCounts): string {
   return STATE_WORDS.filter(([state]) => counts[state] > 0)
     .map(([state, word]) => `${counts[state]} ${word}`)

@@ -43,7 +43,7 @@ import type {
   Viewer,
 } from '../types.ts';
 import type { TilePendingWrite, TileView } from '../views.ts';
-import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, RiskWord, SnoozeSpec, StepSpec, TeamSetup } from './board-spec.ts';
+import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, RiskWord, SnoozeSpec, StepSpec, TeamSetup, TrunkText } from './board-spec.ts';
 
 export const PROPERTY_REPO = 'acme/app';
 export const PROPERTY_TOPIC_ID = 'topic-1';
@@ -53,6 +53,8 @@ export const OTHER_TEAM = 'acme/team-infra';
 export const ROUTING_TEAM = 'acme/approvers';
 /** Who makes a bot's review request. */
 export const REQUEST_BOT = 'github-actions[bot]';
+/** Trunk's merge queue bot, which keeps a status comment on the PR. */
+export const TRUNK_LOGIN = 'trunk-io[bot]';
 
 /** ghost: a deleted account, which GitHub reads back as ''. */
 export const LOGINS: Record<Person, string> = {
@@ -75,7 +77,7 @@ export const RISK_LINES: Record<RiskWord, string> = {
 };
 
 /** Every automation account on a board: what the spec oracles call automation, without asking `isBot`. */
-export const AUTOMATION_LOGINS: readonly string[] = [LOGINS.bot, LOGINS.app, LOGINS.agent, REQUEST_BOT];
+export const AUTOMATION_LOGINS: readonly string[] = [LOGINS.bot, LOGINS.app, LOGINS.agent, REQUEST_BOT, TRUNK_LOGIN];
 
 /** The login or team a request target names; the teammate asked is rowan, so lyra can still be the author. */
 export function requestSubject(target: RequestTarget): string {
@@ -148,6 +150,17 @@ export const MENTIONED_TEAMS: Record<CommentText, string[]> = {
   teams_mention: [ROUTING_TEAM, PROPERTY_TEAM],
   bot_marker: [],
   deploy: [],
+};
+
+/** What trunk writes for each status, in its words (an en space after the emoji, like trunk). */
+export const TRUNK_BODIES: Record<TrunkText, string> = {
+  offer: '<!-- Trunk Merge -->\nMerging to `main` in this repository is managed by Trunk.\n\n- [ ] To merge this pull request, check the box to the left or comment `/trunk merge` below.',
+  submitted: '<!-- Trunk Merge -->\n✨\u2002Submitted to Merge by Ada Example (a GitHub user). It will be added to the merge queue once all branch protection rules pass.',
+  testing: '<!-- Trunk Merge -->\n🧪\u2002Running tests on this pull request (testing on PR [#90](https://github.com/acme/app/pull/90)) - [details](https://trunk.example/q/1).',
+  failed: 'Stacked PR [90](https://github.com/acme/app/pull/90) failed testing in the merge queue. Please investigate the failure and re-submit the stack.',
+  cancelled: 'Stacked PR [90](https://github.com/acme/app/pull/90) was cancelled: a user cancelled it.',
+  merged: '😎\u2002Merged successfully - [details](https://trunk.example/q/2).',
+  garbage: '🛸\u2002Something new happened in the merge queue.',
 };
 
 /** The timeline item an automation step adds. */
@@ -321,6 +334,20 @@ class PrHistory {
     this.timeline.push({ id: this.id('tl', index), kind: AUTOMATION_ITEMS[step.item], actor: REQUEST_BOT, at: time, subject: null });
   }
 
+  /** Trunk's status: an edit of its first comment (sticky, when it has one), else a new comment. */
+  private trunk(step: Extract<StepSpec, { kind: 'trunk' }>, index: number, time: string): void {
+    const body = TRUNK_BODIES[step.text];
+    const sticky = step.sticky ? this.comments.find((comment) => comment.author === TRUNK_LOGIN) : undefined;
+    if (sticky) {
+      sticky.body = body;
+      sticky.lastEditedAt = time;
+      sticky.editor = TRUNK_LOGIN;
+      return;
+    }
+    const url = `https://github.com/${PROPERTY_REPO}/pull/${this.number}#comment-${index}`;
+    this.comments.push({ id: this.id('cm', index), author: TRUNK_LOGIN, body, createdAt: time, kind: 'comment', url, path: null, threadId: null });
+  }
+
   private push(step: Extract<StepSpec, { kind: 'push' }>, index: number, time: string): void {
     const login = LOGINS[step.by];
     const commit: Commit = { oid: this.id('c', index + 1), headline: 'more work', author: login, committer: login, committedAt: time };
@@ -363,6 +390,9 @@ class PrHistory {
         break;
       case 'automation':
         this.automation(step, index, time);
+        break;
+      case 'trunk':
+        this.trunk(step, index, time);
         break;
       case 'to_draft':
         if (!this.isDraft && !this.queued) {

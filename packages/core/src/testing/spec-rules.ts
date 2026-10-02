@@ -21,6 +21,7 @@ import {
   askedToReReview,
   asksViewer,
   changesAnswer,
+  inGitHubQueue,
   isAutomationLogin,
   isHomeTeam,
   isOwner,
@@ -36,6 +37,7 @@ import {
   requestSubjectOf,
   reviewStillOwed,
   routedRequestWaits,
+  specMergeQueue,
   specSnapshotAt,
   specUserStateAt,
   standingChangesBy,
@@ -112,7 +114,7 @@ export function openAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readon
 /** A move and the footer's words for it (a single-PR tile: no " on #n"); `lead` only for "Waiting on". */
 export type ExpectedTurn =
   | { kind: 'you'; move: YourMove; what: string }
-  | { kind: 'them'; who: string; what: string; lead?: string }
+  | { kind: 'them'; who: string | null; what: string; lead?: string }
   | { kind: 'none'; what: '' };
 
 const NONE: ExpectedTurn = { kind: 'none', what: '' };
@@ -170,12 +172,21 @@ function answerThreads(threads: string[]): string {
 }
 
 /**
- * The viewer's own open PR: threads to answer, then changes to address
+ * The viewer's own open PR: the merge queue first (failed in Trunk's queue:
+ * re-submit, with the reason; in either queue: waiting on the queue, no
+ * person named), then threads to answer, then changes to address
  * (their reviewers' move once every one was asked again after a push),
  * then waiting on the pending reviewers, then merging an approved PR.
  */
 function ownPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
+  const queue = specMergeQueue(pr);
+  if (queue?.state === 'failed') {
+    return you('merge', `Re-submit to the merge queue: ${queue.reason}`);
+  }
+  if (queue !== null || inGitHubQueue(pr)) {
+    return { kind: 'them', who: null, what: 'Waiting on the merge queue' };
+  }
   const threads = threadsWaitingOnViewer(pr, viewer);
   if (threads.length > 0) {
     return you('address_changes', answerThreads(threads));

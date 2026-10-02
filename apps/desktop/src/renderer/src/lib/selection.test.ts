@@ -25,7 +25,7 @@ function item(id: string, mine: number): TopicListItem {
     section: mine > 0 ? 'mine' : null,
     people: [],
     prState: null,
-    prStateCounts: { open: 0, draft: 0, merged: 0, closed: 0 },
+    prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
   };
 }
 
@@ -44,7 +44,7 @@ function pr(key: string): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'rest',
     authorRelation: 'other',
-    status: { lifecycle: 'open', review: 'review', agentApprovers: [] },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [], mergeQueue: null, icon: 'open' },
     openThreads: 0,
     verdict: null,
     glanceStale: false,

@@ -380,6 +380,8 @@ export interface EventView {
 
 export interface PrDetail {
   pr: Pr;
+  /** Lifecycle, review, the merge queue and the state icon (`prStatus`), as on the PR's rows: the header's state line. */
+  status: PrStatus;
   /** When the stored snapshot was fetched from GitHub; null when unknown (sample data before a fake fetch). */
   fetchedAt: IsoTime | null;
   /** Every event, unfiltered (search, debug, chat context). */

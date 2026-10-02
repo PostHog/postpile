@@ -41,6 +41,8 @@ export interface SampleCommentInput {
   author: string;
   body: string;
   hoursAgo: number;
+  /** The author edited it since (a bot's sticky status comment); never when left out. */
+  editedHoursAgo?: number;
 }
 
 export interface SampleCommitInput {
@@ -150,6 +152,8 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
       url: `https://github.com/${repo}/pull/${input.number}#${comment.id}`,
       path: null,
       threadId: null,
+      lastEditedAt: comment.editedHoursAgo === undefined ? null : clock.hoursAgo(comment.editedHoursAgo),
+      editor: comment.editedHoursAgo === undefined ? null : comment.author,
     })),
     threads: (input.threads ?? []).map((thread) => ({
       id: thread.id,

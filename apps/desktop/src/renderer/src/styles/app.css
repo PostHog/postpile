@@ -143,6 +143,7 @@
   --color-merged-soft: var(--merged-soft);
   --color-closed: var(--closed);
   --color-pending: var(--pending);
+  --color-pending-ink: var(--pending-ink);
 
   /* Line diffs */
   --color-diff-add: var(--diff-add);

@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from 'react';
-import type { PaneLead, PaneOffers, PrDetail, PrLifecycle, TileView } from '@postpile/core';
+import type { PaneLead, PaneOffers, PrDetail, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useViewer } from '../api/viewer.ts';
 import { approveButton, approveStateGlyphs, type ApproveButtonInput, type ApproveButtonLook } from '../lib/approve.ts';
@@ -48,11 +48,6 @@ const ONLY_OPEN: PaneOffers = {
   pendingWrite: null,
 };
 
-/** The status pill's lifecycle; derived from the PR when the summary is missing. */
-function lifecycleOf(props: ActionBarProps): PrLifecycle {
-  const summary = props.view.prs.find((candidate) => candidate.key === props.detail.pr.key);
-  return summary?.status.lifecycle ?? (props.detail.pr.isDraft ? 'draft' : 'open');
-}
 
 /** The button slots in their fixed order; the lead one moves to the front. */
 type Slot = 'approve' | 'open' | 'ask' | 'mark' | 'snooze' | 'removeTeam';
@@ -122,7 +117,7 @@ export function ActionBar(props: ActionBarProps) {
       >
         {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}
         <span className="mr-px flex items-center gap-[3px] opacity-75">
-          {approveStateGlyphs(lifecycleOf(props), pr.reviewDecision, props.detail.agentApprovers).map((part) => (
+          {approveStateGlyphs(props.detail.status.lifecycle, pr.reviewDecision, props.detail.agentApprovers).map((part) => (
             <span key={part.glyph} role="img" aria-label={part.title} title={part.title} className="flex">
               <Glyph glyph={part.glyph} size={11} strokeWidth={1.8} />
             </span>

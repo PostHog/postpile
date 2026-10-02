@@ -142,6 +142,7 @@ import {
   ownerRelation,
   pingedPrKeys,
   prTier,
+  prStatus,
   prWhoseTurn,
   isReReviewMove,
   searchTopics,
@@ -1122,6 +1123,7 @@ export class FakeEngine implements EngineService {
     const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
       pr,
+      status: prStatus(pr),
       fetchedAt: this.fetchedAtOf(prKey),
       events,
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr, this.prThreads().get(prKey) ?? null),

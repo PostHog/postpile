@@ -427,6 +427,25 @@ describe('FakeEngine queues', () => {
     expect(item?.yourMoves.length).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
   });
 
+  it('shows the merge queue samples: every step, a failure, and a PR merged through it', async () => {
+    const engine = new FakeEngine();
+    const runners = await engine.getTopic('topic-runner-images');
+    const rows = new Map((runners?.tiles ?? []).flatMap((view) => view.prs).map((row) => [row.key, row.status]));
+    expect(rows.get('acme/app#1977')).toMatchObject({ icon: 'merge_queue', mergeQueue: { state: 'submitted' } });
+    expect(rows.get('acme/app#1978')).toMatchObject({ icon: 'merge_queue', mergeQueue: { state: 'waiting' } });
+    expect(rows.get('acme/app#1974')).toMatchObject({ icon: 'merged', mergeQueue: null });
+    const testing = runners?.tiles.find((view) => view.tile.id === 'pr:acme/app#1975');
+    expect(testing?.prs[0]?.status).toMatchObject({ icon: 'merge_queue', mergeQueue: { state: 'testing', testingOn: 'acme/app#1976' } });
+    expect(testing?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
+    expect(runners?.prRollup.state).toBe('merge_queue');
+    const ci = await engine.getTopic('topic-ci-tests');
+    const failed = ci?.tiles.find((view) => view.tile.id === 'pr:acme/app#1950');
+    expect(failed?.prs[0]?.status).toMatchObject({ icon: 'merge_queue_failed', mergeQueue: { state: 'failed', reason: 'waited too long to become mergeable' } });
+    expect(failed?.turn).toMatchObject({ kind: 'you', what: 'Re-submit to the merge queue: waited too long to become mergeable' });
+    expect(ci?.prRollup.state).toBe('merge_queue_failed');
+    expect((await engine.getPr('acme/app#1950'))?.status.icon).toBe('merge_queue_failed');
+  });
+
   it('keeps pulled-in stack layers out of the queues', async () => {
     const engine = new FakeEngine();
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];

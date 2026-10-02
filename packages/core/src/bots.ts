@@ -33,6 +33,11 @@ export function isMergeQueueBot(login: string): boolean {
   return mergeQueueBotLogin.test(login);
 }
 
+/** Trunk's merge queue bot, the one whose status comment `mergeQueueState` reads. */
+export function isTrunkBot(login: string): boolean {
+  return isMergeQueueBot(login) && login.toLowerCase().startsWith('trunk-io');
+}
+
 export function isMachineComment(comment: Pick<Comment, 'author' | 'body'>): boolean {
   return isBot(comment.author) || botBody.test(comment.body);
 }

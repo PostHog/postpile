@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeEvent, makePr, makeUserState, viewer } from './fixtures.ts';
+import { at, makeComment, makeEvent, makePr, makeUserState, viewer } from './fixtures.ts';
 import { displayState, effectiveLoudness, findLoudnessRow, isUnseenLoud, ruleLoudness, type LoudnessInput } from './loudness.ts';
 
 function input(overrides: Partial<LoudnessInput>): LoudnessInput {
@@ -92,6 +92,34 @@ describe('ruleLoudness', () => {
     for (const kind of ['merged', 'closed', 'reopened', 'ready_for_review', 'commits_pushed'] as const) {
       expect(ruleLoudness(input({ kind, actor: 'alice' })).loudness).toBe('quiet');
     }
+  });
+});
+
+describe('ruleLoudness for the merge queue', () => {
+  const testing = makeComment({ id: 't1', author: 'trunk-io[bot]', body: '<!-- Trunk Merge -->\n🧪\u2002Running tests on this pull request - [details](https://trunk.example/1).', createdAt: at(5) });
+  const failed = makeComment({
+    id: 't2',
+    author: 'trunk-io[bot]',
+    body: 'Stacked PR [12](https://github.com/acme/app/pull/12) failed testing in the merge queue. Please investigate the failure and re-submit the stack.',
+    createdAt: at(9),
+  });
+  const own = makePr({ author: 'viewer', comments: [testing, failed] });
+  const trunkEvent = (pr: typeof own, kind: 'bot_comment' | 'comment_edited', minutes: number) => input({ kind, actor: 'trunk-io[bot]', isBot: true, at: at(minutes), pr });
+
+  it('makes the trunk comment that took your PR out of the queue loud, with the reason', () => {
+    expect(ruleLoudness(trunkEvent(own, 'bot_comment', 9))).toEqual({ loudness: 'loud', reason: 'removed from the merge queue: tests failed' });
+    // The same failure as an edit of trunk's sticky comment.
+    const sticky = makePr({ author: 'viewer', comments: [{ ...testing, body: failed.body, lastEditedAt: at(12) }] });
+    expect(ruleLoudness(trunkEvent(sticky, 'comment_edited', 12)).loudness).toBe('loud');
+  });
+
+  it('keeps every other trunk status quiet, and failures on PRs that are not yours', () => {
+    expect(ruleLoudness(trunkEvent(own, 'bot_comment', 5))).toEqual({ loudness: 'quiet', reason: 'bot activity' });
+    expect(ruleLoudness(trunkEvent({ ...own, author: 'sol' }, 'bot_comment', 9)).loudness).toBe('quiet');
+    // Back in the queue, or merged: the failure needs nobody any more.
+    const resubmitted = { ...own, comments: [...own.comments, { ...testing, id: 't3', createdAt: at(20) }] };
+    expect(ruleLoudness(trunkEvent(resubmitted, 'bot_comment', 9)).loudness).toBe('quiet');
+    expect(ruleLoudness(trunkEvent({ ...own, state: 'MERGED' }, 'bot_comment', 9)).loudness).toBe('quiet');
   });
 });
 

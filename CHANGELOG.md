@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Added
 
 - A topic whose tiles are all Dealt with but that still holds an open PR now says so after the Tiles count ("· 1 PR open"), with the PR named in the tooltip. Before, the Archive box stayed away without a reason.
+- PRs in the Trunk merge queue show it like Trunk's browser extension: the merge queue icon replaces the PR icon, amber while it waits or tests and red when the queue takes it out, with "Merge queue: Testing" (or Submitted, Waiting, Failed) in place of the review status. The sidebar row and the topic header follow. Your own queued PR no longer asks you to merge it; a failed one asks you to re-submit it, says why, and counts as new activity.
 
 ### Changed
 

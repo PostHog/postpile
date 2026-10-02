@@ -38,7 +38,7 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): Top
     section: topicSection(queues),
     people: [],
     prState: null,
-    prStateCounts: { open: 0, draft: 0, merged: 0, closed: 0 },
+    prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
     ...extra,
   };
 }
@@ -58,7 +58,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'rest',
     authorRelation: 'other',
-    status: { lifecycle: 'open', review: 'review', agentApprovers: [] },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [], mergeQueue: null, icon: 'open' },
     openThreads: 0,
     verdict: null,
     glanceStale: false,

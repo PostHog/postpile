@@ -12,6 +12,9 @@ function turnLine(item: PingDecisionItem): string {
   if (turn.kind === 'you') {
     return `their move: ${turn.what}`;
   }
+  if (turn.kind === 'them' && turn.who === null) {
+    return turn.what.toLowerCase();
+  }
   if (turn.kind === 'them') {
     return `waiting on @${turn.who} ${turn.what}`;
   }

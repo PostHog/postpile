@@ -15,6 +15,7 @@ import { snoozePhase } from '../snooze.ts';
 import { isPrDone } from '../tiles.ts';
 import { sameLogin } from '../mentions.ts';
 import { isUnseenLoud } from '../loudness.ts';
+import { mergeQueueState } from '../merge-queue.ts';
 import { prWhoseTurn } from '../whose-turn.ts';
 import type { Pr, PrEvent, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
@@ -185,7 +186,7 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   if (teamRequestHold(pr, board.viewer, board.notYours.has(key))?.kind === 'changes') {
     labels.push('shape:routed request held by changes');
   }
-  labels.push(...editLabels(pr, events));
+  labels.push(...editLabels(pr, events), ...mergeQueueLabels(pr, events));
   const lastReadAt = board.threads.get(key)?.lastReadAt ?? null;
   const userState = board.userStates.get(key) ?? null;
   const actedAfterReading = pr.state === 'OPEN' && !userState?.handledAt && actedAfterSeeing(pr, events, board.viewer, { lastReadAt, handledAt: null });
@@ -217,6 +218,16 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   }
   if (prWhoseTurn({ pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer }).kind === 'them') {
     labels.push('pr-turn:them');
+  }
+  return labels;
+}
+
+/** Where the PR stands in Trunk's queue, and a loud failure on the viewer's own PR (DESIGN "Merge queue"). */
+function mergeQueueLabels(pr: Pr, events: PrEvent[]): string[] {
+  const queue = mergeQueueState(pr);
+  const labels = queue ? [`queue:${queue.state}`] : [];
+  if (events.some((event) => event.ruleLoudness === 'loud' && event.ruleReason.startsWith('removed from the merge queue'))) {
+    labels.push('events:loud merge queue failure');
   }
   return labels;
 }
@@ -435,6 +446,10 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:snoozed with an unread thread',
   'shape:unread by the thread alone',
   'edit:bot updates its comment',
+  'queue:submitted',
+  'queue:testing',
+  'queue:failed',
+  'events:loud merge queue failure',
   'edit:person, quiet',
   'edit:person mentions you',
   'touched-read:acted_without_seeing',

@@ -48,7 +48,18 @@ const TOPIC = {
   desktop: 'topic-desktop-release',
   warmer: 'topic-cache-warmer',
   sdk: 'topic-sdk-uploads',
+  runners: 'topic-runner-images',
 };
+
+// Trunk's status comment as trunk-io[bot] edits it (DESIGN.md "Merge queue"): an en space after the emoji.
+const TRUNK_TESTING =
+  '<!-- Trunk Merge -->\n🧪\u2002Running tests on this pull request (testing on PR [#1976](https://github.com/acme/app/pull/1976)) - [details](https://app.trunk.io/acme/merge/1975).';
+const TRUNK_SUBMITTED =
+  '<!-- Trunk Merge -->\n✨\u2002Submitted to Merge by You Example (@you). It will be added to the merge queue once all branch protection rules pass. See more details [here](https://app.trunk.io/acme/merge/1977).';
+const TRUNK_WAITING = '<!-- Trunk Merge -->\n⏳\u2002Waiting to start tests on this pull request - [details](https://app.trunk.io/acme/merge/1978)';
+const TRUNK_MERGED = '<!-- Trunk Merge -->\n😎\u2002Merged successfully - [details](https://app.trunk.io/acme/merge/1974).';
+const TRUNK_REMOVED =
+  "<!-- Trunk Merge -->\n🚫\u2002This pull request was removed from the merge queue because it was waiting to become mergeable for too long (for example: missing required approvals or checks, or a merge conflict). Submit it again once it's ready to merge. See more details [here](https://app.trunk.io/acme/merge/1950).";
 
 function buildTopics(clock: SampleClock): Topic[] {
   return [
@@ -133,6 +144,16 @@ function buildTopics(clock: SampleClock): Topic[] {
       tailoring: '',
       driver: 'koa',
       userRole: 'reviewer',
+    }),
+    // The viewer's one PR here is testing in the Trunk merge queue: the queue icon, amber.
+    sampleTopic(clock, {
+      id: TOPIC.runners,
+      area: 'CI',
+      name: 'Runner image pinning',
+      summary: 'Pinning the Depot runner images by digest, one PR per image. Linux merged through the merge queue; the rest are in it.',
+      tailoring: '',
+      driver: SAMPLE_VIEWER,
+      userRole: 'driver',
     }),
     // Every PR merged and quiet for 2 days: a sync moved it to the Archive drawer.
     {
@@ -374,9 +395,33 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       size: [70, 12, 4], checks: 'SUCCESS', openedHoursAgo: 72, reviewerTeams: ['acme/team-platform'],
     }),
     // Found outside the inbox: the viewer's own open PR, and a review asked of them they already read on GitHub.
+    // Approved, submitted to the Trunk merge queue, and taken out again: its checks never finished.
     samplePr(clock, {
       number: 1950, title: 'Cache pnpm store in the devbox CI image', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [34, 8, 2], checks: 'PENDING', openedHoursAgo: 30,
+      size: [34, 8, 2], checks: 'PENDING', openedHoursAgo: 30, reviews: [['lyra', 'APPROVED', '', undefined, 26]],
+      comments: [{ id: 'issuecomment-1950-trunk', author: 'trunk-io[bot]', body: TRUNK_REMOVED, hoursAgo: 29, editedHoursAgo: 0.6 }],
+    }),
+    samplePr(clock, {
+      number: 1975, title: 'Pin Depot runner images by digest', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [18, 18, 6], checks: 'SUCCESS', openedHoursAgo: 20, reviews: [['rowan', 'APPROVED', '', undefined, 3]],
+      body: 'Runner images float on `:latest` today, so a Depot image update can change CI under us. This pins every image by digest.',
+      comments: [{ id: 'issuecomment-1975-trunk', author: 'trunk-io[bot]', body: TRUNK_TESTING, hoursAgo: 2.5, editedHoursAgo: 0.4 }],
+    }),
+    // The rest of the merge queue in fake mode: submitted (checks still running), waiting, and merged through it.
+    samplePr(clock, {
+      number: 1977, title: 'Pin the macOS runner image too', author: SAMPLE_VIEWER, state: 'OPEN',
+      size: [6, 6, 2], checks: 'PENDING', openedHoursAgo: 4, reviews: [['rowan', 'APPROVED', '', undefined, 1.5]],
+      comments: [{ id: 'issuecomment-1977-trunk', author: 'trunk-io[bot]', body: TRUNK_SUBMITTED, hoursAgo: 1 }],
+    }),
+    samplePr(clock, {
+      number: 1978, title: 'Drop the floating runner image tag', author: 'rowan', state: 'OPEN',
+      size: [2, 9, 3], checks: 'SUCCESS', openedHoursAgo: 6, reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 2]],
+      comments: [{ id: 'issuecomment-1978-trunk', author: 'trunk-io[bot]', body: TRUNK_WAITING, hoursAgo: 1.8, editedHoursAgo: 0.2 }],
+    }),
+    samplePr(clock, {
+      number: 1974, title: 'Pin the Linux runner image', author: SAMPLE_VIEWER, state: 'MERGED',
+      size: [8, 8, 2], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 5, reviews: [['rowan', 'APPROVED', '', undefined, 7]],
+      comments: [{ id: 'issuecomment-1974-trunk', author: 'trunk-io[bot]', body: TRUNK_MERGED, hoursAgo: 6, editedHoursAgo: 5 }],
     }),
     // Addressed your changes, seen on a revisit: you asked for changes
     // yesterday, pim pushed three commits (a review bot and CI chimed in) and
@@ -509,6 +554,38 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 1945, [
       { kind: 'review_commented', actor: 'remy', text: 'commented: "Would 3 hide fewer real flakes?"', hoursAgo: 1, rule: 'quiet', seen: true },
+    ]),
+    // Trunk's status edits: the one that took your PR out of the queue is loud (DESIGN.md "Merge queue").
+    ...sampleEvents(clock, 1950, [
+      { kind: 'review_approved', actor: 'lyra', text: 'approved', hoursAgo: 26, rule: 'loud', seen: true },
+      {
+        kind: 'comment_edited',
+        actor: 'trunk-io[bot]',
+        text: 'updated its comment: 🚫 This pull request was removed from the merge queue because it was waiting to become mergeable for too long',
+        hoursAgo: 0.6,
+        rule: 'loud',
+        sourceId: 'issuecomment-1950-trunk',
+        isBot: true,
+      },
+    ]),
+    ...sampleEvents(clock, 1974, [
+      { kind: 'merged', actor: 'trunk-io[bot]', text: 'merged it', hoursAgo: 5, rule: 'quiet', seen: true, isBot: true },
+    ]),
+    ...sampleEvents(clock, 1978, [
+      { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 5, rule: 'loud', seen: true },
+      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 2, rule: 'quiet', seen: true },
+    ]),
+    ...sampleEvents(clock, 1975, [
+      { kind: 'review_approved', actor: 'rowan', text: 'approved', hoursAgo: 3, rule: 'loud', seen: true },
+      {
+        kind: 'comment_edited',
+        actor: 'trunk-io[bot]',
+        text: 'updated its comment: 🧪 Running tests on this pull request (testing on PR #1976)',
+        hoursAgo: 0.4,
+        rule: 'quiet',
+        sourceId: 'issuecomment-1975-trunk',
+        isBot: true,
+      },
     ]),
     ...sampleEvents(clock, 1934, [
       { kind: 'team_mention', actor: 'ines', text: 'mentioned @team-platform: "do the runner labels clash?"', hoursAgo: 1.5, rule: 'loud' },
@@ -721,6 +798,10 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.warmer, 'single', `pr:${sampleKey(1840)}`, 'Nightly cache warmer removed', [pinged(1840, 'review_requested')]),
     sampleTile(TOPIC.desktop, 'single', `pr:${sampleKey(1940)}`, 'Desktop 2.3 release thread', [pinged(1940, 'subscribed')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1950)}`, 'Your pnpm cache PR for the devbox image', [found(1950, 'own_open', 'your open PR')]),
+    sampleTile(TOPIC.runners, 'single', `pr:${sampleKey(1975)}`, 'Your runner image pins are testing in the merge queue', [pinged(1975, 'author')]),
+    sampleTile(TOPIC.runners, 'single', `pr:${sampleKey(1977)}`, 'Your macOS image pin waits for its checks', [found(1977, 'own_open', 'your open PR')]),
+    sampleTile(TOPIC.runners, 'single', `pr:${sampleKey(1978)}`, "Rowan's floating tag removal is queued", [pinged(1978, 'review_requested')]),
+    sampleTile(TOPIC.runners, 'single', `pr:${sampleKey(1974)}`, 'Linux image pin merged through the queue', [pinged(1974, 'author')]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1955)}`, 'nell wants your review on the Playwright pin', [
       found(1955, 'review_requested', 'review requested from you'),
     ]),

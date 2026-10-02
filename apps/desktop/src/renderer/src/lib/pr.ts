@@ -1,4 +1,5 @@
-import type { Checks, Pr, PrLifecycle, PrStatus, Review } from '@postpile/core';
+import type { Checks, MergeQueueStep, Pr, PrIcon, PrStatus, Review } from '@postpile/core';
+import { sinceLabel } from './time.ts';
 
 const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 
@@ -129,11 +130,12 @@ export function lastPushAt(pr: Pr): string | null {
   return last ? last.committedAt : null;
 }
 
-/** The lifecycle in one word, as the detail pane's state line and the state icon's tooltip say it. */
-export const LIFECYCLE_WORDS: Record<PrLifecycle, { text: string; title: string }> = {
+/** The state icon (core `PrStatus.icon`) in words, as the detail pane's state line and the icon's tooltip say it. */
+export const ICON_WORDS: Record<PrIcon, { text: string; title: string }> = {
   open: { text: 'Open', title: 'Open' },
   draft: { text: 'Draft', title: 'Draft: not ready for review yet' },
-  queued: { text: 'Queued', title: 'In the merge queue' },
+  merge_queue: { text: 'Merge queue', title: 'In the merge queue' },
+  merge_queue_failed: { text: 'Merge queue: Failed', title: 'Removed from the merge queue' },
   merged: { text: 'Merged', title: 'Merged' },
   closed: { text: 'Closed', title: 'Closed without merge' },
 };
@@ -145,7 +147,7 @@ export const LIFECYCLE_WORDS: Record<PrLifecycle, { text: string; title: string 
  * detail pane's facts (2026-09-29).
  */
 export interface StateWord {
-  kind: 'review' | 'approved' | 'changes' | 'draft' | 'merged' | 'closed';
+  kind: 'review' | 'approved' | 'changes' | 'draft' | 'merged' | 'closed' | 'merge_queue' | 'merge_queue_failed';
   text: string;
   /** Spelled out for the tooltip. */
   title: string;
@@ -176,14 +178,60 @@ export function reviewWord(status: PrStatus): StateWord | null {
   };
 }
 
-/** A PR row's state word: merged, closed and drafts say so, everything else shows its review state. */
-export function rowStateWord(status: PrStatus): StateWord | null {
+const QUEUE_STEP_WORDS: Record<MergeQueueStep, string> = {
+  submitted: 'Submitted',
+  waiting: 'Waiting',
+  testing: 'Testing',
+  failed: 'Failed',
+};
+
+/** The tooltip: what the step means and since when ("Testing on #1205 since 06:28"). */
+function mergeQueueTitle(status: PrStatus, now: Date): string {
+  const queue = status.mergeQueue;
+  if (queue === null) {
+    return ICON_WORDS.merge_queue.title;
+  }
+  const since = sinceLabel(queue.since, now);
+  switch (queue.state) {
+    case 'submitted':
+      return `Submitted to the merge queue at ${since}, waiting for checks and approvals`;
+    case 'waiting':
+      return `In the merge queue since ${since}, tests not started yet`;
+    case 'testing':
+      return `In the merge queue, testing${queue.testingOn ? ` on #${queue.testingOn.split('#')[1]}` : ''} since ${since}`;
+    case 'failed':
+      return `Removed from the merge queue at ${since}${queue.reason ? `: ${queue.reason}` : ''}. Re-submit it to merge.`;
+  }
+}
+
+/**
+ * The merge queue in words (core decides the icon): "Merge queue: Testing"
+ * in pending amber, "Merge queue: Failed" in red; `long` adds the reason,
+ * "Merge queue: Failed (tests failed)". GitHub's own queue has no step:
+ * "Merge queue". Null when the PR is not in a queue.
+ */
+export function mergeQueueWord(status: PrStatus, now: Date, long = false): StateWord | null {
+  if (status.icon !== 'merge_queue' && status.icon !== 'merge_queue_failed') {
+    return null;
+  }
+  const queue = status.mergeQueue;
+  const title = mergeQueueTitle(status, now);
+  if (status.icon === 'merge_queue_failed') {
+    const reason = long && queue?.reason ? ` (${queue.reason})` : '';
+    return { kind: 'merge_queue_failed', text: `${ICON_WORDS.merge_queue_failed.text}${reason}`, title };
+  }
+  const text = queue === null ? ICON_WORDS.merge_queue.text : `Merge queue: ${QUEUE_STEP_WORDS[queue.state]}`;
+  return { kind: 'merge_queue', text, title };
+}
+
+/** A PR row's state word: merged, closed and drafts say so, a PR in the merge queue says where it stands, everything else shows its review state. */
+export function rowStateWord(status: PrStatus, now: Date): StateWord | null {
   if (status.lifecycle === 'merged' || status.lifecycle === 'closed') {
-    const word = LIFECYCLE_WORDS[status.lifecycle];
+    const word = ICON_WORDS[status.lifecycle];
     return { kind: status.lifecycle, text: word.text, title: word.title };
   }
   if (status.lifecycle === 'draft') {
-    return { kind: 'draft', text: 'Draft', title: LIFECYCLE_WORDS.draft.title };
+    return { kind: 'draft', text: 'Draft', title: ICON_WORDS.draft.title };
   }
-  return reviewWord(status);
+  return mergeQueueWord(status, now) ?? reviewWord(status);
 }

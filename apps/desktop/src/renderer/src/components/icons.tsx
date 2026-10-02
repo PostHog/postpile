@@ -1,6 +1,6 @@
 // Line icons from the "Crisp native" mockup. They draw with currentColor, so
 // color them with text-* utilities.
-import type { PrLifecycle, TileKind } from '@postpile/core';
+import type { PrIcon, TileKind } from '@postpile/core';
 import type { EventGlyph } from '../lib/events.ts';
 
 interface IconProps {
@@ -273,34 +273,48 @@ export function Glyph(props: IconProps & { glyph: EventGlyph; strokeWidth?: numb
 }
 
 // PR state icons, drawn like GitHub's Octicons (simplified, stroked):
-// open pull request, dashed draft circle, merge, closed pull request.
-// Colors are fixed per state so a row reads at a glance.
+// open pull request, dashed draft circle, merge, closed pull request, and the
+// merge queue. Colors are fixed per state so a row reads at a glance.
 
-const LIFECYCLE_TONES: Record<PrLifecycle, string> = {
+const ICON_TONES: Record<PrIcon, string> = {
   open: 'text-open',
   draft: 'text-faint',
-  // Queued is on its way to merged: the merged purple, with the open-PR outline (2026-10-01).
-  queued: 'text-merged',
+  // In the merge queue: pending amber while it waits or tests, the one red once the queue took it out (2026-10-02).
+  merge_queue: 'text-pending',
+  merge_queue_failed: 'text-status-bad',
   merged: 'text-merged',
   closed: 'text-closed',
 };
 
-const LIFECYCLE_GLYPHS: Record<Exclude<PrLifecycle, 'draft'>, EventGlyph> = {
+const ICON_GLYPHS: Record<'open' | 'merged' | 'closed', EventGlyph> = {
   open: 'ready',
-  queued: 'ready',
   merged: 'merge',
   closed: 'closed',
 };
 
-/** The PR's lifecycle as a colored icon; the word goes in `title` (LIFECYCLE_WORDS). */
-export function PrStateIcon(props: IconProps & { lifecycle: PrLifecycle; title: string }) {
+// GitHub Primer Octicons git-merge-queue-16 (MIT, github.com/primer/octicons),
+// as Trunk's browser extension shows it on github.com. A filled shape, unlike
+// the stroked glyphs above.
+const MERGE_QUEUE_PATH =
+  'M3.75 4.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5ZM3 7.75a.75.75 0 0 1 1.5 0v2.878a2.251 2.251 0 1 1-1.5 0Zm.75 5.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm5-7.75a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Zm5.75 2.5a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-1.5 0a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z';
+
+/** The PR's state icon (core `PrStatus.icon`, a topic's `prState`) in its color; the word goes in `title` (ICON_WORDS). */
+export function PrStateIcon(props: IconProps & { state: PrIcon; title: string }) {
   const size = props.size ?? 14;
-  const tone = `shrink-0 ${LIFECYCLE_TONES[props.lifecycle]} ${props.className ?? ''}`;
-  if (props.lifecycle === 'draft') {
+  const tone = `shrink-0 ${ICON_TONES[props.state]} ${props.className ?? ''}`;
+  if (props.state === 'draft') {
     return (
       <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeDasharray="2.4 2.2" className={tone} role="img" aria-label={props.title}>
         <title>{props.title}</title>
         <circle cx="8" cy="8" r="6" />
+      </svg>
+    );
+  }
+  if (props.state === 'merge_queue' || props.state === 'merge_queue_failed') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" className={tone} role="img" aria-label={props.title}>
+        <title>{props.title}</title>
+        <path d={MERGE_QUEUE_PATH} />
       </svg>
     );
   }
@@ -319,7 +333,7 @@ export function PrStateIcon(props: IconProps & { lifecycle: PrLifecycle; title: 
       aria-label={props.title}
     >
       <title>{props.title}</title>
-      <path d={GLYPH_PATHS[LIFECYCLE_GLYPHS[props.lifecycle]]} />
+      <path d={GLYPH_PATHS[ICON_GLYPHS[props.state]]} />
     </svg>
   );
 }
