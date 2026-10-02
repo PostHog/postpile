@@ -153,10 +153,10 @@ export function PrBody(props: PrBodyProps) {
           </span>
         )}
       </div>
-      <NewSinceBox key={pr.key} detail={props.detail} />
+      <NewSinceBox detail={props.detail} />
       <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
       {props.actions}
-      <PrDescription key={pr.key} body={pr.body} />
+      <PrDescription body={pr.body} />
       <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
       <ReviewList pr={pr} />
       <AgentFacts facts={props.detail.facts} updating={updating} />

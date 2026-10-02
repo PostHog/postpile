@@ -94,6 +94,13 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`TileView.newBadge`) come from core too; never compare `state.kind`
   with `unread` / `done` or read `unreadOnGitHub` / `automation` here.
   `src/main/renderer-rules.test.ts` greps for that and fails.
+- Component tests are rare: only for wiring bugs a `lib/` test cannot see
+  (keys, remounts). `*.test.tsx` next to the component, first line
+  `// @vitest-environment jsdom`, views from `@postpile/core/fixtures`
+  (see `DetailPane.test.tsx`).
+- **One key per PR, on `PrBody`.** `DetailPane` keys the whole body by PR
+  key. Don't also key its children by PR key: siblings with the same key
+  leave stale copies in the DOM (0.15.1 showed one action bar per PR visited).
 
 ## Mutations: one guarded ActionsProvider
 

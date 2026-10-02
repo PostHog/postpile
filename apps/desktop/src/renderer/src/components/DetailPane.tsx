@@ -58,9 +58,10 @@ export function DetailPane(props: DetailPaneProps) {
     body = <p className="flex-1 px-[22px] py-[18px] text-xs text-status-bad">Could not load {prKey}: {pr.error.message}</p>;
   } else if (pr.data) {
     const detail = pr.data;
-    // Keyed by PR: an open compose popover belongs to the PR it was opened on.
-    const actions = <ActionBar key={prKey} detail={detail} view={view} chatOpen={chatOpen} onToggleChat={() => setChatOpen(!chatOpen)} />;
-    body = <PrBody detail={detail} summary={summary} view={view} actions={actions} />;
+    const actions = <ActionBar detail={detail} view={view} chatOpen={chatOpen} onToggleChat={() => setChatOpen(!chatOpen)} />;
+    // Keyed by PR, once for the whole body: the compose popover, folded boxes and scroll start fresh per PR.
+    // Don't key the body's children by PR as well: siblings with one key make React leave stale copies in the DOM.
+    body = <PrBody key={prKey} detail={detail} summary={summary} view={view} actions={actions} />;
   }
 
   return (
